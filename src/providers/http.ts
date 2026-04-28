@@ -1372,18 +1372,44 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
  */
 async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
   const tlsOptions: https.AgentOptions = {};
+  const basePath = cliState.basePath || '';
+  const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
+
+  // Kick off all independent file reads in parallel. JKS and cert/key are
+  // mutually exclusive, so at most we read CA + cert + key + PFX concurrently.
+  type ReadResult = { resolved: string; contents: string | Buffer } | undefined;
+  const readUtf8 = async (p: string | undefined): Promise<ReadResult> => {
+    if (!p) {
+      return undefined;
+    }
+    const resolved = safeResolve(basePath, p);
+    return { resolved, contents: await fs.readFile(resolved, 'utf8') };
+  };
+  const readBuffer = async (p: string | undefined): Promise<ReadResult> => {
+    if (!p) {
+      return undefined;
+    }
+    const resolved = safeResolve(basePath, p);
+    return { resolved, contents: await fs.readFile(resolved) };
+  };
+
+  const [caResult, certResult, keyResult, pfxResult] = await Promise.all([
+    tlsConfig.ca ? Promise.resolve(undefined) : readUtf8(tlsConfig.caPath),
+    !usingJks && !tlsConfig.cert ? readUtf8(tlsConfig.certPath) : Promise.resolve(undefined),
+    !usingJks && !tlsConfig.key ? readUtf8(tlsConfig.keyPath) : Promise.resolve(undefined),
+    tlsConfig.pfx ? Promise.resolve(undefined) : readBuffer(tlsConfig.pfxPath),
+  ]);
 
   // Load CA certificates
   if (tlsConfig.ca) {
     tlsOptions.ca = tlsConfig.ca;
-  } else if (tlsConfig.caPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.caPath);
-    tlsOptions.ca = await fs.readFile(resolvedPath, 'utf8');
-    logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
+  } else if (caResult) {
+    tlsOptions.ca = caResult.contents;
+    logger.debug(`[HTTP Provider] Loaded CA certificate from ${caResult.resolved}`);
   }
 
   // Handle JKS certificates for TLS (extract cert and key)
-  if ((tlsConfig as any).jksPath || (tlsConfig as any).jksContent) {
+  if (usingJks) {
     try {
       const jksModule = await import('jks-js').catch(() => {
         throw new Error(
@@ -1392,7 +1418,6 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       });
       const jks = jksModule as any;
 
-      let keystoreData: Buffer;
       const keystorePassword =
         (tlsConfig as any).keystorePassword ||
         tlsConfig.passphrase ||
@@ -1404,13 +1429,12 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
         );
       }
 
+      let keystoreData: Buffer;
       if ((tlsConfig as any).jksContent) {
-        // Use base64 encoded content
         logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
         keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
       } else if ((tlsConfig as any).jksPath) {
-        // Use file path
-        const resolvedPath = safeResolve(cliState.basePath || '', (tlsConfig as any).jksPath);
+        const resolvedPath = safeResolve(basePath, (tlsConfig as any).jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
         keystoreData = await fs.readFile(resolvedPath);
       } else {
@@ -1459,19 +1483,17 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     // Load client certificate (non-JKS)
     if (tlsConfig.cert) {
       tlsOptions.cert = tlsConfig.cert;
-    } else if (tlsConfig.certPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
-      tlsOptions.cert = await fs.readFile(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
+    } else if (certResult) {
+      tlsOptions.cert = certResult.contents;
+      logger.debug(`[HTTP Provider] Loaded client certificate from ${certResult.resolved}`);
     }
 
     // Load private key (non-JKS)
     if (tlsConfig.key) {
       tlsOptions.key = tlsConfig.key;
-    } else if (tlsConfig.keyPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
-      tlsOptions.key = await fs.readFile(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+    } else if (keyResult) {
+      tlsOptions.key = keyResult.contents;
+      logger.debug(`[HTTP Provider] Loaded private key from ${keyResult.resolved}`);
     }
   }
 
@@ -1493,10 +1515,9 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       tlsOptions.pfx = tlsConfig.pfx;
       logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
     }
-  } else if (tlsConfig.pfxPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
-    tlsOptions.pfx = await fs.readFile(resolvedPath);
-    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
+  } else if (pfxResult) {
+    tlsOptions.pfx = pfxResult.contents;
+    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${pfxResult.resolved}`);
   }
 
   // Set passphrase if provided

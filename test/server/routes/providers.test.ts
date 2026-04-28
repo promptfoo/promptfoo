@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
@@ -9,10 +11,13 @@ import type { ProviderTestResult } from '../../../src/validators/testProvider';
 vi.mock('../../../src/providers/index');
 vi.mock('../../../src/validators/testProvider');
 vi.mock('../../../src/server/config/serverConfig');
+vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
+import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
 import {
   testProviderConnectivity,
@@ -20,24 +25,48 @@ import {
 } from '../../../src/validators/testProvider';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
+const mockedDoTargetPurposeDiscovery = vi.mocked(doTargetPurposeDiscovery);
+const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
 const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
 
 describe('Providers Routes', () => {
-  describe('GET /providers/config-status', () => {
-    let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
 
-    beforeEach(() => {
-      vi.resetAllMocks();
-      app = createApp();
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
     });
+    api = request.agent(server);
+  });
 
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  describe('GET /providers/config-status', () => {
     it('should return hasCustomConfig: false when no custom config exists', async () => {
       // getAvailableProviders returns empty array when no config
       mockedGetAvailableProviders.mockReturnValue([]);
 
-      const response = await request(app).get('/api/providers/config-status');
+      const response = await api.get('/api/providers/config-status');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -54,7 +83,7 @@ describe('Providers Routes', () => {
 
       mockedGetAvailableProviders.mockReturnValue(customProviders);
 
-      const response = await request(app).get('/api/providers/config-status');
+      const response = await api.get('/api/providers/config-status');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -62,16 +91,23 @@ describe('Providers Routes', () => {
         data: { hasCustomConfig: true },
       });
     });
+
+    it('should return standardized 500 errors when config status loading fails', async () => {
+      mockedGetAvailableProviders.mockImplementation(() => {
+        throw new Error('config unavailable');
+      });
+
+      const response = await api.get('/api/providers/config-status');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load provider config status' });
+    });
   });
 
   describe('POST /providers/test', () => {
-    let app: ReturnType<typeof createApp>;
     let mockProvider: ApiProvider;
 
     beforeEach(() => {
-      vi.resetAllMocks();
-      app = createApp();
-
       // Setup mock provider
       mockProvider = {
         id: vi.fn(() => 'test-provider'),
@@ -101,7 +137,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await api.post('/api/providers/test').send({
         prompt: testPrompt,
         providerOptions,
       });
@@ -150,7 +186,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await api.post('/api/providers/test').send({
         providerOptions,
       });
 
@@ -163,7 +199,7 @@ describe('Providers Routes', () => {
     });
 
     it('should return 400 for missing providerOptions', async () => {
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await api.post('/api/providers/test').send({
         prompt: 'Test prompt',
       });
 
@@ -176,44 +212,36 @@ describe('Providers Routes', () => {
     });
 
     it('should return 400 for missing provider id', async () => {
-      const response = await request(app)
-        .post('/api/providers/test')
-        .send({
-          providerOptions: { config: {} },
-        });
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { config: {} },
+      });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when provider id is a number', async () => {
-      const response = await request(app)
-        .post('/api/providers/test')
-        .send({
-          providerOptions: { id: 123 },
-        });
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: 123 },
+      });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when provider id is an object', async () => {
-      const response = await request(app)
-        .post('/api/providers/test')
-        .send({
-          providerOptions: { id: {} },
-        });
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: {} },
+      });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when provider id is empty string', async () => {
-      const response = await request(app)
-        .post('/api/providers/test')
-        .send({
-          providerOptions: { id: '' },
-        });
+      const response = await api.post('/api/providers/test').send({
+        providerOptions: { id: '' },
+      });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -227,7 +255,7 @@ describe('Providers Routes', () => {
 
       mockedLoadApiProvider.mockRejectedValue(new Error('Failed to load provider'));
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await api.post('/api/providers/test').send({
         providerOptions,
       });
 
@@ -249,7 +277,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await api.post('/api/providers/test').send({
         providerOptions,
         prompt: 'Test',
       });
@@ -291,7 +319,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await api.post('/api/providers/test').send({
         providerOptions,
         prompt: 'Test',
       });
@@ -344,7 +372,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await api.post('/api/providers/test').send({
         providerOptions,
         prompt: 'Comprehensive test',
       });
@@ -390,7 +418,7 @@ describe('Providers Routes', () => {
 
       mockedTestProviderConnectivity.mockResolvedValue(mockResult);
 
-      const response = await request(app).post('/api/providers/test').send({
+      const response = await api.post('/api/providers/test').send({
         providerOptions,
       });
 
@@ -408,31 +436,22 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/http-generator validation', () => {
-    let app: ReturnType<typeof createApp>;
-
-    beforeEach(() => {
-      vi.resetAllMocks();
-      app = createApp();
-    });
-
     it('should return 400 for empty body', async () => {
-      const response = await request(app).post('/api/providers/http-generator').send({});
+      const response = await api.post('/api/providers/http-generator').send({});
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for empty string requestExample', async () => {
-      const response = await request(app)
-        .post('/api/providers/http-generator')
-        .send({ requestExample: '' });
+      const response = await api.post('/api/providers/http-generator').send({ requestExample: '' });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for non-string requestExample', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/providers/http-generator')
         .set('Content-Type', 'application/json')
         .send(JSON.stringify({ requestExample: 123 }));
@@ -443,22 +462,15 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/test-session validation', () => {
-    let app: ReturnType<typeof createApp>;
-
-    beforeEach(() => {
-      vi.resetAllMocks();
-      app = createApp();
-    });
-
     it('should return 400 for empty body', async () => {
-      const response = await request(app).post('/api/providers/test-session').send({});
+      const response = await api.post('/api/providers/test-session').send({});
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for missing provider', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/providers/test-session')
         .send({ sessionConfig: {}, mainInputVariable: 'input' });
 
@@ -467,7 +479,7 @@ describe('Providers Routes', () => {
     });
 
     it('should return 400 when provider is not an object', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/providers/test-session')
         .send({ provider: 'not-an-object' });
 
@@ -476,7 +488,7 @@ describe('Providers Routes', () => {
     });
 
     it('should return 400 when provider.id is a number', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/providers/test-session')
         .send({ provider: { id: 123 } });
 
@@ -485,9 +497,7 @@ describe('Providers Routes', () => {
     });
 
     it('should return 400 when provider.id is an object', async () => {
-      const response = await request(app)
-        .post('/api/providers/test-session')
-        .send({ provider: { id: {} } });
+      const response = await api.post('/api/providers/test-session').send({ provider: { id: {} } });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -506,45 +516,78 @@ describe('Providers Routes', () => {
         message: 'Session test successful',
       } as any);
 
-      const response = await request(app)
+      const response = await api
         .post('/api/providers/test-session')
         .send({ provider: { id: 'http://example.com/api' } });
 
       expect(response.status).toBe(200);
     });
+
+    it('should return standardized 500 errors when session provider loading fails', async () => {
+      mockedLoadApiProvider.mockRejectedValue(new Error('provider unavailable'));
+
+      const response = await api
+        .post('/api/providers/test-session')
+        .send({ provider: { id: 'http://example.com/api' } });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to test session' });
+    });
   });
 
   describe('POST /providers/discover validation', () => {
-    let app: ReturnType<typeof createApp>;
+    it('should return discovered target metadata for valid provider options', async () => {
+      const mockProvider = {
+        id: vi.fn(() => 'test-provider'),
+        callApi: vi.fn(),
+        config: {},
+      } as any;
+      const discoveryResult = {
+        purpose: 'Help users',
+        limitations: 'No medical advice',
+        user: 'Support agents',
+        tools: [
+          {
+            name: 'lookup',
+            description: 'Fetch account details',
+            arguments: [{ name: 'id', description: 'Account id', type: 'string' }],
+          },
+        ],
+      };
 
-    beforeEach(() => {
-      vi.resetAllMocks();
-      app = createApp();
+      mockedNeverGenerateRemote.mockReturnValue(false);
+      mockedLoadApiProvider.mockResolvedValue(mockProvider);
+      mockedDoTargetPurposeDiscovery.mockResolvedValue(discoveryResult);
+
+      const response = await api.post('/api/providers/discover').send({ id: 'echo' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(discoveryResult);
     });
 
     it('should return 400 for empty body (missing id)', async () => {
-      const response = await request(app).post('/api/providers/discover').send({});
+      const response = await api.post('/api/providers/discover').send({});
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when id is a number', async () => {
-      const response = await request(app).post('/api/providers/discover').send({ id: 123 });
+      const response = await api.post('/api/providers/discover').send({ id: 123 });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 when id is an object', async () => {
-      const response = await request(app).post('/api/providers/discover').send({ id: {} });
+      const response = await api.post('/api/providers/discover').send({ id: {} });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
     });
 
     it('should return 400 for non-object body', async () => {
-      const response = await request(app)
+      const response = await api
         .post('/api/providers/discover')
         .send('not-an-object')
         .set('Content-Type', 'application/json');

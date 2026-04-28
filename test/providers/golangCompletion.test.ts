@@ -57,7 +57,9 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 vi.mock('fs/promises', () => {
-  const access = vi.fn((filePath: any) => {
+  // Wrap each sync mock so the corresponding fs/promises export returns a real
+  // Promise (or rejects), matching the actual API contract.
+  const access = vi.fn(async (filePath: any) => {
     if (fsMocks.existsSync(filePath)) {
       return undefined;
     }
@@ -65,24 +67,14 @@ vi.mock('fs/promises', () => {
       code: 'ENOENT',
     });
   });
-  return {
-    default: {
-      readFile: fsMocks.readFileSync,
-      readdir: fsMocks.readdirSync,
-      mkdtemp: fsMocks.mkdtempSync,
-      mkdir: fsMocks.mkdirSync,
-      copyFile: fsMocks.copyFileSync,
-      rm: fsMocks.rmSync,
-      access,
-    },
-    readFile: fsMocks.readFileSync,
-    readdir: fsMocks.readdirSync,
-    mkdtemp: fsMocks.mkdtempSync,
-    mkdir: fsMocks.mkdirSync,
-    copyFile: fsMocks.copyFileSync,
-    rm: fsMocks.rmSync,
-    access,
-  };
+  const readFile = vi.fn(async (...args: any[]) => fsMocks.readFileSync(...args));
+  const readdir = vi.fn(async (...args: any[]) => fsMocks.readdirSync(...args));
+  const mkdtemp = vi.fn(async (...args: any[]) => fsMocks.mkdtempSync(...args));
+  const mkdir = vi.fn(async (...args: any[]) => fsMocks.mkdirSync(...args));
+  const copyFile = vi.fn(async (...args: any[]) => fsMocks.copyFileSync(...args));
+  const rm = vi.fn(async (...args: any[]) => fsMocks.rmSync(...args));
+  const promiseApi = { readFile, readdir, mkdtemp, mkdir, copyFile, rm, access };
+  return { default: promiseApi, ...promiseApi };
 });
 vi.mock('path');
 
