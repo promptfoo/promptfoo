@@ -18,12 +18,7 @@ The example uses Inspect's `inspect_evals/osworld_small` task, a smaller OSWorld
 
 In the sample shown above, OSWorld opens `NetIncome.xlsx` in LibreOffice Calc and asks the agent to compute totals for the `Revenue` and `Total Expenses` columns on a new sheet. Inspect provides the Ubuntu desktop sandbox, screenshots, computer tool, model loop, and scorer.
 
-Promptfoo does not send the prompt text to the model as the OSWorld instruction. The OSWorld dataset supplies the task instruction. The Promptfoo prompt is only a wrapper label:
-
-```yaml
-prompts:
-  - 'Run OSWorld sample on app {{app}}'
-```
+Use a simple pass-through prompt such as `{{prompt}}` for Promptfoo's row label; Inspect reads the actual task instruction from the OSWorld dataset.
 
 ## How the wrapper works
 
@@ -109,6 +104,7 @@ Tests select OSWorld app subsets with `vars.app`:
 tests:
   - description: libreoffice_calc - first supported sample
     vars:
+      prompt: Run the pinned LibreOffice Calc OSWorld sample
       app: libreoffice_calc
       sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
     metadata:
@@ -127,6 +123,7 @@ For exact runs, prefer `sample_id`. The provider passes it to Inspect's
 
 ```yaml
 vars:
+  prompt: Run the pinned LibreOffice Calc OSWorld sample
   sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
 

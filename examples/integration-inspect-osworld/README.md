@@ -49,6 +49,7 @@ The active test runs a pinned `libreoffice_calc` sample with GPT-5.5. To make th
 
 ```yaml
 vars:
+  prompt: Run the pinned LibreOffice Calc OSWorld sample
   app: libreoffice_calc
   sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
   model: openai/gpt-5.5
@@ -60,6 +61,7 @@ reliable selector for larger comparisons because it maps directly to Inspect's
 
 ```yaml
 vars:
+  prompt: Run the pinned LibreOffice Calc OSWorld sample
   sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
 

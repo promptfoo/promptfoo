@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: OSWorld via Inspect wrapper with tracing
 prompts:
-  - 'Run OSWorld sample on app {{app}}'
+  - '{{prompt}}'
 providers:
   - id: file://provider.py
     label: OSWorld via Inspect
@@ -14,6 +14,7 @@ providers:
 tests:
   - description: libreoffice_calc — first supported sample with tracing
     vars:
+      prompt: Run the pinned LibreOffice Calc OSWorld sample
       app: libreoffice_calc
       sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
     metadata:
@@ -28,6 +29,7 @@ tests:
   # non-trivial model tokens.
   # - description: vscode — first supported sample
   #   vars:
+  #     prompt: Run the pinned VS Code OSWorld sample
   #     app: vscode
   #     sample_id: 0ed39f63-6049-43d4-ba4d-5fa2fe04a951
   #   assert:
