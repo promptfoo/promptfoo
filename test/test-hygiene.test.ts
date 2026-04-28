@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -147,11 +147,14 @@ const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\
 const processEnvSnapshotIdentifierPattern = /^original[A-Za-z0-9_]*$/i;
 
 function findTestFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const fullPath = path.join(dir, entry);
-    const stats = statSync(fullPath);
+  // Use withFileTypes so entry type comes from the directory record itself rather
+  // than a follow-up stat() call. Other test files (e.g. python/workerPool.test.ts)
+  // create and delete fixtures in beforeAll/afterAll, and parallel test execution
+  // can delete an entry between readdir() and stat(), causing a flaky ENOENT.
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(dir, entry.name);
 
-    if (stats.isDirectory()) {
+    if (entry.isDirectory()) {
       return findTestFiles(fullPath);
     }
 
