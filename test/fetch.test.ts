@@ -118,7 +118,9 @@ vi.mock('../src/envars', () => {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true';
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true';
+        return process.env.PROMPTFOO_INSECURE_SSL === undefined
+          ? defaultValue
+          : process.env.PROMPTFOO_INSECURE_SSL === 'true';
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
         return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true';
@@ -719,10 +721,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         headersTimeout: getRequestTimeoutMs(),
         keepAliveTimeout: 30_000,
@@ -759,10 +761,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         headersTimeout: getRequestTimeoutMs(),
         keepAliveTimeout: 30_000,
