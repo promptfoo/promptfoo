@@ -54,7 +54,9 @@ def _load_osworld_samples(config: Dict[str, Any]) -> List[LoadedSample]:
 
 def _call_inspect_task(task_factory: Any, **kwargs: Any) -> Any:
     parameters = python_inspect.signature(task_factory).parameters
-    supported_kwargs = {key: value for key, value in kwargs.items() if key in parameters}
+    supported_kwargs = {
+        key: value for key, value in kwargs.items() if key in parameters
+    }
     return task_factory(**supported_kwargs)
 
 
