@@ -652,9 +652,13 @@ describe('evaluateOptions behavior', () => {
       }
     });
 
-    it('should ignore newly configured filterRange defaults when resuming without one persisted', async () => {
+    it.each([
+      ['commandLineOptions', { commandLineOptions: { filterRange: '1:2' } }],
+      ['evaluateOptions', { evaluateOptions: { filterRange: '1:2' } }],
+    ])('should restore legacy %s.filterRange when resuming evals without persisted runtime options', async (_source, legacyConfig) => {
       const resumeEval = new Eval(
         {
+          ...legacyConfig,
           providers: ['echo'],
           prompts: ['Hello {{name}}'],
           tests: [
@@ -666,11 +670,6 @@ describe('evaluateOptions behavior', () => {
         {
           id: 'eval-resume-without-filter-range',
           persisted: true,
-          runtimeOptions: {
-            cache: true,
-            maxConcurrency: 1,
-            repeat: 1,
-          },
         },
       );
       const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
@@ -684,13 +683,13 @@ describe('evaluateOptions behavior', () => {
           {},
           undefined,
           {
-            filterRange: '1:2',
+            filterRange: '0:1',
           },
         );
 
         expect(evaluateMock).toHaveBeenCalled();
         const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
-        expect(options.filterRange).toBeUndefined();
+        expect(options.filterRange).toBe('1:2');
       } finally {
         findByIdSpy.mockRestore();
       }
