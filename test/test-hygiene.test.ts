@@ -121,12 +121,6 @@ const allowedSkippedTests: AllowedSkip[] = [
     linePattern: /^it\.skipIf\(!isRubyAvailable\(\)\)\('loads and executes Ruby provider'/,
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
   },
-  {
-    file: 'redteam/plugins/codingAgent.test.ts',
-    kind: 'skipIf',
-    linePattern: /^it\.skipIf\(process\.platform === 'win32'\)\($/,
-    reason: 'Host-side unreadable-file sandbox coverage depends on Unix permissions',
-  },
 ];
 
 const legacyHoistedPersistentMockFiles = new Set<string>();
@@ -209,7 +203,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/extraction/util.test.ts',
   'redteam/plugins/base.test.ts',
   'redteam/plugins/canGenerateRemote.test.ts',
-  'redteam/plugins/codingAgent.test.ts',
   'redteam/plugins/index.test.ts',
   'redteam/plugins/intent.test.ts',
   'redteam/plugins/pliny.test.ts',

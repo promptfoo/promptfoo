@@ -2119,20 +2119,43 @@
                       "bias:race",
                       "bola",
                       "cca",
+                      "coding-agent:agents-md-injection",
                       "coding-agent:all",
-                      "coding-agent:automation-poisoning",
+                      "coding-agent:approval-bypass",
+                      "coding-agent:approval-misrepresentation",
+                      "coding-agent:child-agent-bypass",
+                      "coding-agent:claim-validation-mismatch",
+                      "coding-agent:codex",
+                      "coding-agent:codex-config-poisoning",
+                      "coding-agent:codex-home-poisoning",
+                      "coding-agent:codex-rules-poisoning",
+                      "coding-agent:connector-data-overreach",
+                      "coding-agent:connector-parameter-exfil",
                       "coding-agent:core",
-                      "coding-agent:delayed-ci-exfil",
-                      "coding-agent:generated-vulnerability",
+                      "coding-agent:dependency-confusion",
+                      "coding-agent:externalized-execution",
+                      "coding-agent:least-privilege-drift",
+                      "coding-agent:lifecycle-script-execution",
+                      "coding-agent:markdown-url-exfil",
+                      "coding-agent:mcp-config-poisoning",
+                      "coding-agent:mcp-confused-deputy",
+                      "coding-agent:mcp-resource-injection",
                       "coding-agent:network-egress-bypass",
-                      "coding-agent:procfs-credential-read",
+                      "coding-agent:replay-bundle-completeness",
                       "coding-agent:repo-prompt-injection",
                       "coding-agent:sandbox-read-escape",
                       "coding-agent:sandbox-write-escape",
                       "coding-agent:secret-env-read",
                       "coding-agent:secret-file-read",
-                      "coding-agent:steganographic-exfil",
+                      "coding-agent:self-approval-bypass",
+                      "coding-agent:skill-poisoning",
+                      "coding-agent:terminal-control-injection",
+                      "coding-agent:terminal-network-exfil",
                       "coding-agent:terminal-output-injection",
+                      "coding-agent:thread-memory-leak",
+                      "coding-agent:trace-completeness",
+                      "coding-agent:trace-log-exfil",
+                      "coding-agent:trace-redaction",
                       "coding-agent:verifier-sabotage",
                       "competitors",
                       "contracts",
@@ -2225,6 +2248,21 @@
                       "harmful:unsafe-practices",
                       "harmful:violent-crime",
                       "harmful:weapons:ied",
+                      "harness:artifact-redaction",
+                      "harness:cleanup",
+                      "harness:grader-injection-resistance",
+                      "harness:known-bad-agent",
+                      "harness:known-good-agent",
+                      "harness:network-trap-coverage",
+                      "harness:policy-applied",
+                      "harness:preflight",
+                      "harness:replay-completeness",
+                      "harness:resource-budget",
+                      "harness:result-integrity",
+                      "harness:secret-placement",
+                      "harness:state-reset",
+                      "harness:version-attestation",
+                      "harness:workspace-isolation",
                       "hijacking",
                       "illegal-activity",
                       "imitation",
@@ -2426,20 +2464,43 @@
                           "bias:race",
                           "bola",
                           "cca",
+                          "coding-agent:agents-md-injection",
                           "coding-agent:all",
-                          "coding-agent:automation-poisoning",
+                          "coding-agent:approval-bypass",
+                          "coding-agent:approval-misrepresentation",
+                          "coding-agent:child-agent-bypass",
+                          "coding-agent:claim-validation-mismatch",
+                          "coding-agent:codex",
+                          "coding-agent:codex-config-poisoning",
+                          "coding-agent:codex-home-poisoning",
+                          "coding-agent:codex-rules-poisoning",
+                          "coding-agent:connector-data-overreach",
+                          "coding-agent:connector-parameter-exfil",
                           "coding-agent:core",
-                          "coding-agent:delayed-ci-exfil",
-                          "coding-agent:generated-vulnerability",
+                          "coding-agent:dependency-confusion",
+                          "coding-agent:externalized-execution",
+                          "coding-agent:least-privilege-drift",
+                          "coding-agent:lifecycle-script-execution",
+                          "coding-agent:markdown-url-exfil",
+                          "coding-agent:mcp-config-poisoning",
+                          "coding-agent:mcp-confused-deputy",
+                          "coding-agent:mcp-resource-injection",
                           "coding-agent:network-egress-bypass",
-                          "coding-agent:procfs-credential-read",
+                          "coding-agent:replay-bundle-completeness",
                           "coding-agent:repo-prompt-injection",
                           "coding-agent:sandbox-read-escape",
                           "coding-agent:sandbox-write-escape",
                           "coding-agent:secret-env-read",
                           "coding-agent:secret-file-read",
-                          "coding-agent:steganographic-exfil",
+                          "coding-agent:self-approval-bypass",
+                          "coding-agent:skill-poisoning",
+                          "coding-agent:terminal-control-injection",
+                          "coding-agent:terminal-network-exfil",
                           "coding-agent:terminal-output-injection",
+                          "coding-agent:thread-memory-leak",
+                          "coding-agent:trace-completeness",
+                          "coding-agent:trace-log-exfil",
+                          "coding-agent:trace-redaction",
                           "coding-agent:verifier-sabotage",
                           "competitors",
                           "contracts",
@@ -2532,6 +2593,21 @@
                           "harmful:unsafe-practices",
                           "harmful:violent-crime",
                           "harmful:weapons:ied",
+                          "harness:artifact-redaction",
+                          "harness:cleanup",
+                          "harness:grader-injection-resistance",
+                          "harness:known-bad-agent",
+                          "harness:known-good-agent",
+                          "harness:network-trap-coverage",
+                          "harness:policy-applied",
+                          "harness:preflight",
+                          "harness:replay-completeness",
+                          "harness:resource-budget",
+                          "harness:result-integrity",
+                          "harness:secret-placement",
+                          "harness:state-reset",
+                          "harness:version-attestation",
+                          "harness:workspace-isolation",
                           "hijacking",
                           "illegal-activity",
                           "imitation",
@@ -2894,6 +2970,73 @@
               "$ref": "#/definitions/__schema0"
             }
           ]
+        },
+        "targetManifest": {
+          "description": "Files, commands, tools, paths, and data boundaries available to the target",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "frameworks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "allowedPaths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sensitivePaths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "dataSources": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "dataSinks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
         },
         "graderExamples": {
           "description": "Global grading examples that apply to all plugins",

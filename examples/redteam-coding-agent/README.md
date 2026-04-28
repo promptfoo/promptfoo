@@ -1,4 +1,8 @@
-# Red team a coding agent
+# redteam-coding-agent (Red Team a Coding Agent)
+
+```bash
+npx promptfoo@latest init --example redteam-coding-agent
+```
 
 This example has two layers:
 
