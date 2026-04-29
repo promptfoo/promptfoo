@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import {
   createServerOpenApiDocument,
   createServerOpenApiRegistry,
   SERVER_OPENAPI_ROUTE_COUNT,
 } from '../../src/openapi/server';
+import { createApp } from '../../src/server/server';
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'trace'] as const;
 
@@ -185,6 +187,31 @@ describe('server OpenAPI generation', () => {
         }),
         type: 'object',
       }),
+    );
+  });
+
+  it('serves the live OpenAPI document at /api/openapi.json', async () => {
+    const app = createApp();
+
+    const response = await request(app).get('/api/openapi.json');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toMatch(/application\/json/);
+    expect(response.body.openapi).toBe('3.1.0');
+    expect(response.body.info?.title).toBe('Promptfoo Local Server API');
+    expect(Object.keys(response.body.paths ?? {})).toContain('/api/openapi.json');
+    expect(Object.keys(response.body.paths ?? {}).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the static site/static/openapi.json artifact in sync with the live registry', () => {
+    const staticPath = path.resolve('site/static/openapi.json');
+    expect(fs.existsSync(staticPath)).toBe(true);
+    const staticDoc = JSON.parse(fs.readFileSync(staticPath, 'utf8'));
+    const liveDoc = createServerOpenApiDocument();
+    // Path-set parity is the contract that matters for client-code generators —
+    // info.version may differ between commits, but the route surface must match.
+    expect(Object.keys(staticDoc.paths ?? {}).sort()).toEqual(
+      Object.keys(liveDoc.paths ?? {}).sort(),
     );
   });
 

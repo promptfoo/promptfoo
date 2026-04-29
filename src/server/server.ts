@@ -17,6 +17,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
+import { createServerOpenApiDocument } from '../openapi/server';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
@@ -126,6 +127,13 @@ export function createApp() {
   app.get('/health', (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
+  });
+
+  // Serve the OpenAPI document directly from the live registry so consumers
+  // (frontend, CLI, plugins, curl) can fetch the spec without needing the
+  // statically-generated `site/static/openapi.json` artifact.
+  app.get('/api/openapi.json', (_req: Request, res: Response): void => {
+    res.json(createServerOpenApiDocument());
   });
 
   app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {

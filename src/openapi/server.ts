@@ -70,7 +70,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -212,6 +212,26 @@ export function createServerOpenApiRegistry() {
     summary: 'Check local server health',
     responses: {
       200: jsonResponse('HealthResponse', ServerSchemas.Health.Response),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/openapi.json',
+    operationId: 'getOpenApiSpec',
+    tags: ['Discovery'],
+    summary: 'Fetch this OpenAPI document',
+    description:
+      'Returns the OpenAPI 3.1 description of the local server API generated from the same Zod DTOs that validate runtime requests and responses. Useful for client code generation and live introspection.',
+    responses: {
+      200: {
+        description: 'OpenAPI 3.1 document',
+        content: {
+          'application/json': {
+            schema: { type: 'object' },
+          },
+        },
+      },
     },
   });
 

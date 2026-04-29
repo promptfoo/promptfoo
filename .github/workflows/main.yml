@@ -262,11 +262,16 @@ jobs:
       - name: Generate JSON Schema
         run: npm run jsonSchema:generate
 
+      - name: Generate OpenAPI Spec
+        run: npm run openapi:generate
+
       - name: Check for changes
         run: |
           if [[ -n $(git status --porcelain) ]]; then
             echo "Changes detected after generating assets:"
             git status --porcelain
+            echo ""
+            echo "Run 'npm run jsonSchema:generate' and 'npm run openapi:generate' locally and commit the result."
             exit 1
           else
             echo "No changes detected."
