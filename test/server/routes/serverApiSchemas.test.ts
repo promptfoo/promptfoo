@@ -266,7 +266,8 @@ describe('inline server API DTO validation', () => {
     expect(invalid.body.error).toContain('id');
     expect(valid.status).toBe(200);
     expect(valid.body).toEqual({ url: 'https://share.example/eval-1' });
-    // `readResult` is no longer used by the share route — see commit message.
+    // The share route intentionally avoids `readResult` because it converts
+    // load failures into `undefined`, which would collapse real DB errors into 404s.
     expect(mockedReadResult).not.toHaveBeenCalled();
   });
 
