@@ -147,11 +147,10 @@ defaultTest:
     - type: javascript
       threshold: 0.7
       value: |
-        // The provider returns the parsed object when `output_format` /
-        // `output_schema` is set, and a string otherwise; handle both.
-        const result = typeof output === 'string' ? JSON.parse(output) : output;
+        // `output_format` hands us a parsed object; on Codex `output_schema`
+        // returns a string, so wrap with `JSON.parse(output)` there.
         const expected = context.vars.expectedIssues;
-        const found = (result.issues || []).map((issue) => issue.id);
+        const found = (output.issues || []).map((issue) => issue.id);
         const hits = expected.filter((id) => found.includes(id));
         const recall = hits.length / expected.length;
 
@@ -162,7 +161,7 @@ defaultTest:
         };
 ```
 
-The JavaScript assertion gives each response a score based on issue recall. In your own eval, replace this with the signal that matters for the skill: tests passed, required edits were made, policy checks were followed, or a rubric was satisfied. (No `is-json` is needed here — `output_format` already enforces the schema, and `JSON.parse` will surface any malformed output.)
+The JavaScript assertion gives each response a score based on issue recall. In your own eval, replace this with the signal that matters for the skill: tests passed, required edits were made, policy checks were followed, or a rubric was satisfied.
 
 ### Add Secondary Signals
 
