@@ -241,6 +241,9 @@ type EnvVars = {
   // AIML API
   AIML_API_KEY?: string;
 
+  // Atlas Cloud
+  ATLASCLOUD_API_KEY?: string;
+
   // Anthropic
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MAX_TOKENS?: number;

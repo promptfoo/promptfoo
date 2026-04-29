@@ -182,6 +182,9 @@
         "AIML_API_KEY": {
           "type": "string"
         },
+        "ATLASCLOUD_API_KEY": {
+          "type": "string"
+        },
         "ANTHROPIC_API_KEY": {
           "type": "string"
         },
@@ -1602,6 +1605,9 @@
                       "type": "string"
                     },
                     "AIML_API_KEY": {
+                      "type": "string"
+                    },
+                    "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
                     "ANTHROPIC_API_KEY": {
