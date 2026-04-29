@@ -132,8 +132,17 @@ export function createApp() {
   // Serve the OpenAPI document directly from the live registry so consumers
   // (frontend, CLI, plugins, curl) can fetch the spec without needing the
   // statically-generated `site/static/openapi.json` artifact.
+  //
+  // Memoized at first call: the document is built from a fixed set of Zod
+  // schemas and never changes within a process. Generating it per-request
+  // would re-walk the registry, run the OpenAPI 3.1 generator, and allocate
+  // a ~250 KB object — wasted CPU and GC pressure on a discovery endpoint.
+  let cachedOpenApiDocument: ReturnType<typeof createServerOpenApiDocument> | undefined;
   app.get('/api/openapi.json', (_req: Request, res: Response): void => {
-    res.json(createServerOpenApiDocument());
+    if (!cachedOpenApiDocument) {
+      cachedOpenApiDocument = createServerOpenApiDocument();
+    }
+    res.json(cachedOpenApiDocument);
   });
 
   app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
