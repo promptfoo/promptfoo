@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- fix(redteam): expose Codex trace failures for agentic runtime plugins (#8992)
+
 ## [0.121.7](https://github.com/promptfoo/promptfoo/compare/0.121.6...0.121.7) (2026-04-22)
 
 ### Features
