@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
+import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
   datasetsTable,
@@ -437,25 +438,6 @@ export async function getEvalFromId(hash: string) {
     }
   }
   return undefined;
-}
-
-function deleteTraceRecordsForEvals(db: ReturnType<typeof getDb>, evalIds: string[]) {
-  if (evalIds.length === 0) {
-    return;
-  }
-
-  const traceIds = db
-    .select({ traceId: tracesTable.traceId })
-    .from(tracesTable)
-    .where(inArray(tracesTable.evaluationId, evalIds))
-    .all()
-    .map(({ traceId }) => traceId);
-
-  if (traceIds.length > 0) {
-    db.delete(spansTable).where(inArray(spansTable.traceId, traceIds)).run();
-  }
-
-  db.delete(tracesTable).where(inArray(tracesTable.evaluationId, evalIds)).run();
 }
 
 export async function deleteEval(evalId: string) {
