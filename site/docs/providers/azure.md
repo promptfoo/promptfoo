@@ -1091,13 +1091,13 @@ Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the 
 
 ### Key Differences from Standard Azure Assistants
 
-| Feature             | Azure Assistant                              | Azure Foundry Agent                                                             |
-| ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
-| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime      |
-| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)   |
-| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                 |
-| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                        |
-| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent: { name, type: "agent_reference" } } })` |
+| Feature             | Azure Assistant                              | Azure Foundry Agent                                                                       |
+| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime                |
+| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)             |
+| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                           |
+| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                                  |
+| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent_reference: { name, type: "agent_reference" } } })` |
 
 ### Setup
 

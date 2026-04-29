@@ -341,6 +341,10 @@ tests:
 
 The output should be valid JSON matching your schema, but it is still returned as a string in `response.output`.
 
+:::tip
+This is the OpenAI Codex SDK's analogue of the Claude Agent SDK's [`output_format`](/docs/providers/claude-agent-sdk#structured-output). The two have slightly different shapes (a bare schema here, `{type: 'json_schema', schema: {...}}` on Claude) and Claude additionally hands the JS assertion a parsed object while Codex keeps `output` as a string — wrap with `JSON.parse(output)` in JS assertions on this side. The [Test Agent Skills guide](/docs/guides/test-agent-skills) shows both side by side.
+:::
+
 ### Zod Schemas
 
 You can also use Zod schemas converted with `zod-to-json-schema`:

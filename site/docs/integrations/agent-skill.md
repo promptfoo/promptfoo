@@ -180,6 +180,7 @@ The skill is just markdown files — edit them to match your team's conventions:
 ## Related
 
 - [Getting Started](/docs/getting-started) — promptfoo overview for newcomers
+- [Test Agent Skills](/docs/guides/test-agent-skills) — compare Claude and Codex skill versions side by side
 - [Configuration Reference](/docs/configuration/guide) — full config schema documentation
 - [Assertions Reference](/docs/configuration/expected-outputs) — complete list of assertion types
 - [Custom Providers](/docs/providers/custom-api) — building Python, JavaScript, and HTTP providers

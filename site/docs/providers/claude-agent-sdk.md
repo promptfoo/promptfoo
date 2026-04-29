@@ -644,6 +644,12 @@ When `output_format` is configured, the response will include structured output 
 - `output` - The parsed structured output (when available)
 - `metadata.structuredOutput` - The raw structured output value
 
+:::tip
+For evals that depend on parsing JSON from the model's reply, prefer `output_format` over asking for JSON in the prompt and then running `is-json` / `JSON.parse()`. Without it, Claude commonly wraps short JSON answers in Markdown fences or a leading sentence, which makes downstream parsers brittle. With it, the response arrives as a parsed object, so a JavaScript assertion can read fields directly.
+
+This is the Claude Agent SDK's analogue of the OpenAI Codex SDK's [`output_schema`](/docs/providers/openai-codex-sdk#structured-output) — same idea, slightly different wrapper shape (`{type: 'json_schema', schema: {...}}` here vs a bare schema object on Codex). The [Test Agent Skills guide](/docs/guides/test-agent-skills) shows both side by side.
+:::
+
 ## Session Management
 
 Continue or fork existing sessions for multi-turn interactions:

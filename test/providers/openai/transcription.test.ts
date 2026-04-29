@@ -37,7 +37,9 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 vi.mock('fs/promises', () => {
-  const readFile = vi.fn((filePath: any, encoding?: any) =>
+  // Async wrapper around the sync mock so the returned value is a real Promise,
+  // matching the actual fs/promises.readFile API.
+  const readFile = vi.fn(async (filePath: any, encoding?: any) =>
     encoding === undefined
       ? fsMocks.readFileSync(filePath)
       : fsMocks.readFileSync(filePath, encoding),

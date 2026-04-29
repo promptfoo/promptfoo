@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fsPromises from 'fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -29,41 +29,22 @@ const {
   mockGetConfigDirectoryPath: vi.fn(),
 }));
 
-const fsMocks = vi.hoisted(() => ({
-  existsSync: vi.fn(),
-  mkdirSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  readFileSync: vi.fn(),
+const fsPromiseMocks = vi.hoisted(() => ({
+  mkdir: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
 }));
 
 // Mock the dependencies
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
   return {
     ...actual,
     default: {
       ...actual,
-      ...fsMocks,
+      ...fsPromiseMocks,
     },
-    ...fsMocks,
-  };
-});
-vi.mock('fs/promises', () => {
-  const readFile = vi.fn((filePath: any, encoding?: any) => {
-    if (!fsMocks.existsSync(filePath)) {
-      throw Object.assign(new Error(`ENOENT: no such file or directory, open '${filePath}'`), {
-        code: 'ENOENT',
-      });
-    }
-    return encoding === undefined
-      ? fsMocks.readFileSync(filePath)
-      : fsMocks.readFileSync(filePath, encoding);
-  });
-  return {
-    default: {
-      readFile,
-    },
-    readFile,
+    ...fsPromiseMocks,
   };
 });
 vi.mock('../../../src/storage', () => ({
@@ -99,10 +80,11 @@ describe('AzureVideoProvider', () => {
     // Default config directory path
     mockGetConfigDirectoryPath.mockReturnValue('/test/config');
 
-    // Default: no cached video exists (fs.existsSync returns false for cache files)
-    vi.mocked(fs.existsSync).mockReturnValue(false);
-    vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
-    vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
+    vi.mocked(fsPromises.readFile).mockRejectedValue(
+      Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }),
+    );
+    vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.writeFile).mockResolvedValue(undefined);
 
     // Default: no cached video exists
     const mockStorage = {
@@ -518,8 +500,7 @@ describe('AzureVideoProvider', () => {
       });
 
       // Set up cache hit
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(
+      vi.mocked(fsPromises.readFile).mockResolvedValue(
         JSON.stringify({
           videoKey: 'video/cached123.mp4',
           createdAt: '2024-01-01T00:00:00Z',

@@ -52,11 +52,6 @@ type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
-  /**
-   * Enable interactive UI (opt-in). Set to true to enable Ink-based terminal UI.
-   * Requires stdout to be a TTY.
-   */
-  PROMPTFOO_ENABLE_INTERACTIVE_UI?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
@@ -246,6 +241,9 @@ type EnvVars = {
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
+
+  // Atlas Cloud
+  ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
   AWS_BEARER_TOKEN_BEDROCK?: string;
