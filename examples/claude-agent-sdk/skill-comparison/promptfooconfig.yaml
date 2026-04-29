@@ -62,16 +62,21 @@ defaultTest:
     - type: javascript
       threshold: 0.7
       value: |
-        // `output_format` makes the SDK hand us a parsed object directly.
+        // `output_format` makes the SDK hand us a parsed object directly. The
+        // Codex example's parallel assertion has to wrap with `JSON.parse(output)`
+        // because `output_schema` keeps `output` as a JSON string.
         const expected = context.vars.expectedIssues;
         const found = (output.issues || []).map((issue) => issue.id);
         const hits = expected.filter((id) => found.includes(id));
+        const extras = found.filter((id) => !expected.includes(id));
         const recall = hits.length / expected.length;
+        const precision = found.length ? hits.length / found.length : 0;
+        const score = 0.7 * recall + 0.3 * precision;
 
         return {
-          pass: recall >= 0.75,
-          score: recall,
-          reason: `matched ${hits.length}/${expected.length} expected issues`,
+          pass: recall >= 0.75 && precision >= 0.5,
+          score,
+          reason: `matched ${hits.length}/${expected.length} expected issues; ${extras.length} unexpected issues`,
         };
 
 tests:
