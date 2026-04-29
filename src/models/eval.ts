@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
@@ -10,7 +10,9 @@ import {
   evalsToPromptsTable,
   evalsToTagsTable,
   promptsTable,
+  spansTable,
   tagsTable,
+  tracesTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
@@ -1401,6 +1403,18 @@ export default class Eval {
   async delete() {
     const db = getDb();
     db.transaction(() => {
+      const traceIds = db
+        .select({ traceId: tracesTable.traceId })
+        .from(tracesTable)
+        .where(eq(tracesTable.evaluationId, this.id))
+        .all()
+        .map(({ traceId }) => traceId);
+
+      if (traceIds.length > 0) {
+        db.delete(spansTable).where(inArray(spansTable.traceId, traceIds)).run();
+      }
+
+      db.delete(tracesTable).where(eq(tracesTable.evaluationId, this.id)).run();
       db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
       db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
       db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();

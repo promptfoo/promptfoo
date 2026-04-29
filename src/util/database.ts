@@ -10,7 +10,9 @@ import {
   evalsToPromptsTable,
   evalsToTagsTable,
   promptsTable,
+  spansTable,
   tagsTable,
+  tracesTable,
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -437,10 +439,30 @@ export async function getEvalFromId(hash: string) {
   return undefined;
 }
 
+function deleteTraceRecordsForEvals(db: ReturnType<typeof getDb>, evalIds: string[]) {
+  if (evalIds.length === 0) {
+    return;
+  }
+
+  const traceIds = db
+    .select({ traceId: tracesTable.traceId })
+    .from(tracesTable)
+    .where(inArray(tracesTable.evaluationId, evalIds))
+    .all()
+    .map(({ traceId }) => traceId);
+
+  if (traceIds.length > 0) {
+    db.delete(spansTable).where(inArray(spansTable.traceId, traceIds)).run();
+  }
+
+  db.delete(tracesTable).where(inArray(tracesTable.evaluationId, evalIds)).run();
+}
+
 export async function deleteEval(evalId: string) {
   const db = getDb();
   db.transaction(() => {
     // We need to clean up foreign keys first. We don't have onDelete: 'cascade' set on all these relationships.
+    deleteTraceRecordsForEvals(db, [evalId]);
     db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
     db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
     db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
@@ -461,6 +483,7 @@ export async function deleteEval(evalId: string) {
 export function deleteEvals(ids: string[]) {
   const db = getDb();
   db.transaction(() => {
+    deleteTraceRecordsForEvals(db, ids);
     db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
     db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
     db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
@@ -477,6 +500,8 @@ export function deleteEvals(ids: string[]) {
 export async function deleteAllEvals(): Promise<void> {
   const db = getDb();
   db.transaction(() => {
+    db.delete(spansTable).run();
+    db.delete(tracesTable).run();
     db.delete(evalResultsTable).run();
     db.delete(evalsToPromptsTable).run();
     db.delete(evalsToDatasetsTable).run();
