@@ -191,6 +191,10 @@ describe('AzureFoundryAgentProvider', () => {
           },
         },
       );
+      // Guard against regressing to the deprecated `agent` key, which the
+      // Foundry Responses API now rejects with a 400.
+      const responseOptions = mockResponsesCreate.mock.calls[0][1];
+      expect(responseOptions.body).not.toHaveProperty('agent');
       expect(result.output).toBe('Test response');
     });
 
