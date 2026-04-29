@@ -81,7 +81,8 @@ The caveat is that many trials are required to find an effective suffix.
 - [Iterative Jailbreaks](iterative.md) - Alternative jailbreaking approach without gradients
 - [Composite Jailbreaks](composite-jailbreaks.md) - Combined techniques for jailbreaking
 - [Tree-based Jailbreaks](tree.md) - Systematic approach using tree structures
-- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Vulnerability categories and plugin mapping
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
 
 ## References
 
