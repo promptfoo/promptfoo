@@ -2,7 +2,6 @@ import dedent from 'dedent';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { extractGoalFromPrompt } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -15,70 +14,9 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types/index';
-import type { Inputs } from '../../types/shared';
 import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:intent';
-const USER_INPUT_KEY_PRIORITY = [
-  'prompt',
-  'query',
-  'message',
-  'input',
-  'question',
-  'request',
-  'user_input',
-  'userinput',
-  'text',
-  'body',
-];
-
-function stringifyInputValue(value: unknown): string {
-  return typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
-}
-
-function getPrimaryInputKey(inputKeys: string[]): string {
-  return (
-    USER_INPUT_KEY_PRIORITY.map((candidate) =>
-      inputKeys.find((key) => key.toLowerCase().replace(/[^a-z0-9]/g, '') === candidate),
-    ).find((key): key is string => key !== undefined) ??
-    inputKeys[0] ??
-    'prompt'
-  );
-}
-
-function buildMultiInputVars(intent: string, inputs: Inputs | undefined): Record<string, string> {
-  const inputKeys = inputs ? Object.keys(inputs) : [];
-  const inputVars: Record<string, string> = {};
-
-  if (inputKeys.length === 0) {
-    return inputVars;
-  }
-
-  try {
-    const parsed = JSON.parse(intent);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      for (const key of inputKeys) {
-        if (key in parsed) {
-          inputVars[key] = stringifyInputValue((parsed as Record<string, unknown>)[key]);
-        }
-      }
-    }
-  } catch {
-    // Plain-text intents are mapped to the most likely user-message input below.
-  }
-
-  if (Object.keys(inputVars).length === 0) {
-    inputVars[getPrimaryInputKey(inputKeys)] = intent;
-  }
-
-  for (const key of inputKeys) {
-    if (!(key in inputVars)) {
-      inputVars[key] = `test_${key}`;
-    }
-  }
-
-  return inputVars;
-}
 
 export class IntentPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
@@ -112,34 +50,19 @@ export class IntentPlugin extends RedteamPluginBase {
     // Instead of generating new prompts, we create one test case per intent
     const testCases: TestCase[] = [];
 
-    for (const [index, intent] of this.intents.entries()) {
+    for (const intent of this.intents) {
       if (typeof intent === 'string') {
         const extractedIntent = await extractGoalFromPrompt(intent, this.purpose, this.id);
-        const inputVars = buildMultiInputVars(intent, this.config.inputs);
-        const hasMultipleInputs = Boolean(this.config.inputs && Object.keys(inputVars).length > 0);
-        const materializedInputVars = hasMultipleInputs
-          ? await materializeInputVariablesWithMetadata(inputVars, this.config.inputs!, {
-              materializationIndex: index,
-              pluginId: 'intent',
-              provider: this.provider,
-              purpose: this.purpose,
-            })
-          : undefined;
 
         testCases.push({
           vars: {
-            [this.injectVar]: hasMultipleInputs ? JSON.stringify(inputVars) : intent,
-            ...(materializedInputVars?.vars || {}),
+            [this.injectVar]: intent,
           },
           assert: this.getAssertions(intent),
           metadata: {
             goal: extractedIntent,
             pluginId: this.id,
             pluginConfig: undefined,
-            ...(hasMultipleInputs ? { inputVars } : {}),
-            ...(materializedInputVars?.metadata
-              ? { inputMaterialization: materializedInputVars.metadata }
-              : {}),
           },
         });
       } else {
