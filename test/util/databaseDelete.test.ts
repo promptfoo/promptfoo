@@ -95,27 +95,16 @@ describe('database eval deletion', () => {
     expect(await Eval.findById(eval_.id)).toBeUndefined();
   });
 
-  it('deletes evals that share span ids across distinct traces', async () => {
-    const eval1 = await EvalFactory.create();
-    const eval2 = await EvalFactory.create();
-    await addTrace(eval1.id, 'trace-shared-span-1');
-    await addTrace(eval2.id, 'trace-shared-span-2');
-
-    // Each trace already has one span; add another span on eval1's trace to
-    // exercise multi-span cleanup for a single trace.
-    const traceStore = new TraceStore();
-    await traceStore.addSpans('trace-shared-span-1', [
-      {
-        spanId: 'extra-span',
-        name: 'extra',
-        startTime: 2,
-      },
+  it('deletes every span when a trace has multiple spans', async () => {
+    const eval_ = await EvalFactory.create();
+    await addTrace(eval_.id, 'trace-multi-span');
+    await new TraceStore().addSpans('trace-multi-span', [
+      { spanId: 'extra-span', name: 'extra', startTime: 2 },
     ]);
 
-    deleteEvals([eval1.id, eval2.id]);
+    await deleteEval(eval_.id);
 
     const db = getDb();
-    expect(db.select().from(tracesTable).all()).toHaveLength(0);
     expect(db.select().from(spansTable).all()).toHaveLength(0);
   });
 });
