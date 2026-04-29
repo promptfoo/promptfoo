@@ -781,7 +781,7 @@ evalRouter.post(
       await eval_.save();
       await result.save();
 
-      res.json(EvalSchemas.SubmitRating.Response.parse({ message: 'Rating submitted' }));
+      res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }

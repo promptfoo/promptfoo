@@ -152,6 +152,27 @@ describe('eval routes', () => {
       expect(findByIdSpy).toHaveBeenCalledWith('result-1');
     });
 
+    it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[0];
+      invariant(result.id, 'Result ID is required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+
+      expect(res.status).toBe(200);
+      // The body must include the updated EvalResult fields, not just a message
+      // envelope — external SDK consumers depend on reading refreshed grading
+      // state without a follow-up GET.
+      expect(res.body.id).toBe(result.id);
+      expect(typeof res.body.success).toBe('boolean');
+      expect(typeof res.body.score).toBe('number');
+      expect(res.body.gradingResult?.pass).toBe(true);
+    });
+
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

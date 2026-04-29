@@ -280,6 +280,29 @@ describe('inline server API DTO validation', () => {
     expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
   });
 
+  it('returns a 500 (not 404) when readResult throws', async () => {
+    mockedReadResult.mockRejectedValueOnce(new Error('sqlite: database is locked'));
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to load eval for share' });
+    // never advances to findById / createShareableUrl on a load failure
+    expect(mockedEval.findById).not.toHaveBeenCalled();
+    expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
+  });
+
+  it('returns a 500 (not 404) when Eval.findById throws after readResult succeeds', async () => {
+    mockedReadResult.mockResolvedValue({ result: { id: 'eval-1' } } as never);
+    mockedEval.findById.mockRejectedValueOnce(new Error('sqlite: database is locked'));
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to load eval for share' });
+    expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
+  });
+
   it('does not rate-limit share URL creation attempts', async () => {
     mockedReadResult.mockResolvedValue(undefined);
 

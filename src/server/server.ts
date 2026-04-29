@@ -262,13 +262,26 @@ export function createApp() {
     const { id } = bodyResult.data;
     logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
 
-    const result = await readResult(id);
+    let result: Awaited<ReturnType<typeof readResult>>;
+    try {
+      result = await readResult(id);
+    } catch (error) {
+      sendError(res, 500, 'Failed to load eval for share', error);
+      return;
+    }
     if (!result) {
       logger.warn('Eval not found for share request', { id, source: 'result' });
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
-    const eval_ = await Eval.findById(id);
+
+    let eval_: Awaited<ReturnType<typeof Eval.findById>>;
+    try {
+      eval_ = await Eval.findById(id);
+    } catch (error) {
+      sendError(res, 500, 'Failed to load eval for share', error);
+      return;
+    }
     if (!eval_) {
       logger.warn('Eval not found for share request', { id });
       res.status(404).json({ error: 'Eval not found' });
