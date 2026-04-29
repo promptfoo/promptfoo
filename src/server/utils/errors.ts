@@ -30,7 +30,13 @@ function serializeError(value: unknown, depth: number, seen: Set<unknown>): unkn
     return { name: value.name, message: value.message };
   }
   seen.add(value);
+  // Spread enumerable own props first so subclass diagnostics (Node
+  // SystemError `code`/`errno`/`syscall`/`path`, AWS SDK `$metadata`/`$fault`,
+  // node-fetch `code`, custom provider metadata) reach the log. Then overlay
+  // the four standard non-enumerable Error fields so they always win even if
+  // a subclass shadowed them as enumerable.
   return {
+    ...value,
     name: value.name,
     message: value.message,
     stack: value.stack,

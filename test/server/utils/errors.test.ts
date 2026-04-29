@@ -111,6 +111,43 @@ describe('server/utils/errors', () => {
       expect(context).toEqual({ error: null });
     });
 
+    it('preserves enumerable diagnostic fields on Error subclasses', () => {
+      // Node SystemError carries `code`/`errno`/`syscall`/`path` as enumerable
+      // own props; AWS SDK errors carry `$metadata`/`$fault`; fetch errors
+      // carry `code`/`errno`. Logging the explicit four fields without
+      // spreading would silently drop these — exactly the production-triage
+      // regression flagged by the Codex P2 reviewer on this PR.
+      const { res } = createResponseMock();
+      const sysErr = Object.assign(new Error('ENOENT: no such file or directory, open ...'), {
+        code: 'ENOENT',
+        errno: -2,
+        syscall: 'open',
+        path: '/missing/file',
+      });
+
+      sendError(res, 500, 'Failed', sysErr);
+
+      const [, context] = (logger.error as unknown as Mock).mock.calls[0];
+      const ctx = context as {
+        error: {
+          name: string;
+          message: string;
+          stack: string;
+          code: string;
+          errno: number;
+          syscall: string;
+          path: string;
+        };
+      };
+      expect(ctx.error.name).toBe('Error');
+      expect(ctx.error.code).toBe('ENOENT');
+      expect(ctx.error.errno).toBe(-2);
+      expect(ctx.error.syscall).toBe('open');
+      expect(ctx.error.path).toBe('/missing/file');
+      // Standard fields still win even though the subclass also has its own.
+      expect(typeof ctx.error.stack).toBe('string');
+    });
+
     it('preserves Error subclass name (TypeError, custom subclasses)', () => {
       const { res } = createResponseMock();
       class CustomError extends Error {
