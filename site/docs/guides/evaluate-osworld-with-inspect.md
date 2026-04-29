@@ -150,7 +150,7 @@ supported OSWorld samples, derives app metadata from each sample's
 from pathlib import Path
 from inspect_evals.osworld import osworld_small
 
-EXAMPLE_PATH = "/tmp/osworld/desktop_env/example.json"
+CONTAINER_EXAMPLE_PATH = "/tmp/osworld/desktop_env/example.json"
 
 
 def generate_tests():
@@ -161,7 +161,7 @@ def generate_tests():
 def _test_case(sample):
     sample_id = str(sample.id)
     instruction = str(sample.input)
-    app = _app_from_path(sample.files[EXAMPLE_PATH])
+    app = _normalize_app(Path(sample.files[CONTAINER_EXAMPLE_PATH]).parent.name)
     return {
         "description": f"{app} - {' '.join(instruction.split())[:80]}",
         "vars": {"prompt": instruction, "app": app, "sample_id": sample_id},
@@ -173,9 +173,9 @@ def _test_case(sample):
     }
 
 
-def _app_from_path(path):
-    app = Path(path).parent.name.replace("vs_code", "vscode")
-    return app
+def _normalize_app(app):
+    normalized = str(app).strip().lower().replace("-", "_").replace(" ", "_")
+    return "vscode" if normalized == "vs_code" else normalized
 ```
 
 Those generated `vars` arrive in `provider.py` as `context["vars"]["app"]` and
@@ -261,7 +261,7 @@ inspect log dump "$(jq -r '.results.results[0].response.metadata.inspect_log_pat
 jq '{
   status,
   sample_id: .samples[0].id,
-  score: (.samples[0].scores | to_entries[0].value.value),
+  score: .samples[0].scores.osworld_scorer.value,
   final_answer: .samples[0].output.completion,
   model_usage: .stats.model_usage
 }' inspect-log.json
