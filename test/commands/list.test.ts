@@ -335,6 +335,8 @@ describe('list command', () => {
           ],
         },
       ];
+      const datasetId = datasets[0].id;
+      const bestPromptId = datasets[0].prompts[1].id;
       vi.mocked(getTestCases).mockResolvedValue(datasets);
 
       const datasetsCmd = getListSubcommand('datasets');
@@ -343,8 +345,8 @@ describe('list command', () => {
       expect(wrapTable).toHaveBeenCalledTimes(1);
       const [tableRows] = vi.mocked(wrapTable).mock.calls[0];
       expect(tableRows[0]).toMatchObject({
-        'dataset id': 'datase',
-        'best prompt': 'high-0',
+        'dataset id': datasetId.slice(0, 6),
+        'best prompt': bestPromptId.slice(0, 6),
         evals: 3,
         prompts: 2,
         'recent eval': 'eval-10',
