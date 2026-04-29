@@ -296,8 +296,12 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           : ModelAuditSchemas.Scan.ErrorResponse.parse(body);
         res.status(statusCode).json(parsed);
       } catch (parseError) {
+        // Match the existing logging style in this file (e.g.
+        // `logger.error('Failed to parse model scan output', { parseError, ... })`)
+        // by passing the raw error value so the logger sanitizer can preserve
+        // the stack and other diagnostic context.
         logger.error('safeRespond DTO parse failed; sending fallback envelope', {
-          parseError: parseError instanceof Error ? parseError.message : String(parseError),
+          parseError,
           statusCode,
         });
         // A parse failure on either branch means the response cannot be trusted.

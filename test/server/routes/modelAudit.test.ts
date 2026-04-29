@@ -334,10 +334,10 @@ describe('Model Audit Routes', () => {
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-double-respond.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
-      // Capture how many times `res.status(...).json(...)` actually writes a body.
-      // The historical bug was: parse throws inside safeRespond *before* the
-      // `responded = true` flag is set, so a second emitter (close after error)
-      // re-enters safeRespond and double-fires the response.
+      // Race `error` then `close` so both fire and both call into safeRespond.
+      // Under the pre-fix code, parse threw *before* `responded = true` was
+      // set, so the close emitter could re-enter safeRespond and write a
+      // second body.
       const errorThenClose = {
         on: vi.fn().mockImplementation(function (
           this: object,
@@ -358,9 +358,10 @@ describe('Model Audit Routes', () => {
       mockProc.on = errorThenClose.on as never;
       mockedSpawn.mockReturnValue(asMockChildProcess(mockProc));
 
-      // Force the error-branch parse to throw on first call; the existing
-      // pre-fix code would leave `responded = false` and the close emitter
-      // would attempt to send a second response.
+      // Force the error-branch parse to throw on the first call. Under the
+      // post-fix code `responded` flips to `true` before parse runs, so the
+      // close emitter that fires next observes `responded === true` and
+      // returns without entering parse a second time.
       const errorParseSpy = vi
         .spyOn(ModelAuditSchemas.Scan.ErrorResponse, 'parse')
         .mockImplementationOnce(() => {
@@ -373,12 +374,13 @@ describe('Model Audit Routes', () => {
           .timeout({ deadline: 1000 })
           .send({ paths: [testFilePath], options: { persist: false } });
 
-        // The parse fallback degrades the error envelope to a 500 with a
-        // deterministic message. The client receives exactly one body — the
-        // close emitter that fires next must observe `responded === true`
-        // and silently no-op.
         expect(response.status).toBe(500);
         expect(typeof response.body.error).toBe('string');
+        // `safeRespond` calls `Scan.ErrorResponse.parse` exactly once per
+        // *entered* invocation. If `responded` were not flipped before parse,
+        // the close emitter would re-enter and trigger a second parse call —
+        // so this single-call assertion is the proxy for "exactly one body
+        // was written to the response stream".
         expect(errorParseSpy).toHaveBeenCalledTimes(1);
       } finally {
         errorParseSpy.mockRestore();
