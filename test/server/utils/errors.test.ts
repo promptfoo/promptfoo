@@ -71,15 +71,21 @@ describe('server/utils/errors', () => {
       });
     });
 
-    it('preserves Error.cause when present', () => {
+    it('preserves Error.cause when present, serialized to retain its stack', () => {
       const { res } = createResponseMock();
       const cause = new Error('underlying');
+      cause.stack = 'Error: underlying\n    at someInnerFn';
       const err = new Error('wrapper', { cause });
 
       sendError(res, 500, 'Failed', err);
 
       const [, context] = (logger.error as unknown as Mock).mock.calls[0];
-      expect((context as { error: { cause: unknown } }).error.cause).toBe(cause);
+      const ctx = context as { error: { cause: { name: string; message: string; stack: string } } };
+      expect(ctx.error.cause.name).toBe('Error');
+      expect(ctx.error.cause.message).toBe('underlying');
+      // Stack must survive — serializing the raw Error reference would have
+      // dropped it via JSON.stringify, which is the regression this helper exists to prevent.
+      expect(ctx.error.cause.stack).toContain('someInnerFn');
     });
 
     it('passes non-Error values through verbatim', () => {
@@ -89,6 +95,93 @@ describe('server/utils/errors', () => {
 
       const [, context] = (logger.error as unknown as Mock).mock.calls[0];
       expect(context).toEqual({ error: 'plain string error' });
+    });
+
+    it('logs `null` as a real (no-detail) failure rather than skipping', () => {
+      // Pin current behavior: the guard is `internalError !== undefined`, so
+      // `null` reaches the logger. This is intentional — a future refactor to
+      // `if (internalError)` would silently swallow falsy-but-real signals
+      // (e.g. `0`, `false`, `''`).
+      const { res } = createResponseMock();
+
+      sendError(res, 500, 'Failed', null);
+
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      const [, context] = (logger.error as unknown as Mock).mock.calls[0];
+      expect(context).toEqual({ error: null });
+    });
+
+    it('preserves Error subclass name (TypeError, custom subclasses)', () => {
+      const { res } = createResponseMock();
+      class CustomError extends Error {
+        constructor(message: string) {
+          super(message);
+          this.name = 'CustomError';
+        }
+      }
+
+      sendError(res, 500, 'Failed', new TypeError('not a string'));
+      sendError(res, 500, 'Failed', new CustomError('bespoke'));
+
+      const calls = (logger.error as unknown as Mock).mock.calls;
+      expect((calls[0][1] as { error: { name: string } }).error.name).toBe('TypeError');
+      expect((calls[1][1] as { error: { name: string } }).error.name).toBe('CustomError');
+    });
+
+    it('recursively unwraps Error.cause chains so nested stacks survive serialization', () => {
+      const { res } = createResponseMock();
+      const root = new Error('root cause');
+      root.stack = 'Error: root cause\n    at deep';
+      const middle = new Error('middle', { cause: root });
+      middle.stack = 'Error: middle\n    at middle';
+      const top = new Error('top', { cause: middle });
+      top.stack = 'Error: top\n    at top';
+
+      sendError(res, 500, 'Failed', top);
+
+      const [, context] = (logger.error as unknown as Mock).mock.calls[0];
+      const ctx = context as {
+        error: {
+          stack: string;
+          cause: { stack: string; cause: { stack: string } };
+        };
+      };
+      expect(ctx.error.stack).toContain('top');
+      expect(ctx.error.cause.stack).toContain('middle');
+      expect(ctx.error.cause.cause.stack).toContain('deep');
+    });
+
+    it('does not crash on a circular Error.cause', () => {
+      const { res, status } = createResponseMock();
+      const cyclic = new Error('cyclic') as Error & { cause?: unknown };
+      cyclic.cause = cyclic;
+
+      expect(() => sendError(res, 500, 'Failed', cyclic)).not.toThrow();
+      // The response must still ship — cycle detection in serializeError is
+      // the entire reason this canonical 500 funnel doesn't unhandled-throw.
+      expect(status).toHaveBeenCalledWith(500);
+    });
+
+    it('falls back to a hand-built envelope if ErrorResponseSchema.parse throws', async () => {
+      // Force the schema parse to throw, simulating a future tightening that
+      // rejects what `sendError` produces. Without the safeRespond fallback,
+      // the throw would escape the handler's try/catch and land in Express's
+      // default error path (empty 500 with no JSON body).
+      const common = await import('../../../src/types/api/common');
+      const parseSpy = vi.spyOn(common.ErrorResponseSchema, 'parse').mockImplementationOnce(() => {
+        throw new Error('forced schema rejection');
+      });
+
+      try {
+        const { res, status, json } = createResponseMock();
+
+        expect(() => sendError(res, 500, 'Public message')).not.toThrow();
+        expect(status).toHaveBeenCalledWith(500);
+        expect(json.mock.calls[0]?.[0]).toEqual({ error: 'Public message' });
+        expect(parseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        parseSpy.mockRestore();
+      }
     });
   });
 
