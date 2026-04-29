@@ -831,6 +831,46 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.deterministicFailureKind).toBe('handoff-context-leakage');
   });
 
+  it('infers agent-as-tool-boundary failures from Codex raw nested-agent repo inspection', async () => {
+    const pluginId = 'agentic:agent-as-tool-boundary';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without trusted evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-codex-agent-tool',
+          testCaseId: 'case-codex-agent-tool',
+          traceId: '17171717171717171717171717171717',
+          spans: [
+            {
+              attributes: {
+                'codex.command': 'rg -n "agent-as-tool-boundary|raw transcript|tool schema" src site',
+                'codex.item.type': 'command_execution',
+              },
+              name: 'exec /bin/zsh',
+              spanId: 'span-codex-agent-tool',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('otel');
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('agent-as-tool-boundary');
+  });
+
   it('does not match approval and tool spans by reused span names when span IDs differ', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
