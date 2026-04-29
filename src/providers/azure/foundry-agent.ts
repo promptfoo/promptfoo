@@ -43,7 +43,7 @@ interface AgentReferenceOption {
 
 interface FoundryResponseCreateOptions {
   body?: {
-    agent?: AgentReferenceOption;
+    agent_reference?: AgentReferenceOption;
   };
 }
 
@@ -431,9 +431,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private getAgentReference(agent: FoundryAgent): FoundryResponseCreateOptions {
+    // Azure AI Foundry deprecated the top-level `agent` field in the responses
+    // create body in favor of `agent_reference`. Sending `agent` now returns a
+    // 400 from the service: "The 'agent' property is deprecated. Use
+    // 'agent_reference' instead."
     return {
       body: {
-        agent: {
+        agent_reference: {
           name: agent.name,
           type: 'agent_reference',
         },

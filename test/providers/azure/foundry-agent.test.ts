@@ -184,7 +184,7 @@ describe('AzureFoundryAgentProvider', () => {
         }),
         {
           body: {
-            agent: {
+            agent_reference: {
               name: 'weather-agent',
               type: 'agent_reference',
             },
@@ -216,7 +216,7 @@ describe('AzureFoundryAgentProvider', () => {
       expect(mockListAgents).toHaveBeenCalledTimes(1);
       expect(mockResponsesCreate).toHaveBeenCalledWith(expect.any(Object), {
         body: {
-          agent: {
+          agent_reference: {
             name: 'weather-agent',
             type: 'agent_reference',
           },
@@ -322,7 +322,7 @@ describe('AzureFoundryAgentProvider', () => {
         },
         {
           body: {
-            agent: {
+            agent_reference: {
               name: 'weather-agent',
               type: 'agent_reference',
             },
