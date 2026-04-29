@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { AtlasCloudProvider, createAtlasCloudProvider } from '../../src/providers/atlascloud';
 import * as fetchModule from '../../src/util/fetch/index';
@@ -16,6 +16,13 @@ vi.mock('../../src/util', async (importOriginal: any) => {
 
 vi.mock('../../src/util/fetch/index.ts');
 
+const jsonResponse = (body: unknown, status = 200, statusText = 'OK') =>
+  new Response(JSON.stringify(body), {
+    status,
+    statusText,
+    headers: new Headers({ 'Content-Type': 'application/json' }),
+  });
+
 describe('AtlasCloud', () => {
   const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
@@ -25,17 +32,28 @@ describe('AtlasCloud', () => {
   });
 
   describe('AtlasCloudProvider', () => {
-    const provider = new AtlasCloudProvider('deepseek-v3', {});
+    let restoreEnv: () => void;
+
+    beforeEach(() => {
+      restoreEnv = mockProcessEnv({ ATLASCLOUD_API_KEY: 'atlas-test-key' });
+    });
+
+    afterEach(() => {
+      restoreEnv();
+    });
 
     it('should initialize with correct model name', () => {
+      const provider = new AtlasCloudProvider('deepseek-v3', {});
       expect(provider.modelName).toBe('deepseek-v3');
     });
 
     it('should return correct id', () => {
+      const provider = new AtlasCloudProvider('deepseek-v3', {});
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
     it('should return correct string representation', () => {
+      const provider = new AtlasCloudProvider('deepseek-v3', {});
       expect(provider.toString()).toBe('[Atlas Cloud Provider deepseek-v3]');
     });
 
@@ -86,7 +104,7 @@ describe('AtlasCloud', () => {
     });
 
     it('should preserve custom apiBaseUrl and apiKeyEnvar overrides', () => {
-      const restoreEnv = mockProcessEnv({ CUSTOM_ATLASCLOUD_KEY: 'custom-test-key' });
+      const restoreCustomEnv = mockProcessEnv({ CUSTOM_ATLASCLOUD_KEY: 'custom-test-key' });
 
       try {
         const provider = new AtlasCloudProvider('deepseek-v3', {
@@ -100,104 +118,71 @@ describe('AtlasCloud', () => {
         expect(provider.config.apiKeyEnvar).toBe('CUSTOM_ATLASCLOUD_KEY');
         expect(provider.getApiKey()).toBe('custom-test-key');
       } finally {
-        restoreEnv();
+        restoreCustomEnv();
       }
     });
 
     it('should call the Atlas Cloud API and return output', async () => {
-      const restoreEnv = mockProcessEnv({ ATLASCLOUD_API_KEY: 'atlas-test-key' });
+      const provider = new AtlasCloudProvider('deepseek-v3', {});
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        jsonResponse({
+          choices: [{ message: { content: 'Atlas output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 12, prompt_tokens: 5, completion_tokens: 7 },
+        }),
+      );
 
-      try {
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Atlas output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 12, prompt_tokens: 5, completion_tokens: 7 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+      const result = await provider.callApi('Test prompt');
 
-        const result = await provider.callApi('Test prompt');
-
-        const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
-        expect(url).toBe(`${ATLASCLOUD_API_BASE}/chat/completions`);
-        expect((init as RequestInit | undefined)?.headers).toMatchObject({
-          Authorization: 'Bearer atlas-test-key',
-        });
-        expect(result.output).toBe('Atlas output');
-        expect(result.tokenUsage).toEqual({
-          total: 12,
-          prompt: 5,
-          completion: 7,
-          numRequests: 1,
-        });
-      } finally {
-        restoreEnv();
-      }
+      const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+      expect(url).toBe(`${ATLASCLOUD_API_BASE}/chat/completions`);
+      expect((init as RequestInit | undefined)?.headers).toMatchObject({
+        Authorization: 'Bearer atlas-test-key',
+      });
+      expect(result.output).toBe('Atlas output');
+      expect(result.tokenUsage).toEqual({
+        total: 12,
+        prompt: 5,
+        completion: 7,
+        numRequests: 1,
+      });
     });
 
     it('should call the configured apiBaseUrl instead of the default host', async () => {
-      const restoreEnv = mockProcessEnv({ ATLASCLOUD_API_KEY: 'atlas-test-key' });
+      const customApiBaseUrl = 'https://proxy.example.com/atlas/v1';
+      const provider = new AtlasCloudProvider('deepseek-v3', {
+        config: { apiBaseUrl: customApiBaseUrl },
+      });
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        jsonResponse({
+          choices: [{ message: { content: 'Custom host output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 8, prompt_tokens: 3, completion_tokens: 5 },
+        }),
+      );
 
-      try {
-        const customApiBaseUrl = 'https://proxy.example.com/atlas/v1';
-        const provider = new AtlasCloudProvider('deepseek-v3', {
-          config: {
-            apiBaseUrl: customApiBaseUrl,
-          },
-        });
+      await provider.callApi('Test prompt');
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Custom host output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 8, prompt_tokens: 3, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
-
-        await provider.callApi('Test prompt');
-
-        const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
-        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
-      } finally {
-        restoreEnv();
-      }
+      const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
+      expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
     });
 
     it('should surface API errors', async () => {
-      const restoreEnv = mockProcessEnv({ ATLASCLOUD_API_KEY: 'atlas-test-key' });
-
-      try {
-        const response = new Response(
-          JSON.stringify({
+      const provider = new AtlasCloudProvider('deepseek-v3', {});
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        jsonResponse(
+          {
             error: {
               message: 'Invalid request',
               type: 'invalid_request_error',
             },
-          }),
-          {
-            status: 400,
-            statusText: 'Bad Request',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
           },
-        );
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+          400,
+          'Bad Request',
+        ),
+      );
 
-        const result = await provider.callApi('Test prompt');
-        expect(result.error).toContain('400 Bad Request');
-        expect(result.error).toContain('Invalid request');
-      } finally {
-        restoreEnv();
-      }
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('400 Bad Request');
+      expect(result.error).toContain('Invalid request');
     });
   });
 

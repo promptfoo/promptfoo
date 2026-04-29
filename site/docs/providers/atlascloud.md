@@ -76,8 +76,8 @@ providers:
 
 Precedence is:
 
-- `config.apiBaseUrl` if provided
-- otherwise Atlas Cloud's default `https://api.atlascloud.ai/v1`
+- `config.apiBaseUrl` if provided, otherwise Atlas Cloud's default `https://api.atlascloud.ai/v1`
+- `config.apiKeyEnvar` if provided, otherwise `ATLASCLOUD_API_KEY`
 
 ## Model Examples
 

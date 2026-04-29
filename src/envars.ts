@@ -241,14 +241,14 @@ type EnvVars = {
   // AIML API
   AIML_API_KEY?: string;
 
-  // Atlas Cloud
-  ATLASCLOUD_API_KEY?: string;
-
   // Anthropic
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
+
+  // Atlas Cloud
+  ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
   AWS_BEARER_TOKEN_BEDROCK?: string;

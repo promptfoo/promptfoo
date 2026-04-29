@@ -34,9 +34,3 @@ tests:
     assert:
       - type: icontains
         value: 'machine learning'
-
-defaultTest:
-  options:
-    provider:
-      config:
-        temperature: 0.7

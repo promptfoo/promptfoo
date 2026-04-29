@@ -1,5 +1,6 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
+import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 const ATLASCLOUD_API_BASE = 'https://api.atlascloud.ai/v1';
@@ -38,22 +39,11 @@ export class AtlasCloudProvider extends OpenAiChatCompletionProvider {
 
 export function createAtlasCloudProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: Record<string, string | undefined>;
-  } = {},
+  options: { config?: ProviderOptions; env?: EnvOverrides } = {},
 ): ApiProvider {
-  const splits = providerPath.split(':');
-  const modelName = splits.slice(1).join(':');
-
-  const providerOptions: ProviderOptions = options.config ? { ...options.config } : {};
-  if (options.env && !providerOptions.env) {
-    providerOptions.env = options.env as ProviderOptions['env'];
-  }
-  if (options.id && !providerOptions.id) {
-    providerOptions.id = options.id;
-  }
-
-  return new AtlasCloudProvider(modelName, providerOptions);
+  const modelName = providerPath.split(':').slice(1).join(':');
+  return new AtlasCloudProvider(modelName, {
+    ...options.config,
+    env: options.config?.env ?? options.env,
+  });
 }

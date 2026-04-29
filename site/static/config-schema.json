@@ -182,13 +182,13 @@
         "AIML_API_KEY": {
           "type": "string"
         },
-        "ATLASCLOUD_API_KEY": {
-          "type": "string"
-        },
         "ANTHROPIC_API_KEY": {
           "type": "string"
         },
         "ANTHROPIC_BASE_URL": {
+          "type": "string"
+        },
+        "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
         "AWS_BEDROCK_REGION": {
@@ -1607,13 +1607,13 @@
                     "AIML_API_KEY": {
                       "type": "string"
                     },
-                    "ATLASCLOUD_API_KEY": {
-                      "type": "string"
-                    },
                     "ANTHROPIC_API_KEY": {
                       "type": "string"
                     },
                     "ANTHROPIC_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
                     "AWS_BEDROCK_REGION": {
