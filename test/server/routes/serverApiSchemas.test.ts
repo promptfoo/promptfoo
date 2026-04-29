@@ -279,6 +279,11 @@ describe('inline server API DTO validation', () => {
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: 'Eval not found' });
     expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
+    // Symmetric to the happy-path assertion above: the 404 branch must also
+    // never reach `readResult`. Otherwise a future refactor that reintroduces
+    // a `readResult` preflight only on the not-found path would silently
+    // resurrect the DB-error-as-404 regression.
+    expect(mockedReadResult).not.toHaveBeenCalled();
   });
 
   it('returns a 500 (not 404) when Eval.findById throws on a real DB error', async () => {
