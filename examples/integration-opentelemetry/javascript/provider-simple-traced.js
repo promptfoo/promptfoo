@@ -1,5 +1,6 @@
 // provider-simple-traced.js
-// RAG/Agent provider with intricate OpenTelemetry tracing
+// RAG/Agent provider with nested OpenTelemetry tracing for the
+// site/docs/guides/trace-based-agent-evals.md guide.
 
 const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');

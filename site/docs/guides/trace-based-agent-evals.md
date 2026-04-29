@@ -1,6 +1,6 @@
 ---
-title: 'Trace-Based Agent Evaluation: Tool-Call, Trajectory, and CI Assertions'
-description: Evaluate AI agents on what they actually did — tool calls, retrieval steps, reasoning, and ordering — using OpenTelemetry traces in Promptfoo.
+title: 'Trace-Based Agent Evals: Tool Calls, Trajectories, and CI'
+description: Evaluate AI agents on what they actually did — tool calls, retrieval, reasoning, and ordering — using OpenTelemetry traces in Promptfoo.
 keywords:
   - agent evaluation
   - agent trajectory evaluation
@@ -11,10 +11,11 @@ keywords:
   - trace evaluation
   - LLM CI
 image: /img/docs/tracing/trace-guide-results-overview.png
+slug: /guides/trace-based-agent-evals
 sidebar_position: 64
 ---
 
-# Trace-Based Agent Evaluation
+# Trace-Based Agent Evals
 
 Agent evals often fail in the space between the prompt and the final answer. A support agent can say it looked up an order without calling the order API. A coding agent can say tests passed without running them. A RAG pipeline can answer correctly while silently skipping retrieval.
 
@@ -33,7 +34,7 @@ This guide shows how to:
 - design trace checks that stay stable as an agent evolves
 
 :::note Span 101: a 60-second primer
-A **span** is one timed operation in a trace. It has a `name`, a `startTime` and (usually) an `endTime`, an OTEL `statusCode`, and a flat `attributes` map of strings, numbers, and booleans. Spans nest into a tree via `parentSpanId`, and the whole tree shares one `traceId`.
+A **span** is one timed operation in a trace. It has a `name`, a `startTime` and (usually) an `endTime`, an OTel `status.code`, and a flat `attributes` map of strings, numbers, and booleans. Spans nest into a tree via `parentSpanId`, and the whole tree shares one `traceId`. We call the linearized step list derived from that tree the agent's **trajectory**.
 
 A trace from one eval row of the example RAG agent looks like this (each indent is a parent → child relationship):
 
@@ -44,6 +45,7 @@ rag_agent_workflow
 │  ├─ retrieve_document_0          attrs: {tool.name: search_corpus, tool.arguments: "..."}
 │  ├─ retrieve_document_1          attrs: {tool.name: search_corpus, ...}
 │  └─ retrieve_document_2          attrs: {tool.name: search_corpus, ...}
+├─ context_augmentation            attrs: {augmentation.strategy: rerank_and_merge}
 ├─ reasoning_chain
 │  ├─ reasoning_identify_key_concepts
 │  ├─ reasoning_analyze_relationships
@@ -51,10 +53,12 @@ rag_agent_workflow
 └─ response_generation              attrs: {tool.name: compose_answer}
 ```
 
-Promptfoo asserts on this tree two ways: directly (`trace-span-*` over names, timing, and status) or after normalization into trajectory steps (`trajectory:*` over `tool` / `command` / `search` / `reasoning` / `message`). The W3C `traceparent` string (`00-<traceId>-<spanId>-<flags>`) is what stitches your provider's spans into Promptfoo's eval row — your provider reads it from the call context and uses it as the parent context for every span it emits.
+Promptfoo asserts on this tree two ways: directly (`trace-span-*` over names, timing, and status) or after normalization into trajectory steps (`trajectory:*` over `tool` / `command` / `search` / `reasoning` / `message`). The W3C `traceparent` string (`00-<traceId>-<spanId>-<flags>`) is what stitches your provider's spans into Promptfoo's eval row: your provider reads it from the call context and uses it as the parent context for every span it emits.
+
+If you have never instrumented anything before, jump straight to [Run the example](#run-the-example) and come back to the conceptual sections after you have seen a trace render.
 :::
 
-## Why Evaluate Agent Trajectories, Not Just Final Answers
+## Why evaluate agent trajectories, not just final answers
 
 Modern agent observability tools are converging on the same pattern: keep the trace as the ground truth for what the agent did, then evaluate the trace instead of only evaluating the final message.
 
@@ -65,7 +69,7 @@ Modern agent observability tools are converging on the same pattern: keep the tr
 
 Promptfoo's angle is that these checks live in the same eval config as the rest of your regression suite. You can run them locally, in CI, against custom providers, and against agent SDKs that emit or forward OpenTelemetry spans.
 
-## Raw Spans vs. Trajectory Steps
+## Raw spans vs. trajectory steps
 
 Trace-based evals have three layers:
 
@@ -100,7 +104,7 @@ For each traced test row, Promptfoo runs the same loop:
 Trace-based assertions are not a separate observability product bolted on after the run — they are part of the eval result. Pass/fail status, scores, reasons, and the trace UI all point at the same execution path.
 :::
 
-## Run The Example
+## Run the example
 
 The JavaScript OpenTelemetry example includes a traced RAG-style provider and a complete trace guide config:
 
@@ -114,6 +118,10 @@ npx promptfoo@latest view
 ```
 
 The example uses a simulated provider for the RAG workflow. It only needs `OPENAI_API_KEY` for the model-graded `trajectory:goal-success` assertion. If you want a fully offline run, remove that assertion and keep the deterministic trace and trajectory assertions.
+
+:::note The example provider's body is hardcoded
+The simulated provider always emits the same response body and the same `search_corpus` query so the deterministic `contains` and `trajectory:tool-args-match` assertions stay green across runs. Treat those two assertions as instructive shape, not as proof that the feature handles paraphrased queries — a real model will phrase `quantum computing classical computing` a dozen different ways. See [Anti-patterns](#anti-patterns) for how to assert on causally load-bearing arguments instead of free text.
+:::
 
 Open the eval row, then switch between **Evaluation** and **Traces** in the details panel. The Evaluation tab shows which assertion passed and why:
 
@@ -138,7 +146,7 @@ In the passing run above, Promptfoo verified:
 - no `issue_refund` tool call
 - the expected search query argument
 - search before answer composition
-- four reasoning steps (the parent `reasoning_chain` span plus three `reasoning_*` children — any span whose name starts with `reasoning` or `reasoning_` counts)
+- four reasoning steps (the parent `reasoning_chain` span plus three `reasoning_*` children — see [`trajectory:step-count`](#trajectorystep-count) for the exact reasoning name match)
 - overall traced task success with a judge score of `0.98`
 
 Read the assertion reasons as a debugging contract:
@@ -148,7 +156,7 @@ Read the assertion reasons as a debugging contract:
 - inverse trajectory rows tell you which forbidden behavior was absent
 - `trajectory:goal-success` shows the goal template and the judge's trace-backed explanation
 
-## Instrument Spans For Assertions
+## Instrument spans for assertions
 
 Promptfoo receives traces through its OTLP receiver. Enable tracing in your config:
 
@@ -188,7 +196,17 @@ Promptfoo normalizes spans into trajectory steps like this:
 | `message`            | Agent response/message spans such as `agent response` or `send input`                                          | Multi-turn agent message checks                         |
 | `span`               | Any span that does not normalize into a more specific type                                                     | Temporary inspection or custom workflow checks          |
 
-Each span normalizes into exactly one trajectory step. When attributes overlap, Promptfoo applies them in this priority order: shell-style tool calls become `command`, then any `tool.name` becomes `tool`, then a recognised command attribute becomes `command`, then a recognised search attribute becomes `search`, then reasoning, then message, otherwise `span`. So a retrieval span that sets both `tool.name: search_corpus` and `search.query: ...` normalizes to `tool`, not `search` — assert with `trajectory:tool-used` rather than `trajectory:step-count { type: search }` for that case.
+Each span normalizes into exactly one trajectory step. When attributes overlap, Promptfoo applies them in this priority order:
+
+1. Shell-style tool calls become `command`.
+2. Any `tool.name` becomes `tool`.
+3. A recognised command attribute becomes `command`.
+4. A recognised search attribute becomes `search`.
+5. Reasoning span names become `reasoning`.
+6. Agent message span names become `message`.
+7. Anything else becomes `span`.
+
+So a retrieval span that sets both `tool.name: search_corpus` and `search.query: ...` normalizes to `tool`, not `search`. Assert with `trajectory:tool-used` rather than `trajectory:step-count { type: search }` for that case.
 
 "Shell-style" means `tool.name` matches one of `shell`, `exec_command`, or `local_shell` (case-insensitive). A tool you named `bash`, `terminal`, `run`, or anything else falls through to step type `tool` by default. Extend the recognised set in your config:
 
@@ -220,7 +238,7 @@ Keep span names boring and stable. Avoid generated IDs in names; put IDs in attr
 
 If your provider manually flushes OpenTelemetry, flush after the root span has ended. Flushing before `span.end()` can export child spans while omitting the parent span, which makes count and timeline assertions harder to reason about.
 
-## Write A Complete Trace Eval
+## Write a complete trace eval
 
 The example config combines output quality, raw trace checks, deterministic trajectory checks, an inverse trajectory check, and one model-graded trajectory check:
 
@@ -331,7 +349,7 @@ curl "http://localhost:15500/api/traces/evaluation/$EVAL_ID" \
   | jq --arg tid "$TRACE_ID" '.traces[] | select(.traceId == $tid)'
 ```
 
-## Assertion Matrix
+## Assertion matrix
 
 Use this matrix when choosing an assertion:
 
@@ -363,7 +381,11 @@ All trace and trajectory assertions accept a `not-` prefix that flips the result
 - `not-trace-error-spans` passes when the error budget was **not** met (i.e. errors are present). Useful in negative tests where you intentionally trigger a tool failure.
 - `not-trace-span-duration` passes when at least one matching span exceeds the budget. Useful when proving that a slow path actually triggers your latency guardrail.
 
-## Assertion Reference
+:::warning Inverse `trace-*` forms need a span to act on
+For the no-match case, the inverse `trace-span-duration` and `trace-error-spans` assertions don't currently flip — when zero spans match the pattern they still report `pass: true`. Always pair these inverse forms with a `trace-span-count` presence check on a known span name so a missing trace can't silently satisfy an inverse assertion.
+:::
+
+## Assertion reference
 
 ### `trace-span-count`
 
@@ -543,7 +565,7 @@ The judge receives a JSON summary of the trajectory truncated to roughly 24 step
 For any of these, pair the judge with deterministic `trace-*` and `trajectory:*` assertions. The judge is at its best for "did the agent broadly accomplish the user's task?" and at its worst for "did this specific operation hit this specific argument?"
 :::
 
-## Retrieval Evaluation: Presence vs. Quality
+## Retrieval evaluation: presence vs. quality
 
 `trace-span-count` and `trajectory:tool-used` answer one question about a RAG pipeline: did retrieval _run_? They cannot answer whether retrieval _worked_. Treat the two as separate failure modes.
 
@@ -592,11 +614,11 @@ For any of these, pair the judge with deterministic `trace-*` and `trajectory:*`
 
 For full retrieval-quality scoring (precision@k, recall, MRR, faithfulness), see the [RAG evaluation guide](/docs/guides/evaluate-rag) and combine its scorers with the trace-presence assertions above. Trace-based assertions tell you the retriever _ran_; RAG metrics tell you the retriever _was right_.
 
-## Multi-Turn and Conversational Traces
+## Multi-turn and conversational traces
 
 A trace from a single eval row covers one turn. Multi-turn agents add two requirements:
 
-1. **Stitch turns into a session.** Set the OTel attribute `gen_ai.conversation.id` on every span emitted during the same conversation, and pass the same value into Promptfoo via `metadata.conversationId`. Promptfoo carries the metadata into the trace lookup so you can group rows by conversation post-hoc.
+1. **Stitch turns into a session.** Set the OTel attribute `gen_ai.conversation.id` on every span emitted during the same conversation, and set the same value as `metadata.conversationId` on each test row. Promptfoo does not group rows by conversation in the UI today, but matching IDs let you reassemble a session in `output.json` (e.g. `jq 'group_by(.testCase.metadata.conversationId)'`) or in your trace backend.
 2. **Assert per-turn and across turns.** Per-turn assertions live on each row as usual. Cross-turn assertions (e.g. "the agent never re-asks for the user's email") are most reliable when one row drives the full conversation in a single `callApi` invocation and emits one parent span per turn.
 
 ```yaml
@@ -634,7 +656,7 @@ tests:
 
 Tracking one conversation across multiple Promptfoo rows (one row per turn) is a useful pattern for production trace replay; today, asserting cross-turn behavior is most reliable inside one row.
 
-## Parallel and Concurrent Tool Calls
+## Parallel and concurrent tool calls
 
 `trajectory:tool-sequence` walks the steps sorted by `startTime` and looks for a subsequence. It assumes serial execution. An agent that fires three searches concurrently still produces three spans, but the order between them is determined by start-time race and is not stable.
 
@@ -673,7 +695,7 @@ Three workable patterns:
 
 `mode: subset` (the default) requires every expected tool to appear at least once but allows extras. `mode: exact` additionally forbids any tool outside the set. Use the inverse `not-trajectory:tool-set` to assert that a forbidden combination of tools never fired together.
 
-## CI Gating, Regressions, and Cost Budgets
+## CI gating, regressions, and cost budgets
 
 Trace-based assertions exist to fail PRs cleanly. A few patterns make them production-grade in CI:
 
@@ -693,13 +715,18 @@ jobs:
     timeout-minutes: 15
     concurrency:
       group: agent-eval-${{ github.ref }}
-      cancel-in-progress: true
+      # Don't cancel in-flight evals — let prior runs finish so artefacts upload
+      # and pass-rate trends stay continuous. Set to `true` only if you're
+      # comfortable losing data when commits land quickly.
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm ci
+      # Linux-only pre-flight; ubuntu-latest runners include `ss`.
+      # Replace with `lsof -nP -iTCP:4318` on macOS runners.
       - name: Verify port 4318 is free
         run: |
           if ss -lnt | grep -q ':4318 '; then
@@ -710,11 +737,12 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PROMPTFOO_DISABLE_TELEMETRY: '1'
+          # Fail the job if fewer than 95% of rows pass.
+          PROMPTFOO_PASS_RATE_THRESHOLD: '95'
         run: |
           npx promptfoo eval \
             -c promptfooconfig.yaml \
             --no-cache \
-            --pass-rate 0.95 \
             -o eval-output.json
       - name: Upload eval output
         if: always()
@@ -754,7 +782,7 @@ For large suites, also keep judges off the deterministic critical path. Tag judg
 
 Promptfoo does not currently produce a built-in run-vs-run diff. The pragmatic patterns:
 
-- **Suite-level threshold.** Pass `--pass-rate 0.95` so the CLI exits non-zero when row pass-rate drops below the threshold. Combine with `--share` to upload the run for human review when CI fails.
+- **Suite-level threshold.** Set `PROMPTFOO_PASS_RATE_THRESHOLD=95` (a percentage, not a fraction) so the CLI exits non-zero when row pass-rate drops below the threshold. Combine with `--share` to upload the run for human review when CI fails.
 - **Pinned baseline.** Check a sanitized `expected.json` into the repo and add a `javascript` assertion that compares each row's `score` and per-component scores to the baseline, failing on regression beyond a tolerance.
 - **Tagged artifacts.** Upload `eval-output.json` per commit (the workflow above does this), then compare PR vs base in a follow-up step with `jq`:
 
@@ -778,7 +806,11 @@ Agents that loop have unbounded cost. Use the built-in `tokens-used` assertion t
     source: auto # auto (default) | trace | response
 ```
 
-`source: auto` reads `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` (and Promptfoo's own `tokens.used`) off the trace when present, and falls back to `providerResponse.tokenUsage`. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
+`source: auto` sums any of `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.usage.total_tokens`, and Promptfoo's own `tokens.used` it finds across matching spans, and falls back to `providerResponse.tokenUsage` when the trace yields zero. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
+
+:::warning Don't mix aggregate and component token attributes on the same span
+The summer reads every recognised key, so a span that records both the OTel-style component fields (`gen_ai.usage.input_tokens` + `gen_ai.usage.output_tokens`) **and** the aggregate (`gen_ai.usage.total_tokens`) is double-counted. Pick one shape per span — components or totals, not both — or use `source: response` for budget assertions.
+:::
 
 Pair this with a tool-call ceiling to detect runaway loops directly from the span tree:
 
@@ -789,9 +821,9 @@ Pair this with a tool-call ceiling to detect runaway loops directly from the spa
   value: { pattern: '*', max: 200 }
 ```
 
-### Compare against last main
+### Compare against the last main run
 
-A common CI ask is "did this PR regress p95 latency vs main?" Today the cleanest route is two artefacts and a `jq`/`javascript` step. Run the eval on `main` nightly with the same config, store the artefact, then in PR runs compare:
+A common CI ask is "did this PR regress p95 latency vs main?" Today the cleanest route is two artefacts and a `jq`/`javascript` step. Run the eval on `main` nightly with the same config, store the artefact, then in PR runs compare. The snippet below regexes the duration out of the assertion `reason` field as a quick demo — for a durable check, prefer reading structured fields (`componentResults[i].score`, span events) instead of parsing prose:
 
 ```bash
 # In PR job, fetch latest main artefact
@@ -815,16 +847,16 @@ node -e '
 '
 ```
 
-This is brittle — a first-class `promptfoo eval --baseline` is on the roadmap. For now, keep the comparison logic in your CI workflow rather than in the eval config so the suite stays portable.
+Keep the comparison logic in your CI workflow rather than in the eval config so the eval suite stays portable across machines and PRs.
 
-## Handling PII in Spans
+## Handling PII in spans
 
 Anything you put on a span travels to:
 
 - Promptfoo's SQLite trace store (default `~/.promptfoo/promptfoo.db`)
 - the Web UI Traces tab
 - assertion failure reasons inside `output.json` — full `tool.arguments` JSON appears verbatim in `trajectory:tool-args-match` and `not-trajectory:tool-args-match` reasons
-- any configured `tracing.forwarding.endpoint` (forwarded spans are not redacted)
+- any external trace backend you forward to from your own provider
 
 Treat span attributes as you would log lines: redact at the source, not in the viewer.
 
@@ -878,7 +910,7 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
 
   Spans arrive with the named keys replaced by `[REDACTED]` so the original values never reach disk. Use this as defense in depth — the safer move is to redact at the source in your provider.
 
-- Disable `tracing.forwarding` in CI unless the destination is trusted and configured for sensitive data. The forwarder receives spans after redaction, so the receiver-side `redactAttributes` list also covers what is forwarded.
+- If your provider exports spans to an external trace backend in addition to Promptfoo, redact at the source. Promptfoo's receiver-side `redactAttributes` list applies only to what Promptfoo stores; it does not intercept spans your provider sends to a separate collector.
 - Avoid recording full prompts and full responses on spans by default. The OTel GenAI semantic conventions treat `gen_ai.prompt` and `gen_ai.completion` as opt-in for the same reason.
 - Never put live customer data, secrets, or auth headers in fixture configs that travel through the eval.
 - If your eval database accumulates real production traces, set `PROMPTFOO_CONFIG_DIR` to an ephemeral path in CI so the SQLite file is scoped to the run and discarded with the runner.
@@ -892,7 +924,7 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
       retentionDays: 30 # delete traces older than 30 days at every eval start
   ```
 
-## Managing Drift Over Time
+## Managing drift over time
 
 A `min: 3, max: 3` retrieval count is right today and wrong tomorrow. Models change, tools are added, prompts evolve. Treat every numeric range and exact string match as a moving baseline.
 
@@ -919,7 +951,7 @@ A failing `advisory.*` becomes a soft signal in dashboards rather than a CI bloc
 
 **Schedule a quarterly refresh.** Re-run the full trace suite against the current model, capture the actual span counts and latencies, and update bounds explicitly. Outdated assertions break trust in the suite faster than any false positive.
 
-## Anti-Patterns
+## Anti-patterns
 
 A few common mistakes pass schema validation but undermine the eval. Watch for these:
 
@@ -935,9 +967,9 @@ A few common mistakes pass schema validation but undermine the eval. Watch for t
 
 **Letting `trace-span-duration` and `trace-error-spans` no-op-pass.** Both pass when no spans match the pattern. Anchor each one to a presence check with `trace-span-count` whenever the span must exist.
 
-**Recording free-form prompts and outputs as span attributes.** Span attributes travel to the trace DB, the UI, assertion failure reasons in `output.json`, and any forwarding endpoint. Treat them as log lines: redact at the source. See [Handling PII in Spans](#handling-pii-in-spans).
+**Recording free-form prompts and outputs as span attributes.** Span attributes travel to the trace DB, the UI, assertion failure reasons in `output.json`, and anywhere your provider forwards them. Treat them as log lines: redact at the source. See [Handling PII in spans](#handling-pii-in-spans).
 
-## Design Durable Trace Checks
+## Design durable trace checks
 
 Good trace assertions are specific about the risk and flexible about harmless implementation details.
 
@@ -952,16 +984,16 @@ Good trace assertions are specific about the risk and flexible about harmless im
 - Use `trajectory:goal-success` for holistic task completion, not as a replacement for contract checks.
 - Keep secrets out of span attributes; redaction is defense-in-depth, not a tracing strategy.
 
-## Current Limits To Design Around
+## Current limits to design around
 
 Trace-based evals are most reliable when you design for the current assertion surface:
 
 - `trace-span-duration` and `trace-error-spans` pass when no spans match. Add `trace-span-count` when span presence is required.
-- Use `trace-span-count` with `max: 0` to assert that a raw span did not occur; inverse `not-` forms are designed for trajectory assertions.
+- Inverse `not-trace-*` forms exist (see [Assertion matrix](#assertion-matrix)), but `not-trace-span-duration` and `not-trace-error-spans` don't currently flip in the no-match case. Pair inverse trace assertions with a `trace-span-count` presence check, or for a simple "must not occur" use `trace-span-count` with `max: 0`.
 - `trajectory:tool-args-match` depends on captured structured arguments. Add `tool.arguments`, `tool.args`, or framework-specific tool-call argument attributes.
 - Use stable literal expected arguments in structured examples. If you need row-specific values inside nested argument objects, verify the rendered assertion value in the assertion reason.
 - `trajectory:goal-success` adds a judge model call, cost, latency, and nondeterminism. Keep it for high-level task success and use deterministic assertions for critical gates.
-- Exported eval JSON includes assertion reasons, scores, `traceId`, and `evaluationId` per row, but not every raw span. Inspect full traces in the web UI or through the trace API when debugging instrumentation — see the curl recipe in [Write A Complete Trace Eval](#write-a-complete-trace-eval).
+- Exported eval JSON includes assertion reasons, scores, `traceId`, and `evaluationId` per row, but not every raw span. Inspect full traces in the web UI or through the trace API when debugging instrumentation — see the curl recipe in [Write a complete trace eval](#write-a-complete-trace-eval).
 - Trace schemas differ across frameworks. Normalize tool names, arguments, commands, searches, and reasoning spans explicitly when you own the instrumentation.
 
 ## Troubleshooting
@@ -984,7 +1016,7 @@ If traces appear but trajectory assertions do not match:
 - Use `trajectory:step-count` with `type: span` temporarily to inspect what Promptfoo can see.
 - Export results with `-o output.json` and inspect each component assertion reason for matched span names and arguments.
 
-## Next Steps
+## Next steps
 
 Pick the path that matches what you want to do next:
 
@@ -999,7 +1031,7 @@ npx promptfoo@latest eval -c promptfooconfig.trace-guide.yaml --no-cache -o outp
 npx promptfoo@latest view
 ```
 
-**Add tracing to a config you already have.** Drop the `tracing:` block from [Instrument Spans For Assertions](#instrument-spans-for-assertions) into your `promptfooconfig.yaml`, then start with one assertion:
+**Add tracing to a config you already have.** Drop the `tracing:` block from [Instrument spans for assertions](#instrument-spans-for-assertions) into your `promptfooconfig.yaml`, then start with one assertion:
 
 ```yaml
 - type: trace-span-count
@@ -1016,15 +1048,15 @@ Confirm the assertion fires by running the eval and checking the Traces tab. The
 - Coding agents that run shell commands → [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents)
 - LangGraph apps → [Evaluate LangGraph](/docs/guides/evaluate-langgraph)
 - RAG quality scoring on top of trace presence → [RAG evaluation](/docs/guides/evaluate-rag)
-- Red-team coverage of forbidden tools and trajectories → [How to Red Team LLM Agents](/docs/red-team/agents)
+- Red-team coverage of forbidden tools and trajectories → [How to Red Team LLM Agents](/docs/red-team/llm-agents)
 
-## Related Docs
+## Related docs
 
 - [Tracing](/docs/tracing/) — full OTLP receiver setup, JS and Python provider examples, and forwarding to external backends
 - [Deterministic assertions](/docs/configuration/expected-outputs/deterministic/) — non-trace assertions that pair with `trace-*` and `trajectory:*`
 - [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) — judge configuration shared with `trajectory:goal-success`
 - [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents)
 - [Evaluate OpenAI Agents Python SDK](/docs/guides/evaluate-openai-agents-python)
-- [How to Red Team LLM Agents](/docs/red-team/agents)
+- [How to Red Team LLM Agents](/docs/red-team/llm-agents)
 - [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
 - [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python)

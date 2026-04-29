@@ -528,7 +528,7 @@ tests:
       # Did the final answer match what the trajectory shows?
       - type: trajectory:goal-success
         value: 'Identify the files relevant to the bug and explain the fix without editing files'
-        provider: openai:gpt-5-mini
+        provider: openai:chat:gpt-5.4-mini
 ```
 
 For shell commands, match on `type: command` because Codex command spans are normalized from `codex.command`. For MCP calls, use `trajectory:tool-used` or `trajectory:tool-args-match`; MCP spans are normalized from `mcp <server>/<tool>` plus `codex.mcp.input`.
