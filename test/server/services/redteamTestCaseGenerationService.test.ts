@@ -3,8 +3,13 @@ import { createMockResponse } from '../../util/utils';
 
 import type { MultiTurnPromptParams } from '../../../src/server/services/redteamTestCaseGenerationService';
 
-const REMOTE_GENERATION_URL = 'https://api.promptfoo.app/api/v1/task';
-const REQUEST_TIMEOUT_MS = 300000;
+async function getExpectedRemoteGenerationUrl() {
+  const { getRemoteGenerationUrl } = await vi.importActual<
+    typeof import('../../../src/redteam/remoteGeneration')
+  >('../../../src/redteam/remoteGeneration');
+  return getRemoteGenerationUrl();
+}
+const TEST_REQUEST_TIMEOUT_MS = 300000;
 const MOCKED_MODULES = [
   '../../../src/util/fetch/index',
   '../../../src/redteam/remoteGeneration',
@@ -24,12 +29,12 @@ function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
   vi.doMock('../../../src/util/fetch/index', () => ({
     fetchWithRetries,
   }));
-  vi.doMock('../../../src/redteam/remoteGeneration', () => ({
-    getRemoteGenerationUrl: vi.fn().mockReturnValue(REMOTE_GENERATION_URL),
+  vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
+    getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
   }));
   vi.doMock('../../../src/providers/shared', () => ({
-    getRequestTimeoutMs: () => REQUEST_TIMEOUT_MS,
+    getRequestTimeoutMs: () => TEST_REQUEST_TIMEOUT_MS,
   }));
   vi.doMock('../../../src/constants', () => ({
     VERSION: '0.0.0-test',
@@ -56,18 +61,18 @@ async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['stra
   });
 }
 
-function expectTaskRequest(fetchWithRetries: ReturnType<typeof vi.fn>, expectedTask: string) {
+async function expectTaskRequest(fetchWithRetries: ReturnType<typeof vi.fn>, expectedTask: string) {
   expect(fetchWithRetries).toHaveBeenCalledTimes(1);
   const [url, request, timeout] = fetchWithRetries.mock.calls[0]!;
   const body = JSON.parse(String(request.body));
 
-  expect(url).toBe(REMOTE_GENERATION_URL);
+  expect(url).toBe(await getExpectedRemoteGenerationUrl());
   expect(request).toMatchObject({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   });
   expect(body.task).toBe(expectedTask);
-  expect(timeout).toBe(REQUEST_TIMEOUT_MS);
+  expect(timeout).toBe(TEST_REQUEST_TIMEOUT_MS);
 }
 
 describe('redteamTestCaseGenerationService', () => {
@@ -92,7 +97,7 @@ describe('redteamTestCaseGenerationService', () => {
 
       await generatePromptForStrategy('goat');
 
-      expectTaskRequest(fetchWithRetries, 'goat');
+      await expectTaskRequest(fetchWithRetries, 'goat');
     });
 
     it('should propagate remote generation failures', async () => {
@@ -114,7 +119,7 @@ describe('redteamTestCaseGenerationService', () => {
 
       await generatePromptForStrategy('crescendo');
 
-      expectTaskRequest(fetchWithRetries, 'crescendo');
+      await expectTaskRequest(fetchWithRetries, 'crescendo');
     });
 
     it('should call fetchWithRetries with correct parameters for Hydra strategy', async () => {
@@ -124,7 +129,7 @@ describe('redteamTestCaseGenerationService', () => {
 
       await generatePromptForStrategy('jailbreak:hydra');
 
-      expectTaskRequest(fetchWithRetries, 'hydra-decision');
+      await expectTaskRequest(fetchWithRetries, 'hydra-decision');
     });
 
     it('should call fetchWithRetries with correct parameters for Mischievous User strategy', async () => {
@@ -134,7 +139,7 @@ describe('redteamTestCaseGenerationService', () => {
 
       await generatePromptForStrategy('mischievous-user');
 
-      expectTaskRequest(fetchWithRetries, 'mischievous-user-redteam');
+      await expectTaskRequest(fetchWithRetries, 'mischievous-user-redteam');
     });
   });
 });

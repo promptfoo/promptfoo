@@ -19,7 +19,7 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { sanitizeObject } from '../util/sanitizer';
+import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
@@ -126,6 +126,154 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
   }) as T;
 }
 
+// Headers that may carry credentials, session state, or PII / org-level identifiers
+// when echoed back from OpenAI / edge proxies. We redact these on the persistence
+// boundary only — keep them in-memory so callers / hooks still see real values.
+//
+// Note: `sanitizeForDbWithSecrets` already redacts well-known credential-shaped keys
+// (`set-cookie`, `cookie`, `authorization`, …) via `SECRET_FIELD_NAMES`, and
+// `looksLikeSecret` redacts values that match common API-key shapes. This list adds
+// the headers those passes don't catch (project/org IDs, request IDs, ratelimit hints,
+// trace IDs, edge-proxy markers).
+const SENSITIVE_RESPONSE_HEADER_NAMES = new Set<string>([
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'set-cookie',
+  'openai-organization',
+  'openai-project',
+  'openai-version',
+  'x-request-id',
+  'x-amzn-requestid',
+  'x-amzn-trace-id',
+  'x-amz-security-token',
+  'x-amz-cf-id',
+  'x-azure-ref',
+  'x-correlation-id',
+  'x-trace-id',
+  'cf-ray',
+  'cf-cache-status',
+  'x-openai-proxy-wasm',
+  'via',
+]);
+
+const SENSITIVE_RESPONSE_HEADER_PREFIXES = ['x-ratelimit-'];
+
+function isSensitiveResponseHeader(headerName: string): boolean {
+  const normalized = headerName.toLowerCase();
+  if (SENSITIVE_RESPONSE_HEADER_NAMES.has(normalized)) {
+    return true;
+  }
+  return SENSITIVE_RESPONSE_HEADER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
+function redactSensitiveHeaders(headers: Record<string, unknown>): Record<string, unknown> | null {
+  let mutated = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (isSensitiveResponseHeader(key)) {
+      next[key] = REDACTED;
+      mutated = true;
+    } else {
+      next[key] = value;
+    }
+  }
+  return mutated ? next : null;
+}
+
+// Redact `metadata.http.headers` and `metadata.http.requestHeaders` on a single
+// metadata object. Does NOT recurse into other keys (e.g. `output`, `audio`,
+// arbitrary model output) — providers populate transport metadata at the canonical
+// `metadata.http` slot only, and walking arbitrary subtrees risks rewriting
+// user-controlled content that legitimately uses an `http` key (see
+// https://github.com/promptfoo/promptfoo/pull/8876#issuecomment-4315002350).
+function redactHttpHeadersOnMetadata<T>(metadata: T): T {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return metadata;
+  }
+
+  const m = metadata as Record<string, unknown>;
+  const http = m.http;
+  if (!http || typeof http !== 'object' || Array.isArray(http)) {
+    return metadata;
+  }
+
+  const httpRecord = http as Record<string, unknown>;
+  let mutated = false;
+  const nextHttp: Record<string, unknown> = { ...httpRecord };
+
+  for (const slot of ['headers', 'requestHeaders'] as const) {
+    const slotValue = httpRecord[slot];
+    if (slotValue && typeof slotValue === 'object' && !Array.isArray(slotValue)) {
+      const redacted = redactSensitiveHeaders(slotValue as Record<string, unknown>);
+      if (redacted) {
+        nextHttp[slot] = redacted;
+        mutated = true;
+      }
+    }
+  }
+
+  return (mutated ? { ...m, http: nextHttp } : metadata) as T;
+}
+
+// Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
+// every nested `componentResults[]`. Limits recursion to the documented schema
+// (`componentResults` only) — does not descend into arbitrary subtrees.
+function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
+  if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
+    return gradingResult;
+  }
+
+  const gr = gradingResult as Record<string, unknown>;
+  let mutated = false;
+  const next: Record<string, unknown> = { ...gr };
+
+  if (gr.metadata !== undefined) {
+    const redacted = redactHttpHeadersOnMetadata(gr.metadata);
+    if (redacted !== gr.metadata) {
+      next.metadata = redacted;
+      mutated = true;
+    }
+  }
+
+  if (Array.isArray(gr.componentResults)) {
+    let componentMutated = false;
+    const nextComponents = gr.componentResults.map((component) => {
+      const redacted = redactHttpHeadersOnGradingResult(component);
+      if (redacted !== component) {
+        componentMutated = true;
+      }
+      return redacted;
+    });
+    if (componentMutated) {
+      next.componentResults = nextComponents;
+      mutated = true;
+    }
+  }
+
+  return (mutated ? next : gradingResult) as T;
+}
+
+function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {
+  if (!response) {
+    return response;
+  }
+
+  const redactedMetadata = redactHttpHeadersOnMetadata((response as ProviderResponse).metadata);
+  if (redactedMetadata === (response as ProviderResponse).metadata) {
+    return response;
+  }
+  return { ...response, metadata: redactedMetadata } as T;
+}
+
+function sanitizeMetadataForDb<T>(metadata: T): T {
+  return redactHttpHeadersOnMetadata(metadata);
+}
+
+function sanitizeGradingResultForDb<T>(gradingResult: T): T {
+  return redactHttpHeadersOnGradingResult(gradingResult);
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -192,6 +340,9 @@ export default class EvalResult {
     if (persist) {
       const db = getDb();
 
+      args.response = sanitizeResponseForDb(args.response);
+      args.gradingResult = sanitizeGradingResultForDb(args.gradingResult);
+      args.metadata = sanitizeMetadataForDb(args.metadata);
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
@@ -222,10 +373,10 @@ export default class EvalResult {
           ...result,
           testCase: sanitizeForDbWithSecrets(result.testCase),
           prompt: sanitizeForDbWithSecrets(result.prompt),
-          response: sanitizeForDb(result.response),
-          gradingResult: sanitizeForDb(result.gradingResult),
+          response: sanitizeResponseForDb(sanitizeForDb(result.response)),
+          gradingResult: sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeForDb(result.metadata),
+          metadata: sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = db

@@ -855,6 +855,17 @@ describe('resolveAudioSource', () => {
     });
   });
 
+  it('should not treat file:// paths as base64 audio data', () => {
+    expect(
+      resolveAudioSource({
+        data: 'file://assets/Armstrong_Small_Step.mp3',
+        format: 'mp3',
+        blobRef: 'file://assets/Armstrong_Small_Step.mp3',
+      }),
+    ).toBeNull();
+    expect(resolveAudioSource({}, 'file://assets/Armstrong_Small_Step.mp3')).toBeNull();
+  });
+
   it('should prefer blobRef over data', () => {
     const result = resolveAudioSource({
       blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',

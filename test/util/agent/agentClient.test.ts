@@ -160,11 +160,13 @@ describe('createAgentClient', () => {
     await promise;
     expect(resolveCount).toBe(1);
 
-    // Reconnect — should NOT cause a second resolution
+    // Reconnect — should NOT cause a second resolution. Flush several
+    // microtask rounds to give any (buggy) re-resolve handler a chance to fire.
     fakeSocket._simulateDisconnect('transport close');
     fakeSocket._simulateConnect();
-
-    await new Promise((r) => setTimeout(r, 50));
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
     expect(resolveCount).toBe(1);
   });
 

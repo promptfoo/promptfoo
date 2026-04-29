@@ -124,8 +124,8 @@ promptfoo eval --output results.jsonl
 **Use when:** Working with very large evaluations or when JSON export fails with memory errors.
 
 ```jsonl
-{"testIdx": 0, "promptIdx": 0, "output": "Response 1", "success": true, "score": 1.0}
-{"testIdx": 1, "promptIdx": 0, "output": "Response 2", "success": true, "score": 0.9}
+{"testIdx":0,"promptIdx":0,"success":true,"score":1.0,"response":{"output":"Response 1"},"gradingResult":{"pass":true,"score":1.0,"reason":"All assertions passed","componentResults":[{"pass":true,"score":1.0,"reason":"Expected output to contain \"hello\"","assertion":{"type":"contains","value":"hello"}}]}}
+{"testIdx":1,"promptIdx":0,"success":false,"score":0.0,"response":{"output":"Response 2"},"gradingResult":null}
 ```
 
 For assertion-level details, inspect each row's `gradingResult?.componentResults` array when
@@ -133,6 +133,36 @@ present. The top-level `success`, `score`, and `gradingResult` fields describe t
 result for the row, while each `componentResults[]` entry contains the pass/fail, score,
 reason, and assertion metadata for one evaluated assertion. Both `gradingResult` and
 `componentResults` may be absent on error rows or rows without assertions.
+
+To stream a JSONL file and read each row's component results:
+
+```ts
+import fs from 'node:fs';
+import readline from 'node:readline';
+
+const rl = readline.createInterface({
+  input: fs.createReadStream('results.jsonl', { encoding: 'utf8' }),
+  crlfDelay: Infinity,
+});
+
+for await (const line of rl) {
+  if (!line.trim()) {
+    continue;
+  }
+  const row = JSON.parse(line);
+  for (const component of row.gradingResult?.componentResults ?? []) {
+    console.log({
+      type: component.assertion?.type,
+      pass: component.pass,
+      score: component.score,
+      reason: component.reason,
+    });
+  }
+}
+```
+
+`?.` and `?? []` together cover the `gradingResult: null` case shown above and rows
+where a single top-level assertion produced no nested `componentResults`.
 
 ### XML Format
 

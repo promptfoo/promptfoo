@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
@@ -64,7 +64,7 @@ export async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]
     } else {
       // Read from local file
       try {
-        csvData = fs.readFileSync(DATASET_URL, 'utf8');
+        csvData = await fs.readFile(DATASET_URL, 'utf8');
       } catch (error) {
         throw new Error(`[DoNotAnswer] Error reading local file: ${error}`);
       }

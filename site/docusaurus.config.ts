@@ -300,7 +300,7 @@ const config: Config = {
             },
             {
               label: 'LLM Red Teaming',
-              to: '/docs/red-team',
+              to: '/docs/red-team/',
             },
             {
               label: 'Foundation Model Reports',
@@ -312,23 +312,23 @@ const config: Config = {
             },
             {
               label: 'Running Benchmarks',
-              to: '/docs/guides/censored-vs-uncensored-ollama',
+              to: '/docs/guides/censored-vs-uncensored-ollama/',
             },
             {
               label: 'Evaluating Factuality',
-              to: '/docs/guides/factuality-eval',
+              to: '/docs/guides/factuality-eval/',
             },
             {
               label: 'Evaluating RAGs',
-              to: '/docs/guides/evaluate-rag',
+              to: '/docs/guides/evaluate-rag/',
             },
             {
               label: 'Minimizing Hallucinations',
-              to: '/docs/guides/prevent-llm-hallucinations',
+              to: '/docs/guides/prevent-llm-hallucinations/',
             },
             {
               label: 'Config Validator',
-              to: '/validator',
+              to: '/validator/',
             },
           ],
         },
@@ -451,15 +451,15 @@ const config: Config = {
         redirects: [
           {
             from: '/docs/category/troubleshooting',
-            to: '/docs/usage/troubleshooting',
+            to: '/docs/usage/troubleshooting/',
           },
           {
             from: '/docs/providers/palm',
-            to: '/docs/providers/google',
+            to: '/docs/providers/google/',
           },
           {
             from: '/docs',
-            to: '/docs/intro',
+            to: '/docs/intro/',
           },
           {
             from: '/vegas-contact',
@@ -467,106 +467,106 @@ const config: Config = {
           },
           {
             from: '/docs/guides/prevent-llm-hallucations',
-            to: '/docs/guides/prevent-llm-hallucinations',
+            to: '/docs/guides/prevent-llm-hallucinations/',
           },
           {
             from: '/docs/category/guides',
-            to: '/docs/guides',
+            to: '/docs/guides/',
           },
           {
             from: '/docs/guides/gpt-5-vs-gpt-5-mini-mmlu',
-            to: '/docs/guides/gpt-mmlu-comparison',
+            to: '/docs/guides/gpt-mmlu-comparison/',
           },
           {
             from: '/docs/guides/gpt-5.2-vs-o3',
-            to: '/docs/guides/gpt-vs-reasoning-model',
+            to: '/docs/guides/gpt-vs-reasoning-model/',
           },
           {
             from: '/solutions/healthcare',
-            to: '/docs/red-team/plugins/medical',
+            to: '/docs/red-team/plugins/medical/',
           },
           {
             from: '/docs/guides/llama2-uncensored-benchmark-ollama',
-            to: '/docs/guides/censored-vs-uncensored-ollama',
+            to: '/docs/guides/censored-vs-uncensored-ollama/',
           },
           {
             from: '/docs/red-team/guardrails',
-            to: '/docs/enterprise/guardrails',
+            to: '/docs/enterprise/guardrails/',
           },
           // Deleted guides consolidated into gpt-vs-claude-vs-gemini
           {
             from: '/docs/guides/claude-vs-gpt',
-            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini/',
           },
           {
             from: '/docs/guides/gemini-vs-gpt',
-            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini/',
           },
           // Deleted guides consolidated into compare-open-source-models
           {
             from: '/docs/guides/compare-llama2-vs-gpt',
-            to: '/docs/guides/compare-open-source-models',
+            to: '/docs/guides/compare-open-source-models/',
           },
           {
             from: '/docs/guides/gemma-vs-llama',
-            to: '/docs/guides/compare-open-source-models',
+            to: '/docs/guides/compare-open-source-models/',
           },
           {
             from: '/docs/guides/gemma-vs-mistral',
-            to: '/docs/guides/compare-open-source-models',
+            to: '/docs/guides/compare-open-source-models/',
           },
           {
             from: '/docs/guides/mistral-vs-llama',
-            to: '/docs/guides/compare-open-source-models',
+            to: '/docs/guides/compare-open-source-models/',
           },
           {
             from: '/docs/guides/phi-vs-llama',
-            to: '/docs/guides/compare-open-source-models',
+            to: '/docs/guides/compare-open-source-models/',
           },
           // Deleted guides consolidated into choosing-best-gpt-model
           {
             from: '/docs/guides/gpt-3.5-vs-gpt-4',
-            to: '/docs/guides/choosing-best-gpt-model',
+            to: '/docs/guides/choosing-best-gpt-model/',
           },
           {
             from: '/docs/guides/gpt-4-vs-gpt-4o',
-            to: '/docs/guides/choosing-best-gpt-model',
+            to: '/docs/guides/choosing-best-gpt-model/',
           },
           // Deleted guides consolidated into gpt-vs-reasoning-model
           {
             from: '/docs/guides/gpt-vs-o1',
-            to: '/docs/guides/gpt-vs-reasoning-model',
+            to: '/docs/guides/gpt-vs-reasoning-model/',
           },
           // Deleted guides consolidated into gpt-mmlu-comparison
           {
             from: '/docs/guides/gpt-4.1-vs-gpt-4o-mmlu',
-            to: '/docs/guides/gpt-mmlu-comparison',
+            to: '/docs/guides/gpt-mmlu-comparison/',
           },
           // Deleted guides redirected to guides index
           {
             from: '/docs/guides/cohere-command-r-benchmark',
-            to: '/docs/guides',
+            to: '/docs/guides/',
           },
           {
             from: '/docs/guides/dbrx-benchmark',
-            to: '/docs/guides',
+            to: '/docs/guides/',
           },
           {
             from: '/docs/guides/evaluate-replicate-lifeboat',
-            to: '/docs/guides',
+            to: '/docs/guides/',
           },
           {
             from: '/docs/guides/building-trust-in-ai-with-portkey-and-promptfoo',
-            to: '/docs/guides',
+            to: '/docs/guides/',
           },
           {
             from: '/docs/guides/mistral-magistral-aime2024',
-            to: '/docs/guides',
+            to: '/docs/guides/',
           },
           // Renamed guide: agent-eval -> evaluate-coding-agents
           {
             from: '/docs/guides/agent-eval',
-            to: '/docs/guides/evaluate-coding-agents',
+            to: '/docs/guides/evaluate-coding-agents/',
           },
         ],
       },

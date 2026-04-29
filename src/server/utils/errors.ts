@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import logger from '../../logger';
+import { ErrorResponseSchema } from '../../types/api/common';
 import type { Response } from 'express';
 
 /**
@@ -16,5 +18,10 @@ export function sendError(
   if (internalError) {
     logger.error(publicMessage, { error: internalError });
   }
-  res.status(status).json({ error: publicMessage });
+  res.status(status).json(ErrorResponseSchema.parse({ error: publicMessage }));
+}
+
+/** Reply with a 400 from a Zod safeParse error, formatted via `z.prettifyError`. */
+export function replyValidationError(res: Response, error: z.ZodError): void {
+  res.status(400).json(ErrorResponseSchema.parse({ error: z.prettifyError(error) }));
 }

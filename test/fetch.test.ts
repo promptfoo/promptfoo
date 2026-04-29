@@ -5,7 +5,7 @@ import { Agent, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
-import { getEnvBool, getEnvString } from '../src/envars';
+import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { getRequestTimeoutMs } from '../src/providers/shared';
@@ -117,13 +117,13 @@ vi.mock('../src/envars', () => {
     }),
     getEnvBool: vi.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true';
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true';
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true';
       }
       return defaultValue;
     }),
@@ -627,6 +627,37 @@ describe('fetchWithProxy', () => {
     expect(ProxyAgent).not.toHaveBeenCalled();
   });
 
+  it('should read REQUEST_TIMEOUT_MS when creating the default agent', async () => {
+    vi.mocked(getEnvInt).mockReturnValueOnce(1234);
+
+    await fetchWithProxy('https://example.com/api');
+
+    expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
+    expect(Agent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headersTimeout: 1234,
+        connections: DEFAULT_MAX_CONCURRENCY,
+      }),
+    );
+  });
+
+  it('should read REQUEST_TIMEOUT_MS when creating the proxy agent', async () => {
+    const mockProxyUrl = 'http://proxy.example.com';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    vi.mocked(getEnvInt).mockReturnValueOnce(4321);
+
+    await fetchWithProxy('https://example.com/api');
+
+    expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        headersTimeout: 4321,
+        connections: DEFAULT_MAX_CONCURRENCY,
+      }),
+    );
+  });
+
   it('should use proxy URL from environment variables in order of precedence', async () => {
     const mockProxyUrls = {
       HTTPS_PROXY: 'http://https-proxy.example.com',
@@ -944,9 +975,7 @@ describe('fetchWithTimeout', () => {
   });
 
   it('should reject when request times out', async () => {
-    vi.mocked(global.fetch).mockImplementationOnce(
-      () => new Promise((resolve) => setTimeout(resolve, 6000)),
-    );
+    vi.mocked(global.fetch).mockImplementationOnce(() => new Promise(() => {}));
 
     const fetchPromise = fetchWithTimeout('https://example.com', {}, 5000);
     vi.advanceTimersByTime(5000);

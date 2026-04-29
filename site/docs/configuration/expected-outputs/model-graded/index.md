@@ -221,7 +221,11 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use `gpt-5` for grading. If you do not have access to `gpt-5` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts use promptfoo's built-in grading provider. Promptfoo chooses that
+provider from the credentials available in the environment; for example, OpenAI, Anthropic, Gemini,
+Mistral, GitHub Models, Azure OpenAI, and Codex login credentials can each activate a different
+default. If you do not have access to the selected default or prefer a different judge, you can
+override the grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
@@ -268,11 +272,57 @@ tests:
 
 This works at every level where a grader can be set — per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
 
+If you configure a full provider object globally, do not also add a shorthand
+`provider: openai:chat:...` to the assertion. Assertion-level providers take precedence, so the
+global provider object's `config` values such as `apiBaseUrl`, `apiKey`, `temperature`, or
+`showThinking` will not be inherited. Either remove the assertion-level provider or repeat the full
+provider object there.
+
 :::note
-The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. GPT-5 series reasoning models ignore `temperature` entirely.
+The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when
+overriding the grader with a custom `provider` block that would otherwise inherit a non-zero
+default. GPT-5 series reasoning models ignore `temperature` entirely.
+
+The built-in OpenAI grader may spend hidden reasoning tokens internally, but promptfoo receives the
+final grader output without private reasoning text prepended to the output string. The
+`showThinking: false` guidance below is for OpenAI-compatible or local judge providers that return
+reasoning fields such as `reasoning` or `reasoning_content`.
 :::
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.
+
+### OpenAI-compatible thinking judges
+
+Self-hosted OpenAI-compatible judges such as [vLLM](/docs/providers/vllm), LocalAI, and llamafile
+can return reasoning in a separate field while putting the final answer in `content`. Set
+`showThinking: false` on the judge provider so promptfoo uses only the final `content` for grading:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:llm_judge
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: empty
+        temperature: 0
+        max_tokens: 10000
+        showThinking: false
+```
+
+This is not specific to `llm-rubric`. JSON-first metrics can parse scratchpad JSON,
+`answer-relevance` can embed questions with `Thinking:` prepended, RAG metrics can score scratchpad
+sentences or attribution markers, and `select-best` can read a scratchpad number as the winning
+index.
+
+For vLLM specifically, `showThinking: false` only removes reasoning after vLLM has parsed it into a
+separate field such as `reasoning_content`. If `max_tokens` or the server context window is too
+small, vLLM may return an unfinished `<think>` block in `content`; increase the budget or disable
+thinking for judge requests.
+
+For vLLM models whose chat template enables thinking by default, you can also disable thinking at
+request time. See the [vLLM judge guide](/docs/providers/vllm#use-vllm-as-an-llm-judge) for
+complete Qwen, GPT-OSS, and GLM examples.
 
 ### Multiple graders
 

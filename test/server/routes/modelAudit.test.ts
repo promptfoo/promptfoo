@@ -27,6 +27,7 @@ import {
   GetScanResponseSchema,
   ListScannersResponseSchema,
   ListScansResponseSchema,
+  ModelAuditSchemas,
 } from '../../../src/types/api/modelAudit';
 
 const mockedCheckModelAuditInstalled = vi.mocked(checkModelAuditInstalled);
@@ -36,12 +37,11 @@ describe('Model Audit Routes', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    app = createApp();
     // Reset mock implementations to ensure test isolation when tests run in random order.
     // vi.clearAllMocks() only clears call history, not mockResolvedValue/mockReturnValue.
     mockedCheckModelAuditInstalled.mockReset();
     mockedSpawn.mockReset();
-    app = createApp();
   });
 
   describe('GET /api/model-audit/scanners', () => {
@@ -210,6 +210,49 @@ describe('Model Audit Routes', () => {
       expect(response.body).toHaveProperty('total_checks', 5);
     });
 
+    it('should accept timeout 0 from the UI and apply the route default', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-zero-timeout.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+
+      const mockScanOutput = JSON.stringify({
+        total_checks: 1,
+        passed_checks: 1,
+        failed_checks: 0,
+        files_scanned: 1,
+        bytes_scanned: 9,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: mockScanOutput,
+          }),
+        ),
+      );
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .send({ paths: [testFilePath], options: { timeout: 0 } });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('total_checks', 1);
+        expect(mockedSpawn).toHaveBeenCalledWith(
+          'modelaudit',
+          expect.arrayContaining(['--timeout', '3600']),
+          expect.any(Object),
+        );
+      } finally {
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
     it('should pass and persist scanner selection options', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
 
@@ -281,6 +324,52 @@ describe('Model Audit Routes', () => {
         );
       } finally {
         createSpy.mockRestore();
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should fall back to a 500 response when scan success DTO parsing fails', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-response-parse.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+
+      const mockScanOutput = JSON.stringify({
+        total_checks: 1,
+        passed_checks: 1,
+        failed_checks: 0,
+        files_scanned: 1,
+        bytes_scanned: 9,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: mockScanOutput,
+          }),
+        ),
+      );
+      const parseSpy = vi
+        .spyOn(ModelAuditSchemas.Scan.Response, 'parse')
+        .mockImplementationOnce(() => {
+          throw new Error('bad scan response DTO');
+        });
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .timeout({ deadline: 1000 })
+          .send({ paths: [testFilePath], options: { persist: false } });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({ error: 'Error processing scan results' });
+        expect(parseSpy).toHaveBeenCalled();
+      } finally {
+        parseSpy.mockRestore();
         fs.unlinkSync(testFilePath);
       }
     });
@@ -394,10 +483,9 @@ describe('Model Audit Routes - DB-backed', () => {
   });
 
   beforeEach(async () => {
-    vi.clearAllMocks();
+    app = createApp();
     mockedCheckModelAuditInstalled.mockReset();
     mockedSpawn.mockReset();
-    app = createApp();
     // Clean up model_audits table
     const db = getDb();
     db.run('DELETE FROM model_audits');
