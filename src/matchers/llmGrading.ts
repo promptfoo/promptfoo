@@ -165,6 +165,7 @@ export async function matchesLlmRubric(
       return {
         ...fail(`Could not perform remote grading: ${error}`),
         assertion,
+        metadata: { graderError: true },
       };
     }
   }

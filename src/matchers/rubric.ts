@@ -138,21 +138,23 @@ function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
+  const graderFail = (reason: string): Omit<GradingResult, 'assertion'> => ({
+    ...fail(reason, resp.tokenUsage),
+    metadata: { graderError: true },
+  });
+
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
     try {
       jsonObjects = extractJsonObjects(resp.output);
       if (jsonObjects.length === 0) {
         return {
-          failure: fail(`Could not extract JSON from ${label} response`, resp.tokenUsage),
+          failure: graderFail(`Could not extract JSON from ${label} response`),
         };
       }
     } catch (err) {
       return {
-        failure: fail(
-          `${label} produced malformed response: ${err}\n\n${resp.output}`,
-          resp.tokenUsage,
-        ),
+        failure: graderFail(`${label} produced malformed response: ${err}\n\n${resp.output}`),
       };
     }
   } else if (
@@ -163,9 +165,8 @@ function parseJsonGradingResponse(
     jsonObjects = [resp.output];
   } else {
     return {
-      failure: fail(
+      failure: graderFail(
         `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
-        resp.tokenUsage,
       ),
     };
   }
@@ -173,9 +174,8 @@ function parseJsonGradingResponse(
   const parsed = jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
-      failure: fail(
+      failure: graderFail(
         `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
-        resp.tokenUsage,
       ),
     };
   }
@@ -225,7 +225,10 @@ export async function runJsonGradingPrompt({
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return {
+      ...fail(resp.error || 'No output', resp.tokenUsage),
+      metadata: { graderError: true },
+    };
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {

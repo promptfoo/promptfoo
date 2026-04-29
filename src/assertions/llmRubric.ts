@@ -1,10 +1,11 @@
-import { matchesLlmRubric } from '../matchers/llmGrading';
+import { isGraderFailure, matchesLlmRubric } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-export const handleLlmRubric = ({
+export const handleLlmRubric = async ({
   assertion,
+  inverse,
   renderedValue,
   outputString,
   test,
@@ -23,7 +24,7 @@ export const handleLlmRubric = ({
   // Update the assertion value. This allows the web view to display the prompt.
   assertion.value = assertion.value || test.options?.rubricPrompt;
 
-  return matchesLlmRubric(
+  const resp = await matchesLlmRubric(
     renderedValue || '',
     outputString,
     test.options,
@@ -32,4 +33,14 @@ export const handleLlmRubric = ({
     undefined,
     providerCallContext,
   );
+
+  if (isGraderFailure(resp)) {
+    return resp;
+  }
+
+  return {
+    ...resp,
+    pass: resp.pass !== inverse,
+    score: inverse ? 1 - resp.score : resp.score,
+  };
 };
