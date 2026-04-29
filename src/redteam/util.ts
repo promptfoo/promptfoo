@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { getRequestTimeoutMs } from '../providers/shared';
 import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
@@ -384,7 +384,7 @@ export async function extractGoalFromPrompt(
         },
         body: JSON.stringify(requestBody),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
     );
 
     logger.debug(
