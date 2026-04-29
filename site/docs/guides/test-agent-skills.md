@@ -198,9 +198,25 @@ That weighting makes task quality the main signal, while still rewarding the ver
 
 ## Use the Same Eval With Codex
 
-To run the same comparison with [OpenAI Codex SDK](/docs/providers/openai-codex-sdk), keep the prompt, tests, and assertions, then replace the provider block:
+To run the same comparison with [OpenAI Codex SDK](/docs/providers/openai-codex-sdk), keep the tests and scoring logic, then use Codex's bare `output_schema` shape with the provider block:
 
 ```yaml
+x-review-schema: &reviewSchema
+  type: object
+  required: [summary, issues]
+  additionalProperties: false
+  properties:
+    summary: { type: string }
+    issues:
+      type: array
+      items:
+        type: object
+        required: [id, severity]
+        additionalProperties: false
+        properties:
+          id: { type: string }
+          severity: { type: string, enum: [high, medium, low] }
+
 providers:
   - id: openai:codex-sdk
     label: review-standards-v1
@@ -210,6 +226,7 @@ providers:
       skip_git_repo_check: true
       sandbox_mode: read-only
       enable_streaming: true
+      output_schema: *reviewSchema
       cli_env:
         CODEX_HOME: ./codex-home
 
@@ -221,13 +238,14 @@ providers:
       skip_git_repo_check: true
       sandbox_mode: read-only
       enable_streaming: true
+      output_schema: *reviewSchema
       cli_env:
         CODEX_HOME: ./codex-home
 ```
 
-Codex discovers project skills from `.agents/skills/` under each `working_dir`. Its `skill-used` signal is inferred from successful reads of the matching `SKILL.md`, so keep `enable_streaming: true` while developing the eval if you want Promptfoo to collect that evidence.
+Codex discovers project skills from `.agents/skills/` under each `working_dir`. Its `skill-used` signal is inferred from successful reads of the matching `SKILL.md`, so keep `enable_streaming: true` while developing the eval if you want Promptfoo to collect that evidence. The earlier JavaScript assertion should use `JSON.parse(output)` with Codex because `output_schema` keeps `output` as a JSON string rather than a parsed object.
 
-If you'd rather enforce the JSON shape at the provider level instead of asserting on it, set [`output_schema`](/docs/providers/openai-codex-sdk#structured-output) on each Codex provider. The runnable [`skill-comparison` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skill-comparison) uses this approach (and a YAML anchor to share the schema between v1 and v2).
+The runnable [`skill-comparison` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skill-comparison) uses the same approach, with a YAML anchor to share the schema between v1 and v2.
 
 There is a [matching Claude example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk/skill-comparison) that uses `output_format` and the `skills:` filter so you can run the same comparison against either provider.
 

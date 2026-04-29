@@ -69,7 +69,6 @@ defaultTest:
   assert:
     - type: skill-used
       value: review-standards
-      weight: 2
 
     - type: javascript
       threshold: 0.7
