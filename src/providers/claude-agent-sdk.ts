@@ -1,6 +1,7 @@
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
@@ -1217,9 +1218,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     if (workingDir) {
       // verify the working dir exists and is a directory
-      let stats: fs.Stats;
+      let stats: Stats;
       try {
-        stats = fs.statSync(workingDir);
+        stats = await fs.stat(workingDir);
       } catch (err: any) {
         throw new Error(
           `Working dir ${config.working_dir} does not exist or isn't accessible: ${err.message}`,
@@ -1230,7 +1231,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     } else if (isTempDir) {
       // use a temp dir
-      workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
+      workingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
     }
 
     // Make sure we didn't already abort
@@ -1554,7 +1555,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     } finally {
       if (isTempDir && workingDir) {
         // Clean up the temp dir
-        fs.rmSync(workingDir, { recursive: true, force: true });
+        await fs.rm(workingDir, { recursive: true, force: true });
       }
       if (callOptions?.abortSignal && abortHandler) {
         callOptions.abortSignal.removeEventListener('abort', abortHandler);
