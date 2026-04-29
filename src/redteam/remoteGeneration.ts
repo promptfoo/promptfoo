@@ -136,13 +136,6 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
     return true;
   }
 
-  // If the user has explicitly opted in to remote inference via env var, honour it.
-  // This is useful in CI/CD pipelines that set OPENAI_API_KEY for other providers but
-  // still need remote-only strategies (e.g. jailbreak:meta, jailbreak:composite).
-  if (getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION')) {
-    return true;
-  }
-
   // If logged into cloud, prefer remote generation
   if (isLoggedIntoCloud()) {
     return true;
@@ -156,8 +149,10 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
     (options?.canUseCodexDefaultProvider &&
       !options?.requireEmbeddingProvider &&
       hasCodexDefaultCredentials());
+  const forceRemote =
+    getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION') || (cliState.remote ?? false);
 
-  return !hasLocalCredentials || (cliState.remote ?? false);
+  return forceRemote || !hasLocalCredentials;
 }
 
 /**

@@ -47,7 +47,7 @@ Credentials, authorization headers, provider config fields, and request examples
 
 ## With Your Own API Key
 
-Setting `OPENAI_API_KEY` routes locally-capable generation and grading through your OpenAI account instead of promptfoo servers:
+Setting `OPENAI_API_KEY` routes locally-capable generation and grading through your OpenAI account instead of Promptfoo servers:
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -61,8 +61,6 @@ redteam:
 ```
 
 With this configuration, Promptfoo servers usually receive only [telemetry](#telemetry) unless you use red team target/provider setup helpers, red team target/provider test requests, sharing, Cloud sync, hosted reports, other Cloud-backed features, or opt back into hosted inference with `--remote` or `PROMPTFOO_ENABLE_REMOTE_GENERATION`.
-
-## Forcing Remote Generation
 
 Some red-team plugins and strategies require Promptfoo-hosted inference. If your CI/CD environment sets `OPENAI_API_KEY` for other providers but still needs those remote-only paths, set:
 
@@ -153,11 +151,11 @@ See the [Enterprise Overview](/docs/enterprise/) for deployment options.
 
 ## Configuration Summary
 
-| Requirement                  | Configuration                                                                                                                                                                                                                                                                                                                       |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Requirement                  | Configuration                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No data to Promptfoo servers | Use API-key/local providers for every generation, grading, embedding, and moderation path; avoid remote-only plugins, red team target/provider setup helpers, red team target/provider test requests, Cloud sync, and sharing; set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` and `PROMPTFOO_DISABLE_TELEMETRY=1`; do not pass `--remote` or set `PROMPTFOO_ENABLE_REMOTE_GENERATION` |
-| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local providers for supported generation paths                                                                                                                                                                                                                            |
-| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                                                                                                                                                                                                                                                                                         |
+| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local providers for supported generation paths                                                                                                                                                                                                                                                                             |
+| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                                                                                                                                                                                                                                                                                                                                           |
 
 ## Related Documentation
 

@@ -830,7 +830,7 @@ Some providers such as Anthropic may disable your account for generating harmful
 
 ### Remote Generation
 
-Promptfoo can use a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. When local credentials such as `OPENAI_API_KEY` are present, promptfoo uses them for locally-capable generation and grading, but some plugins and strategies still require remote generation.
+Promptfoo can use a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. When local credentials such as `OPENAI_API_KEY` are present, Promptfoo uses them for locally-capable generation and grading, but some plugins and strategies still require remote generation.
 
 :::info Cloud Users
 If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
