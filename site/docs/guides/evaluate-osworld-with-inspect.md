@@ -25,7 +25,7 @@ Use a simple pass-through prompt such as `{{prompt}}` for Promptfoo's row label;
 The example is intentionally thin:
 
 1. Promptfoo calls `provider.py` once for each test case.
-2. The provider starts `inspect eval inspect_evals/osworld_small` with either `--sample-id <id>` or an app filter plus `--limit`.
+2. The provider starts `inspect eval inspect_evals/osworld_small --sample-id <id>`.
 3. Inspect runs the desktop sandbox and agent loop.
 4. Inspect writes a `.eval` log with screenshots, model messages, tool calls, files, scores, and metadata.
 5. The provider runs `inspect log dump`, parses the sample score, and returns normal Promptfoo output and metadata.
@@ -60,7 +60,7 @@ The provider treats three states differently:
 
 - `score >= 1.0`: Inspect completed and OSWorld scored the task as correct.
 - `score < 1.0`: Inspect completed and OSWorld scored the task as incorrect.
-- provider `error`: setup, Docker, model SDK, timeout, tool execution, or log parsing failed before a scored sample was produced.
+- provider `error`: setup, Docker, model SDK, timeout, tool execution, log parsing, or missing scorer output prevented a scored sample from being produced.
 
 ## Prerequisites
 
@@ -106,13 +106,6 @@ PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
     --max-concurrency 6 -o osworld-results.json
 ```
 
-To make the GPT-5.5 model selection explicit for one run:
-
-```bash
-PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  promptfoo eval -c promptfooconfig.yaml --no-cache --var model=openai/gpt-5.5
-```
-
 When iterating, run one app before spending on the full suite:
 
 ```bash
@@ -149,8 +142,8 @@ defaultTest:
 tests: file://osworld_tests.py:generate_tests
 ```
 
-`osworld_tests.py` keeps Inspect as the dataset source of truth. It loads
-Inspect's supported OSWorld samples, derives app metadata from each sample's
+`osworld_tests.py` delegates sample selection to Inspect. It loads the
+supported OSWorld samples, derives app metadata from each sample's
 `example.json` path, and returns normal Promptfoo test cases:
 
 ```python title="osworld_tests.py"
@@ -160,7 +153,7 @@ from inspect_evals.osworld import osworld_small
 EXAMPLE_PATH = "/tmp/osworld/desktop_env/example.json"
 
 
-def generate_tests(config=None):
+def generate_tests():
     dataset = osworld_small().dataset
     return [_test_case(dataset[index]) for index in range(len(dataset))]
 
@@ -195,10 +188,10 @@ promptfoo eval -c promptfooconfig.yaml \
   --filter-metadata sample_id=42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
 
-For exact runs, prefer `sample_id`. The provider passes it to Inspect's
-`--sample-id` flag and skips app/index filtering. Keep `app` in the generated
-vars so results can still be grouped by OSWorld application. Inspect app ids use
-`vscode`, not `vs_code`, and multi-app tasks use `multi_apps`.
+The provider always passes `sample_id` to Inspect's `--sample-id` flag. Keep
+`app` in the generated vars so results can still be grouped by OSWorld
+application. The generated metadata normalizes VS Code to `vscode`; multi-app
+tasks use `multi_apps`.
 
 The example enables Promptfoo tracing directly:
 
@@ -241,6 +234,11 @@ A failed score is still a valid eval result when Inspect completed and the
 OSWorld scorer returned `0.0`. Treat provider errors differently: those
 indicate setup, Docker, model SDK, timeout, Inspect tool execution, or log
 parsing failures before a scored sample was produced.
+
+On subprocess failures, the wrapper keeps Promptfoo results compact: it returns a
+concise error and stores the local log path/status/duration, but it does not copy
+captured Inspect stdout or stderr into result metadata. Use the local Inspect logs
+for detailed screenshots, tool output, and trajectory debugging.
 
 Inspect the exported Promptfoo JSON first:
 
@@ -337,7 +335,7 @@ reported `compare_pptx_files(...) returned 0`.
 
 ## Inspect logs
 
-Inspect logs are the source of truth for trajectory debugging:
+Use Inspect logs for trajectory debugging:
 
 ```bash
 inspect view --log-dir inspect_logs
@@ -354,13 +352,13 @@ usage, status, eval id, and test case id.
 
 Trace-level visibility into OSWorld itself still lives in Inspect: every run
 writes a `.eval` log, and `inspect view` displays the desktop trajectory.
-Promptfoo receives wrapper-level telemetry plus result metadata: output text,
-score, token usage, sample id, status, and `inspect_log_path`.
+Promptfoo receives one provider span per sample plus result metadata: output
+text, score, token usage, sample id, status, and `inspect_log_path`.
 
-You can verify that Promptfoo stored wrapper-level traces by checking the
-result's trace in the Promptfoo UI, or by asserting on raw provider spans in a
-separate trace-focused config. The real desktop trajectory remains in Inspect
-unless you build a bridge from Inspect events to OpenTelemetry spans.
+You can verify that Promptfoo stored provider spans by checking the result's
+trace in the Promptfoo UI, or by asserting on raw spans in a separate
+trace-focused config. The real desktop trajectory remains in Inspect unless you
+build a bridge from Inspect events to OpenTelemetry spans.
 
 To make the desktop actions Promptfoo-native tracing, the wrapper would need to
 translate Inspect events into OpenTelemetry spans or expose a Promptfoo trace

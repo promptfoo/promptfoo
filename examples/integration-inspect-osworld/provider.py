@@ -27,6 +27,7 @@ from typing import Any
 DEFAULT_MODEL = "openai/gpt-5.5"
 DEFAULT_TIMEOUT_SECONDS = 1800
 DEFAULT_TASK = "inspect_evals/osworld_small"
+OSWORLD_SCORER = "osworld_scorer"
 
 
 def call_api(prompt: str, options: dict, context: dict) -> dict:
@@ -34,13 +35,13 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     del prompt
     config = options.get("config") or {}
     vars_ = context.get("vars") or {}
-    app = vars_.get("app")
     requested_sample_id = vars_.get("sample_id")
-    if not app and not requested_sample_id:
+    app = vars_.get("app")
+    if not requested_sample_id:
         return {
             "error": (
-                "OSWorld app or sample_id is required. Set vars.app, for example "
-                "'libreoffice_calc', or vars.sample_id for an exact OSWorld sample."
+                "OSWorld sample_id is required. Use osworld_tests.py or set "
+                "vars.sample_id."
             )
         }
 
@@ -50,14 +51,14 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     log_root = _resolve_log_root(config, base_path)
     log_dir = _new_log_dir(log_root, str(app or requested_sample_id))
     inspect_cmd = _inspect_command(config)
+    if not inspect_cmd:
+        return {
+            "error": (
+                "Inspect CLI command is empty. Set providers[0].config.inspectCommand "
+                "or PROMPTFOO_OSWORLD_INSPECT_COMMAND."
+            )
+        }
 
-    task_index = vars_.get("task_index")
-    if requested_sample_id and task_index not in (None, ""):
-        return {"error": "sample_id and task_index are mutually exclusive."}
-    try:
-        limit = _limit_for_task_index(task_index) if not requested_sample_id else None
-    except ValueError as exc:
-        return {"error": str(exc)}
     task = config.get("task") or DEFAULT_TASK
 
     eval_cmd = [
@@ -68,11 +69,9 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         str(model),
         "--log-dir",
         str(log_dir),
+        "--sample-id",
+        str(requested_sample_id),
     ]
-    if requested_sample_id:
-        eval_cmd.extend(["--sample-id", str(requested_sample_id)])
-    else:
-        eval_cmd.extend(["--limit", str(limit), "-T", f"include_apps={app}"])
 
     started = time.monotonic()
     try:
@@ -86,7 +85,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         )
     except FileNotFoundError:
         return {"error": _missing_inspect_message(inspect_cmd[0])}
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         return {
             "error": (
                 f"Inspect OSWorld run timed out after {timeout_seconds}s. "
@@ -96,21 +95,17 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
                 "inspect_log_path": str(log_dir),
                 "status": "error",
                 "duration_seconds": round(time.monotonic() - started, 3),
-                "stdout_tail": _tail(exc.stdout),
-                "stderr_tail": _tail(exc.stderr),
             },
         }
 
     duration = time.monotonic() - started
     if eval_result.returncode != 0:
         return {
-            "error": _humanize_inspect_failure(eval_result, eval_cmd),
+            "error": _humanize_inspect_failure(eval_result),
             "metadata": {
                 "inspect_log_path": str(log_dir),
                 "status": "error",
                 "duration_seconds": round(duration, 3),
-                "stdout_tail": _tail(eval_result.stdout),
-                "stderr_tail": _tail(eval_result.stderr),
             },
         }
 
@@ -166,10 +161,9 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         "num_messages": parsed.get("num_messages", 0),
         "duration_seconds": round(duration, 3),
         "task": task,
-        "app": str(app or "sample_id"),
+        "app": str(app or "unknown"),
+        "requested_sample_id": str(requested_sample_id),
     }
-    if requested_sample_id:
-        metadata["requested_sample_id"] = str(requested_sample_id)
     token_usage = parsed.get("token_usage")
 
     inspect_error = _inspect_log_error(parsed)
@@ -192,7 +186,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         parsed.get("final_answer") or "(no final assistant text found in Inspect log)"
     )
     output = (
-        f"Sample {sample_id} on app {app or 'sample_id'}: "
+        f"Sample {sample_id} on app {app or 'unknown'}: "
         f"score={score if score is not None else 'unknown'} "
         f"status={status}\n\nFinal answer: {final_answer}"
     )
@@ -234,29 +228,6 @@ def _new_log_dir(log_root: Path, app: str) -> Path:
     return path
 
 
-def _limit_for_task_index(task_index: Any) -> str:
-    if task_index in (None, ""):
-        return "1"
-
-    if isinstance(task_index, bool):
-        raise ValueError("task_index must be an integer starting at 0")
-
-    if isinstance(task_index, int):
-        index = task_index
-    elif isinstance(task_index, str):
-        try:
-            index = int(task_index.strip())
-        except ValueError as exc:
-            raise ValueError("task_index must be an integer starting at 0") from exc
-    else:
-        raise ValueError("task_index must be an integer starting at 0")
-
-    if index < 0:
-        raise ValueError("task_index must be >= 0")
-    one_based = index + 1
-    return f"{one_based}-{one_based}"
-
-
 def _find_eval_log(log_dir: Path) -> Path | None:
     logs = sorted(
         log_dir.rglob("*.eval"), key=lambda path: path.stat().st_mtime, reverse=True
@@ -267,10 +238,17 @@ def _find_eval_log(log_dir: Path) -> Path | None:
 def _parse_inspect_log(data: dict[str, Any]) -> dict[str, Any]:
     samples = data.get("samples") or []
     sample = samples[0] if samples else {}
-    sample_score = _sample_score(sample) if sample else None
-    score = sample_score if sample_score is not None else _aggregate_score(data)
+    sample_score, score_error = _sample_score(sample) if sample else (None, None)
+    score = (
+        None
+        if score_error
+        else sample_score
+        if sample_score is not None
+        else _aggregate_score(data)
+    )
     return {
         "score": score,
+        "score_error": score_error,
         "sample_id": sample.get("id") or sample.get("uuid"),
         "final_answer": _final_answer(sample),
         "num_messages": len(sample.get("messages") or []),
@@ -280,16 +258,39 @@ def _parse_inspect_log(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _sample_score(sample: dict[str, Any]) -> float | None:
+def _sample_score(sample: dict[str, Any]) -> tuple[float | None, str | None]:
     scores = sample.get("scores") or {}
-    for score in scores.values():
-        if not isinstance(score, dict):
-            continue
-        value = score.get("value")
-        numeric = _coerce_score(value)
+    preferred_score = scores.get(OSWORLD_SCORER)
+    if preferred_score is not None:
+        numeric = _score_value(preferred_score)
         if numeric is not None:
-            return numeric
-    return None
+            return numeric, None
+        return (
+            None,
+            f"Inspect recorded {OSWORLD_SCORER}, but its value was not numeric.",
+        )
+
+    numeric_scores: list[tuple[str, float]] = []
+    for name, score in scores.items():
+        numeric = _score_value(score)
+        if numeric is None:
+            continue
+        numeric_scores.append((str(name), numeric))
+
+    if len(numeric_scores) == 1:
+        return numeric_scores[0][1], None
+    if len(numeric_scores) > 1:
+        return (
+            None,
+            f"Inspect recorded multiple numeric scorer values but not {OSWORLD_SCORER}.",
+        )
+    return None, None
+
+
+def _score_value(score: Any) -> float | None:
+    if not isinstance(score, dict):
+        return None
+    return _coerce_score(score.get("value"))
 
 
 def _aggregate_score(data: dict[str, Any]) -> float | None:
@@ -363,6 +364,10 @@ def _token_usage(data: dict[str, Any], sample: dict[str, Any]) -> dict[str, int]
 
 
 def _inspect_log_error(parsed: dict[str, Any]) -> str | None:
+    score_error = parsed.get("score_error")
+    if score_error:
+        return str(score_error)
+
     sample_error = parsed.get("sample_error")
     if isinstance(sample_error, dict):
         message = sample_error.get("message") or sample_error.get("traceback")
@@ -374,10 +379,16 @@ def _inspect_log_error(parsed: dict[str, Any]) -> str | None:
     if parsed.get("inspect_status") == "error":
         return "Inspect log status is error and no scorer result was recorded."
 
-    if parsed.get("score") is None and not parsed.get("sample_id"):
+    if parsed.get("score") is None:
+        sample_id = parsed.get("sample_id")
+        if sample_id:
+            return (
+                f"Inspect completed sample {sample_id}, but no OSWorld scorer result "
+                "was recorded."
+            )
         return (
             "Inspect completed, but selected zero samples or recorded no scorer result. "
-            "Check vars.app, vars.task_index, or vars.sample_id."
+            "Check vars.sample_id."
         )
 
     return None
@@ -411,17 +422,12 @@ def _missing_inspect_message(command: str) -> str:
     return f"Could not execute Inspect CLI command '{command}'."
 
 
-def _humanize_inspect_failure(
-    result: subprocess.CompletedProcess, cmd: list[str]
-) -> str:
+def _humanize_inspect_failure(result: subprocess.CompletedProcess) -> str:
     tail = _tail(result.stderr) or _tail(result.stdout) or "(no output)"
     hint = ""
     lowered = tail.lower()
     if "specified dataset is empty" in lowered or "no samples" in lowered:
-        hint = (
-            " Check vars.app or vars.sample_id. Inspect selected no OSWorld samples "
-            "for this filter."
-        )
+        hint = " Check vars.sample_id. Inspect selected no OSWorld samples for this id."
     elif "docker compose" in lowered or "compose" in lowered:
         hint = " Check that Docker Compose V2 is installed and available as `docker compose`."
     elif "docker" in lowered:
@@ -432,14 +438,13 @@ def _humanize_inspect_failure(
         hint = " Check that the selected model provider API key is exported."
     elif "model" in lowered:
         hint = " Check providers[0].config.defaultModel or vars.model."
-    return f"Inspect eval failed with exit code {result.returncode}.{hint}\nCommand: {_redact(cmd)}\n{tail}"
+    return f"Inspect eval failed with exit code {result.returncode}.{hint}"
 
 
 def _humanize_log_dump_failure(
     result: subprocess.CompletedProcess, eval_log: Path
 ) -> str:
-    tail = _tail(result.stderr) or _tail(result.stdout) or "(no output)"
-    return f"Inspect log dump failed for {eval_log} with exit code {result.returncode}.\n{tail}"
+    return f"Inspect log dump failed for {eval_log} with exit code {result.returncode}."
 
 
 def _tail(text: Any, limit: int = 4000) -> str:
@@ -447,7 +452,3 @@ def _tail(text: Any, limit: int = 4000) -> str:
         return ""
     text = text.decode(errors="replace") if isinstance(text, bytes) else str(text)
     return text[-limit:]
-
-
-def _redact(cmd: list[str]) -> str:
-    return " ".join(shlex.quote(part) for part in cmd)
