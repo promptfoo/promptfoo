@@ -53,6 +53,11 @@ providers:
       output_format: *reviewSchema
 
 defaultTest:
+  # Without `disableVarExpansion`, Promptfoo would fan each YAML-list var into
+  # one test case per element (src/evaluator.ts:generateVarCombinations), which
+  # would split each comparison test in two.
+  options:
+    disableVarExpansion: true
   assert:
     - type: skill-used
       value: review-standards
@@ -60,11 +65,10 @@ defaultTest:
     - type: javascript
       threshold: 0.7
       value: |
-        // expectedIssues is a comma-separated string rather than a YAML list
-        // because Promptfoo expands string-array vars into a matrix of test
-        // cases (src/evaluator.ts:generateVarCombinations).
+        // The provider returns a parsed object when `output_format` is set
+        // and a string otherwise; handle both.
         const result = typeof output === 'string' ? JSON.parse(output) : output;
-        const expected = context.vars.expectedIssues.split(',');
+        const expected = context.vars.expectedIssues;
         const found = (result.issues || []).map((issue) => issue.id);
         const hits = expected.filter((id) => found.includes(id));
         const recall = hits.length / expected.length;
@@ -79,10 +83,12 @@ tests:
   - description: Finds password handling issues
     vars:
       request: Review src/auth.ts for password handling security issues.
-      # comma-separated string, not a YAML list — see the JS assertion above.
-      expectedIssues: weak-password-hash,timing-unsafe-compare
+      expectedIssues:
+        - weak-password-hash
+        - timing-unsafe-compare
 
   - description: Finds the most important issue
     vars:
       request: Review src/auth.ts and report only the highest-risk auth issue.
-      expectedIssues: weak-password-hash
+      expectedIssues:
+        - weak-password-hash

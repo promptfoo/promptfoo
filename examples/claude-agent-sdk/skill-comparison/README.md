@@ -24,6 +24,6 @@ From this directory:
 ANTHROPIC_API_KEY=… promptfoo eval --no-cache
 ```
 
-`expectedIssues` is a comma-separated string rather than a YAML list because Promptfoo expands string-array vars into a matrix of test cases (`src/evaluator.ts:generateVarCombinations`), which would split each test in two. The runnable example holds the comparison to two cases on purpose.
+`defaultTest.options.disableVarExpansion: true` keeps each `expectedIssues` array intact instead of [fanning it into one test case per element](https://www.promptfoo.dev/docs/configuration/test-cases#passing-arrays-to-assertions). Without it the example would run 6 cases instead of 4.
 
 The two skill versions are intentionally asymmetric: v1 caps reviews at one issue and only knows password hashing, while v2 also flags timing-unsafe token comparison. With the supplied tasks you should expect each version to pass exactly the test that matches its scope.

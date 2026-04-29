@@ -94,21 +94,31 @@ Because everything else is held constant, any meaningful difference in the resul
 Next, add a few tasks that represent how the skill will really be used:
 
 ```yaml
+defaultTest:
+  # By default, Promptfoo fans each YAML-list var into one test case per
+  # element (matrix expansion), which would split each comparison test in
+  # two. Disable that here so `expectedIssues` reaches the assertion intact.
+  options:
+    disableVarExpansion: true
+
 tests:
   - description: Finds password handling issues
     vars:
       request: Review src/auth.ts for password handling security issues.
-      # comma-separated rather than a YAML list — Promptfoo expands string-array
-      # vars into a matrix of test cases, which would split each test in two.
-      expectedIssues: weak-password-hash,timing-unsafe-compare
+      expectedIssues:
+        - weak-password-hash
+        - timing-unsafe-compare
 
   - description: Finds the most important issue
     vars:
       request: Review src/auth.ts and report only the highest-risk auth issue.
-      expectedIssues: weak-password-hash
+      expectedIssues:
+        - weak-password-hash
 ```
 
 The first case asks for a broad review. The second is narrower, which helps catch a skill that finds the right problems but ignores the user's requested scope.
+
+See [Passing Arrays to Assertions](/docs/configuration/test-cases#passing-arrays-to-assertions) for the matrix-expansion behavior `disableVarExpansion` opts out of.
 
 ## Add Assertions
 
@@ -140,7 +150,7 @@ defaultTest:
         // The provider returns the parsed object when `output_format` /
         // `output_schema` is set, and a string otherwise; handle both.
         const result = typeof output === 'string' ? JSON.parse(output) : output;
-        const expected = context.vars.expectedIssues.split(',');
+        const expected = context.vars.expectedIssues;
         const found = (result.issues || []).map((issue) => issue.id);
         const hits = expected.filter((id) => found.includes(id));
         const recall = hits.length / expected.length;

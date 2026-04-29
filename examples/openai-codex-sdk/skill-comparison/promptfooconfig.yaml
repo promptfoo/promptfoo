@@ -61,6 +61,11 @@ providers:
       working_dir: '{{ env.CODEX_SKILL_COMPARE_V2_DIR | default("./fixtures/v2") }}'
 
 defaultTest:
+  # Without `disableVarExpansion`, Promptfoo would fan each YAML-list var into
+  # one test case per element (src/evaluator.ts:generateVarCombinations), which
+  # would split each comparison test in two and break max-score selection.
+  options:
+    disableVarExpansion: true
   assert:
     - type: skill-used
       value: review-standards
@@ -69,11 +74,8 @@ defaultTest:
     - type: javascript
       threshold: 0.7
       value: |
-        // expectedIssues is a comma-separated string rather than a YAML list to
-        // avoid Promptfoo's matrix expansion of string-array vars
-        // (src/evaluator.ts:generateVarCombinations).
         const result = JSON.parse(output);
-        const expected = context.vars.expectedIssues.split(',');
+        const expected = context.vars.expectedIssues;
         const found = (result.issues || []).map((issue) => issue.id);
         const hits = expected.filter((id) => found.includes(id));
         const extras = found.filter((id) => !expected.includes(id));
@@ -107,10 +109,12 @@ tests:
   - description: Finds both auth issues
     vars:
       request: Review src/auth.ts for password handling and token comparison issues.
-      # comma-separated string, not a YAML list — see the JS assertion above.
-      expectedIssues: weak-password-hash,timing-unsafe-compare
+      expectedIssues:
+        - weak-password-hash
+        - timing-unsafe-compare
 
   - description: Focuses on token comparison
     vars:
       request: Review src/auth.ts only for token comparison issues.
-      expectedIssues: timing-unsafe-compare
+      expectedIssues:
+        - timing-unsafe-compare
