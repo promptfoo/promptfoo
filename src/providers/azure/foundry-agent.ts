@@ -17,6 +17,12 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import {
+  formatContentFilterResponse,
+  isContentFilterError,
+  isRateLimitError,
+  isServiceError,
+} from './errors';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-projects';
@@ -607,64 +613,17 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       };
     }
 
-    if (this.isContentFilterError(errorMessage)) {
-      const lowerErrorMessage = errorMessage.toLowerCase();
-      const isInputFiltered =
-        lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-      const isOutputFiltered =
-        lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-      return {
-        output:
-          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-        guardrails: {
-          flagged: true,
-          flaggedInput: isInputFiltered,
-          flaggedOutput: isOutputFiltered || (!isInputFiltered && !isOutputFiltered),
-        },
-      };
+    if (isContentFilterError(errorMessage)) {
+      return formatContentFilterResponse(errorMessage);
     }
 
-    if (this.isRateLimitError(errorMessage)) {
+    if (isRateLimitError(errorMessage)) {
       return { error: `Rate limit exceeded: ${errorMessage}` };
     }
-    if (this.isServiceError(errorMessage)) {
+    if (isServiceError(errorMessage)) {
       return { error: `Service error: ${errorMessage}` };
     }
 
     return { error: `Error in Azure Foundry Agent API call: ${errorMessage}` };
-  }
-
-  private isContentFilterError(errorMessage: string): boolean {
-    const lowerErrorMessage = errorMessage.toLowerCase();
-    return (
-      lowerErrorMessage.includes('content_filter') ||
-      lowerErrorMessage.includes('content filter') ||
-      lowerErrorMessage.includes('filtered due to') ||
-      lowerErrorMessage.includes('content filtering') ||
-      lowerErrorMessage.includes('inappropriate content') ||
-      lowerErrorMessage.includes('safety guidelines') ||
-      lowerErrorMessage.includes('guardrail')
-    );
-  }
-
-  private isRateLimitError(errorMessage: string): boolean {
-    const lower = errorMessage.toLowerCase();
-    return (
-      lower.includes('rate limit') ||
-      lower.includes('quota exceeded') ||
-      lower.includes('too many requests') ||
-      errorMessage.includes('429')
-    );
-  }
-
-  private isServiceError(errorMessage: string): boolean {
-    return (
-      errorMessage.includes('Service unavailable') ||
-      errorMessage.includes('Bad gateway') ||
-      errorMessage.includes('Gateway timeout') ||
-      errorMessage.includes('Server is busy') ||
-      errorMessage.includes('Sorry, something went wrong')
-    );
   }
 }

@@ -2,17 +2,19 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import {
-  formatRateLimitErrorMessage,
-  HttpRateLimitError,
-  isHardQuotaCode,
-} from '../../util/fetch/errors';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { getRequestTimeoutMs, toTitleCase } from '../shared';
+import {
+  formatContentFilterResponse,
+  isContentFilterError,
+  isRateLimitError,
+  isServiceError,
+} from './errors';
 import { AzureGenericProvider } from './generic';
 
 import type {
@@ -335,30 +337,11 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           );
         } else {
           if (completedRun.last_error) {
-            // Check if the error is a content filter error
             const errorCode = completedRun.last_error.code || '';
             const errorMessage = completedRun.last_error.message || '';
 
-            if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
-              const lowerErrorMessage = errorMessage.toLowerCase();
-              const isInputFiltered =
-                lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-              const isOutputFiltered =
-                lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-              // Ensure mutual exclusivity - prioritize input if both are detected
-              const flaggedInput = isInputFiltered;
-              const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
-
-              result = {
-                output:
-                  "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-                guardrails: {
-                  flagged: true,
-                  flaggedInput,
-                  flaggedOutput,
-                },
-              };
+            if (errorCode === 'content_filter' || isContentFilterError(errorMessage)) {
+              result = formatContentFilterResponse(errorMessage);
             } else {
               result = {
                 error: `Thread run failed: ${errorCode} - ${errorMessage}`,
@@ -410,36 +393,20 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       };
     }
 
-    // Handle content filter errors
-    if (this.isContentFilterError(errorMessage)) {
-      const lowerErrorMessage = errorMessage.toLowerCase();
-      const isInputFiltered =
-        lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-      const isOutputFiltered =
-        lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-      return {
-        output:
-          "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-        guardrails: {
-          flagged: true,
-          flaggedInput: isInputFiltered,
-          flaggedOutput: isOutputFiltered || (!isInputFiltered && !isOutputFiltered), // Default to output if neither is explicitly mentioned
-        },
-      };
+    if (isContentFilterError(errorMessage)) {
+      return formatContentFilterResponse(errorMessage);
     }
 
-    // Format specific error types
     if (
       errorMessage.includes("Can't add messages to thread") &&
       errorMessage.includes('while a run')
     ) {
       return { error: `Error in Azure Assistant API call: ${errorMessage}` };
     }
-    if (this.isRateLimitError(errorMessage)) {
+    if (isRateLimitError(errorMessage)) {
       return { error: `Rate limit exceeded: ${errorMessage}` };
     }
-    if (this.isServiceError(errorMessage)) {
+    if (isServiceError(errorMessage)) {
       return { error: `Service error: ${errorMessage}` };
     }
 
@@ -527,72 +494,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       'Content-Type': 'application/json',
       ...(this.authHeaders || {}),
     };
-  }
-
-  /**
-   * Helper methods to check for specific error types
-   */
-  private isContentFilterError(errorMessage: string): boolean {
-    const lowerErrorMessage = errorMessage.toLowerCase();
-    return (
-      lowerErrorMessage.includes('content_filter') ||
-      lowerErrorMessage.includes('content filter') ||
-      lowerErrorMessage.includes('filtered due to') ||
-      lowerErrorMessage.includes('content filtering') ||
-      lowerErrorMessage.includes('inappropriate content') ||
-      lowerErrorMessage.includes('safety guidelines') ||
-      lowerErrorMessage.includes('guardrail')
-    );
-  }
-
-  private isRateLimitError(errorMessage: string): boolean {
-    const lower = errorMessage.toLowerCase();
-    return (
-      lower.includes('rate limit') ||
-      lower.includes('quota exceeded') ||
-      lower.includes('too many requests') ||
-      errorMessage.includes('429')
-    );
-  }
-
-  private isServiceError(errorMessage: string): boolean {
-    return (
-      errorMessage.includes('Service unavailable') ||
-      errorMessage.includes('Bad gateway') ||
-      errorMessage.includes('Gateway timeout') ||
-      errorMessage.includes('Server is busy') ||
-      errorMessage.includes('Sorry, something went wrong')
-    );
-  }
-
-  private isServerError(errorMessage: string): boolean {
-    return (
-      errorMessage.includes('500') ||
-      errorMessage.includes('502') ||
-      errorMessage.includes('503') ||
-      errorMessage.includes('504')
-    );
-  }
-
-  private isRetryableError(code?: string, message?: string, err?: unknown): boolean {
-    // Structured signal beats string matching: hard quotas are explicitly
-    // not retryable even though they share HTTP 429 with rate limits.
-    if (err instanceof HttpRateLimitError) {
-      return err.kind !== 'quota';
-    }
-    if (code === 'rate_limit_exceeded') {
-      return true;
-    }
-    if (isHardQuotaCode(code)) {
-      return false;
-    }
-    if (!message) {
-      return false;
-    }
-
-    return (
-      this.isRateLimitError(message) || this.isServiceError(message) || this.isServerError(message)
-    );
   }
 
   /**
@@ -827,26 +728,8 @@ export class AzureAssistantProvider extends AzureGenericProvider {
               const errorCode = run.last_error.code || '';
               const errorMessage = run.last_error.message || '';
 
-              if (errorCode === 'content_filter' || this.isContentFilterError(errorMessage)) {
-                const lowerErrorMessage = errorMessage.toLowerCase();
-                const isInputFiltered =
-                  lowerErrorMessage.includes('prompt') || lowerErrorMessage.includes('input');
-                const isOutputFiltered =
-                  lowerErrorMessage.includes('output') || lowerErrorMessage.includes('response');
-
-                // Ensure mutual exclusivity - prioritize input if both are detected
-                const flaggedInput = isInputFiltered;
-                const flaggedOutput = !isInputFiltered && (isOutputFiltered || !isOutputFiltered);
-
-                return {
-                  output:
-                    "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.",
-                  guardrails: {
-                    flagged: true,
-                    flaggedInput,
-                    flaggedOutput,
-                  },
-                };
+              if (errorCode === 'content_filter' || isContentFilterError(errorMessage)) {
+                return formatContentFilterResponse(errorMessage);
               }
 
               return {
