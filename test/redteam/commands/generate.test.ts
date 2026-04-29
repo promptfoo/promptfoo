@@ -977,6 +977,48 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
   });
 
+  it('should explain when basic is disabled without replacement strategies', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {
+          plugins: [{ id: 'intent', config: { intent: ['reservation details'] } }],
+          strategies: [{ id: 'basic', config: { enabled: false } }],
+        },
+      },
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    const result = await doGenerateRedteam(options);
+
+    expect(result).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Basic strategy is disabled and no other strategies are selected'),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Enable Basic'));
+    expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
   it('should cleanup provider even when --strict mode throws an exception', async () => {
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [

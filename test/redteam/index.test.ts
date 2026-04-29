@@ -2117,6 +2117,25 @@ describe('calculateTotalTests', () => {
     });
   });
 
+  it('should count custom intents instead of numTests for intent plugins', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 1,
+        config: { intent: ['intent1', 'intent2', 'intent3'] },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result).toEqual({
+      totalTests: 3,
+      totalPluginTests: 3,
+      effectiveStrategyCount: 0,
+      includeBasicTests: true,
+    });
+  });
+
   it('should handle retry strategy with default numTests', () => {
     const strategies = [{ id: 'retry' }];
     const result = calculateTotalTests(mockPlugins, strategies);

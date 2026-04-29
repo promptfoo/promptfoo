@@ -96,6 +96,67 @@ describe('IntentPlugin', () => {
     expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
   });
 
+  it('should materialize plain string intents for multi-input targets', async () => {
+    const plugin = new IntentPlugin(mockProvider, 'test-purpose', '__prompt', {
+      intent: 'View reservation details',
+      inputs: {
+        user_id: 'Signed-in user identifier',
+        message: 'User message to the assistant',
+      },
+    });
+
+    const tests = await plugin.generateTests(1, 0);
+
+    expect(tests).toHaveLength(1);
+    expect(JSON.parse(String(tests[0].vars?.__prompt))).toEqual({
+      user_id: 'test_user_id',
+      message: 'View reservation details',
+    });
+    expect(tests[0].vars).toMatchObject({
+      user_id: 'test_user_id',
+      message: 'View reservation details',
+    });
+    expect(tests[0].metadata).toMatchObject({
+      goal: 'Access unauthorized customer data',
+      pluginId: 'promptfoo:redteam:intent',
+      inputVars: {
+        user_id: 'test_user_id',
+        message: 'View reservation details',
+      },
+    });
+    expect(tests[0].metadata?.pluginConfig).toBeUndefined();
+  });
+
+  it('should preserve JSON intent values for multi-input targets', async () => {
+    const plugin = new IntentPlugin(mockProvider, 'test-purpose', '__prompt', {
+      intent: JSON.stringify({
+        user_id: 'user_123',
+        message: 'View reservation details',
+      }),
+      inputs: {
+        user_id: 'Signed-in user identifier',
+        message: 'User message to the assistant',
+      },
+    });
+
+    const tests = await plugin.generateTests(1, 0);
+
+    expect(tests).toHaveLength(1);
+    expect(JSON.parse(String(tests[0].vars?.__prompt))).toEqual({
+      user_id: 'user_123',
+      message: 'View reservation details',
+    });
+    expect(tests[0].vars).toMatchObject({
+      user_id: 'user_123',
+      message: 'View reservation details',
+    });
+    expect(tests[0].metadata?.inputVars).toEqual({
+      user_id: 'user_123',
+      message: 'View reservation details',
+    });
+    expect(tests[0].metadata?.pluginConfig).toBeUndefined();
+  });
+
   it('should initialize with a list of list of strings', async () => {
     const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
       intent: [

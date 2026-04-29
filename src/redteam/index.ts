@@ -404,6 +404,35 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
     ? `1 ${strategy ? 'additional ' : ''}test`
     : `${numTests} ${strategy ? 'additional ' : ''}tests`;
 
+function getPluginLanguageCount(
+  plugin: SynthesizeOptions['plugins'][number],
+  language?: string | string[],
+): number {
+  const pluginLanguageConfig = plugin.config?.language ?? language;
+  return Array.isArray(pluginLanguageConfig) ? pluginLanguageConfig.length : 1;
+}
+
+function getIntentTestCount(plugin: SynthesizeOptions['plugins'][number]): number | undefined {
+  if (plugin.id !== 'intent') {
+    return undefined;
+  }
+
+  const intent = plugin.config?.intent;
+  if (!intent) {
+    return 0;
+  }
+
+  return Array.isArray(intent) ? intent.length : 1;
+}
+
+function getExpectedPluginTestCount(
+  plugin: SynthesizeOptions['plugins'][number],
+  language?: string | string[],
+): number {
+  const languageCount = getPluginLanguageCount(plugin, language);
+  return (getIntentTestCount(plugin) ?? plugin.numTests ?? 0) * languageCount;
+}
+
 /**
  * Gets the language from a test case's metadata.
  * Checks both metadata.language and metadata.modifiers.language.
@@ -836,11 +865,7 @@ export function calculateTotalTests(
   // Calculate total plugin tests accounting for multiple languages
   // Each plugin's tests are multiplied by the number of languages when multiple languages are configured
   const totalPluginTests = plugins.reduce((sum, p) => {
-    const pluginLanguageConfig = p.config?.language ?? language;
-    const pluginLanguageCount = Array.isArray(pluginLanguageConfig)
-      ? pluginLanguageConfig.length
-      : 1;
-    return sum + (p.numTests || 0) * pluginLanguageCount;
+    return sum + getExpectedPluginTestCount(p, language);
   }, 0);
 
   // When there are no strategies, or only a disabled basic strategy
@@ -1012,11 +1037,7 @@ export async function synthesize({
       plugins
         .map((p) => {
           // Calculate actual test count accounting for multiple languages
-          const pluginLanguageConfig = p.config?.language ?? language;
-          const pluginLanguageCount = Array.isArray(pluginLanguageConfig)
-            ? pluginLanguageConfig.length
-            : 1;
-          const actualTestCount = (p.numTests || 0) * pluginLanguageCount;
+          const actualTestCount = getExpectedPluginTestCount(p, language);
           // Build a concise display string for the plugin
           let configSummary = '';
           if (p.config) {
@@ -1411,7 +1432,11 @@ export async function synthesize({
       }
 
       if (showProgressBar) {
-        progressBar?.increment(plugin.numTests * languages.length);
+        progressBar?.increment(
+          plugin.id === 'intent'
+            ? allPluginTests.length
+            : getExpectedPluginTestCount(plugin, language),
+        );
       } else {
         logger.info(`Generated ${allPluginTests.length} tests for ${plugin.id}`);
       }
@@ -1437,7 +1462,9 @@ export async function synthesize({
       } else {
         // Single language or no language - use aggregated result
         const requested =
-          plugin.id === 'intent' ? allPluginTests.length : plugin.numTests * languages.length;
+          plugin.id === 'intent'
+            ? allPluginTests.length
+            : getExpectedPluginTestCount(plugin, language);
         const generated = allPluginTests.length;
         pluginResults[baseDisplayId] = { requested, generated };
       }
