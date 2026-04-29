@@ -102,21 +102,21 @@ defaultTest:
     disableVarExpansion: true
 
 tests:
-  - description: Finds password handling issues
+  - description: Finds both auth issues
     vars:
-      request: Review src/auth.ts for password handling security issues.
+      request: Review src/auth.ts for password handling and token comparison issues.
       expectedIssues:
         - weak-password-hash
         - timing-unsafe-compare
 
-  - description: Finds the most important issue
+  - description: Focuses on password handling only
     vars:
-      request: Review src/auth.ts and report only the highest-risk auth issue.
+      request: Review src/auth.ts only for password handling issues.
       expectedIssues:
         - weak-password-hash
 ```
 
-The first case asks for a broad review. The second is narrower, which helps catch a skill that finds the right problems but ignores the user's requested scope.
+The first case asks for a broad review covering both topics. The second is narrower, which helps catch a skill that finds the right problems but ignores the user's requested scope. Pairing the two together is what lets the eval reward a skill version that both knows the full set of issues _and_ respects the user's scope when asked.
 
 See [Passing Arrays to Assertions](/docs/configuration/test-cases#passing-arrays-to-assertions) for the matrix-expansion behavior `disableVarExpansion` opts out of.
 
@@ -221,7 +221,7 @@ providers:
   - id: openai:codex-sdk
     label: review-standards-v1
     config:
-      model: gpt-5.2
+      model: gpt-5.5
       working_dir: ./fixtures/v1
       skip_git_repo_check: true
       sandbox_mode: read-only
@@ -233,7 +233,7 @@ providers:
   - id: openai:codex-sdk
     label: review-standards-v2
     config:
-      model: gpt-5.2
+      model: gpt-5.5
       working_dir: ./fixtures/v2
       skip_git_repo_check: true
       sandbox_mode: read-only
@@ -267,7 +267,7 @@ For Codex SDK, trace evidence can be useful when you want to see the workflow be
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.2
+      model: gpt-5.5
       working_dir: ./fixtures/v2
       skip_git_repo_check: true
       sandbox_mode: read-only

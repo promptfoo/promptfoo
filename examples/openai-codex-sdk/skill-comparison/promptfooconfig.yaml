@@ -39,7 +39,7 @@ x-review-schema: &reviewSchema
 # `working_dir` so v1/v2 read different `SKILL.md` files but everything else
 # (model, sandbox, schema) stays identical.
 x-codex-config: &codexConfig
-  model: gpt-5.2
+  model: gpt-5.5
   skip_git_repo_check: true
   sandbox_mode: read-only
   enable_streaming: true

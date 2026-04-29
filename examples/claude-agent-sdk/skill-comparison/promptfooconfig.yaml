@@ -75,15 +75,15 @@ defaultTest:
         };
 
 tests:
-  - description: Finds password handling issues
+  - description: Finds both auth issues
     vars:
-      request: Review src/auth.ts for password handling security issues.
+      request: Review src/auth.ts for password handling and token comparison issues.
       expectedIssues:
         - weak-password-hash
         - timing-unsafe-compare
 
-  - description: Finds the most important issue
+  - description: Focuses on password handling only
     vars:
-      request: Review src/auth.ts and report only the highest-risk auth issue.
+      request: Review src/auth.ts only for password handling issues.
       expectedIssues:
         - weak-password-hash
