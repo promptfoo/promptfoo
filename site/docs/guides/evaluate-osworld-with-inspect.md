@@ -79,7 +79,9 @@ pip install 'inspect-evals[osworld]' openai anthropic opentelemetry-sdk opentele
 
 For the default config, export `OPENAI_API_KEY`. To use Anthropic instead, export `ANTHROPIC_API_KEY` and override the model in the test vars or provider config.
 
-The first run can build an OSWorld Docker image of roughly 8GB. A single sample commonly takes 5-15 minutes and can use many tokens.
+The first run can build an OSWorld Docker image of roughly 8GB. Real runs can
+consume substantial time and tokens; use the verification ladder below instead of
+starting with the full suite.
 
 ## Run the example
 
@@ -106,12 +108,27 @@ PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
     --max-concurrency 6 -o osworld-results.json
 ```
 
-When iterating, run one app before spending on the full suite:
+For the first real verification, run one exact sample:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  promptfoo eval -c promptfooconfig.yaml --no-cache --filter-metadata app=libreoffice_calc
+  promptfoo eval -c promptfooconfig.yaml --no-cache \
+    --filter-metadata sample_id=42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
+
+Then broaden to an app subset once the wrapper works end to end:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.yaml --no-cache \
+    --filter-metadata app=libreoffice_calc --max-concurrency 1 \
+    -o osworld-libreoffice-calc.json
+```
+
+App filters are still multi-sample runs. In the current `osworld_small` set,
+`app=libreoffice_calc` selects three samples; in one local GPT-5.5 verification
+on April 29, 2026, that sequential subset took 12m31s and used 533,101 total
+tokens. Treat that as scale guidance, not a fixed benchmark.
 
 ## Configuration
 
@@ -192,6 +209,13 @@ The provider always passes `sample_id` to Inspect's `--sample-id` flag. Keep
 `app` in the generated vars so results can still be grouped by OSWorld
 application. The generated metadata normalizes VS Code to `vscode`; multi-app
 tasks use `multi_apps`.
+
+Use the run scopes intentionally:
+
+1. `mockllm/model --limit 0` checks the Inspect CLI shape without model spend.
+2. `--filter-metadata sample_id=...` is the smallest real end-to-end validation.
+3. `--filter-metadata app=...` is a broader app slice and may include multiple samples.
+4. No filter runs the full suite and is appropriate for benchmark-style reporting.
 
 The example enables Promptfoo tracing directly:
 

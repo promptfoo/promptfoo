@@ -25,29 +25,45 @@ You need:
   `vars.model` or `providers[0].config.defaultModel` to an Inspect model such as
   `anthropic/claude-sonnet-4-5`.
 - Disk and time for Inspect's OSWorld Docker image. The first run builds an image of roughly 8GB and can take several minutes before the sample starts.
-- Budget for a non-trivial model run. A single OSWorld sample commonly takes 5-15 minutes and can use many tokens.
+- Budget for a non-trivial model run. Start with one exact sample before expanding
+  to a larger subset or the full suite.
 
 This example uses `inspect_evals/osworld_small`, the smaller OSWorld corpus supported by Inspect.
 
 ## Run
 
-From the repository root:
+For the first real verification from the repository root, run one exact sample:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
   npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache \
-    --filter-metadata app=libreoffice_calc
+    --filter-metadata sample_id=42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
 
 Or, after copying the example with `npx promptfoo@latest init --example integration-inspect-osworld`, run:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  promptfoo eval -c promptfooconfig.yaml --no-cache --filter-metadata app=libreoffice_calc
+  promptfoo eval -c promptfooconfig.yaml --no-cache \
+    --filter-metadata sample_id=42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
 
-Those commands run one app subset. To run the full supported small suite, remove
-the metadata filter and set a concurrency appropriate for your machine:
+After that succeeds, broaden to an app subset:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.yaml --no-cache \
+    --filter-metadata app=libreoffice_calc --max-concurrency 1 \
+    -o osworld-libreoffice-calc.json
+```
+
+App filters are still multi-sample runs. In the current `osworld_small` set,
+`app=libreoffice_calc` selects three samples; in one local GPT-5.5 verification
+on April 29, 2026, that sequential subset took 12m31s and used 533,101 total
+tokens. Treat that as scale guidance, not a fixed benchmark.
+
+To run the full supported small suite, remove the metadata filter and set a
+concurrency appropriate for your machine:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
@@ -76,15 +92,15 @@ sample ids, updating `inspect-evals` updates the generated row list without
 maintaining a local copy.
 
 The default config runs the full Inspect-supported `osworld_small` suite, which
-is 21 samples in the version used for the reference run below. To smoke test one
-app first, filter by metadata:
+is 21 samples in the version used for the reference run below. To run a broader
+subset after the exact-sample check, filter by app metadata:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
   promptfoo eval -c promptfooconfig.yaml --no-cache --filter-metadata app=libreoffice_calc
 ```
 
-To run a single exact OSWorld sample, filter by `sample_id`:
+To run the smallest real end-to-end validation, filter by `sample_id`:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
@@ -95,6 +111,13 @@ PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
 For custom subsets, filter by metadata at the CLI. The generated metadata uses
 OSWorld app ids, normalizes VS Code to `vscode`, and keeps multi-app tasks under
 `multi_apps`.
+
+Use the run scopes intentionally:
+
+1. `mockllm/model --limit 0` checks the Inspect CLI shape without model spend.
+2. `--filter-metadata sample_id=...` is the smallest real end-to-end validation.
+3. `--filter-metadata app=...` is a broader app slice and may include multiple samples.
+4. No filter runs the full suite and is appropriate for benchmark-style reporting.
 
 The example config sets two timeouts because both layers need enough time:
 
@@ -178,4 +201,4 @@ inspect log dump <file.eval>
 ```
 
 A real end-to-end OSWorld run still requires Docker, the first-run image build,
-provider credentials, and 5-15 minutes of runtime.
+and provider credentials. Use one exact sample before spending on larger slices.
