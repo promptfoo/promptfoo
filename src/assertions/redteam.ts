@@ -62,6 +62,20 @@ function createInitialGradingContext({
   return gradingContext;
 }
 
+function shouldRegradeStoredMissingEvidenceResult({
+  assertionValueContext,
+  baseType,
+  storedResult,
+}: Pick<AssertionParams, 'assertionValueContext' | 'baseType'> & {
+  storedResult: GradingResult;
+}): boolean {
+  return Boolean(
+    baseType.startsWith('promptfoo:redteam:agentic:') &&
+      storedResult.metadata?.verifierStatus === 'missing-evidence' &&
+      assertionValueContext.trace?.spans?.length,
+  );
+}
+
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
  * grader or preferably returning a `storedGraderResult` if it exists on the provider response.
@@ -84,26 +98,41 @@ export const handleRedteam = async ({
     assertion.type.includes(test.metadata.pluginId)
   ) {
     const storedResult = providerResponse.metadata.storedGraderResult;
+    if (
+      shouldRegradeStoredMissingEvidenceResult({
+        assertionValueContext,
+        baseType,
+        storedResult,
+      })
+    ) {
+      logger.debug(
+        '[Redteam] Regrading stored agentic result because final trace evidence is now available',
+        {
+          pluginId: test.metadata.pluginId,
+          traceId: assertionValueContext.trace?.traceId,
+        },
+      );
+    } else {
+      // Check if any turns had grader errors (even though we have a stored result)
+      const redteamHistory = providerResponse.metadata?.redteamHistory as
+        | Array<{ graderError?: string }>
+        | undefined;
+      const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
 
-    // Check if any turns had grader errors (even though we have a stored result)
-    const redteamHistory = providerResponse.metadata?.redteamHistory as
-      | Array<{ graderError?: string }>
-      | undefined;
-    const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
-
-    return {
-      ...storedResult,
-      assertion: {
-        ...(storedResult.assertion ?? assertion),
-        value: storedResult.assertion?.value || assertion.value,
-      },
-      metadata: {
-        ...test.metadata,
-        ...storedResult.metadata,
-        // Propagate gradingIncomplete if any turns had grader errors
-        ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
-      },
-    };
+      return {
+        ...storedResult,
+        assertion: {
+          ...(storedResult.assertion ?? assertion),
+          value: storedResult.assertion?.value || assertion.value,
+        },
+        metadata: {
+          ...test.metadata,
+          ...storedResult.metadata,
+          // Propagate gradingIncomplete if any turns had grader errors
+          ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
+        },
+      };
+    }
   }
 
   const grader = getGraderById(assertion.type);

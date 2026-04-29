@@ -9,6 +9,7 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../../tracing/traceContext';
+import { flushOtel } from '../../../tracing/otelSdk';
 import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
@@ -648,6 +649,7 @@ export class HydraProvider implements ApiProvider {
         const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
         if (traceId) {
+          await flushOtel();
           traceContext = await fetchTraceContext(traceId, {
             earliestStartTime: iterationStart,
             includeInternalSpans: tracingOptions.includeInternalSpans,

@@ -8,6 +8,7 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
+import { flushOtel } from '../../tracing/otelSdk';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -449,6 +450,7 @@ export async function runMetaAgentRedteam({
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 
       if (traceId) {
+        await flushOtel();
         traceContext = await fetchTraceContext(traceId, {
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,

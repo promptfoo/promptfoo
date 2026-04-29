@@ -425,11 +425,18 @@ export class OTLPReceiver {
 
   private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
     for (const [traceId, info] of traceInfoById) {
+      if (!info.evaluationId) {
+        logger.debug(
+          `[OtlpReceiver] Trace ${traceId} has no evaluation.id attribute; using any existing evaluator trace record`,
+        );
+        continue;
+      }
+
       try {
         logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
         await this.traceStore.createTrace({
           traceId,
-          evaluationId: info.evaluationId || '',
+          evaluationId: info.evaluationId,
           testCaseId: info.testCaseId || '',
         });
       } catch (error) {
@@ -442,7 +449,10 @@ export class OTLPReceiver {
   private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-      await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+      await this.traceStore.addSpans(traceId, spans, {
+        skipTraceCheck: false,
+        warnIfMissingTrace: false,
+      });
     }
   }
 

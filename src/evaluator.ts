@@ -770,7 +770,14 @@ async function callProviderForRunEval({
   const startTime = Date.now();
   const traceContext = test.providerOutput
     ? null
-    : await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx, testSuite);
+    : await generateTraceContextIfNeeded(
+        test,
+        evaluateOptions,
+        testIdx,
+        promptIdx,
+        testSuite,
+        evalId,
+      );
   const response = test.providerOutput
     ? {
         output: test.providerOutput,

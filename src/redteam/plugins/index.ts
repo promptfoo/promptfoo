@@ -16,6 +16,10 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import {
+  AGENTIC_RUNTIME_PLUGINS,
+  type AgenticRuntimePlugin as AgenticRuntimePluginId,
+} from '../constants/agentic';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -36,6 +40,7 @@ import {
 } from '../shared/promptLength';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
+import { AgenticRuntimePlugin } from './agentic';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -666,6 +671,22 @@ const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
   (id) => id !== 'indirect-prompt-injection' && id !== 'rag-poisoning',
 ).map((key) => createRemotePlugin(key));
 
+const agenticRuntimePlugins: PluginFactory[] = AGENTIC_RUNTIME_PLUGINS.map(
+  (pluginId: AgenticRuntimePluginId) => ({
+    key: pluginId,
+    action: async ({ provider, purpose, injectVar, n, config }: PluginActionParams) => {
+      logger.debug(`Using local redteam generation for ${pluginId}`);
+      return new AgenticRuntimePlugin(
+        provider,
+        purpose,
+        injectVar,
+        config ?? {},
+        pluginId,
+      ).generateTests(n);
+    },
+  }),
+);
+
 remotePlugins.push(
   createRemotePlugin<{ indirectInjectionVar: string }>(
     'indirect-prompt-injection',
@@ -690,6 +711,7 @@ remotePlugins.push(
 
 export const Plugins: PluginFactory[] = [
   ...pluginFactories,
+  ...agenticRuntimePlugins,
   ...piiPlugins,
   ...biasPlugins,
   ...remotePlugins,
