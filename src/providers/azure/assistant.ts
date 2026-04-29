@@ -400,8 +400,14 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     // Structured rate-limit errors carry status, code, retry-after metadata.
     // Use them in preference to substring matching so we can distinguish a
     // hard quota (don't retry) from a per-window rate limit (retry-safe).
+    // `metadata.rateLimitKind` lets the scheduler honor the same fail-fast
+    // contract on the result path, even though we're folding the structured
+    // error into a string here.
     if (err instanceof HttpRateLimitError) {
-      return { error: formatRateLimitErrorMessage(err) };
+      return {
+        error: formatRateLimitErrorMessage(err),
+        metadata: { rateLimitKind: err.kind },
+      };
     }
 
     // Handle content filter errors

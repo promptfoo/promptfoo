@@ -536,6 +536,60 @@ export function isTransientError(response: Response): boolean {
  */
 export type { FetchOptions } from './types';
 
+/**
+ * Decide what to do with a rate-limited response inside `fetchWithRetries`.
+ *
+ * Throws on hard-quota fail-fast or retry exhaustion (with a structured
+ * {@link HttpRateLimitError} for status 429, or a plain `Error` for the soft
+ * `X-RateLimit-Remaining=0` 200 case). Otherwise sleeps via
+ * {@link handleRateLimit} and returns so the caller can `continue` the loop.
+ */
+async function handleRateLimitedResponse(
+  response: Response,
+  url: RequestInfo,
+  attempt: number,
+  maxRetries: number,
+): Promise<void> {
+  // Only the 429 path produces a structured error. A 200 OK with
+  // `X-RateLimit-Remaining=0` is a soft hint that we're approaching a limit —
+  // sleep and retry, but constructing a "Rate limit exceeded: HTTP 200 OK"
+  // error on retry exhaustion would be misleading and pointlessly buffers a
+  // 64 KB body peek on every successful call.
+  const isHardRateLimit = response.status === 429;
+  const { body, code } = isHardRateLimit
+    ? await peekRateLimitBody(response)
+    : { body: undefined, code: undefined };
+
+  // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
+  // fast with a structured error so the caller can stop instead of amplifying
+  // load against an exhausted account.
+  if (isHardRateLimit && isHardQuotaCode(code)) {
+    logger.debug(
+      `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
+    );
+    throw buildHttpRateLimitError(response, body, code);
+  }
+
+  if (attempt >= maxRetries) {
+    if (isHardRateLimit) {
+      // No retries remain: throw a structured error instead of a bare string
+      // so callers can read Retry-After / reset / code without re-parsing.
+      logger.debug(
+        `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
+      );
+      throw buildHttpRateLimitError(response, body, code);
+    }
+    throw new Error(
+      `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,
+    );
+  }
+
+  logger.debug(
+    `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, waiting before retry...`,
+  );
+  await handleRateLimit(response);
+}
+
 function formatFetchErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) {
     return String(error);
@@ -578,31 +632,7 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
-        const { body, code } = await peekRateLimitBody(response);
-
-        // Hard quota codes (e.g. insufficient_quota) won't resolve on retry.
-        // Fail fast with a structured error so the caller can stop instead
-        // of amplifying load against an exhausted account.
-        if (isHardQuotaCode(code)) {
-          logger.debug(
-            `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
-          );
-          throw buildHttpRateLimitError(response, body, code);
-        }
-
-        lastErrorMessage = `Rate limited: ${response.status} ${response.statusText}`;
-        if (i >= maxRetries) {
-          // No retries remain: throw a structured error instead of a bare string
-          // so callers can read Retry-After / reset / code without re-parsing.
-          logger.debug(
-            `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, no retries remain.`,
-          );
-          throw buildHttpRateLimitError(response, body, code);
-        }
-        logger.debug(
-          `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, waiting before retry...`,
-        );
-        await handleRateLimit(response);
+        await handleRateLimitedResponse(response, url, i, maxRetries);
         continue;
       }
 

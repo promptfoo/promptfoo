@@ -15,6 +15,12 @@ export interface SystemError extends Error {
  * - OpenAI: https://platform.openai.com/docs/guides/error-codes/api-errors
  * - Azure OpenAI: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
  * - Anthropic: https://docs.anthropic.com/en/api/errors
+ *
+ * Note: Azure OpenAI is known to return `insufficient_quota` for both billing
+ * exhaustion AND per-minute deployment quota saturation. The
+ * {@link HttpRateLimitError} constructor downgrades a quota code to
+ * `rate_limit` when a small `Retry-After` is also present — a billing server
+ * has no reason to hint at recovery time.
  */
 export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
   'insufficient_quota',
@@ -23,6 +29,14 @@ export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
   'access_terminated',
   'quota_exceeded',
 ]);
+
+/**
+ * Upper bound for the "server hinted a recovery time, so this isn't billing"
+ * heuristic. A server that says "retry in &lt;= 1 hour" is signalling a
+ * per-window throttle, not a billing exhaustion. Above 1h we treat a
+ * Retry-After as ambiguous and let the body code decide.
+ */
+const RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS = 60 * 60 * 1000;
 
 /**
  * Distinguishes the operational meaning of an HTTP rate-limit response.
@@ -93,17 +107,32 @@ export class HttpRateLimitError extends Error {
   constructor(init: HttpRateLimitErrorInit) {
     const status = init.status;
     const statusText = init.statusText ?? 'Too Many Requests';
-    const kind: RateLimitKind = isHardQuotaCode(init.code) ? 'quota' : 'rate_limit';
+    const retryAfterMs =
+      typeof init.retryAfterMs === 'number' && init.retryAfterMs >= 0
+        ? init.retryAfterMs
+        : undefined;
+
+    // A hard-quota body code normally implies `kind: 'quota'`. But Azure
+    // OpenAI is known to return `insufficient_quota` for per-minute
+    // deployment saturation too; in that case the server hints at recovery
+    // via `Retry-After`. Trust that hint: if the wait is short, this is
+    // recoverable rate_limit, not billing exhaustion.
+    let kind: RateLimitKind = isHardQuotaCode(init.code) ? 'quota' : 'rate_limit';
+    if (
+      kind === 'quota' &&
+      retryAfterMs !== undefined &&
+      retryAfterMs <= RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS
+    ) {
+      kind = 'rate_limit';
+    }
+
     const prefix = kind === 'quota' ? 'Quota exceeded' : 'Rate limit exceeded';
     const codeSuffix = init.code ? ` (code: ${init.code})` : '';
     super(`${prefix}: HTTP ${status} ${statusText}${codeSuffix}`);
     this.name = 'HttpRateLimitError';
     this.status = status;
     this.statusText = statusText;
-    this.retryAfterMs =
-      typeof init.retryAfterMs === 'number' && init.retryAfterMs >= 0
-        ? init.retryAfterMs
-        : undefined;
+    this.retryAfterMs = retryAfterMs;
     this.resetAt = init.resetAt;
     this.code = init.code;
     this.kind = kind;

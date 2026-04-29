@@ -1438,6 +1438,17 @@ describe('Azure Assistant Provider', () => {
       expect(result.error).toContain('rate_limit_exceeded');
       expect(result.error).toContain('retry after 12s');
       expect(result.error).not.toContain('Retries will not help');
+      // Structured signal so the scheduler can fail-fast on the result path.
+      expect(result.metadata?.rateLimitKind).toBe('rate_limit');
+    });
+
+    it('propagates kind=quota into result.metadata so the scheduler does not retry', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
+      const result = (provider as any).formatError(err);
+      expect(result.metadata?.rateLimitKind).toBe('quota');
     });
 
     it('formats a hard quota error with a clear non-retryable hint', () => {

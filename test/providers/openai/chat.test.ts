@@ -167,6 +167,26 @@ describe('OpenAI Provider', () => {
       expect(result.metadata?.choices).toBeUndefined();
     });
 
+    it('preserves HttpRateLimitError as a structured error with metadata.rateLimitKind', async () => {
+      // Closes the regression where the chat catch block stringified
+      // HttpRateLimitError into "API call error: HttpRateLimitError: ..."
+      // and dropped `kind`, causing the scheduler to retry quota errors.
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      const quota = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
+      mockFetchWithCache.mockRejectedValueOnce(quota);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+      expect(result.error).toContain('Retries will not help');
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(result.metadata?.http?.status).toBe(429);
+    });
+
     it('should include HTTP metadata in error response', async () => {
       const mockResponse = {
         data: { error: { message: 'Rate limit exceeded' } },

@@ -58,19 +58,29 @@ interface FoundryResponseCreateOptions {
  * shared {@link HttpRateLimitError} so SDK-raised rate limits flow through
  * the same formatter and quota/retry classification as fetch-based paths.
  * Returns null when the input is not a 429.
+ *
+ * Status detection: prefer the modern OpenAI SDK shape (`err.status`) and
+ * fall back to `err.response.status` for older SDK versions or alternate
+ * Azure wrappers that nest the response.
+ *
+ * Code detection: prefer the body-level `err.error.code` / `err.error.type`
+ * over any top-level `err.code`. The OpenAI SDK's `APIError` exposes a
+ * top-level `code` that can mirror the body, but other SDK wrappers
+ * sometimes set top-level `code` to a transport-level value (e.g.
+ * `'ETIMEDOUT'`) that would shadow the more reliable body code.
  */
 function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   if (typeof error !== 'object' || error === null) {
     return null;
   }
-  const err = error as { status?: unknown };
-  if (err.status !== 429) {
+  const err = error as { status?: unknown; response?: { status?: unknown }; error?: unknown };
+  const status = typeof err.status === 'number' ? err.status : err.response?.status;
+  if (status !== 429) {
     return null;
   }
-  return new HttpRateLimitError({
-    status: 429,
-    code: extractRateLimitErrorCode(err),
-  });
+  // Prefer body-level code; fall back to top-level / `type` aliases.
+  const code = extractRateLimitErrorCode(err.error) ?? extractRateLimitErrorCode(err);
+  return new HttpRateLimitError({ status: 429, code });
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {
@@ -578,7 +588,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     if (error instanceof HttpRateLimitError) {
-      return { error: formatRateLimitErrorMessage(error) };
+      return {
+        error: formatRateLimitErrorMessage(error),
+        metadata: { rateLimitKind: error.kind },
+      };
     }
 
     // The OpenAI SDK throws APIError-shaped objects with `status` and a body
@@ -588,7 +601,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     // context (deployment name, token counts) is preserved.
     const sdkRateLimit = rateLimitFromSdkError(error);
     if (sdkRateLimit) {
-      return { error: formatRateLimitErrorMessage(sdkRateLimit, errorMessage) };
+      return {
+        error: formatRateLimitErrorMessage(sdkRateLimit, errorMessage),
+        metadata: { rateLimitKind: sdkRateLimit.kind },
+      };
     }
 
     if (this.isContentFilterError(errorMessage)) {

@@ -543,6 +543,50 @@ describe('AzureFoundryAgentProvider', () => {
         const result = await provider.callApi('test prompt');
         expect(result.error).toContain('Error in Azure Foundry Agent API call');
       });
+
+      it('detects 429 nested under err.response.status (older SDK shape)', async () => {
+        // Some SDK wrappers / older openai-node versions nest the response.
+        mockGetAgent.mockResolvedValue(mockAgent);
+        const sdkErr = Object.assign(new Error('sdk wrapper'), {
+          response: { status: 429 },
+          error: { code: 'rate_limit_exceeded' },
+        });
+        mockResponsesCreate.mockRejectedValue(sdkErr);
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).toContain('rate_limit_exceeded');
+      });
+
+      it('prefers body-level err.error.code over top-level err.code', async () => {
+        // The OpenAI SDK can set `err.code` to a transport-level value while
+        // the body's error.code is the authoritative API code. Body wins.
+        mockGetAgent.mockResolvedValue(mockAgent);
+        const sdkErr = Object.assign(new Error('sdk shadow'), {
+          status: 429,
+          code: 'ETIMEDOUT',
+          error: { code: 'rate_limit_exceeded' },
+        });
+        mockResponsesCreate.mockRejectedValue(sdkErr);
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).toContain('rate_limit_exceeded');
+      });
+
+      it('populates metadata.rateLimitKind on SDK 429 errors', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+      });
     });
   });
 });

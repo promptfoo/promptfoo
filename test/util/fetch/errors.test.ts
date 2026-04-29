@@ -308,14 +308,55 @@ describe('formatRateLimitDetail', () => {
   it('returns empty string for kind=quota even when retry metadata is present', () => {
     // Quota errors should not advertise a "retry after Xs" hint — that
     // would contradict the "Retries will not help" message the providers
-    // surface to the operator.
+    // surface to the operator. Use a 2-hour retryAfterMs so the constructor's
+    // "small Retry-After downgrades quota to rate_limit" heuristic does not
+    // fire here.
+    const twoHoursMs = 2 * 60 * 60 * 1000;
     const err = new HttpRateLimitError({
       status: 429,
       code: 'insufficient_quota',
-      retryAfterMs: 60_000,
-      resetAt: Date.now() + 60_000,
+      retryAfterMs: twoHoursMs,
+      resetAt: Date.now() + twoHoursMs,
     });
+    expect(err.kind).toBe('quota');
     expect(formatRateLimitDetail(err)).toBe('');
+  });
+});
+
+describe('HttpRateLimitError: small Retry-After downgrades quota to rate_limit', () => {
+  // Azure OpenAI returns `insufficient_quota` for both billing exhaustion and
+  // per-minute deployment saturation. A small Retry-After is the server
+  // hinting at recovery — billing quotas don't recover in seconds.
+  it('downgrades insufficient_quota with small retryAfterMs to rate_limit', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'insufficient_quota',
+      retryAfterMs: 30_000,
+    });
+    expect(err.kind).toBe('rate_limit');
+    expect(err.code).toBe('insufficient_quota');
+    expect(err.message).toContain('Rate limit exceeded');
+  });
+
+  it('keeps kind=quota when no Retry-After is present', () => {
+    const err = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
+    expect(err.kind).toBe('quota');
+  });
+
+  it('keeps kind=quota when Retry-After is large (> 1h)', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'insufficient_quota',
+      retryAfterMs: 90 * 60 * 1000,
+    });
+    expect(err.kind).toBe('quota');
+  });
+
+  it('downgrades all hard-quota codes when Retry-After is small', () => {
+    for (const code of ['quota_exceeded', 'billing_hard_limit_reached', 'insufficient_quota']) {
+      const err = new HttpRateLimitError({ status: 429, code, retryAfterMs: 5000 });
+      expect(err.kind).toBe('rate_limit');
+    }
   });
 });
 
