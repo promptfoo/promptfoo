@@ -70,8 +70,13 @@ describe('Eval API schemas', () => {
     expect(parsed.id).toBe('result-123');
     expect(parsed.success).toBe(true);
     expect(parsed.score).toBe(0.75);
-    // Passthrough preserves additional EvalResult fields like gradingResult
-    expect((parsed as { gradingResult: { pass: boolean } }).gradingResult.pass).toBe(true);
+    // Passthrough preserves additional EvalResult fields like gradingResult.
+    // The inferred Zod type carries an index signature for the passthrough
+    // bucket but doesn't statically include `gradingResult`, so cast through
+    // `unknown` to read it.
+    expect((parsed as unknown as { gradingResult: { pass: boolean } }).gradingResult.pass).toBe(
+      true,
+    );
   });
 
   it('SubmitRating response schema rejects payloads missing the row identifier', () => {
