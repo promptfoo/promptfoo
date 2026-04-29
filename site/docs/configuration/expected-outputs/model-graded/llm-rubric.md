@@ -350,6 +350,18 @@ assert:
       Return {"pass": false, "score": 0} if the response is incorrect
 ```
 
+## Negation with `not-llm-rubric`
+
+Prepend `not-` to invert the assertion — useful for "must not" criteria:
+
+```yaml
+assert:
+  - type: not-llm-rubric
+    value: Apologizes or hedges before answering
+```
+
+`not-llm-rubric` passes when the rubric criterion does **not** match. Transport or parse failures from the grader are reported as failures in both directions — a grader error is not treated as evidence that the criterion was or was not met, so inversion never silently turns a failed grader call into a pass.
+
 ## Further reading
 
 See [model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options.

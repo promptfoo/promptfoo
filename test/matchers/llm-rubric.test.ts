@@ -1202,7 +1202,7 @@ Evaluate the response
     );
   });
 
-  it('should throw an error when the external file is not found', async () => {
+  it('should return a graderError result when the external file is not found', async () => {
     mockExistsSync.mockReturnValue(false);
 
     const rubric = 'Test rubric';
@@ -1217,15 +1217,40 @@ Evaluate the response
       }),
     };
 
-    await expect(matchesLlmRubric(rubric, llmOutput, grading)).rejects.toThrow(
-      'File does not exist',
-    );
+    // The rethrow path was converted to a graderError-tagged failure so that
+    // inverse-aware callers (e.g. `not-llm-rubric`) cannot turn a missing
+    // rubric file into a spurious pass.
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('File does not exist');
+    expect(result.metadata?.graderError).toBe(true);
 
     expect(mockExistsSync).toHaveBeenCalledWith(
       expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
     );
     expect(mockReadFileSync).not.toHaveBeenCalled();
     expect(grading.provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should still throw when throwOnError is true and the external file is not found', async () => {
+    mockExistsSync.mockReturnValue(false);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockFilePath}`,
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    await expect(
+      matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, { throwOnError: true }),
+    ).rejects.toThrow('File does not exist');
   });
 
   it('should not call remote when rubric prompt is overridden, even if redteam is enabled', async () => {
@@ -1356,6 +1381,44 @@ Evaluate the response
     expect(remoteGeneration.shouldGenerateRemote).toHaveBeenCalledWith({
       canUseCodexDefaultProvider: true,
     });
+  });
+
+  it('should tag remote-grading transport failures with metadata.graderError', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {};
+
+    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
+    vi.mocked(remoteGrading.doRemoteGrading).mockRejectedValue(new Error('network down'));
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('Could not perform remote grading');
+    expect(result.metadata?.graderError).toBe(true);
+  });
+
+  it('should tag uncaught grader exceptions with metadata.graderError when throwOnError is false', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: createMockProvider({
+        callApi: vi.fn().mockRejectedValue(new Error('synthetic transport failure')),
+      }),
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('synthetic transport failure');
+    expect(result.metadata?.graderError).toBe(true);
   });
 
   it('should use local provider when redteam.provider is configured even if remote generation is available', async () => {

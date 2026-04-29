@@ -35,12 +35,19 @@ export const handleLlmRubric = async ({
   );
 
   if (isGraderFailure(resp)) {
-    return resp;
+    return { ...resp, assertion };
   }
 
+  // Clamp the inverted score to [0, 1] so a grader that emits a NaN or
+  // out-of-range score cannot produce a misleading negative/inflated value
+  // after inversion. Non-inverted scores are passed through unchanged to
+  // preserve the existing contract for callers reading raw rubric scores.
+  const score = inverse
+    ? Math.min(1, Math.max(0, 1 - (Number.isFinite(resp.score) ? resp.score : 0)))
+    : resp.score;
   return {
     ...resp,
     pass: resp.pass !== inverse,
-    score: inverse ? 1 - resp.score : resp.score,
+    score,
   };
 };

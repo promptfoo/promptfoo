@@ -191,7 +191,64 @@ describe('handleLlmRubric', () => {
 
     const result = await handleLlmRubric(params);
 
-    expect(result).toEqual(graderFailure);
+    expect(result).toEqual({ ...graderFailure, assertion: params.assertion });
+  });
+
+  it('should attach assertion when matcher omitted it on a grader failure', async () => {
+    const params = {
+      ...defaultParams,
+      inverse: true,
+      renderedValue: 'test rubric',
+    };
+
+    const graderFailure = {
+      pass: false,
+      score: 0,
+      reason: 'grader failed',
+      metadata: { graderError: true as const },
+    };
+    mockMatchesLlmRubric.mockResolvedValue(graderFailure as GradingResult);
+
+    const result = await handleLlmRubric(params);
+
+    expect(result.assertion).toBe(params.assertion);
+    expect(result.metadata?.graderError).toBe(true);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('should invert score 1 to 0 for inverse assertions', async () => {
+    const params = { ...defaultParams, inverse: true, renderedValue: 'test rubric' };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'matched' });
+    const result = await handleLlmRubric(params);
+    expect(result).toEqual({ pass: false, score: 0, reason: 'matched' });
+  });
+
+  it('should invert score 0 to 1 for inverse assertions', async () => {
+    const params = { ...defaultParams, inverse: true, renderedValue: 'test rubric' };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: false, score: 0, reason: 'no match' });
+    const result = await handleLlmRubric(params);
+    expect(result).toEqual({ pass: true, score: 1, reason: 'no match' });
+  });
+
+  it('should clamp inverted score when grader emits an out-of-range score', async () => {
+    const params = { ...defaultParams, inverse: true, renderedValue: 'test rubric' };
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 5, reason: 'matched' });
+    const result = await handleLlmRubric(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('should treat NaN scores as 0 when inverting', async () => {
+    const params = { ...defaultParams, inverse: true, renderedValue: 'test rubric' };
+    mockMatchesLlmRubric.mockResolvedValue({
+      pass: false,
+      score: Number.NaN,
+      reason: 'malformed',
+    });
+    const result = await handleLlmRubric(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
   });
 
   it('should stringify object rubricPrompt', async () => {

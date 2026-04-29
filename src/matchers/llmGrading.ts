@@ -189,7 +189,14 @@ export async function matchesLlmRubric(
     if (options?.throwOnError) {
       throw new LlmRubricProviderError((error as Error).message || 'No output');
     }
-    throw error;
+    // Tag uncaught provider/template errors as graderError so inverse-aware
+    // callers (e.g. `not-llm-rubric`) propagate the failure verbatim instead
+    // of flipping a transport error into a spurious pass.
+    return {
+      ...fail((error as Error).message || 'No output'),
+      assertion,
+      metadata: { graderError: true },
+    };
   }
 }
 

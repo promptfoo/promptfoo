@@ -86,6 +86,8 @@ tests:
 
 This works best alongside deterministic trajectory checks such as [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used), [`trajectory:tool-args-match`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match), or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) when the exact path through the task also matters.
 
+Prepend `not-` to flag runs that achieved a **forbidden** goal (`type: not-trajectory:goal-success`). Inversion only flips real grader verdicts — judge transport or parse failures still report as failures so a broken judge cannot silently turn into a passing "did not achieve forbidden goal" result.
+
 Example of pi scorer:
 
 ```yaml
