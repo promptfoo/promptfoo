@@ -262,13 +262,20 @@ export function createApp() {
     const { id } = bodyResult.data;
     logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
 
-    const result = await readResult(id);
-    if (!result) {
-      logger.warn('Eval not found for share request', { id, source: 'result' });
-      res.status(404).json({ error: 'Eval not found' });
+    // `Eval.findById` returns `undefined` only for a missing row and otherwise
+    // throws on real DB errors (lock contention, schema drift, etc.). Branch
+    // on the throw to distinguish 500 from 404 — `readResult` cannot serve
+    // that role because it catches its own exceptions and also returns
+    // `undefined` (`src/util/database.ts`), which would silently classify
+    // every load failure as "not found". A separate preflight via
+    // `readResult` would also double the per-request DB load.
+    let eval_: Awaited<ReturnType<typeof Eval.findById>>;
+    try {
+      eval_ = await Eval.findById(id);
+    } catch (error) {
+      sendError(res, 500, 'Failed to load eval for share', error);
       return;
     }
-    const eval_ = await Eval.findById(id);
     if (!eval_) {
       logger.warn('Eval not found for share request', { id });
       res.status(404).json({ error: 'Eval not found' });

@@ -184,13 +184,17 @@ describe('AzureFoundryAgentProvider', () => {
         }),
         {
           body: {
-            agent: {
+            agent_reference: {
               name: 'weather-agent',
               type: 'agent_reference',
             },
           },
         },
       );
+      // Guard against regressing to the deprecated `agent` key, which the
+      // Foundry Responses API now rejects with a 400.
+      const responseOptions = mockResponsesCreate.mock.calls[0][1];
+      expect(responseOptions.body).not.toHaveProperty('agent');
       expect(result.output).toBe('Test response');
     });
 
@@ -216,7 +220,7 @@ describe('AzureFoundryAgentProvider', () => {
       expect(mockListAgents).toHaveBeenCalledTimes(1);
       expect(mockResponsesCreate).toHaveBeenCalledWith(expect.any(Object), {
         body: {
-          agent: {
+          agent_reference: {
             name: 'weather-agent',
             type: 'agent_reference',
           },
@@ -322,7 +326,7 @@ describe('AzureFoundryAgentProvider', () => {
         },
         {
           body: {
-            agent: {
+            agent_reference: {
               name: 'weather-agent',
               type: 'agent_reference',
             },

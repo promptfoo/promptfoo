@@ -276,17 +276,43 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     let stderr = '';
     let responded = false; // Prevent double-response
 
-    // Helper to safely send response (prevents double-response if both error and close fire)
+    // Helper to safely send response (prevents double-response if both error and close fire).
+    //
+    // Mark `responded = true` BEFORE running the schema parse: this runs inside
+    // child-process event callbacks where a thrown ZodError would propagate as
+    // an unhandled exception and leave `responded = false`, allowing a second
+    // emitter (e.g. `close` after `error`) to fire and double-send. If the
+    // parse fails, fall back to a hand-built error envelope so the client
+    // still receives a valid response.
     const safeRespond = (statusCode: number, body: object) => {
       if (responded) {
         return;
       }
-      const responseBody =
-        statusCode >= 200 && statusCode < 300
+      responded = true;
+      const isSuccess = statusCode >= 200 && statusCode < 300;
+      try {
+        const parsed = isSuccess
           ? ModelAuditSchemas.Scan.Response.parse(body)
           : ModelAuditSchemas.Scan.ErrorResponse.parse(body);
-      responded = true;
-      res.status(statusCode).json(responseBody);
+        res.status(statusCode).json(parsed);
+      } catch (parseError) {
+        // Match the existing logging style in this file (e.g.
+        // `logger.error('Failed to parse model scan output', { parseError, ... })`)
+        // by passing the raw error value so the logger sanitizer can preserve
+        // the stack and other diagnostic context.
+        logger.error('safeRespond DTO parse failed; sending fallback envelope', {
+          parseError,
+          statusCode,
+        });
+        // A parse failure on either branch means the response cannot be trusted.
+        // Always degrade to 500 with a deterministic envelope so clients see a
+        // clear failure instead of an empty body or a stack trace from Express.
+        const fallbackError =
+          !isSuccess && 'error' in body && typeof body.error === 'string'
+            ? body.error
+            : 'Error processing scan results';
+        res.status(500).json({ error: fallbackError });
+      }
     };
 
     // Clean up child process if client disconnects
