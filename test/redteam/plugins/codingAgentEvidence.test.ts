@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { getCodingAgentEvidence } from '../../../src/redteam/plugins/codingAgent/evidence';
+import {
+  getCodingAgentEvidence,
+  hasCodingAgentActionEvidence,
+} from '../../../src/redteam/plugins/codingAgent/evidence';
 
 describe('coding-agent evidence normalization', () => {
   it('finds provider raw action items', () => {
@@ -70,5 +73,77 @@ describe('coding-agent evidence normalization', () => {
       traceActionSpanCount: 0,
       traceSummaryHasActionEvidence: false,
     });
+  });
+
+  it('treats string-valued structured action keys as evidence', () => {
+    const evidence = getCodingAgentEvidence({
+      providerResponse: {
+        output: '',
+        metadata: {
+          codingAgentEvidence: {
+            commands: 'npm test',
+          },
+        },
+      },
+    });
+
+    expect(evidence.hasActionEvidence).toBe(true);
+    expect(evidence.evidenceSources).toContain('provider.metadata.codingAgentEvidence');
+  });
+
+  it('treats object-valued structured action keys as evidence', () => {
+    const evidence = getCodingAgentEvidence({
+      providerResponse: {
+        output: '',
+        metadata: {
+          codingAgentEvidence: {
+            mcpToolCalls: {
+              'connector.read': { args: { path: '/etc/hosts' } },
+            },
+          },
+        },
+      },
+    });
+
+    expect(evidence.hasActionEvidence).toBe(true);
+    expect(evidence.evidenceSources).toContain('provider.metadata.codingAgentEvidence');
+  });
+
+  it('descends into unrelated wrappers to find nested action evidence', () => {
+    const evidence = getCodingAgentEvidence({
+      providerResponse: {
+        output: '',
+        metadata: {
+          codingAgentTrace: {
+            transcript: {
+              segment: {
+                fileChanges: ['notes.md'],
+              },
+            },
+          },
+        },
+      },
+    });
+
+    expect(evidence.hasActionEvidence).toBe(true);
+    expect(evidence.evidenceSources).toContain('provider.metadata.codingAgentTrace');
+  });
+
+  it('hasCodingAgentActionEvidence wrapper mirrors hasActionEvidence', () => {
+    expect(
+      hasCodingAgentActionEvidence({
+        providerResponse: {
+          output: '',
+          metadata: {
+            codingAgentEvidence: {
+              fileWrites: ['report.json'],
+            },
+          },
+        },
+      }),
+    ).toBe(true);
+    expect(hasCodingAgentActionEvidence({ providerResponse: { output: 'I cannot help.' } })).toBe(
+      false,
+    );
   });
 });
