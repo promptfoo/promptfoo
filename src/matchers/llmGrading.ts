@@ -189,14 +189,12 @@ export async function matchesLlmRubric(
     if (options?.throwOnError) {
       throw new LlmRubricProviderError((error as Error).message || 'No output');
     }
-    // Tag uncaught provider/template errors as graderError so inverse-aware
-    // callers (e.g. `not-llm-rubric`) propagate the failure verbatim instead
-    // of flipping a transport error into a spurious pass.
-    return {
-      ...fail((error as Error).message || 'No output'),
-      assertion,
-      metadata: { graderError: true },
-    };
+    // Rethrow so the evaluator's "Assertion grading failed" path logs and
+    // marks the row as errored. SyntaxError/TypeError/etc. from a misbehaving
+    // grader represent real bugs and must not be silently suppressed —
+    // `handleLlmRubric` lets the rejection propagate, so the evaluator
+    // converts it to a row-level error rather than a passing inverse result.
+    throw error;
   }
 }
 
