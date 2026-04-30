@@ -4,7 +4,7 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { getCacheOptions, parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
@@ -289,7 +289,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         getCacheOptions(context),
       )) as unknown as { data: any; cached: boolean });
@@ -439,7 +439,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         getCacheOptions(context),
       )) as {
@@ -621,7 +621,7 @@ export class AIStudioEmbeddingProvider
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {

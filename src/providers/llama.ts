@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
-import { getCacheOptions, REQUEST_TIMEOUT_MS } from './shared';
+import { getCacheOptions, getRequestTimeoutMs } from './shared';
 
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
@@ -84,7 +84,7 @@ export class LlamaProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         getCacheOptions(context),
       ));

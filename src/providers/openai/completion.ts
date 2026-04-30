@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getCacheOptions, REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import {
   calculateOpenAICost,
@@ -88,7 +88,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         getCacheOptions(context),
         this.config.maxRetries,

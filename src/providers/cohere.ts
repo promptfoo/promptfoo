@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { getCacheOptions, REQUEST_TIMEOUT_MS } from './shared';
+import { getCacheOptions, getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -190,7 +190,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         getCacheOptions(context),
       )) as unknown as { data: any; cached: boolean });
@@ -294,7 +294,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${err}`);

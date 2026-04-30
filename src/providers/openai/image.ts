@@ -1,7 +1,7 @@
 import { type CacheOptions, fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
-import { getCacheOptions, REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { formatOpenAiError } from './util';
 
@@ -850,7 +850,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         getCacheOptions(context),
       ));
 

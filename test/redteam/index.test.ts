@@ -979,6 +979,91 @@ describe('synthesize', () => {
       });
     });
 
+    it('should preserve existing DOCX materialization when strategies leave the multi-input prompt unchanged', async () => {
+      const inputs = {
+        document: {
+          config: {
+            benign: false,
+            injectionPlacements: ['comment'],
+            inputPurpose: 'Summarize an uploaded policy draft',
+          },
+          description: 'DOCX document to summarize',
+          type: 'docx',
+        },
+        question: {
+          config: {
+            benign: true,
+          },
+          description: 'Benign user question',
+          type: 'text',
+        },
+      } satisfies Inputs;
+      const baseMultiInputPrompt = JSON.stringify({
+        document: 'stale pre-strategy payload',
+        question: 'base question',
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            inputMaterialization: {
+              document: {
+                injectedInstruction: 'stale injected instruction',
+                injectionPlacement: 'body',
+                inputPurpose: 'Summarize an uploaded policy draft',
+                wrapperSummary: 'stale wrapper summary',
+              },
+            },
+            pluginConfig: { inputs },
+            pluginId: 'prompt-extraction',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: baseMultiInputPrompt,
+            document: 'stale-document-data-uri',
+            question: 'base question',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'prompt-extraction',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases: any[]) => testCases);
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'jailbreak:meta',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+        prompts: ['{{document}} {{question}}'],
+        provider: mockProvider,
+        purpose: 'Summarize uploaded documents',
+        strategies: [{ id: 'jailbreak:meta' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'jailbreak:meta',
+      );
+
+      expect(strategyTestCase).toBeDefined();
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+      expect(strategyTestCase?.vars?.document).toBe('stale-document-data-uri');
+      expect(strategyTestCase?.metadata?.inputMaterialization).toMatchObject({
+        document: {
+          injectedInstruction: 'stale injected instruction',
+          injectionPlacement: 'body',
+          inputPurpose: 'Summarize an uploaded policy draft',
+          wrapperSummary: 'stale wrapper summary',
+        },
+      });
+    });
+
     it('should find exact strategy ID for custom strategy', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

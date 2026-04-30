@@ -1115,6 +1115,23 @@ describe('fetchWithCache', () => {
       // Only 1 call — body retry loop does not re-invoke fetchWithRetries
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
+
+    it('propagates HttpRateLimitError without re-invoking fetchWithRetries', async () => {
+      // Hard quota / retry-exhausted rate limits surface as HttpRateLimitError
+      // from fetchWithRetries; the cache body-retry loop must NOT swallow them
+      // or retry — that would amplify load against an exhausted account.
+      const { HttpRateLimitError } = await import('../src/util/fetch/errors');
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+        retryAfterMs: 60_000,
+      });
+      mockFetchWithRetries.mockRejectedValueOnce(rateLimit);
+
+      await expect(fetchWithCache(url, {}, 1000)).rejects.toBeInstanceOf(HttpRateLimitError);
+      // Single call — body retry loop must not re-invoke fetchWithRetries.
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('cache utility functions', () => {

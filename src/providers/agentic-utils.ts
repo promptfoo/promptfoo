@@ -7,7 +7,7 @@
  */
 
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -21,6 +21,7 @@ import type { ProviderResponse } from '../types/index';
  * Prevents hanging on extremely large directories
  */
 const FINGERPRINT_TIMEOUT_MS = 2000;
+const STAT_BATCH_SIZE = 32;
 
 /**
  * Get a fingerprint for a working directory to use as a cache key.
@@ -34,23 +35,23 @@ const FINGERPRINT_TIMEOUT_MS = 2000;
  * @throws Error if fingerprinting times out or directory is inaccessible
  */
 export async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
-  const dirStat = fs.statSync(workingDir);
+  const dirStat = await fs.stat(workingDir);
   const dirMtime = dirStat.mtimeMs;
 
   const startTime = Date.now();
 
   // Recursively get all files
-  const getAllFiles = (dir: string, files: string[] = []): string[] => {
+  const getAllFiles = async (dir: string, files: string[] = []): Promise<string[]> => {
     if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
       throw new Error('Working directory fingerprint timed out');
     }
 
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const entries = await fs.readdir(dir, { withFileTypes: true });
 
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        getAllFiles(fullPath, files);
+        await getAllFiles(fullPath, files);
       } else if (entry.isFile()) {
         files.push(fullPath);
       }
@@ -58,16 +59,26 @@ export async function getWorkingDirFingerprint(workingDir: string): Promise<stri
     return files;
   };
 
-  const allFiles = getAllFiles(workingDir);
+  const allFiles = await getAllFiles(workingDir);
 
   // Create fingerprint from directory mtime + all file mtimes
-  const fileMtimes = allFiles
-    .map((file: string) => {
-      const stat = fs.statSync(file);
-      const relativePath = path.relative(workingDir, file);
-      return `${relativePath}:${stat.mtimeMs}`;
-    })
-    .sort(); // Sort for consistent ordering
+  const fileMtimes: string[] = [];
+  for (let i = 0; i < allFiles.length; i += STAT_BATCH_SIZE) {
+    if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
+      throw new Error('Working directory fingerprint timed out');
+    }
+
+    const batch = allFiles.slice(i, i + STAT_BATCH_SIZE);
+    const batchMtimes = await Promise.all(
+      batch.map(async (file: string) => {
+        const stat = await fs.stat(file);
+        const relativePath = path.relative(workingDir, file);
+        return `${relativePath}:${stat.mtimeMs}`;
+      }),
+    );
+    fileMtimes.push(...batchMtimes);
+  }
+  fileMtimes.sort(); // Sort for consistent ordering
 
   const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
   const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');

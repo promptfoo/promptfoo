@@ -130,6 +130,7 @@ jobs:
           name: backend-coverage
           fail_ci_if_error: true
           use_oidc: true
+          version: v11.2.7
 
   build:
     needs: ci-config
@@ -403,6 +404,7 @@ jobs:
           name: site-coverage
           fail_ci_if_error: true
           use_oidc: true
+          version: v11.2.7
 
   webui:
     name: webui tests
@@ -448,6 +450,7 @@ jobs:
           name: frontend-coverage
           fail_ci_if_error: true
           use_oidc: true
+          version: v11.2.7
 
   integration-tests:
     name: Run Integration Tests

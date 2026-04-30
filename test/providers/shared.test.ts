@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getEnvBool } from '../../src/envars';
+import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
   getCacheOptions,
+  getRequestTimeoutMs,
   isOpenAIToolArray,
   isOpenAIToolChoice,
   isPromptfooSampleTarget,
@@ -27,6 +28,18 @@ describe('Shared Provider Functions', () => {
     vi.resetAllMocks();
     vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
+    });
+    vi.mocked(getEnvInt).mockImplementation(function (_key, defaultValue) {
+      return defaultValue ?? 0;
+    });
+  });
+
+  describe('getRequestTimeoutMs', () => {
+    it('reads REQUEST_TIMEOUT_MS lazily', () => {
+      vi.mocked(getEnvInt).mockReturnValueOnce(12_345);
+
+      expect(getRequestTimeoutMs()).toBe(12_345);
+      expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
     });
   });
 

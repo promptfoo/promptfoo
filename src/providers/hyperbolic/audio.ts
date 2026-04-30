@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getCacheOptions, REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, getRequestTimeoutMs } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -129,7 +129,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
           headers,
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         getCacheOptions(context),
       ));
