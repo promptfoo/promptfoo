@@ -1,4 +1,4 @@
-import { isTransientConnectionError } from '../util/fetch/errors';
+import { isHttpRateLimitError, isTransientConnectionError } from '../util/fetch/errors';
 
 export interface RetryPolicy {
   maxRetries: number;
@@ -49,6 +49,15 @@ export function shouldRetry(
   policy: RetryPolicy,
 ): boolean {
   if (attempt >= policy.maxRetries) {
+    return false;
+  }
+
+  // Hard quotas (insufficient_quota, billing_hard_limit_reached, …) won't
+  // resolve on retry — retrying just amplifies load against an exhausted
+  // account. The transport already fails fast, but isRateLimited may
+  // still be true via substring match, so check the structured signal
+  // before the rate-limit retry path.
+  if (isHttpRateLimitError(error) && error.kind === 'quota') {
     return false;
   }
 
