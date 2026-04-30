@@ -1,5 +1,6 @@
 import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
+import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
@@ -468,45 +469,6 @@ export default class Eval {
           persisted: true,
         }),
     );
-  }
-
-  /**
-   * Get paginated evals with offset support for efficient infinite scroll.
-   * @param offset - Number of evals to skip
-   * @param limit - Maximum number of evals to return
-   */
-  static async getPaginated(
-    offset: number = 0,
-    limit: number = DEFAULT_QUERY_LIMIT,
-  ): Promise<Eval[]> {
-    const db = getDb();
-    const evals = await db
-      .select()
-      .from(evalsTable)
-      .orderBy(desc(evalsTable.createdAt))
-      .limit(limit)
-      .offset(offset)
-      .all();
-    return evals.map(
-      (e) =>
-        new Eval(e.config, {
-          id: e.id,
-          createdAt: new Date(e.createdAt),
-          author: e.author,
-          description: e.description || undefined,
-          prompts: e.prompts || [],
-          persisted: true,
-        }),
-    );
-  }
-
-  /**
-   * Get total count of evals for pagination.
-   */
-  static async getCount(): Promise<number> {
-    const db = getDb();
-    const result = await db.select({ count: sql<number>`count(*)` }).from(evalsTable).get();
-    return result?.count ?? 0;
   }
 
   static async create(
@@ -1444,6 +1406,7 @@ export default class Eval {
   async delete() {
     const db = getDb();
     db.transaction(() => {
+      deleteTraceRecordsForEvals(db, [this.id]);
       db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
       db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
       db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();

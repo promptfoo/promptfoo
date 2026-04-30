@@ -9,7 +9,7 @@
  */
 
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../../cache';
@@ -241,7 +241,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   private async readAudioFile(filePath: string): Promise<Buffer> {
     try {
       const resolvedPath = path.resolve(filePath);
-      return await fs.promises.readFile(resolvedPath);
+      return await fs.readFile(resolvedPath);
     } catch (error) {
       throw new Error(
         `Failed to read audio file: ${error instanceof Error ? error.message : String(error)}`,
@@ -303,7 +303,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   /**
    * Generate cache key for audio file
    */
-  private getCacheKey(audioFilePath: string): string {
+  private async getCacheKey(audioFilePath: string): Promise<string> {
     const configHash = crypto
       .createHash('sha256')
       .update(
@@ -318,7 +318,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       .slice(0, 16);
 
     // Include file modification time in cache key
-    const stats = fs.statSync(audioFilePath);
+    const stats = await fs.stat(audioFilePath);
     const mtime = stats.mtime.getTime();
 
     const fileHash = crypto
@@ -336,7 +336,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   private async getCachedResponse(audioFilePath: string): Promise<ProviderResponse | null> {
     try {
       const cache = await getCache();
-      const cacheKey = this.getCacheKey(audioFilePath);
+      const cacheKey = await this.getCacheKey(audioFilePath);
       const cached = await cache.get(cacheKey);
 
       if (cached) {
@@ -360,7 +360,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
   private async cacheResponse(audioFilePath: string, response: ProviderResponse): Promise<void> {
     try {
       const cache = await getCache();
-      const cacheKey = this.getCacheKey(audioFilePath);
+      const cacheKey = await this.getCacheKey(audioFilePath);
       await cache.set(cacheKey, response);
 
       logger.debug('[ElevenLabs STT] Response cached', { audioFilePath });

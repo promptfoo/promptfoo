@@ -32,12 +32,15 @@ const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 const debugSpy = vi.spyOn(logger, 'debug');
 
 describe('Redteam Routes', () => {
-  describe('POST /redteam/generate-test', () => {
-    let app: ReturnType<typeof createApp>;
+  let app: ReturnType<typeof createApp>;
 
+  beforeEach(() => {
+    app = createApp();
+  });
+
+  describe('POST /redteam/generate-test', () => {
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
 
       // Default mock implementations
       mockedGetPluginConfigurationError.mockReturnValue(null);
@@ -78,6 +81,36 @@ describe('Redteam Routes', () => {
         expect(response.status).toBe(200);
         // Should have called the plugin factory action (not excluded)
         expect(mockPluginFactory.action).toHaveBeenCalled();
+        expect(response.body.prompt).toBe('generated test prompt');
+      });
+
+      it('should default missing application purpose for generated tests', async () => {
+        const mockPluginFactory = {
+          key: 'aegis',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'aegis',
+              config: {},
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {},
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockPluginFactory.action).toHaveBeenCalledWith(
+          expect.objectContaining({ purpose: 'general AI assistant' }),
+        );
         expect(response.body.prompt).toBe('generated test prompt');
       });
 
@@ -444,11 +477,8 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/run', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
       mockedDoRedteamRun.mockResolvedValue(undefined as any);
     });
 
@@ -563,12 +593,9 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/:taskId', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
       debugSpy.mockClear();
-      app = createApp();
       mockedGetRemoteGenerationUrl.mockReturnValue('https://api.example.com/task');
     });
 
@@ -655,11 +682,8 @@ describe('Redteam Routes', () => {
   });
 
   describe('POST /redteam/cancel', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.clearAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {
@@ -675,11 +699,8 @@ describe('Redteam Routes', () => {
   });
 
   describe('GET /redteam/status', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.clearAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {

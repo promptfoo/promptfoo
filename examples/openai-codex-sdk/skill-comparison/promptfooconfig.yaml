@@ -1,0 +1,119 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Codex skill versions
+
+prompts:
+  - |
+    Use the review-standards skill.
+    {{ request }}
+
+    Return JSON with this shape:
+    {
+      "summary": "one sentence",
+      "issues": [{"id": "stable-id", "severity": "high|medium|low"}]
+    }
+
+# YAML anchor for the review-output schema. Both providers must enforce the
+# same shape so the JS assertion can compare issue ids without per-provider
+# parsing branches.
+x-review-schema: &reviewSchema
+  type: object
+  required: [summary, issues]
+  additionalProperties: false
+  properties:
+    summary:
+      type: string
+    issues:
+      type: array
+      items:
+        type: object
+        required: [id, severity]
+        additionalProperties: false
+        properties:
+          id:
+            type: string
+          severity:
+            type: string
+            enum: [high, medium, low]
+
+# YAML anchor for the shared Codex config. Each provider overrides
+# `working_dir` so v1/v2 read different `SKILL.md` files but everything else
+# (model, sandbox, schema) stays identical.
+x-codex-config: &codexConfig
+  model: gpt-5.5
+  skip_git_repo_check: true
+  sandbox_mode: read-only
+  enable_streaming: true
+  output_schema: *reviewSchema
+  cli_env:
+    CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
+
+providers:
+  - id: openai:codex-sdk
+    label: review-standards-v1
+    config:
+      <<: *codexConfig
+      working_dir: '{{ env.CODEX_SKILL_COMPARE_V1_DIR | default("./fixtures/v1") }}'
+
+  - id: openai:codex-sdk
+    label: review-standards-v2
+    config:
+      <<: *codexConfig
+      working_dir: '{{ env.CODEX_SKILL_COMPARE_V2_DIR | default("./fixtures/v2") }}'
+
+defaultTest:
+  # Without `disableVarExpansion`, Promptfoo would fan each YAML-list var into
+  # one test case per element (src/evaluator.ts:generateVarCombinations), which
+  # would split each comparison test in two and break max-score selection.
+  options:
+    disableVarExpansion: true
+  assert:
+    - type: skill-used
+      value: review-standards
+
+    - type: javascript
+      threshold: 0.7
+      value: |
+        const result = JSON.parse(output);
+        const expected = context.vars.expectedIssues;
+        const found = (result.issues || []).map((issue) => issue.id);
+        const hits = expected.filter((id) => found.includes(id));
+        const extras = found.filter((id) => !expected.includes(id));
+        const recall = hits.length / expected.length;
+        const precision = found.length ? hits.length / found.length : 0;
+        const score = 0.7 * recall + 0.3 * precision;
+
+        return {
+          pass: recall >= 0.75 && precision >= 0.5,
+          score,
+          reason: `matched ${hits.length}/${expected.length} expected issues; ${extras.length} unexpected issues`,
+        };
+
+    - type: cost
+      threshold: 1
+
+    - type: latency
+      threshold: 180000
+
+    - type: max-score
+      value:
+        method: average
+        threshold: 0.7
+        weights:
+          javascript: 4
+          skill-used: 2
+          cost: 0.5
+          latency: 0.5
+
+tests:
+  - description: Finds both auth issues
+    vars:
+      request: Review src/auth.ts for password handling and token comparison issues.
+      expectedIssues:
+        - weak-password-hash
+        - timing-unsafe-compare
+
+  - description: Focuses on token comparison
+    vars:
+      request: Review src/auth.ts only for token comparison issues.
+      expectedIssues:
+        - timing-unsafe-compare

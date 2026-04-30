@@ -318,6 +318,11 @@ describe('DataTable', () => {
           scrollContainer.scrollTop = 20_000;
           scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
         });
+        // TanStack Virtual debounces scroll-end notification after scroll events.
+        // Let it settle before jsdom teardown so React does not receive a late update.
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
       }
 
       const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
@@ -946,6 +951,51 @@ describe('DataTable', () => {
     expect(headerCells[2].className).toContain('overflow-hidden');
     expect(headerCells[3].className).toContain('px-4');
     expect(headerCells[3].className).toContain('overflow-hidden');
+  });
+
+  it('should reserve inline space for sortable header actions without absolute positioning', () => {
+    const layoutColumns: ColumnDef<TestRow>[] = [
+      {
+        accessorKey: 'id',
+        header: 'Identifier',
+        size: 96,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Right Aligned Header',
+        size: 128,
+        meta: {
+          align: 'right',
+        },
+      },
+    ];
+    const data: TestRow[] = [{ id: '1', name: 'Long header row' }];
+
+    render(<DataTable columns={layoutColumns} data={data} />);
+
+    const assertHeaderLayout = (headerText: string, shouldBeRightAligned = false) => {
+      const headerLabel = screen.getByText(headerText);
+      const headerContent = headerLabel.closest('div');
+      expect(headerContent).not.toBeNull();
+      expect(headerContent).toHaveClass('flex', 'min-w-0', 'items-center', 'gap-1');
+      expect(headerContent).toHaveClass('overflow-hidden');
+
+      if (shouldBeRightAligned) {
+        expect(headerContent).toHaveClass('flex-row-reverse');
+      } else {
+        expect(headerContent).not.toHaveClass('flex-row-reverse');
+      }
+
+      expect(headerLabel).toHaveClass('block', 'min-w-0', 'flex-1', 'truncate');
+
+      const actionGroup = headerContent?.querySelector('button')?.closest('span');
+      expect(actionGroup).toBeInTheDocument();
+      expect(actionGroup).toHaveClass('flex', 'shrink-0', 'items-center');
+      expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
+    };
+
+    assertHeaderLayout('Identifier');
+    assertHeaderLayout('Right Aligned Header', true);
   });
 
   describe('cell content wrapper', () => {
