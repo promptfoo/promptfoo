@@ -91,6 +91,41 @@ describe('UpdateBanner', () => {
     });
   });
 
+  it("should make the don't remind me action clickable", async () => {
+    const user = userEvent.setup();
+    const dismiss = vi.fn();
+    const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss,
+    };
+    mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
+
+    renderWithProviders(<UpdateBanner />);
+
+    const dismissButton = screen.getByRole('button', {
+      name: "Don't remind me of this version",
+    });
+
+    expect(dismissButton).toHaveClass('cursor-pointer');
+
+    await user.click(dismissButton);
+
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
   it('should render correctly in both dark and light modes', () => {
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {

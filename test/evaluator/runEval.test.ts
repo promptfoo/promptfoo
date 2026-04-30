@@ -949,7 +949,12 @@ describe('runEval', () => {
       const providerWithoutLatency: ApiProvider = {
         id: vi.fn().mockReturnValue('no-latency-provider'),
         callApi: vi.fn().mockImplementation(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          // Yield first so the test still validates that runEval awaits the
+          // provider before computing elapsed time. Then advance the fake
+          // clock so the latency measurement records ~50ms without relying
+          // on a real timer.
+          await Promise.resolve();
+          vi.advanceTimersByTime(50);
           return {
             output: 'Test output',
             tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
