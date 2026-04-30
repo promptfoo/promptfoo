@@ -2,7 +2,7 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
@@ -155,7 +155,7 @@ export class GeminiImageProvider implements ApiProvider {
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         false,
       )) as { data: any; cached: boolean };
@@ -216,7 +216,7 @@ export class GeminiImageProvider implements ApiProvider {
           ...(this.config.headers || {}),
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
       const latencyMs = Date.now() - startTime;
 

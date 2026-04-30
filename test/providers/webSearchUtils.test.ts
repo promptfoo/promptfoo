@@ -36,8 +36,8 @@ describe('webSearchUtils', () => {
     });
 
     it('should return false for provider-like values without an id function', () => {
-      expect(hasWebSearchCapability('openai:responses:gpt-5.4-2026-03-05' as any)).toBe(false);
-      expect(hasWebSearchCapability({ id: 'openai:responses:gpt-5.4-2026-03-05' } as any)).toBe(
+      expect(hasWebSearchCapability('openai:responses:gpt-5.5-2026-04-23' as any)).toBe(false);
+      expect(hasWebSearchCapability({ id: 'openai:responses:gpt-5.5-2026-04-23' } as any)).toBe(
         false,
       );
     });
@@ -129,7 +129,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for OpenAI responses provider with web_search_preview tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.4-2026-03-05',
+        id: () => 'openai:responses:gpt-5.5-2026-04-23',
         config: {
           tools: [{ type: 'web_search_preview' }],
         },
@@ -138,13 +138,13 @@ describe('webSearchUtils', () => {
     });
 
     it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
-      const provider = new OpenAiResponsesProvider('gpt-5.4-2026-03-05', {
+      const provider = new OpenAiResponsesProvider('gpt-5.5-2026-04-23', {
         config: {
           tools: [{ type: 'web_search_preview' }],
         },
       });
 
-      expect(provider.id()).toBe('openai:gpt-5.4-2026-03-05');
+      expect(provider.id()).toBe('openai:gpt-5.5-2026-04-23');
       expect(hasWebSearchCapability(provider)).toBe(true);
     });
 
@@ -211,7 +211,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for OpenAI responses provider without web_search_preview', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.4-2026-03-05',
+        id: () => 'openai:responses:gpt-5.5-2026-04-23',
         config: {
           tools: [{ type: 'code_interpreter' }],
         },
@@ -258,7 +258,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for provider with no tools configured', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.4-2026-03-05',
+        id: () => 'openai:responses:gpt-5.5-2026-04-23',
         config: {},
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
@@ -283,7 +283,7 @@ describe('webSearchUtils', () => {
     });
     const mockOpenAiWebSearchProvider = (): Partial<ApiProvider> =>
       ({
-        id: () => 'openai:gpt-5.4-2026-03-05',
+        id: () => 'openai:gpt-5.5-2026-04-23',
         constructor: { name: 'OpenAiResponsesProvider' },
         config: {
           tools: [{ type: 'web_search_preview' }],
@@ -345,7 +345,7 @@ describe('webSearchUtils', () => {
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.4-2026-03-05',
+        'openai:responses:gpt-5.5-2026-04-23',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -457,7 +457,7 @@ describe('webSearchUtils', () => {
 
       // Should try OpenAI first (since preferAnthropic defaults to false)
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.4-2026-03-05',
+        'openai:responses:gpt-5.5-2026-04-23',
         expect.anything(),
       );
     });

@@ -15,9 +15,9 @@ For CI and straightforward automation, prefer the [OpenAI Codex SDK provider](./
 ```yaml
 providers:
   - openai:codex-app-server
-  - openai:codex-app-server:gpt-5.4
+  - openai:codex-app-server:gpt-5.5
   - openai:codex-desktop
-  - openai:codex-desktop:gpt-5.4
+  - openai:codex-desktop:gpt-5.5
 ```
 
 `openai:codex-desktop` is an alias for the same app-server protocol. Promptfoo starts its own `codex app-server` process; it does not attach to an already-running Codex Desktop app process.
@@ -71,7 +71,7 @@ Promptfoo also accepts `CODEX_API_KEY` or `config.apiKey`. For reproducible eval
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-5.5
     config:
       sandbox_mode: read-only
       approval_policy: never
@@ -120,7 +120,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `additional_directories`  | string[]      | Additional directories added to workspace-write sandbox roots.                                                                                                      | None                 |
 | `skip_git_repo_check`     | boolean       | Skip the default Git repository safety check.                                                                                                                       | `false`              |
 | `codex_path_override`     | string        | Path to a specific `codex` binary.                                                                                                                                  | `codex`              |
-| `model`                   | string        | Model id, such as `gpt-5.4`. Can also be set in the provider id.                                                                                                    | Codex default        |
+| `model`                   | string        | Model id, such as `gpt-5.5`. Can also be set in the provider id.                                                                                                    | Codex default        |
 | `model_provider`          | string        | App-server model provider override for `thread/start` and `thread/resume`.                                                                                          | None                 |
 | `service_tier`            | string        | `fast` or `flex`.                                                                                                                                                   | App-server default   |
 | `sandbox_mode`            | string        | `read-only`, `workspace-write`, or `danger-full-access`.                                                                                                            | `read-only`          |
@@ -157,7 +157,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 
 ```yaml
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-5.5
     config:
       approval_policy:
         granular:
@@ -172,12 +172,12 @@ providers:
 
 ```yaml
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-5.5
     config:
       collaboration_mode:
         mode: plan
         settings:
-          model: gpt-5.4
+          model: gpt-5.5
           reasoning_effort: none
           developer_instructions: null
 ```
@@ -190,7 +190,7 @@ Configure deterministic responses when you intentionally want app-server approva
 
 ```yaml
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-5.5
     config:
       sandbox_mode: workspace-write
       approval_policy: on-request
@@ -237,7 +237,7 @@ Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-5.5
     config:
       sandbox_mode: read-only
       output_schema:

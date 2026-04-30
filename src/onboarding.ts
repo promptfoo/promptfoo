@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import confirm from '@inquirer/confirm';
@@ -10,6 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
+import { pathExists } from './util/file';
 import { promptfooCommand } from './util/promptfooCommand';
 import { getNunjucksEngine } from './util/templates';
 
@@ -327,7 +328,7 @@ async function askForPermissionToOverwrite({
   relativePath: string;
   required: boolean;
 }): Promise<boolean> {
-  if (!fs.existsSync(absolutePath)) {
+  if (!(await pathExists(absolutePath))) {
     return true;
   }
 
@@ -373,7 +374,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
       }
     }
 
-    fs.writeFileSync(absolutePath, contents);
+    await fs.writeFile(absolutePath, contents);
     logger.info(`📝 Wrote ${relativePath}`);
   }
 
@@ -382,9 +383,7 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   let action: string;
   let language: string;
 
-  if (!fs.existsSync(outDirAbsolute)) {
-    fs.mkdirSync(outDirAbsolute, { recursive: true });
-  }
+  await fs.mkdir(outDirAbsolute, { recursive: true });
 
   if (interactive) {
     recordOnboardingStep('start');
