@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -10,6 +10,7 @@ import logger, { setLogCallback, setLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { createEvalInCloud, streamResultsToCloud } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
+import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
@@ -98,7 +99,10 @@ function getRedteamPaths(options: RedteamRunOptions): RedteamPaths {
   };
 }
 
-function applyLiveRedteamConfig(options: RedteamRunOptions, paths: RedteamPaths): RedteamPaths {
+async function applyLiveRedteamConfig(
+  options: RedteamRunOptions,
+  paths: RedteamPaths,
+): Promise<RedteamPaths> {
   if (!options.liveRedteamConfig) {
     return paths;
   }
@@ -106,8 +110,8 @@ function applyLiveRedteamConfig(options: RedteamRunOptions, paths: RedteamPaths)
   const filename = `redteam-${Date.now()}.yaml`;
   const tmpDir = options.loadedFromCloud ? '' : os.tmpdir();
   const tmpFile = path.join(tmpDir, filename);
-  fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
-  fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
+  await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+  await fs.writeFile(tmpFile, yaml.dump(options.liveRedteamConfig));
   logger.debug(`Using live config from ${tmpFile}`);
   logger.debug(`Live config: ${JSON.stringify(options.liveRedteamConfig, null, 2)}`);
 
@@ -179,7 +183,7 @@ async function setupCloudStreamingForRun(options: RedteamRunOptions, redteamPath
   }
 
   try {
-    const generatedConfig = yaml.load(fs.readFileSync(redteamPath, 'utf8')) as UnifiedConfig;
+    const generatedConfig = yaml.load(await fs.readFile(redteamPath, 'utf8')) as UnifiedConfig;
 
     logger.info('Creating eval in cloud for streaming...');
     cloudEvalId = await createEvalInCloud({
@@ -265,7 +269,10 @@ async function logRedteamCompletion(
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
   const verboseToggleCleanup = configureRedteamLogging(options);
-  const { configPath, redteamPath } = applyLiveRedteamConfig(options, getRedteamPaths(options));
+  const { configPath, redteamPath } = await applyLiveRedteamConfig(
+    options,
+    getRedteamPaths(options),
+  );
 
   await checkPromptfooApiHealth();
 
@@ -278,7 +285,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   );
   const generationDurationMs = Date.now() - generationStartTime;
 
-  if (!redteamConfig || !fs.existsSync(redteamPath)) {
+  if (!redteamConfig || !(await pathExists(redteamPath))) {
     logger.info('No test cases generated. Skipping scan.');
     cleanupRedteamLogging(verboseToggleCleanup);
     return;
@@ -335,8 +342,8 @@ export async function doRedteamResume(options: RedteamResumeOptions): Promise<Ev
   const tmpFile = path.join('', filename);
 
   try {
-    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
-    fs.writeFileSync(tmpFile, yaml.dump(liveRedteamConfig));
+    await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+    await fs.writeFile(tmpFile, yaml.dump(liveRedteamConfig));
 
     logger.debug(`Resume config written to ${tmpFile}`);
     const testsCount = Array.isArray(liveRedteamConfig.tests) ? liveRedteamConfig.tests.length : 0;
@@ -376,7 +383,7 @@ export async function doRedteamResume(options: RedteamResumeOptions): Promise<Ev
     return evalResult;
   } finally {
     try {
-      fs.unlinkSync(tmpFile);
+      await fs.unlink(tmpFile);
     } catch {
       // Ignore cleanup errors.
     }

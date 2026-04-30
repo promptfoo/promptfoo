@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
@@ -116,6 +116,7 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
   };
 });
 vi.mock('fs');
+vi.mock('fs/promises');
 vi.mock('js-yaml');
 vi.mock('os');
 
@@ -163,19 +164,13 @@ describe('doRedteamRun', () => {
     vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.promptfoo.dev');
     vi.mocked(createEvalInCloud).mockResolvedValue('cloud-eval-123');
     vi.mocked(streamResultsToCloud).mockResolvedValue(undefined);
-    vi.mocked(fs.existsSync).mockImplementation(function () {
-      return true;
-    });
-    vi.mocked(fs.readFileSync).mockImplementation(function () {
-      return 'mocked-generated-yaml-content';
-    });
+    vi.mocked(fsPromises.access).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.readFile).mockResolvedValue('mocked-generated-yaml-content');
+    vi.mocked(fsPromises.writeFile).mockResolvedValue();
     vi.mocked(os.tmpdir).mockImplementation(function () {
       return '/tmp';
     });
-    vi.mocked(fs.mkdirSync).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
     vi.mocked(yaml.dump).mockImplementation(function () {
       return 'mocked-yaml-content';
     });
@@ -245,8 +240,10 @@ describe('doRedteamRun', () => {
       const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
       const expectedPath = path.join('', expectedFilename);
 
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(expectedPath, 'mocked-yaml-content');
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(expectedPath, 'mocked-yaml-content');
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -266,8 +263,10 @@ describe('doRedteamRun', () => {
       const expectedFilePrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining(expectedFilePrefix),
         'mocked-yaml-content',
       );
@@ -290,8 +289,10 @@ describe('doRedteamRun', () => {
       const expectedFilePrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining(expectedFilePrefix),
         'mocked-yaml-content',
       );
@@ -327,8 +328,12 @@ describe('doRedteamRun', () => {
       const secondExpectedPath = path.join('', `redteam-${secondTimestamp}.yaml`);
 
       // Verify different filenames were generated
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, firstExpectedPath, 'mocked-yaml-content');
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(
+      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
+        1,
+        firstExpectedPath,
+        'mocked-yaml-content',
+      );
+      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
         2,
         secondExpectedPath,
         'mocked-yaml-content',
@@ -631,9 +636,9 @@ describe('doRedteamResume', () => {
       defaultConfigPath: 'promptfooconfig.yaml',
     });
     vi.mocked(doEval).mockResolvedValue(createMockEvalResult() as any);
-    vi.mocked(fs.mkdirSync).mockImplementation(() => '');
-    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
-    vi.mocked(fs.unlinkSync).mockImplementation(() => {});
+    vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.writeFile).mockResolvedValue();
+    vi.mocked(fsPromises.unlink).mockResolvedValue();
     vi.mocked(yaml.dump).mockImplementation(() => 'mocked-yaml-content');
   });
 
@@ -648,7 +653,7 @@ describe('doRedteamResume', () => {
       resumeEvalId: 'eval-123',
     });
 
-    expect(fs.writeFileSync).toHaveBeenCalledWith(
+    expect(fsPromises.writeFile).toHaveBeenCalledWith(
       expect.stringContaining('redteam-resume-'),
       'mocked-yaml-content',
     );
@@ -660,7 +665,7 @@ describe('doRedteamResume', () => {
       resumeEvalId: 'eval-123',
     });
 
-    expect(fs.unlinkSync).toHaveBeenCalledWith(
+    expect(fsPromises.unlink).toHaveBeenCalledWith(
       expect.stringContaining(`redteam-resume-${mockDate.getTime()}.yaml`),
     );
   });
@@ -708,9 +713,7 @@ describe('doRedteamResume', () => {
   });
 
   it('should ignore temporary-file cleanup errors', async () => {
-    vi.mocked(fs.unlinkSync).mockImplementation(() => {
-      throw new Error('cleanup failed');
-    });
+    vi.mocked(fsPromises.unlink).mockRejectedValue(new Error('cleanup failed'));
 
     await expect(
       doRedteamResume({

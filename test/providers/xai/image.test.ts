@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
-import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
+import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -117,7 +117,7 @@ describe('XAI Image Provider', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${mockApiKey}`,
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       expect(result).toEqual({

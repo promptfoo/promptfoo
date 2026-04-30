@@ -40,6 +40,19 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: mockFsReadFileSync,
+    mkdir: mockFsMkdirSync,
+    writeFile: mockFsWriteFileSync,
+    stat: vi.fn(async (...args: unknown[]) => mockFsStatSync(...args)),
+  },
+  readFile: mockFsReadFileSync,
+  mkdir: mockFsMkdirSync,
+  writeFile: mockFsWriteFileSync,
+  stat: vi.fn(async (...args: unknown[]) => mockFsStatSync(...args)),
+}));
+
 const mockPathJoin = vi.hoisted(() => vi.fn());
 const mockPathRelative = vi.hoisted(() => vi.fn());
 const mockPathResolve = vi.hoisted(() => vi.fn());
