@@ -10,6 +10,18 @@ OSWorld is a [computer-use benchmark](https://arxiv.org/abs/2404.07972) for agen
 
 The `integration-inspect-osworld` example runs an OSWorld eval through [Inspect](https://inspect.aisi.org.uk/) and reports the score back to Promptfoo. Use this pattern when the benchmark already has a mature desktop harness and you want Promptfoo to own the config, assertions, result table, traces, and CI gate around it.
 
+This guide shows you how to:
+
+- run one real desktop task before paying for a larger benchmark
+- scale from one sample to an app slice, then to the small and full suites
+- separate scored model failures from provider or harness errors
+- inspect the desktop trajectory when a result is surprising
+
+OSWorld is useful because success is not judged from the final text alone. An
+agent can answer `DONE` and still score `0.0` if the spreadsheet, slide deck, or
+desktop state is wrong. That makes it a concrete example of why agent evals need
+stateful graders, not only text assertions.
+
 ![OSWorld LibreOffice Calc task](/img/docs/evaluate-osworld-with-inspect/osworld-libreoffice-start.png)
 
 ## What runs
@@ -25,6 +37,13 @@ upstream OSWorld paper corpus, not all 369 upstream tasks.
 In the sample shown above, OSWorld opens `NetIncome.xlsx` in LibreOffice Calc and asks the agent to compute totals for the `Revenue` and `Total Expenses` columns on a new sheet. That is one generated row in the full suite. Inspect provides the Ubuntu desktop sandbox, screenshots, computer tool, model loop, and scorer.
 
 Use a simple pass-through prompt such as `{{prompt}}` for Promptfoo's row label; Inspect reads the actual task instruction from the OSWorld dataset.
+
+The dated full-corpus GPT-5.5 run later in this guide finished with 242 scored
+rows after reruns: 139 passes, 103 scored failures, and 4 repeated provider
+errors. Spreadsheet and document tasks were among the strongest clusters, while
+cross-app workflows and VLC were harder. Those results are useful both as a
+benchmark example and as a reminder that model capability and harness reliability
+must be reported separately.
 
 ## How the wrapper works
 
@@ -471,6 +490,11 @@ benchmark attempts:
 This is why the guide treats provider errors separately from scored OSWorld
 failures. Publish the raw run, the rerun policy, and the reconciled scored
 denominator together.
+
+The app breakdown also changes what you learn from the run. GPT-5.5 was stronger
+on focused spreadsheet and document edits than on multi-app workflows, and the
+`vlc` group combined lower scores with two repeated harness-side failures. A
+single aggregate pass rate would hide both patterns.
 
 | App                   | Samples | Passed | Scored failures | Provider errors | Mean score |
 | --------------------- | ------: | -----: | --------------: | --------------: | ---------: |
