@@ -130,7 +130,7 @@
       ".": "4.2.2",
       "@chevrotain/regexp-to-ast": "11.2.0",
       "chevrotain": "11.2.0",
-      "chevrotain-allstar": "0.4.1"
+      "chevrotain-allstar": "0.4.3"
     },
     "chevrotain": {
       ".": "11.2.0",
@@ -146,7 +146,7 @@
       "@chevrotain/types": "12.0.0"
     },
     "chevrotain-allstar": {
-      ".": "0.4.1",
+      ".": "0.4.3",
       "chevrotain": "11.2.0"
     },
     "webpack": "5.106.2",
