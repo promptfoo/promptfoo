@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import fs from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -159,14 +159,16 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
       ? expandedPath
       : path.resolve(process.cwd(), expandedPath);
 
-    // Check if path exists
-    if (!fs.existsSync(absolutePath)) {
+    // Treat any access failure (ENOENT, EACCES, EPERM, ELOOP, ...) as not-exists,
+    // matching the historical fs.existsSync behavior the UI depends on.
+    let stats;
+    try {
+      stats = await fs.stat(absolutePath);
+    } catch {
       res.json(ModelAuditSchemas.CheckPath.Response.parse({ exists: false, type: null }));
       return;
     }
 
-    // Get path stats
-    const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
     res.json(
@@ -220,11 +222,15 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         ? expandedPath
         : path.resolve(process.cwd(), expandedPath);
 
-      // Check if path exists
-      if (!fs.existsSync(absolutePath)) {
-        res
-          .status(400)
-          .json({ error: `Path does not exist: ${inputPath} (resolved to: ${absolutePath})` });
+      try {
+        await fs.access(absolutePath);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const message =
+          code === 'ENOENT'
+            ? `Path does not exist: ${inputPath} (resolved to: ${absolutePath})`
+            : `Cannot access path: ${inputPath} (resolved to: ${absolutePath}, ${code ?? 'unknown error'})`;
+        res.status(400).json({ error: message });
         return;
       }
 
@@ -270,13 +276,43 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     let stderr = '';
     let responded = false; // Prevent double-response
 
-    // Helper to safely send response (prevents double-response if both error and close fire)
+    // Helper to safely send response (prevents double-response if both error and close fire).
+    //
+    // Mark `responded = true` BEFORE running the schema parse: this runs inside
+    // child-process event callbacks where a thrown ZodError would propagate as
+    // an unhandled exception and leave `responded = false`, allowing a second
+    // emitter (e.g. `close` after `error`) to fire and double-send. If the
+    // parse fails, fall back to a hand-built error envelope so the client
+    // still receives a valid response.
     const safeRespond = (statusCode: number, body: object) => {
       if (responded) {
         return;
       }
       responded = true;
-      res.status(statusCode).json(body);
+      const isSuccess = statusCode >= 200 && statusCode < 300;
+      try {
+        const parsed = isSuccess
+          ? ModelAuditSchemas.Scan.Response.parse(body)
+          : ModelAuditSchemas.Scan.ErrorResponse.parse(body);
+        res.status(statusCode).json(parsed);
+      } catch (parseError) {
+        // Match the existing logging style in this file (e.g.
+        // `logger.error('Failed to parse model scan output', { parseError, ... })`)
+        // by passing the raw error value so the logger sanitizer can preserve
+        // the stack and other diagnostic context.
+        logger.error('safeRespond DTO parse failed; sending fallback envelope', {
+          parseError,
+          statusCode,
+        });
+        // A parse failure on either branch means the response cannot be trusted.
+        // Always degrade to 500 with a deterministic envelope so clients see a
+        // clear failure instead of an empty body or a stack trace from Express.
+        const fallbackError =
+          !isSuccess && 'error' in body && typeof body.error === 'string'
+            ? body.error
+            : 'Error processing scan results';
+        res.status(500).json({ error: fallbackError });
+      }
     };
 
     // Clean up child process if client disconnects

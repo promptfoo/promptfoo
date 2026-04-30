@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import chalk from 'chalk';
@@ -31,6 +31,7 @@ import {
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
+import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
 import { printBorder, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -106,8 +107,8 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
   );
 }
 
-function getConfigHash(configPath: string): string {
-  const content = fs.readFileSync(configPath, 'utf8');
+async function getConfigHash(configPath: string): Promise<string> {
+  const content = await fs.readFile(configPath, 'utf8');
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
 }
 
@@ -200,8 +201,8 @@ export async function doGenerateRedteam(
     // Write configFromCloud to a temporary file
     const filename = `redteam-generate-${Date.now()}.yaml`;
     const tmpFile = path.join('', filename);
-    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
-    fs.writeFileSync(tmpFile, yaml.dump(options.configFromCloud));
+    await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+    await fs.writeFile(tmpFile, yaml.dump(options.configFromCloud));
     configPath = tmpFile;
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
@@ -211,13 +212,15 @@ export async function doGenerateRedteam(
     !options.force &&
     !options.configFromCloud &&
     !outputPath.endsWith('.burp') &&
-    fs.existsSync(outputPath) &&
+    (await pathExists(outputPath)) &&
     configPath &&
-    fs.existsSync(configPath)
+    (await pathExists(configPath))
   ) {
-    const redteamContent = yaml.load(fs.readFileSync(outputPath, 'utf8')) as Partial<UnifiedConfig>;
+    const redteamContent = yaml.load(
+      await fs.readFile(outputPath, 'utf8'),
+    ) as Partial<UnifiedConfig>;
     const storedHash = redteamContent.metadata?.configHash;
-    const currentHash = getConfigHash(configPath);
+    const currentHash = await getConfigHash(configPath);
 
     if (storedHash === currentHash) {
       logger.warn(
@@ -691,7 +694,7 @@ export async function doGenerateRedteam(
         })
         .filter((line) => line.length > 0)
         .join('\n');
-      fs.writeFileSync(options.output, outputLines);
+      await fs.writeFile(options.output, outputLines);
       logger.info(
         chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
       );
@@ -699,7 +702,7 @@ export async function doGenerateRedteam(
       return {};
     } else if (options.output) {
       const existingYaml = configPath
-        ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
+        ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
@@ -719,7 +722,7 @@ export async function doGenerateRedteam(
         metadata: {
           ...(existingYaml.metadata || {}),
           ...(configPath && redteamTests.length > 0
-            ? { configHash: getConfigHash(configPath) }
+            ? { configHash: await getConfigHash(configPath) }
             : { configHash: 'force-regenerate' }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
@@ -757,7 +760,7 @@ export async function doGenerateRedteam(
       printBorder();
     } else if (options.write && configPath) {
       const existingConfig = yaml.load(
-        fs.readFileSync(configPath, 'utf8'),
+        await fs.readFile(configPath, 'utf8'),
       ) as Partial<UnifiedConfig>;
       const existingTests = existingConfig.tests;
       let testsArray: any[] = [];
@@ -784,7 +787,7 @@ export async function doGenerateRedteam(
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...(existingConfig.metadata || {}),
-        configHash: getConfigHash(configPath),
+        configHash: await getConfigHash(configPath),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();

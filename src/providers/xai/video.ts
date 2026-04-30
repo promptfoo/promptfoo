@@ -530,7 +530,7 @@ export class XAIVideoProvider implements ApiProvider {
 
     // Store cache mapping (skip for edits)
     if (!isEdit) {
-      storeCacheMapping(cacheKey, storageKey, undefined, undefined, PROVIDER_NAME);
+      await storeCacheMapping(cacheKey, storageKey, undefined, undefined, PROVIDER_NAME);
     }
 
     const storedVideoUrl = buildStorageRefUrl(storageKey);

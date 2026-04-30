@@ -1,4 +1,3 @@
-import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
@@ -649,7 +648,7 @@ export async function resolveConfigs(
       process.exit(1);
     }
     const modelOutputs = JSON.parse(
-      fs.readFileSync(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
+      await fsPromises.readFile(path.join(process.cwd(), cmdObj.modelOutputs), 'utf8'),
     ) as string[] | { output: string; tags?: string[] }[];
     const assertions = await readAssertions(cmdObj.assertions);
     fileConfig.prompts = ['{{output}}'];
