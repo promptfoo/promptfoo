@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EVAL_CONFIG_DETAIL_FIELDS, EVAL_TABLE_CELL_DETAIL_FIELDS } from '../evalDetailFields';
+import { EVAL_CONFIG_DETAIL_FIELDS } from '../evalDetailFields';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
@@ -34,7 +34,10 @@ export type UpdateEvalAuthorResponse = z.infer<typeof UpdateEvalAuthorResponseSc
 export const GetMetadataKeysParamsSchema = EvalIdStrictParamSchema;
 
 export const GetMetadataKeysQuerySchema = z.object({
-  comparisonEvalIds: z.array(z.string()).optional(),
+  comparisonEvalIds: z
+    .union([z.string(), z.array(z.string())])
+    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+    .prefault([]),
 });
 
 export const GetMetadataKeysResponseSchema = z.object({
@@ -82,9 +85,9 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
 /** Query parameters for eval table endpoint. */
 export const EvalTableQuerySchema = z.object({
-  format: z.string().optional(),
-  limit: z.coerce.number().positive().prefault(50),
-  offset: z.coerce.number().nonnegative().prefault(0),
+  format: z.enum(['csv', 'json']).optional(),
+  limit: z.coerce.number().int().positive().prefault(50),
+  offset: z.coerce.number().int().nonnegative().prefault(0),
   filterMode: EvalResultsFilterMode.prefault('all'),
   search: z.string().prefault(''),
   filter: z
@@ -106,41 +109,17 @@ const EvalConfigDetailInfoSchema = z.object({
   omittedFields: z.array(EvalConfigDetailFieldSchema),
 });
 
-const EvalTableCellDetailFieldSchema = z.enum(EVAL_TABLE_CELL_DETAIL_FIELDS);
-
-const EvalTableCellDetailInfoSchema = z.object({
-  available: z.boolean(),
-  omittedFields: z.array(EvalTableCellDetailFieldSchema),
-});
-
-const EvalTableOutputSchema = z
+const ShallowEvaluateTableSchema = z
   .object({
-    id: z.string(),
-    prompt: z.string(),
-    detail: EvalTableCellDetailInfoSchema.optional(),
-  })
-  .passthrough();
-
-const EvalTableResponseTableSchema = z
-  .object({
-    head: z.object({
-      prompts: z.array(z.record(z.string(), z.unknown())),
-      vars: z.array(z.string()),
-    }),
-    body: z.array(
-      z
-        .object({
-          outputs: z.array(EvalTableOutputSchema.nullable().optional()),
-          vars: z.array(z.string()),
-          testIdx: z.number(),
-        })
-        .passthrough(),
-    ),
+    head: z
+      .unknown()
+      .refine((value) => value !== null && typeof value === 'object', 'Expected table head object'),
+    body: z.unknown().refine(Array.isArray, 'Expected table body array'),
   })
   .passthrough();
 
 export const EvalTableResponseSchema = z.object({
-  table: EvalTableResponseTableSchema,
+  table: ShallowEvaluateTableSchema,
   totalCount: z.number(),
   filteredCount: z.number(),
   filteredMetrics: z.array(z.record(z.string(), z.unknown())).nullable(),
@@ -189,6 +168,7 @@ export const EvalResultDetailResponseSchema = z.object({
 export type EvalResultDetailParams = z.infer<typeof EvalResultDetailParamsSchema>;
 export type EvalResultDetailResponse = z.infer<typeof EvalResultDetailResponseSchema>;
 
+export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
 // POST /api/eval/job
 
 /**
@@ -322,8 +302,23 @@ export const SubmitRatingRequestSchema = z
   })
   .passthrough();
 
+/**
+ * Response is the persisted EvalResult row. The route returns the updated
+ * record so external SDKs/CLIs can read refreshed metrics without a follow-up
+ * fetch. The shape is permissive because EvalResult does not have a Zod
+ * schema — only the most commonly-read fields are validated.
+ */
+export const SubmitRatingResponseSchema = z
+  .object({
+    id: z.string(),
+    success: z.boolean(),
+    score: z.number(),
+  })
+  .passthrough();
+
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
+export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
 // POST /api/eval (save eval to database)
 
@@ -409,6 +404,7 @@ export const EvalSchemas = {
     Params: EvalIdParamSchema,
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
+    JsonExportResponse: EvalTableJsonExportResponseSchema,
   },
   Config: {
     Params: EvalConfigParamsSchema,
@@ -429,6 +425,7 @@ export const EvalSchemas = {
   SubmitRating: {
     Params: SubmitRatingParamsSchema,
     Request: SubmitRatingRequestSchema,
+    Response: SubmitRatingResponseSchema,
   },
   Save: {
     Request: SaveEvalRequestSchema,

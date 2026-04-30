@@ -14,6 +14,7 @@ import {
 import { getActualPrompt } from '@app/utils/providerResponse';
 import {
   type EvaluateTableOutput,
+  type GradingResult,
   type ImageOutput,
   type ProviderResponse,
   ResultFailureReason,
@@ -629,6 +630,15 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   };
 }
 
+function getDialogGradingResults(output: EvaluateTableOutput): GradingResult[] | undefined {
+  const gradingResult = output.gradingResult;
+  if (!gradingResult) {
+    return undefined;
+  }
+
+  return gradingResult.componentResults?.length ? gradingResult.componentResults : [gradingResult];
+}
+
 function getPassFailText({
   passCount,
   failCount,
@@ -1229,7 +1239,7 @@ function renderOutputActions({
               onClose={handlePromptClose}
               prompt={displayPrompt || detailError || ''}
               provider={output.provider}
-              gradingResults={output.gradingResult?.componentResults}
+              gradingResults={getDialogGradingResults(output)}
               output={cellDetail?.text || text}
               metadata={cellDetail?.metadata || output.metadata}
               providerPrompt={getActualPrompt(detailResponse || output.response, {

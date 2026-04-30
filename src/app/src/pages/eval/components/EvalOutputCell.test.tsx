@@ -17,9 +17,10 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ metadata, prompt, output, variables }) => (
+  default: vi.fn(({ gradingResults, metadata, prompt, output, variables }) => (
     <div
       data-testid="dialog-component"
+      data-grading-results={JSON.stringify(gradingResults)}
       data-metadata={JSON.stringify(metadata)}
       data-output={output}
       data-prompt={prompt}
@@ -211,6 +212,40 @@ describe('EvalOutputCell', () => {
     // Check that metadata is passed correctly
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
     expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('passes the top-level grading result to the dialog when component results are absent', async () => {
+    const user = userEvent.setup();
+    const propsWithSingleAssertionResult = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        gradingResult: {
+          assertion: {
+            type: 'context-relevance' as AssertionType,
+          },
+          pass: false,
+          reason: 'Context relevance 0.00 is < 0.9',
+          score: 0,
+          metadata: {
+            graderOutputs: {
+              final: 'Insufficient Information',
+            },
+          },
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithSingleAssertionResult} />);
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    const passedGradingResults = JSON.parse(
+      dialogComponent.getAttribute('data-grading-results') || '[]',
+    );
+
+    expect(passedGradingResults).toHaveLength(1);
+    expect(passedGradingResults[0].metadata.graderOutputs.final).toBe('Insufficient Information');
   });
 
   it('handles enter key press to open dialog', async () => {
