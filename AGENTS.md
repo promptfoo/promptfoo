@@ -24,7 +24,6 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 | `src/providers/`    | LLM providers                   | `src/providers/AGENTS.md`    |
 | `src/redteam/`      | Security testing                | `src/redteam/AGENTS.md`      |
 | `src/server/`       | Backend server                  | `src/server/AGENTS.md`       |
-| `src/ui/`           | Terminal UI components          | `src/ui/AGENTS.md`           |
 | `test/`             | Tests (Vitest)                  | `test/AGENTS.md`             |
 | `site/`             | Docs site (Docusaurus)          | `site/AGENTS.md`             |
 | `examples/`         | Example configs                 | `examples/AGENTS.md`         |
@@ -143,6 +142,8 @@ with `--env-file`); never echo them into logs or commit messages.
 When asked only to review or audit a PR, keep the work read-only: inspect the branch, diff, PR comments, and CI as needed; run non-mutating tests or QA when useful; and report findings without committing, pushing, or changing files unless the user explicitly asks for fixes.
 
 When asked to fix, improve, or land a PR, own the full loop: check out the branch, inspect the diff and PR comments, merge or rebase on current `origin/main` when requested, run focused tests, run the relevant real workflow, commit, push, and watch CI until it is green or the remaining failure is clearly unrelated.
+
+**Standing commit/push authorization on feature branches.** When the user has asked you to fix, improve, or land work on a non-`main` branch, you have durable authorization to `git commit` and `git push` to that branch's tracking remote without per-step confirmation. Do not pause to ask "want me to commit?" — committing and pushing is part of the requested work. The safety constraints in _Git Workflow (CRITICAL)_ below (no commits to `main`, no `--force` without approval, no `--no-verify`, etc.) still apply.
 
 For behavior changes, do not stop at unit tests. Run the actual CLI or example with the local build. For eval and redteam work, prefer:
 

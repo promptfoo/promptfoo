@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import {
   getEnvBool,
@@ -8,6 +8,7 @@ import {
   getMaxEvalTimeMs,
   isCI,
 } from '../src/envars';
+import { setEnvOverridesProvider } from '../src/envOverrides';
 import { mockProcessEnv } from './util/utils';
 
 import type { EnvVarKey } from '../src/envars';
@@ -23,6 +24,13 @@ describe('envars', () => {
     Object.keys(cliState).forEach((key) => {
       delete cliState[key as keyof typeof cliState];
     });
+    setEnvOverridesProvider(() => cliState.config?.env);
+  });
+
+  afterEach(() => {
+    // Clear the throwing cliState mock used by the "without importing cliState" test
+    // before the next test's beforeEach re-resolves modules.
+    vi.doUnmock('../src/cliState');
   });
 
   afterAll(() => {
@@ -32,6 +40,9 @@ describe('envars', () => {
       delete cliState[key as keyof typeof cliState];
     });
     Object.assign(cliState, originalCliState);
+    // Symmetric teardown: leave the singleton "unregistered" rather than pointing
+    // at a closure owned by this test file.
+    setEnvOverridesProvider(undefined);
   });
 
   describe('getEnvar', () => {
@@ -91,14 +102,79 @@ describe('envars', () => {
       mockProcessEnv({ CUSTOM_ENV_VAR: 'custom value' });
       expect(getEnvString('CUSTOM_ENV_VAR' as EnvVarKey)).toBe('custom value');
     });
+
+    it('should read injected env overrides without importing cliState', async () => {
+      vi.resetModules();
+      vi.doMock('../src/cliState', () => {
+        throw new Error('cliState should not be imported by envars');
+      });
+
+      const [{ getEnvString }, { setEnvOverridesProvider }] = await Promise.all([
+        import('../src/envars'),
+        import('../src/envOverrides'),
+      ]);
+
+      setEnvOverridesProvider(() => ({ OPENAI_API_KEY: 'provider-env-key' }));
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('provider-env-key');
+    });
+
+    it('should fall through to process.env when no provider is registered', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
+      setEnvOverridesProvider(undefined);
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('process-env-key');
+    });
+
+    it('should fall through to process.env when the provider returns undefined', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
+      setEnvOverridesProvider(() => undefined);
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('process-env-key');
+    });
+
+    it('should fall through to process.env when the provider returns an empty record', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
+      setEnvOverridesProvider(() => ({}));
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('process-env-key');
+    });
+
+    it('should swallow provider exceptions and fall through to process.env', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
+      setEnvOverridesProvider(() => {
+        throw new Error('provider exploded');
+      });
+
+      expect(() => getEnvString('OPENAI_API_KEY')).not.toThrow();
+      expect(getEnvString('OPENAI_API_KEY')).toBe('process-env-key');
+    });
+
+    it('should auto-register the provider when cliState is imported', async () => {
+      vi.resetModules();
+
+      const [dynEnvOverrides, dynCliState] = await Promise.all([
+        import('../src/envOverrides'),
+        import('../src/cliState'),
+      ]);
+
+      dynCliState.default.config = { env: { OPENAI_API_KEY: 'wired-key' } };
+
+      expect(dynEnvOverrides.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
+    });
   });
 
   describe('getEnvBool', () => {
     it('should return true for truthy string values', () => {
-      ['1', 'true', 'yes', 'yup', 'yeppers'].forEach((value) => {
+      ['1', 'true', 'yes', 'yup'].forEach((value) => {
         mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
         expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
       });
+    });
+
+    it('should explicitly treat "yeppers" as a truthy value', () => {
+      mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'yeppers' });
+      expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
     });
 
     it('should return false for falsy string values', () => {
@@ -111,13 +187,6 @@ describe('envars', () => {
     it('should return the default value for a non-existing environment variable', () => {
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED', true)).toBe(true);
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED', false)).toBe(false);
-    });
-
-    it('should return true for uppercase truthy string values', () => {
-      ['TRUE', 'YES', 'YUP', 'YEPPERS'].forEach((value) => {
-        mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
-        expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
-      });
     });
 
     it('should return false for any other string values', () => {

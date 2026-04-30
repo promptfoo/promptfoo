@@ -13,7 +13,7 @@
 
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithProxy } from '../../util/fetch';
 
 /**
@@ -187,7 +187,7 @@ export class HttpAdversarialProvider implements AdversarialAudioProvider {
     supportedAttacks?: (AdversarialAttackType | string)[];
   }) {
     this.endpoint = config.endpoint;
-    this.timeout = config.timeout || REQUEST_TIMEOUT_MS;
+    this.timeout = config.timeout || getRequestTimeoutMs();
     this.headers = config.headers || {};
     this.supportedAttacks = config.supportedAttacks || [
       'noise-injection',
