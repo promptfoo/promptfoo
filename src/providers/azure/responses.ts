@@ -9,7 +9,7 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
@@ -259,7 +259,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
 
     // Calculate timeout for deep research models
     const isDeepResearchModel = this.deploymentName.includes('deep-research');
-    let timeout = REQUEST_TIMEOUT_MS;
+    let timeout = getRequestTimeoutMs();
     if (isDeepResearchModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
       timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;

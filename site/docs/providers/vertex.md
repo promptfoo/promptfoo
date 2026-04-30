@@ -139,14 +139,25 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 ### Embedding Models
 
-- `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
-- `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
-- `vertex:textembedding-gecko@003` - Text embeddings (2,048 tokens, 768d)
-- `vertex:text-embedding-004` - Text embeddings (2,048 tokens, ≤768d)
-- `vertex:text-embedding-005` - Text embeddings (2,048 tokens, ≤768d)
-- `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
-- `vertex:text-multilingual-embedding-002` - Multilingual embeddings (2,048 tokens, ≤768d)
-- `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
+Reference Vertex embedding models with the `vertex:embedding:` prefix:
+
+- `vertex:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+- `vertex:embedding:text-embedding-005` - English and code, up to 768 dimensions, 2,048 input-token limit
+- `vertex:embedding:text-multilingual-embedding-002` - Multilingual, up to 768 dimensions, 2,048 input-token limit
+
+Pass `autoTruncate: true` in `config` to let Vertex truncate oversize inputs on the server instead of returning an error:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vertex:embedding:gemini-embedding-001
+        config:
+          autoTruncate: true
+```
+
+Upgrading between embedding model families changes the vector space, so re-embed any previously indexed content. See Google's [supported embedding models](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings) reference for the current list.
 
 ### Image Generation Models
 
@@ -627,8 +638,8 @@ defaultTest:
     provider:
       # For llm-rubric and factuality assertions
       text: vertex:gemini-2.5-pro
-      # For similarity comparisons
-      embedding: vertex:embedding:text-embedding-004
+      # For similarity and answer-relevance assertions
+      embedding: vertex:embedding:gemini-embedding-001
 ```
 
 ### Configuration Reference

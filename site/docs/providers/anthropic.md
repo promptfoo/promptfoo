@@ -328,6 +328,33 @@ providers:
 
 This configuration allows the model to first search for relevant information, then fetch full content from the most promising results.
 
+##### Memory Tool
+
+Anthropic's `memory_20250818` tool can be included in `tools`. Promptfoo passes this native tool definition through unchanged, which is useful for evaluating whether a model requests memory operations. Promptfoo does not manage Anthropic memory stores or run local memory handlers for you.
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      tools:
+        - type: memory_20250818
+          name: memory
+          allowed_callers:
+            - direct
+```
+
+**Memory Tool Configuration Options:**
+
+| Parameter         | Type     | Description                                                          |
+| ----------------- | -------- | -------------------------------------------------------------------- |
+| `type`            | string   | Must be `memory_20250818`                                            |
+| `name`            | string   | Must be `memory`                                                     |
+| `allowed_callers` | string[] | Restrict which tool callers may invoke the memory tool (optional)    |
+| `cache_control`   | object   | Apply Anthropic cache control to the tool definition (optional)      |
+| `defer_loading`   | boolean  | Load the tool lazily instead of including it in the initial prompt   |
+| `input_examples`  | object[] | Example memory commands to include in the tool definition (optional) |
+| `strict`          | boolean  | Enable strict schema validation for tool names and inputs (optional) |
+
 **Important Security Notes:**
 
 - The web fetch tool requires trusted environments due to potential data exfiltration risks

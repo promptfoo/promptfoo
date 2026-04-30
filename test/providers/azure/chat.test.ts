@@ -369,6 +369,37 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.error).toBe('API call error: API Error');
     });
 
+    it('preserves HttpRateLimitError as a structured error with metadata.rateLimitKind', async () => {
+      // Closes the regression where Azure chat's catch block stringified
+      // HttpRateLimitError into "API call error: HttpRateLimitError: ..."
+      // and dropped `kind`, causing the scheduler to retry quota errors.
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      const quota = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(quota);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+      expect(result.error).toContain('Retries will not help');
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+    });
+
+    it('preserves rate-limit kind for per-window 429s', async () => {
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 7000,
+      });
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(rateLimit);
+
+      const result = await provider.callApi('test prompt');
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.error).toContain('retry after 7s');
+      expect(result.error).not.toContain('Retries will not help');
+      expect(result.metadata?.rateLimitKind).toBe('rate_limit');
+    });
+
     it('should handle invalid JSON response', async () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: 'invalid json',

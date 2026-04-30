@@ -2,8 +2,8 @@ import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvString } from '../envars';
 import {
   extractReasoningFromOpenAiCompatibleMessage,
+  getRequestTimeoutMs,
   parseChatPrompt,
-  REQUEST_TIMEOUT_MS,
 } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -83,7 +83,7 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {
@@ -126,7 +126,7 @@ export class LocalAiEmbeddingProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {
@@ -173,7 +173,7 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {

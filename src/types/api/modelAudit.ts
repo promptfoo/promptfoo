@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TimestampSchema } from './common';
+import { ErrorResponseSchema, TimestampSchema } from './common';
 
 // ---------------------------------------------------------------------------
 // GET /api/model-audit/check-installed
@@ -71,7 +71,7 @@ export const ScanRequestSchema = z.object({
   options: z
     .object({
       blacklist: z.array(z.string()).optional(),
-      timeout: z.number().positive().optional(),
+      timeout: z.number().nonnegative().optional(),
       maxFileSize: z.string().optional(),
       maxTotalSize: z.string().optional(),
       verbose: z.boolean().optional(),
@@ -96,17 +96,40 @@ export const ScanRequestSchema = z.object({
 
 export type ScanRequest = z.infer<typeof ScanRequestSchema>;
 
-// Scan response is highly variable (success vs various error shapes),
-// so we do not apply a strict response schema.
+// Scan response is highly variable because it includes scanner-specific output.
+// Keep the API contract explicit while preserving the modelaudit JSON payload.
+export const ScanResponseSchema = z
+  .object({
+    rawOutput: z.string().optional(),
+    auditId: z.string().optional(),
+    persisted: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const ScanErrorResponseSchema = ErrorResponseSchema;
+
+export type ScanResponse = z.infer<typeof ScanResponseSchema>;
+export type ScanErrorResponse = z.infer<typeof ScanErrorResponseSchema>;
 
 // ---------------------------------------------------------------------------
 // GET /api/model-audit/scans
 // ---------------------------------------------------------------------------
 
+export const MODEL_AUDIT_SORT_FIELDS = [
+  'createdAt',
+  'failedChecks',
+  'hasErrors',
+  'id',
+  'modelPath',
+  'name',
+  'passedChecks',
+  'totalChecks',
+] as const;
+
 export const ListScansQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(100),
   offset: z.coerce.number().int().min(0).optional().default(0),
-  sort: z.enum(['createdAt', 'name', 'modelPath']).optional().default('createdAt'),
+  sort: z.enum(MODEL_AUDIT_SORT_FIELDS).optional().default('createdAt'),
   order: z.enum(['asc', 'desc']).optional().default('desc'),
   search: z.string().optional(),
 });
@@ -196,6 +219,8 @@ export const ModelAuditSchemas = {
   },
   Scan: {
     Request: ScanRequestSchema,
+    Response: ScanResponseSchema,
+    ErrorResponse: ScanErrorResponseSchema,
   },
   ListScans: {
     Query: ListScansQuerySchema,

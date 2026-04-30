@@ -354,7 +354,10 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       );
     });
 
-    it('should use longer timeout for gpt-5.4-pro models', async () => {
+    it.each([
+      'gpt-5.4-pro',
+      'gpt-5.5-pro',
+    ])('should use longer timeout for %s models', async (model) => {
       const mockData = {
         output: [
           {
@@ -373,7 +376,44 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         cached: false,
       });
 
-      const provider = new OpenAiResponsesProvider('gpt-5.4-pro', {
+      const provider = new OpenAiResponsesProvider(model, {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should use longer timeout for gpt-5.5-pro models', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response complete' }],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+      };
+
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-5.5-pro', {
         config: {
           apiKey: 'test-key',
         },
