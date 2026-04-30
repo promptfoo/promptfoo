@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { storeBlob } from '../../../src/blobs/index';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
-import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
+import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
@@ -160,7 +160,7 @@ describe('XAI Image Provider', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${mockApiKey}`,
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       expect(result).toMatchObject({
