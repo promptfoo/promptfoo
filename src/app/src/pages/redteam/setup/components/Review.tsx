@@ -49,7 +49,7 @@ import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
-import type { Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
+import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
@@ -89,27 +89,33 @@ const isIntentPlugin = (plugin: unknown): plugin is IntentPluginRef =>
 const isNonEmptyIntentEntry = (entry: string | string[]): boolean =>
   typeof entry === 'string' ? entry.trim() !== '' : Array.isArray(entry) && entry.length > 0;
 
+type ReviewPlugin = RedteamPlugin | { id: string; config?: PluginConfig };
+
 // Each top-level entry in `config.intent` is one intent test case at runtime
 // (an inner array is a single multi-step sequence). Preserves the original
 // index so the remove handler can target multi-step entries by position.
-function getDisplayedIntents(plugins: readonly unknown[]): IntentEntry[] {
+function getDisplayedIntents(plugins: readonly ReviewPlugin[]): IntentEntry[] {
   const intentPlugin = plugins.find(isIntentPlugin);
   if (!intentPlugin) {
     return [];
   }
   const raw = intentPlugin.config.intent;
   const entries: (string | string[])[] = Array.isArray(raw) ? raw : [raw];
-  return entries.flatMap((entry, index) => {
+  return entries.flatMap<IntentEntry>((entry, index) => {
     if (!isNonEmptyIntentEntry(entry)) {
       return [];
     }
-    return Array.isArray(entry)
-      ? [{ display: entry.join(' → '), isMultiStep: true, index }]
-      : [{ display: entry, isMultiStep: false, index }];
+    if (Array.isArray(entry)) {
+      return [{ display: entry.join(' → '), isMultiStep: true, index }];
+    }
+    return [{ display: entry, isMultiStep: false, index }];
   });
 }
 
-function removeIntentByIndex(plugins: readonly unknown[], indexToRemove: number): unknown[] | null {
+function removeIntentByIndex(
+  plugins: readonly ReviewPlugin[],
+  indexToRemove: number,
+): ReviewPlugin[] | null {
   const intentPlugin = plugins.find(isIntentPlugin);
   if (!intentPlugin) {
     return null;
