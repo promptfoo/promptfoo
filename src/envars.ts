@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import cliState from './cliState';
+import { getEnvOverrides } from './envOverrides';
 
 import type { EnvOverrides } from './types/env';
 
@@ -53,11 +53,6 @@ type EnvVars = {
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
   PROMPTFOO_MAX_ERRORS?: number;
-  /**
-   * Enable interactive UI (opt-in). Set to true to enable Ink-based terminal UI.
-   * Requires stdout to be a TTY.
-   */
-  PROMPTFOO_ENABLE_INTERACTIVE_UI?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
@@ -247,6 +242,9 @@ type EnvVars = {
   ANTHROPIC_MAX_TOKENS?: number;
   ANTHROPIC_STOP?: string;
   ANTHROPIC_TEMPERATURE?: number;
+
+  // Atlas Cloud
+  ATLASCLOUD_API_KEY?: string;
 
   // AWS Bedrock
   AWS_BEARER_TOKEN_BEDROCK?: string;
@@ -450,10 +448,9 @@ export type EnvVarKey = keyof EnvVars;
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  // First check if the key exists in CLI state env config
-  if (cliState.config?.env && typeof cliState.config.env === 'object') {
-    // Handle both ProviderEnvOverridesSchema and Record<string, string|number|boolean> type
-    const envValue = cliState.config.env[key as keyof typeof cliState.config.env];
+  const envOverrides = getEnvOverrides();
+  if (envOverrides) {
+    const envValue = envOverrides[key as string];
     if (envValue !== undefined) {
       return String(envValue);
     }

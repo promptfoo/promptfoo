@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -18,8 +20,28 @@ const mockedGetBlobByHash = vi.mocked(getBlobByHash);
 const mockedGetDb = vi.mocked(getDb);
 
 describe('Blobs Routes', () => {
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
+
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+
   describe('GET /api/blobs/:hash', () => {
-    let app: ReturnType<typeof createApp>;
     const validHash = 'a'.repeat(64);
 
     // Create chainable mock DB that returns assetResult on first .get() and referenceResult on second
@@ -60,7 +82,6 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {
@@ -70,7 +91,7 @@ describe('Blobs Routes', () => {
     it('should return 404 when blob storage is disabled', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(false);
 
-      const response = await request(app).get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob storage disabled' });
@@ -83,7 +104,7 @@ describe('Blobs Routes', () => {
     ])('should return 400 for invalid hash (%s)', async (_label, hash) => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
-      const response = await request(app).get(`/api/blobs/${hash}`);
+      const response = await api.get(`/api/blobs/${hash}`);
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -93,7 +114,7 @@ describe('Blobs Routes', () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
       mockedGetDb.mockReturnValue(createMockDb(undefined));
 
-      const response = await request(app).get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob not found' });
@@ -109,7 +130,7 @@ describe('Blobs Routes', () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
       mockedGetDb.mockReturnValue(createMockDb(mockAsset, undefined));
 
-      const response = await request(app).get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({ error: 'Not authorized to access this blob' });
@@ -126,7 +147,7 @@ describe('Blobs Routes', () => {
       const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
       mockedGetBlobUrl.mockResolvedValue(presignedUrl);
 
-      const response = await request(app).get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(302);
       expect(response.header.location).toBe(presignedUrl);
@@ -145,7 +166,7 @@ describe('Blobs Routes', () => {
       mockedGetBlobUrl.mockResolvedValue(null);
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
 
-      const response = await request(app).get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('image/png');
@@ -168,7 +189,7 @@ describe('Blobs Routes', () => {
       mockedGetBlobUrl.mockResolvedValue(null);
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('audio/wav.html', 2048));
 
-      const response = await request(app).get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('application/octet-stream');
@@ -186,7 +207,7 @@ describe('Blobs Routes', () => {
       // Blob metadata has different MIME type and size than the asset record
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/jpeg', 2048));
 
-      const response = await request(app).get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('image/jpeg');
@@ -208,7 +229,7 @@ describe('Blobs Routes', () => {
       mockedGetBlobUrl.mockResolvedValue(null);
       mockedGetBlobByHash.mockRejectedValue(new Error('File system error'));
 
-      const response = await request(app).get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob not found' });
@@ -216,8 +237,6 @@ describe('Blobs Routes', () => {
   });
 
   describe('GET /api/blobs/library', () => {
-    let app: ReturnType<typeof createApp>;
-
     /**
      * Create a mock DB for library queries.
      * The /library route executes 3 chained queries:
@@ -255,7 +274,6 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {
@@ -265,7 +283,7 @@ describe('Blobs Routes', () => {
     it('should return empty list with blobStorageEnabled=false when blob storage is disabled', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(false);
 
-      const response = await request(app).get('/api/blobs/library');
+      const response = await api.get('/api/blobs/library');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -277,7 +295,7 @@ describe('Blobs Routes', () => {
     it('should return 400 for invalid query parameters', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
-      const response = await request(app).get('/api/blobs/library?limit=abc');
+      const response = await api.get('/api/blobs/library?limit=abc');
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({
@@ -289,7 +307,7 @@ describe('Blobs Routes', () => {
     it('should return 400 for invalid type filter', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
-      const response = await request(app).get('/api/blobs/library?type=invalid');
+      const response = await api.get('/api/blobs/library?type=invalid');
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({
@@ -303,7 +321,7 @@ describe('Blobs Routes', () => {
       const mockDb = createLibraryMockDb({ count: 0 }, [], []);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library');
+      const response = await api.get('/api/blobs/library');
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -337,7 +355,7 @@ describe('Blobs Routes', () => {
       const mockDb = createLibraryMockDb({ count: 1 }, [{ hash: hash1 }], items);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library');
+      const response = await api.get('/api/blobs/library');
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -393,7 +411,7 @@ describe('Blobs Routes', () => {
       const mockDb = createLibraryMockDb({ count: 1 }, [{ hash: hash1 }], items);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get(`/api/blobs/library?hash=${hash1}`);
+      const response = await api.get(`/api/blobs/library?hash=${hash1}`);
 
       expect(response.status).toBe(200);
       const item = response.body.data.items[0];
@@ -433,7 +451,7 @@ describe('Blobs Routes', () => {
       const mockDb = createLibraryMockDb({ count: 1 }, [{ hash: hash1 }], items);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library');
+      const response = await api.get('/api/blobs/library');
 
       expect(response.status).toBe(200);
       const item = response.body.data.items[0];
@@ -473,7 +491,7 @@ describe('Blobs Routes', () => {
       const mockDb = createLibraryMockDb({ count: 5 }, [{ hash: hash1 }], items);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library?limit=1');
+      const response = await api.get('/api/blobs/library?limit=1');
 
       expect(response.status).toBe(200);
       expect(response.body.data.total).toBe(5);
@@ -487,20 +505,20 @@ describe('Blobs Routes', () => {
       mockedGetDb.mockReturnValue(mockDb);
 
       // Type filter
-      const res1 = await request(app).get('/api/blobs/library?type=image');
+      const res1 = await api.get('/api/blobs/library?type=image');
       expect(res1.status).toBe(200);
 
       // Sort parameters
-      const res2 = await request(app).get('/api/blobs/library?sortField=sizeBytes&sortOrder=asc');
+      const res2 = await api.get('/api/blobs/library?sortField=sizeBytes&sortOrder=asc');
       expect(res2.status).toBe(200);
 
       // Eval filter
-      const res3 = await request(app).get('/api/blobs/library?evalId=some-eval-id');
+      const res3 = await api.get('/api/blobs/library?evalId=some-eval-id');
       expect(res3.status).toBe(200);
 
       // Hash filter (deep link)
       const hash = 'd'.repeat(64);
-      const res4 = await request(app).get(`/api/blobs/library?hash=${hash}`);
+      const res4 = await api.get(`/api/blobs/library?hash=${hash}`);
       expect(res4.status).toBe(200);
     });
 
@@ -540,7 +558,7 @@ describe('Blobs Routes', () => {
       mockedGetDb.mockReturnValue(mockDb);
 
       // Use hash filter to trigger detail mode
-      const response = await request(app).get(`/api/blobs/library?hash=${hash1}`);
+      const response = await api.get(`/api/blobs/library?hash=${hash1}`);
 
       expect(response.status).toBe(200);
       const item = response.body.data.items[0];
@@ -565,15 +583,13 @@ describe('Blobs Routes', () => {
         throw new Error('Database connection failed');
       });
 
-      const response = await request(app).get('/api/blobs/library');
+      const response = await api.get('/api/blobs/library');
 
       expect(response.status).toBe(500);
     });
   });
 
   describe('GET /api/blobs/library/evals', () => {
-    let app: ReturnType<typeof createApp>;
-
     function createEvalsMockDb(evals: any[]) {
       return {
         selectDistinct: vi.fn().mockReturnThis(),
@@ -588,7 +604,6 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {
@@ -598,7 +613,7 @@ describe('Blobs Routes', () => {
     it('should return empty array when blob storage is disabled', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(false);
 
-      const response = await request(app).get('/api/blobs/library/evals');
+      const response = await api.get('/api/blobs/library/evals');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ success: true, data: [] });
@@ -607,7 +622,7 @@ describe('Blobs Routes', () => {
     it('should return 400 for invalid query parameters', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
-      const response = await request(app).get('/api/blobs/library/evals?limit=abc');
+      const response = await api.get('/api/blobs/library/evals?limit=abc');
 
       expect(response.status).toBe(400);
       expect(response.body).toEqual({
@@ -635,7 +650,7 @@ describe('Blobs Routes', () => {
       const mockDb = createEvalsMockDb(mockEvals);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library/evals');
+      const response = await api.get('/api/blobs/library/evals');
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -656,7 +671,7 @@ describe('Blobs Routes', () => {
       const mockDb = createEvalsMockDb([]);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library/evals?limit=5');
+      const response = await api.get('/api/blobs/library/evals?limit=5');
 
       expect(response.status).toBe(200);
       expect(mockDb.limit).toHaveBeenCalledWith(5);
@@ -668,7 +683,7 @@ describe('Blobs Routes', () => {
         throw new Error('Database connection failed');
       });
 
-      const response = await request(app).get('/api/blobs/library/evals');
+      const response = await api.get('/api/blobs/library/evals');
 
       expect(response.status).toBe(500);
     });
@@ -678,7 +693,7 @@ describe('Blobs Routes', () => {
       const mockDb = createEvalsMockDb([]);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library/evals?search=test');
+      const response = await api.get('/api/blobs/library/evals?search=test');
 
       expect(response.status).toBe(200);
       expect(mockDb.where).toHaveBeenCalled();
@@ -689,7 +704,7 @@ describe('Blobs Routes', () => {
       const mockDb = createEvalsMockDb([]);
       mockedGetDb.mockReturnValue(mockDb);
 
-      const response = await request(app).get('/api/blobs/library/evals');
+      const response = await api.get('/api/blobs/library/evals');
 
       expect(response.status).toBe(200);
       // where is called with undefined (no conditions)
@@ -700,7 +715,7 @@ describe('Blobs Routes', () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
       const longSearch = 'a'.repeat(201);
-      const response = await request(app).get(`/api/blobs/library/evals?search=${longSearch}`);
+      const response = await api.get(`/api/blobs/library/evals?search=${longSearch}`);
 
       expect(response.status).toBe(400);
     });

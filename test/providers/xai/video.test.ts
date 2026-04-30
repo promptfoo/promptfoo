@@ -54,7 +54,7 @@ describe('XAI Video Provider', () => {
     vi.mocked(videoUtils.formatVideoOutput).mockReturnValue(
       `[Video: ${mockPrompt}](storageRef:${mockStorageKey})`,
     );
-    vi.mocked(videoUtils.storeCacheMapping).mockReturnValue(undefined);
+    vi.mocked(videoUtils.storeCacheMapping).mockResolvedValue(undefined);
     vi.mocked(videoUtils.storeVideoContent).mockResolvedValue({
       storageRef: {
         provider: 'filesystem',
@@ -304,9 +304,11 @@ describe('XAI Video Provider', () => {
     it('handles polling timeout', async () => {
       vi.useFakeTimers();
       try {
-        vi.mocked(sleep).mockImplementation(
-          (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
-        );
+        // Route the mocked sleep through the real implementation so fake
+        // timers can advance the polling loop deterministically.
+        const realTime =
+          await vi.importActual<typeof import('../../../src/util/time')>('../../../src/util/time');
+        vi.mocked(sleep).mockImplementation(realTime.sleep);
 
         // Mock job creation
         const createResponse = {

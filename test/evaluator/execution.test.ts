@@ -98,7 +98,16 @@ describeEvaluator('evaluator execution control', () => {
       }
       // Wait until either the barrier trips (parallel path) or a short
       // fallback fires (serial path — we'll never reach targetConcurrency).
-      await Promise.race([holdPromise, new Promise<void>((resolve) => setTimeout(resolve, 100))]);
+      let resolveFallback!: () => void;
+      const fallback = new Promise<void>((r) => {
+        resolveFallback = r;
+      });
+      const fallbackHandle = setTimeout(() => resolveFallback(), 100);
+      try {
+        await Promise.race([holdPromise, fallback]);
+      } finally {
+        clearTimeout(fallbackHandle);
+      }
       activeCalls -= 1;
       return {
         output: String(prompt),
@@ -704,18 +713,24 @@ describeEvaluator('evaluator execution control', () => {
     vi.useFakeTimers();
 
     const results: any[] = [];
-    const waitForTarget = (ms: number, signal?: AbortSignal) =>
-      new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(resolve, ms);
-        signal?.addEventListener(
-          'abort',
-          () => {
-            clearTimeout(timeout);
-            reject(new Error('target aborted'));
-          },
-          { once: true },
-        );
+    const waitForTarget = (ms: number, signal?: AbortSignal) => {
+      let resolveSleep!: () => void;
+      let rejectSleep!: (err: Error) => void;
+      const sleepPromise = new Promise<void>((resolve, reject) => {
+        resolveSleep = resolve;
+        rejectSleep = reject;
       });
+      const timeout = setTimeout(() => resolveSleep(), ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timeout);
+          rejectSleep(new Error('target aborted'));
+        },
+        { once: true },
+      );
+      return sleepPromise;
+    };
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('target-provider'),
       callApi: vi.fn(async (prompt: string, _context, options) => {
