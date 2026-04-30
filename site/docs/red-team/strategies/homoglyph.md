@@ -77,5 +77,4 @@ The strategy helps identify:
 - [Hex Encoding](hex.md) - Alternative encoding strategy
 - [Leetspeak](leetspeak.md) - Text obfuscation technique using similar principles
 - [ROT13 Encoding](rot13.md) - Character substitution technique
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

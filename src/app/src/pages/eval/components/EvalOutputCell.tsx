@@ -11,7 +11,12 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { type EvaluateTableOutput, type ImageOutput, ResultFailureReason } from '@promptfoo/types';
+import {
+  type EvaluateTableOutput,
+  type GradingResult,
+  type ImageOutput,
+  ResultFailureReason,
+} from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -620,6 +625,15 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   };
 }
 
+function getDialogGradingResults(output: EvaluateTableOutput): GradingResult[] | undefined {
+  const gradingResult = output.gradingResult;
+  if (!gradingResult) {
+    return undefined;
+  }
+
+  return gradingResult.componentResults?.length ? gradingResult.componentResults : [gradingResult];
+}
+
 function getPassFailText({
   passCount,
   failCount,
@@ -1180,7 +1194,7 @@ function renderOutputActions({
               onClose={handlePromptClose}
               prompt={output.prompt}
               provider={output.provider}
-              gradingResults={output.gradingResult?.componentResults}
+              gradingResults={getDialogGradingResults(output)}
               output={text}
               metadata={output.metadata}
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
