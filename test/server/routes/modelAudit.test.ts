@@ -328,6 +328,66 @@ describe('Model Audit Routes', () => {
       }
     });
 
+    it('should not double-respond when both error and close events fire after a parse-throw', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-double-respond.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+
+      // Race `error` then `close` so both fire and both call into safeRespond.
+      // Under the pre-fix code, parse threw *before* `responded = true` was
+      // set, so the close emitter could re-enter safeRespond and write a
+      // second body.
+      const errorThenClose = {
+        on: vi.fn().mockImplementation(function (
+          this: object,
+          event: string,
+          callback: (...args: unknown[]) => void,
+        ) {
+          if (event === 'error') {
+            setImmediate(() => callback(new Error('boom')));
+          } else if (event === 'close') {
+            // Fire close immediately after error so both safeRespond paths race.
+            setImmediate(() => setImmediate(() => callback(1)));
+          }
+          return this;
+        }),
+      };
+
+      const mockProc = createMockChildProcess({ exitCode: 1 });
+      mockProc.on = errorThenClose.on as never;
+      mockedSpawn.mockReturnValue(asMockChildProcess(mockProc));
+
+      // Force the error-branch parse to throw on the first call. Under the
+      // post-fix code `responded` flips to `true` before parse runs, so the
+      // close emitter that fires next observes `responded === true` and
+      // returns without entering parse a second time.
+      const errorParseSpy = vi
+        .spyOn(ModelAuditSchemas.Scan.ErrorResponse, 'parse')
+        .mockImplementationOnce(() => {
+          throw new Error('forced error-branch parse failure');
+        });
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .timeout({ deadline: 1000 })
+          .send({ paths: [testFilePath], options: { persist: false } });
+
+        expect(response.status).toBe(500);
+        expect(typeof response.body.error).toBe('string');
+        // `safeRespond` calls `Scan.ErrorResponse.parse` exactly once per
+        // *entered* invocation. If `responded` were not flipped before parse,
+        // the close emitter would re-enter and trigger a second parse call —
+        // so this single-call assertion is the proxy for "exactly one body
+        // was written to the response stream".
+        expect(errorParseSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        errorParseSpy.mockRestore();
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
     it('should fall back to a 500 response when scan success DTO parsing fails', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
 

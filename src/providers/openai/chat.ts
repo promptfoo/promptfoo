@@ -10,6 +10,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
@@ -538,6 +539,24 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
       await deleteFromCache?.();
+      // Preserve the structured rate-limit signal so the scheduler honors
+      // the transport-layer fail-fast contract (no retry on hard quotas)
+      // and so the user-facing message stays the canonical
+      // "Rate limit exceeded:" / "Quota exceeded:" form rather than being
+      // wrapped in "API call error: HttpRateLimitError: ...".
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatRateLimitErrorMessage(err),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: err.headers ?? responseHeaders ?? {},
+            },
+          },
+        };
+      }
       return {
         error: `API call error: ${String(err)}`,
         metadata: {
