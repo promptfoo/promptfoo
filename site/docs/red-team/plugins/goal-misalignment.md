@@ -120,6 +120,4 @@ By incorporating the Goal Misalignment plugin in your LLM red teaming strategy, 
 - [Overreliance](/docs/red-team/plugins/overreliance)
 - [Excessive Agency](/docs/red-team/plugins/excessive-agency)
 - [Hallucination](/docs/red-team/plugins/hallucination)
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

@@ -1,4 +1,5 @@
 import type { TestCase } from '../../types/index';
+import type { Inputs } from '../../types/shared';
 
 export function addIterativeJailbreaks(
   testCases: TestCase[],
@@ -31,7 +32,7 @@ export function addIterativeJailbreaks(
     const originalText = String(testCase.vars![injectVar]);
     // Get inputs from plugin config if available
     const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
-    const inputs = pluginConfig?.inputs as Record<string, string> | undefined;
+    const inputs = pluginConfig?.inputs as Inputs | undefined;
 
     return {
       ...testCase,

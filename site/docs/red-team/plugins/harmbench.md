@@ -95,11 +95,9 @@ The available functional categories are:
 
 ## Related Concepts
 
-- [Types of LLM Vulnerabilities](../llm-vulnerability-types.md)
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
 - [Evaluating LLM safety with HarmBench](/docs/guides/evaling-with-harmbench)
 - [Harmful Content Plugin](harmful.md)
 - [BeaverTails Plugin](beavertails.md)
 - [CyberSecEval Plugin](cyberseceval.md)
 - [Pliny Plugin](pliny.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

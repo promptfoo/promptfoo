@@ -2,7 +2,7 @@
 import './setup';
 
 import crypto from 'crypto';
-import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -15,23 +15,39 @@ import { runPython } from '../../../src/python/pythonUtils';
 import { TOKEN_REFRESH_BUFFER_MS } from '../../../src/util/oauth';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
+const fsPromisesMocks = vi.hoisted(() => ({
+  actualReadFile: undefined as typeof import('fs/promises').readFile | undefined,
+  readFile: vi.fn(),
+}));
+
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  fsPromisesMocks.actualReadFile = actual.readFile;
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFile: fsPromisesMocks.readFile,
+    },
+    readFile: fsPromisesMocks.readFile,
+  };
+});
+
 describe('RSA signature authentication', () => {
   let mockPrivateKey: string;
   let mockSign: MockInstance;
   let mockUpdate: MockInstance;
   let mockEnd: MockInstance;
-  let actualReadFileSync: typeof fs.readFileSync;
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
-    actualReadFileSync = fs.readFileSync;
-    vi.spyOn(fs, 'readFileSync').mockImplementation(((path, options) => {
-      if (path === '/path/to/key.pem') {
+    vi.mocked(fsPromises.readFile).mockImplementation((async (filePath, options) => {
+      if (filePath.toString() === '/path/to/key.pem') {
         return mockPrivateKey;
       }
 
-      return actualReadFileSync(path as any, options as any);
-    }) as typeof fs.readFileSync);
+      return fsPromisesMocks.actualReadFile!(filePath as any, options as any);
+    }) as typeof fsPromises.readFile);
 
     mockUpdate = vi.fn();
     mockEnd = vi.fn();
@@ -74,7 +90,7 @@ describe('RSA signature authentication', () => {
     await provider.callApi('test');
 
     // Verify signature generation with specific data
-    expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
+    expect(fsPromises.readFile).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockEnd).toHaveBeenCalledTimes(1);
@@ -196,7 +212,7 @@ describe('RSA signature authentication', () => {
 
     // Verify signature generation using privateKey directly
     const privateKeyFileReads = vi
-      .mocked(fs.readFileSync)
+      .mocked(fsPromises.readFile)
       .mock.calls.filter(([filePath]) => filePath === '/path/to/key.pem');
     expect(privateKeyFileReads).toHaveLength(0);
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
@@ -250,10 +266,8 @@ describe('RSA signature authentication', () => {
       },
     });
 
-    // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = vi
-      .spyOn(fs, 'readFileSync')
-      .mockReturnValue(Buffer.from('mock-keystore-data'));
+    // Mock fs/promises.readFile to return mock keystore data
+    vi.mocked(fsPromises.readFile).mockResolvedValue(Buffer.from('mock-keystore-data'));
 
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_JKS_PASSWORD: 'env-password',
@@ -287,9 +301,6 @@ describe('RSA signature authentication', () => {
       expect(jksMock.toPem).toHaveBeenCalledWith(expect.anything(), 'env-password');
     } finally {
       restoreEnv();
-
-      // Clean up
-      readFileSyncSpy.mockRestore();
     }
   });
 
@@ -302,10 +313,8 @@ describe('RSA signature authentication', () => {
       },
     });
 
-    // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = vi
-      .spyOn(fs, 'readFileSync')
-      .mockReturnValue(Buffer.from('mock-keystore-data'));
+    // Mock fs/promises.readFile to return mock keystore data
+    vi.mocked(fsPromises.readFile).mockResolvedValue(Buffer.from('mock-keystore-data'));
 
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_JKS_PASSWORD: 'env-password',
@@ -339,9 +348,6 @@ describe('RSA signature authentication', () => {
       expect(jksMock.toPem).toHaveBeenCalledWith(expect.any(Buffer), 'config-password');
     } finally {
       restoreEnv();
-
-      // Clean up
-      readFileSyncSpy.mockRestore();
     }
   });
 
@@ -352,10 +358,8 @@ describe('RSA signature authentication', () => {
       throw new Error('Should not be called');
     });
 
-    // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = vi
-      .spyOn(fs, 'readFileSync')
-      .mockReturnValue(Buffer.from('mock-keystore-data'));
+    // Mock fs/promises.readFile to return mock keystore data
+    vi.mocked(fsPromises.readFile).mockResolvedValue(Buffer.from('mock-keystore-data'));
 
     const provider = new HttpProvider('http://example.com', {
       config: {
@@ -388,9 +392,6 @@ describe('RSA signature authentication', () => {
       );
     } finally {
       restoreEnv();
-
-      // Clean up
-      readFileSyncSpy.mockRestore();
     }
   });
 });
@@ -450,8 +451,9 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
         typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
       if (urlString === tokenUrl) {
         tokenRefreshCallCount++;
-        // Simulate network delay
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        // Yield so the other concurrent callers register on the in-flight
+        // refresh promise before this one resolves.
+        await Promise.resolve();
         return tokenResponse;
       }
       return apiResponse;
@@ -510,7 +512,8 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
       const urlString =
         typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
       if (urlString === tokenUrl) {
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        // Yield so concurrent callers register on the in-flight refresh.
+        await Promise.resolve();
         return tokenResponse;
       }
       return apiResponse;
@@ -760,8 +763,11 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
 
     // Start first call (will trigger token refresh)
     const promise1 = provider.callApi('test 1');
-    // Wait a bit to ensure token refresh has started
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Wait until the token refresh has actually been issued before starting
+    // the second call, so it observes the in-flight refresh.
+    await vi.waitFor(() => {
+      expect(vi.mocked(fetchWithCache).mock.calls.some((call) => call[0] === tokenUrl)).toBe(true);
+    });
     // Start second call (should wait for first refresh)
     const promise2 = provider.callApi('test 2');
 
@@ -978,7 +984,8 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
         typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
       if (urlString === tokenUrl) {
         refreshCallCount++;
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        // Yield so concurrent callers register on the in-flight refresh.
+        await Promise.resolve();
         return tokenResponse;
       }
       return apiResponse;
@@ -1343,13 +1350,15 @@ describe('HttpProvider - File Auth', () => {
 
   it('should deduplicate concurrent file auth refreshes', async () => {
     const authFn = vi.fn(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Yield so concurrent callers register on the in-flight refresh.
+      await Promise.resolve();
       return {
         token: 'shared-file-token',
         expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS + 60_000,
       };
     });
     vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
 
     const provider = new HttpProvider(mockUrl, {
       config: {
@@ -1391,6 +1400,28 @@ describe('HttpProvider - File Auth', () => {
         }),
       );
     }
+    expect(debugSpy).toHaveBeenCalledWith('[HTTP Provider Auth]: Acquired file auth refresh lock');
+    expect(debugSpy).toHaveBeenCalledWith(
+      '[HTTP Provider Auth]: Invoking file auth function ./auth/get-token.js#default',
+    );
+    expect(
+      debugSpy.mock.calls.filter(
+        ([message]) => message === '[HTTP Provider Auth]: Acquired file auth refresh lock',
+      ),
+    ).toHaveLength(1);
+    expect(
+      debugSpy.mock.calls.filter(
+        ([message]) =>
+          message ===
+          '[HTTP Provider Auth]: Invoking file auth function ./auth/get-token.js#default',
+      ),
+    ).toHaveLength(1);
+    expect(
+      debugSpy.mock.calls.filter(
+        ([message]) =>
+          message === '[HTTP Provider Auth]: Token refresh already in progress, waiting...',
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it('should make file auth values available to transformRequest before the request is rendered', async () => {
@@ -1522,6 +1553,68 @@ describe('HttpProvider - File Auth', () => {
           session: 'session-123',
         }),
       }),
+    );
+  });
+
+  it('should log how many seconds a refreshed file auth token stays fresh', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'expiring-token',
+      expiration: 43_000,
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {},
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[HTTP Provider Auth]: Successfully refreshed file auth token (expires in 42 seconds)',
+    );
+  });
+
+  it('should log when a refreshed file auth token never expires', async () => {
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'non-expiring-token',
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {},
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[HTTP Provider Auth]: Successfully refreshed file auth token (never expires)',
     );
   });
 
