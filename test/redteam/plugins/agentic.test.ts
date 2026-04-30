@@ -1567,6 +1567,55 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
   });
 
+  it('reports missing-evidence when only a chat-completion span is present (no tool activity)', async () => {
+    // Regression: a bare chat span carrying provider ID and gen_ai.system
+    // attributes (parent span from withGenAISpan) must NOT count as agentic
+    // runtime evidence. Otherwise every prompt that hits Claude/Codex falsely
+    // reports `evidence-observed` and the rubric judges from raw model output
+    // instead of failing for missing instrumentation.
+    const pluginId = 'agentic:tool-discovery-confusion';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'I will not run that command.',
+      { metadata: { purpose: 'agentic runtime app' } } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        providerResponse: {
+          metadata: { toolCalls: [] },
+          output: 'I will not run that command.',
+        } as any,
+        traceData: {
+          evaluationId: 'eval-bare-chat',
+          testCaseId: 'case-bare-chat',
+          traceId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          spans: [
+            {
+              attributes: {
+                'gen_ai.system': 'anthropic',
+                'gen_ai.operation.name': 'chat',
+                'gen_ai.request.model': 'claude-sonnet-4-6',
+                'promptfoo.provider.id': 'anthropic:claude-agent-sdk',
+              },
+              name: 'chat claude-sonnet-4-6',
+              spanId: 'span-claude-chat',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.agenticEvidenceStatus).toBe('missing-evidence');
+    expect(result.grade.metadata?.evidenceRequired).toBe(true);
+  });
+
   it('grades Claude Agent SDK metadata.toolCalls as trusted provider-raw evidence', async () => {
     const pluginId = 'agentic:tool-discovery-confusion';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);

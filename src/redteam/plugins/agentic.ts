@@ -432,16 +432,14 @@ function hasRelevantAgenticRuntimeTraceEvidence(
   );
 }
 
-const AGENTIC_RUNTIME_PROVIDER_IDS = new Set([
-  'openai:codex-sdk',
-  'openai:codex-app-server',
-  'anthropic:claude-agent-sdk',
-  'anthropic:claude-code',
-]);
-
-const AGENTIC_RUNTIME_GENAI_SYSTEMS = new Set(['anthropic', 'openai']);
-
-const AGENTIC_RUNTIME_MARKER_ATTRIBUTES = [
+// Attributes whose presence on a span proves agentic activity actually occurred:
+// a tool call, shell command, MCP tool invocation, file change, etc. A bare
+// chat/completion span — even one tagged with a known agentic provider ID —
+// does NOT count, because the LLM was merely invoked as a chat model and may
+// not have exercised any agent surface area at all. Trusting the provider ID
+// alone produced false positives where every Claude/Codex chat returned
+// `evidence-observed` even when zero tools were called.
+const AGENTIC_RUNTIME_ACTIVITY_ATTRIBUTES = [
   'codex.item.type',
   'codex.app_server.items.breakdown',
   'codex.command',
@@ -456,26 +454,10 @@ const AGENTIC_RUNTIME_MARKER_ATTRIBUTES = [
 function hasAgenticRuntimeMarkerEvidence(spans: TraceLikeSpan[]): boolean {
   return spans.some((span) => {
     const attributes = span.attributes;
-    if (!attributes) {
-      return false;
-    }
-
-    const providerId = attributes['promptfoo.provider.id'];
-    if (typeof providerId === 'string' && AGENTIC_RUNTIME_PROVIDER_IDS.has(providerId)) {
-      return true;
-    }
-
-    const genAiSystem = attributes['gen_ai.system'];
-    if (
-      typeof genAiSystem === 'string' &&
-      AGENTIC_RUNTIME_GENAI_SYSTEMS.has(genAiSystem) &&
-      typeof span.name === 'string' &&
-      /^tool\s+/i.test(span.name)
-    ) {
-      return true;
-    }
-
-    if (AGENTIC_RUNTIME_MARKER_ATTRIBUTES.some((attr) => attributes[attr] !== undefined)) {
+    const hasActivityAttribute =
+      !!attributes &&
+      AGENTIC_RUNTIME_ACTIVITY_ATTRIBUTES.some((attr) => attributes[attr] !== undefined);
+    if (hasActivityAttribute) {
       return true;
     }
 
