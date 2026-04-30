@@ -2629,6 +2629,11 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(filteredTokensElement).toHaveStyle('font-size: 0.9em');
     expect(filteredTokensElement).toHaveStyle('color: #666');
     expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
+
+    expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    const filteredLatencyElement = screen.getByText('(200ms filtered)');
+    expect(filteredLatencyElement).toBeInTheDocument();
+    expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
   });
 });
 
