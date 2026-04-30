@@ -3,7 +3,7 @@ import { Presets, SingleBar } from 'cli-progress';
 import { fetchWithCache } from '../../cache';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -12,6 +12,7 @@ import {
 } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { Inputs } from '../../types/shared';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
@@ -44,7 +45,7 @@ async function generateCompositePrompts(
       );
 
       // Get inputs schema from plugin config for multi-input mode
-      const inputs = testCase.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
+      const inputs = testCase.metadata?.pluginConfig?.inputs as Inputs | undefined;
 
       const payload = {
         task: 'jailbreak:composite',
@@ -82,7 +83,7 @@ async function generateCompositePrompts(
           },
           body: JSON.stringify(payload),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       logger.debug(

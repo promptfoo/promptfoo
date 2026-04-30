@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { access } from 'fs/promises';
 import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
@@ -20,6 +21,24 @@ import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
+
+/**
+ * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
+ * surfaces when a path component isn't a directory) yield false; other errors
+ * such as EACCES/EPERM are rethrown so permission problems remain visible.
+ */
+export async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') {
+      return false;
+    }
+    throw err;
+  }
+}
 
 /**
  * Simple Nunjucks engine specifically for file paths
