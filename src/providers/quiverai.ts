@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProxy } from '../util/fetch';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -154,7 +154,7 @@ export class QuiverAiProvider implements ApiProvider {
         headers: this.getHeaders(),
         body: JSON.stringify(body),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'json',
       context?.bustCache ?? context?.debug,
     );
@@ -182,7 +182,7 @@ export class QuiverAiProvider implements ApiProvider {
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const timeout = setTimeout(() => controller.abort(), getRequestTimeoutMs());
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
       try {

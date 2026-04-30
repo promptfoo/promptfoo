@@ -5,7 +5,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
-import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -509,7 +509,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
             },
             body: JSON.stringify(params),
           },
-          REQUEST_TIMEOUT_MS,
+          getRequestTimeoutMs(),
           'json',
           true,
         )) as unknown as MistralFetchResult;
@@ -701,7 +701,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
               },
               body: JSON.stringify(body),
             },
-            REQUEST_TIMEOUT_MS,
+            getRequestTimeoutMs(),
             'json',
             true,
           )) as unknown as MistralFetchResult;

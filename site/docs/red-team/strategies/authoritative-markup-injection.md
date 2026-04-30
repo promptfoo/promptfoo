@@ -88,5 +88,4 @@ This strategy helps identify vulnerabilities where models prioritize structural 
 - [Prompt Injection](prompt-injection.md) - Direct injection attacks
 - [Jailbreak Strategies](iterative.md) - Iterative bypass techniques
 - [Composite Jailbreaks](composite-jailbreaks.md) - Combined attack techniques
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
