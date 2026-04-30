@@ -14,6 +14,14 @@ const mockFs = vi.hoisted(() => ({
   existsSync: vi.fn(),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
+  access: vi.fn((path: string) => {
+    if (mockFs.existsSync(path)) {
+      return undefined;
+    }
+    throw Object.assign(new Error(`ENOENT: no such file or directory, access '${path}'`), {
+      code: 'ENOENT',
+    });
+  }),
 }));
 
 vi.mock('fs', () => ({
@@ -22,6 +30,16 @@ vi.mock('fs', () => ({
 }));
 
 vi.mock('fs/promises', () => ({
+  default: {
+    access: mockFs.access,
+    writeFile: mockFs.writeFileSync,
+    mkdir: mockFs.mkdirSync,
+    mkdtemp: vi.fn(),
+    rm: vi.fn(),
+  },
+  access: mockFs.access,
+  writeFile: mockFs.writeFileSync,
+  mkdir: mockFs.mkdirSync,
   mkdtemp: vi.fn(),
   rm: vi.fn(),
 }));
@@ -78,6 +96,7 @@ beforeEach(() => {
   mockFs.existsSync.mockReset();
   mockFs.writeFileSync.mockReset();
   mockFs.mkdirSync.mockReset();
+  mockFs.access.mockClear();
 });
 
 describe('reportProviderAPIKeyWarnings', () => {
