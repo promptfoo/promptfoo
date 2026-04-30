@@ -28,7 +28,12 @@ describe('integration-inspect-osworld example provider', () => {
   }
 
   function pythonExecutable(): string {
-    return process.env.PROMPTFOO_PYTHON || process.env.PYTHON || process.env.PYTHON3 || 'python3';
+    return (
+      process.env.PROMPTFOO_PYTHON ||
+      process.env.PYTHON ||
+      process.env.PYTHON3 ||
+      (process.platform === 'win32' ? 'python' : 'python3')
+    );
   }
 
   it('generates the Inspect osworld_small sample suite', () => {
