@@ -21,6 +21,11 @@ import {
 } from '../inputVariables';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializationContextVars,
+  buildRemoteMaterializedInputVariables,
+} from '../remoteMaterialization';
+import {
   applyRuntimeTransforms,
   type LayerConfig,
   type MediaData,
@@ -200,6 +205,7 @@ export async function runRedteamConversation({
   const sessionIds: string[] = [];
 
   const totalTokenUsage = createEmptyTokenUsage();
+  const usingRemoteRedteamProvider = shouldGenerateRemote();
 
   const previousOutputs: {
     prompt: string;
@@ -254,7 +260,15 @@ export async function runRedteamConversation({
           raw: redteamBody,
           label: 'history',
         },
-        vars: {},
+        vars: usingRemoteRedteamProvider
+          ? buildRemoteMaterializationContextVars({
+              injectVar,
+              inputs,
+              materializationIndex: i,
+              pluginId: String(test?.metadata?.pluginId || 'iterative'),
+              purpose: test?.metadata?.purpose as string | undefined,
+            })
+          : {},
       },
       options,
     );
@@ -362,16 +376,33 @@ export async function runRedteamConversation({
     }
 
     // Extract input vars from the attack prompt for multi-input mode
+    if (inputs && usingRemoteRedteamProvider) {
+      assertRemoteMaterializationHandled(redteamResp, 'Iterative multi-input generation');
+    }
     const currentInputVars = extractInputVarsFromPrompt(newInjectVar, inputs);
-    const materializedInputVars =
-      currentInputVars && inputs
-        ? await materializeInputVariablesWithMetadata(currentInputVars, inputs, {
+    let materializedInputVars:
+      | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+      | undefined;
+    if (currentInputVars && inputs) {
+      if (usingRemoteRedteamProvider) {
+        materializedInputVars = buildRemoteMaterializedInputVariables(
+          redteamResp,
+          currentInputVars,
+          inputs,
+        );
+      } else {
+        materializedInputVars = await materializeInputVariablesWithMetadata(
+          currentInputVars,
+          inputs,
+          {
             materializationIndex: i,
             pluginId: String(test?.metadata?.pluginId || 'iterative'),
             provider: redteamProvider,
             purpose: test?.metadata?.purpose as string | undefined,
-          })
-        : undefined;
+          },
+        );
+      }
+    }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
     // Build updated vars - handle multi-input mode

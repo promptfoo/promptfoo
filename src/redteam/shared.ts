@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -8,6 +8,7 @@ import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
@@ -80,8 +81,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     const configFilename = `redteam-config-${Date.now()}.yaml`;
     const configTmpFile = path.join(tmpDir, configFilename);
-    fs.mkdirSync(path.dirname(configTmpFile), { recursive: true });
-    fs.writeFileSync(configTmpFile, yaml.dump(options.liveRedteamConfig));
+    await fs.mkdir(path.dirname(configTmpFile), { recursive: true });
+    await fs.writeFile(configTmpFile, yaml.dump(options.liveRedteamConfig));
     configPath = configTmpFile;
     logger.debug(`Using live config from ${configTmpFile}`);
     logger.debug(`Output will be written to ${redteamPath}`);
@@ -127,7 +128,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   const generationDurationMs = Date.now() - generationStartTime;
 
   // Check if redteam.yaml exists before running evaluation
-  if (!redteamConfig || !fs.existsSync(redteamPath)) {
+  if (!redteamConfig || !(await pathExists(redteamPath))) {
     logger.info('No test cases generated. Skipping scan.');
     if (verboseToggleCleanup) {
       verboseToggleCleanup();

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
@@ -103,6 +104,7 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
   };
 });
 vi.mock('fs');
+vi.mock('fs/promises');
 vi.mock('js-yaml');
 vi.mock('os');
 
@@ -122,6 +124,9 @@ describe('doRedteamRun', () => {
     vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
+    vi.mocked(fsPromises.access).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.writeFile).mockResolvedValue();
     vi.mocked(os.tmpdir).mockImplementation(function () {
       return '/tmp';
     });
@@ -201,10 +206,10 @@ describe('doRedteamRun', () => {
       const expectedOutputFilename = `redteam-${mockDate.getTime()}.yaml`;
       const expectedOutputPath = path.join('', expectedOutputFilename);
 
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedConfigPath), {
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedConfigPath), {
         recursive: true,
       });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(expectedConfigPath, 'mocked-yaml-content');
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(expectedConfigPath, 'mocked-yaml-content');
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -225,8 +230,10 @@ describe('doRedteamRun', () => {
       const expectedTempDir = path.normalize('/tmp');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(expectedTempDir, { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(expectedTempDir, {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining(expectedConfigPrefix),
         'mocked-yaml-content',
       );
@@ -250,8 +257,10 @@ describe('doRedteamRun', () => {
       const expectedTempDir = path.normalize('/tmp');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(expectedTempDir, { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(expectedTempDir, {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining(expectedConfigPrefix),
         'mocked-yaml-content',
       );
@@ -288,12 +297,12 @@ describe('doRedteamRun', () => {
       const secondExpectedConfigPath = path.join('', `redteam-config-${secondTimestamp}.yaml`);
 
       // Verify different config filenames were generated
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(
+      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
         1,
         firstExpectedConfigPath,
         'mocked-yaml-content',
       );
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(
+      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
         2,
         secondExpectedConfigPath,
         'mocked-yaml-content',
