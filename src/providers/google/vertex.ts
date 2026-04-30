@@ -18,7 +18,7 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
@@ -42,7 +42,12 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { ClaudeRequest, ClaudeResponse, ClaudeThinkingConfig } from './types';
+import type {
+  ClaudeRequest,
+  ClaudeResponse,
+  ClaudeThinkingConfig,
+  GoogleProviderConfig,
+} from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -53,6 +58,21 @@ import type {
 
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
+
+type VertexEmbeddingPredictResponse = {
+  predictions?: Array<{
+    embeddings?: {
+      values?: number[];
+      statistics?: {
+        token_count?: number;
+      };
+    };
+  }>;
+};
+
+type VertexEmbeddingProviderConfig = GoogleProviderConfig & {
+  autoTruncate?: boolean;
+};
 
 function getVertexApiHost(
   region: string,
@@ -325,7 +345,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json; charset=utf-8',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
 
       data = res.data as ClaudeResponse;
@@ -530,7 +550,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             method: 'POST',
             headers: await this.getAuthHeaders(),
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            signal: AbortSignal.timeout(getRequestTimeoutMs()),
           });
 
           if (!res.ok) {
@@ -553,7 +573,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             url,
             method: 'POST',
             data: body,
-            timeout: REQUEST_TIMEOUT_MS,
+            timeout: getRequestTimeoutMs(),
           });
           data = res.data as GeminiApiResponse;
         }
@@ -862,7 +882,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
       data = res.data as Palm2ApiResponse;
     } catch (err) {
@@ -1005,7 +1025,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json; charset=utf-8',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
 
       data = res.data as LlamaResponse;
@@ -1068,13 +1088,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;
-  config: any;
-  env?: any;
+  config: VertexEmbeddingProviderConfig;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, config: any = {}, env?: any) {
+  constructor(modelName: string, options: GoogleProviderOptions = {}) {
     this.modelName = modelName;
-    this.config = config;
-    this.env = env;
+    this.config = options.config || {};
+    this.env = options.env;
   }
 
   /**
@@ -1124,7 +1144,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       },
     };
 
-    let data: any;
+    let data: VertexEmbeddingPredictResponse = {};
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
@@ -1136,7 +1156,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         method: 'POST',
         data: body,
       });
-      data = res.data;
+      data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
       logger.error(`Vertex API call error: ${err}`);
       throw err;

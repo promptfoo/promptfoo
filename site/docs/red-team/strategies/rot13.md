@@ -45,5 +45,4 @@ The strategy helps identify:
 - [Base64 Encoding](base64.md) - More complex but widely recognized encoding
 - [Leetspeak](leetspeak.md) - Similar character-level obfuscation
 - [Prompt Injection](prompt-injection.md) - Can be combined with ROT13
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

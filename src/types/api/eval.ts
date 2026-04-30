@@ -33,7 +33,10 @@ export type UpdateEvalAuthorResponse = z.infer<typeof UpdateEvalAuthorResponseSc
 export const GetMetadataKeysParamsSchema = EvalIdStrictParamSchema;
 
 export const GetMetadataKeysQuerySchema = z.object({
-  comparisonEvalIds: z.array(z.string()).optional(),
+  comparisonEvalIds: z
+    .union([z.string(), z.array(z.string())])
+    .transform((v) => (Array.isArray(v) ? v : v ? [v] : []))
+    .prefault([]),
 });
 
 export const GetMetadataKeysResponseSchema = z.object({
@@ -81,9 +84,9 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
 /** Query parameters for eval table endpoint. */
 export const EvalTableQuerySchema = z.object({
-  format: z.string().optional(),
-  limit: z.coerce.number().positive().prefault(50),
-  offset: z.coerce.number().nonnegative().prefault(0),
+  format: z.enum(['csv', 'json']).optional(),
+  limit: z.coerce.number().int().positive().prefault(50),
+  offset: z.coerce.number().int().nonnegative().prefault(0),
   filterMode: EvalResultsFilterMode.prefault('all'),
   search: z.string().prefault(''),
   filter: z
@@ -113,6 +116,32 @@ export const ResultDetailResponseSchema = z.object({
 
 export type ResultDetailParams = z.infer<typeof ResultDetailParamsSchema>;
 export type ResultDetailResponse = z.infer<typeof ResultDetailResponseSchema>;
+
+const ShallowEvaluateTableSchema = z
+  .object({
+    head: z
+      .unknown()
+      .refine((value) => value !== null && typeof value === 'object', 'Expected table head object'),
+    body: z.unknown().refine(Array.isArray, 'Expected table body array'),
+  })
+  .passthrough();
+
+export const EvalTableResponseSchema = z
+  .object({
+    table: ShallowEvaluateTableSchema,
+    totalCount: z.number(),
+    filteredCount: z.number(),
+    filteredMetrics: z.array(z.unknown()).nullable(),
+    config: z.record(z.string(), z.unknown()),
+    author: z.string().nullable(),
+    version: z.number(),
+    id: z.string(),
+    stats: z.unknown(),
+  })
+  .passthrough();
+
+export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
+export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
 // POST /api/eval/job
 
@@ -246,8 +275,23 @@ export const SubmitRatingRequestSchema = z
   })
   .passthrough();
 
+/**
+ * Response is the persisted EvalResult row. The route returns the updated
+ * record so external SDKs/CLIs can read refreshed metrics without a follow-up
+ * fetch. The shape is permissive because EvalResult does not have a Zod
+ * schema — only the most commonly-read fields are validated.
+ */
+export const SubmitRatingResponseSchema = z
+  .object({
+    id: z.string(),
+    success: z.boolean(),
+    score: z.number(),
+  })
+  .passthrough();
+
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
+export type SubmitRatingResponse = z.infer<typeof SubmitRatingResponseSchema>;
 
 // POST /api/eval (save eval to database)
 
@@ -332,6 +376,8 @@ export const EvalSchemas = {
   Table: {
     Params: EvalIdParamSchema,
     Query: EvalTableQuerySchema,
+    Response: EvalTableResponseSchema,
+    JsonExportResponse: EvalTableJsonExportResponseSchema,
   },
   ResultDetail: {
     Params: ResultDetailParamsSchema,
@@ -348,6 +394,7 @@ export const EvalSchemas = {
   SubmitRating: {
     Params: SubmitRatingParamsSchema,
     Request: SubmitRatingRequestSchema,
+    Response: SubmitRatingResponseSchema,
   },
   Save: {
     Request: SaveEvalRequestSchema,

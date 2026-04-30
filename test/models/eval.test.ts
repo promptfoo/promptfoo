@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
+import { spansTable, tracesTable } from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
@@ -11,6 +12,7 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
+import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
@@ -44,6 +46,8 @@ describe('evaluator', () => {
     // Clear all tables before each test
     const db = getDb();
     // Delete related tables first
+    await db.run('DELETE FROM spans');
+    await db.run('DELETE FROM traces');
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -227,6 +231,30 @@ describe('evaluator', () => {
 
       const eval_2 = await Eval.findById(eval1.id);
       expect(eval_2).toBeUndefined();
+    });
+
+    it('should delete traces and spans for an evaluation', async () => {
+      const eval1 = await EvalFactory.create();
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({
+        traceId: 'trace-to-delete',
+        evaluationId: eval1.id,
+        testCaseId: 'test-case-id',
+      });
+      await traceStore.addSpans('trace-to-delete', [
+        {
+          spanId: 'span-to-delete',
+          name: 'test-span',
+          startTime: 1,
+        },
+      ]);
+
+      await eval1.delete();
+
+      const db = getDb();
+      expect(await Eval.findById(eval1.id)).toBeUndefined();
+      expect(db.select().from(tracesTable).all()).toHaveLength(0);
+      expect(db.select().from(spansTable).all()).toHaveLength(0);
     });
   });
 
