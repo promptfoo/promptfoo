@@ -193,6 +193,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 provider_path = Path(sys.argv[1])
 log_root = Path(sys.argv[2])
@@ -206,6 +207,11 @@ class FrozenDateTime:
         return datetime(2026, 1, 2, 3, 4, 5, tzinfo=tz)
 
 provider.datetime = FrozenDateTime
+uuid_values = iter([
+    "aaaaaaaa000000000000000000000000",
+    "bbbbbbbb000000000000000000000000",
+])
+provider.uuid.uuid4 = lambda: SimpleNamespace(hex=next(uuid_values))
 first = provider._new_log_dir(log_root, "libreoffice_calc")
 second = provider._new_log_dir(log_root, "libreoffice_calc")
 print(json.dumps({
@@ -223,8 +229,8 @@ print(json.dumps({
     expect(result.status).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed.first).not.toBe(parsed.second);
-    expect(parsed.first).toMatch(/^20260102T030405Z-libreoffice_calc-\d+-[0-9a-f]{8}$/);
-    expect(parsed.second).toMatch(/^20260102T030405Z-libreoffice_calc-\d+-[0-9a-f]{8}$/);
+    expect(parsed.first).toMatch(/^20260102T030405Z-libreoffice_calc-\d+-aaaaaaaa$/);
+    expect(parsed.second).toMatch(/^20260102T030405Z-libreoffice_calc-\d+-bbbbbbbb$/);
     expect(parsed.count).toBe(2);
   });
 
