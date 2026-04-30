@@ -146,7 +146,11 @@ install can still show a `NODE_MODULE_VERSION` mismatch after switching Node.js
 versions. Current promptfoo releases use a different SQLite client, but other native
 dependencies can still need rebuilding when the active Node.js version changes.
 
-### Project checkout
+### Solution: Remove npx cache and reinstall
+
+Use the repair path that matches how you run promptfoo.
+
+**Project checkout**
 
 If you are working from a checkout, switch to the repo's Node.js version first, then
 refresh dependencies for that runtime:
@@ -164,7 +168,7 @@ looks like:
 npm rebuild better-sqlite3
 ```
 
-### Global npm install
+**Global npm install**
 
 If you installed promptfoo globally with npm, reinstall it under the active Node.js
 version:
@@ -173,7 +177,7 @@ version:
 npm install -g promptfoo@latest
 ```
 
-### npx
+**npx**
 
 If the error happens with `npx promptfoo@latest`, remove the cached npx install and
 run the command again. With newer npm versions, remove only the matching cache entry:

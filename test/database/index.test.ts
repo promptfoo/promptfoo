@@ -24,6 +24,8 @@ describe('database', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(getConfigDirectoryPath).mockReset();
+    vi.mocked(getEnvBool).mockReset();
     await closeDb();
     tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-db-index-'));
     vi.mocked(getConfigDirectoryPath).mockReturnValue(tempConfigDir);
