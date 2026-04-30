@@ -467,8 +467,7 @@ function firstToolObservationMatching(
 ): AgentToolObservation | undefined {
   return observations
     .filter(
-      (observation) =>
-        observation.kind === 'tool_call' || observation.kind === 'connector_call',
+      (observation) => observation.kind === 'tool_call' || observation.kind === 'connector_call',
     )
     .map(
       (observation): AgentToolObservation => ({
@@ -740,8 +739,9 @@ function inferredGuardrailCoverageGapFindings(
     .filter(Boolean)
     .join('\n');
   const mentionedToolName =
-    guardedToolNames.find((toolName) => commandText.toLowerCase().includes(toolName.toLowerCase())) ??
-    'side-effect command';
+    guardedToolNames.find((toolName) =>
+      commandText.toLowerCase().includes(toolName.toLowerCase()),
+    ) ?? 'side-effect command';
   const hasSamePathCoverage =
     mentionedToolName !== 'side-effect command' &&
     observations.some(
