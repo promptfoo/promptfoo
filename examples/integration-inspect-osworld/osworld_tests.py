@@ -8,9 +8,16 @@ CONTAINER_EXAMPLE_PATH = "/tmp/osworld/desktop_env/example.json"
 
 
 def generate_tests():
-    """Return one Promptfoo test case per Inspect-supported OSWorld sample."""
+    """Return one Promptfoo test case per Inspect-supported small-suite sample."""
 
     dataset = _osworld_small_dataset()
+    return [_test_case(dataset[index]) for index in range(len(dataset))]
+
+
+def generate_full_tests():
+    """Return one Promptfoo test case per Inspect-supported full-suite sample."""
+
+    dataset = _osworld_full_dataset()
     return [_test_case(dataset[index]) for index in range(len(dataset))]
 
 
@@ -24,6 +31,18 @@ def _osworld_small_dataset():
         ) from exc
 
     return osworld_small().dataset
+
+
+def _osworld_full_dataset():
+    try:
+        from inspect_evals.osworld import osworld
+    except ImportError as exc:
+        raise RuntimeError(
+            "Could not import inspect_evals.osworld. Install prerequisites with "
+            "`pip install 'inspect-evals[osworld]'` before loading OSWorld tests."
+        ) from exc
+
+    return osworld(include_connected=True).dataset
 
 
 def _test_case(sample):

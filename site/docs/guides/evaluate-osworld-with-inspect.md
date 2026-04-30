@@ -14,7 +14,13 @@ The `integration-inspect-osworld` example runs an OSWorld eval through [Inspect]
 
 ## What runs
 
-The example uses Inspect's `inspect_evals/osworld_small` task, a smaller OSWorld corpus packaged for Inspect. A Python test loader asks Inspect for that dataset and generates one Promptfoo test case for each supported OSWorld sample.
+The default example uses Inspect's `inspect_evals/osworld_small` task, a smaller
+OSWorld corpus packaged for Inspect. A second config,
+`promptfooconfig.full.yaml`, switches to `inspect_evals/osworld` with
+`include_connected=true` for every Inspect-supported full-corpus sample. In the
+Inspect version used here, that means 21 default small-suite samples and 246
+full-corpus samples. That full run is still an Inspect-supported subset of the
+upstream OSWorld paper corpus, not all 369 upstream tasks.
 
 In the sample shown above, OSWorld opens `NetIncome.xlsx` in LibreOffice Calc and asks the agent to compute totals for the `Revenue` and `Total Expenses` columns on a new sheet. That is one generated row in the full suite. Inspect provides the Ubuntu desktop sandbox, screenshots, computer tool, model loop, and scorer.
 
@@ -25,7 +31,7 @@ Use a simple pass-through prompt such as `{{prompt}}` for Promptfoo's row label;
 The example is intentionally thin:
 
 1. Promptfoo calls `provider.py` once for each test case.
-2. The provider starts `inspect eval inspect_evals/osworld_small --sample-id <id>`.
+2. The provider starts `inspect eval <task> --sample-id <id>`.
 3. Inspect runs the desktop sandbox and agent loop.
 4. Inspect writes a `.eval` log with screenshots, model messages, tool calls, files, scores, and metadata.
 5. The provider runs `inspect log dump`, parses the sample score, and returns normal Promptfoo output and metadata.
@@ -33,7 +39,7 @@ The example is intentionally thin:
 
 This means Promptfoo owns orchestration and reporting. Inspect owns the agent runtime and OSWorld grading.
 
-For each generated row, the provider effectively runs:
+For each generated small-suite row, the provider effectively runs:
 
 ```bash
 inspect eval inspect_evals/osworld_small \
@@ -50,8 +56,9 @@ inspect log dump /absolute/path/to/inspect_logs/<run>/<file>.eval
 
 The example has five moving parts:
 
-- `promptfooconfig.yaml` is the Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and loads OSWorld rows from `osworld_tests.py`.
-- `osworld_tests.py` calls Inspect's OSWorld task loader and returns one Promptfoo test case per supported `osworld_small` sample, with app and sample metadata for filtering.
+- `promptfooconfig.yaml` is the small-suite Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and loads OSWorld rows from `osworld_tests.py`.
+- `promptfooconfig.full.yaml` is the full-suite entrypoint. It switches the Inspect task to `inspect_evals/osworld`, sets `include_connected=true`, and loads the full generated row list.
+- `osworld_tests.py` calls Inspect's OSWorld task loader and returns one Promptfoo test case per supported small-suite or full-corpus sample, with app and sample metadata for filtering.
 - `provider.py` is a file provider with `call_api(prompt, options, context)`. It resolves paths to absolute locations, runs Inspect, dumps the `.eval` file to JSON, and returns Promptfoo output plus metadata.
 - `assertion.py` reads `context.providerResponse.metadata.score` and turns the OSWorld scorer result into a normal Promptfoo pass or fail.
 - `inspect_logs/` is gitignored run state. Inspect stores screenshots, model messages, tool calls, files, scorer output, and token usage there.
@@ -130,6 +137,33 @@ App filters are still multi-sample runs. In the current `osworld_small` set,
 on April 29, 2026, that sequential subset took 12m31s and used 533,101 total
 tokens. Treat that as scale guidance, not a fixed benchmark.
 
+To run Inspect's full supported corpus through Promptfoo, use the dedicated
+full-suite config:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.full.yaml --no-cache --max-concurrency 3 \
+    -o osworld-full-results.json
+```
+
+On a 6-vCPU, 16-GiB Colima VM, `--max-concurrency 3` kept three desktop
+containers active without oversubscribing the machine during the reference run.
+Choose concurrency from the Docker VM's limits, not only from the host machine's
+headline CPU and memory.
+
+The full config intentionally includes connected samples, so it is more
+sensitive to runtime network conditions than the default small-suite config.
+It also raises the timeout budget because some full-suite Writer rows can exceed
+the small config's 30-minute limit:
+
+```yaml
+providers:
+  - id: file://provider.py
+    config:
+      timeout: 7500000 # Promptfoo Python worker timeout, in ms
+      timeoutSeconds: 7200 # Inspect subprocess timeout, in seconds
+```
+
 ## Configuration
 
 The provider config sets two timeouts because there are two execution layers:
@@ -159,19 +193,39 @@ defaultTest:
 tests: file://osworld_tests.py:generate_tests
 ```
 
+The full-suite config changes the task and loader together:
+
+```yaml
+providers:
+  - id: file://provider.py
+    label: OSWorld via Inspect
+    config:
+      defaultModel: openai/gpt-5.5
+      task: inspect_evals/osworld
+      taskParameters:
+        include_connected: true
+
+tests: file://osworld_tests.py:generate_full_tests
+```
+
 `osworld_tests.py` delegates sample selection to Inspect. It loads the
 supported OSWorld samples, derives app metadata from each sample's
 `example.json` path, and returns normal Promptfoo test cases:
 
 ```python title="osworld_tests.py"
 from pathlib import Path
-from inspect_evals.osworld import osworld_small
+from inspect_evals.osworld import osworld, osworld_small
 
 CONTAINER_EXAMPLE_PATH = "/tmp/osworld/desktop_env/example.json"
 
 
 def generate_tests():
     dataset = osworld_small().dataset
+    return [_test_case(dataset[index]) for index in range(len(dataset))]
+
+
+def generate_full_tests():
+    dataset = osworld(include_connected=True).dataset
     return [_test_case(dataset[index]) for index in range(len(dataset))]
 
 
@@ -215,7 +269,8 @@ Use the run scopes intentionally:
 1. `mockllm/model --limit 0` checks the Inspect CLI shape without model spend.
 2. `--filter-metadata sample_id=...` is the smallest real end-to-end validation.
 3. `--filter-metadata app=...` is a broader app slice and may include multiple samples.
-4. No filter runs the full suite and is appropriate for benchmark-style reporting.
+4. No filter on `promptfooconfig.yaml` runs the full small suite.
+5. `promptfooconfig.full.yaml` runs Inspect's full supported corpus and is the benchmark-style configuration.
 
 The example enables Promptfoo tracing directly:
 
@@ -356,6 +411,63 @@ inside Inspect's `computer` tool while executing a model-requested desktop
 command. The isolated rerun completed in 7m 44s, used 288,447 total tokens,
 returned final answer `DONE`, and failed only because the OSWorld scorer
 reported `compare_pptx_files(...) returned 0`.
+
+## Reference full-corpus GPT-5.5 run
+
+We also ran the dedicated full-suite config against every Inspect-supported
+full-corpus sample in the installed version:
+
+```bash
+promptfoo eval -c promptfooconfig.full.yaml --no-cache --max-concurrency 3 \
+  -o osworld-full-results.json
+```
+
+The reference machine exposed a 6-vCPU, 16-GiB Colima VM to Docker, so
+`--max-concurrency 3` kept three desktop sandboxes active without pushing the VM
+to saturation. Use the Docker VM's CPU and memory limits as the sizing input;
+the host machine can have much more capacity than the desktop sandboxes can
+actually use.
+
+The raw run completed all 246 selected rows on April 30, 2026 in 5h27m5s and
+used 54,421,072 total tokens. It produced 138 passes, 101 scored failures, and
+7 provider errors. After rerunning those seven rows sequentially with
+`--max-concurrency 1`, three became normal scored outcomes: one pass and two
+failures. Four reproduced as provider errors, so the reconciled result is:
+
+| Metric                       |     Result |
+| ---------------------------- | ---------: |
+| Samples                      |        246 |
+| Scored rows after reruns     |        242 |
+| Passed                       |        139 |
+| Scored failures after reruns |        103 |
+| Provider errors after reruns |          4 |
+| Pass rate over scored rows   |      57.4% |
+| Mean OSWorld score           |      0.594 |
+| Main-run wall time           |    5h27m5s |
+| Main-run token counter       | 54,421,072 |
+| Targeted rerun token counter |  1,917,890 |
+
+The repeated provider errors were useful diagnostic evidence, not failed
+benchmark attempts:
+
+- one `libreoffice_impress` row repeated an Inspect computer-tool runtime error
+- one `multi_apps` row repeated an OSWorld scorer missing-image-artifact error
+- two `vlc` rows repeated an OSWorld scorer desktop-environment error
+
+This is why the guide treats provider errors separately from scored OSWorld
+failures. Publish the raw run, the rerun policy, and the reconciled scored
+denominator together.
+
+| App                   | Samples | Passed | Scored failures | Provider errors | Mean score |
+| --------------------- | ------: | -----: | --------------: | --------------: | ---------: |
+| `gimp`                |      26 |     14 |              12 |               0 |      0.538 |
+| `libreoffice_calc`    |      47 |     34 |              13 |               0 |      0.723 |
+| `libreoffice_impress` |      46 |     26 |              19 |               1 |      0.599 |
+| `libreoffice_writer`  |      23 |     17 |               6 |               0 |      0.750 |
+| `multi_apps`          |      46 |     17 |              28 |               1 |      0.435 |
+| `os`                  |      19 |      9 |              10 |               0 |      0.474 |
+| `vlc`                 |      16 |      6 |               8 |               2 |      0.491 |
+| `vscode`              |      23 |     16 |               7 |               0 |      0.696 |
 
 ## Inspect logs
 

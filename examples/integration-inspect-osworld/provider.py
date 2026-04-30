@@ -60,11 +60,13 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         }
 
     task = config.get("task") or DEFAULT_TASK
+    task_parameters = _task_parameters(config.get("taskParameters"))
 
     eval_cmd = [
         *inspect_cmd,
         "eval",
         task,
+        *task_parameters,
         "--model",
         str(model),
         "--log-dir",
@@ -149,9 +151,27 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         }
 
     parsed = _parse_inspect_log(log_json)
+    parsed_sample_id = parsed.get("sample_id")
+    sample_id = parsed_sample_id or "unknown sample"
+    if parsed_sample_id and sample_id != str(requested_sample_id):
+        return {
+            "error": (
+                f"Inspect returned sample {sample_id}, but Promptfoo requested "
+                f"{requested_sample_id}."
+            ),
+            "metadata": {
+                "inspect_log_path": str(eval_log),
+                "status": "error",
+                "sample_id": sample_id,
+                "requested_sample_id": str(requested_sample_id),
+                "duration_seconds": round(duration, 3),
+                "task": task,
+                "app": str(app or "unknown"),
+            },
+        }
+
     score = parsed.get("score")
     status = "pass" if isinstance(score, (int, float)) and score >= 1.0 else "fail"
-    sample_id = parsed.get("sample_id") or "unknown sample"
     metadata = {
         "inspect_log_path": str(eval_log),
         "score": score,
@@ -205,6 +225,24 @@ def _inspect_command(config: dict) -> list[str]:
     return shlex.split(str(command))
 
 
+def _task_parameters(configured: Any) -> list[str]:
+    if not isinstance(configured, dict):
+        return []
+
+    parameters: list[str] = []
+    for key, value in configured.items():
+        if value is None:
+            continue
+        parameters.extend(["-T", f"{key}={_format_task_parameter_value(value)}"])
+    return parameters
+
+
+def _format_task_parameter_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return str(value).lower()
+    return str(value)
+
+
 def _resolve_base_path(config: dict) -> Path:
     configured = config.get("basePath")
     if configured:
@@ -239,13 +277,7 @@ def _parse_inspect_log(data: dict[str, Any]) -> dict[str, Any]:
     samples = data.get("samples") or []
     sample = samples[0] if samples else {}
     sample_score, score_error = _sample_score(sample) if sample else (None, None)
-    score = (
-        None
-        if score_error
-        else sample_score
-        if sample_score is not None
-        else _aggregate_score(data)
-    )
+    score = None if score_error else sample_score
     return {
         "score": score,
         "score_error": score_error,
@@ -270,19 +302,10 @@ def _sample_score(sample: dict[str, Any]) -> tuple[float | None, str | None]:
             f"Inspect recorded {OSWORLD_SCORER}, but its value was not numeric.",
         )
 
-    numeric_scores: list[tuple[str, float]] = []
-    for name, score in scores.items():
-        numeric = _score_value(score)
-        if numeric is None:
-            continue
-        numeric_scores.append((str(name), numeric))
-
-    if len(numeric_scores) == 1:
-        return numeric_scores[0][1], None
-    if len(numeric_scores) > 1:
+    if scores:
         return (
             None,
-            f"Inspect recorded multiple numeric scorer values but not {OSWORLD_SCORER}.",
+            f"Inspect did not record {OSWORLD_SCORER} for the selected sample.",
         )
     return None, None
 
@@ -291,16 +314,6 @@ def _score_value(score: Any) -> float | None:
     if not isinstance(score, dict):
         return None
     return _coerce_score(score.get("value"))
-
-
-def _aggregate_score(data: dict[str, Any]) -> float | None:
-    for score in (data.get("results") or {}).get("scores") or []:
-        metrics = score.get("metrics") or {}
-        accuracy = metrics.get("accuracy") or {}
-        numeric = _coerce_score(accuracy.get("value"))
-        if numeric is not None:
-            return numeric
-    return None
 
 
 def _coerce_score(value: Any) -> float | None:
@@ -401,8 +414,19 @@ def _summarize_inspect_error(message: str) -> str:
             "command. See the Inspect log for the full traceback and command output."
         )
 
-    first_line = message.strip().splitlines()[0] if message.strip() else message
-    return _tail(first_line, 1000)
+    if "image_original.png" in message:
+        return (
+            "OSWorld scorer could not read an expected image artifact. See the Inspect "
+            "log for the full traceback."
+        )
+
+    if "'OSWorldDesktopEnv' object has no attribute 'vm_ip'" in message:
+        return (
+            "OSWorld scorer could not read VLC desktop state. See the Inspect log for "
+            "the full traceback."
+        )
+
+    return "Inspect reported an unscored sample error. See the Inspect log for details."
 
 
 def _int_config(value: Any, default: int) -> int:

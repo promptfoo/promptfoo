@@ -28,7 +28,11 @@ You need:
 - Budget for a non-trivial model run. Start with one exact sample before expanding
   to a larger subset or the full suite.
 
-This example uses `inspect_evals/osworld_small`, the smaller OSWorld corpus supported by Inspect.
+The default config uses `inspect_evals/osworld_small`, the smaller OSWorld corpus
+supported by Inspect. `promptfooconfig.full.yaml` switches to
+`inspect_evals/osworld` with `include_connected=true`, which loads every
+Inspect-supported full-corpus sample. In the Inspect version used for this
+example, that is 246 samples, not the 369-task upstream OSWorld paper corpus.
 
 ## Run
 
@@ -71,6 +75,41 @@ PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
     -o osworld-results.json
 ```
 
+To run Inspect's full supported corpus through Promptfoo, use the dedicated
+full-suite config:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.full.yaml --no-cache --max-concurrency 3 \
+    -o osworld-full-results.json
+```
+
+That config keeps the same wrapper but switches both moving pieces that define
+the run:
+
+```yaml
+providers:
+  - id: file://provider.py
+    config:
+      task: inspect_evals/osworld
+      taskParameters:
+        include_connected: true
+
+tests: file://osworld_tests.py:generate_full_tests
+```
+
+Because the full config includes connected samples, it is more sensitive to the
+runtime network environment than the default small-suite config.
+
+The full config also uses larger timeouts than the small config:
+
+- `timeout: 7500000` gives Promptfoo's Python worker a little over two hours.
+- `timeoutSeconds: 7200` gives the inner Inspect subprocess two hours.
+
+Some full-suite Writer rows can exceed the small config's 30-minute timeout
+budget, so keep the full-suite timeouts larger than the exact-sample and
+small-suite defaults.
+
 `promptfooconfig.yaml` keeps the shared assertion and tracing metadata in
 `defaultTest`, then asks `osworld_tests.py` to generate the OSWorld rows:
 
@@ -85,11 +124,11 @@ defaultTest:
 tests: file://osworld_tests.py:generate_tests
 ```
 
-The loader calls Inspect's `osworld_small().dataset` and returns one Promptfoo
-test case per supported sample. Each row sets `vars.prompt`, `vars.app`,
-`vars.sample_id`, and matching filterable metadata. Because Inspect supplies the
-sample ids, updating `inspect-evals` updates the generated row list without
-maintaining a local copy.
+The loader calls Inspect's `osworld_small().dataset` or
+`osworld(include_connected=True).dataset` and returns one Promptfoo test case per
+supported sample. Each row sets `vars.prompt`, `vars.app`, `vars.sample_id`, and
+matching filterable metadata. Because Inspect supplies the sample ids, updating
+`inspect-evals` updates the generated row list without maintaining a local copy.
 
 The default config runs the full Inspect-supported `osworld_small` suite, which
 is 21 samples in the version used for the reference run below. To run a broader
@@ -117,7 +156,8 @@ Use the run scopes intentionally:
 1. `mockllm/model --limit 0` checks the Inspect CLI shape without model spend.
 2. `--filter-metadata sample_id=...` is the smallest real end-to-end validation.
 3. `--filter-metadata app=...` is a broader app slice and may include multiple samples.
-4. No filter runs the full suite and is appropriate for benchmark-style reporting.
+4. No filter on `promptfooconfig.yaml` runs the full small suite.
+5. `promptfooconfig.full.yaml` runs Inspect's full supported corpus and is the benchmark-style configuration.
 
 The example config sets two timeouts because both layers need enough time:
 
@@ -173,6 +213,22 @@ For larger benchmark reports, rerun provider-error samples by exact `sample_id`
 before publishing a pass rate. Count reruns that produce an OSWorld score as
 normal passes or failures, and keep repeated provider errors separate from
 scored benchmark failures.
+
+For the full supported corpus, a local GPT-5.5 run on April 30, 2026 used
+`promptfooconfig.full.yaml`, `--max-concurrency 3`, and a 6-vCPU / 16-GiB
+Colima VM. The 246-sample run took 5h27m5s and used 54,421,072 total tokens.
+The raw run ended at 138 passes, 101 scored failures, and 7 provider errors.
+Rerunning those seven rows one at a time recovered one pass and two ordinary
+scored failures; four rows repeated as provider errors. The reconciled report
+was therefore 139 passes, 103 scored failures, 4 provider errors, and mean
+OSWorld score `0.594` across the 242 scored rows. The seven targeted reruns
+added 1,917,890 tokens.
+
+The repeated provider errors were not model failures: one row reproduced an
+Inspect computer-tool runtime error, one row reproduced an OSWorld scorer
+missing-image-artifact error, and two VLC rows reproduced an OSWorld scorer
+environment error. Keep those rows outside the scored denominator unless a
+later rerun produces an OSWorld score.
 
 ## Inspect logs and traces
 
