@@ -42,9 +42,8 @@ export async function writeResultsToDatabase(
   const evalId = createEvalId(createdAt);
   const db = await getDb();
 
-  const promises = [];
-  promises.push(
-    db
+  await db.transaction(async (tx) => {
+    await tx
       .insert(evalsTable)
       .values({
         id: evalId,
@@ -55,88 +54,78 @@ export async function writeResultsToDatabase(
         results,
       })
       .onConflictDoNothing()
-      .run(),
-  );
+      .run();
 
-  logger.debug(`Inserting eval ${evalId}`);
+    logger.debug(`Inserting eval ${evalId}`);
 
-  // Record prompt relation
-  invariant(results.table, 'Table is required');
+    // Record prompt relation
+    invariant(results.table, 'Table is required');
 
-  for (const prompt of results.table.head.prompts) {
-    const label = prompt.label || prompt.display || prompt.raw;
-    const promptId = generateIdFromPrompt(prompt);
+    for (const prompt of results.table.head.prompts) {
+      const label = prompt.label || prompt.display || prompt.raw;
+      const promptId = generateIdFromPrompt(prompt);
 
-    promises.push(
-      db
+      await tx
         .insert(promptsTable)
         .values({
           id: promptId,
           prompt: label,
         })
         .onConflictDoNothing()
-        .run(),
-    );
+        .run();
 
-    promises.push(
-      db
+      await tx
         .insert(evalsToPromptsTable)
         .values({
           evalId,
           promptId,
         })
         .onConflictDoNothing()
-        .run(),
-    );
+        .run();
 
-    logger.debug(`Inserting prompt ${promptId}`);
-  }
+      logger.debug(`Inserting prompt ${promptId}`);
+    }
 
-  // Record dataset relation
-  const datasetId = sha256(JSON.stringify(config.tests || []));
-  const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
+    // Record dataset relation
+    const datasetId = sha256(JSON.stringify(config.tests || []));
+    const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
 
-  // Log when non-array tests are converted to empty array for database storage
-  if (config.tests && !Array.isArray(config.tests)) {
-    const testsType = typeof config.tests;
-    const hasPath =
-      typeof config.tests === 'object' && config.tests !== null && 'path' in config.tests;
-    logger.debug(
-      `Converting non-array test configuration to empty array for database storage. Type: ${testsType}, hasPath: ${hasPath}`,
-    );
-  }
+    // Log when non-array tests are converted to empty array for database storage
+    if (config.tests && !Array.isArray(config.tests)) {
+      const testsType = typeof config.tests;
+      const hasPath =
+        typeof config.tests === 'object' && config.tests !== null && 'path' in config.tests;
+      logger.debug(
+        `Converting non-array test configuration to empty array for database storage. Type: ${testsType}, hasPath: ${hasPath}`,
+      );
+    }
 
-  promises.push(
-    db
+    await tx
       .insert(datasetsTable)
       .values({
         id: datasetId,
         tests: testsForStorage,
       })
       .onConflictDoNothing()
-      .run(),
-  );
+      .run();
 
-  promises.push(
-    db
+    await tx
       .insert(evalsToDatasetsTable)
       .values({
         evalId,
         datasetId,
       })
       .onConflictDoNothing()
-      .run(),
-  );
+      .run();
 
-  logger.debug(`Inserting dataset ${datasetId}`);
+    logger.debug(`Inserting dataset ${datasetId}`);
 
-  // Record tags
-  if (config.tags) {
-    for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-      const tagId = sha256(`${tagKey}:${tagValue}`);
+    // Record tags
+    if (config.tags) {
+      for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+        const tagId = sha256(`${tagKey}:${tagValue}`);
 
-      promises.push(
-        db
+        await tx
           .insert(tagsTable)
           .values({
             id: tagId,
@@ -144,26 +133,21 @@ export async function writeResultsToDatabase(
             value: tagValue,
           })
           .onConflictDoNothing()
-          .run(),
-      );
+          .run();
 
-      promises.push(
-        db
+        await tx
           .insert(evalsToTagsTable)
           .values({
             evalId,
             tagId,
           })
           .onConflictDoNothing()
-          .run(),
-      );
+          .run();
 
-      logger.debug(`Inserting tag ${tagId}`);
+        logger.debug(`Inserting tag ${tagId}`);
+      }
     }
-  }
-
-  logger.debug(`Awaiting ${promises.length} promises to database...`);
-  await Promise.all(promises);
+  });
 
   return evalId;
 }
