@@ -1,7 +1,7 @@
 import * as path from 'path';
 
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { type Client, createClient } from '@libsql/client/node';
+import { drizzle } from 'drizzle-orm/libsql/node';
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
@@ -16,7 +16,8 @@ export class DrizzleLogWriter implements LogWriter {
 }
 
 let dbInstance: ReturnType<typeof drizzle> | null = null;
-let sqliteInstance: Database.Database | null = null;
+let dbPromise: Promise<ReturnType<typeof drizzle>> | null = null;
+let sqliteInstance: Client | null = null;
 
 export function getDbPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'promptfoo.db');
@@ -26,63 +27,100 @@ export function getDbSignalPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
 }
 
-export function getDb() {
-  if (!dbInstance) {
-    const isMemoryDb = getEnvBool('IS_TESTING');
-    const dbPath = isMemoryDb ? ':memory:' : getDbPath();
+async function configureDatabase(client: Client, skipWalMode: boolean): Promise<void> {
+  // Enable foreign key constraints (required for referential integrity)
+  await client.execute('PRAGMA foreign_keys = ON');
 
-    sqliteInstance = new Database(dbPath);
+  // Configure WAL mode unless explicitly disabled or using in-memory database
+  if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
+    try {
+      // Enable WAL mode for better concurrency
+      await client.execute('PRAGMA journal_mode = WAL');
 
-    // Enable foreign key constraints (required for referential integrity)
-    sqliteInstance.pragma('foreign_keys = ON');
+      // Verify WAL mode was actually enabled
+      const result = await client.execute('PRAGMA journal_mode');
+      const journalMode = String(result.rows[0]?.journal_mode ?? '');
 
-    // Configure WAL mode unless explicitly disabled or using in-memory database
-    if (!isMemoryDb && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
-      try {
-        // Enable WAL mode for better concurrency
-        sqliteInstance.pragma('journal_mode = WAL');
-
-        // Verify WAL mode was actually enabled
-        const result = sqliteInstance.prepare('PRAGMA journal_mode').get() as {
-          journal_mode: string;
-        };
-
-        if (result.journal_mode.toLowerCase() === 'wal') {
-          logger.debug('Successfully enabled SQLite WAL mode');
-        } else {
-          logger.warn(
-            `Failed to enable WAL mode (got '${result.journal_mode}'). ` +
-              'Database performance may be reduced. This can happen on network filesystems. ' +
-              'Set PROMPTFOO_DISABLE_WAL_MODE=true to suppress this warning.',
-          );
-        }
-
-        // Additional WAL configuration for optimal performance
-        sqliteInstance.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
-        sqliteInstance.pragma('synchronous = NORMAL'); // Good balance of safety and speed with WAL
-      } catch (err) {
+      if (journalMode.toLowerCase() === 'wal') {
+        logger.debug('Successfully enabled SQLite WAL mode');
+      } else {
         logger.warn(
-          `Error configuring SQLite WAL mode: ${err}. ` +
-            'Database will use default journal mode. Performance may be reduced. ' +
-            'This can happen on network filesystems or certain containerized environments. ' +
+          `Failed to enable WAL mode (got '${journalMode}'). ` +
+            'Database performance may be reduced. This can happen on network filesystems. ' +
             'Set PROMPTFOO_DISABLE_WAL_MODE=true to suppress this warning.',
         );
       }
+
+      // Additional WAL configuration for optimal performance
+      await client.execute('PRAGMA wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
+      await client.execute('PRAGMA synchronous = NORMAL'); // Good balance of safety and speed with WAL
+    } catch (err) {
+      logger.warn(
+        `Error configuring SQLite WAL mode: ${err}. ` +
+          'Database will use default journal mode. Performance may be reduced. ' +
+          'This can happen on network filesystems or certain containerized environments. ' +
+          'Set PROMPTFOO_DISABLE_WAL_MODE=true to suppress this warning.',
+      );
+    }
+  }
+}
+
+function serializeTransactions(db: ReturnType<typeof drizzle>): ReturnType<typeof drizzle> {
+  const transaction = db.transaction.bind(db);
+  let transactionQueue = Promise.resolve();
+
+  // better-sqlite3 executed all writes synchronously on one connection. libsql opens a
+  // fresh connection for each top-level transaction, so overlapping transactions on the
+  // shared client can otherwise fail immediately with SQLITE_BUSY.
+  db.transaction = ((callback, config) => {
+    const result = transactionQueue.then(() => transaction(callback, config));
+    transactionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }) as typeof db.transaction;
+
+  return db;
+}
+
+export async function getDb() {
+  if (!dbInstance) {
+    if (!dbPromise) {
+      dbPromise = (async () => {
+        const isTesting = getEnvBool('IS_TESTING');
+        // libsql opens fresh connections for top-level transactions, so tests need a
+        // shared in-memory database rather than connection-local `:memory:`.
+        const dbUrl = isTesting ? 'file::memory:?cache=shared' : `file:${getDbPath()}`;
+        const client = createClient({ url: dbUrl });
+        sqliteInstance = client;
+
+        await configureDatabase(client, isTesting);
+
+        const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
+        dbInstance = serializeTransactions(drizzle(client, { logger: drizzleLogger }));
+        return dbInstance;
+      })().catch((error) => {
+        sqliteInstance?.close();
+        sqliteInstance = null;
+        dbInstance = null;
+        dbPromise = null;
+        throw error;
+      });
     }
 
-    const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
-    dbInstance = drizzle(sqliteInstance, { logger: drizzleLogger });
+    return dbPromise;
   }
   return dbInstance;
 }
 
-export function closeDb() {
+export async function closeDb() {
   if (sqliteInstance) {
     try {
       // Attempt to checkpoint WAL file before closing
       if (!getEnvBool('IS_TESTING') && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
-          sqliteInstance.pragma('wal_checkpoint(TRUNCATE)');
+          await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
           logger.debug('Successfully checkpointed WAL file before closing');
         } catch (err) {
           logger.debug(`Could not checkpoint WAL file: ${err}`);
@@ -98,6 +136,7 @@ export function closeDb() {
     } finally {
       sqliteInstance = null;
       dbInstance = null;
+      dbPromise = null;
     }
   }
 }
@@ -114,8 +153,8 @@ export function isDbOpen(): boolean {
  * Safe to call even if database was never opened
  * Should be called during graceful shutdown to prevent event loop hanging
  */
-export function closeDbIfOpen(): void {
+export async function closeDbIfOpen(): Promise<void> {
   if (sqliteInstance) {
-    closeDb();
+    await closeDb();
   }
 }

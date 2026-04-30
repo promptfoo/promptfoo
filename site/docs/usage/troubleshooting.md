@@ -141,30 +141,28 @@ prompts:
 
 ## Node.js version mismatch error
 
-You might encounter this error after switching Node.js versions:
-
-```text
-Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
-was compiled against a different Node.js version using
-NODE_MODULE_VERSION 115. This version of Node.js requires
-NODE_MODULE_VERSION 127. Please try re-compiling or re-installing
-the module (for instance, using `npm rebuild` or `npm install`).
-```
-
-This happens because promptfoo uses native code modules such as `better-sqlite3`,
-which must be compiled for the active Node.js version.
+Older promptfoo versions used native SQLite bindings, so an older checkout or cached
+install can still show a `NODE_MODULE_VERSION` mismatch after switching Node.js
+versions. Current promptfoo releases use a different SQLite client, but other native
+dependencies can still need rebuilding when the active Node.js version changes.
 
 ### Project checkout
 
-If you are running promptfoo from a local checkout, switch to the Node.js version
-you intend to use, then rebuild the native dependency:
+If you are working from a checkout, switch to the repo's Node.js version first, then
+refresh dependencies for that runtime:
+
+```bash
+nvm use
+npm install
+```
+
+If the error names a specific native dependency, rebuild that package for the active
+Node.js version. For older promptfoo checkouts that still use `better-sqlite3`, that
+looks like:
 
 ```bash
 npm rebuild better-sqlite3
 ```
-
-If the project includes an `.nvmrc`, run `nvm use` first so the active Node.js version
-matches the project before rebuilding.
 
 ### Global npm install
 
@@ -193,11 +191,9 @@ version does not support `npm cache npx`, remove the older npx cache directory i
 rm -rf ~/.npm/_npx && npx -y promptfoo@latest
 ```
 
-This forces a fresh install for the current Node.js version.
-
 ## Native build failures
 
-Some dependencies like [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) include native code that must compile locally. Ensure your machine has a C/C++ build toolchain:
+Some dependencies include native code that may need to compile locally. Ensure your machine has a C/C++ build toolchain:
 
 - **Ubuntu/Debian**: `sudo apt-get install build-essential`
 - **macOS**: `xcode-select --install`

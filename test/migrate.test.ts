@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
-const mockGetDb = vi.fn().mockReturnValue(mockDb);
+const mockGetDb = vi.fn().mockResolvedValue(mockDb);
 const mockGetDirectory = vi.fn();
 const mockLogger = {
   debug: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock('../src/logger', () => ({
   default: mockLogger,
 }));
 
-vi.mock('drizzle-orm/better-sqlite3/migrator', () => ({
+vi.mock('drizzle-orm/libsql/migrator', () => ({
   migrate: mockMigrate,
 }));
 
@@ -34,7 +34,7 @@ describe('migrate', () => {
     vi.resetModules();
     vi.clearAllMocks();
     // Reset mock implementations to defaults
-    mockGetDb.mockReturnValue(mockDb);
+    mockGetDb.mockResolvedValue(mockDb);
     mockMigrate.mockReset();
     mockGetDirectory.mockReset();
   });
@@ -102,9 +102,7 @@ describe('migrate', () => {
 
     it('should reject with error when getDb fails', async () => {
       const dbError = new Error('Database connection failed');
-      mockGetDb.mockImplementation(() => {
-        throw dbError;
-      });
+      mockGetDb.mockRejectedValue(dbError);
       mockGetDirectory.mockReturnValue('/project/src');
 
       const { runDbMigrations } = await import('../src/migrate');
@@ -116,39 +114,9 @@ describe('migrate', () => {
       expect(mockMigrate).not.toHaveBeenCalled();
     });
 
-    it('should log native addon ABI mismatches without labeling them as migration failures', async () => {
-      const nativeAddonError = new Error(
-        [
-          "The module '/tmp/node_modules/better-sqlite3/build/Release/better_sqlite3.node'",
-          'was compiled against a different Node.js version using',
-          'NODE_MODULE_VERSION 115. This version of Node.js requires',
-          'NODE_MODULE_VERSION 137.',
-        ].join('\n'),
-      );
-      mockGetDb.mockImplementation(() => {
-        throw nativeAddonError;
-      });
-      mockGetDirectory.mockReturnValue('/project/src');
-
-      const { runDbMigrations } = await import('../src/migrate');
-      await expect(runDbMigrations()).rejects.toThrow('NODE_MODULE_VERSION 115');
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
-        {
-          currentNodeVersion: process.version,
-          currentNodeAbi: '137',
-          installedBetterSqlite3Abi: '115',
-        },
-      );
-      expect(mockMigrate).not.toHaveBeenCalled();
-    });
-
     it('should reject with error when migrate fails', async () => {
       const migrationError = new Error('Migration failed: syntax error');
-      mockMigrate.mockImplementation(() => {
-        throw migrationError;
-      });
+      mockMigrate.mockRejectedValue(migrationError);
       mockGetDirectory.mockReturnValue('/project/src');
 
       const { runDbMigrations } = await import('../src/migrate');
@@ -198,7 +166,7 @@ describe('migrate', () => {
 
     it('should pass the correct database instance to migrate', async () => {
       const specificDb = { id: 'test-db-instance', prepare: vi.fn() };
-      mockGetDb.mockReturnValue(specificDb);
+      mockGetDb.mockResolvedValue(specificDb);
       mockGetDirectory.mockReturnValue('/project/src');
 
       const { runDbMigrations } = await import('../src/migrate');

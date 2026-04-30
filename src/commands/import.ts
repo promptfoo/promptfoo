@@ -69,7 +69,7 @@ export function importCommand(program: Command) {
     .option('--new-id', 'Generate a new eval ID instead of preserving the original')
     .option('--force', 'Replace existing eval with the same ID')
     .action(async (file, cmdObj) => {
-      const db = getDb();
+      const db = await getDb();
       let evalId: string;
       try {
         const fileContent = await fs.readFile(file, 'utf-8');

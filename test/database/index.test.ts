@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,10 +20,13 @@ vi.mock('../../src/logger');
 vi.mock('../../src/util/config/manage');
 
 describe('database', () => {
-  beforeEach(() => {
+  let tempConfigDir: string;
+
+  beforeEach(async () => {
     vi.clearAllMocks();
-    closeDb();
-    vi.mocked(getConfigDirectoryPath).mockReturnValue('/test/config/path');
+    await closeDb();
+    tempConfigDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-db-index-'));
+    vi.mocked(getConfigDirectoryPath).mockReturnValue(tempConfigDir);
     vi.mocked(getEnvBool).mockImplementation((key) => {
       if (key === 'IS_TESTING') {
         return true;
@@ -30,8 +35,9 @@ describe('database', () => {
     });
   });
 
-  afterEach(() => {
-    closeDb();
+  afterEach(async () => {
+    await closeDb();
+    fs.rmSync(tempConfigDir, { force: true, recursive: true });
   });
 
   describe('getDbPath', () => {
@@ -62,20 +68,44 @@ describe('database', () => {
       });
     });
 
-    it('should return in-memory database when testing', () => {
-      const db = getDb();
+    it('should return a database when testing', async () => {
+      const db = await getDb();
       expect(db).toBeDefined();
     });
 
-    it('should initialize database with WAL mode', () => {
-      const db = getDb();
+    it('should use an in-memory database when testing', async () => {
+      await getDb();
+
+      expect(fs.existsSync(getDbPath())).toBe(false);
+    });
+
+    it('should initialize database with WAL mode', async () => {
+      const db = await getDb();
       expect(db).toBeDefined();
     });
 
-    it('should return same instance on subsequent calls', () => {
-      const db1 = getDb();
-      const db2 = getDb();
+    it('should return same instance on subsequent calls', async () => {
+      const db1 = await getDb();
+      const db2 = await getDb();
       expect(db1).toBe(db2);
+    });
+
+    it('should serialize concurrent top-level transactions', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE transaction_queue_test (id TEXT PRIMARY KEY)');
+
+      await Promise.all([
+        db.transaction(async (tx) => {
+          await tx.run("INSERT INTO transaction_queue_test (id) VALUES ('a')");
+        }),
+        db.transaction(async (tx) => {
+          await tx.run("INSERT INTO transaction_queue_test (id) VALUES ('b')");
+        }),
+      ]);
+
+      await expect(
+        db.all<{ id: string }>('SELECT id FROM transaction_queue_test ORDER BY id'),
+      ).resolves.toEqual([{ id: 'a' }, { id: 'b' }]);
     });
   });
 
@@ -101,47 +131,47 @@ describe('database', () => {
   });
 
   describe('closeDb', () => {
-    it('should close database connection and reset instances', () => {
-      const _db = getDb();
+    it('should close database connection and reset instances', async () => {
+      const _db = await getDb();
       expect(isDbOpen()).toBe(true);
-      closeDb();
+      await closeDb();
       expect(isDbOpen()).toBe(false);
-      const newDb = getDb();
+      const newDb = await getDb();
       expect(newDb).toBeDefined();
       expect(isDbOpen()).toBe(true);
     });
 
-    it('should handle errors when closing database', () => {
-      const _db = getDb();
-      closeDb();
-      closeDb(); // Second close should be handled gracefully
+    it('should handle errors when closing database', async () => {
+      const _db = await getDb();
+      await closeDb();
+      await closeDb(); // Second close should be handled gracefully
       expect(logger.error).not.toHaveBeenCalled();
     });
 
-    it('should handle close errors gracefully', () => {
-      const _db = getDb();
+    it('should handle close errors gracefully', async () => {
+      const _db = await getDb();
       // Force an error by closing twice
-      closeDb();
-      closeDb();
+      await closeDb();
+      await closeDb();
       expect(logger.error).not.toHaveBeenCalled();
     });
   });
 
   describe('isDbOpen', () => {
-    it('should return false when database is not initialized', () => {
-      closeDb(); // Ensure clean state
+    it('should return false when database is not initialized', async () => {
+      await closeDb(); // Ensure clean state
       expect(isDbOpen()).toBe(false);
     });
 
-    it('should return true when database is open', () => {
-      const _db = getDb();
+    it('should return true when database is open', async () => {
+      const _db = await getDb();
       expect(isDbOpen()).toBe(true);
     });
 
-    it('should return false after closing database', () => {
-      const _db = getDb();
+    it('should return false after closing database', async () => {
+      const _db = await getDb();
       expect(isDbOpen()).toBe(true);
-      closeDb();
+      await closeDb();
       expect(isDbOpen()).toBe(false);
     });
   });

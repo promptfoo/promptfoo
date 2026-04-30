@@ -100,6 +100,32 @@ describe('eval routes', () => {
     return payload;
   }
 
+  describe('POST /', () => {
+    it('returns 500 when v4 prompt persistence fails', async () => {
+      const createSpy = vi.spyOn(Eval, 'create');
+      vi.spyOn(Eval.prototype, 'addPrompts').mockRejectedValueOnce(
+        new Error('prompt persistence failed'),
+      );
+
+      const res = await api.post('/api/eval').send({
+        config: {
+          description: 'v4 save test',
+          tests: [],
+        },
+        prompts: [{ raw: 'hello', label: 'hello' }],
+        results: [],
+      });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to write eval to database' });
+
+      const createdEval = await createSpy.mock.results[0]?.value;
+      if (createdEval) {
+        testEvalIds.add(createdEval.id);
+      }
+    });
+  });
+
   describe('post("/:evalId/results/:id/rating")', () => {
     it('rejects result ratings when the URL eval does not own the result', async () => {
       const evalA = await EvalFactory.create();
@@ -427,7 +453,7 @@ describe('eval routes', () => {
 
       // Add eval results with metadata using direct database insert
       const { getDb } = await import('../../src/database');
-      const db = getDb();
+      const db = await getDb();
       await db.run(
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,

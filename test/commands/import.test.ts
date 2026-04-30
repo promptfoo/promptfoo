@@ -38,14 +38,14 @@ describe('importCommand', () => {
     process.exitCode = undefined;
 
     // Clear all tables before each test
-    const db = getDb();
+    const db = await getDb();
     // Delete related tables first
-    db.run('DELETE FROM eval_results');
-    db.run('DELETE FROM evals_to_datasets');
-    db.run('DELETE FROM evals_to_prompts');
-    db.run('DELETE FROM evals_to_tags');
+    await db.run('DELETE FROM eval_results');
+    await db.run('DELETE FROM evals_to_datasets');
+    await db.run('DELETE FROM evals_to_prompts');
+    await db.run('DELETE FROM evals_to_tags');
     // Then delete from main table
-    db.run('DELETE FROM evals');
+    await db.run('DELETE FROM evals');
   });
 
   afterEach(() => {

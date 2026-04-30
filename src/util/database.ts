@@ -40,7 +40,7 @@ export async function writeResultsToDatabase(
 ): Promise<string> {
   createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
   const evalId = createEvalId(createdAt);
-  const db = getDb();
+  const db = await getDb();
 
   const promises = [];
   promises.push(
@@ -383,7 +383,7 @@ async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<EvalWithMetadata[]> {
-  const db = getDb();
+  const db = await getDb();
   const evals_ = await db
     .select({
       id: evalsTable.id,
@@ -441,20 +441,20 @@ export async function getEvalFromId(hash: string) {
 }
 
 export async function deleteEval(evalId: string) {
-  const db = getDb();
-  db.transaction(() => {
+  const db = await getDb();
+  await db.transaction(async (tx) => {
     // Clean up FK-referenced rows first; not all relationships have onDelete: 'cascade'.
     // Spans and traces in particular must be removed before the eval row, otherwise
     // SQLite raises "FOREIGN KEY constraint failed" (foreign_keys pragma is ON).
-    deleteTraceRecordsForEvals(db, [evalId]);
-    db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
-    db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
-    db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
-    db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+    await deleteTraceRecordsForEvals(tx, [evalId]);
+    await tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
+    await tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
+    await tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
+    await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
 
     // Finally, delete the eval record
-    const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
-    if (deletedIds.changes === 0) {
+    const deletedIds = await tx.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
+    if (deletedIds.rowsAffected === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
@@ -464,15 +464,15 @@ export async function deleteEval(evalId: string) {
  * Deletes evals by their IDs.
  * @param ids - The IDs of the evals to delete.
  */
-export function deleteEvals(ids: string[]) {
-  const db = getDb();
-  db.transaction(() => {
-    deleteTraceRecordsForEvals(db, ids);
-    db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
-    db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
-    db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
-    db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
-    db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
+export async function deleteEvals(ids: string[]): Promise<void> {
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await deleteTraceRecordsForEvals(tx, ids);
+    await tx.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
+    await tx.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
+    await tx.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
+    await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
+    await tx.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
 }
 
@@ -482,15 +482,15 @@ export function deleteEvals(ids: string[]) {
  * @returns {Promise<void>}
  */
 export async function deleteAllEvals(): Promise<void> {
-  const db = getDb();
-  db.transaction(() => {
-    db.delete(spansTable).run();
-    db.delete(tracesTable).run();
-    db.delete(evalResultsTable).run();
-    db.delete(evalsToPromptsTable).run();
-    db.delete(evalsToDatasetsTable).run();
-    db.delete(evalsToTagsTable).run();
-    db.delete(evalsTable).run();
+  const db = await getDb();
+  await db.transaction(async (tx) => {
+    await tx.delete(spansTable).run();
+    await tx.delete(tracesTable).run();
+    await tx.delete(evalResultsTable).run();
+    await tx.delete(evalsToPromptsTable).run();
+    await tx.delete(evalsToDatasetsTable).run();
+    await tx.delete(evalsToTagsTable).run();
+    await tx.delete(evalsTable).run();
   });
 }
 
@@ -531,8 +531,8 @@ export async function getStandaloneEvals({
     return cachedResult;
   }
 
-  const db = getDb();
-  const results = db
+  const db = await getDb();
+  const results = await db
     .select({
       evalId: evalsTable.id,
       description: evalsTable.description,

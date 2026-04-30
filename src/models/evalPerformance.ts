@@ -42,11 +42,11 @@ export async function getCachedResultsCount(evalId: string): Promise<number> {
     return cached.count;
   }
 
-  const db = getDb();
+  const db = await getDb();
   const start = Date.now();
 
   // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
-  const result = db
+  const result = await db
     .select({ count: sql<number>`COUNT(DISTINCT test_idx)` })
     .from(evalResultsTable)
     .where(sql`eval_id = ${evalId}`)
@@ -79,11 +79,11 @@ export async function getTotalResultRowCount(evalId: string): Promise<number> {
     return cached.count;
   }
 
-  const db = getDb();
+  const db = await getDb();
   const start = Date.now();
 
   // Count all result rows - use this when iterating over all results
-  const result = db
+  const result = await db
     .select({ count: sql<number>`COUNT(*)` })
     .from(evalResultsTable)
     .where(sql`eval_id = ${evalId}`)
@@ -121,7 +121,7 @@ export async function queryTestIndicesOptimized(
     filters?: string[];
   },
 ): Promise<{ testIndices: number[]; filteredCount: number }> {
-  const db = getDb();
+  const db = await getDb();
   const offset = opts.offset ?? 0;
   const limit = opts.limit ?? 50;
   const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
@@ -166,7 +166,7 @@ export async function queryTestIndicesOptimized(
     WHERE ${whereClause}
   `;
 
-  const countResult = db.all<CountResult>(countQuery);
+  const countResult = await db.all<CountResult>(countQuery);
   const filteredCount = Number(countResult[0]?.count ?? 0);
   logger.debug(`Optimized count query took ${Date.now() - countStart}ms`);
 
@@ -181,7 +181,7 @@ export async function queryTestIndicesOptimized(
     OFFSET ${offset}
   `;
 
-  const rows = db.all<TestIndexRow>(idxQuery);
+  const rows = await db.all<TestIndexRow>(idxQuery);
   const testIndices = rows.map((row) => row.test_idx);
   logger.debug(`Optimized index query took ${Date.now() - idxStart}ms`);
 

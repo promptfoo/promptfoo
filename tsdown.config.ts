@@ -88,7 +88,6 @@ export default defineConfig([
       /^[a-z@][^:]*/,
       // Ensure critical native deps remain external
       '@huggingface/transformers',
-      'better-sqlite3',
       'playwright',
       'sharp',
       '@swc/core',
