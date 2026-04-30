@@ -74,7 +74,7 @@ describe('GitHub Models Default Providers', () => {
     const providers = await getDefaultProviders();
 
     // Should use OpenAI, not GitHub
-    expect(providers.gradingProvider.id()).toBe('openai:gpt-5.4-2026-03-05');
+    expect(providers.gradingProvider.id()).toBe('openai:gpt-5.5-2026-04-23');
   });
 
   it('should prefer Anthropic over GitHub when Anthropic is available', async () => {

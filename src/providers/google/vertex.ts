@@ -18,7 +18,7 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
@@ -345,7 +345,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json; charset=utf-8',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
 
       data = res.data as ClaudeResponse;
@@ -550,7 +550,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             method: 'POST',
             headers: await this.getAuthHeaders(),
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            signal: AbortSignal.timeout(getRequestTimeoutMs()),
           });
 
           if (!res.ok) {
@@ -573,7 +573,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             url,
             method: 'POST',
             data: body,
-            timeout: REQUEST_TIMEOUT_MS,
+            timeout: getRequestTimeoutMs(),
           });
           data = res.data as GeminiApiResponse;
         }
@@ -882,7 +882,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
       data = res.data as Palm2ApiResponse;
     } catch (err) {
@@ -1025,7 +1025,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json; charset=utf-8',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
 
       data = res.data as LlamaResponse;
