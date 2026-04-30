@@ -797,7 +797,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('ScanResponse', ModelAuditSchemas.Scan.Response),
       400: validationError(),
-      500: jsonResponse('ScanErrorResponse', ModelAuditSchemas.Scan.ErrorResponse),
+      500: jsonResponse('ScanErrorResponse', ModelAuditSchemas.Scan.ErrorResponse, 'Server error'),
     },
   });
 
@@ -938,7 +938,7 @@ export function createServerOpenApiRegistry() {
         'TestRequestTransformResponse',
         ProviderSchemas.TestRequestTransform.Response,
       ),
-      400: jsonResponse('ProviderTransformErrorResponse', ErrorResponseSchema),
+      400: errorResponse('Validation error'),
     },
   });
 
@@ -956,7 +956,7 @@ export function createServerOpenApiRegistry() {
         'TestResponseTransformResponse',
         ProviderSchemas.TestResponseTransform.Response,
       ),
-      400: jsonResponse('ProviderTransformErrorResponse', ErrorResponseSchema),
+      400: errorResponse('Validation error'),
     },
   });
 
@@ -1254,7 +1254,13 @@ export function createServerOpenApiRegistry() {
   return { registry, routes };
 }
 
-export function createServerOpenApiDocument() {
+type CreateServerOpenApiDocumentOptions = {
+  version?: string;
+};
+
+export function createServerOpenApiDocument({
+  version = VERSION,
+}: CreateServerOpenApiDocumentOptions = {}) {
   const { registry } = createServerOpenApiRegistry();
   const generator = new OpenApiGeneratorV31(registry.definitions, {
     sortComponents: 'alphabetically',
@@ -1265,7 +1271,7 @@ export function createServerOpenApiDocument() {
     openapi: SERVER_OPENAPI_VERSION,
     info: {
       title: 'Promptfoo Local Server API',
-      version: VERSION,
+      version,
       description:
         'OpenAPI document generated from the shared Zod DTO schemas used by the Promptfoo local server and web UI.',
     },

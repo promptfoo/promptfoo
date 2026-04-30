@@ -215,6 +215,31 @@ describe('server OpenAPI generation', () => {
     );
   });
 
+  it('does not describe error responses as successful', () => {
+    const paths = createServerOpenApiDocument().paths ?? {};
+
+    for (const pathItem of Object.values(paths)) {
+      for (const operation of Object.values(pathItem ?? {})) {
+        if (!operation || typeof operation !== 'object' || !('responses' in operation)) {
+          continue;
+        }
+
+        for (const [status, response] of Object.entries(operation.responses ?? {})) {
+          if (
+            !/^[45]\d\d$/.test(status) ||
+            !response ||
+            typeof response !== 'object' ||
+            !('description' in response)
+          ) {
+            continue;
+          }
+
+          expect(response.description).not.toBe('Successful response');
+        }
+      }
+    }
+  });
+
   it('documents explicit server-error response paths', () => {
     const paths = createServerOpenApiDocument().paths ?? {};
     const explicitServerErrorOperations = [
