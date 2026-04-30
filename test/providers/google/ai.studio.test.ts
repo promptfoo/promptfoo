@@ -1939,6 +1939,7 @@ describe('AIStudioChatProvider', () => {
 describe('AIStudioEmbeddingProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cache.fetchWithCache).mockReset();
     mockProcessEnv({ GOOGLE_API_KEY: 'test-key' });
   });
 
@@ -2013,6 +2014,24 @@ describe('AIStudioEmbeddingProvider', () => {
     const response = await provider.callEmbeddingApi('hello');
     expect(response.error).toContain('Google API key is not set');
     expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-string embedding inputs before making a request', async () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi(123 as any);
+
+    expect(response.error).toContain('Invalid input type for embedding API');
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('surfaces fetch failures as API call errors', async () => {
+    vi.mocked(cache.fetchWithCache).mockRejectedValue(new Error('network down'));
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello');
+
+    expect(response.embedding).toBeUndefined();
+    expect(response.error).toContain('API call error: Error: network down');
   });
 
   it('surfaces a descriptive error when the response has no values', async () => {
