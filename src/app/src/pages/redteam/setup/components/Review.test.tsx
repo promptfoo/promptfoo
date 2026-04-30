@@ -1653,4 +1653,145 @@ Application Details:
       expect(callApi).not.toHaveBeenCalledWith('/eval/job/saved-job-before-hydration');
     });
   });
+
+  describe('Intents Card', () => {
+    it('counts a multi-step intent as a single intent and shows the multi-step label', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            {
+              id: 'intent',
+              config: {
+                intent: ['single intent', ['step one', 'step two', 'step three'], 'another'],
+              },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Intents (3)')).toBeInTheDocument();
+      expect(screen.getByText('single intent')).toBeInTheDocument();
+      expect(screen.getByText('step one → step two → step three')).toBeInTheDocument();
+      expect(screen.getByText('another')).toBeInTheDocument();
+      expect(screen.getByText('Multi-step intent')).toBeInTheDocument();
+    });
+
+    it('removes a multi-step intent by index when its X button is clicked', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            {
+              id: 'intent',
+              config: {
+                intent: ['keep me', ['step1', 'step2'], 'also keep'],
+              },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Find the multi-step row and click its delete button.
+      const multiStepRow = screen.getByText('step1 → step2').closest('div');
+      expect(multiStepRow).not.toBeNull();
+      const deleteButton = multiStepRow!.querySelector('button');
+      expect(deleteButton).not.toBeNull();
+      clickElement(deleteButton!);
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'plugins',
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'intent',
+            config: expect.objectContaining({ intent: ['keep me', 'also keep'] }),
+          }),
+        ]),
+      );
+    });
+
+    it('preserves the original index when removing an entry that follows empty slots', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            {
+              id: 'intent',
+              config: {
+                intent: ['', '   ', 'visible one', '', 'visible two'],
+              },
+            },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // The header shows only the non-empty entries.
+      expect(screen.getByText('Intents (2)')).toBeInTheDocument();
+
+      // Remove "visible two" — its displayed position is 1, but its top-level
+      // index is 4. The handler must drop slot 4, not slot 1.
+      const targetRow = screen.getByText('visible two').closest('div');
+      const deleteButton = targetRow!.querySelector('button');
+      clickElement(deleteButton!);
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith(
+        'plugins',
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'intent',
+            config: expect.objectContaining({
+              intent: ['', '   ', 'visible one', ''],
+            }),
+          }),
+        ]),
+      );
+    });
+
+    it('does not render the Intents Card when only empty entries exist', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [{ id: 'intent', config: { intent: ['', '   ', []] } }],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByText(/^Intents \(/)).not.toBeInTheDocument();
+    });
+  });
 });

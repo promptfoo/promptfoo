@@ -69,6 +69,60 @@ interface JobStatusResponse {
   jobId?: string;
 }
 
+interface IntentEntry {
+  display: string;
+  isMultiStep: boolean;
+  index: number;
+}
+
+interface IntentPluginRef {
+  id: 'intent';
+  config: { intent: string | (string | string[])[] };
+}
+
+const isIntentPlugin = (plugin: unknown): plugin is IntentPluginRef =>
+  typeof plugin === 'object' &&
+  plugin !== null &&
+  (plugin as { id?: unknown }).id === 'intent' &&
+  (plugin as { config?: { intent?: unknown } }).config?.intent !== undefined;
+
+const isNonEmptyIntentEntry = (entry: string | string[]): boolean =>
+  typeof entry === 'string' ? entry.trim() !== '' : Array.isArray(entry) && entry.length > 0;
+
+// Each top-level entry in `config.intent` is one intent test case at runtime
+// (an inner array is a single multi-step sequence). Preserves the original
+// index so the remove handler can target multi-step entries by position.
+function getDisplayedIntents(plugins: readonly unknown[]): IntentEntry[] {
+  const intentPlugin = plugins.find(isIntentPlugin);
+  if (!intentPlugin) {
+    return [];
+  }
+  const raw = intentPlugin.config.intent;
+  const entries: (string | string[])[] = Array.isArray(raw) ? raw : [raw];
+  return entries.flatMap((entry, index) => {
+    if (!isNonEmptyIntentEntry(entry)) {
+      return [];
+    }
+    return Array.isArray(entry)
+      ? [{ display: entry.join(' → '), isMultiStep: true, index }]
+      : [{ display: entry, isMultiStep: false, index }];
+  });
+}
+
+function removeIntentByIndex(plugins: readonly unknown[], indexToRemove: number): unknown[] | null {
+  const intentPlugin = plugins.find(isIntentPlugin);
+  if (!intentPlugin) {
+    return null;
+  }
+  const currentIntents: (string | string[])[] = Array.isArray(intentPlugin.config.intent)
+    ? intentPlugin.config.intent
+    : [intentPlugin.config.intent];
+  const newIntents = currentIntents.filter((_, i) => i !== indexToRemove);
+  return plugins.map((p) =>
+    isIntentPlugin(p) ? { ...p, config: { ...p.config, intent: newIntents } } : p,
+  );
+}
+
 export default function Review({
   onBack,
   navigateToPlugins,
@@ -312,16 +366,17 @@ export default function Review({
     );
   }, [config.plugins]);
 
-  const intents = useMemo(() => {
-    return config.plugins
-      .filter(
-        (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-          typeof p === 'object' && p.id === 'intent' && p.config?.intent !== undefined,
-      )
-      .map((p) => p.config.intent)
-      .flat()
-      .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
-  }, [config.plugins]);
+  const intents = useMemo(() => getDisplayedIntents(config.plugins), [config.plugins]);
+
+  const handleRemoveIntent = useCallback(
+    (indexToRemove: number) => {
+      const next = removeIntentByIndex(config.plugins, indexToRemove);
+      if (next) {
+        updateConfig('plugins', next);
+      }
+    },
+    [config.plugins, updateConfig],
+  );
 
   const [expanded, setExpanded] = React.useState(false);
 
@@ -788,42 +843,34 @@ export default function Review({
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
-                    <div key={index} className="relative rounded-lg bg-muted/50 p-3 pr-8">
-                      <p className="line-clamp-2 text-sm">{intent}</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1 size-6"
-                        onClick={() => {
-                          const intentPlugin = config.plugins.find(
-                            (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-                              typeof p === 'object' &&
-                              p.id === 'intent' &&
-                              p.config?.intent !== undefined,
-                          );
-
-                          if (intentPlugin) {
-                            const currentIntents = Array.isArray(intentPlugin.config.intent)
-                              ? intentPlugin.config.intent
-                              : [intentPlugin.config.intent];
-
-                            const newIntents = currentIntents.filter((i) => i !== intent);
-
-                            const newPlugins = config.plugins.map((p) =>
-                              typeof p === 'object' && p.id === 'intent'
-                                ? { ...p, config: { ...p.config, intent: newIntents } }
-                                : p,
-                            );
-
-                            updateConfig('plugins', newPlugins);
-                          }
-                        }}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
+                  {intents
+                    .slice(0, expanded ? undefined : 5)
+                    .map(({ display, isMultiStep, index }) => {
+                      // Truncate long entries for the SR/title label so screen
+                      // readers can distinguish multiple Remove buttons.
+                      const shortLabel = display.length > 80 ? `${display.slice(0, 80)}…` : display;
+                      return (
+                        <div key={index} className="relative rounded-lg bg-muted/50 p-3 pr-8">
+                          <p className="line-clamp-2 text-sm" title={display}>
+                            {display}
+                          </p>
+                          {isMultiStep && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Multi-step intent
+                            </p>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Remove intent: ${shortLabel}`}
+                            className="absolute right-1 top-1 size-6"
+                            onClick={() => handleRemoveIntent(index)}
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   {intents.length > 5 && (
                     <Button
                       variant="link"
