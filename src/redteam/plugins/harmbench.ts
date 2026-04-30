@@ -1,7 +1,7 @@
 import { parse as csvParse } from 'csv-parse/sync';
 import dedent from 'dedent';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -152,7 +152,7 @@ async function fetchDataset(
   config?: NormalizedHarmbenchPluginConfig,
 ): Promise<HarmbenchInput[]> {
   try {
-    const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
+    const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
     if (!response.ok) {
       throw new Error(`HTTP status: ${response.status} ${response.statusText}`);
     }

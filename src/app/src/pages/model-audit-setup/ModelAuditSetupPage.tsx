@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card, CardContent } from '@app/components/ui/card';
@@ -44,6 +44,11 @@ export default function ModelAuditSetupPage() {
   const [scannerCatalog, setScannerCatalog] = useState<ScannerCatalogEntry[]>([]);
   const [isLoadingScanners, setIsLoadingScanners] = useState(false);
   const [scannerCatalogError, setScannerCatalogError] = useState<string | null>(null);
+  const isOptionsDialogOpenRef = useRef(showOptionsDialog);
+
+  useLayoutEffect(() => {
+    isOptionsDialogOpenRef.current = showOptionsDialog;
+  }, [showOptionsDialog]);
 
   useEffect(() => {
     useModelAuditConfigStore.persist.rehydrate();
@@ -61,6 +66,8 @@ export default function ModelAuditSetupPage() {
       setIsLoadingScanners(true);
       setScannerCatalogError(null);
 
+      const shouldApplyScannerUpdate = () => !cancelled && isOptionsDialogOpenRef.current;
+
       try {
         const response = await callApi('/model-audit/scanners');
         if (!response.ok) {
@@ -69,18 +76,18 @@ export default function ModelAuditSetupPage() {
         }
 
         const data = (await response.json()) as { scanners?: ScannerCatalogEntry[] };
-        if (!cancelled) {
+        if (shouldApplyScannerUpdate()) {
           setScannerCatalog(Array.isArray(data.scanners) ? data.scanners : []);
         }
       } catch (error) {
-        if (!cancelled) {
+        if (shouldApplyScannerUpdate()) {
           setScannerCatalog([]);
           setScannerCatalogError(
             error instanceof Error ? error.message : 'Unable to load scanners',
           );
         }
       } finally {
-        if (!cancelled) {
+        if (shouldApplyScannerUpdate()) {
           setIsLoadingScanners(false);
         }
       }
