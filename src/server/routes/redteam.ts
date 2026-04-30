@@ -369,7 +369,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 
   const { taskId } = paramsResult.data;
   if (neverGenerateRemote()) {
-    res.status(400).json({ error: 'Requires remote generation be enabled.' });
+    res.status(400).json({ success: false, error: 'Requires remote generation be enabled.' });
     return;
   }
 

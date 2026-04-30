@@ -629,7 +629,10 @@ describe('Redteam Routes', () => {
       const response = await request(app).post('/api/redteam/my-task').send({ data: 'test' });
 
       expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: 'Requires remote generation be enabled.' });
+      expect(response.body).toEqual({
+        success: false,
+        error: 'Requires remote generation be enabled.',
+      });
       expect(mockedGetRemoteGenerationUrl).not.toHaveBeenCalled();
       expect(mockedFetchWithProxy).not.toHaveBeenCalled();
     });
