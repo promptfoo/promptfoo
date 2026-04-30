@@ -213,7 +213,7 @@ export const shutdownGracefully = async (): Promise<void> => {
     // Can't log since logger might be closed.
   }
 
-  await closeDbIfOpen();
+  closeDbIfOpen();
   clearAgentCache();
 
   try {

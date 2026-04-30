@@ -22,11 +22,11 @@ export function getMonthStartTimestamp(): number {
  * The probe count is tracked via `response.tokenUsage.numRequests` on each eval result.
  * Falls back to 1 per result row if numRequests is not present.
  */
-export async function getMonthlyRedteamProbeUsage(): Promise<number> {
-  const db = await getDb();
+export function getMonthlyRedteamProbeUsage(): number {
+  const db = getDb();
   const monthStart = getMonthStartTimestamp();
 
-  const result = await db
+  const result = db
     .select({
       totalProbes: sql<number>`COALESCE(SUM(COALESCE(
         json_extract(${evalResultsTable.response}, '$.tokenUsage.numRequests'),
@@ -56,7 +56,7 @@ export interface ProbeLimitResult {
  * Check if the user is within the monthly redteam probe limit.
  * Users authenticated via `promptfoo auth login` (cloud users) are exempt.
  */
-export async function checkRedteamProbeLimit(): Promise<ProbeLimitResult> {
+export function checkRedteamProbeLimit(): ProbeLimitResult {
   if (isLoggedIntoCloud()) {
     return {
       withinLimit: true,
@@ -66,7 +66,7 @@ export async function checkRedteamProbeLimit(): Promise<ProbeLimitResult> {
     };
   }
 
-  const used = await getMonthlyRedteamProbeUsage();
+  const used = getMonthlyRedteamProbeUsage();
   const remaining = Math.max(0, MONTHLY_PROBE_LIMIT - used);
 
   return {

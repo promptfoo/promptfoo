@@ -70,30 +70,26 @@ vi.mock('path', async () => {
 vi.mock('../../src/util/config/load');
 vi.mock('../../src/util/tokenUsage');
 vi.mock('../../src/database/index', async (importOriginal) => {
-  const dbMock = {
-    insert: vi.fn(() => ({
-      values: vi.fn(() => ({
-        onConflictDoNothing: vi.fn(() => ({
-          run: vi.fn(),
-        })),
-        run: vi.fn(),
-      })),
-    })),
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn(() => ({
-          run: vi.fn(),
-        })),
-      })),
-    })),
-  };
-
   return {
     ...(await importOriginal()),
 
     getDb: vi.fn(() => ({
-      ...dbMock,
-      transaction: vi.fn((fn) => fn(dbMock)),
+      transaction: vi.fn((fn) => fn()),
+      insert: vi.fn(() => ({
+        values: vi.fn(() => ({
+          onConflictDoNothing: vi.fn(() => ({
+            run: vi.fn(),
+          })),
+          run: vi.fn(),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({
+            run: vi.fn(),
+          })),
+        })),
+      })),
     })),
   };
 });

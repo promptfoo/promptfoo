@@ -547,7 +547,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
       return;
     }
 
-    const values = await EvalQueries.getMetadataValuesFromEval(id, key);
+    const values = EvalQueries.getMetadataValuesFromEval(id, key);
     const response = EvalSchemas.MetadataValues.Response.parse({ values });
     res.json(response);
   } catch (error) {
@@ -822,7 +822,7 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         vars: incEval.vars,
       });
       if (incEval.prompts) {
-        await eval_.addPrompts(incEval.prompts);
+        eval_.addPrompts(incEval.prompts);
       }
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
 
@@ -868,7 +868,7 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
 /**
  * Bulk delete evals.
  */
-evalRouter.delete('/', async (req: Request, res: Response) => {
+evalRouter.delete('/', (req: Request, res: Response) => {
   const bodyResult = EvalSchemas.BulkDelete.Request.safeParse(req.body);
   if (!bodyResult.success) {
     res.status(400).json({ error: z.prettifyError(bodyResult.error) });
@@ -878,7 +878,7 @@ evalRouter.delete('/', async (req: Request, res: Response) => {
   const { ids } = bodyResult.data;
 
   try {
-    await deleteEvals(ids);
+    deleteEvals(ids);
     res.status(204).send();
   } catch {
     res.status(500).json({ error: 'Failed to delete evals' });

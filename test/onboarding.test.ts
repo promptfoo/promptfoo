@@ -48,7 +48,7 @@ vi.mock('glob', () => ({
   globSync: vi.fn(),
 }));
 
-vi.mock('libsql');
+vi.mock('better-sqlite3');
 
 vi.mock('@inquirer/select', () => ({
   __esModule: true,

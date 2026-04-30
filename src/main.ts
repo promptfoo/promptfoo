@@ -41,6 +41,7 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
+import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
 import { VERSION } from './version';
 
 async function main() {
@@ -53,7 +54,7 @@ async function main() {
   }
 
   await checkForUpdates();
-  await runDbMigrations();
+  await runDbMigrations({ suppressNativeAddonLogging: true });
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
@@ -163,6 +164,13 @@ if (isMain) {
   }
   // Re-throw the original error after cleanup is complete
   if (mainError) {
-    throw mainError;
+    const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(mainError);
+    if (nativeAddonVersionMismatchMessage) {
+      console.error(nativeAddonVersionMismatchMessage);
+      logger.debug('better-sqlite3 ABI mismatch (original error follows)', { error: mainError });
+      // exit code preserved by process.exitCode = 1 above
+    } else {
+      throw mainError;
+    }
   }
 }

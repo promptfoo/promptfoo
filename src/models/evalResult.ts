@@ -338,7 +338,7 @@ export default class EvalResult {
       failureReason,
     };
     if (persist) {
-      const db = await getDb();
+      const db = getDb();
 
       args.response = sanitizeResponseForDb(args.response);
       args.gradingResult = sanitizeGradingResultForDb(args.gradingResult);
@@ -350,7 +350,7 @@ export default class EvalResult {
   }
 
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
-    const db = await getDb();
+    const db = getDb();
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
     for (const result of results) {
@@ -364,7 +364,7 @@ export default class EvalResult {
       processedResults.push({ ...result, response: processedResponse ?? undefined });
     }
 
-    await db.transaction(async (tx) => {
+    db.transaction(() => {
       for (const result of processedResults) {
         // See `createFromEvaluateResult` for why `testCase` and `prompt` go
         // through the credential-redacting sanitizer while the other fields
@@ -379,7 +379,7 @@ export default class EvalResult {
           metadata: sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
-        const dbResult = await tx
+        const dbResult = db
           .insert(evalResultsTable)
           .values({ ...sanitizedResult, evalId, id: crypto.randomUUID() })
           .returning()
@@ -391,13 +391,13 @@ export default class EvalResult {
   }
 
   static async findById(id: string) {
-    const db = await getDb();
+    const db = getDb();
     const result = await db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }
 
   static async findManyByEvalId(evalId: string, opts?: { testIdx?: number }) {
-    const db = await getDb();
+    const db = getDb();
     const results = await db
       .select()
       .from(evalResultsTable)
@@ -415,7 +415,7 @@ export default class EvalResult {
       return [];
     }
 
-    const db = await getDb();
+    const db = getDb();
     const results = await db
       .select()
       .from(evalResultsTable)
@@ -442,7 +442,7 @@ export default class EvalResult {
     evalId: string,
     opts?: { excludeErrors?: boolean },
   ): Promise<Set<string>> {
-    const db = await getDb();
+    const db = getDb();
     const whereClause = opts?.excludeErrors
       ? and(
           eq(evalResultsTable.evalId, evalId),
@@ -471,7 +471,7 @@ export default class EvalResult {
       batchSize?: number;
     },
   ): AsyncGenerator<EvalResult[]> {
-    const db = await getDb();
+    const db = getDb();
     const batchSize = opts?.batchSize || 100;
     let offset = 0;
 
@@ -568,7 +568,7 @@ export default class EvalResult {
   }
 
   async save() {
-    const db = await getDb();
+    const db = getDb();
     //check if this exists in the db
     if (this.persisted) {
       await db

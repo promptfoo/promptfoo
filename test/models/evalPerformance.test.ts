@@ -15,7 +15,7 @@ describe('evalPerformance', () => {
   });
 
   beforeEach(async () => {
-    const db = await getDb();
+    const db = getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');

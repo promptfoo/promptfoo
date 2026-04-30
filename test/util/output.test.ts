@@ -61,7 +61,7 @@ describe('writeOutput', () => {
     );
     consoleLogSpy = mockConsole('log');
     // @ts-ignore
-    vi.mocked(getDb).mockResolvedValue({
+    vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue([]),
@@ -82,7 +82,7 @@ describe('writeOutput', () => {
 
   it('writeOutput with CSV output', async () => {
     // @ts-ignore
-    vi.mocked(getDb).mockResolvedValue({
+    vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -261,7 +261,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
     // @ts-ignore
-    vi.mocked(getDb).mockResolvedValue({
+    vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),
@@ -289,7 +289,7 @@ describe('writeOutput', () => {
   it('does not sanitize config for JSONL output', async () => {
     const outputPath = 'output.jsonl';
     // @ts-ignore
-    vi.mocked(getDb).mockResolvedValue({
+    vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
           where: vi.fn().mockReturnValue({ all: vi.fn().mockResolvedValue([]) }),

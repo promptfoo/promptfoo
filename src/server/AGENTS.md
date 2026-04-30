@@ -6,7 +6,7 @@ Express-based HTTP + WebSocket server for the web UI.
 
 - Express 5 + Socket.io
 - Zod for request validation
-- libsql + Drizzle ORM
+- Better SQLite3 + Drizzle ORM
 
 ## Directory Structure
 

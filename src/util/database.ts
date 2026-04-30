@@ -40,10 +40,11 @@ export async function writeResultsToDatabase(
 ): Promise<string> {
   createdAt = createdAt || (results.timestamp ? new Date(results.timestamp) : new Date());
   const evalId = createEvalId(createdAt);
-  const db = await getDb();
+  const db = getDb();
 
-  await db.transaction(async (tx) => {
-    await tx
+  const promises = [];
+  promises.push(
+    db
       .insert(evalsTable)
       .values({
         id: evalId,
@@ -54,78 +55,88 @@ export async function writeResultsToDatabase(
         results,
       })
       .onConflictDoNothing()
-      .run();
+      .run(),
+  );
 
-    logger.debug(`Inserting eval ${evalId}`);
+  logger.debug(`Inserting eval ${evalId}`);
 
-    // Record prompt relation
-    invariant(results.table, 'Table is required');
+  // Record prompt relation
+  invariant(results.table, 'Table is required');
 
-    for (const prompt of results.table.head.prompts) {
-      const label = prompt.label || prompt.display || prompt.raw;
-      const promptId = generateIdFromPrompt(prompt);
+  for (const prompt of results.table.head.prompts) {
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = generateIdFromPrompt(prompt);
 
-      await tx
+    promises.push(
+      db
         .insert(promptsTable)
         .values({
           id: promptId,
           prompt: label,
         })
         .onConflictDoNothing()
-        .run();
+        .run(),
+    );
 
-      await tx
+    promises.push(
+      db
         .insert(evalsToPromptsTable)
         .values({
           evalId,
           promptId,
         })
         .onConflictDoNothing()
-        .run();
+        .run(),
+    );
 
-      logger.debug(`Inserting prompt ${promptId}`);
-    }
+    logger.debug(`Inserting prompt ${promptId}`);
+  }
 
-    // Record dataset relation
-    const datasetId = sha256(JSON.stringify(config.tests || []));
-    const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
+  // Record dataset relation
+  const datasetId = sha256(JSON.stringify(config.tests || []));
+  const testsForStorage = Array.isArray(config.tests) ? config.tests : [];
 
-    // Log when non-array tests are converted to empty array for database storage
-    if (config.tests && !Array.isArray(config.tests)) {
-      const testsType = typeof config.tests;
-      const hasPath =
-        typeof config.tests === 'object' && config.tests !== null && 'path' in config.tests;
-      logger.debug(
-        `Converting non-array test configuration to empty array for database storage. Type: ${testsType}, hasPath: ${hasPath}`,
-      );
-    }
+  // Log when non-array tests are converted to empty array for database storage
+  if (config.tests && !Array.isArray(config.tests)) {
+    const testsType = typeof config.tests;
+    const hasPath =
+      typeof config.tests === 'object' && config.tests !== null && 'path' in config.tests;
+    logger.debug(
+      `Converting non-array test configuration to empty array for database storage. Type: ${testsType}, hasPath: ${hasPath}`,
+    );
+  }
 
-    await tx
+  promises.push(
+    db
       .insert(datasetsTable)
       .values({
         id: datasetId,
         tests: testsForStorage,
       })
       .onConflictDoNothing()
-      .run();
+      .run(),
+  );
 
-    await tx
+  promises.push(
+    db
       .insert(evalsToDatasetsTable)
       .values({
         evalId,
         datasetId,
       })
       .onConflictDoNothing()
-      .run();
+      .run(),
+  );
 
-    logger.debug(`Inserting dataset ${datasetId}`);
+  logger.debug(`Inserting dataset ${datasetId}`);
 
-    // Record tags
-    if (config.tags) {
-      for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-        const tagId = sha256(`${tagKey}:${tagValue}`);
+  // Record tags
+  if (config.tags) {
+    for (const [tagKey, tagValue] of Object.entries(config.tags)) {
+      const tagId = sha256(`${tagKey}:${tagValue}`);
 
-        await tx
+      promises.push(
+        db
           .insert(tagsTable)
           .values({
             id: tagId,
@@ -133,21 +144,26 @@ export async function writeResultsToDatabase(
             value: tagValue,
           })
           .onConflictDoNothing()
-          .run();
+          .run(),
+      );
 
-        await tx
+      promises.push(
+        db
           .insert(evalsToTagsTable)
           .values({
             evalId,
             tagId,
           })
           .onConflictDoNothing()
-          .run();
+          .run(),
+      );
 
-        logger.debug(`Inserting tag ${tagId}`);
-      }
+      logger.debug(`Inserting tag ${tagId}`);
     }
-  });
+  }
+
+  logger.debug(`Awaiting ${promises.length} promises to database...`);
+  await Promise.all(promises);
 
   return evalId;
 }
@@ -367,7 +383,7 @@ async function getEvalsWithPredicate(
   predicate: (result: ResultsFile) => boolean,
   limit: number,
 ): Promise<EvalWithMetadata[]> {
-  const db = await getDb();
+  const db = getDb();
   const evals_ = await db
     .select({
       id: evalsTable.id,
@@ -425,20 +441,20 @@ export async function getEvalFromId(hash: string) {
 }
 
 export async function deleteEval(evalId: string) {
-  const db = await getDb();
-  await db.transaction(async (tx) => {
+  const db = getDb();
+  db.transaction(() => {
     // Clean up FK-referenced rows first; not all relationships have onDelete: 'cascade'.
     // Spans and traces in particular must be removed before the eval row, otherwise
     // SQLite raises "FOREIGN KEY constraint failed" (foreign_keys pragma is ON).
-    await deleteTraceRecordsForEvals(tx, [evalId]);
-    await tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
-    await tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
-    await tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
-    await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
+    deleteTraceRecordsForEvals(db, [evalId]);
+    db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, evalId)).run();
+    db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, evalId)).run();
+    db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, evalId)).run();
+    db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, evalId)).run();
 
     // Finally, delete the eval record
-    const deletedIds = await tx.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
-    if (deletedIds.rowsAffected === 0) {
+    const deletedIds = db.delete(evalsTable).where(eq(evalsTable.id, evalId)).run();
+    if (deletedIds.changes === 0) {
       throw new Error(`Eval with ID ${evalId} not found`);
     }
   });
@@ -448,15 +464,15 @@ export async function deleteEval(evalId: string) {
  * Deletes evals by their IDs.
  * @param ids - The IDs of the evals to delete.
  */
-export async function deleteEvals(ids: string[]): Promise<void> {
-  const db = await getDb();
-  await db.transaction(async (tx) => {
-    await deleteTraceRecordsForEvals(tx, ids);
-    await tx.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
-    await tx.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
-    await tx.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
-    await tx.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
-    await tx.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
+export function deleteEvals(ids: string[]) {
+  const db = getDb();
+  db.transaction(() => {
+    deleteTraceRecordsForEvals(db, ids);
+    db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
+    db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
+    db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
+    db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
+    db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
   });
 }
 
@@ -466,15 +482,15 @@ export async function deleteEvals(ids: string[]): Promise<void> {
  * @returns {Promise<void>}
  */
 export async function deleteAllEvals(): Promise<void> {
-  const db = await getDb();
-  await db.transaction(async (tx) => {
-    await tx.delete(spansTable).run();
-    await tx.delete(tracesTable).run();
-    await tx.delete(evalResultsTable).run();
-    await tx.delete(evalsToPromptsTable).run();
-    await tx.delete(evalsToDatasetsTable).run();
-    await tx.delete(evalsToTagsTable).run();
-    await tx.delete(evalsTable).run();
+  const db = getDb();
+  db.transaction(() => {
+    db.delete(spansTable).run();
+    db.delete(tracesTable).run();
+    db.delete(evalResultsTable).run();
+    db.delete(evalsToPromptsTable).run();
+    db.delete(evalsToDatasetsTable).run();
+    db.delete(evalsToTagsTable).run();
+    db.delete(evalsTable).run();
   });
 }
 
@@ -515,8 +531,8 @@ export async function getStandaloneEvals({
     return cachedResult;
   }
 
-  const db = await getDb();
-  const results = await db
+  const db = getDb();
+  const results = db
     .select({
       evalId: evalsTable.id,
       description: evalsTable.description,

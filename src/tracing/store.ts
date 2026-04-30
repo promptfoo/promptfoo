@@ -177,12 +177,12 @@ function deriveSpanKind(span: SpanData): string {
 }
 
 export class TraceStore {
-  private db: Awaited<ReturnType<typeof getDb>> | null = null;
+  private db: ReturnType<typeof getDb> | null = null;
 
-  private async getDatabase() {
+  private getDatabase() {
     if (!this.db) {
       logger.debug('[TraceStore] Initializing database connection');
-      this.db = await getDb();
+      this.db = getDb();
     }
     return this.db;
   }
@@ -192,7 +192,7 @@ export class TraceStore {
       logger.debug(
         `[TraceStore] Creating trace ${trace.traceId} for evaluation ${trace.evaluationId}`,
       );
-      const db = await this.getDatabase();
+      const db = this.getDatabase();
       await db
         .insert(tracesTable)
         .values({
@@ -217,7 +217,7 @@ export class TraceStore {
   ): Promise<{ stored: boolean; reason?: string }> {
     try {
       logger.debug(`[TraceStore] Adding ${spans.length} spans to trace ${traceId}`);
-      const db = await this.getDatabase();
+      const db = this.getDatabase();
 
       // Only verify trace exists if not skipping the check (for OTLP scenarios)
       if (options?.skipTraceCheck) {
@@ -278,7 +278,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching traces for evaluation ${evaluationId}`);
-      const db = await this.getDatabase();
+      const db = this.getDatabase();
 
       // Get all traces for the evaluation
       const traces = await db
@@ -323,7 +323,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
-      const db = await this.getDatabase();
+      const db = this.getDatabase();
 
       const traces = await db
         .select()
@@ -357,7 +357,7 @@ export class TraceStore {
   async deleteOldTraces(retentionDays: number): Promise<void> {
     try {
       logger.debug(`[TraceStore] Deleting traces older than ${retentionDays} days`);
-      const db = await this.getDatabase();
+      const db = this.getDatabase();
       const cutoffTime = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
 
       // Delete old traces (spans will be cascade deleted due to foreign key)
@@ -382,7 +382,7 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching spans for trace ${traceId}`);
-      const db = await this.getDatabase();
+      const db = this.getDatabase();
 
       const rows = await db
         .select()

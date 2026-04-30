@@ -44,7 +44,7 @@ describe('evaluator', () => {
     vi.mocked(updateSignalFile).mockClear();
 
     // Clear all tables before each test
-    const db = await getDb();
+    const db = getDb();
     // Delete related tables first
     await db.run('DELETE FROM spans');
     await db.run('DELETE FROM traces');
@@ -251,10 +251,10 @@ describe('evaluator', () => {
 
       await eval1.delete();
 
-      const db = await getDb();
+      const db = getDb();
       expect(await Eval.findById(eval1.id)).toBeUndefined();
-      await expect(db.select().from(tracesTable).all()).resolves.toHaveLength(0);
-      await expect(db.select().from(spansTable).all()).resolves.toHaveLength(0);
+      expect(db.select().from(tracesTable).all()).toHaveLength(0);
+      expect(db.select().from(spansTable).all()).toHaveLength(0);
     });
   });
 
@@ -333,7 +333,7 @@ describe('evaluator', () => {
       });
 
       // Remove vars from the evals table to trigger backfill
-      const db = await getDb();
+      const db = getDb();
       // Drizzle's .run() does not support ? params for this case, so interpolate directly
       await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval1.id}'`);
 
@@ -349,7 +349,7 @@ describe('evaluator', () => {
       });
 
       // Remove vars from the evals table to trigger backfill
-      const db = await getDb();
+      const db = getDb();
       await db.run(`UPDATE evals SET vars = json('[]') WHERE id = '${eval1.id}'`);
 
       const persistedEval1 = await Eval.findById(eval1.id);
@@ -365,7 +365,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Inject NaN as durationMs in the results column
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = json_set(results, '$.durationMs', 'NaN') WHERE id = '${eval1.id}'`,
       );
@@ -380,7 +380,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Inject negative number as durationMs
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = json_set(results, '$.durationMs', -5000) WHERE id = '${eval1.id}'`,
       );
@@ -395,7 +395,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Inject string as durationMs
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = json_set(results, '$.durationMs', '"not a number"') WHERE id = '${eval1.id}'`,
       );
@@ -410,7 +410,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Inject valid durationMs
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = json_set(results, '$.durationMs', 12345) WHERE id = '${eval1.id}'`,
       );
@@ -423,7 +423,7 @@ describe('evaluator', () => {
     it('should extract generationDurationMs and evaluationDurationMs from database', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ durationMs: 15000, generationDurationMs: 10000, evaluationDurationMs: 5000 })}' WHERE id = '${eval1.id}'`,
       );
@@ -437,7 +437,7 @@ describe('evaluator', () => {
     it('should handle missing generationDurationMs and evaluationDurationMs in database', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ durationMs: 5000 })}' WHERE id = '${eval1.id}'`,
       );
@@ -451,7 +451,7 @@ describe('evaluator', () => {
     it('should handle invalid generationDurationMs in database by returning undefined', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ durationMs: 5000, generationDurationMs: -100, evaluationDurationMs: 'bad' })}' WHERE id = '${eval1.id}'`,
       );
@@ -465,7 +465,7 @@ describe('evaluator', () => {
     it('should recompute durationMs from split fields when durationMs is missing', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ generationDurationMs: 10000, evaluationDurationMs: 5000 })}' WHERE id = '${eval1.id}'`,
       );
@@ -495,7 +495,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Seed the results column with an extra key (simulating future fields or other data)
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE evals SET results = '${JSON.stringify({ someOtherKey: 'preserve-me' })}' WHERE id = '${eval1.id}'`,
       );
@@ -517,7 +517,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Corrupt the results column with invalid JSON
-      const db = await getDb();
+      const db = getDb();
       await db.run(`UPDATE evals SET results = 'not-valid-json' WHERE id = '${eval1.id}'`);
 
       eval1.setDurationMs(5000);
@@ -532,7 +532,7 @@ describe('evaluator', () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
 
       // Set results to a valid JSON array (non-object)
-      const db = await getDb();
+      const db = getDb();
       await db.run(`UPDATE evals SET results = '[]' WHERE id = '${eval1.id}'`);
 
       eval1.setDurationMs(3000);
@@ -1062,7 +1062,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create();
 
       // Add eval results with different metadata
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
@@ -1090,7 +1090,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create();
 
       // Add eval result with empty metadata
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `INSERT INTO eval_results (
           id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
@@ -1191,7 +1191,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello world"}') WHERE eval_id = '${eval_.id}' AND test_idx = 1`,
       );
@@ -1236,7 +1236,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = await getDb();
+      const db = getDb();
       // Set up test data with various field states
       await db.run(
         `UPDATE eval_results SET metadata = json('{"source":"unit","note":"hello"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -1282,7 +1282,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = await getDb();
+      const db = getDb();
       // Set up test data with different data types
       await db.run(
         `UPDATE eval_results SET metadata = json('{"count":42}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -1370,7 +1370,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = await getDb();
+      const db = getDb();
       // Test metadata keys with quotes and backslashes that could cause JSON path injection
       await db.run(
         `UPDATE eval_results SET metadata = json('{"field\\"with\\"quotes":"value1"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -1449,7 +1449,7 @@ describe('evaluator', () => {
         resultTypes: ['success', 'failure'],
       });
 
-      const db = await getDb();
+      const db = getDb();
       // Test empty array - should match (not empty)
       await db.run(
         `UPDATE eval_results SET metadata = json('{"arrayField":[]}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -1526,7 +1526,7 @@ describe('evaluator', () => {
         numResults: 6,
         resultTypes: ['success', 'failure'],
       });
-      const db = await getDb();
+      const db = getDb();
       // Set pluginId on one row and strategyId on another
       await db.run(
         `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 3`,
@@ -1567,7 +1567,7 @@ describe('evaluator', () => {
         numResults: 5,
         resultTypes: ['success'],
       });
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"pluginId":"harmful:harassment"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
       );
@@ -1609,7 +1609,7 @@ describe('evaluator', () => {
         numResults: 4,
         resultTypes: ['success', 'failure'],
       });
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"severity":"high"}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
       );
@@ -1982,7 +1982,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set metadata.sessionId on the result
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionId":"session-123"}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -1997,7 +1997,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set metadata.sessionIds array on the result (multi-turn strategy format)
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionIds":["session-a","session-b","session-c"]}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -2012,7 +2012,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set both metadata.sessionIds and testCase.vars.sessionId
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET
           metadata = json('{"sessionIds":["session-a","session-b"]}'),
@@ -2036,7 +2036,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set empty sessionIds array
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionIds":[]}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -2051,7 +2051,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 1 });
 
       // Set both sessionIds array and sessionId
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionId":"single","sessionIds":["multi-1","multi-2"]}') WHERE eval_id = '${eval_.id}'`,
       );
@@ -2065,7 +2065,7 @@ describe('evaluator', () => {
     it('should handle multiple results with varying sessionId/sessionIds configurations', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3 });
 
-      const db = await getDb();
+      const db = getDb();
       // Result 0: Has sessionIds array (multi-turn)
       await db.run(
         `UPDATE eval_results SET metadata = json('{"sessionIds":["multi-0a","multi-0b"]}') WHERE eval_id = '${eval_.id}' AND test_idx = 0`,
@@ -2089,7 +2089,7 @@ describe('evaluator', () => {
       const eval_ = await EvalFactory.create({ numResults: 2 });
 
       // Set empty metadata on all results
-      const db = await getDb();
+      const db = getDb();
       await db.run(
         `UPDATE eval_results SET metadata = json('{"otherField":"value"}') WHERE eval_id = '${eval_.id}'`,
       );

@@ -182,7 +182,7 @@ export function combineFilterConditions(
 
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
-    const db = await getDb();
+    const db = getDb();
 
     // Handle empty array case to avoid SQL syntax error
     if (evals.length === 0) {
@@ -211,7 +211,7 @@ export class EvalQueries {
   }
 
   static async getVarsFromEval(evalId: string) {
-    const db = await getDb();
+    const db = getDb();
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
@@ -230,9 +230,9 @@ export class EvalQueries {
   }
 
   static async setVars(evalId: string, vars: string[]) {
-    const db = await getDb();
+    const db = getDb();
     try {
-      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
     }
@@ -242,7 +242,7 @@ export class EvalQueries {
     evalId: string,
     comparisonEvalIds: string[] = [],
   ): Promise<string[]> {
-    const db = await getDb();
+    const db = getDb();
     try {
       // Combine primary eval ID with comparison eval IDs
       const allEvalIds = [evalId, ...comparisonEvalIds];
@@ -277,8 +277,8 @@ export class EvalQueries {
    * @param key - The key of the metadata to get the values from.
    * @returns An array of unique metadata values.
    */
-  static async getMetadataValuesFromEval(evalId: string, key: string): Promise<string[]> {
-    const db = await getDb();
+  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
+    const db = getDb();
     const trimmedKey = key.trim();
     if (!trimmedKey) {
       return [];
@@ -301,7 +301,7 @@ export class EvalQueries {
         LIMIT 1000
       `;
 
-      const rows = await db.all<{ value: string }>(query);
+      const rows = db.all<{ value: string }>(query);
       const values = rows
         .map(({ value }) => String(value).trim())
         .filter((value) => value.length > 0);
@@ -347,7 +347,7 @@ export default class Eval {
   shareableUrl?: string;
 
   static async latest() {
-    const db = await getDb();
+    const db = getDb();
     const db_results = await db
       .select({
         id: evalsTable.id,
@@ -364,15 +364,15 @@ export default class Eval {
   }
 
   static async findById(id: string) {
-    const db = await getDb();
+    const db = getDb();
 
-    const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
+    const evalData = db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
     if (evalData.length === 0) {
       return undefined;
     }
 
-    const datasetResults = await db
+    const datasetResults = db
       .select({
         datasetId: evalsToDatasetsTable.datasetId,
       })
@@ -430,7 +430,7 @@ export default class Eval {
   }
 
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
-    const db = await getDb();
+    const db = getDb();
     const evals = await db
       .select()
       .from(evalsTable)
@@ -470,13 +470,12 @@ export default class Eval {
     // pass it explicitly — honor that value. Only fall back to the global
     // resolution chain when the caller did not provide one at all.
     const author = opts && 'author' in opts ? (opts.author ?? null) : getAuthor();
-    const db = await getDb();
+    const db = getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
 
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(evalsTable)
+    db.transaction(() => {
+      db.insert(evalsTable)
         .values({
           id: evalId,
           createdAt: createdAt.getTime(),
@@ -495,8 +494,7 @@ export default class Eval {
         const label = prompt.label || prompt.display || prompt.raw;
         const promptId = hashPrompt(prompt);
 
-        await tx
-          .insert(promptsTable)
+        db.insert(promptsTable)
           .values({
             id: promptId,
             prompt: label,
@@ -504,8 +502,7 @@ export default class Eval {
           .onConflictDoNothing()
           .run();
 
-        await tx
-          .insert(evalsToPromptsTable)
+        db.insert(evalsToPromptsTable)
           .values({
             evalId,
             promptId,
@@ -517,15 +514,14 @@ export default class Eval {
       }
 
       if (opts?.results && opts.results.length > 0) {
-        const res = await tx
+        const res = db
           .insert(evalResultsTable)
           .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
           .run();
-        logger.debug(`Inserted ${res.rowsAffected} eval results`);
+        logger.debug(`Inserted ${res.changes} eval results`);
       }
 
-      await tx
-        .insert(datasetsTable)
+      db.insert(datasetsTable)
         .values({
           id: datasetId,
           tests: config.tests,
@@ -533,8 +529,7 @@ export default class Eval {
         .onConflictDoNothing()
         .run();
 
-      await tx
-        .insert(evalsToDatasetsTable)
+      db.insert(evalsToDatasetsTable)
         .values({
           evalId,
           datasetId,
@@ -548,8 +543,7 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          await tx
-            .insert(tagsTable)
+          db.insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -558,8 +552,7 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          await tx
-            .insert(evalsToTagsTable)
+          db.insert(evalsToTagsTable)
             .values({
               evalId,
               tagId,
@@ -634,7 +627,7 @@ export default class Eval {
   }
 
   async save() {
-    const db = await getDb();
+    const db = getDb();
     const updateObj: Record<string, unknown> = {
       config: this.config,
       prompts: this.prompts,
@@ -668,7 +661,7 @@ export default class Eval {
       }
       updateObj.results = expr;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
   }
 
@@ -774,11 +767,11 @@ export default class Eval {
 
     // For persisted evals, use efficient database query
     try {
-      const db = await getDb();
+      const db = getDb();
 
       // Query for any result with a non-transient HTTP status
       // Uses json_extract to access nested metadata.http.status field
-      const result = await db
+      const result = db
         .select({
           httpStatus: sql<number>`CAST(json_extract(${evalResultsTable.response}, '$.metadata.http.status') AS INTEGER)`,
         })
@@ -904,35 +897,17 @@ export default class Eval {
             return;
           }
         } else if (type === 'metadata' && field) {
+          const jsonPath = buildSafeJsonPath(field);
+
           if (operator === 'equals') {
-            condition = sql`EXISTS (
-              SELECT 1
-              FROM json_each(metadata)
-              WHERE json_each.key = ${field}
-                AND json_each.value = ${value}
-            )`;
+            condition = sql`json_extract(metadata, ${jsonPath}) = ${value}`;
           } else if (operator === 'contains') {
-            condition = sql`EXISTS (
-              SELECT 1
-              FROM json_each(metadata)
-              WHERE json_each.key = ${field}
-                AND json_each.value LIKE ${`%${value}%`}
-            )`;
+            condition = sql`json_extract(metadata, ${jsonPath}) LIKE ${`%${value}%`}`;
           } else if (operator === 'not_contains') {
-            condition = sql`NOT EXISTS (
-              SELECT 1
-              FROM json_each(metadata)
-              WHERE json_each.key = ${field}
-                AND json_each.value LIKE ${`%${value}%`}
-            )`;
+            condition = sql`(json_extract(metadata, ${jsonPath}) IS NULL OR json_extract(metadata, ${jsonPath}) NOT LIKE ${`%${value}%`})`;
           } else if (operator === 'exists') {
             // For exists, check if the field is present AND not empty
-            condition = sql`EXISTS (
-              SELECT 1
-              FROM json_each(metadata)
-              WHERE json_each.key = ${field}
-                AND LENGTH(TRIM(COALESCE(json_each.value, ''))) > 0
-            )`;
+            condition = sql`LENGTH(TRIM(COALESCE(json_extract(metadata, ${jsonPath}), ''))) > 0`;
           }
         } else if (type === 'plugin') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
@@ -1038,7 +1013,7 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = await getDb();
+    const db = getDb();
     const offset = opts.offset ?? 0;
     const limit = opts.limit ?? 50;
 
@@ -1230,8 +1205,8 @@ export default class Eval {
   async addPrompts(prompts: CompletedPrompt[]) {
     this.prompts = prompts;
     if (this.persisted) {
-      const db = await getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      const db = getDb();
+      db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
       // Notify the view server after prompt metadata changes so cached /api/prompts
       // responses and socket listeners can pick up prompts added after eval creation.
       updateSignalFile(this.id);
@@ -1241,7 +1216,7 @@ export default class Eval {
   async setResults(results: EvalResult[]) {
     this.results = results;
     if (this.persisted) {
-      const db = await getDb();
+      const db = getDb();
       await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
     }
     this._resultsLoaded = true;
@@ -1386,14 +1361,14 @@ export default class Eval {
   }
 
   async delete() {
-    const db = await getDb();
-    await db.transaction(async (tx) => {
-      await deleteTraceRecordsForEvals(tx, [this.id]);
-      await tx.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
-      await tx.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
-      await tx.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
-      await tx.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
-      await tx.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
+    const db = getDb();
+    db.transaction(() => {
+      deleteTraceRecordsForEvals(db, [this.id]);
+      db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
+      db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
+      db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();
+      db.delete(evalResultsTable).where(eq(evalResultsTable.evalId, this.id)).run();
+      db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
 
@@ -1424,14 +1399,13 @@ export default class Eval {
     const newVars = this.vars ? structuredClone(this.vars) : [];
     const author = getAuthor();
 
-    const db = await getDb();
+    const db = getDb();
 
     // Copy eval, results, and relationships within transaction for atomicity
     let copiedCount = 0;
-    await db.transaction(async (tx) => {
+    db.transaction(() => {
       // Create the new eval record first
-      await tx
-        .insert(evalsTable)
+      db.insert(evalsTable)
         .values({
           id: newEvalId,
           createdAt: Date.now(),
@@ -1449,15 +1423,14 @@ export default class Eval {
       // Copy prompts relationships
       // Note: prompts already exist in promptsTable from when the source eval was created
       // We just need to create new relationships pointing to those same prompts
-      const promptRels = await tx
+      const promptRels = db
         .select()
         .from(evalsToPromptsTable)
         .where(eq(evalsToPromptsTable.evalId, this.id))
         .all();
 
       if (promptRels.length > 0) {
-        await tx
-          .insert(evalsToPromptsTable)
+        db.insert(evalsToPromptsTable)
           .values(
             promptRels.map((rel) => ({
               evalId: newEvalId,
@@ -1473,8 +1446,7 @@ export default class Eval {
         for (const [tagKey, tagValue] of Object.entries(this.config.tags)) {
           const tagId = sha256(`${tagKey}:${tagValue}`);
 
-          await tx
-            .insert(tagsTable)
+          db.insert(tagsTable)
             .values({
               id: tagId,
               name: tagKey,
@@ -1483,8 +1455,7 @@ export default class Eval {
             .onConflictDoNothing()
             .run();
 
-          await tx
-            .insert(evalsToTagsTable)
+          db.insert(evalsToTagsTable)
             .values({
               evalId: newEvalId,
               tagId,
@@ -1495,7 +1466,7 @@ export default class Eval {
       }
 
       // Copy dataset relationship
-      const datasetRel = await tx
+      const datasetRel = db
         .select()
         .from(evalsToDatasetsTable)
         .where(eq(evalsToDatasetsTable.evalId, this.id))
@@ -1503,8 +1474,7 @@ export default class Eval {
         .all();
 
       if (datasetRel.length > 0) {
-        await tx
-          .insert(evalsToDatasetsTable)
+        db.insert(evalsToDatasetsTable)
           .values({
             evalId: newEvalId,
             datasetId: datasetRel[0].datasetId,
@@ -1519,7 +1489,7 @@ export default class Eval {
 
       while (true) {
         // Fetch batch from source eval
-        const batch = await tx
+        const batch = db
           .select()
           .from(evalResultsTable)
           .where(eq(evalResultsTable.evalId, this.id))
@@ -1543,7 +1513,7 @@ export default class Eval {
         }));
 
         // Insert batch
-        await tx.insert(evalResultsTable).values(copiedResults).run();
+        db.insert(evalResultsTable).values(copiedResults).run();
 
         copiedCount += batch.length;
         offset += BATCH_SIZE;
@@ -1590,7 +1560,7 @@ export async function getEvalSummaries(
   type?: 'redteam' | 'eval',
   includeProviders: boolean = false,
 ): Promise<EvalSummary[]> {
-  const db = await getDb();
+  const db = getDb();
 
   const whereClauses = [];
 
@@ -1606,7 +1576,7 @@ export async function getEvalSummaries(
     }
   }
 
-  const results = await db
+  const results = db
     .select({
       evalId: evalsTable.id,
       createdAt: evalsTable.createdAt,

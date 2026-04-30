@@ -2,8 +2,7 @@ import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { sql } from 'drizzle-orm';
-import Database from 'libsql';
+import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from './util/utils';
 
@@ -26,7 +25,7 @@ describe('database WAL mode', () => {
     // Close the database connection if it exists
     try {
       const database = await import('../src/database');
-      await database.closeDb();
+      database.closeDb();
     } catch (err) {
       console.error('Error closing database:', err);
     }
@@ -56,10 +55,10 @@ describe('database WAL mode', () => {
   it('enables WAL journal mode by default', async () => {
     // First import and initialize the database to trigger WAL mode configuration
     const database = await import('../src/database');
-    await database.getDb();
+    database.getDb();
 
     // Close it to ensure we don't get resource conflicts
-    await database.closeDb();
+    database.closeDb();
 
     // Then independently verify the journal mode using a direct connection
     const dbPath = database.getDbPath();
@@ -78,8 +77,8 @@ describe('database WAL mode', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_WAL_MODE: 'true' });
 
     const database = await import('../src/database');
-    await database.getDb();
-    await database.closeDb();
+    database.getDb();
+    database.closeDb();
 
     const dbPath = database.getDbPath();
     const directDb = new Database(dbPath);
@@ -93,13 +92,14 @@ describe('database WAL mode', () => {
     }
   });
 
-  it('does not enable WAL mode while testing', async () => {
+  it('does not enable WAL mode for in-memory databases', async () => {
     mockProcessEnv({ IS_TESTING: 'true' });
 
     const database = await import('../src/database');
-    const db = await database.getDb();
+    const db = database.getDb();
 
-    // Unit tests use a shared in-memory DB and skip WAL setup.
+    // For in-memory databases, we can't verify the journal mode
+    // but we can ensure it doesn't throw
     expect(db).toBeDefined();
   });
 
@@ -108,11 +108,11 @@ describe('database WAL mode', () => {
       const database = await import('../src/database');
 
       // Open the database
-      await database.getDb();
+      database.getDb();
       expect(database.isDbOpen()).toBe(true);
 
       // Close it using closeDbIfOpen
-      await database.closeDbIfOpen();
+      database.closeDbIfOpen();
       expect(database.isDbOpen()).toBe(false);
     });
 
@@ -123,7 +123,7 @@ describe('database WAL mode', () => {
       expect(database.isDbOpen()).toBe(false);
 
       // closeDbIfOpen should not throw
-      await expect(database.closeDbIfOpen()).resolves.toBeUndefined();
+      expect(() => database.closeDbIfOpen()).not.toThrow();
       expect(database.isDbOpen()).toBe(false);
     });
 
@@ -131,34 +131,40 @@ describe('database WAL mode', () => {
       const database = await import('../src/database');
 
       // Open the database
-      await database.getDb();
+      database.getDb();
       expect(database.isDbOpen()).toBe(true);
 
       // Close multiple times - should not throw
-      await database.closeDbIfOpen();
+      database.closeDbIfOpen();
       expect(database.isDbOpen()).toBe(false);
 
-      await database.closeDbIfOpen();
+      database.closeDbIfOpen();
       expect(database.isDbOpen()).toBe(false);
 
-      await database.closeDbIfOpen();
+      database.closeDbIfOpen();
       expect(database.isDbOpen()).toBe(false);
     });
   });
 
   it('verifies WAL checkpoint settings', async () => {
     const database = await import('../src/database');
-    const db = await database.getDb();
+    database.getDb();
+    database.closeDb();
 
-    const autocheckpoint = (await db.get(sql`PRAGMA wal_autocheckpoint;`)) as unknown as {
-      wal_autocheckpoint: number;
-    };
-    expect(autocheckpoint.wal_autocheckpoint).toBe(1000);
+    const dbPath = database.getDbPath();
+    const directDb = new Database(dbPath);
 
-    const synchronous = (await db.get(sql`PRAGMA synchronous;`)) as unknown as {
-      synchronous: number;
-    };
-    // NORMAL = 1 in SQLite
-    expect(synchronous.synchronous).toBe(1);
+    try {
+      const autocheckpoint = directDb.prepare('PRAGMA wal_autocheckpoint;').get() as {
+        wal_autocheckpoint: number;
+      };
+      expect(autocheckpoint.wal_autocheckpoint).toBe(1000);
+
+      const synchronous = directDb.prepare('PRAGMA synchronous;').get() as { synchronous: number };
+      // NORMAL = 1 in SQLite
+      expect(synchronous.synchronous).toBe(1);
+    } finally {
+      directDb.close();
+    }
   });
 });
