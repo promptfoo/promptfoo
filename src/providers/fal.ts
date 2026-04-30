@@ -11,6 +11,18 @@ import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../typ
 
 type FalProviderOptions = {
   apiKey?: string;
+  client?: FalClientOptions;
+};
+
+type FalProxyUrl =
+  | string
+  | {
+      url: string;
+      when?: 'browser' | 'always';
+    };
+
+type FalClientOptions = {
+  proxyUrl?: FalProxyUrl;
 };
 
 interface FalResult<T = unknown> {
@@ -54,6 +66,11 @@ function omitFalSecretConfigFields(config: FalProviderOptions): Record<string, u
   return rest;
 }
 
+function getFalModelInput(config: FalProviderOptions): Record<string, unknown> {
+  const { apiKey, client, ...input } = config;
+  return input;
+}
+
 function generateConfigHash(config: FalProviderOptions): string {
   const sortedConfig = sortObject(omitFalSecretConfigFields(config));
   return createHmac('sha256', FAL_CACHE_KEY_HMAC_KEY)
@@ -80,6 +97,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
   modelType: 'image';
   apiKey?: string;
   config: FalProviderOptions;
+  clientConfig: FalClientOptions;
   input: Input;
 
   private fal: typeof import('@fal-ai/client') | null = null;
@@ -96,9 +114,10 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     this.id = id ? () => id : this.id;
 
     this.config = config ?? {};
-    const { apiKey, ...input } = this.config;
+    const { apiKey, client } = this.config;
     this.apiKey = apiKey ?? env?.FAL_KEY ?? getEnvString('FAL_KEY');
-    this.input = input as Input;
+    this.clientConfig = client ?? {};
+    this.input = getFalModelInput(this.config) as Input;
   }
 
   id(): string {
@@ -131,7 +150,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
     const input = {
       prompt,
       ...this.input,
-      ...(context?.prompt?.config ?? {}),
+      ...getFalModelInput((context?.prompt?.config ?? {}) as FalProviderOptions),
     };
 
     const cacheEnabled = isCacheEnabled();
@@ -159,6 +178,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
 
     this.fal.fal.config({
       credentials: this.apiKey,
+      ...this.clientConfig,
     });
 
     if (!response) {

@@ -19,7 +19,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   getGeminiMaxRetries,
@@ -303,7 +303,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         url,
         method: 'POST',
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
       return { data: res.data as GeminiApiResponse, cached: false };
     }
@@ -317,7 +317,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         method: 'POST',
         headers: await this.getAuthHeaders(),
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(getRequestTimeoutMs()),
       });
 
       if (!res.ok) {
@@ -346,7 +346,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         // Include auth discriminator in cache key to prevent cross-tenant cache sharing
         ...(authDiscriminator && { _authHash: authDiscriminator }),
       } as RequestInit,
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'json',
       false,
       0,
@@ -449,7 +449,6 @@ export class GoogleProvider extends GoogleGenericProvider {
         if (result.error) {
           return { error: result.error };
         }
-
         data = result.data as GeminiApiResponse;
         cached = result.cached;
 

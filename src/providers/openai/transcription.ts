@@ -1,9 +1,9 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TRANSCRIPTION_MODELS } from './util';
 
@@ -78,15 +78,19 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     // The prompt should be a file path to an audio file
     const audioFilePath = prompt.trim();
 
-    if (!fs.existsSync(audioFilePath)) {
-      return {
-        error: `Audio file not found: ${audioFilePath}`,
-      };
+    let fileBuffer: Awaited<ReturnType<typeof fs.readFile>>;
+    try {
+      fileBuffer = await fs.readFile(audioFilePath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { error: `Audio file not found: ${audioFilePath}` };
+      }
+      logger.error('Failed to read audio file', { error: err, audioFilePath });
+      return { error: `Failed to read audio file ${audioFilePath}: ${String(err)}` };
     }
 
     try {
-      // Read the audio file and create a File object for native FormData
-      const fileBuffer = fs.readFileSync(audioFilePath);
+      // Create a File object for native FormData from the loaded buffer
       const fileName = path.basename(audioFilePath);
       const file = new File([fileBuffer], fileName);
 
@@ -140,7 +144,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
             headers,
             body: formData,
           },
-          REQUEST_TIMEOUT_MS,
+          getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
         ));

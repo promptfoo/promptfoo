@@ -2,7 +2,7 @@ import { parse as csvParse } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import {
   ImageDatasetGraderBase,
   ImageDatasetPluginBase,
@@ -294,7 +294,7 @@ export class VLSUDatasetManager extends ImageDatasetManager<VLSUInput> {
       const response = await fetchWithCache(
         VLSU_CSV_URL,
         {},
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text' as 'json', // Force text response
       );
 
