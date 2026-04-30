@@ -54,7 +54,7 @@ inspect log dump /absolute/path/to/inspect_logs/<run>/<file>.eval
 
 ## Implementation map
 
-The example has five moving parts:
+The example has six moving parts:
 
 - `promptfooconfig.yaml` is the small-suite Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and loads OSWorld rows from `osworld_tests.py`.
 - `promptfooconfig.full.yaml` is the full-suite entrypoint. It switches the Inspect task to `inspect_evals/osworld`, sets `include_connected=true`, and loads the full generated row list.
@@ -99,23 +99,7 @@ npx promptfoo@latest init --example integration-inspect-osworld
 cd integration-inspect-osworld
 ```
 
-Run the full traced `osworld_small` suite:
-
-```bash
-PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  promptfoo eval -c promptfooconfig.yaml --no-cache --max-concurrency 6 \
-    -o osworld-results.json
-```
-
-To run it from the promptfoo repository source tree:
-
-```bash
-PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache \
-    --max-concurrency 6 -o osworld-results.json
-```
-
-For the first real verification, run one exact sample:
+Start with one exact sample:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
@@ -136,6 +120,23 @@ App filters are still multi-sample runs. In the current `osworld_small` set,
 `app=libreoffice_calc` selects three samples; in one local GPT-5.5 verification
 on April 29, 2026, that sequential subset took 12m31s and used 533,101 total
 tokens. Treat that as scale guidance, not a fixed benchmark.
+
+After the exact sample and app slice both work, run the full traced
+`osworld_small` suite:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.yaml --no-cache --max-concurrency 6 \
+    -o osworld-small-results.json
+```
+
+To run the same flow from the promptfoo repository source tree:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache \
+    --max-concurrency 6 -o osworld-small-results.json
+```
 
 To run Inspect's full supported corpus through Promptfoo, use the dedicated
 full-suite config:
@@ -331,6 +332,19 @@ jq '.results.results[] | {
 }' osworld-results.json
 ```
 
+For a benchmark report, separate scored rows from provider errors before you
+compute a pass rate:
+
+```bash
+jq '[.results.results[] | select((.response.metadata.status // "") != "error")] | length' \
+  osworld-full-results.json
+
+jq -r '.results.results[]
+  | select((.response.metadata.status // "") == "error")
+  | [.vars.app, .vars.sample_id, .response.error]
+  | @tsv' osworld-full-results.json
+```
+
 Then dump the underlying Inspect log for the row you care about:
 
 ```bash
@@ -369,7 +383,7 @@ and `defaultTest` assertion block, and export the results:
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
   promptfoo eval -c promptfooconfig.yaml --no-cache --max-concurrency 6 \
-    -o osworld-full-results.json
+    -o osworld-small-results.json
 ```
 
 | Metric                          |                         Result |
@@ -511,7 +525,7 @@ To reimplement the wrapper in another repo:
 3. Read `vars.sample_id` for exact runs, and keep `vars.app` for filtering and result grouping.
 4. Resolve `basePath`, `logRoot`, and `--log-dir` to absolute paths before invoking Inspect.
 5. Run `inspect eval inspect_evals/osworld_small --model <model> --sample-id <id> --log-dir <dir>` for exact samples.
-6. Run `inspect log dump <file.eval>` and parse `samples[0].scores[*].value`, falling back to `results.scores[*].metrics.accuracy.value`.
+6. Run `inspect log dump <file.eval>` and require `samples[0].scores.osworld_scorer.value` for the selected sample. Treat missing per-sample scorer output as a provider error instead of falling back to aggregate metrics.
 7. Return Promptfoo `output`, `metadata.score`, `metadata.status`, `metadata.sample_id`, `metadata.inspect_log_path`, and `tokenUsage`.
 8. Make assertion pass/fail depend on the OSWorld score, not the provider's final text.
 9. Keep Inspect `.eval` logs out of git and inspect them when scores or provider errors look surprising.
