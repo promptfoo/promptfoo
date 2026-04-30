@@ -23,7 +23,30 @@ vi.mock('../../src/logger', () => ({
 
 vi.mock('../../src/python/pythonUtils');
 vi.mock('../../src/cache');
-vi.mock('fs');
+const fsMocks = vi.hoisted(() => ({
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: fsMocks.readFileSync,
+  },
+  readFile: fsMocks.readFileSync,
+}));
 vi.mock('path');
 vi.mock('../../src/util', async () => {
   const actual = await vi.importActual<typeof import('../../src/util')>('../../src/util');

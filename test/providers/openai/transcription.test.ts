@@ -20,7 +20,37 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('fs');
+const fsMocks = vi.hoisted(() => ({
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+}));
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+vi.mock('fs/promises', () => {
+  // Async wrapper around the sync mock so the returned value is a real Promise,
+  // matching the actual fs/promises.readFile API.
+  const readFile = vi.fn(async (filePath: any, encoding?: any) =>
+    encoding === undefined
+      ? fsMocks.readFileSync(filePath)
+      : fsMocks.readFileSync(filePath, encoding),
+  );
+  return {
+    default: {
+      readFile,
+    },
+    readFile,
+  };
+});
 
 class MockFile {
   constructor(
@@ -138,7 +168,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       const result = await provider.callApi('/path/to/audio.mp3');
 
-      expect(fs.existsSync).toHaveBeenCalledWith('/path/to/audio.mp3');
+      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/audio.mp3');
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.stringContaining('/audio/transcriptions'),
         expect.objectContaining({
@@ -357,8 +387,8 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      vi.mocked(fs.existsSync).mockImplementation(function () {
-        return false;
+      vi.mocked(fs.readFileSync).mockImplementation(function () {
+        throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
       });
 
       const result = await provider.callApi('/path/to/missing.mp3');
@@ -718,7 +748,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('  /path/to/audio.mp3  ');
 
-      expect(fs.existsSync).toHaveBeenCalledWith('/path/to/audio.mp3');
+      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/audio.mp3');
     });
   });
 });

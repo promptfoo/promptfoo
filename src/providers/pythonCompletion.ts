@@ -1,4 +1,5 @@
-import fs from 'fs';
+import fsSync from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
@@ -212,7 +213,7 @@ export class PythonProvider implements ApiProvider {
   }
 
   private validateScriptExists(absPath: string): void {
-    if (fs.existsSync(absPath)) {
+    if (fsSync.existsSync(absPath)) {
       return;
     }
 
@@ -345,7 +346,7 @@ export class PythonProvider implements ApiProvider {
 
     const absPath = this.getAbsoluteScriptPath();
     logger.debug(`Computing file hash for script ${absPath}`);
-    const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
+    const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(

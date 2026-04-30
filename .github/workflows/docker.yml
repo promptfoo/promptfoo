@@ -43,8 +43,10 @@ on:
       - 'Dockerfile'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Reusable workflow calls inherit the caller's github.workflow value. Keep this
+  # group Docker-specific so release-please callers are not cancelled mid-release.
+  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', github.repository) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io

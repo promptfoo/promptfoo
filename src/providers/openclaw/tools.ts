@@ -1,6 +1,6 @@
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { buildOpenClawContextHeaders, resolveAuthToken, resolveGatewayUrl } from './shared';
 
 import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../types/providers';
@@ -37,7 +37,7 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
     const env = providerOptions.env as Record<string, string | undefined> | undefined;
     this.gatewayUrl = resolveGatewayUrl(this.openclawConfig, env);
     this.authToken = resolveAuthToken(this.openclawConfig, env);
-    this.timeoutMs = this.openclawConfig.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    this.timeoutMs = this.openclawConfig.timeoutMs ?? getRequestTimeoutMs();
   }
 
   id(): string {

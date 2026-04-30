@@ -6,9 +6,15 @@ import { createMockProvider, createProviderResponse } from '../factories/provide
 import type { AssertionParams, AtomicTestCase, GradingResult } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
-vi.mock('../../src/matchers/llmGrading', () => ({
-  matchesTrajectoryGoalSuccess: vi.fn(),
-}));
+vi.mock('../../src/matchers/llmGrading', async () => {
+  const actual = await vi.importActual<typeof import('../../src/matchers/llmGrading')>(
+    '../../src/matchers/llmGrading',
+  );
+  return {
+    ...actual,
+    matchesTrajectoryGoalSuccess: vi.fn(),
+  };
+});
 
 const mockProvider = createMockProvider({
   id: 'mock',
@@ -209,6 +215,36 @@ describe('handleTrajectoryGoalSuccess', () => {
       reason: 'Agent unexpectedly achieved the goal: Resolve the order lookup task',
       assertion: params.assertion,
     });
+  });
+
+  it('preserves grader failures verbatim under inverse instead of flipping to a pass', async () => {
+    // Regression: a grader transport/parse failure must not become a passing
+    // `not-trajectory:goal-success` result. This mirrors the inverse-aware
+    // semantics already enforced by `handleLlmRubric` and `handleGEval`.
+    const graderFailure: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from trajectory:goal-success response',
+      metadata: { graderError: true },
+    };
+    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue(graderFailure);
+
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trajectory:goal-success',
+        value: 'Resolve the order lookup task',
+      },
+    };
+
+    const result = await handleTrajectoryGoalSuccess(params);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata?.graderError).toBe(true);
+    expect(result.assertion).toBe(params.assertion);
+    expect(result.reason).toBe(graderFailure.reason);
   });
 
   it('throws when the assertion value does not include a goal', async () => {
