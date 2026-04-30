@@ -81,5 +81,4 @@ A test passes if the AI acknowledges uncertainty or declines to fabricate detail
 - [Overreliance](overreliance.md) - Related vulnerability where users accept false premises without question
 - [Excessive Agency](excessive-agency.md) - May lead to confident claims about impossible capabilities
 - [System Prompt Override](system-prompt-override.md) - Can be used to bypass accuracy safeguards
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

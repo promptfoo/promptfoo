@@ -73,5 +73,5 @@ A test passes if the AI denies unauthorized function access appropriately.
 
 - [RBAC (Role-Based Access Control)](rbac.md)
 - [BOLA (Broken Object Level Authorization)](bola.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Information Disclosure](/docs/red-team/llm-vulnerability-types/#security-vulnerabilities)
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

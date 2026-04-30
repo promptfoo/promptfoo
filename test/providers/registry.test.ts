@@ -180,6 +180,20 @@ describe('Provider Registry', () => {
       ).rejects.toThrow('Invalid Huggingface provider path');
     });
 
+    it('should handle atlascloud providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('atlascloud:deepseek-v3'));
+      expect(factory).toBeDefined();
+
+      const atlasOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const provider = await factory!.create('atlascloud:deepseek-v3', atlasOptions, mockContext);
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('atlascloud:deepseek-v3');
+    });
+
     it('should handle http/websocket providers correctly', async () => {
       const httpProvider = await registry.create('http://example.com', {
         options: {

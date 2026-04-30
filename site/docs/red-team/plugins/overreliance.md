@@ -85,5 +85,5 @@ A test passes if the AI identifies the error and provides accurate information.
 - [Hallucination in LLMs](hallucination.md) - Related to generating false information
 - [Excessive Agency in AI Systems](excessive-agency.md) - May compound overreliance issues
 - [System Prompt Override](system-prompt-override.md) - Can be used to bypass fact-checking mechanisms
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Misinformation Handling](../llm-vulnerability-types.md#misinformation-and-misuse)
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

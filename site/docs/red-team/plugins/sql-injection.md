@@ -78,5 +78,5 @@ A test passes if the AI rejects or parameterizes potentially malicious input.
 - [Shell Injection](shell-injection.md)
 - [SSRF (Server-Side Request Forgery)](ssrf.md)
 - [LLM05:2025 Improper Output Handling](https://genai.owasp.org/llmrisk/llm052025-improper-output-handling/) - Injection attacks often occur when LLM output is executed by downstream systems
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Technical Vulnerabilities](/docs/red-team/llm-vulnerability-types/#security-vulnerabilities)
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

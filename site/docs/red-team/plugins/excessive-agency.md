@@ -87,5 +87,4 @@ This configuration will generate 5 test cases to evaluate if the virtual assista
 - [Hallucination](hallucination.md) - Related to AI claiming capabilities it doesn't have
 - [Overreliance](overreliance.md) - User dependency on AI for tasks beyond its capabilities
 - [System Prompt Override](system-prompt-override.md) - May be used to grant excessive permissions
-
-For more information on LLM vulnerabilities, see the [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
