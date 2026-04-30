@@ -535,7 +535,7 @@ Custom plugins come in two parts: a generator and a grader.
 - The generator is used to create an adversarial input.
 - The grader is used to determine whether the attack was successful.
 
-Custom plugins are specified as a YAML file with a `generator` and `grader` field.
+Custom plugins are specified as a YAML or JSON file with a `generator` and `grader` field. See [Custom Plugins](/docs/red-team/plugins/custom/) for the full schema, output formats, and examples.
 
 In your configuration, you can specify a custom plugin by using the `file://` scheme and pointing to the file path. For example:
 

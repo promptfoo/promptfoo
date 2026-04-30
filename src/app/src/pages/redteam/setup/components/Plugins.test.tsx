@@ -325,6 +325,33 @@ describe('Plugins', () => {
     });
   });
 
+  it('does not enable next button for named custom policies with blank text', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: {
+                id: '0f4e92ab19c7',
+                name: 'Refund Policy',
+                text: '   ',
+              },
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
   it('enables next button when only custom intents are configured', async () => {
     mockUseRedTeamConfig.mockReturnValue({
       config: {
