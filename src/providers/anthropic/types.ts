@@ -56,12 +56,15 @@ export interface WebSearchToolConfig20260209 extends BaseWebSearchToolConfig {
   type: 'web_search_20260209';
 }
 
+export type MemoryToolConfig = Anthropic.Messages.MemoryTool20250818;
+
 export type AnthropicToolConfig =
   | WebFetchToolConfig
   | WebFetchToolConfig20260209
   | WebFetchToolConfigV2
   | WebSearchToolConfig
-  | WebSearchToolConfig20260209;
+  | WebSearchToolConfig20260209
+  | MemoryToolConfig;
 
 // Structured outputs configuration (JSON schema)
 export interface OutputFormat {

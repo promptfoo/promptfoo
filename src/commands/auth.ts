@@ -8,7 +8,7 @@ import { isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { CLOUD_API_HOST, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { getRequestTimeoutMs } from '../providers/shared';
 import {
   canCreateTargets,
   getUserTeams,
@@ -50,7 +50,7 @@ type DeviceTokenResponse = DeviceTokenSuccessResponse | DeviceTokenErrorResponse
 
 const DEVICE_CLIENT_ID = 'promptfoo-cli';
 const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
-const DEVICE_AUTH_REQUEST_TIMEOUT_MS = REQUEST_TIMEOUT_MS ?? 300_000;
+const DEVICE_AUTH_REQUEST_TIMEOUT_MS = getRequestTimeoutMs() ?? 300_000;
 
 function getOrganizationTeams(
   teams: UserTeam[],
