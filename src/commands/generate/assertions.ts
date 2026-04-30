@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 
 import chalk from 'chalk';
 import { InvalidArgumentError } from 'commander';
@@ -73,7 +73,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
   if (options.output) {
     // Should the output be written as a YAML or CSV?
     if (options.output.endsWith('.yaml')) {
-      fs.writeFileSync(options.output, yamlString);
+      await fs.writeFile(options.output, yamlString);
     } else {
       throw new Error(`Unsupported output file type: ${options.output}`);
     }
@@ -89,7 +89,9 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
 
   printBorder();
   if (options.write && configPath) {
-    const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    const existingConfig = yaml.load(
+      await fs.readFile(configPath, 'utf8'),
+    ) as Partial<UnifiedConfig>;
     // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
     const existingDefaultTest =
       typeof existingConfig.defaultTest === 'object' ? existingConfig.defaultTest : {};
@@ -97,7 +99,7 @@ export async function doGenerateAssertions(options: DatasetGenerateOptions): Pro
       ...existingDefaultTest,
       assert: [...(existingDefaultTest?.assert || []), ...configAddition.assert],
     };
-    fs.writeFileSync(configPath, yaml.dump(existingConfig));
+    await fs.writeFile(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
     const runCommand = promptfooCommand('eval');
     logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated assertions`));

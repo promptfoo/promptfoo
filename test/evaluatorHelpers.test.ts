@@ -18,8 +18,8 @@ import { mockProcessEnv } from './util/utils';
 import type { Prompt, TestCase, TestSuite } from '../src/types/index';
 
 // Use vi.hoisted to define mocks and helpers that need to be accessible in vi.mock factories
-const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve } = vi.hoisted(
-  () => {
+const { actualPathResolve, dynamicModuleMocks, fsMocks, mockDynamicModule, mockPathResolve } =
+  vi.hoisted(() => {
     const actualPath = require('path');
     const actualPathResolve = actualPath.resolve.bind(actualPath);
     const mockPathResolve = vi.fn((...paths: string[]) => actualPathResolve(...paths));
@@ -28,9 +28,16 @@ const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolv
       const resolvedPath = actualPathResolve(filePath);
       dynamicModuleMocks.set(resolvedPath, moduleExport);
     };
-    return { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve };
-  },
-);
+    const fsMocks = {
+      readFileSync: vi.fn(),
+      writeFileSync: vi.fn(),
+      statSync: vi.fn(),
+      readdirSync: vi.fn(),
+      existsSync: vi.fn(),
+      mkdirSync: vi.fn(),
+    };
+    return { actualPathResolve, dynamicModuleMocks, fsMocks, mockDynamicModule, mockPathResolve };
+  });
 
 vi.mock('path', async () => {
   const actual = await vi.importActual<typeof import('path')>('path');
@@ -58,15 +65,17 @@ vi.mock('node:module', () => {
 });
 
 vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  statSync: vi.fn(),
-  readdirSync: vi.fn(),
-  existsSync: vi.fn(),
-  mkdirSync: vi.fn(),
+  ...fsMocks,
   promises: {
-    readFile: vi.fn(),
+    readFile: fsMocks.readFileSync,
   },
+}));
+
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: fsMocks.readFileSync,
+  },
+  readFile: fsMocks.readFileSync,
 }));
 
 const mockGetText = vi.fn().mockResolvedValue({ text: 'Extracted PDF text' });

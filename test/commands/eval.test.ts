@@ -20,6 +20,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import { generateTable } from '../../src/table';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -104,6 +105,7 @@ describe('evalCommand', () => {
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
+    vi.mocked(generateTable).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -469,6 +471,39 @@ describe('evalCommand', () => {
       expect.anything(),
       expect.objectContaining({ maxConcurrency: 5 }),
     );
+  });
+
+  it('should pass tableCellMaxLength to the table renderer', async () => {
+    const config = {
+      commandLineOptions: {
+        tableCellMaxLength: 37,
+      },
+    } as UnifiedConfig;
+
+    vi.spyOn(Eval.prototype, 'getTable').mockResolvedValue({
+      head: { prompts: [], vars: [] },
+      body: [],
+    } as any);
+    vi.mocked(generateTable).mockReturnValue({ toString: () => 'rendered table' } as any);
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: config.commandLineOptions,
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval({ table: true, write: false }, config, undefined, {});
+
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 37);
+
+    vi.mocked(generateTable).mockClear();
+    await doEval({ table: true, tableCellMaxLength: 42, write: false }, config, undefined, {});
+
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 42);
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {

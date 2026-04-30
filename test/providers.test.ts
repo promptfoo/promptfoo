@@ -473,6 +473,21 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should load OpenAI GPT-5.5 chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5.5');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.5', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should load OpenAI GPT-5.5 dated snapshot chat provider', async () => {
+    const provider = await loadApiProvider('openai:chat:gpt-5.5-2026-04-23');
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
+      'gpt-5.5-2026-04-23',
+      expect.any(Object),
+    );
+    expect(provider).toBeDefined();
+  });
+
   it('should load OpenAI Codex provider with model from provider path', async () => {
     const provider = await loadApiProvider('openai:codex:gpt-5.4');
 
@@ -481,12 +496,28 @@ describe('loadApiProvider', () => {
     expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4');
   });
 
+  it('should load OpenAI Codex provider with GPT-5.5 model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex:gpt-5.5');
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex:gpt-5.5');
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.5');
+  });
+
   it('should load OpenAI Codex SDK provider with model from provider path', async () => {
     const provider = await loadApiProvider('openai:codex-sdk:gpt-5.4-pro');
 
     expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
     expect(provider.id()).toBe('openai:codex-sdk:gpt-5.4-pro');
     expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.4-pro');
+  });
+
+  it('should load OpenAI Codex SDK provider with GPT-5.5 Pro model from provider path', async () => {
+    const provider = await loadApiProvider('openai:codex-sdk:gpt-5.5-pro');
+
+    expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+    expect(provider.id()).toBe('openai:codex-sdk:gpt-5.5-pro');
+    expect((provider as OpenAICodexSDKProvider).config.model).toBe('gpt-5.5-pro');
   });
 
   it('should load OpenAI Codex provider with model from config when ID has no model', async () => {
@@ -578,6 +609,22 @@ describe('loadApiProvider', () => {
     try {
       const provider = await loadApiProvider('openai:gpt-5.4-pro');
       expect(OpenAiResponsesProvider).toHaveBeenCalledWith('gpt-5.4-pro', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
+    }
+  });
+
+  it('should auto-route OpenAI GPT-5.5 Pro shorthand to responses', async () => {
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalResponsesModelNames = (OpenAiResponsesProvider as any)
+      .OPENAI_RESPONSES_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = [];
+    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = ['gpt-5.5-pro'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-5.5-pro');
+      expect(OpenAiResponsesProvider).toHaveBeenCalledWith('gpt-5.5-pro', expect.any(Object));
       expect(provider).toBeDefined();
     } finally {
       (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
