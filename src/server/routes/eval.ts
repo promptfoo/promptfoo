@@ -14,7 +14,7 @@ import invariant from '../../util/invariant';
 import { sanitizeObject } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { sendError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -197,8 +197,16 @@ function validateWebEvalPrompts(prompts: (string | Record<string, unknown>)[]): 
 }
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
+  let parsedPayload: EvalTableDTO;
   try {
-    res.json(responsePayload);
+    parsedPayload = EvalSchemas.Table.Response.parse(responsePayload) as unknown as EvalTableDTO;
+  } catch (error) {
+    sendError(res, 500, 'Failed to render eval table', error);
+    return;
+  }
+
+  try {
+    res.json(parsedPayload);
   } catch (error) {
     if (!(error instanceof RangeError)) {
       throw error;
@@ -208,7 +216,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       evalId,
     });
 
-    const promptLocations = getEvalTableOutputPromptLocationsBySize(responsePayload);
+    const promptLocations = getEvalTableOutputPromptLocationsBySize(parsedPayload);
     if (promptLocations.length === 0) {
       logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
         evalId,
@@ -219,7 +227,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
 
     const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
       const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
-        responsePayload,
+        parsedPayload,
         promptLocations,
         promptCountToStrip,
       );
@@ -850,13 +858,13 @@ evalRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.SubmitRating.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
     const bodyResult = EvalSchemas.SubmitRating.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -935,7 +943,7 @@ evalRouter.post(
       await eval_.save();
       await result.save();
 
-      res.json(result);
+      res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }
