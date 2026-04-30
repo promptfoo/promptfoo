@@ -8,6 +8,8 @@ providers:
   - id: openai:codex-sdk
     config:
       model: gpt-5.2-codex
+      cli_config:
+        model_verbosity: medium
       sandbox_mode: read-only
       skip_git_repo_check: true
       persist_threads: true
