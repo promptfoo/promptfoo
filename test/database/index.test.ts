@@ -109,6 +109,25 @@ describe('database', () => {
         db.all<{ id: string }>('SELECT id FROM transaction_queue_test ORDER BY id'),
       ).resolves.toEqual([{ id: 'a' }, { id: 'b' }]);
     });
+
+    it('should enforce foreign keys inside top-level transactions', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE transaction_fk_parent (id TEXT PRIMARY KEY)');
+      await db.run(`
+        CREATE TABLE transaction_fk_child (
+          id TEXT PRIMARY KEY,
+          parent_id TEXT NOT NULL REFERENCES transaction_fk_parent(id)
+        )
+      `);
+
+      await expect(
+        db.transaction(async (tx) => {
+          await tx.run(
+            "INSERT INTO transaction_fk_child (id, parent_id) VALUES ('child', 'missing')",
+          );
+        }),
+      ).rejects.toThrow();
+    });
   });
 
   describe('DrizzleLogWriter', () => {
