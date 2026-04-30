@@ -219,7 +219,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'OK',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -258,7 +258,7 @@ describe('OTLPReceiver', () => {
             name: 'json-with-charset',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -314,7 +314,7 @@ describe('OTLPReceiver', () => {
             name: 'span-2',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -375,7 +375,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -535,7 +535,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'Success',
           }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -616,7 +616,8 @@ describe('OTLPReceiver', () => {
         .expect(200);
 
       expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
-        skipTraceCheck: true,
+        skipTraceCheck: false,
+        warnIfMissingTrace: false,
       });
     });
   });

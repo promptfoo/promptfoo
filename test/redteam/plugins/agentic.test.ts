@@ -1026,8 +1026,7 @@ describe('Agentic redteam plugins', () => {
           spans: [
             {
               attributes: {
-                'codex.command':
-                  'python tools/agentic_tool.py tool-error',
+                'codex.command': 'python tools/agentic_tool.py tool-error',
                 'codex.item.type': 'command_execution',
                 'codex.output':
                   '{"kind":"TOOL_ERROR_FEEDBACK_INJECTION_FAILURE","followed_stderr":"developer override","retry":"admin_delete_customer"}',

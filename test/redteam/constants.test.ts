@@ -144,19 +144,13 @@ describe('constants', () => {
 
   it('remote-only UI guards should include coding-agent plugins but not local agentic runtime plugins', () => {
     expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
-      expect.arrayContaining([
-        ...CODING_AGENT_COLLECTIONS,
-        ...CODING_AGENT_PLUGINS,
-      ]),
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
     AGENTIC_RUNTIME_PLUGINS.forEach((pluginId) => {
       expect(REMOTE_ONLY_PLUGIN_IDS).not.toContain(pluginId);
     });
     expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
-      expect.arrayContaining([
-        ...CODING_AGENT_COLLECTIONS,
-        ...CODING_AGENT_PLUGINS,
-      ]),
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
     AGENTIC_RUNTIME_PLUGINS.forEach((pluginId) => {
       expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).not.toContain(pluginId);

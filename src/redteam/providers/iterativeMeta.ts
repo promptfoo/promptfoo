@@ -3,12 +3,12 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import { flushOtel } from '../../tracing/otelSdk';
 import {
   extractTraceIdFromTraceparent,
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import { flushOtel } from '../../tracing/otelSdk';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
