@@ -1,5 +1,6 @@
 import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
+import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
@@ -525,7 +526,6 @@ export default class Eval {
     const result = await db.select({ count: sql<number>`count(*)` }).from(evalsTable).get();
     return result?.count ?? 0;
   }
-
   static async create(
     config: Partial<UnifiedConfig>,
     renderedPrompts: Prompt[], // The config doesn't contain the actual prompts, so we need to pass them in separately
@@ -1454,6 +1454,7 @@ export default class Eval {
   async delete() {
     const db = getDb();
     db.transaction(() => {
+      deleteTraceRecordsForEvals(db, [this.id]);
       db.delete(evalsToDatasetsTable).where(eq(evalsToDatasetsTable.evalId, this.id)).run();
       db.delete(evalsToPromptsTable).where(eq(evalsToPromptsTable.evalId, this.id)).run();
       db.delete(evalsToTagsTable).where(eq(evalsToTagsTable.evalId, this.id)).run();

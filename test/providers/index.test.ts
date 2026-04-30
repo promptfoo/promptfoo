@@ -811,6 +811,17 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('vertex:vertex-embedding-model');
   });
 
+  it('vertex:embedding forwards providerOptions.config to this.config', async () => {
+    const provider = (await loadApiProvider('vertex:embedding:gemini-embedding-001', {
+      options: {
+        config: { autoTruncate: true, region: 'us-west1' },
+      },
+    })) as VertexEmbeddingProvider;
+    expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+    expect(provider.config.autoTruncate).toBe(true);
+    expect(provider.config.region).toBe('us-west1');
+  });
+
   it('loadApiProvider with google:embedding', async () => {
     const provider = await loadApiProvider('google:embedding:gemini-embedding-001');
     expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
