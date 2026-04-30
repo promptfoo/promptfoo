@@ -2,7 +2,7 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 
 import type {
@@ -289,7 +289,7 @@ export class OpenAiModerationProvider
               headers,
               body: requestBody,
             },
-            REQUEST_TIMEOUT_MS,
+            getRequestTimeoutMs(),
             'json',
             true,
             this.config.maxRetries,

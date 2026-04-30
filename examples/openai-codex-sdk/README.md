@@ -83,6 +83,24 @@ The default relative paths in these configs are intentionally subdirectory-relat
 
 The checked-in `sample-codex-home` fixture is intentionally empty of auth state. Use it with `OPENAI_API_KEY`/`CODEX_API_KEY`, or point `CODEX_HOME_OVERRIDE` at `$HOME/.codex` when you want to reuse a local Codex login.
 
+### Skill Comparison
+
+This example compares two versions of the same local Codex skill against identical review tasks.
+
+- **Versioned fixtures**: Each provider points at a different `working_dir` with its own `review-standards` skill
+- **Outcome scoring**: A JavaScript assertion scores issue recall and precision for each response
+- **Winner selection**: `max-score` picks the strongest skill version for each task after combining routing, correctness, cost, and latency signals
+
+**Location**: `./skill-comparison/`
+
+**Usage**:
+
+```bash
+(cd skill-comparison && promptfoo eval --no-cache)
+```
+
+If you run this config from the repo root, set `CODEX_SKILL_COMPARE_V1_DIR` and `CODEX_SKILL_COMPARE_V2_DIR` to the absolute fixture paths first.
+
 If your network requires proxy or custom certificate environment variables such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, or `NODE_EXTRA_CA_CERTS`, pass them through `config.cli_env` or set `inherit_process_env: true` in the provider config. Promptfoo intentionally does not forward the full process environment to Codex by default.
 
 ### Thread Persistence
