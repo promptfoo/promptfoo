@@ -21,6 +21,10 @@ import {
   shouldGenerateRemote,
 } from '../../remoteGeneration';
 import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializedInputVariables,
+} from '../../remoteMaterialization';
+import {
   applyRuntimeTransforms,
   type LayerConfig,
   type MediaData,
@@ -287,6 +291,7 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
+    let agentFailureError: string | undefined;
 
     const redteamHistory: Array<{
       prompt: string;
@@ -386,6 +391,7 @@ export class HydraProvider implements ApiProvider {
           testRunId,
           error: agentResp.error,
         });
+        agentFailureError = agentResp.error;
         continue;
       }
 
@@ -402,6 +408,7 @@ export class HydraProvider implements ApiProvider {
 
       if (!nextMessage) {
         logger.info('[Hydra] Missing message from agent', { turn });
+        agentFailureError = 'Hydra agent did not return an attack message';
         continue;
       }
 
@@ -414,16 +421,46 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Extract input vars from the processed message for multi-input mode
+      if (this.config.inputs && shouldGenerateRemote()) {
+        assertRemoteMaterializationHandled(agentResp, 'Hydra multi-input generation');
+      }
       const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
-      const materializedInputVars =
-        currentInputVars && this.config.inputs
-          ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+      let materializedInputVars:
+        | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+        | undefined;
+      if (
+        this.config.inputs &&
+        shouldGenerateRemote() &&
+        !currentInputVars &&
+        !agentResp.materializedVars
+      ) {
+        logger.warn('[Hydra] Remote multi-input generation returned an invalid prompt format', {
+          turn,
+          messagePreview: processedMessage.slice(0, 200),
+        });
+        agentFailureError = 'Hydra remote multi-input generation returned an invalid prompt format';
+        continue;
+      }
+      if ((currentInputVars || agentResp.materializedVars) && this.config.inputs) {
+        if (shouldGenerateRemote()) {
+          materializedInputVars = buildRemoteMaterializedInputVariables(
+            agentResp,
+            currentInputVars ?? {},
+            this.config.inputs,
+          );
+        } else {
+          materializedInputVars = await materializeInputVariablesWithMetadata(
+            currentInputVars!,
+            this.config.inputs,
+            {
               materializationIndex: turn,
               pluginId: 'hydra',
               provider: this.agentProvider,
               purpose: test?.metadata?.purpose as string | undefined,
-            })
-          : undefined;
+            },
+          );
+        }
+      }
       const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
       // Add message to conversation history (without <Prompt> tags)
@@ -931,14 +968,24 @@ export class HydraProvider implements ApiProvider {
       role: msg.role,
       content: msg.content,
     })) as Record<string, any>[];
+    const targetProbeCount = totalTokenUsage.numRequests ?? 0;
+    const hydraRoundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
+    const failClosedError =
+      targetProbeCount === 0
+        ? agentFailureError || 'Hydra did not execute any target probes'
+        : undefined;
 
     return {
       output: lastTargetResponse?.output || '',
-      ...(lastTargetResponse?.error ? { error: lastTargetResponse.error } : {}),
+      ...(failClosedError
+        ? { error: failClosedError }
+        : lastTargetResponse?.error
+          ? { error: lastTargetResponse.error }
+          : {}),
       metadata: {
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
-        hydraRoundsCompleted: this.conversationHistory.filter((m) => m.role === 'user').length,
+        hydraRoundsCompleted,
         hydraBacktrackCount: backtrackCount,
         hydraResult: vulnerabilityAchieved,
         stopReason,
