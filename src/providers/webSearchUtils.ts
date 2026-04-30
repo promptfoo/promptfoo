@@ -121,10 +121,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // OpenAI GPT-5.4 snapshot with web search tool (via responses API)
+  // OpenAI GPT-5.5 snapshot with web search tool (via responses API)
   const loadOpenAIWebSearch = async () => {
     try {
-      return await loadApiProvider('openai:responses:gpt-5.4-2026-03-05', {
+      return await loadApiProvider('openai:responses:gpt-5.5-2026-04-23', {
         options: {
           config: { tools: [{ type: 'web_search_preview' }] },
         },

@@ -16,7 +16,7 @@ import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
-import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
+import type { ProviderOptions } from '../../types/providers';
 
 export const providersRouter = Router();
 
@@ -37,16 +37,11 @@ providersRouter.get('/config-status', (_req: Request, res: Response): void => {
     const serverProviders = getAvailableProviders();
     const hasCustomConfig = serverProviders.length > 0;
 
-    res.json({
-      success: true,
-      data: { hasCustomConfig },
-    });
+    res.json(
+      ProviderSchemas.ConfigStatus.Response.parse({ success: true, data: { hasCustomConfig } }),
+    );
   } catch (error) {
-    logger.error('[GET /api/providers/config-status] Error loading config status', { error });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to load provider config status',
-    });
+    sendError(res, 500, 'Failed to load provider config status', error);
   }
 });
 
@@ -59,36 +54,42 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
 
   const { providerOptions } = bodyResult.data;
 
-  const loadedProvider = await loadApiProvider(providerOptions.id, {
-    options: {
-      ...(providerOptions as ProviderOptions),
-      config: {
-        ...providerOptions.config,
-        maxRetries: 1,
+  try {
+    const loadedProvider = await loadApiProvider(providerOptions.id, {
+      options: {
+        ...(providerOptions as ProviderOptions),
+        config: {
+          ...providerOptions.config,
+          maxRetries: 1,
+        },
       },
-    },
-  });
+    });
 
-  // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
-  // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
-  const result = await testProviderConnectivity({
-    provider: loadedProvider,
-    prompt: bodyResult.data.prompt,
-    inputs: providerOptions.inputs || providerOptions.config?.inputs,
-  });
+    // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
+    // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+    const result = await testProviderConnectivity({
+      provider: loadedProvider,
+      prompt: bodyResult.data.prompt,
+      inputs: providerOptions.inputs || providerOptions.config?.inputs,
+    });
 
-  res.status(200).json({
-    testResult: {
-      success: result.success,
-      message: result.message,
-      error: result.error,
-      changes_needed: result.analysis?.changes_needed,
-      changes_needed_reason: result.analysis?.changes_needed_reason,
-      changes_needed_suggestions: result.analysis?.changes_needed_suggestions,
-    },
-    providerResponse: result.providerResponse,
-    transformedRequest: result.transformedRequest,
-  } as ProviderTestResponse);
+    res.status(200).json(
+      ProviderSchemas.Test.Response.parse({
+        testResult: {
+          success: result.success,
+          message: result.message,
+          error: result.error,
+          changes_needed: result.analysis?.changes_needed,
+          changes_needed_reason: result.analysis?.changes_needed_reason,
+          changes_needed_suggestions: result.analysis?.changes_needed_suggestions,
+        },
+        providerResponse: result.providerResponse,
+        transformedRequest: result.transformedRequest,
+      }),
+    );
+  } catch (error) {
+    sendError(res, 500, 'Failed to test provider', error);
+  }
 });
 
 providersRouter.post(
@@ -117,7 +118,7 @@ providersRouter.post(
       const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
 
       if (result) {
-        res.json(result);
+        res.json(ProviderSchemas.Discover.Response.parse(result));
       } else {
         res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
       }
@@ -173,7 +174,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
 
     const data = await response.json();
     logger.debug('[POST /providers/http-generator] Successfully generated config');
-    res.status(200).json(data);
+    res.status(200).json(ProviderSchemas.HttpGenerator.Response.parse(data));
   } catch (error) {
     logger.error('[POST /providers/http-generator] Error calling HTTP provider generator', {
       error,
@@ -208,27 +209,28 @@ providersRouter.post(
 
       // Check if result is completely empty (no value at all)
       if (result === null || result === undefined) {
-        res.json({
-          success: false,
-          error:
-            'Transform returned null or undefined. Check your transform function. Did you forget to `return` the result?',
-        });
+        res.json(
+          ProviderSchemas.TestRequestTransform.Response.parse({
+            success: false,
+            error:
+              'Transform returned null or undefined. Check your transform function. Did you forget to `return` the result?',
+          }),
+        );
         return;
       }
 
-      res.json({
-        success: true,
-        result,
-      });
+      res.json(ProviderSchemas.TestRequestTransform.Response.parse({ success: true, result }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[POST /providers/test-request-transform] Error', {
         error,
       });
-      res.status(200).json({
-        success: false,
-        error: errorMessage,
-      });
+      res.status(200).json(
+        ProviderSchemas.TestRequestTransform.Response.parse({
+          success: false,
+          error: errorMessage,
+        }),
+      );
     }
   },
 );
@@ -265,28 +267,34 @@ providersRouter.post(
       const output = result?.output ?? result?.raw ?? result;
 
       if (output === null || output === undefined || output === '') {
-        res.json({
-          success: false,
-          error:
-            'Transform returned empty result. Ensure that your sample response is correct, and check your extraction path or transform function are returning a valid result.',
-          result: JSON.stringify(output),
-        });
+        res.json(
+          ProviderSchemas.TestResponseTransform.Response.parse({
+            success: false,
+            error:
+              'Transform returned empty result. Ensure that your sample response is correct, and check your extraction path or transform function are returning a valid result.',
+            result: JSON.stringify(output),
+          }),
+        );
         return;
       }
 
-      res.json({
-        success: true,
-        result: output,
-      });
+      res.json(
+        ProviderSchemas.TestResponseTransform.Response.parse({
+          success: true,
+          result: output,
+        }),
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[POST /providers/test-response-transform] Error', {
         error,
       });
-      res.status(200).json({
-        success: false,
-        error: errorMessage,
-      });
+      res.status(200).json(
+        ProviderSchemas.TestResponseTransform.Response.parse({
+          success: false,
+          error: errorMessage,
+        }),
+      );
     }
   },
 );
@@ -322,13 +330,8 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       mainInputVariable,
     });
 
-    res.json(result);
+    res.json(ProviderSchemas.TestSession.Response.parse(result));
   } catch (error) {
-    logger.error('[POST /providers/test-session] Error testing session', { error });
-    res.status(500).json({
-      success: false,
-      message: 'Failed to test session',
-      error: 'Failed to test session',
-    });
+    sendError(res, 500, 'Failed to test session', error);
   }
 });
