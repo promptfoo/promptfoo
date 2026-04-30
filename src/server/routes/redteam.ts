@@ -66,7 +66,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       const excludedPlugins = [...DATASET_EXEMPT_PLUGINS, ...MULTI_INPUT_EXCLUDED_PLUGINS];
       if (excludedPlugins.includes(plugin.id as (typeof excludedPlugins)[number])) {
         logger.debug(`Skipping plugin '${plugin.id}' - does not support multi-input mode`);
-        res.json({ testCases: [], count: 0 });
+        res.json(RedteamSchemas.GenerateTest.Response.parse({ testCases: [], count: 0 }));
         return;
       }
     }
@@ -160,11 +160,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           stateful,
         });
 
-        res.json({
-          prompt: multiTurnResult.prompt,
-          context,
-          metadata: multiTurnResult.metadata,
-        });
+        res.json(
+          RedteamSchemas.GenerateTest.Response.parse({
+            prompt: multiTurnResult.prompt,
+            context,
+            metadata: multiTurnResult.metadata,
+          }),
+        );
         return;
       } catch (error) {
         if (error instanceof RemoteGenerationDisabledError) {
@@ -192,10 +194,12 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         return { prompt, context, metadata };
       });
 
-      res.json({
-        testCases: batchResults,
-        count: batchResults.length,
-      });
+      res.json(
+        RedteamSchemas.GenerateTest.Response.parse({
+          testCases: batchResults,
+          count: batchResults.length,
+        }),
+      );
       return;
     }
 
@@ -205,11 +209,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const baseMetadata =
       testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
 
-    res.json({
-      prompt: generatedPrompt,
-      context,
-      metadata: baseMetadata,
-    });
+    res.json(
+      RedteamSchemas.GenerateTest.Response.parse({
+        prompt: generatedPrompt,
+        context,
+        metadata: baseMetadata,
+      }),
+    );
   } catch (error) {
     logger.error('Error generating test case', { error });
     res.status(500).json({
@@ -307,7 +313,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     });
 
-  res.json({ id });
+  res.json(RedteamSchemas.Run.Response.parse({ id }));
 });
 
 redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
@@ -336,7 +342,7 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   // Wait a moment to ensure cleanup
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  res.json({ message: 'Job cancelled' });
+  res.json(RedteamSchemas.Cancel.Response.parse({ message: 'Job cancelled' }));
 });
 
 /**
@@ -389,7 +395,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 
     const data = await response.json();
     logger.debug(`Received response from cloud function: ${JSON.stringify(data)}`);
-    res.json(data);
+    res.json(RedteamSchemas.Task.Response.parse(data));
   } catch (error) {
     logger.error(`Error in ${taskId} task: ${error}`);
     res.status(500).json({ error: `Failed to process ${taskId} task` });
@@ -397,8 +403,10 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 });
 
 redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void> => {
-  res.json({
-    hasRunningJob: currentJobId !== null,
-    jobId: currentJobId,
-  });
+  res.json(
+    RedteamSchemas.Status.Response.parse({
+      hasRunningJob: currentJobId !== null,
+      jobId: currentJobId,
+    }),
+  );
 });
