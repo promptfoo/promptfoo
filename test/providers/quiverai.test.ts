@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
-import { getEnvString } from '../../src/envars';
+import { getEnvInt, getEnvString } from '../../src/envars';
 import { createQuiverAiProvider, QuiverAiProvider } from '../../src/providers/quiverai';
 import { fetchWithProxy } from '../../src/util/fetch';
 
@@ -73,6 +73,9 @@ function createSSEStream(events: string, splitAt?: number[]) {
 describe('QuiverAI Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getEnvString).mockReset();
+    vi.mocked(getEnvInt).mockReset();
+    vi.mocked(getEnvInt).mockReturnValue(300_000);
   });
 
   afterEach(() => {

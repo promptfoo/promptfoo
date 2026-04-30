@@ -129,7 +129,7 @@ export function resolveAudioSource(
   }
 
   const data = audio?.data || fallbackContent;
-  if (!data) {
+  if (!data || data.startsWith('file://')) {
     return null;
   }
 

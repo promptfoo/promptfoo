@@ -140,9 +140,10 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -euo pipefail
-          # core.hooksPath=/dev/null blocks PR-planted .git/hooks/pre-push from
-          # executing with GH_TOKEN in env. The extraheader scopes auth to just
-          # this invocation instead of persisting in .git/config.
+          # GitHub's Git smart HTTP endpoint expects Basic auth. Build the
+          # header just-in-time so credentials are scoped to this invocation
+          # instead of being persisted in .git/config.
+          basic_auth="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 | tr -d '\n')"
           git -c core.hooksPath=/dev/null \
-              -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" \
+              -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic_auth}" \
               push origin "HEAD:${HEAD_REF}"
