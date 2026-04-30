@@ -192,4 +192,5 @@ The composite approach is often more effective than single techniques because:
 - [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
 - [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
 - [Citation Strategy](citation.md) - Academic framing technique used within composite approach
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

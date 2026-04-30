@@ -62,10 +62,10 @@
           "$ref": "#/definitions/__schema42"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema44"
         },
         "targets": {
-          "$ref": "#/definitions/__schema44"
+          "$ref": "#/definitions/__schema45"
         }
       },
       "required": ["prompts"],
@@ -186,6 +186,9 @@
           "type": "string"
         },
         "ANTHROPIC_BASE_URL": {
+          "type": "string"
+        },
+        "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
         "AWS_BEDROCK_REGION": {
@@ -1614,6 +1617,9 @@
                       "type": "string"
                     },
                     "ANTHROPIC_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
                     "AWS_BEDROCK_REGION": {
@@ -3120,11 +3126,17 @@
         },
         "silent": {
           "type": "boolean"
+        },
+        "filterRange": {
+          "$ref": "#/definitions/__schema43"
         }
       },
       "additionalProperties": false
     },
     "__schema43": {
+      "type": "string"
+    },
+    "__schema44": {
       "type": "object",
       "properties": {
         "description": {
@@ -3252,6 +3264,13 @@
         "filterProviders": {
           "type": "string"
         },
+        "filterRange": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema43"
+            }
+          ]
+        },
         "filterSample": {
           "type": "integer",
           "exclusiveMinimum": 0,
@@ -3303,7 +3322,7 @@
       },
       "additionalProperties": false
     },
-    "__schema44": {
+    "__schema45": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

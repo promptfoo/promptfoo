@@ -5,6 +5,7 @@ import {
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
+import { MessageResponseSchema } from './common';
 
 import type { Plugin, Strategy } from '../../redteam/constants';
 
@@ -25,7 +26,7 @@ export const TestCaseGenerationSchema = z.object({
   }),
   config: z.object({
     applicationDefinition: z.object({
-      purpose: z.string().nullable(),
+      purpose: z.string().nullable().optional(),
     }),
   }),
   turn: z.int().min(0).optional().prefault(0),
@@ -39,6 +40,22 @@ export const TestCaseGenerationSchema = z.object({
 
 export type TestCaseGeneration = z.infer<typeof TestCaseGenerationSchema>;
 
+const GeneratedTestCaseResponseSchema = z.object({
+  prompt: z.string(),
+  context: z.string(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const TestCaseGenerationResponseSchema = z.union([
+  GeneratedTestCaseResponseSchema,
+  z.object({
+    testCases: z.array(GeneratedTestCaseResponseSchema),
+    count: z.number().int().nonnegative(),
+  }),
+]);
+
+export type TestCaseGenerationResponse = z.infer<typeof TestCaseGenerationResponseSchema>;
+
 // POST /api/redteam/run
 
 export const RedteamRunRequestSchema = z.object({
@@ -51,6 +68,18 @@ export const RedteamRunRequestSchema = z.object({
 
 export type RedteamRunRequest = z.infer<typeof RedteamRunRequestSchema>;
 
+export const RedteamRunResponseSchema = z.object({
+  id: z.string().uuid(),
+});
+
+export type RedteamRunResponse = z.infer<typeof RedteamRunResponseSchema>;
+
+// POST /api/redteam/cancel
+
+export const RedteamCancelResponseSchema = MessageResponseSchema;
+
+export type RedteamCancelResponse = z.infer<typeof RedteamCancelResponseSchema>;
+
 // POST /api/redteam/:taskId
 
 export const RedteamTaskParamsSchema = z.object({
@@ -61,11 +90,29 @@ export type RedteamTaskParams = z.infer<typeof RedteamTaskParamsSchema>;
 
 export const RedteamTaskRequestSchema = z.record(z.string(), z.unknown());
 
+export const RedteamTaskResponseSchema = z.unknown();
+
 export type RedteamTaskRequest = z.infer<typeof RedteamTaskRequestSchema>;
+export type RedteamTaskResponse = z.infer<typeof RedteamTaskResponseSchema>;
+
+// GET /api/redteam/status
+
+export const RedteamStatusResponseSchema = z.object({
+  hasRunningJob: z.boolean(),
+  jobId: z.string().nullable(),
+});
+
+export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const RedteamSchemas = {
-  GenerateTest: { Request: TestCaseGenerationSchema },
-  Run: { Request: RedteamRunRequestSchema },
-  Task: { Params: RedteamTaskParamsSchema, Request: RedteamTaskRequestSchema },
+  GenerateTest: { Request: TestCaseGenerationSchema, Response: TestCaseGenerationResponseSchema },
+  Run: { Request: RedteamRunRequestSchema, Response: RedteamRunResponseSchema },
+  Cancel: { Response: RedteamCancelResponseSchema },
+  Task: {
+    Params: RedteamTaskParamsSchema,
+    Request: RedteamTaskRequestSchema,
+    Response: RedteamTaskResponseSchema,
+  },
+  Status: { Response: RedteamStatusResponseSchema },
 } as const;
