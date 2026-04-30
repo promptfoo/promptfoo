@@ -1,6 +1,7 @@
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
 import dedent from 'dedent';
@@ -317,6 +318,15 @@ export interface ClaudeCodeOptions {
   permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
 
   /**
+   * Custom workflow instructions for plan mode. Only takes effect when
+   * `permission_mode` is `'plan'`; the string replaces the default
+   * code-implementation workflow body in the plan-mode system reminder.
+   * The CLI still wraps it with the read-only enforcement preamble and the
+   * ExitPlanMode protocol footer.
+   */
+  plan_mode_instructions?: string;
+
+  /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
    */
   custom_system_prompt?: string;
@@ -359,6 +369,39 @@ export interface ClaudeCodeOptions {
    * Each plugin must be a directory containing .claude-plugin/plugin.json manifest
    */
   plugins?: Array<{ type: 'local'; path: string }>;
+
+  /**
+   * Filters which Skills are loaded into the main session.
+   *
+   * - omitted: no SDK-side filtering — the CLI's own defaults still apply
+   *   (this is **not** "skills off")
+   * - `'all'`: enable every discovered skill
+   * - `string[]`: enable only the listed skills, matched by SKILL.md `name` /
+   *   directory name, or `plugin:skill` for plugin-qualified skills
+   *
+   * When set, the SDK auto-allows the `Skill` tool for the session — you do
+   * not need to add it to `append_allowed_tools` / `custom_allowed_tools`.
+   *
+   * This is a context filter, not a sandbox: unlisted skills are hidden from
+   * the model's listing and rejected by the Skill tool, but their files
+   * remain on disk and are reachable via Read/Bash. Do not store secrets in
+   * skill files.
+   *
+   * Skills are discovered from the directories enabled by `setting_sources`
+   * and from `plugins`; this option only narrows the set, it does not
+   * discover new skills.
+   *
+   * @example
+   * ```yaml
+   * skills: all
+   * skills:
+   *   - pdf
+   *   - docx
+   * ```
+   *
+   * @see https://platform.claude.com/docs/en/agent-sdk/skills
+   */
+  skills?: string[] | 'all';
 
   /**
    * Maximum budget in USD for this session. When exceeded, the SDK will stop with error_max_budget_usd.
@@ -420,6 +463,17 @@ export interface ClaudeCodeOptions {
   include_partial_messages?: boolean;
 
   /**
+   * When true, forwards subagent text and thinking blocks as assistant/user
+   * messages with `parent_tool_use_id` set. By default the SDK only emits
+   * tool_use/tool_result blocks from subagents (enough for a heartbeat
+   * counter). Enable this if you want a complete subagent transcript in
+   * `metadata.toolCalls` / OTel spans.
+   *
+   * @default false
+   */
+  forward_subagent_text?: boolean;
+
+  /**
    * When true, includes hook lifecycle events (hook_started, hook_progress, hook_response)
    * in the output stream. SessionStart and Setup hook events are always emitted regardless.
    *
@@ -476,6 +530,27 @@ export interface ClaudeCodeOptions {
    * ```
    */
   settings?: string | Settings;
+
+  /**
+   * Policy-tier settings supplied by the embedding parent. Loaded into the
+   * managed-settings layer (above HKCU, below IT-controlled sources), so
+   * user/project settings cannot widen restrictions set here. Use this when
+   * promptfoo runs inside an app that derives lockdown configuration from
+   * its own enterprise policy and needs to enforce it on the SDK subprocess
+   * without writing root-owned files.
+   *
+   * Differs from `settings` (flag layer, user-controllable) — prefer
+   * `managed_settings` for fields like `sandbox.network.allowManagedDomainsOnly`.
+   *
+   * @example
+   * ```yaml
+   * managed_settings:
+   *   sandbox:
+   *     network:
+   *       allowManagedDomainsOnly: true
+   * ```
+   */
+  managed_settings?: Settings;
 
   /**
    * Callback for handling MCP elicitation requests.
@@ -546,6 +621,15 @@ export interface ClaudeCodeOptions {
    * 'fork_session' is also set.
    */
   session_id?: string;
+
+  /**
+   * Custom title for a new session. When set, the session uses this title instead
+   * of auto-generating one from the first user message. Useful for locating an
+   * eval run in `~/.claude/projects/` or in Claude Code's session list.
+   *
+   * When resuming via `resume`/`continue`, the persisted title takes precedence.
+   */
+  title?: string;
 
   /**
    * Enable debug mode for the Claude Code process.
@@ -981,6 +1065,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
 
+    // `title` only applies to new sessions; the SDK silently keeps the
+    // persisted title on resume/continue. Warn so users don't wonder why their
+    // custom title didn't stick.
+    if (config.title && (config.resume || config.continue)) {
+      logger.warn(
+        '[ClaudeAgentSDK] `title` is ignored when `resume` or `continue` is set; the persisted session title is used instead.',
+      );
+    }
+
     // De-dupe and sort allowed/disallowed tools for cache key consistency
     const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
 
@@ -1017,6 +1110,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
+    // Keys listed here are excluded from the cache key because they're either
+    // callbacks/runtime controllers (hashing them is pointless) or pure session
+    // metadata that doesn't influence the model's output (`title`).
     const cacheKeyQueryOptions: Omit<
       QueryOptions,
       | 'abortController'
@@ -1026,12 +1122,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       | 'onElicitation'
       | 'spawnClaudeCodeProcess'
       | 'stderr'
+      | 'title'
     > = {
       maxTurns: config.max_turns,
       model: config.model,
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
       permissionMode: config.permission_mode,
+      planModeInstructions: config.plan_mode_instructions,
       systemPrompt: config.custom_system_prompt
         ? config.custom_system_prompt
         : {
@@ -1047,6 +1145,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         ...plugin,
         path: safeResolve(basePath, plugin.path),
       })),
+      skills: config.skills,
       maxBudgetUsd: config.max_budget_usd,
       additionalDirectories: config.additional_directories?.map((dir) =>
         safeResolve(basePath, dir),
@@ -1060,6 +1159,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
       includeHookEvents: config.include_hook_events,
+      forwardSubagentText: config.forward_subagent_text,
       toolConfig: config.tool_config,
       promptSuggestions: config.prompt_suggestions,
       agentProgressSummaries: config.agent_progress_summaries,
@@ -1067,10 +1167,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         typeof config.settings === 'string' && config.settings
           ? safeResolve(basePath, config.settings)
           : config.settings,
+      managedSettings: config.managed_settings,
       betas: config.betas,
       thinking: config.thinking,
-      // The SDK runtime accepts `xhigh` for newer models before the bundled d.ts does.
-      effort: config.effort as QueryOptions['effort'],
+      effort: config.effort,
       agent: config.agent,
       sessionId: config.session_id,
       debug: config.debug,
@@ -1118,9 +1218,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     if (workingDir) {
       // verify the working dir exists and is a directory
-      let stats: fs.Stats;
+      let stats: Stats;
       try {
-        stats = fs.statSync(workingDir);
+        stats = await fs.stat(workingDir);
       } catch (err: any) {
         throw new Error(
           `Working dir ${config.working_dir} does not exist or isn't accessible: ${err.message}`,
@@ -1131,7 +1231,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       }
     } else if (isTempDir) {
       // use a temp dir
-      workingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
+      workingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
     }
 
     // Make sure we didn't already abort
@@ -1160,6 +1260,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
       canUseTool,
       onElicitation: config.on_elicitation,
+      // Session metadata — excluded from cache key so cosmetic changes don't
+      // force cache misses. The SDK ignores `title` on resumed sessions
+      // (the persisted title wins), so we warn above when both are set.
+      title: config.title,
     };
     const queryParams = { prompt, options };
 
@@ -1451,7 +1555,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     } finally {
       if (isTempDir && workingDir) {
         // Clean up the temp dir
-        fs.rmSync(workingDir, { recursive: true, force: true });
+        await fs.rm(workingDir, { recursive: true, force: true });
       }
       if (callOptions?.abortSignal && abortHandler) {
         callOptions.abortSignal.removeEventListener('abort', abortHandler);

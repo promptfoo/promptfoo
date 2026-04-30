@@ -16,6 +16,7 @@ import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
+import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
@@ -567,7 +568,7 @@ function renderCostMetric({
       <strong>Total Cost:</strong>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
-          <span style={{ cursor: 'help' }}>${totalCost}</span>
+          <span className="cursor-help">${totalCost}</span>
         </TooltipTrigger>
         <TooltipContent>{`Average: $${averageCost} per test`}</TooltipContent>
       </Tooltip>
@@ -629,16 +630,25 @@ function renderLatencyMetric({
 
   const totalAverage = testCount?.total ? metrics.totalLatencyMs / testCount.total : 0;
   const filteredAverage =
-    filteredMetrics?.totalLatencyMs && testCount?.filtered
+    filteredMetrics?.totalLatencyMs != null && testCount?.filtered
       ? filteredMetrics.totalLatencyMs / testCount.filtered
       : undefined;
 
+  const formatLatency = (ms: number) => formatDuration(ms) ?? `${formatMetricValue(ms)} ms`;
+  const exactTotalMs = `${formatMetricValue(totalAverage, { maximumFractionDigits: 3 })} ms`;
+
   return (
     <div>
-      <strong>Avg Latency:</strong> {formatMetricValue(totalAverage)} ms
-      {filteredAverage
-        ? renderFilteredSuffix(formatMetricValue(filteredAverage), 'ms filtered')
-        : null}
+      <strong>Avg Latency:</strong>{' '}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-help" aria-label={exactTotalMs}>
+            {formatLatency(totalAverage)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{exactTotalMs}</TooltipContent>
+      </Tooltip>
+      {filteredAverage === undefined ? null : renderFilteredSuffix(formatLatency(filteredAverage))}
     </div>
   );
 }

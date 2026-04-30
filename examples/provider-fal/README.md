@@ -56,6 +56,7 @@ Edit `promptfooconfig.yaml` to:
 - Add your own prompts
 - Adjust model parameters
 - Add assertions to test output quality
+- Route SDK requests through a proxy with `config.client.proxyUrl` when your environment requires it
 
 ## Documentation
 
