@@ -35,6 +35,22 @@ export function fail(
   };
 }
 
+/**
+ * Same shape as `fail`, but tagged with `metadata.graderError` so inverse-aware
+ * callers (e.g. `not-llm-rubric`, `not-g-eval`, `not-trajectory:goal-success`)
+ * propagate the failure verbatim rather than flipping a transport/parse error
+ * into a spurious pass.
+ */
+export function graderFail(
+  reason: string,
+  tokensUsed?: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
+  return {
+    ...fail(reason, tokensUsed),
+    metadata: { graderError: true },
+  };
+}
+
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');

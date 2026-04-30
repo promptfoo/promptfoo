@@ -5,7 +5,7 @@ prompts:
   - 'Return a concise JSON summary of this workspace. Include the main purpose and two likely maintenance risks.'
 
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-5.5
     config:
       sandbox_mode: read-only
       approval_policy: never

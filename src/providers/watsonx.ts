@@ -8,7 +8,7 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
@@ -243,7 +243,7 @@ async function fetchModelSpecs(): Promise<ModelSpec[]> {
           'Content-Type': 'application/json',
         },
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
     );
 
     // Handle string response that needs to be parsed

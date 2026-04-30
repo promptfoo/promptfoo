@@ -10,7 +10,7 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type {
   ApiProvider,
@@ -196,7 +196,7 @@ export class WebSocketProvider implements ApiProvider {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
     this.label = options.label;
-    this.timeoutMs = this.config.timeoutMs || REQUEST_TIMEOUT_MS;
+    this.timeoutMs = this.config.timeoutMs || getRequestTimeoutMs();
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
     );

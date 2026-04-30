@@ -4,7 +4,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type {
   ApiProvider,
@@ -266,7 +266,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       logger.debug('Huggingface Inference API response', { data: response.data });
@@ -347,7 +347,7 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (response.data.error) {
@@ -450,7 +450,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (typeof response.data === 'object' && 'error' in response.data) {
@@ -545,7 +545,7 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (typeof response.data === 'object' && 'error' in response.data) {
@@ -635,7 +635,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (typeof response.data === 'object' && 'error' in response.data) {
