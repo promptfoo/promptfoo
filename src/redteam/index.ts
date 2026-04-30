@@ -9,6 +9,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
+import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
 import {
@@ -422,7 +423,17 @@ function getIntentTestCount(plugin: SynthesizeOptions['plugins'][number]): numbe
     return 0;
   }
 
-  return Array.isArray(intent) ? intent.length : 1;
+  // Resolve `file://` references so pre-generation totals match what IntentPlugin
+  // will actually emit at runtime. Falls back to the literal value if the file
+  // can't be read yet (e.g. the path is unresolved or doesn't exist locally).
+  let resolved: unknown;
+  try {
+    resolved = maybeLoadFromExternalFile(intent as string | object);
+  } catch {
+    resolved = intent;
+  }
+
+  return Array.isArray(resolved) ? resolved.length : 1;
 }
 
 function getExpectedPluginTestCount(
@@ -1432,11 +1443,11 @@ export async function synthesize({
       }
 
       if (showProgressBar) {
-        progressBar?.increment(
-          plugin.id === 'intent'
-            ? allPluginTests.length
-            : getExpectedPluginTestCount(plugin, language),
-        );
+        // Increment by expected count so the bar's running total stays aligned
+        // with `totalTests` (which is computed from `getExpectedPluginTestCount`).
+        // For intent, the helper now resolves `file://` references so the expected
+        // count matches what was actually generated in the happy path.
+        progressBar?.increment(getExpectedPluginTestCount(plugin, language));
       } else {
         logger.info(`Generated ${allPluginTests.length} tests for ${plugin.id}`);
       }
@@ -1573,12 +1584,12 @@ export async function synthesize({
           }
         } else {
           pluginResults[baseDisplayId] = {
-            requested: plugin.numTests * languages.length,
+            requested: getExpectedPluginTestCount(plugin, language),
             generated: allCustomTests.length,
           };
         }
 
-        progressBar?.increment(plugin.numTests * languages.length);
+        progressBar?.increment(getExpectedPluginTestCount(plugin, language));
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         const displayId = getPluginDisplayId(plugin);
