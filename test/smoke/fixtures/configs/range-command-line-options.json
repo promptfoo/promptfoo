@@ -1,0 +1,30 @@
+{
+  "$schema": "https://promptfoo.dev/config-schema.json",
+  "commandLineOptions": {
+    "filterRange": "1:3"
+  },
+  "prompts": ["Hello {{name}}"],
+  "providers": ["echo"],
+  "tests": [
+    {
+      "vars": {
+        "name": "Alice"
+      }
+    },
+    {
+      "vars": {
+        "name": "Bob"
+      }
+    },
+    {
+      "vars": {
+        "name": "Charlie"
+      }
+    },
+    {
+      "vars": {
+        "name": "David"
+      }
+    }
+  ]
+}

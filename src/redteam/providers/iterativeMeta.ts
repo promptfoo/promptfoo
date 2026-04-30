@@ -19,6 +19,11 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializationContextVars,
+  buildRemoteMaterializedInputVariables,
+} from '../remoteMaterialization';
+import {
   applyRuntimeTransforms,
   type LayerConfig,
   type MediaData,
@@ -165,6 +170,7 @@ export async function runMetaAgentRedteam({
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
+  let failClosedError: string | undefined;
 
   // Track the previous iteration's trace summary for attack generation
   let previousTraceSummary: string | undefined;
@@ -202,6 +208,7 @@ export async function runMetaAgentRedteam({
       goal,
       purpose: test?.metadata?.purpose,
       modifiers: test?.metadata?.modifiers,
+      inputs,
       excludeTargetOutputFromAgenticAttackGeneration,
       lastAttempt:
         i > 0 && lastResponse && redteamHistory[i - 1]
@@ -230,7 +237,15 @@ export async function runMetaAgentRedteam({
           raw: JSON.stringify(cloudRequest),
           label: 'meta-agent',
         },
-        vars: {},
+        vars: shouldGenerateRemote()
+          ? buildRemoteMaterializationContextVars({
+              injectVar,
+              inputs,
+              materializationIndex: i,
+              pluginId: String(test?.metadata?.pluginId || 'iterative-meta'),
+              purpose: test?.metadata?.purpose as string | undefined,
+            })
+          : {},
       },
       options,
     );
@@ -340,16 +355,45 @@ export async function runMetaAgentRedteam({
       .replace(/%\}/g, '% }');
 
     // Extract input vars from the attack prompt for multi-input mode
+    if (inputs && shouldGenerateRemote()) {
+      assertRemoteMaterializationHandled(agentResp, 'Iterative Meta multi-input generation');
+    }
     const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
-    const materializedInputVars =
-      currentInputVars && inputs
-        ? await materializeInputVariablesWithMetadata(currentInputVars, inputs, {
+    let materializedInputVars:
+      | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+      | undefined;
+    if (inputs && shouldGenerateRemote() && !currentInputVars && !agentResp.materializedVars) {
+      failClosedError =
+        'Iterative Meta remote multi-input generation returned an invalid prompt format';
+      logger.warn(
+        '[IterativeMeta] Remote multi-input generation returned an invalid prompt format',
+        {
+          iteration: i + 1,
+          attackPromptPreview: attackPrompt.slice(0, 200),
+        },
+      );
+      break;
+    }
+    if ((currentInputVars || agentResp.materializedVars) && inputs) {
+      if (shouldGenerateRemote()) {
+        materializedInputVars = buildRemoteMaterializedInputVariables(
+          agentResp,
+          currentInputVars ?? {},
+          inputs,
+        );
+      } else {
+        materializedInputVars = await materializeInputVariablesWithMetadata(
+          currentInputVars!,
+          inputs,
+          {
             materializationIndex: i,
             pluginId: String(test?.metadata?.pluginId || 'iterative-meta'),
             provider: agentProvider,
             purpose: test?.metadata?.purpose as string | undefined,
-          })
-        : undefined;
+          },
+        );
+      }
+    }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
     // Build updated vars - handle multi-input mode
@@ -606,7 +650,11 @@ export async function runMetaAgentRedteam({
   return {
     output: bestResponse || lastResponse?.output || '',
     prompt: bestPrompt,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(failClosedError
+      ? { error: failClosedError }
+      : lastResponse?.error
+        ? { error: lastResponse.error }
+        : {}),
     metadata: {
       finalIteration,
       vulnerabilityAchieved,
