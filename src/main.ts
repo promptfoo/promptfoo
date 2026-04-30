@@ -41,6 +41,7 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
+import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
 import { VERSION } from './version';
 
 async function main() {
@@ -163,6 +164,11 @@ if (isMain) {
   }
   // Re-throw the original error after cleanup is complete
   if (mainError) {
-    throw mainError;
+    const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(mainError);
+    if (nativeAddonVersionMismatchMessage) {
+      console.error(nativeAddonVersionMismatchMessage);
+    } else {
+      throw mainError;
+    }
   }
 }

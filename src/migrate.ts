@@ -36,6 +36,10 @@ function getCurrentDir(): string {
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database/index';
 import logger from './logger';
+import {
+  formatNativeAddonVersionMismatchMessage,
+  isNativeAddonVersionMismatchError,
+} from './util/nativeAddonErrors';
 
 /**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.
@@ -74,7 +78,9 @@ export async function runDbMigrations(): Promise<void> {
         logger.debug('Database migrations completed');
         resolve();
       } catch (error) {
-        logger.error(`Database migration failed: ${error}`);
+        if (!isNativeAddonVersionMismatchError(error)) {
+          logger.error(`Database migration failed: ${error}`);
+        }
         reject(error);
       }
     });
@@ -113,7 +119,13 @@ if (shouldCheckDirectExecution) {
       // Run migrations and exit with appropriate code
       runDbMigrations()
         .then(() => process.exit(0))
-        .catch(() => process.exit(1));
+        .catch((error) => {
+          const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
+          if (nativeAddonVersionMismatchMessage) {
+            console.error(nativeAddonVersionMismatchMessage);
+          }
+          process.exit(1);
+        });
     }
   } catch {
     // Expected in CJS environments (Jest) where import.meta syntax is invalid.
