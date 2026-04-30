@@ -289,5 +289,5 @@ For questions about medical plugins:
 - [Red Team Configuration](/docs/red-team/configuration/)
 - [Harmful Content Plugins](/docs/red-team/plugins/harmful/)
 - [Hallucination Plugin](/docs/red-team/plugins/hallucination/)
-- [Custom Policy Plugin](/docs/red-team/plugins/custom/)
+- [Custom Policy Plugin](/docs/red-team/plugins/policy/)
 - [Research Paper: "Red Teaming Large Language Models for Healthcare"](https://arxiv.org/abs/2505.00467)

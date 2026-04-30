@@ -24,7 +24,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { REQUEST_TIMEOUT_MS, transformTools } from '../shared';
+import { getRequestTimeoutMs, transformTools } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { normalizeTools } from './util';
 
@@ -398,7 +398,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * Get the request timeout in milliseconds.
    */
   protected getTimeout(): number {
-    return this.config.timeoutMs || REQUEST_TIMEOUT_MS;
+    return this.config.timeoutMs || getRequestTimeoutMs();
   }
 }
 

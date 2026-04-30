@@ -245,6 +245,7 @@
   color: var(--ifm-color-emphasis-800);
   font-size: 0.95rem;
   font-weight: 500;
+  text-decoration: none;
   transition: color 0.2s ease;
 }
 

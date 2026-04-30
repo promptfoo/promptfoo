@@ -53,5 +53,4 @@ Instead of relying on brute-force approaches or static prompts, its dynamic conv
 - [Multi-turn Jailbreaks](multi-turn.md)
 - [Tree-based Jailbreaks](tree.md)
 - [Iterative Jailbreaks](iterative.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
