@@ -883,7 +883,8 @@ describe('WatsonXProvider', () => {
       expect(typeof response.cost).toBe('number');
       // For class_c1 tier ($0.0001 per 1M tokens)
       // Input: 50 tokens * $0.0001/1M = 0.000005
-      // Output: 50 tokens * $0.0001/1M = 0.000005
+      // Output: (generated_token_count - input_token_count) = (100 - 50) = 50 tokens
+      // Output cost: 50 tokens * $0.0001/1M = 0.000005
       // Total expected: 0.00001
       expect(response.cost).toBeCloseTo(0.00001, 6);
     });
@@ -959,7 +960,9 @@ describe('WatsonXProvider', () => {
 
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
-      // For class_9 tier ($0.00035 per 1M tokens)
+      // For class_9 tier ($0.00035 per 1M tokens):
+      // input_token_count = 50
+      // generated_token_count = 100, so completion/output tokens = 100 - 50 = 50
       // Input: 50 tokens * $0.00035/1M = 0.0000175
       // Output: 50 tokens * $0.00035/1M = 0.0000175
       // Total expected: 0.000035
@@ -1038,6 +1041,8 @@ describe('WatsonXProvider', () => {
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
       // For class_c1 tier ($0.0001 per 1M tokens)
+      // input_token_count = 50
+      // generated_token_count = 100, so completion/output tokens = 100 - 50 = 50
       // Input: 50 tokens * $0.0001/1M = 0.000005
       // Output: 50 tokens * $0.0001/1M = 0.000005
       // Total expected: 0.00001
