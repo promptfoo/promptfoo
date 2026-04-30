@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import { setEnvOverridesProvider } from './envOverrides';
+
 import type { UnifiedConfig } from './types/index';
 
 interface CliState {
@@ -98,5 +100,7 @@ const state: CliState = {
     return evaluationIdContext.run({ evaluationId }, fn);
   },
 };
+
+setEnvOverridesProvider(() => state.config?.env);
 
 export default state;
