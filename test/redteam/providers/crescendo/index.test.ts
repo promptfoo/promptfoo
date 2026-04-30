@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
+import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
@@ -81,6 +82,10 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
   ...(await vi.importActual('../../../../src/evaluatorHelpers')),
   renderPrompt: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+});
 
 describe('MemorySystem', () => {
   let memorySystem: MemorySystem;
@@ -1939,6 +1944,11 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    vi.mocked(evaluatorHelpers.renderPrompt).mockReset();
+    vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (prompt) => {
+      const rawPrompt = typeof prompt === 'object' && 'raw' in prompt ? prompt.raw : String(prompt);
+      return rawPrompt;
+    });
     mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
@@ -2662,5 +2672,145 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
       expect(result.metadata.redteamHistory[0].promptAudio).toBeUndefined();
       expect(result.metadata.redteamHistory[0].promptImage).toBeUndefined();
     }
+  });
+
+  it('should use remote materialized vars when the crescendo prompt is plain text', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    const docxDataUri =
+      'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+      inputs: {
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        question: {
+          description: 'Benign analyst question',
+          type: 'text',
+        },
+      },
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    await (provider as any).sendPrompt(
+      'Summarize the uploaded planning document for the analyst.',
+      { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      {
+        objective: 'test objective',
+        document: 'stale document',
+        question: 'stale question',
+      },
+      undefined,
+      mockTargetProvider,
+      1,
+      {
+        vars: {
+          objective: 'test objective',
+          document: 'stale document',
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        materializationHandled: true,
+        materializedVars: {
+          document: docxDataUri,
+          question: 'What changed?',
+        },
+      },
+    );
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalled();
+    const targetCallContext = mockTargetProvider.callApi.mock.calls[0][1] as {
+      vars?: Record<string, string>;
+    };
+    expect(targetCallContext.vars).toMatchObject({
+      document: docxDataUri,
+      question: 'What changed?',
+    });
+  });
+
+  it('should preserve the existing DOCX var when remote materialization omits it', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    const docxDataUri =
+      'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+      inputs: {
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        question: {
+          description: 'Benign analyst question',
+          type: 'text',
+        },
+      },
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    await (provider as any).sendPrompt(
+      JSON.stringify({
+        document: 'Quarterly Sales Report',
+        question: 'Can you summarize the main points from this document?',
+      }),
+      { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      {
+        objective: 'test objective',
+        document: docxDataUri,
+        question: 'stale question',
+      },
+      undefined,
+      mockTargetProvider,
+      1,
+      {
+        vars: {
+          objective: 'test objective',
+          document: docxDataUri,
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        materializationHandled: true,
+        materializedVars: {
+          question: 'What changed?',
+        },
+      },
+    );
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalled();
+    const targetCallContext = mockTargetProvider.callApi.mock.calls[0][1] as {
+      vars?: Record<string, string>;
+    };
+    expect(targetCallContext.vars).toMatchObject({
+      document: docxDataUri,
+      question: 'What changed?',
+    });
   });
 });

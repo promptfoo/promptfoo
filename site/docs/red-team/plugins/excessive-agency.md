@@ -54,5 +54,4 @@ This configuration will generate 5 test cases to evaluate if the virtual assista
 
 - [Hallucination](hallucination.md)
 - [Overreliance](overreliance.md)
-
-For more information on LLM vulnerabilities, see the [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

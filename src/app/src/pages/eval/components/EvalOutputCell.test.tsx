@@ -16,8 +16,12 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ metadata }) => (
-    <div data-testid="dialog-component" data-metadata={JSON.stringify(metadata)}>
+  default: vi.fn(({ gradingResults, metadata }) => (
+    <div
+      data-testid="dialog-component"
+      data-grading-results={JSON.stringify(gradingResults)}
+      data-metadata={JSON.stringify(metadata)}
+    >
       Mocked Dialog Component
     </div>
   )),
@@ -199,6 +203,40 @@ describe('EvalOutputCell', () => {
     expect(passedMetadata.testKey).toBe('testValue');
   });
 
+  it('passes the top-level grading result to the dialog when component results are absent', async () => {
+    const user = userEvent.setup();
+    const propsWithSingleAssertionResult = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        gradingResult: {
+          assertion: {
+            type: 'context-relevance' as AssertionType,
+          },
+          pass: false,
+          reason: 'Context relevance 0.00 is < 0.9',
+          score: 0,
+          metadata: {
+            graderOutputs: {
+              final: 'Insufficient Information',
+            },
+          },
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithSingleAssertionResult} />);
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    const dialogComponent = screen.getByTestId('dialog-component');
+    const passedGradingResults = JSON.parse(
+      dialogComponent.getAttribute('data-grading-results') || '[]',
+    );
+
+    expect(passedGradingResults).toHaveLength(1);
+    expect(passedGradingResults[0].metadata.graderOutputs.final).toBe('Insufficient Information');
+  });
+
   it('handles enter key press to open dialog', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
     const promptButton = screen.getByRole('button', { name: /view output and test details/i });
@@ -280,6 +318,46 @@ describe('EvalOutputCell', () => {
     const dialogContent = screen.getByTestId('context-text');
     expect(dialogContent).toHaveTextContent('Assertion 1 (accuracy): expected value');
     expect(dialogContent).toHaveTextContent('Assertion 2 (relevance): another value');
+  });
+
+  it('uses rendered assertion values in comment dialog when present', async () => {
+    const user = userEvent.setup();
+    const propsWithRenderedAssertionValue: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        gradingResult: {
+          ...defaultProps.output.gradingResult,
+          componentResults: [
+            {
+              assertion: {
+                type: 'llm-rubric' as AssertionType,
+                value: 'Does output reference {{myVar}}?',
+              },
+              metadata: {
+                renderedAssertionValue: 'Does output reference hello world?',
+              },
+              pass: true,
+              reason: 'Rendered rubric passed',
+              score: 1,
+            },
+          ],
+          pass: true,
+          reason: 'Test reason',
+          score: 1,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithRenderedAssertionValue} />);
+
+    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+
+    const dialogContent = screen.getByTestId('context-text');
+    expect(dialogContent).toHaveTextContent(
+      'Assertion 1 (llm-rubric): Does output reference hello world?',
+    );
+    expect(dialogContent).not.toHaveTextContent('{{myVar}}');
   });
 
   it('falls back to overall grading result when component results are empty', async () => {
@@ -866,6 +944,25 @@ describe('EvalOutputCell', () => {
     renderWithProviders(<EvalOutputCell {...propsWithStandardTokens} />);
 
     expect(screen.getByText('33 (11+22)')).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('11 prompt tokens + 22 completion tokens = 33 total'),
+    ).toBeInTheDocument();
+  });
+
+  it('italicizes the (cached) suffix on cached token usage', () => {
+    const props: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        tokenUsage: { cached: 42 },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    const cachedSuffix = screen.getByText('(cached)');
+    expect(cachedSuffix).toBeInTheDocument();
+    expect(cachedSuffix).toHaveClass('italic');
   });
 
   it('renders JSON diffs with added and removed fragments when showDiffs is enabled', () => {
@@ -1000,7 +1097,7 @@ describe('EvalOutputCell', () => {
       },
     };
     renderWithProviders(<EvalOutputCell {...props} />);
-    const latencyElement = screen.getByText('123 ms');
+    const latencyElement = screen.getByText('123ms');
     expect(latencyElement).toBeInTheDocument();
 
     const props2 = {
@@ -1012,7 +1109,7 @@ describe('EvalOutputCell', () => {
       },
     };
     renderWithProviders(<EvalOutputCell {...props2} />);
-    const latencyElement2 = screen.getByText('456 ms');
+    const latencyElement2 = screen.getByText('456ms');
     expect(latencyElement2).toBeInTheDocument();
   });
 
@@ -1030,8 +1127,116 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...props} />);
 
-    const latencyElement = screen.getByText('0 ms (cached)');
-    expect(latencyElement).toBeInTheDocument();
+    expect(screen.getByText('0ms')).toBeInTheDocument();
+    const cachedSuffix = screen.getByText('(cached)');
+    expect(cachedSuffix).toBeInTheDocument();
+    expect(cachedSuffix).toHaveClass('italic');
+  });
+
+  it('exposes precise milliseconds via aria-label on the latency trigger', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 3_789_665,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    expect(screen.getByLabelText('3,789,665 ms')).toBeInTheDocument();
+  });
+
+  it('clarifies cached latency in the aria-label', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 1234,
+        response: { cached: true },
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    expect(screen.getByLabelText('1,234 ms (cached response)')).toBeInTheDocument();
+  });
+
+  it('renders sub-millisecond latency without rounding away precision', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 0.123,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    expect(screen.getByLabelText('0.123 ms')).toBeInTheDocument();
+  });
+
+  it('falls back to raw ms when latency is non-finite or negative', () => {
+    const cases: { latencyMs: number; expected: string }[] = [
+      { latencyMs: Number.POSITIVE_INFINITY, expected: '∞ ms' },
+      { latencyMs: -1234, expected: '-1,234 ms' },
+    ];
+    for (const { latencyMs, expected } of cases) {
+      const { unmount } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{ ...defaultProps.output, latencyMs, response: {} }}
+        />,
+      );
+      expect(screen.getByLabelText(expected)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('renders an exact-hour latency without trailing minutes', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 129_600_000,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    expect(screen.getByText('36h')).toBeInTheDocument();
+  });
+
+  it('displays large latency values in human-readable format (minutes/hours)', () => {
+    const propsMinutes = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 255_718,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...propsMinutes} />);
+    expect(screen.getByText('4m 16s')).toBeInTheDocument();
+
+    const propsHours = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 3_789_665,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...propsHours} />);
+    expect(screen.getByText('1h 3m')).toBeInTheDocument();
+  });
+
+  it('displays seconds for sub-minute latencies', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 2300,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    expect(screen.getByText('2.3s')).toBeInTheDocument();
   });
 
   it('handles searchText containing complex regex special characters', () => {
