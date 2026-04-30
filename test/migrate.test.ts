@@ -1,6 +1,7 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createNativeAddonVersionMismatchError } from './factories/nativeAddonErrors';
 
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
@@ -117,14 +118,7 @@ describe('migrate', () => {
     });
 
     it('should log native addon ABI mismatches without labeling them as migration failures', async () => {
-      const nativeAddonError = new Error(
-        [
-          "The module '/tmp/node_modules/better-sqlite3/build/Release/better_sqlite3.node'",
-          'was compiled against a different Node.js version using',
-          'NODE_MODULE_VERSION 115. This version of Node.js requires',
-          'NODE_MODULE_VERSION 137.',
-        ].join('\n'),
-      );
+      const nativeAddonError = createNativeAddonVersionMismatchError();
       mockGetDb.mockImplementation(() => {
         throw nativeAddonError;
       });
@@ -144,14 +138,7 @@ describe('migrate', () => {
     });
 
     it('should demote ABI mismatch log to debug when suppressNativeAddonLogging is set', async () => {
-      const nativeAddonError = new Error(
-        [
-          "The module '/tmp/node_modules/better-sqlite3/build/Release/better_sqlite3.node'",
-          'was compiled against a different Node.js version using',
-          'NODE_MODULE_VERSION 115. This version of Node.js requires',
-          'NODE_MODULE_VERSION 137.',
-        ].join('\n'),
-      );
+      const nativeAddonError = createNativeAddonVersionMismatchError();
       mockGetDb.mockImplementation(() => {
         throw nativeAddonError;
       });

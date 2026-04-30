@@ -3,17 +3,10 @@ import {
   formatNativeAddonVersionMismatchMessage,
   getNativeAddonVersionMismatchDetails,
 } from '../src/util/nativeAddonErrors';
+import { createNativeAddonVersionMismatchError } from './factories/nativeAddonErrors';
 
 describe('native addon errors', () => {
-  const versionMismatchError = new Error(
-    [
-      "The module '/tmp/node_modules/better-sqlite3/build/Release/better_sqlite3.node'",
-      'was compiled against a different Node.js version using',
-      'NODE_MODULE_VERSION 115. This version of Node.js requires',
-      'NODE_MODULE_VERSION 137. Please try re-compiling or re-installing',
-      'the module (for instance, using `npm rebuild` or `npm install`).',
-    ].join('\n'),
-  );
+  const versionMismatchError = createNativeAddonVersionMismatchError();
 
   it('extracts better-sqlite3 ABI mismatch details', () => {
     expect(getNativeAddonVersionMismatchDetails(versionMismatchError)).toEqual({

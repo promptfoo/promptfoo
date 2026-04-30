@@ -92,25 +92,17 @@ export async function runDbMigrations(options: RunDbMigrationsOptions = {}): Pro
       } catch (error) {
         const nativeAddonVersionMismatchDetails = getNativeAddonVersionMismatchDetails(error);
         if (nativeAddonVersionMismatchDetails) {
-          if (options.suppressNativeAddonLogging) {
-            logger.debug(
-              'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
-              {
-                currentNodeVersion: process.version,
-                currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
-                installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
-              },
-            );
-          } else {
-            logger.error(
-              'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
-              {
-                currentNodeVersion: process.version,
-                currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
-                installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
-              },
-            );
-          }
+          const logNativeAddonMismatch = options.suppressNativeAddonLogging
+            ? logger.debug
+            : logger.error;
+          logNativeAddonMismatch(
+            'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+            {
+              currentNodeVersion: process.version,
+              currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
+              installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
+            },
+          );
         } else {
           logger.error(`Database migration failed: ${error}`);
         }
@@ -150,7 +142,7 @@ if (shouldCheckDirectExecution) {
 
     if (isMigrateModuleMainExecution) {
       // Run migrations and exit with appropriate code
-      runDbMigrations()
+      runDbMigrations({ suppressNativeAddonLogging: true })
         .then(() => process.exit(0))
         .catch((error) => {
           const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
