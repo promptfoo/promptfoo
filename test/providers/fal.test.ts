@@ -230,6 +230,52 @@ describe('Fal Provider', () => {
           },
         });
       });
+
+      it('should pass fal client proxy config without sending it as model input', async () => {
+        const providerWithClientConfig = new FalImageGenerationProvider('fal-ai/flux/schnell', {
+          config: {
+            apiKey: 'test-api-key',
+            seed: 12345,
+            client: {
+              proxyUrl: {
+                url: 'http://fal-proxy.test/api/fal',
+                when: 'always',
+              },
+            },
+          },
+        });
+
+        mockSubscribe.mockResolvedValueOnce(mockImageResponse);
+
+        await providerWithClientConfig.callApi('test prompt', {
+          prompt: {
+            raw: 'test prompt',
+            label: 'test',
+            config: {
+              guidance_scale: 7.5,
+              client: {
+                proxyUrl: 'http://context-proxy.test/api/fal',
+              },
+            },
+          },
+          vars: {},
+        });
+
+        expect(mockConfig).toHaveBeenCalledWith({
+          credentials: 'test-api-key',
+          proxyUrl: {
+            url: 'http://fal-proxy.test/api/fal',
+            when: 'always',
+          },
+        });
+        expect(mockSubscribe).toHaveBeenCalledWith('fal-ai/flux/schnell', {
+          input: {
+            prompt: 'test prompt',
+            seed: 12345,
+            guidance_scale: 7.5,
+          },
+        });
+      });
     });
 
     describe('runInference method', () => {

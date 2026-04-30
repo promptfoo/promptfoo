@@ -10,6 +10,7 @@ import { mockProcessEnv } from '../util/utils';
 const mocks = vi.hoisted(() => {
   const core = {
     getInput: vi.fn(),
+    getBooleanInput: vi.fn(),
     getIDToken: vi.fn(),
     info: vi.fn(),
     warning: vi.fn(),
@@ -23,15 +24,27 @@ const mocks = vi.hoisted(() => {
 
   const github = {
     context: {
+      eventName: 'pull_request',
       repo: {
         owner: 'test-owner',
         repo: 'test-repo',
       },
       payload: {
+        repository: {
+          full_name: 'test-owner/test-repo',
+        },
         pull_request: {
           number: 123,
           head: {
             sha: 'abc123',
+            repo: {
+              full_name: 'test-owner/test-repo',
+            },
+          },
+          base: {
+            repo: {
+              full_name: 'test-owner/test-repo',
+            },
           },
         },
       },
@@ -96,6 +109,31 @@ interface NpmExecCall {
 }
 
 function setupMocks() {
+  mocks.github.context.eventName = 'pull_request';
+  mocks.github.context.repo = {
+    owner: 'test-owner',
+    repo: 'test-repo',
+  };
+  mocks.github.context.payload = {
+    repository: {
+      full_name: 'test-owner/test-repo',
+    },
+    pull_request: {
+      number: 123,
+      head: {
+        sha: 'abc123',
+        repo: {
+          full_name: 'test-owner/test-repo',
+        },
+      },
+      base: {
+        repo: {
+          full_name: 'test-owner/test-repo',
+        },
+      },
+    },
+  };
+
   mocks.core.getInput.mockImplementation((name: string) => {
     if (name === 'github-token') {
       return 'fake-token';
@@ -105,6 +143,7 @@ function setupMocks() {
     }
     return '';
   });
+  mocks.core.getBooleanInput.mockReturnValue(false);
   mocks.core.getIDToken.mockResolvedValue('fake-oidc-token');
 
   mocks.exec.exec.mockImplementation(
@@ -203,6 +242,11 @@ function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecC
   expect(options?.env?.npm_config_before).toBeUndefined();
 }
 
+function setPullRequestRepos(headRepoFullName: string, baseRepoFullName = 'test-owner/test-repo') {
+  mocks.github.context.payload.pull_request.head.repo.full_name = headRepoFullName;
+  mocks.github.context.payload.pull_request.base.repo.full_name = baseRepoFullName;
+}
+
 describe('code-scan-action main', () => {
   let restoreEnv: () => void;
 
@@ -264,6 +308,85 @@ describe('code-scan-action main', () => {
       const { options } = await importActionAndGetNpmInstallCall();
 
       expectSanitizedExecEnv(options);
+    });
+  });
+
+  describe('fork PR controls', () => {
+    it('should skip fork pull_request scans by default before fetching files or starting auth', async () => {
+      setPullRequestRepos('external-contributor/test-repo');
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity' || name === 'minimum-severity') {
+          return 'medium';
+        }
+        if (name === 'guidance-file') {
+          return '/tmp/missing-guidance.md';
+        }
+        return '';
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Fork PR detected and enable-fork-prs is false; skipping Promptfoo Code Scan',
+        );
+      });
+
+      expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
+      expect(mocks.core.getIDToken).not.toHaveBeenCalled();
+      expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('should skip fork pull_request_target scans by default', async () => {
+      mocks.github.context.eventName = 'pull_request_target';
+      setPullRequestRepos('external-contributor/test-repo');
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Fork PR detected and enable-fork-prs is false; skipping Promptfoo Code Scan',
+        );
+      });
+
+      expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
+      expect(mocks.core.getIDToken).not.toHaveBeenCalled();
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('should scan fork pull_request events when enable-fork-prs is true', async () => {
+      setPullRequestRepos('external-contributor/test-repo');
+      mocks.core.getBooleanInput.mockReturnValue(true);
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--github-pr', 'test-owner/test-repo#123');
+      expect(mocks.actionGithub.getPRFiles).toHaveBeenCalled();
+      expect(mocks.core.getIDToken).toHaveBeenCalled();
+    });
+
+    it('should allow workflow_dispatch scans when enable-fork-prs is false', async () => {
+      mocks.github.context.eventName = 'workflow_dispatch';
+      mocks.github.context.payload = {
+        repository: {
+          full_name: 'test-owner/test-repo',
+        },
+        inputs: {
+          pr_number: '123',
+        },
+      };
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--github-pr', 'test-owner/test-repo#123');
+      expect(mocks.actionGithub.getPRFiles).toHaveBeenCalled();
+      expect(mocks.core.getIDToken).toHaveBeenCalled();
     });
   });
 });
