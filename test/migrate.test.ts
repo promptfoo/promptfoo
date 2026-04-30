@@ -116,7 +116,7 @@ describe('migrate', () => {
       expect(mockMigrate).not.toHaveBeenCalled();
     });
 
-    it('should avoid labeling native addon ABI mismatches as migration failures', async () => {
+    it('should log native addon ABI mismatches without labeling them as migration failures', async () => {
       const nativeAddonError = new Error(
         [
           "The module '/tmp/node_modules/better-sqlite3/build/Release/better_sqlite3.node'",
@@ -133,7 +133,14 @@ describe('migrate', () => {
       const { runDbMigrations } = await import('../src/migrate');
       await expect(runDbMigrations()).rejects.toThrow('NODE_MODULE_VERSION 115');
 
-      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+        {
+          currentNodeVersion: process.version,
+          currentNodeAbi: '137',
+          installedBetterSqlite3Abi: '115',
+        },
+      );
       expect(mockMigrate).not.toHaveBeenCalled();
     });
 

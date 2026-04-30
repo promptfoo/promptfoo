@@ -38,7 +38,7 @@ import { getDb } from './database/index';
 import logger from './logger';
 import {
   formatNativeAddonVersionMismatchMessage,
-  isNativeAddonVersionMismatchError,
+  getNativeAddonVersionMismatchDetails,
 } from './util/nativeAddonErrors';
 
 /**
@@ -78,7 +78,17 @@ export async function runDbMigrations(): Promise<void> {
         logger.debug('Database migrations completed');
         resolve();
       } catch (error) {
-        if (!isNativeAddonVersionMismatchError(error)) {
+        const nativeAddonVersionMismatchDetails = getNativeAddonVersionMismatchDetails(error);
+        if (nativeAddonVersionMismatchDetails) {
+          logger.error(
+            'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+            {
+              currentNodeVersion: process.version,
+              currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
+              installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
+            },
+          );
+        } else {
           logger.error(`Database migration failed: ${error}`);
         }
         reject(error);
