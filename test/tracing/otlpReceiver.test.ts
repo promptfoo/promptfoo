@@ -219,7 +219,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'OK',
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: true },
       );
     });
 
@@ -258,7 +258,7 @@ describe('OTLPReceiver', () => {
             name: 'json-with-charset',
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: true },
       );
     });
 
@@ -314,7 +314,7 @@ describe('OTLPReceiver', () => {
             name: 'span-2',
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: true },
       );
     });
 
@@ -375,7 +375,7 @@ describe('OTLPReceiver', () => {
             }),
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: true },
       );
     });
 
@@ -535,7 +535,7 @@ describe('OTLPReceiver', () => {
             statusMessage: 'Success',
           }),
         ]),
-        { skipTraceCheck: false, warnIfMissingTrace: false },
+        { skipTraceCheck: true },
       );
     });
 
@@ -616,9 +616,53 @@ describe('OTLPReceiver', () => {
         .expect(200);
 
       expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
-        skipTraceCheck: false,
-        warnIfMissingTrace: false,
+        skipTraceCheck: true,
       });
+    });
+
+    it('persists spans even when no evaluation.id attribute is present (no silent drop)', async () => {
+      // Regression for chatgpt-codex-connector P1 #2: when OTLP spans arrive
+      // without an `evaluation.id` attribute (third-party producer, or a race
+      // before the evaluator created the trace record), they must still be
+      // forwarded to the trace store. Pre-fix code dropped them silently.
+      const traceIdHex = 'aabbccddeeff00112233445566778899';
+      const spanIdHex = 'aabbccdd11223344';
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from(traceIdHex, 'hex').toString('base64'),
+                    spanId: Buffer.from(spanIdHex, 'hex').toString('base64'),
+                    name: 'orphan-span',
+                    startTimeUnixNano: '1700000000000000000',
+                    endTimeUnixNano: '1700000001000000000',
+                    // Note: no evaluation.id attribute on purpose
+                    attributes: [{ key: 'tool.name', value: { stringValue: 'Bash' } }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        traceIdHex,
+        expect.arrayContaining([expect.objectContaining({ name: 'orphan-span' })]),
+        { skipTraceCheck: true },
+      );
+      // And we must NOT have called createTrace for this trace, since the trace
+      // record creation is deferred to the evaluator path that owns evaluationId.
+      expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
     });
   });
 

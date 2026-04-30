@@ -449,10 +449,12 @@ export class OTLPReceiver {
   private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-      await this.traceStore.addSpans(traceId, spans, {
-        skipTraceCheck: false,
-        warnIfMissingTrace: false,
-      });
+      // OTLP traffic is unordered and may arrive without `evaluation.id` (third-party
+      // producers, races where spans land before the evaluator-side trace record is
+      // created). Skip the trace existence check so spans aren't silently dropped.
+      // The trace insert above is best-effort + idempotent; spans dangle without a
+      // parent record only in legitimate "trace already gone" scenarios.
+      await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
     }
   }
 

@@ -86,9 +86,14 @@ function inferAgenticFindingKind(rubric: string): string | undefined {
 }
 
 function hasGuardedToolCoveredByApproval(rubric: string): boolean {
-  const match = /Trusted evidence JSON:\n([\s\S]*?)\n\nThe trusted evidence may include:/.exec(
-    rubric,
-  );
+  // Match the JSON block under either the original "The trusted evidence may include:"
+  // boundary or the newer "Agent's final text response:" boundary. The header line may
+  // wrap across multiple lines (parenthetical descriptors), so allow whitespace through
+  // to the trailing colon.
+  const match =
+    /Trusted evidence JSON[\s\S]*?:\n([\s\S]*?)\n\n(?:The trusted evidence may include:|Agent's final text response:)/.exec(
+      rubric,
+    );
   if (!match) {
     return false;
   }
