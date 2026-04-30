@@ -39,7 +39,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)                    |
 | [contains-html](#contains-html)                                 | output contains HTML content                                                    |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                                       |
-| [contains-xml](#contains-xml)                                   | output contains valid xml                                                       |
+| [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                                           |
 | [cost](#cost)                                                   | Inference cost is below a threshold, or records raw cost as a metric            |
 | [equals](#equality)                                             | output matches exactly                                                          |
 | [f-score](#f-score)                                             | F-score is above a threshold                                                    |
@@ -268,11 +268,9 @@ See [`is-sql`](#is-sql) for advanced usage, including specific database types an
 
 ### Cost
 
-The `cost` assertion checks if the cost of the LLM call is below a specified threshold. If you omit `threshold` and set `metric`, promptfoo records the raw cost as a named metric instead of using it as a pass/fail guardrail.
+The `cost` assertion checks if the cost of the LLM call is below a specified threshold.
 
-Metric-only `cost` assertions are treated as non-scoring automatically, so you do not need to add `weight: 0`.
-
-This requires the provider to return cost information. Hosted providers with built-in pricing support and custom providers can do this. If the provider does not return cost, promptfoo throws `Cost assertion does not support providers that do not return cost`.
+This requires LLM providers to return cost information. Currently this is only supported by OpenAI GPT models and custom providers.
 
 Example:
 
@@ -285,27 +283,6 @@ assert:
   - type: cost
     threshold: 0.001
 ```
-
-To track average cost per test case across many tests, apply the metric in `defaultTest` and pair it with `derivedMetrics` plus `__count`:
-
-```yaml
-defaultTest:
-  assert:
-    - type: cost
-      metric: total_cost
-
-tests:
-  - vars:
-      question: 'First test case'
-  - vars:
-      question: 'Second test case'
-
-derivedMetrics:
-  - name: avg_cost
-    value: total_cost / __count
-```
-
-The raw metric appears in the Custom Metrics section of the eval UI. The derived average settles to its final value when the eval completes.
 
 ### Equality
 
@@ -482,13 +459,15 @@ Note: The `is-xml` assertion requires the entire output to be valid XML. For che
 
 ### Contains-XML
 
-The `contains-xml` is identical to `is-xml`, except it checks if the LLM output contains valid XML content, even if it's not the entire output. For example, the following is valid.
+The `contains-xml` assertion checks if the LLM output contains valid XML content, even if it's not the entire output. It uses the same `value.requiredElements` format as `is-xml`; required element paths are checked from the extracted XML fragment's root.
 
 ```xml
 Sure, here is your xml:
 <root><child>Content</child></root>
 let me know if you have any other questions!
 ```
+
+For example, `contains-xml` with `root.child` passes for `Text <root><child>Content</child></root>`. If the XML fragment is wrapped, use the wrapper in the required path, such as `wrapper.root.child` for `<wrapper><root><child>Content</child></root></wrapper>`.
 
 ### Is-SQL
 
@@ -820,11 +799,7 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 ### Latency
 
-The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds. If you omit `threshold` and set `metric`, promptfoo records the raw latency as a named metric instead of using it as a pass/fail guardrail.
-
-Metric-only `latency` assertions are treated as non-scoring automatically, so you do not need to add `weight: 0`.
-
-`latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option. This applies to both thresholded and metric-only latency assertions.
+The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
 Example:
 
@@ -835,26 +810,7 @@ assert:
     threshold: 5000
 ```
 
-To track average latency per test case across many tests, apply the metric in `defaultTest` and aggregate it:
-
-```yaml
-defaultTest:
-  assert:
-    - type: latency
-      metric: total_latency_ms
-
-tests:
-  - vars:
-      question: 'First test case'
-  - vars:
-      question: 'Second test case'
-
-derivedMetrics:
-  - name: avg_latency_ms
-    value: total_latency_ms / __count
-```
-
-The raw metric appears in the Custom Metrics section of the eval UI. The derived average settles to its final value when the eval completes.
+Note that `latency` requires that the [cache is disabled](/docs/configuration/caching) with `promptfoo eval --no-cache` or an equivalent option.
 
 ### Levenshtein distance
 

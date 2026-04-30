@@ -885,6 +885,56 @@ describe('ResultsTable Metrics Display', () => {
       expect(screen.getByText('/path/to/input.wav (audio/wav)')).toBeInTheDocument();
     });
 
+    it('does not render file:// audio variables as invalid base64 audio', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      audioVar: {
+                        path: 'file://assets/Armstrong_Small_Step.mp3',
+                        type: 'audio',
+                        format: 'mp3',
+                      },
+                    },
+                  },
+                },
+              ],
+              test: {},
+              vars: ['file://assets/Armstrong_Small_Step.mp3'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['audioVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(container.querySelector('audio source')).toBeNull();
+      expect(screen.getByText('file://assets/Armstrong_Small_Step.mp3')).toBeInTheDocument();
+    });
+
     it('renders variable images from file metadata with lightbox support', async () => {
       const user = userEvent.setup();
       vi.mocked(useTableStore).mockImplementation(() => ({
@@ -2841,6 +2891,13 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(filteredTokensElement).toHaveStyle('font-size: 0.9em');
     expect(filteredTokensElement).toHaveStyle('color: #666');
     expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
+
+    expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(screen.getByText('200ms')).toBeInTheDocument();
+    expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
+    const filteredLatencyElement = screen.getByText('(200ms filtered)');
+    expect(filteredLatencyElement).toBeInTheDocument();
+    expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
   });
 });
 
@@ -2920,6 +2977,10 @@ describe('ResultsTable - No Filters Applied', () => {
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
     expect(screen.getByText('1,000')).toBeInTheDocument();
+
+    expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(screen.getByText('200ms')).toBeInTheDocument();
+    expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
 
     const filteredMetricElements = screen.queryAllByTestId('filtered-metric');
     expect(filteredMetricElements.length).toBe(0);

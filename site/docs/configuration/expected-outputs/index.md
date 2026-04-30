@@ -129,7 +129,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-sql](/docs/configuration/expected-outputs/deterministic/#is-sql)                                               | output is valid sql                                                                       |
 | [contains-sql](/docs/configuration/expected-outputs/deterministic/#contains-sql)                                   | output contains valid sql                                                                 |
 | [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is valid xml                                                                       |
-| [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml                                                                 |
+| [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                                                     |
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | output indicates the model refused to perform the task                                    |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                                         |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                                             |
@@ -229,8 +229,6 @@ If the LLM outputs `Goodbye world`, the `equals` assertion fails but the `contai
 
 :::info
 If weight is set to 0, the assertion automatically passes.
-
-Metric-only `cost` and `latency` assertions behave this way automatically, so you do not need to set `weight: 0` yourself.
 :::
 
 ### Custom assertion scoring
@@ -274,7 +272,7 @@ The scoring function can be JavaScript or Python, referenced with `file://` pref
 
 ```typescript
 type ScoringFunction = (
-  namedScores: Record<string, number>, // Map of metric names to assertion scores or raw numeric values
+  namedScores: Record<string, number>, // Map of metric names to scores (0-1)
   context: {
     threshold?: number; // Test case threshold if set
     tokensUsed?: {
@@ -498,7 +496,7 @@ tests:
         metric: Tone
 ```
 
-These metrics will be shown in the UI. Metric-only `cost` and `latency` assertions appear in the same Custom Metrics section:
+These metrics will be shown in the UI:
 
 ![llm eval metrics](/img/docs/named-metrics.png)
 
@@ -618,8 +616,6 @@ The `__count` variable contains the number of test evals for the current prompt-
 - Each test case produces a value that gets summed (like error metrics)
 - You want to display the average instead of the total
 
-Derived metrics are recalculated as evals finish, so averages that use `__count` settle on their final value when the run completes.
-
 For JavaScript functions, `__count` is available in the `namedScores` object:
 
 ```yaml
@@ -634,8 +630,7 @@ derivedMetrics:
 ### Notes
 
 - Missing metrics default to 0
-- The `__count` variable is the number of test cases for the prompt-provider combination, regardless of how many assertions wrote to a given metric
-- Multiple assertions writing to the same metric accumulate into its `namedScoreWeights` (used for UI averaging), but `__count` is not incremented per assertion
+- The `__count` variable is per prompt-provider combination (number of test cases)
 - Functions receive a copy of the context - return values, don't mutate
 - To avoid division by zero: `value: 'numerator / (denominator + 0.0001)'`
 - Debug errors with: `LOG_LEVEL=debug promptfoo eval`

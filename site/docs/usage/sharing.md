@@ -8,6 +8,8 @@ keywords: [eval sharing, model testing, promptfoo sharing, collaboration, team s
 
 Share your eval results with others using the `share` command or the web interface.
 
+Sharing uploads the eval/report snapshot needed to view the result. This can include prompts, vars, outputs, traces, metadata, provider configuration fields, media/blob references, scan artifacts, and derived artifacts. Do not put secrets in prompts, datasets, provider config fields, metadata, or other shareable inputs unless that field is documented as redacted. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for what counts as a configured sharing destination.
+
 ## Quick Start (Cloud)
 
 Most users will share to promptfoo.app cloud:
@@ -127,6 +129,8 @@ sharing:
   apiBaseUrl: http://your-server:3000
   appBaseUrl: http://your-server:3000
 ```
+
+Config-supplied sharing endpoints are trusted. Only accept or run configs with `sharing.apiBaseUrl` / `sharing.appBaseUrl` from sources you trust, because sharing sends the eval snapshot to the configured endpoint.
 
 :::tip
 
