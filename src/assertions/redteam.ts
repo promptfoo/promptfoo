@@ -71,7 +71,8 @@ function shouldRegradeStoredMissingEvidenceResult({
 }): boolean {
   return Boolean(
     baseType.startsWith('promptfoo:redteam:agentic:') &&
-      storedResult.metadata?.verifierStatus === 'missing-evidence' &&
+      (storedResult.metadata?.agenticEvidenceStatus === 'missing-evidence' ||
+        storedResult.metadata?.verifierStatus === 'missing-evidence') &&
       assertionValueContext.trace?.spans?.length,
   );
 }
@@ -141,7 +142,7 @@ export const handleRedteam = async ({
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
   // Build grading context from provider response metadata, test metadata, and locally
-  // captured assertion trace data. Keep raw trace data in-process for deterministic
+  // captured assertion trace data. Keep raw trace data in-process for trace-aware
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
   let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });

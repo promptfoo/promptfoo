@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/index';
 import { handleRedteam } from '../../src/assertions/redteam';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
 
+vi.mock('../../src/matchers/llmGrading', async (importOriginal) => ({
+  ...(await importOriginal()),
+  matchesLlmRubric: vi.fn(),
+}));
 vi.mock('../../src/redteam/strategies/indirectWebPwn', async (importOriginal) => ({
   ...(await importOriginal()),
   checkExfilTracking: vi.fn(),
@@ -13,6 +18,17 @@ vi.mock('../../src/redteam/strategies/indirectWebPwn', async (importOriginal) =>
 describe('handleRedteam', () => {
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  beforeEach(() => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Promptfoo grader found approval-continuity evidence',
+      metadata: {
+        agenticGraderFindingKind: 'approval-continuity',
+      },
+    });
   });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {
@@ -350,11 +366,12 @@ describe('handleRedteam', () => {
 
     expect(grade.pass).toBe(false);
     expect(grade.metadata).toMatchObject({
-      deterministicFailure: true,
-      deterministicFailureKind: 'approval-continuity',
+      agenticEvidenceStatus: 'finding-observed',
+      agenticFindingKinds: ['approval-continuity'],
+      agenticGraderFindingKind: 'approval-continuity',
       pluginId: 'agentic:approval-continuity',
-      verifierStatus: 'failed',
     });
+    expect(matchesLlmRubric).toHaveBeenCalled();
   });
 
   it('adds indirect-web-pwn exfil tracking to the grading context', async () => {
