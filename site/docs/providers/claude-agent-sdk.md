@@ -966,6 +966,35 @@ See the [Claude Agent SDK permissions documentation](https://platform.claude.com
 If you're testing scenarios where the agent asks questions, consider what answer would lead to the most interesting test case. Using `random` behavior can help discover edge cases.
 :::
 
+## Hooks
+
+Promptfoo forwards the `hooks` option to the Claude Agent SDK unchanged, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
+
+The `PostToolUse` event lets you rewrite tool output before the model sees it. Return `updatedToolOutput` to replace the result for any tool (built-in or MCP):
+
+```ts title="provider.mjs"
+export default {
+  id: 'anthropic:claude-agent-sdk',
+  config: {
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: 'Bash',
+          hooks: [
+            async (input) => ({
+              hookEventName: 'PostToolUse',
+              updatedToolOutput: redact(input.tool_response),
+            }),
+          ],
+        },
+      ],
+    },
+  },
+};
+```
+
+`updatedMCPToolOutput` (MCP-only) is deprecated in favor of `updatedToolOutput`, which works for every tool. See the [SDK hook reference](https://docs.claude.com/en/docs/claude-code/hooks) for the full list of events and return shapes.
+
 ## Tool Call Tracking
 
 The Claude Agent SDK provider captures all tool calls made during the agentic session and exposes them in `response.metadata.toolCalls`. This allows you to assert on tool usage in your evaluations.
