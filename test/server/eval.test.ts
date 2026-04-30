@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -9,15 +11,27 @@ import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
 describe('eval routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
   const testEvalIds = new Set<string>();
 
   beforeAll(async () => {
     await runDbMigrations();
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
   });
 
-  beforeEach(() => {
-    app = createApp();
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   });
 
   afterEach(async () => {
@@ -87,6 +101,89 @@ describe('eval routes', () => {
   }
 
   describe('post("/:evalId/results/:id/rating")', () => {
+    it('rejects result ratings when the URL eval does not own the result', async () => {
+      const evalA = await EvalFactory.create();
+      const evalB = await EvalFactory.create();
+      testEvalIds.add(evalA.id);
+      testEvalIds.add(evalB.id);
+
+      const resultsB = await evalB.getResults();
+      const resultB = resultsB[0];
+      invariant(resultB.id, 'Result ID is required');
+      const originalResultB = {
+        gradingResult: structuredClone(resultB.gradingResult),
+        score: resultB.score,
+        success: resultB.success,
+      };
+      const originalEvalAMetrics = structuredClone(evalA.prompts[resultB.promptIdx].metrics);
+      const originalEvalBMetrics = structuredClone(evalB.prompts[resultB.promptIdx].metrics);
+
+      const res = await api
+        .post(`/api/eval/${evalA.id}/results/${resultB.id}/rating`)
+        .send(createManualRatingPayload(resultB, false));
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('Result not found');
+
+      const updatedResultB = await EvalResult.findById(resultB.id);
+      expect(updatedResultB?.gradingResult).toEqual(originalResultB.gradingResult);
+      expect(updatedResultB?.score).toBe(originalResultB.score);
+      expect(updatedResultB?.success).toBe(originalResultB.success);
+
+      const updatedEvalA = await Eval.findById(evalA.id);
+      const updatedEvalB = await Eval.findById(evalB.id);
+      invariant(updatedEvalA, 'Eval A is required');
+      invariant(updatedEvalB, 'Eval B is required');
+      expect(updatedEvalA.prompts[resultB.promptIdx].metrics).toEqual(originalEvalAMetrics);
+      expect(updatedEvalB.prompts[resultB.promptIdx].metrics).toEqual(originalEvalBMetrics);
+    });
+
+    it('returns a JSON 500 response when rating storage fails', async () => {
+      const findByIdSpy = vi
+        .spyOn(EvalResult, 'findById')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+
+      const res = await api
+        .post('/api/eval/eval-1/results/result-1/rating')
+        .send({ pass: true, score: 1 });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to submit rating' });
+      expect(findByIdSpy).toHaveBeenCalledWith('result-1');
+    });
+
+    it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      // Pick the failing result so flipping `pass=true` produces a real
+      // state transition. With `results[0]` (already passing), every numeric
+      // field would be unchanged and the test couldn't distinguish a fresh
+      // post-rating row from a pre-rating snapshot.
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      expect(result.gradingResult?.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.success).toBe(false);
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+
+      expect(res.status).toBe(200);
+      // The body must reflect the *post-rating* state, not just include the
+      // row's id — external SDK consumers depend on reading refreshed
+      // grading state without a follow-up GET. If the route ever regressed
+      // to returning a pre-save snapshot or a generic `{message}` envelope,
+      // the strict equality on flipped fields below would catch it.
+      expect(res.body.id).toBe(result.id);
+      expect(res.body.success).toBe(true);
+      expect(res.body.score).toBe(1);
+      expect(res.body.gradingResult?.pass).toBe(true);
+      expect(res.body.gradingResult?.score).toBe(1);
+      expect(res.body.gradingResult?.reason).toContain('Manual result');
+    });
+
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -103,7 +200,7 @@ describe('eval routes', () => {
       expect(result.gradingResult?.score).toBe(1);
       const ratingPayload = createManualRatingPayload(result, true);
 
-      const res = await request(app)
+      const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
 
@@ -141,7 +238,7 @@ describe('eval routes', () => {
       expect(result.gradingResult?.pass).toBe(true);
       expect(result.gradingResult?.score).toBe(1);
       const ratingPayload = createManualRatingPayload(result, false);
-      const res = await request(app)
+      const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
 
@@ -180,7 +277,7 @@ describe('eval routes', () => {
 
       const ratingPayload = createManualRatingPayload(result, true);
 
-      const res = await request(app)
+      const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
 
@@ -220,7 +317,7 @@ describe('eval routes', () => {
       expect(result.gradingResult?.pass).toBe(false);
       expect(result.gradingResult?.score).toBe(0);
       const ratingPayload = createManualRatingPayload(result, false);
-      const res = await request(app)
+      const res = await api
         .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
         .send(ratingPayload);
 
@@ -248,12 +345,12 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
 
       expect(res.status).toBe(200);
       expect(res.body.config.tests).toHaveLength(2);
 
-      const patchRes = await request(app)
+      const patchRes = await api
         .patch(`/api/eval/${eval_.id}`)
         .send({ config: { ...res.body.config, description: 'renamed eval' } });
 
@@ -271,7 +368,7 @@ describe('eval routes', () => {
 
       mockTablePayloadRangeError((attempt) => attempt === 1);
 
-      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('table');
@@ -294,7 +391,7 @@ describe('eval routes', () => {
 
       mockTablePayloadRangeError((attempt) => attempt <= 2);
 
-      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('table');
@@ -314,7 +411,7 @@ describe('eval routes', () => {
 
       mockTablePayloadRangeError(() => true);
 
-      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+      const res = await api.get(`/api/eval/${eval_.id}/table`);
 
       expect(res.status).toBe(413);
       expect(res.body).toEqual({
@@ -340,7 +437,7 @@ describe('eval routes', () => {
         ('result2', '${eval_.id}', 0, 1, '{}', '{}', '{}', 1, 1.0, '{"key2": "value3", "key3": "value4"}')`,
       );
 
-      const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
+      const res = await api.get(`/api/eval/${eval_.id}/metadata-keys`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('keys');
@@ -348,7 +445,7 @@ describe('eval routes', () => {
     });
 
     it('should return 404 for non-existent eval', async () => {
-      const res = await request(app).get('/api/eval/non-existent-id/metadata-keys');
+      const res = await api.get('/api/eval/non-existent-id/metadata-keys');
 
       expect(res.status).toBe(404);
       expect(res.body).toHaveProperty('error', 'Eval not found');
@@ -358,7 +455,7 @@ describe('eval routes', () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
 
-      const res = await request(app).get(`/api/eval/${eval_.id}/metadata-keys`);
+      const res = await api.get(`/api/eval/${eval_.id}/metadata-keys`);
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('keys');

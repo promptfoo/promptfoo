@@ -10,6 +10,7 @@ import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './aliba
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { ANTHROPIC_MODELS } from './anthropic/util';
+import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
@@ -39,7 +40,7 @@ import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
-import { AIStudioChatProvider } from './google/ai.studio';
+import { AIStudioChatProvider, AIStudioEmbeddingProvider } from './google/ai.studio';
 import { GeminiImageProvider } from './google/gemini-image';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
@@ -251,6 +252,19 @@ export const providerMap: ProviderFactory[] = [
         - anthropic:completion:<model name> - For Completion API
         - anthropic:<model name> - Shorthand for Messages API with a known model name`,
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('atlascloud:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createAtlasCloudProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -1352,6 +1366,13 @@ export const providerMap: ProviderFactory[] = [
             ...providerOptions,
             id: providerPath,
           });
+        } else if (serviceType === 'embedding' || serviceType === 'embeddings') {
+          if (!modelName) {
+            throw new Error(
+              `Missing model name for ${providerPath}. Use e.g. google:embedding:gemini-embedding-001.`,
+            );
+          }
+          return new AIStudioEmbeddingProvider(modelName, providerOptions);
         }
       }
 

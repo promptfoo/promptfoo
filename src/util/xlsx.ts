@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-
 import type { CsvRow } from '../types/index';
 
 function getSheetIndex(sheetSpecifier: string | undefined, sheetNames: string[]): number {
@@ -37,11 +35,6 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     // Supports syntax: file.xlsx#SheetName or file.xlsx#2 (1-based index)
     const [actualFilePath, sheetSpecifier] = filePath.split('#');
 
-    // Check if file exists before attempting to read it
-    if (!fs.existsSync(actualFilePath)) {
-      throw new Error(`File not found: ${actualFilePath}`);
-    }
-
     // Try to import read-excel-file first to give proper error if not installed
     let readXlsxFile: typeof import('read-excel-file/node').default;
     try {
@@ -55,7 +48,12 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     }
 
     // Get all sheet names to validate and determine which sheet to use
-    const sheets = await readXlsxFile(actualFilePath);
+    const sheets = await readXlsxFile(actualFilePath).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`File not found: ${actualFilePath}`);
+      }
+      throw error;
+    });
     const sheetNames = sheets.map((sheet) => sheet.sheet);
 
     // Validate that the workbook has at least one sheet
