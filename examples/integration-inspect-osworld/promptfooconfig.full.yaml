@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Full OSWorld via Inspect benchmark with tracing
+prompts:
+  - '{{prompt}}'
+providers:
+  - id: file://provider.py
+    label: OSWorld via Inspect
+    config:
+      defaultModel: openai/gpt-5.5
+      task: inspect_evals/osworld
+      taskParameters:
+        include_connected: true
+      # Promptfoo's Python worker timeout, in milliseconds.
+      timeout: 7500000
+      # Inspect subprocess timeout, in seconds.
+      timeoutSeconds: 7200
+defaultTest:
+  metadata:
+    tracingEnabled: true
+  assert:
+    - type: python
+      value: file://assertion.py
+tests: file://osworld_tests.py:generate_full_tests
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: 127.0.0.1
+      acceptFormats:
+        - json
+        - protobuf

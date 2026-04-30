@@ -8,10 +8,27 @@ import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
-const GPT_5_4_LONG_CONTEXT_THRESHOLD = 272_000;
+const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
+
+type OpenAIModelCost = {
+  input: number;
+  output: number;
+  audioInput?: number;
+  audioOutput?: number;
+  longContext?: {
+    threshold: number;
+    input: number;
+    output: number;
+  };
+};
+
+type OpenAIModelInfo = {
+  id: string;
+  cost?: OpenAIModelCost;
+};
 
 // see https://platform.openai.com/docs/models
-export const OPENAI_CHAT_MODELS = [
+export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
   // TTS model (text input + audio output costs)
   ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15'].map((model) => ({
     id: model,
@@ -340,6 +357,19 @@ export const OPENAI_CHAT_MODELS = [
       output: 4 / 1e6,
     },
   })),
+  // GPT-5.5 models
+  ...['gpt-5.5', 'gpt-5.5-2026-04-23'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6,
+      output: 30 / 1e6,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1e6,
+        output: 45 / 1e6,
+      },
+    },
+  })),
   // GPT-5.4 models
   ...['gpt-5.4', 'gpt-5.4-2026-03-05'].map((model) => ({
     id: model,
@@ -347,7 +377,7 @@ export const OPENAI_CHAT_MODELS = [
       input: 2.5 / 1e6,
       output: 15 / 1e6,
       longContext: {
-        threshold: GPT_5_4_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 5 / 1e6,
         output: 22.5 / 1e6,
       },
@@ -397,23 +427,31 @@ export const OPENAI_CHAT_MODELS = [
   })),
 ];
 
-export const OPENAI_RESPONSES_ONLY_MODELS = [
+export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
   ...['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'].map((model) => ({
     id: model,
     cost: {
       input: 30 / 1e6,
       output: 180 / 1e6,
       longContext: {
-        threshold: GPT_5_4_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1e6,
         output: 270 / 1e6,
       },
     },
   })),
+  // GPT-5.5 Pro is Responses-only
+  ...['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23'].map((model) => ({
+    id: model,
+    cost: {
+      input: 30 / 1e6,
+      output: 180 / 1e6,
+    },
+  })),
 ];
 
 // Deep research models for Responses API
-export const OPENAI_DEEP_RESEARCH_MODELS = [
+export const OPENAI_DEEP_RESEARCH_MODELS: OpenAIModelInfo[] = [
   ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
     id: model,
     cost: {
@@ -431,7 +469,7 @@ export const OPENAI_DEEP_RESEARCH_MODELS = [
 ];
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
-export const OPENAI_COMPLETION_MODELS = [
+export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
@@ -448,7 +486,7 @@ export const OPENAI_COMPLETION_MODELS = [
 ];
 
 // Realtime models for WebSocket API
-export const OPENAI_REALTIME_MODELS = [
+export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   // GA gpt-realtime models
   ...['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'].map((model) => ({
     id: model,

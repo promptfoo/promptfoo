@@ -6,7 +6,9 @@ import type { ApiProvider } from '../types/index';
 /**
  * The default timeout for API requests in milliseconds.
  */
-export const REQUEST_TIMEOUT_MS = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+export function getRequestTimeoutMs(): number {
+  return getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
+}
 
 /**
  * Extended timeout for long-running models (deep research, gpt-5-pro, etc.) in milliseconds.

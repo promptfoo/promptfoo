@@ -154,5 +154,4 @@ redteam:
 - [RBAC](rbac.md) - Tests role-based access controls for admin functions
 - [Contracts](contracts.md) - Tests for unauthorized business commitments
 - [Excessive Agency](excessive-agency.md) - Tests for actions beyond authorized scope
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
