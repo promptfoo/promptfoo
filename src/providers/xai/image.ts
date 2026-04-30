@@ -7,7 +7,7 @@ import {
   formatOutput,
   OpenAiImageProvider,
 } from '../openai/image';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -118,7 +118,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       ));
       if (status < 200 || status >= 300) {
         return {

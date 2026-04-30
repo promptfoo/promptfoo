@@ -297,8 +297,17 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ### Embedding Models
 
-- `google:embedding:text-embedding-004` - Google text embedding model
-- `google:embedding:embedding-001` - Google embedding model
+Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
+
+- `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+
+Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
+
+- `taskType` - one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`
+- `outputDimensionality` - truncates the returned vector (useful for storage cost)
+- `title` - document title, only applied with `taskType: RETRIEVAL_DOCUMENT`
+
+If you need Vertex authentication or additional embedding models, see the [Vertex provider](/docs/providers/vertex#embedding-models) instead.
 
 ### Image Generation Models
 
@@ -811,7 +820,7 @@ defaultTest:
           temperature: 0.7
       # Override embedding provider for similarity comparisons
       embedding:
-        id: google:embedding:text-embedding-004
+        id: google:embedding:gemini-embedding-001
 ```
 
 2. For individual assertions:
@@ -822,7 +831,7 @@ assert:
     value: Expected response
     threshold: 0.8
     provider:
-      id: google:embedding:text-embedding-004
+      id: google:embedding:gemini-embedding-001
 ```
 
 3. For specific tests:
@@ -836,7 +845,7 @@ tests:
         text:
           id: google:gemini-2.0-flash
         embedding:
-          id: google:embedding:text-embedding-004
+          id: google:embedding:gemini-embedding-001
     assert:
       - type: similar
         value: The answer is 4

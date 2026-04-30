@@ -14,7 +14,26 @@ vi.mock('../src/envars', () => ({
   getEnvString: vi.fn(),
 }));
 
-vi.mock('fs');
+const mockReadFileSync = vi.hoisted(() => vi.fn());
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFileSync: mockReadFileSync,
+    },
+    readFileSync: mockReadFileSync,
+  };
+});
+
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: mockReadFileSync,
+  },
+  readFile: mockReadFileSync,
+}));
 
 // Mock the MSAL node module
 const mockMsalClient = {
