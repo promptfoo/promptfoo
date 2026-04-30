@@ -1461,6 +1461,229 @@ describe('HydraProvider', () => {
       // First request should not have lastGraderResult
       expect(request.lastGraderResult).toBeUndefined();
     });
+
+    it('should send plain input descriptions to the hydra agent prompt in multi-input mode', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          prompt: 'Summarize the uploaded planning document.',
+          document: 'doc payload',
+          question: 'What changed?',
+        }),
+        materializationHandled: true,
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+          question: {
+            description: 'Benign analyst question',
+            type: 'text',
+          },
+        },
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: {
+            goal: 'test goal',
+            pluginId: 'harmful:test',
+            purpose: 'Test purpose',
+          },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const agentCall = mockAgentProvider.callApi.mock.calls[0];
+      const request = JSON.parse(agentCall[0] as string);
+
+      expect(request.inputs).toEqual({
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        question: {
+          description: 'Benign analyst question',
+          type: 'text',
+        },
+      });
+    });
+
+    it('should use remote materialized vars when the hydra prompt is plain text', async () => {
+      const docxDataUri =
+        'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Summarize the uploaded planning document for the analyst.',
+        materializationHandled: true,
+        materializedVars: {
+          document: docxDataUri,
+          question: 'What changed?',
+        },
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+          question: {
+            description: 'Benign analyst question',
+            type: 'text',
+          },
+        },
+        maxTurns: 1,
+        stateful: true,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: {
+          input: 'test goal',
+          document: 'stale document',
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: {
+            goal: 'test goal',
+            pluginId: 'harmful:test',
+            purpose: 'Test purpose',
+          },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const renderCalls = (evaluatorHelpers.renderPrompt as Mock).mock.calls;
+      expect(renderCalls[0][1]).toMatchObject({
+        document: docxDataUri,
+        question: 'What changed?',
+      });
+    });
+
+    it('should preserve the existing DOCX var when remote materialization omits it', async () => {
+      const docxDataUri =
+        'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          document: 'Quarterly Sales Report',
+          question: 'Can you summarize the main points from this document?',
+        }),
+        materializationHandled: true,
+        materializedVars: {
+          question: 'What changed?',
+        },
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+          question: {
+            description: 'Benign analyst question',
+            type: 'text',
+          },
+        },
+        maxTurns: 1,
+        stateful: true,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: {
+          input: 'test goal',
+          document: docxDataUri,
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: {
+            goal: 'test goal',
+            pluginId: 'harmful:test',
+            purpose: 'Test purpose',
+          },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const renderCalls = (evaluatorHelpers.renderPrompt as Mock).mock.calls;
+      expect(renderCalls[0][1]).toMatchObject({
+        document: docxDataUri,
+        question: 'What changed?',
+      });
+    });
+
+    it('should fail closed when the hydra agent never produces a target probe', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        error: 'Invalid schema for inputs.document',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+        },
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: {
+            goal: 'test goal',
+            pluginId: 'harmful:test',
+            purpose: 'Test purpose',
+          },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.error).toBe('Invalid schema for inputs.document');
+      expect(result.metadata.hydraRoundsCompleted).toBe(0);
+      expect(result.tokenUsage?.numRequests).toBe(0);
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
   });
 
   describe('Abort Signal Handling', () => {
