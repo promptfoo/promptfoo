@@ -14,8 +14,7 @@
     "composite": true,
     "rootDir": ".",
     "ignoreDeprecations": "6.0",
-    "baseUrl": "./",
-    "jsx": "react-jsx"
+    "baseUrl": "./"
   },
   "include": [
     "src/",

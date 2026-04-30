@@ -1,7 +1,7 @@
 import { fetchWithCache } from './cache';
 import { getEnvString } from './envars';
 import logger from './logger';
-import { REQUEST_TIMEOUT_MS } from './providers/shared';
+import { getRequestTimeoutMs } from './providers/shared';
 
 import type { GradingResult } from './types/index';
 
@@ -59,7 +59,7 @@ export async function doRemoteScoringWithPi(
           },
           body,
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
       return convertPiResultToGradingResult(data, passThreshold);
     } else {

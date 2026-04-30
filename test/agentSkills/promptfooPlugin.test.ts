@@ -1,11 +1,14 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
+
+const execFileAsync = promisify(execFile);
 
 const repoRoot = path.resolve(__dirname, '../..');
 const pluginRoot = path.join(repoRoot, 'plugins', 'promptfoo');
@@ -2183,7 +2186,7 @@ describe('promptfoo Codex plugin package', () => {
     }
   });
 
-  it('keeps Python file providers executable and on the promptfoo function contract', () => {
+  it('keeps Python file providers executable and on the promptfoo function contract', async () => {
     const configPaths = listFiles(fixtureRoot, (filePath) =>
       ['promptfooconfig.yaml', 'redteam.yaml'].includes(path.basename(filePath)),
     );
@@ -2219,22 +2222,29 @@ describe('promptfoo Codex plugin package', () => {
       'redteam-setup-static-code-python/target.py:invoice_redteam_target',
     ]);
 
-    for (const { absolutePath, context, functionName, reference } of pythonReferences.values()) {
-      const script = readText(absolutePath);
-      expect(script, `${context}: ${reference}`).toContain(`def ${functionName}(`);
+    const pythonEnv = { ...process.env, OAIPKG_DISABLE_META_MISSING: '1' };
+    await Promise.all(
+      [...pythonReferences.values()].map(
+        async ({ absolutePath, context, functionName, reference }) => {
+          const script = readText(absolutePath);
+          expect(script, `${context}: ${reference}`).toContain(`def ${functionName}(`);
 
-      const output = execFileSync(fixturePythonExecutable, [absolutePath], {
-        cwd: path.dirname(absolutePath),
-        encoding: 'utf8',
-        env: { ...process.env, OAIPKG_DISABLE_META_MISSING: '1' },
-      });
-      const parsed = JSON.parse(output) as ProviderResult;
-      expect(typeof parsed.output, `${absolutePath} should print JSON with output`).toBe('string');
-      expect(
-        String(parsed.output).length,
-        `${absolutePath} output should be non-empty`,
-      ).toBeGreaterThan(0);
-    }
+          const { stdout } = await execFileAsync(fixturePythonExecutable, [absolutePath], {
+            cwd: path.dirname(absolutePath),
+            encoding: 'utf8',
+            env: pythonEnv,
+          });
+          const parsed = JSON.parse(stdout) as ProviderResult;
+          expect(typeof parsed.output, `${absolutePath} should print JSON with output`).toBe(
+            'string',
+          );
+          expect(
+            String(parsed.output).length,
+            `${absolutePath} output should be non-empty`,
+          ).toBeGreaterThan(0);
+        },
+      ),
+    );
   });
 
   it('keeps packaged configs and fixtures free of literal secrets', () => {

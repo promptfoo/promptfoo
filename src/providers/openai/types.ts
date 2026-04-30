@@ -157,7 +157,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
-  reasoning_effort?: ReasoningEffort;
+  reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
   service_tier?: ('auto' | 'default' | 'premium') | null;
   modalities?: string[];
