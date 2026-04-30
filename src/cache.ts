@@ -8,7 +8,7 @@ import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
-import { REQUEST_TIMEOUT_MS } from './providers/shared';
+import { getRequestTimeoutMs } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
@@ -492,7 +492,7 @@ async function prepareFetchResponse(
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: RequestInit = {},
-  timeout: number = REQUEST_TIMEOUT_MS,
+  timeout: number = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
   bust: boolean = false,
   maxRetries?: number,
