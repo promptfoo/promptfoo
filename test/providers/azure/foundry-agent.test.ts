@@ -480,5 +480,117 @@ describe('AzureFoundryAgentProvider', () => {
       expect(result.error).toContain('Error in Azure Foundry Agent API call');
       expect(result.error).toContain('Something unexpected happened');
     });
+
+    describe('SDK-shape 429 classification (classifySdkRateLimit)', () => {
+      // The OpenAI / Azure SDK rejects with a plain object that has `status`,
+      // not an HttpRateLimitError instance, since it bypasses fetchWithRetries.
+      // We verify formatError still classifies these correctly by `status === 429`
+      // and the body-level error code.
+
+      function makeSdkError(status: number, code?: string, message = 'sdk error'): unknown {
+        return Object.assign(new Error(message), { status, error: code ? { code } : undefined });
+      }
+
+      it('classifies SDK 429 with insufficient_quota body code as quota', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Quota exceeded');
+        expect(result.error).toContain('insufficient_quota');
+        expect(result.error).toContain('Retries will not help');
+      });
+
+      it('classifies SDK 429 with rate_limit_exceeded body code as rate_limit', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'rate_limit_exceeded'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).toContain('rate_limit_exceeded');
+        expect(result.error).not.toContain('Retries will not help');
+      });
+
+      it('classifies SDK 429 with no body code as rate_limit by default', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).not.toContain('Retries will not help');
+      });
+
+      it('does not misclassify non-429 SDK errors with insufficient_quota body', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        // 500 with the same code shouldn't trigger the rate-limit branch
+        mockResponsesCreate.mockRejectedValue(makeSdkError(500, 'insufficient_quota'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).not.toContain('Quota exceeded');
+        expect(result.error).not.toContain('Rate limit exceeded');
+      });
+
+      it('falls through for non-object errors', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue('string error');
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Error in Azure Foundry Agent API call');
+      });
+
+      it('detects 429 nested under err.response.status (older SDK shape)', async () => {
+        // Some SDK wrappers / older openai-node versions nest the response.
+        mockGetAgent.mockResolvedValue(mockAgent);
+        const sdkErr = Object.assign(new Error('sdk wrapper'), {
+          response: { status: 429 },
+          error: { code: 'rate_limit_exceeded' },
+        });
+        mockResponsesCreate.mockRejectedValue(sdkErr);
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).toContain('rate_limit_exceeded');
+      });
+
+      it('prefers body-level err.error.code over top-level err.code', async () => {
+        // The OpenAI SDK can set `err.code` to a transport-level value while
+        // the body's error.code is the authoritative API code. Body wins.
+        mockGetAgent.mockResolvedValue(mockAgent);
+        const sdkErr = Object.assign(new Error('sdk shadow'), {
+          status: 429,
+          code: 'ETIMEDOUT',
+          error: { code: 'rate_limit_exceeded' },
+        });
+        mockResponsesCreate.mockRejectedValue(sdkErr);
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.error).toContain('Rate limit exceeded');
+        expect(result.error).toContain('rate_limit_exceeded');
+      });
+
+      it('populates metadata.rateLimitKind on SDK 429 errors', async () => {
+        mockGetAgent.mockResolvedValue(mockAgent);
+        mockResponsesCreate.mockRejectedValue(makeSdkError(429, 'insufficient_quota'));
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: { projectUrl },
+        });
+        const result = await provider.callApi('test prompt');
+        expect(result.metadata?.rateLimitKind).toBe('quota');
+      });
+    });
   });
 });

@@ -9,8 +9,10 @@ import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { getRequestTimeoutMs } from '../src/providers/shared';
+import { HttpRateLimitError } from '../src/util/fetch/errors';
 import {
   clearAgentCache,
+  computeRateLimitWaitMs,
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
@@ -1049,13 +1051,21 @@ describe('isRateLimited', () => {
 });
 
 describe('handleRateLimit', () => {
+  const originalRandom = Math.random;
+  let randomReturn = 0;
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    // Pin Math.random so jitter is deterministic across tests. Tests can
+    // mutate `randomReturn` to control the value returned on the next call.
+    randomReturn = 0;
+    Math.random = () => randomReturn;
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    Math.random = originalRandom;
   });
 
   it('should handle OpenAI reset headers', async () => {
@@ -1069,7 +1079,7 @@ describe('handleRateLimit', () => {
     vi.advanceTimersByTime(5000);
     await promise;
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 5000ms'));
   });
 
   it('should handle OpenAI reset headers with millisecond durations', async () => {
@@ -1081,7 +1091,7 @@ describe('handleRateLimit', () => {
 
     await handleRateLimit(response);
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 500ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 500ms'));
   });
 
   it('should handle OpenAI reset headers with compound durations', async () => {
@@ -1093,7 +1103,7 @@ describe('handleRateLimit', () => {
 
     await handleRateLimit(response);
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 90000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 90000ms'));
   });
 
   it('should handle standard rate limit reset headers', async () => {
@@ -1107,9 +1117,7 @@ describe('handleRateLimit', () => {
     const promise = handleRateLimit(response);
     await promise;
 
-    expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/Rate limited, waiting \d+ms before retry/),
-    );
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringMatching(/Rate limited, waiting \d+ms/));
   });
 
   it('should handle Retry-After headers', async () => {
@@ -1123,7 +1131,7 @@ describe('handleRateLimit', () => {
     vi.advanceTimersByTime(5000);
     await promise;
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 5000ms'));
   });
 
   it('should handle Retry-After HTTP-date headers', async () => {
@@ -1136,7 +1144,7 @@ describe('handleRateLimit', () => {
 
     await handleRateLimit(response);
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 5000ms'));
   });
 
   it('should use default wait time for invalid Retry-After headers', async () => {
@@ -1148,7 +1156,7 @@ describe('handleRateLimit', () => {
 
     await handleRateLimit(response);
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 60000ms'));
   });
 
   it('should use default wait time when no headers present', async () => {
@@ -1158,7 +1166,67 @@ describe('handleRateLimit', () => {
     vi.advanceTimersByTime(60000);
     await promise;
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 60000ms'));
+  });
+
+  it('adds bounded jitter to spread concurrent retries', async () => {
+    randomReturn = 0.5; // -> jitter = floor(0.5 * 1000) = 500ms
+    const response = createMockResponse({
+      headers: new Headers({ 'Retry-After': '5' }),
+    });
+
+    const promise = handleRateLimit(response);
+    vi.advanceTimersByTime(5500);
+    await promise;
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('base 5000ms + 500ms jitter'),
+    );
+    // Total wait used in sleep should be base + jitter
+    expect(sleep).toHaveBeenCalledWith(5500);
+  });
+
+  it('jitter draws from [0, 1000) so two concurrent waiters can desynchronize', async () => {
+    // Vary the value Math.random returns across two sequential calls
+    let callCount = 0;
+    Math.random = () => {
+      callCount++;
+      return callCount === 1 ? 0.1 : 0.9;
+    };
+
+    const response1 = createMockResponse({ headers: new Headers({ 'Retry-After': '5' }) });
+    const response2 = createMockResponse({ headers: new Headers({ 'Retry-After': '5' }) });
+
+    await handleRateLimit(response1);
+    await handleRateLimit(response2);
+
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(sleep).mock.calls[0][0]).toBe(5100); // 5000 + floor(0.1 * 1000)
+    expect(vi.mocked(sleep).mock.calls[1][0]).toBe(5900); // 5000 + floor(0.9 * 1000)
+  });
+});
+
+describe('computeRateLimitWaitMs', () => {
+  it('returns 60000ms by default', () => {
+    expect(computeRateLimitWaitMs(createMockResponse())).toBe(60_000);
+  });
+
+  it('reads Retry-After in seconds', () => {
+    const response = createMockResponse({ headers: new Headers({ 'Retry-After': '7' }) });
+    expect(computeRateLimitWaitMs(response)).toBe(7_000);
+  });
+
+  it('prefers OpenAI reset headers when present', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '3s',
+        'Retry-After': '60',
+      }),
+    });
+    const wait = computeRateLimitWaitMs(response);
+    // resolves close to 3000ms; allow a few ms of clock drift
+    expect(wait).toBeGreaterThanOrEqual(2_900);
+    expect(wait).toBeLessThanOrEqual(3_100);
   });
 });
 
@@ -1361,7 +1429,7 @@ describe('fetchWithRetries', () => {
     vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
-      'Rate limited: 429 Too Many Requests',
+      /Rate limit exceeded.*429.*Too Many Requests/,
     );
   });
 
@@ -1374,7 +1442,7 @@ describe('fetchWithRetries', () => {
     vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 0)).rejects.toThrow(
-      'Request failed after 0 retries: Rate limited: 429 Too Many Requests',
+      /Rate limit exceeded.*429.*Too Many Requests/,
     );
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -1470,6 +1538,201 @@ describe('fetchWithRetries', () => {
 
       // Should not retry on abort
       expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('HttpRateLimitError classification', () => {
+    function rateLimitedJsonResponse(opts: {
+      headers?: Headers;
+      body?: unknown;
+      statusText?: string;
+    }): Response {
+      const text = JSON.stringify(opts.body ?? {});
+      return createMockResponse({
+        status: 429,
+        statusText: opts.statusText ?? 'Too Many Requests',
+        headers: opts.headers ?? new Headers(),
+        text: () => Promise.resolve(text),
+      });
+    }
+
+    it('throws HttpRateLimitError when retries exhausted with rate-limit body code', async () => {
+      const rateLimitResponse = rateLimitedJsonResponse({
+        headers: new Headers({ 'Retry-After': '7' }),
+        body: { error: { code: 'rate_limit_exceeded', message: 'too many requests' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
+
+      try {
+        await fetchWithRetries('https://example.com', {}, 1000, 1);
+        throw new Error('expected to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpRateLimitError);
+        const rl = err as HttpRateLimitError;
+        expect(rl.kind).toBe('rate_limit');
+        expect(rl.status).toBe(429);
+        expect(rl.code).toBe('rate_limit_exceeded');
+        expect(rl.retryAfterMs).toBe(7000);
+      }
+    });
+
+    it('fails fast on insufficient_quota without consuming retries', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: {
+          error: {
+            code: 'insufficient_quota',
+            message: 'You exceeded your current quota',
+            type: 'insufficient_quota',
+          },
+        },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      try {
+        await fetchWithRetries('https://example.com', {}, 1000, 4);
+        throw new Error('expected to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpRateLimitError);
+        const rl = err as HttpRateLimitError;
+        expect(rl.kind).toBe('quota');
+        expect(rl.code).toBe('insufficient_quota');
+      }
+
+      // Single attempt — no retries on a hard quota failure
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it('fails fast on billing_hard_limit_reached', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: { error: { code: 'billing_hard_limit_reached', message: 'billing limit hit' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 3).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      expect((err as HttpRateLimitError).kind).toBe('quota');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves headers and reset metadata on the structured error', async () => {
+      const headers = new Headers({
+        'Retry-After': '12',
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '12s',
+      });
+      vi.mocked(global.fetch).mockResolvedValue(rateLimitedJsonResponse({ headers }));
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.retryAfterMs).toBe(12_000);
+      expect(rl.resetAt).toBeGreaterThanOrEqual(Date.now() - 1_000);
+      expect(rl.headers?.['retry-after']).toBe('12');
+    });
+
+    it('falls back to status-only when body has no JSON code', async () => {
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.resolve('plain text rate limit notice'),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBeUndefined();
+      // Body is preserved as raw text for diagnostics.
+      expect(rl.body).toBe('plain text rate limit notice');
+    });
+
+    it('handles empty body without bubbling up the read', async () => {
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.resolve(''),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBeUndefined();
+      expect(rl.body).toBeUndefined();
+    });
+
+    it('degrades gracefully when body read fails', async () => {
+      // Simulate a stream that errors mid-read — the structured error must
+      // still surface, just without body code (worst case: misclassify
+      // quota as rate_limit, which is the safer side).
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.reject(new Error('stream consumed')),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBeUndefined();
+    });
+
+    it('classifies via error.type when error.code is missing (Anthropic shape)', async () => {
+      // Anthropic error envelopes use `error.type`, not `error.code`. The
+      // body-code extractor falls back to `type`; verify a quota-shaped
+      // type still triggers the quota fail-fast path.
+      const response = rateLimitedJsonResponse({
+        body: { error: { type: 'insufficient_quota', message: 'quota exhausted' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      expect((err as HttpRateLimitError).kind).toBe('quota');
+      expect((err as HttpRateLimitError).code).toBe('insufficient_quota');
+      // Single attempt — quota fail-fast must not retry.
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('bounds streamed 429 body to RATE_LIMIT_BODY_PEEK_BYTES under a single oversized chunk', async () => {
+      // Hostile / buggy upstream: one chunk much larger than the 64KB peek
+      // cap. The classifier must surface a structured error without
+      // buffering the full payload — the truncated body proves the cap is
+      // honored before the stream is drained.
+      const oversize = 1024 * 1024; // 1 MB
+      const payload = `{"x":"${'A'.repeat(oversize - 10)}"}`;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(payload));
+          controller.close();
+        },
+      });
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.resolve(payload),
+      });
+      Object.defineProperty(response, 'body', { value: stream });
+      Object.defineProperty(response, 'clone', { value: () => response });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      // Body is truncated, so JSON.parse fails and we fall through to raw text.
+      expect(typeof rl.body).toBe('string');
+      expect((rl.body as string).length).toBeLessThanOrEqual(64 * 1024);
+      // Sanity: payload was much larger than the cap.
+      expect((rl.body as string).length).toBeLessThan(payload.length);
     });
   });
 });
