@@ -5,7 +5,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
-import type { ProviderOptions } from '@promptfoo/types';
+import type { Inputs, ProviderOptions } from '@promptfoo/types';
 
 vi.mock('./ExtensionEditor', () => ({
   default: ({
@@ -38,8 +38,8 @@ vi.mock('./InputsEditor', () => ({
     onChange,
     compact,
   }: {
-    inputs?: Record<string, string>;
-    onChange: (inputs: Record<string, string> | undefined) => void;
+    inputs?: Inputs;
+    onChange: (inputs: Inputs | undefined) => void;
     compact?: boolean;
   }) => {
     return (

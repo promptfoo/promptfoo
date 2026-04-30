@@ -318,6 +318,11 @@ describe('DataTable', () => {
           scrollContainer.scrollTop = 20_000;
           scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
         });
+        // TanStack Virtual debounces scroll-end notification after scroll events.
+        // Let it settle before jsdom teardown so React does not receive a late update.
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
       }
 
       const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
@@ -353,6 +358,45 @@ describe('DataTable', () => {
       expect(screen.getByText('Loaded row')).toBeInTheDocument();
       expect(container.querySelectorAll('tbody tr[data-rowindex]').length).toBeLessThan(100);
       expect(container.querySelector('tbody tr[aria-busy="true"]')).toBeInTheDocument();
+    });
+
+    it('should use virtual row indexes for server-side selection when no getRowId is provided', async () => {
+      const user = userEvent.setup();
+      let capturedSelection: Record<string, boolean> = {};
+      const loadedRows = new Map<number, TestRow>([[25, { id: 'row-25', name: 'Loaded row 25' }]]);
+
+      render(
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          virtualRowEstimate={20}
+          virtualOverscan={10}
+          enableRowSelection
+          rowSelection={{}}
+          onRowSelectionChange={(selection) => {
+            capturedSelection = selection;
+          }}
+          serverVirtualization={{
+            rowCount: 100,
+            pageSize: 25,
+            getRow: (index) => loadedRows.get(index),
+            loadRows: vi.fn(),
+            isRowLoading: (index) => !loadedRows.has(index),
+          }}
+        />,
+      );
+
+      await screen.findByText('Loaded row 25');
+
+      const checkboxes = screen.getAllByRole('checkbox');
+      expect(checkboxes).toHaveLength(2);
+
+      await user.click(checkboxes[1]);
+
+      expect(capturedSelection).toHaveProperty('25', true);
+      expect(capturedSelection).not.toHaveProperty('0');
     });
 
     it('should hide no-op filter controls for server-side rows by default', async () => {
@@ -907,6 +951,51 @@ describe('DataTable', () => {
     expect(headerCells[2].className).toContain('overflow-hidden');
     expect(headerCells[3].className).toContain('px-4');
     expect(headerCells[3].className).toContain('overflow-hidden');
+  });
+
+  it('should reserve inline space for sortable header actions without absolute positioning', () => {
+    const layoutColumns: ColumnDef<TestRow>[] = [
+      {
+        accessorKey: 'id',
+        header: 'Identifier',
+        size: 96,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Right Aligned Header',
+        size: 128,
+        meta: {
+          align: 'right',
+        },
+      },
+    ];
+    const data: TestRow[] = [{ id: '1', name: 'Long header row' }];
+
+    render(<DataTable columns={layoutColumns} data={data} />);
+
+    const assertHeaderLayout = (headerText: string, shouldBeRightAligned = false) => {
+      const headerLabel = screen.getByText(headerText);
+      const headerContent = headerLabel.closest('div');
+      expect(headerContent).not.toBeNull();
+      expect(headerContent).toHaveClass('flex', 'min-w-0', 'items-center', 'gap-1');
+      expect(headerContent).toHaveClass('overflow-hidden');
+
+      if (shouldBeRightAligned) {
+        expect(headerContent).toHaveClass('flex-row-reverse');
+      } else {
+        expect(headerContent).not.toHaveClass('flex-row-reverse');
+      }
+
+      expect(headerLabel).toHaveClass('block', 'min-w-0', 'flex-1', 'truncate');
+
+      const actionGroup = headerContent?.querySelector('button')?.closest('span');
+      expect(actionGroup).toBeInTheDocument();
+      expect(actionGroup).toHaveClass('flex', 'shrink-0', 'items-center');
+      expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
+    };
+
+    assertHeaderLayout('Identifier');
+    assertHeaderLayout('Right Aligned Header', true);
   });
 
   describe('cell content wrapper', () => {
