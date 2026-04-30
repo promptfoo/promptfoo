@@ -536,6 +536,8 @@ export interface GradingResult {
     // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
     context?: string | string[];
     contextUnits?: string[];
+    // Raw textual responses returned by one or more LLM grader phases
+    graderOutputs?: Record<string, string>;
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)

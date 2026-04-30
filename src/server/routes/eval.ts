@@ -12,7 +12,7 @@ import invariant from '../../util/invariant';
 import { sanitizeObject } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { sendError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -696,13 +696,13 @@ evalRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.SubmitRating.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
     const bodyResult = EvalSchemas.SubmitRating.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -781,7 +781,7 @@ evalRouter.post(
       await eval_.save();
       await result.save();
 
-      res.json(EvalSchemas.SubmitRating.Response.parse({ message: 'Rating submitted' }));
+      res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }

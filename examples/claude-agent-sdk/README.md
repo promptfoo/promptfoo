@@ -160,6 +160,23 @@ This example demonstrates testing [Agent Skills](https://platform.claude.com/doc
 (cd skills && promptfoo eval)
 ```
 
+### Skill Comparison
+
+This example compares two versions of the same Claude Agent SDK skill against identical review tasks. It is the Claude companion to [`examples/openai-codex-sdk/skill-comparison`](../openai-codex-sdk/skill-comparison) and the runnable form of the [agent-skill testing guide](https://www.promptfoo.dev/docs/guides/test-agent-skills).
+
+- **Versioned fixtures**: Each provider points at a different `working_dir` with its own `.claude/skills/review-standards/SKILL.md`
+- **Skill filter**: Uses `skills: ['review-standards']` (SDK 0.2.120+) to auto-allow the `Skill` tool
+- **Structured output**: Shares an `output_format` schema across both providers via a YAML anchor so JSON results are reliable without prompt gymnastics
+- **Outcome scoring**: A JavaScript assertion scores issue recall against `expectedIssues`
+
+**Location**: `./skill-comparison/`
+
+**Usage**:
+
+```bash
+(cd skill-comparison && promptfoo eval --no-cache)
+```
+
 ### Plugins
 
 This example demonstrates loading skills from a [plugin](https://code.claude.com/docs/en/plugins) instead of from `setting_sources`. Plugins are self-contained directories that bundle skills, agents, hooks, and MCP servers together.

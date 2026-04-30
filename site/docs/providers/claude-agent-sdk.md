@@ -644,6 +644,12 @@ When `output_format` is configured, the response will include structured output 
 - `output` - The parsed structured output (when available)
 - `metadata.structuredOutput` - The raw structured output value
 
+:::tip
+For evals that depend on parsing JSON from the model's reply, prefer `output_format` over asking for JSON in the prompt and then running `is-json` / `JSON.parse()`. Without it, Claude commonly wraps short JSON answers in Markdown fences or a leading sentence, which makes downstream parsers brittle. With it, the response arrives as a parsed object, so a JavaScript assertion can read fields directly.
+
+This is the Claude Agent SDK's analogue of the OpenAI Codex SDK's [`output_schema`](/docs/providers/openai-codex-sdk#structured-output) — same idea, slightly different wrapper shape (`{type: 'json_schema', schema: {...}}` here vs a bare schema object on Codex). The [Test Agent Skills guide](/docs/guides/test-agent-skills) shows both side by side.
+:::
+
 ## Session Management
 
 Continue or fork existing sessions for multi-turn interactions:
@@ -959,6 +965,35 @@ See the [Claude Agent SDK permissions documentation](https://platform.claude.com
 :::tip
 If you're testing scenarios where the agent asks questions, consider what answer would lead to the most interesting test case. Using `random` behavior can help discover edge cases.
 :::
+
+## Hooks
+
+Promptfoo forwards the `hooks` option to the Claude Agent SDK unchanged, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
+
+The `PostToolUse` event lets you rewrite tool output before the model sees it. Return `updatedToolOutput` to replace the result for any tool (built-in or MCP):
+
+```ts title="provider.mjs"
+export default {
+  id: 'anthropic:claude-agent-sdk',
+  config: {
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: 'Bash',
+          hooks: [
+            async (input) => ({
+              hookEventName: 'PostToolUse',
+              updatedToolOutput: redact(input.tool_response),
+            }),
+          ],
+        },
+      ],
+    },
+  },
+};
+```
+
+`updatedMCPToolOutput` (MCP-only) is deprecated in favor of `updatedToolOutput`, which works for every tool. See the [SDK hook reference](https://docs.claude.com/en/docs/claude-code/hooks) for the full list of events and return shapes.
 
 ## Tool Call Tracking
 
