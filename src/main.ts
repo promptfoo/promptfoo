@@ -54,7 +54,7 @@ async function main() {
   }
 
   await checkForUpdates();
-  await runDbMigrations();
+  await runDbMigrations({ suppressNativeAddonLogging: true });
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
@@ -167,6 +167,8 @@ if (isMain) {
     const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(mainError);
     if (nativeAddonVersionMismatchMessage) {
       console.error(nativeAddonVersionMismatchMessage);
+      logger.debug('better-sqlite3 ABI mismatch (original error follows)', { error: mainError });
+      // exit code preserved by process.exitCode = 1 above
     } else {
       throw mainError;
     }

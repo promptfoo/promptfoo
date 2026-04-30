@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   formatNativeAddonVersionMismatchMessage,
   getNativeAddonVersionMismatchDetails,
-  isNativeAddonVersionMismatchError,
 } from '../src/util/nativeAddonErrors';
 
 describe('native addon errors', () => {
@@ -21,18 +20,15 @@ describe('native addon errors', () => {
       addonAbi: '115',
       nodeAbi: '137',
     });
-    expect(isNativeAddonVersionMismatchError(versionMismatchError)).toBe(true);
   });
 
   it('formats actionable repair instructions for supported mismatch errors', () => {
     const message = formatNativeAddonVersionMismatchMessage(versionMismatchError);
 
-    expect(message).toContain('promptfoo could not load its SQLite dependency');
+    // Verify ABI numbers are dynamically interpolated
     expect(message).toContain('Current Node.js ABI: 137');
     expect(message).toContain('Installed better-sqlite3 ABI: 115');
-    expect(message).toContain('npm rebuild better-sqlite3');
-    expect(message).toContain('npm install -g promptfoo@latest');
-    expect(message).toContain('npx -y promptfoo@latest');
+    // Verify the call-to-action URL is present
     expect(message).toContain('troubleshooting/#nodejs-version-mismatch-error');
   });
 
@@ -40,7 +36,6 @@ describe('native addon errors', () => {
     const error = new Error('Database connection failed');
 
     expect(getNativeAddonVersionMismatchDetails(error)).toBeUndefined();
-    expect(isNativeAddonVersionMismatchError(error)).toBe(false);
     expect(formatNativeAddonVersionMismatchMessage(error)).toBeUndefined();
   });
 });

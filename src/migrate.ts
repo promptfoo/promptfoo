@@ -42,13 +42,25 @@ import {
 } from './util/nativeAddonErrors';
 
 /**
+ * Options for runDbMigrations.
+ */
+export type RunDbMigrationsOptions = {
+  /**
+   * When true, demotes the structured better-sqlite3 ABI mismatch log from error to debug.
+   * Use this from callers (e.g. the CLI) that will display their own human-readable banner so
+   * the user does not see the same information twice.
+   */
+  suppressNativeAddonLogging?: boolean;
+};
+
+/**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.
  *
  * Note: While the underlying drizzle-orm migrate() function is synchronous, we wrap it in a Promise
  * with setImmediate to avoid blocking the event loop during startup. This allows other async
  * operations to proceed while migrations run.
  */
-export async function runDbMigrations(): Promise<void> {
+export async function runDbMigrations(options: RunDbMigrationsOptions = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     // Run the synchronous migration in the next tick to avoid blocking
     setImmediate(() => {
@@ -80,14 +92,25 @@ export async function runDbMigrations(): Promise<void> {
       } catch (error) {
         const nativeAddonVersionMismatchDetails = getNativeAddonVersionMismatchDetails(error);
         if (nativeAddonVersionMismatchDetails) {
-          logger.error(
-            'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
-            {
-              currentNodeVersion: process.version,
-              currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
-              installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
-            },
-          );
+          if (options.suppressNativeAddonLogging) {
+            logger.debug(
+              'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+              {
+                currentNodeVersion: process.version,
+                currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
+                installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
+              },
+            );
+          } else {
+            logger.error(
+              'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+              {
+                currentNodeVersion: process.version,
+                currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
+                installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
+              },
+            );
+          }
         } else {
           logger.error(`Database migration failed: ${error}`);
         }
