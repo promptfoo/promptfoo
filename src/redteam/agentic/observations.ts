@@ -713,6 +713,52 @@ export function observationsFromProviderRaw(raw: unknown): AgentObservation[] {
   return observations;
 }
 
+function observationsFromClaudeToolCalls(toolCalls: unknown): AgentObservation[] {
+  if (!Array.isArray(toolCalls)) {
+    return [];
+  }
+
+  return toolCalls.flatMap((entry, index): AgentObservation[] => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+    const tool = getString(entry.name);
+    if (!tool) {
+      return [];
+    }
+    const itemNumber = index + 1;
+    const input = stringifyValue(entry.input);
+    const output = stringifyValue(entry.output);
+    const isError = isExplicitlyTrue(entry.is_error);
+    const location = `provider raw tool call ${itemNumber}`;
+    return [
+      {
+        fieldLocations: {
+          input: input ? `${location} input` : undefined,
+          output: output ? `${location} output` : undefined,
+          tool: `${location} tool`,
+        },
+        input,
+        kind: 'tool_call',
+        location,
+        operation: tool,
+        outcome: isError ? 'error' : undefined,
+        output,
+        source: 'provider-raw',
+        text: output ?? input,
+        tool,
+      },
+    ];
+  });
+}
+
+export function observationsFromProviderMetadata(metadata: unknown): AgentObservation[] {
+  if (!isRecord(metadata)) {
+    return [];
+  }
+  return observationsFromClaudeToolCalls(metadata.toolCalls);
+}
+
 export function observationsFromProviderResponse(
   providerResponse?: ProviderResponse,
 ): AgentObservation[] {
@@ -729,6 +775,7 @@ export function observationsFromProviderResponse(
   }
 
   observations.push(...observationsFromProviderRaw(providerResponse?.raw));
+  observations.push(...observationsFromProviderMetadata(providerResponse?.metadata));
   return observations;
 }
 

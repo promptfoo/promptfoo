@@ -432,22 +432,54 @@ function hasRelevantAgenticRuntimeTraceEvidence(
   );
 }
 
-function hasCodexRuntimeTraceEvidence(spans: TraceLikeSpan[]): boolean {
+const AGENTIC_RUNTIME_PROVIDER_IDS = new Set([
+  'openai:codex-sdk',
+  'openai:codex-app-server',
+  'anthropic:claude-agent-sdk',
+  'anthropic:claude-code',
+]);
+
+const AGENTIC_RUNTIME_GENAI_SYSTEMS = new Set(['anthropic', 'openai']);
+
+const AGENTIC_RUNTIME_MARKER_ATTRIBUTES = [
+  'codex.item.type',
+  'codex.app_server.items.breakdown',
+  'codex.command',
+  'codex.tool.name',
+  'codex.mcp.tool.name',
+  'tool.name',
+  'tool.input',
+  'tool.output',
+  'tool.is_error',
+] as const;
+
+function hasAgenticRuntimeMarkerEvidence(spans: TraceLikeSpan[]): boolean {
   return spans.some((span) => {
     const attributes = span.attributes;
     if (!attributes) {
       return false;
     }
 
-    return (
-      attributes['promptfoo.provider.id'] === 'openai:codex-sdk' ||
-      attributes['promptfoo.provider.id'] === 'openai:codex-app-server' ||
-      attributes['codex.item.type'] !== undefined ||
-      attributes['codex.app_server.items.breakdown'] !== undefined ||
-      attributes['codex.command'] !== undefined ||
-      attributes['codex.tool.name'] !== undefined ||
-      attributes['codex.mcp.tool.name'] !== undefined
-    );
+    const providerId = attributes['promptfoo.provider.id'];
+    if (typeof providerId === 'string' && AGENTIC_RUNTIME_PROVIDER_IDS.has(providerId)) {
+      return true;
+    }
+
+    const genAiSystem = attributes['gen_ai.system'];
+    if (
+      typeof genAiSystem === 'string' &&
+      AGENTIC_RUNTIME_GENAI_SYSTEMS.has(genAiSystem) &&
+      typeof span.name === 'string' &&
+      /^tool\s+/i.test(span.name)
+    ) {
+      return true;
+    }
+
+    if (AGENTIC_RUNTIME_MARKER_ATTRIBUTES.some((attr) => attributes[attr] !== undefined)) {
+      return true;
+    }
+
+    return typeof span.name === 'string' && /^tool\s+/i.test(span.name);
   });
 }
 
@@ -467,9 +499,9 @@ function extractTraceEvidence(
     findingMatchesPlugin(finding, pluginId),
   );
   const hasAgenticEvidence = hasRelevantAgenticRuntimeTraceEvidence(spans, pluginId);
-  const hasCodexEvidence = hasCodexRuntimeTraceEvidence(spans);
+  const hasRuntimeMarkerEvidence = hasAgenticRuntimeMarkerEvidence(spans);
 
-  if (findings.length === 0 && !hasAgenticEvidence && !hasCodexEvidence) {
+  if (findings.length === 0 && !hasAgenticEvidence && !hasRuntimeMarkerEvidence) {
     return undefined;
   }
 
@@ -480,7 +512,7 @@ function extractTraceEvidence(
     observations: traceObservations,
     pluginId,
     trace: {
-      codexSpanCount: hasCodexEvidence
+      codexSpanCount: hasRuntimeMarkerEvidence
         ? spans.filter((span) => span.attributes?.['codex.item.type'] !== undefined).length
         : undefined,
       matchingSpanNames: spans
@@ -504,7 +536,7 @@ function extractTraceEvidence(
   };
 }
 
-function hasCodexRuntimeProviderEvidence(observations: AgentObservation[]): boolean {
+function hasAgenticRuntimeProviderEvidence(observations: AgentObservation[]): boolean {
   return observations.some(
     (observation) =>
       observation.source === 'provider-raw' &&
@@ -595,9 +627,9 @@ function extractProviderRawEvidence(
   const findings = findingsFromObservations(providerObservations).filter((finding) =>
     findingMatchesPlugin(finding, pluginId),
   );
-  const hasCodexEvidence = hasCodexRuntimeProviderEvidence(providerObservations);
+  const hasRuntimeProviderEvidence = hasAgenticRuntimeProviderEvidence(providerObservations);
 
-  if (findings.length === 0 && !hasCodexEvidence) {
+  if (findings.length === 0 && !hasRuntimeProviderEvidence) {
     return undefined;
   }
 
@@ -608,9 +640,40 @@ function extractProviderRawEvidence(
     observations: providerObservations,
     pluginId,
     trace: {
-      codexSpanCount: hasCodexEvidence ? providerObservations.length : undefined,
+      codexSpanCount: hasRuntimeProviderEvidence ? providerObservations.length : undefined,
       spanCount: providerObservations.length,
     },
+  };
+}
+
+function mergeRuntimeEvidence(
+  traceEvidence: AgenticRuntimeEvidence | undefined,
+  providerRawEvidence: AgenticRuntimeEvidence | undefined,
+): AgenticRuntimeEvidence | undefined {
+  if (!traceEvidence) {
+    return providerRawEvidence;
+  }
+  if (!providerRawEvidence) {
+    return traceEvidence;
+  }
+
+  const mergedFindings = [
+    ...(traceEvidence.findings ?? []),
+    ...(providerRawEvidence.findings ?? []),
+  ];
+  const mergedObservations = [
+    ...(traceEvidence.observations ?? []),
+    ...(providerRawEvidence.observations ?? []),
+  ];
+  const evidenceSource =
+    mergedFindings.length > 0 ? (traceEvidence.findings?.length ? 'otel' : 'provider-raw') : 'otel';
+
+  return {
+    ...traceEvidence,
+    evidenceSource,
+    findings: mergedFindings,
+    mode: evidenceSource === 'provider-raw' ? 'provider-raw' : traceEvidence.mode,
+    observations: mergedObservations,
   };
 }
 
@@ -620,12 +683,10 @@ function extractAgenticRuntimeEvidence(
 ): AgenticRuntimeEvidence | undefined {
   if (pluginId) {
     const traceEvidence = extractTraceEvidence(gradingContext, pluginId);
-    if (traceEvidence) {
-      return traceEvidence;
-    }
     const providerRawEvidence = extractProviderRawEvidence(gradingContext, pluginId);
-    if (providerRawEvidence) {
-      return providerRawEvidence;
+    const merged = mergeRuntimeEvidence(traceEvidence, providerRawEvidence);
+    if (merged) {
+      return merged;
     }
   }
 
