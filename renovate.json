@@ -276,6 +276,12 @@
       "matchDepTypes": ["optionalDependencies"],
       "minimumReleaseAge": "2 days"
     },
+    {
+      "description": "npm overrides/resolutions: wait 2 days to match .npmrc min-release-age floor",
+      "matchDatasources": ["npm"],
+      "matchDepTypes": ["overrides", "pnpm.overrides", "resolutions"],
+      "minimumReleaseAge": "2 days"
+    },
 
     {
       "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
