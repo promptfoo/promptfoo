@@ -69,6 +69,4 @@ The plugin assesses the AI's response based on:
 - [Excessive Agency](/docs/red-team/plugins/excessive-agency)
 - [Prompt Injection](/docs/red-team/plugins/indirect-prompt-injection)
 - [System Prompt Override](/docs/red-team/plugins/system-prompt-override)
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

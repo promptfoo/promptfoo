@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
@@ -36,7 +36,7 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
     const { PDFParse } = await import('pdf-parse');
-    const dataBuffer = fs.readFileSync(pdfPath);
+    const dataBuffer = await fs.readFile(pdfPath);
     const parser = new PDFParse({ data: dataBuffer });
     const result = await parser.getText();
     await parser.destroy();
@@ -296,7 +296,7 @@ export async function renderPrompt(
         vars[varName] = pythonScriptOutput.output.trim();
       } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
         vars[varName] = JSON.stringify(
-          yaml.load(fs.readFileSync(filePath, 'utf8')) as string | object,
+          yaml.load(await fs.readFile(filePath, 'utf8')) as string | object,
         );
       } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
         telemetry.record('feature_used', {
@@ -319,7 +319,7 @@ export async function renderPrompt(
 
         logger.debug(`Loading ${fileType} as base64: ${filePath}`);
         try {
-          const fileBuffer = fs.readFileSync(filePath);
+          const fileBuffer = await fs.readFile(filePath);
           const base64Data = fileBuffer.toString('base64');
 
           if (fileType === 'image') {
@@ -357,7 +357,7 @@ export async function renderPrompt(
           );
         }
       } else {
-        vars[varName] = fs.readFileSync(filePath, 'utf8').trim();
+        vars[varName] = (await fs.readFile(filePath, 'utf8')).trim();
       }
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';

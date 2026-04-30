@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 
 import chalk from 'chalk';
 import yaml from 'js-yaml';
@@ -214,7 +214,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     // Should the output be written as a YAML or CSV?
     if (options.output.endsWith('.csv')) {
       // Note: CSV output only contains test cases, not assertions
-      fs.writeFileSync(options.output, serializeObjectArrayAsCSV(results));
+      await fs.writeFile(options.output, serializeObjectArrayAsCSV(results));
       printBorder();
       logger.info(`Wrote ${results.length} new test cases to ${options.output}`);
       if (generatedAssertions && generatedAssertions.length > 0) {
@@ -225,7 +225,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
         );
       }
     } else if (options.output.endsWith('.yaml')) {
-      fs.writeFileSync(options.output, yamlString);
+      await fs.writeFile(options.output, yamlString);
       printBorder();
       const assertionMsg =
         generatedAssertions && generatedAssertions.length > 0
@@ -245,7 +245,9 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
 
   printBorder();
   if (options.write && configPath) {
-    const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
+    const existingConfig = yaml.load(
+      await fs.readFile(configPath, 'utf8'),
+    ) as Partial<UnifiedConfig>;
     // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
     const existingTests = existingConfig.tests;
     let testsArray: Array<TestCase | string | { vars: Record<string, string> }> = [];
@@ -255,7 +257,6 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
       testsArray = [existingTests as TestCase | string];
     }
     existingConfig.tests = [...testsArray, ...configAddition.tests];
-
     // Add generated assertions to defaultTest.assert if present
     if (configAddition.defaultTest?.assert) {
       const existingDefaultTest =
@@ -273,7 +274,7 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
       };
     }
 
-    fs.writeFileSync(configPath, yaml.dump(existingConfig));
+    await fs.writeFile(configPath, yaml.dump(existingConfig));
     const assertionMsg =
       generatedAssertions && generatedAssertions.length > 0
         ? ` and ${generatedAssertions.length} assertion${generatedAssertions.length === 1 ? '' : 's'}`

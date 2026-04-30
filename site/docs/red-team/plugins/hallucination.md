@@ -71,5 +71,4 @@ By incorporating the Hallucination plugin in your LLM red teaming strategy, you 
 - [Misinformation and Disinformation](../llm-vulnerability-types.md#misinformation-and-misuse)
 - [Overreliance](overreliance.md)
 - [Excessive Agency](excessive-agency.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
