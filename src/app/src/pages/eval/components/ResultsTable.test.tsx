@@ -2631,6 +2631,8 @@ describe('ResultsTable Filtered Metrics Display', () => {
     expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
 
     expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(screen.getByText('200ms')).toBeInTheDocument();
+    expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
     const filteredLatencyElement = screen.getByText('(200ms filtered)');
     expect(filteredLatencyElement).toBeInTheDocument();
     expect(filteredLatencyElement).toHaveStyle('font-size: 0.9em');
@@ -2713,6 +2715,10 @@ describe('ResultsTable - No Filters Applied', () => {
 
     expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
     expect(screen.getByText('1,000')).toBeInTheDocument();
+
+    expect(screen.getByText('Avg Latency:')).toBeInTheDocument();
+    expect(screen.getByText('200ms')).toBeInTheDocument();
+    expect(screen.getByLabelText('200 ms')).toBeInTheDocument();
 
     const filteredMetricElements = screen.queryAllByTestId('filtered-metric');
     expect(filteredMetricElements.length).toBe(0);

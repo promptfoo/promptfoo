@@ -1156,9 +1156,50 @@ describe('EvalOutputCell', () => {
       },
     };
     renderWithProviders(<EvalOutputCell {...props} />);
-    expect(
-      screen.getByLabelText('1,234 ms — original duration; served from cache'),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText('1,234 ms (cached response)')).toBeInTheDocument();
+  });
+
+  it('renders sub-millisecond latency without rounding away precision', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 0.123,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    expect(screen.getByLabelText('0.123 ms')).toBeInTheDocument();
+  });
+
+  it('falls back to raw ms when latency is non-finite or negative', () => {
+    const cases: { latencyMs: number; expected: string }[] = [
+      { latencyMs: Number.POSITIVE_INFINITY, expected: '∞ ms' },
+      { latencyMs: -1234, expected: '-1,234 ms' },
+    ];
+    for (const { latencyMs, expected } of cases) {
+      const { unmount } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{ ...defaultProps.output, latencyMs, response: {} }}
+        />,
+      );
+      expect(screen.getByLabelText(expected)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('renders an exact-hour latency without trailing minutes', () => {
+    const props = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        latencyMs: 129_600_000,
+        response: {},
+      },
+    };
+    renderWithProviders(<EvalOutputCell {...props} />);
+    expect(screen.getByText('36h')).toBeInTheDocument();
   });
 
   it('displays large latency values in human-readable format (minutes/hours)', () => {

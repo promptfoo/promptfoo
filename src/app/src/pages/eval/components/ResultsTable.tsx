@@ -630,12 +630,12 @@ function renderLatencyMetric({
 
   const totalAverage = testCount?.total ? metrics.totalLatencyMs / testCount.total : 0;
   const filteredAverage =
-    filteredMetrics?.totalLatencyMs && testCount?.filtered
+    filteredMetrics?.totalLatencyMs != null && testCount?.filtered
       ? filteredMetrics.totalLatencyMs / testCount.filtered
       : undefined;
 
   const formatLatency = (ms: number) => formatDuration(ms) ?? `${formatMetricValue(ms)} ms`;
-  const exactTotalMs = `${formatMetricValue(totalAverage)} ms`;
+  const exactTotalMs = `${formatMetricValue(totalAverage, { maximumFractionDigits: 3 })} ms`;
 
   return (
     <div>
