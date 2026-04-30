@@ -13,17 +13,29 @@ import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/esm');
 vi.mock('python-shell');
+const fsMock = vi.hoisted(() => ({
+  writeFileSync: vi.fn(),
+  readFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+}));
+
 vi.mock('fs', () => {
-  const fsMock = {
-    writeFileSync: vi.fn(),
-    readFileSync: vi.fn(),
-    unlinkSync: vi.fn(),
-  };
   return {
     ...fsMock,
     default: fsMock,
   };
 });
+
+vi.mock('fs/promises', () => ({
+  default: {
+    writeFile: fsMock.writeFileSync,
+    readFile: fsMock.readFileSync,
+    unlink: fsMock.unlinkSync,
+  },
+  writeFile: fsMock.writeFileSync,
+  readFile: fsMock.readFileSync,
+  unlink: fsMock.unlinkSync,
+}));
 vi.mock('../../src/python/pythonUtils', async () => {
   const originalModule = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
     '../../src/python/pythonUtils',
@@ -60,6 +72,7 @@ describe('wrapper', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.values(fsMock).forEach((mock) => mock.mockReset());
     vi.mocked(validatePythonPath).mockImplementation(
       (pythonPath: string, _isExplicit: boolean): Promise<string> => {
         state.cachedPythonPath = pythonPath;
@@ -118,16 +131,15 @@ describe('wrapper', () => {
       state.cachedPythonPath = null;
       state.validationPromise = null;
 
-      // Configure the module-level mocks with realistic delays to simulate Windows behavior
-      // This is critical for testing race conditions that only appear under slow I/O
+      // Yield once before resolving so concurrent callers can race onto the
+      // shared validation promise — this is the same race condition the test
+      // is exercising; wall-clock delay isn't needed.
       vi.mocked(tryPath).mockImplementation(async (_path: string) => {
-        // Simulate slow Windows process spawning and antivirus scanning
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await Promise.resolve();
         return '/usr/bin/python3';
       });
       vi.mocked(getSysExecutable).mockImplementation(async () => {
-        // Simulate slow Windows 'where' command and py launcher
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await Promise.resolve();
         return '/usr/bin/python3';
       });
     });

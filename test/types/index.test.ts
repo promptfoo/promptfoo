@@ -652,6 +652,7 @@ describe('CommandLineOptionsSchema', () => {
       filterFailing: 'true',
       filterFirstN: 5,
       filterMetadata: 'meta',
+      filterRange: '1:3',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
@@ -679,11 +680,25 @@ describe('CommandLineOptionsSchema', () => {
       filterMetadata: 'metadata',
       filterPattern: 'pattern',
       filterProviders: 'provider1',
+      filterRange: '1:3',
       filterSample: 5,
       filterTargets: 'target1',
     };
     expect(() => CommandLineOptionsSchema.parse(options)).not.toThrow(
       'Invalid command line options',
+    );
+  });
+
+  it('should reject invalid filterRange values', () => {
+    const baseOptions = {
+      output: ['output1'],
+      providers: ['provider1'],
+    };
+    expect(() => CommandLineOptionsSchema.parse({ ...baseOptions, filterRange: '3:1' })).toThrow(
+      '--filter-range start must be less than or equal to end, got: 3:1',
+    );
+    expect(() => CommandLineOptionsSchema.parse({ ...baseOptions, filterRange: ':' })).toThrow(
+      '--filter-range must be specified in start:end format using zero-based indices, got: :',
     );
   });
 });

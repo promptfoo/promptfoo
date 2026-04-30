@@ -17,7 +17,7 @@ prompts:
     actionable comments, return an empty comments array.
 
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-5.5
     config:
       sandbox_mode: read-only
       approval_policy: never

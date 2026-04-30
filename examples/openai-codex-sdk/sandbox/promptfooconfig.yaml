@@ -10,6 +10,8 @@ providers:
   - id: openai:codex-sdk
     config:
       model: gpt-5.2-codex
+      cli_config:
+        model_verbosity: medium
       working_dir: '{{ env.CODEX_SANDBOX_WORKING_DIR | default("./sample-workspace") }}'
       sandbox_mode: read-only
       approval_policy: never

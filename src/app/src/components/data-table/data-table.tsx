@@ -41,7 +41,6 @@ type DataTableHeaderActionsProps<TData, TValue> = {
   canSort: boolean;
   header: Header<TData, TValue>;
   isFiltered: boolean;
-  isRightAligned: boolean;
   sortDirection: false | 'asc' | 'desc';
 };
 
@@ -83,7 +82,6 @@ function renderDataTableHeaderActions<TData, TValue>({
   canSort,
   header,
   isFiltered,
-  isRightAligned,
   sortDirection,
 }: DataTableHeaderActionsProps<TData, TValue>) {
   if (!canSort && !canFilter) {
@@ -93,10 +91,8 @@ function renderDataTableHeaderActions<TData, TValue>({
   return (
     <span
       className={cn(
-        'absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5',
+        'flex shrink-0 items-center gap-0.5',
         'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
-        'bg-inherit',
-        isRightAligned ? 'left-0 pr-1' : 'right-0 pl-1',
         (sortDirection || isFiltered) && 'opacity-100 pointer-events-auto',
       )}
     >
@@ -164,11 +160,11 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
       {header.isPlaceholder ? null : (
         <div
           className={cn(
-            'relative min-w-0 overflow-hidden',
-            isRightAligned && 'flex flex-row-reverse',
+            'flex min-w-0 items-center gap-1 overflow-hidden',
+            isRightAligned && 'flex-row-reverse',
           )}
         >
-          <span className="truncate block">
+          <span className="block min-w-0 flex-1 truncate">
             {flexRender(header.column.columnDef.header, header.getContext())}
           </span>
           {renderDataTableHeaderActions({
@@ -176,7 +172,6 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
             canSort,
             header,
             isFiltered,
-            isRightAligned,
             sortDirection,
           })}
         </div>
