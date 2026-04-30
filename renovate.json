@@ -348,6 +348,13 @@
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "fast-xml-parser: monthly updates to reduce noise from frequent patch releases",
+      "matchPackageNames": ["fast-xml-parser"],
+      "schedule": ["before 6am on the first day of the month"],
+      "rangeStrategy": "bump",
+      "minimumReleaseAge": "7 days"
     }
   ]
 }
