@@ -44,8 +44,8 @@ Return a JSON response with your translation, confidence level, and any fun cult
 
   providers: [
     {
-      id: 'openai:chat:gpt-5.4-mini',
-      label: 'GPT-5 Mini (structured)',
+      id: 'openai:chat:gpt-5.5',
+      label: 'GPT-5.5 (structured)',
       config: {
         response_format: responseFormat,
       },

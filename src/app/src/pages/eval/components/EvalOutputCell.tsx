@@ -11,7 +11,12 @@ import {
   resolveVideoSource,
 } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
-import { type EvaluateTableOutput, type ImageOutput, ResultFailureReason } from '@promptfoo/types';
+import {
+  type EvaluateTableOutput,
+  type GradingResult,
+  type ImageOutput,
+  ResultFailureReason,
+} from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -28,6 +33,7 @@ import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
 import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
@@ -619,6 +625,15 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   };
 }
 
+function getDialogGradingResults(output: EvaluateTableOutput): GradingResult[] | undefined {
+  const gradingResult = output.gradingResult;
+  if (!gradingResult) {
+    return undefined;
+  }
+
+  return gradingResult.componentResults?.length ? gradingResult.componentResults : [gradingResult];
+}
+
 function getPassFailText({
   passCount,
   failCount,
@@ -671,7 +686,8 @@ function getCombinedContextText(output: EvaluateTableOutput): string {
   return output.gradingResult.componentResults
     .map((result, index) => {
       const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
-      const value = result.assertion?.value || '';
+      const rawValue = result.metadata?.renderedAssertionValue ?? result.assertion?.value;
+      const value = rawValue === undefined ? '' : stringifyAssertionValue(rawValue);
       return `Assertion ${index + 1} (${displayName}): ${value}`;
     })
     .join('\n\n');
@@ -1178,7 +1194,7 @@ function renderOutputActions({
               onClose={handlePromptClose}
               prompt={output.prompt}
               provider={output.provider}
-              gradingResults={output.gradingResult?.componentResults}
+              gradingResults={getDialogGradingResults(output)}
               output={text}
               metadata={output.metadata}
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
