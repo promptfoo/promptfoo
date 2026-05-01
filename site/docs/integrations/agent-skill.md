@@ -52,7 +52,8 @@ four skills: `promptfoo-evals`, `promptfoo-provider-setup`,
 | `promptfoo-redteam-setup`  | Focused redteam configs from live endpoints, OpenAPI specs, or static code |
 | `promptfoo-redteam-run`    | Running generated scans, triaging failures, and filtered reruns            |
 
-There is no meta selector skill. Codex routes from each skill's description and
+There is intentionally no meta selector skill. Codex routes from each skill's
+description and
 default prompt.
 
 Python providers are first-class in the Codex bundle. The provider and redteam
@@ -61,7 +62,7 @@ skills cover Promptfoo's `file://provider.py` and
 local graders, and local redteam generators, including `workers`, `timeout`, and
 `PROMPTFOO_PYTHON` configuration.
 
-Use the Claude marketplace command above when you want the single portable
+Use the Claude marketplace command above when you want the portable single
 `promptfoo-evals` skill. Use the Codex bundle when working in this repo and you
 want separate eval, provider setup, redteam setup, and redteam run workflows.
 To reuse the bundle elsewhere, copy `plugins/promptfoo` and its
@@ -154,7 +155,7 @@ New to promptfoo? See [Getting Started](/docs/getting-started) for an overview o
 The Codex bundle also teaches the agent to:
 
 - Keep real inputs such as user IDs, object IDs, documents, and tools visible so authorization and agent-boundary issues stay testable.
-- Choose plugins such as `policy`, `rbac`, `bola`, prompt-boundary, RAG, and tool checks from live or static evidence instead of defaulting to one broad scan.
+- Choose plugins such as `policy`, `rbac`, `bola`, `hijacking`, `prompt-extraction`, and `system-prompt-override` from live or static evidence instead of defaulting to one broad scan.
 - Inspect generated probes before running them, reuse generated tests with `redteam eval` when possible, and separate grader failures from real target failures.
 - Prefer no-share runs for internal systems and keep provider secrets in environment variables rather than committed configs.
 
@@ -205,9 +206,6 @@ it into one free-form prompt:
 
 ```yaml title="promptfooconfig.yaml"
 description: 'Invoice assistant red team'
-
-prompts:
-  - '{{prompt}}'
 
 targets:
   - id: https
