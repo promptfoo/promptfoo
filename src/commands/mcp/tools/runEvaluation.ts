@@ -62,9 +62,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         .describe(
           dedent`
             Specify which test cases to run:
-            - Single index: 0
+            - Single zero-based index: 0
             - Multiple indices: [0, 2, 5]  
-            - Range: {"start": 0, "end": 3}
+            - Range with inclusive start and exclusive end: {"start": 0, "end": 3}
             If not specified, runs all test cases.
           `,
         ),

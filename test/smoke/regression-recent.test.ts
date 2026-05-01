@@ -147,6 +147,48 @@ describe('Recent Bug Regression Tests', () => {
         expect(componentResult.reason).not.toContain('file://');
       });
     });
+
+    describe('#7861 - llm-rubric in defaultTest resolves test vars', () => {
+      it('renders defaultTest llm-rubric templates with each test case vars before grading', () => {
+        const configPath = path.join(FIXTURES_DIR, 'configs/defaulttest-llm-rubric-vars.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'defaulttest-llm-rubric-vars-output.json');
+
+        const { exitCode, stderr } = runCli([
+          'eval',
+          '-c',
+          configPath,
+          '-o',
+          outputPath,
+          '--no-cache',
+        ]);
+
+        expect(exitCode).toBe(0);
+        expect(stderr).not.toContain('Error');
+
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+        const results = parsed.results.results;
+
+        expect(results).toHaveLength(2);
+        for (const [index, expectedValue] of ['hello world', 'goodbye moon'].entries()) {
+          const result = results[index];
+          const componentResult = result.gradingResult.componentResults[0];
+
+          expect(result.success).toBe(true);
+          expect(componentResult.pass).toBe(true);
+          expect(componentResult.assertion.value).toBe(
+            'Does the output correctly reference the input: {{myVar}}?',
+          );
+          expect(componentResult.metadata.renderedAssertionValue).toBe(
+            `Does the output correctly reference the input: ${expectedValue}?`,
+          );
+          expect(componentResult.metadata.renderedGradingPrompt).toContain(expectedValue);
+          expect(componentResult.metadata.renderedGradingPrompt).not.toContain('{{myVar}}');
+          expect(componentResult.reason).toContain(expectedValue);
+          expect(componentResult.reason).not.toContain('{{myVar}}');
+        }
+      });
+    });
   });
 
   describe('Provider Support', () => {
@@ -557,7 +599,7 @@ tests:
         // Look for a definition that has the options properties (prefix, suffix, provider, etc.)
         // and verify it's NOT using the problematic allOf pattern
         let foundOptionsSchema = false;
-        for (const [_key, def] of Object.entries(definitions)) {
+        for (const def of Object.values(definitions)) {
           const defObj = def as Record<string, unknown>;
           const props = defObj.properties as Record<string, unknown> | undefined;
 
