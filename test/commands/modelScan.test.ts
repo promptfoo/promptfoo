@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'child_process';
+import { writeFileSync } from 'fs';
 
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
@@ -45,6 +46,71 @@ vi.mock('../../src/util/huggingfaceMetadata', async (importOriginal) => {
   };
 });
 
+const SIGNAL_TERMINATIONS: NodeJS.Signals[] = ['SIGTERM', 'SIGINT', 'SIGKILL'];
+const VALID_SCAN_OUTPUT = JSON.stringify({
+  total_checks: 10,
+  passed_checks: 10,
+  failed_checks: 0,
+  files_scanned: 1,
+  bytes_scanned: 1024,
+  duration: 1000,
+  issues: [],
+  checks: [],
+});
+
+function createSignalTerminatedProcess(signal: NodeJS.Signals, stdout = ''): ChildProcess {
+  const mockChildProcess = {
+    stdout: {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'data' && stdout) {
+          callback(Buffer.from(stdout));
+        }
+        return mockChildProcess.stdout;
+      }),
+    },
+    stderr: {
+      on: vi.fn().mockImplementation(function () {
+        return mockChildProcess.stderr;
+      }),
+    },
+    killed: false,
+    kill: vi.fn(),
+    on: vi.fn().mockImplementation(function (event: string, callback: any) {
+      if (event === 'close') {
+        callback(null, signal);
+      }
+      return mockChildProcess;
+    }),
+  } as unknown as ChildProcess;
+
+  return mockChildProcess;
+}
+
+async function resetModelScanTestMocks() {
+  vi.clearAllMocks();
+
+  vi.mocked(spawn).mockReset();
+  const { getModelAuditCurrentVersion } = await import('../../src/updates');
+  vi.mocked(getModelAuditCurrentVersion).mockReset();
+  vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.16');
+
+  const ModelAudit = (await import('../../src/models/modelAudit')).default;
+  vi.mocked(ModelAudit.findByRevision).mockReset();
+  vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
+  vi.mocked(ModelAudit.create).mockReset();
+  vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
+
+  const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
+    '../../src/util/huggingfaceMetadata'
+  );
+  vi.mocked(isHuggingFaceModel).mockReset();
+  vi.mocked(isHuggingFaceModel).mockReturnValue(false);
+  vi.mocked(getHuggingFaceMetadata).mockReset();
+  vi.mocked(getHuggingFaceMetadata).mockResolvedValue(null);
+  vi.mocked(parseHuggingFaceModel).mockReset();
+  vi.mocked(parseHuggingFaceModel).mockReturnValue(null);
+}
+
 describe('modelScanCommand', () => {
   let program: Command;
   let mockExit: MockInstance;
@@ -55,31 +121,7 @@ describe('modelScanCommand', () => {
       return undefined as never;
     });
     process.exitCode = 0;
-    vi.clearAllMocks();
-
-    // Reset mock implementations (clearAllMocks only clears call history, not implementations)
-    vi.mocked(spawn).mockReset();
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    vi.mocked(getModelAuditCurrentVersion).mockReset();
-    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.16');
-
-    // Reset ModelAudit mock to default (no existing scan found)
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
-    vi.mocked(ModelAudit.findByRevision).mockReset();
-    vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-    vi.mocked(ModelAudit.create).mockReset();
-    vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
-
-    // Reset HuggingFace mocks
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
-      '../../src/util/huggingfaceMetadata'
-    );
-    vi.mocked(isHuggingFaceModel).mockReset();
-    vi.mocked(isHuggingFaceModel).mockReturnValue(false);
-    vi.mocked(getHuggingFaceMetadata).mockReset();
-    vi.mocked(getHuggingFaceMetadata).mockResolvedValue(null);
-    vi.mocked(parseHuggingFaceModel).mockReset();
-    vi.mocked(parseHuggingFaceModel).mockReturnValue(null);
+    await resetModelScanTestMocks();
   });
 
   afterEach(() => {
@@ -441,6 +483,132 @@ describe('modelScanCommand', () => {
   });
 });
 
+describe('Signal termination handling', () => {
+  let program: Command;
+  let mockExit: MockInstance;
+
+  beforeEach(async () => {
+    program = new Command();
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
+      return undefined as never;
+    });
+    process.exitCode = 0;
+    await resetModelScanTestMocks();
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+    process.exitCode = 0;
+    vi.resetAllMocks();
+  });
+
+  it.each(
+    SIGNAL_TERMINATIONS,
+  )('fails closed in --no-write mode when modelaudit terminates via %s', async (signal) => {
+    (spawn as unknown as Mock).mockReturnValue(createSignalTerminatedProcess(signal));
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+
+    await command.parseAsync(['node', 'scan-model', 'model.pkl', '--no-write']);
+
+    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('forwards parent SIGINT to modelaudit as SIGINT', async () => {
+    let closeHandler: ((code: number | null, signal: NodeJS.Signals | null) => void) | undefined;
+    const mockChildProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          closeHandler = callback;
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    const parsePromise = command.parseAsync(['node', 'scan-model', 'model.pkl', '--no-write']);
+
+    await vi.waitFor(() => {
+      expect(closeHandler).toBeDefined();
+    });
+    process.emit('SIGINT');
+    closeHandler?.(null, 'SIGINT');
+    await parsePromise;
+
+    expect(mockChildProcess.kill).toHaveBeenCalledWith('SIGINT');
+    expect(logger.error).toHaveBeenCalledWith('Model scan process terminated by signal SIGINT');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('fails closed when modelaudit closes without an exit code or signal', async () => {
+    const mockChildProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(null, null);
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+
+    await command.parseAsync(['node', 'scan-model', 'model.pkl', '--no-write']);
+
+    expect(logger.error).toHaveBeenCalledWith('Model scan process exited without an exit code');
+    expect(process.exitCode).toBe(1);
+  });
+
+  it.each(
+    SIGNAL_TERMINATIONS,
+  )('fails closed in stdout-capture mode after JSON output when modelaudit terminates via %s', async (signal) => {
+    (spawn as unknown as Mock).mockReturnValue(
+      createSignalTerminatedProcess(signal, VALID_SCAN_OUTPUT),
+    );
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+
+    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+
+    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
+    expect(process.exitCode).toBe(1);
+    expect(ModelAudit.create).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    SIGNAL_TERMINATIONS,
+  )('fails closed in temp-output mode after JSON output when modelaudit terminates via %s', async (signal) => {
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
+    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
+    (spawn as unknown as Mock).mockImplementation((_command: string, args: string[]) => {
+      const outputFlagIndex = args.indexOf('--output');
+      writeFileSync(args[outputFlagIndex + 1], VALID_SCAN_OUTPUT);
+      return createSignalTerminatedProcess(signal);
+    });
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+
+    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+
+    expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
+    expect(process.exitCode).toBe(1);
+    expect(ModelAudit.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('Re-scan on version change behavior', () => {
   let program: Command;
   let mockExit: MockInstance;
@@ -450,31 +618,7 @@ describe('Re-scan on version change behavior', () => {
     mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
-    vi.clearAllMocks();
-
-    // Reset mock implementations (clearAllMocks only clears call history, not implementations)
-    vi.mocked(spawn).mockReset();
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    vi.mocked(getModelAuditCurrentVersion).mockReset();
-    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.16');
-
-    // Reset ModelAudit mock to default (no existing scan found)
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
-    vi.mocked(ModelAudit.findByRevision).mockReset();
-    vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-    vi.mocked(ModelAudit.create).mockReset();
-    vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
-
-    // Reset HuggingFace mocks
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
-      '../../src/util/huggingfaceMetadata'
-    );
-    vi.mocked(isHuggingFaceModel).mockReset();
-    vi.mocked(isHuggingFaceModel).mockReturnValue(false);
-    vi.mocked(getHuggingFaceMetadata).mockReset();
-    vi.mocked(getHuggingFaceMetadata).mockResolvedValue(null);
-    vi.mocked(parseHuggingFaceModel).mockReset();
-    vi.mocked(parseHuggingFaceModel).mockReturnValue(null);
+    await resetModelScanTestMocks();
   });
 
   afterEach(() => {
@@ -813,31 +957,7 @@ describe('Re-scan on version change behavior', () => {
 
 describe('checkModelAuditInstalled', () => {
   beforeEach(async () => {
-    vi.clearAllMocks();
-
-    // Reset mock implementations (clearAllMocks only clears call history, not implementations)
-    vi.mocked(spawn).mockReset();
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    vi.mocked(getModelAuditCurrentVersion).mockReset();
-    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.16');
-
-    // Reset ModelAudit mock to default (no existing scan found)
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
-    vi.mocked(ModelAudit.findByRevision).mockReset();
-    vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-    vi.mocked(ModelAudit.create).mockReset();
-    vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
-
-    // Reset HuggingFace mocks
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
-      '../../src/util/huggingfaceMetadata'
-    );
-    vi.mocked(isHuggingFaceModel).mockReset();
-    vi.mocked(isHuggingFaceModel).mockReturnValue(false);
-    vi.mocked(getHuggingFaceMetadata).mockReset();
-    vi.mocked(getHuggingFaceMetadata).mockResolvedValue(null);
-    vi.mocked(parseHuggingFaceModel).mockReset();
-    vi.mocked(parseHuggingFaceModel).mockReturnValue(null);
+    await resetModelScanTestMocks();
   });
 
   it('should return installed: true and version when getModelAuditCurrentVersion returns version', async () => {
@@ -887,31 +1007,7 @@ describe('Command Options Validation', () => {
     mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
-    vi.clearAllMocks();
-
-    // Reset mock implementations (clearAllMocks only clears call history, not implementations)
-    vi.mocked(spawn).mockReset();
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    vi.mocked(getModelAuditCurrentVersion).mockReset();
-    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.16');
-
-    // Reset ModelAudit mock to default (no existing scan found)
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
-    vi.mocked(ModelAudit.findByRevision).mockReset();
-    vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-    vi.mocked(ModelAudit.create).mockReset();
-    vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
-
-    // Reset HuggingFace mocks
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
-      '../../src/util/huggingfaceMetadata'
-    );
-    vi.mocked(isHuggingFaceModel).mockReset();
-    vi.mocked(isHuggingFaceModel).mockReturnValue(false);
-    vi.mocked(getHuggingFaceMetadata).mockReset();
-    vi.mocked(getHuggingFaceMetadata).mockResolvedValue(null);
-    vi.mocked(parseHuggingFaceModel).mockReset();
-    vi.mocked(parseHuggingFaceModel).mockReturnValue(null);
+    await resetModelScanTestMocks();
   });
 
   afterEach(() => {
@@ -1139,31 +1235,7 @@ describe('Temp file JSON output (CLI UI fix)', () => {
     mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
-    vi.clearAllMocks();
-
-    // Reset mock implementations (clearAllMocks only clears call history, not implementations)
-    vi.mocked(spawn).mockReset();
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    vi.mocked(getModelAuditCurrentVersion).mockReset();
-    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.16');
-
-    // Reset ModelAudit mock to default (no existing scan found)
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
-    vi.mocked(ModelAudit.findByRevision).mockReset();
-    vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-    vi.mocked(ModelAudit.create).mockReset();
-    vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
-
-    // Reset HuggingFace mocks
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
-      '../../src/util/huggingfaceMetadata'
-    );
-    vi.mocked(isHuggingFaceModel).mockReset();
-    vi.mocked(isHuggingFaceModel).mockReturnValue(false);
-    vi.mocked(getHuggingFaceMetadata).mockReset();
-    vi.mocked(getHuggingFaceMetadata).mockResolvedValue(null);
-    vi.mocked(parseHuggingFaceModel).mockReset();
-    vi.mocked(parseHuggingFaceModel).mockReturnValue(null);
+    await resetModelScanTestMocks();
   });
 
   afterEach(() => {
@@ -1279,7 +1351,7 @@ describe('Sharing behavior', () => {
     mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
-    vi.clearAllMocks();
+    await resetModelScanTestMocks();
 
     // Get mocks
     const shareModule = await import('../../src/share');
@@ -1296,28 +1368,6 @@ describe('Sharing behavior', () => {
     cloudConfigIsEnabledMock = vi.mocked(cloudModule.cloudConfig.isEnabled);
     cloudConfigIsEnabledMock.mockReset();
     cloudConfigIsEnabledMock.mockReturnValue(false);
-
-    // Reset other mocks
-    vi.mocked(spawn).mockReset();
-    const { getModelAuditCurrentVersion } = await import('../../src/updates');
-    vi.mocked(getModelAuditCurrentVersion).mockReset();
-    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.16');
-
-    const ModelAudit = (await import('../../src/models/modelAudit')).default;
-    vi.mocked(ModelAudit.findByRevision).mockReset();
-    vi.mocked(ModelAudit.findByRevision).mockResolvedValue(null);
-    vi.mocked(ModelAudit.create).mockReset();
-    vi.mocked(ModelAudit.create).mockResolvedValue({ id: 'scan-abc-2025-01-01T00:00:00' } as any);
-
-    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
-      '../../src/util/huggingfaceMetadata'
-    );
-    vi.mocked(isHuggingFaceModel).mockReset();
-    vi.mocked(isHuggingFaceModel).mockReturnValue(false);
-    vi.mocked(getHuggingFaceMetadata).mockReset();
-    vi.mocked(getHuggingFaceMetadata).mockResolvedValue(null);
-    vi.mocked(parseHuggingFaceModel).mockReset();
-    vi.mocked(parseHuggingFaceModel).mockReturnValue(null);
   });
 
   afterEach(() => {

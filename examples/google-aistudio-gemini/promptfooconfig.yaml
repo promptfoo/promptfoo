@@ -135,7 +135,7 @@ defaultTest:
       text:
         id: google:gemini-2.5-flash
       embedding:
-        id: google:embedding:text-embedding-004
+        id: google:embedding:gemini-embedding-001
 tests:
   - vars:
       puzzle: 'If a train travels at 60 mph for 2.5 hours, then at 40 mph for 1.5 hours, what is the average speed for the entire journey?'
