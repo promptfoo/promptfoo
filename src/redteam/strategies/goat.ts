@@ -1,6 +1,7 @@
 import logger from '../../logger';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { Inputs } from '../../types/shared';
 
 export async function addGoatTestCases(
   testCases: TestCaseWithPlugin[],
@@ -12,7 +13,7 @@ export async function addGoatTestCases(
     const originalText = String(testCase.vars![injectVar]);
     // Get inputs from plugin config if available
     const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
-    const inputs = pluginConfig?.inputs as Record<string, string> | undefined;
+    const inputs = pluginConfig?.inputs as Inputs | undefined;
 
     return {
       ...testCase,
