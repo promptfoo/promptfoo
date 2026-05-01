@@ -502,6 +502,52 @@ describe('GoogleLiveProvider', () => {
     expect(mockAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
   });
 
+  it('should disable tools and skip callbacks when tool_choice is none', async () => {
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'addNumbers', args: { a: 5, b: 6 }, id: 'function-call-disabled' },
+        ]);
+        simulateTextMessage(mockWs, 'Tools disabled.\n');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const mockAddNumbers = vi.fn().mockResolvedValue({ sum: 11 });
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tool_choice: 'none',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'addNumbers',
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          addNumbers: mockAddNumbers,
+        },
+      },
+    });
+
+    await provider.callApi('What is the sum of 5 and 6?');
+
+    const setupMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(setupMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+    expect(setupMessage.setup.tools).toBeUndefined();
+    expect(mockAddNumbers).not.toHaveBeenCalled();
+  });
+
   it('should handle errors in function tool callbacks', async () => {
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {

@@ -8,7 +8,13 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { calculateCost, type ProviderConfig, parseChatPrompt } from '../shared';
+import {
+  calculateCost,
+  isOpenAIToolChoice,
+  openaiToolChoiceToGoogle,
+  type ProviderConfig,
+  parseChatPrompt,
+} from '../shared';
 import { loadCredentials } from './auth';
 import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
@@ -31,6 +37,63 @@ export function normalizeSafetySettings(
     category,
     threshold: threshold || probability || '',
   }));
+}
+
+type GoogleFunctionCallingMode = NonNullable<
+  NonNullable<CompletionOptions['toolConfig']>['functionCallingConfig']
+>['mode'];
+
+function normalizeFunctionCallingMode(mode: unknown): GoogleFunctionCallingMode | undefined {
+  if (typeof mode !== 'string') {
+    return undefined;
+  }
+
+  const normalized = mode.toUpperCase();
+  if (['MODE_UNSPECIFIED', 'AUTO', 'ANY', 'NONE'].includes(normalized)) {
+    return normalized as GoogleFunctionCallingMode;
+  }
+
+  return undefined;
+}
+
+export function resolveGoogleToolControl(config: CompletionOptions): {
+  toolConfig?: CompletionOptions['toolConfig'];
+  toolsDisabled: boolean;
+} {
+  let toolConfig: CompletionOptions['toolConfig'] | undefined;
+
+  if (config.tool_choice !== undefined && isOpenAIToolChoice(config.tool_choice)) {
+    toolConfig = openaiToolChoiceToGoogle(config.tool_choice) as CompletionOptions['toolConfig'];
+  } else if (config.tool_config?.function_calling_config) {
+    const functionCallingConfig = config.tool_config.function_calling_config;
+    const mode = normalizeFunctionCallingMode(functionCallingConfig.mode);
+    toolConfig = {
+      functionCallingConfig: {
+        ...(mode ? { mode } : {}),
+        ...(functionCallingConfig.allowed_function_names
+          ? { allowedFunctionNames: functionCallingConfig.allowed_function_names }
+          : {}),
+      },
+    };
+  } else if (config.toolConfig) {
+    const mode = normalizeFunctionCallingMode(config.toolConfig.functionCallingConfig?.mode);
+    toolConfig = {
+      ...config.toolConfig,
+      ...(config.toolConfig.functionCallingConfig
+        ? {
+            functionCallingConfig: {
+              ...config.toolConfig.functionCallingConfig,
+              ...(mode ? { mode } : {}),
+            },
+          }
+        : {}),
+    };
+  }
+
+  return {
+    toolConfig,
+    toolsDisabled: toolConfig?.functionCallingConfig?.mode === 'NONE',
+  };
 }
 
 /**

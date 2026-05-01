@@ -22,6 +22,7 @@ import {
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
+  resolveGoogleToolControl,
   resolveProjectId,
   sanitizeSchemaForGemini,
   validateFunctionCall,
@@ -2786,6 +2787,46 @@ describe('util', () => {
         { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
         { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
       ]);
+    });
+  });
+});
+
+describe('resolveGoogleToolControl', () => {
+  it('should map tool_choice none to a disabled native tool config', () => {
+    expect(resolveGoogleToolControl({ tool_choice: 'none' })).toEqual({
+      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+      toolsDisabled: true,
+    });
+  });
+
+  it('should normalize documented snake_case tool_config disable controls', () => {
+    expect(
+      resolveGoogleToolControl({
+        tool_config: {
+          function_calling_config: {
+            mode: 'none',
+          },
+        },
+      }),
+    ).toEqual({
+      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+      toolsDisabled: true,
+    });
+  });
+
+  it.each([
+    'none',
+    'NONE',
+  ] as const)('should normalize camelCase mode %s to disabled native config', (mode) => {
+    expect(
+      resolveGoogleToolControl({
+        toolConfig: {
+          functionCallingConfig: { mode },
+        },
+      }),
+    ).toEqual({
+      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+      toolsDisabled: true,
     });
   });
 });

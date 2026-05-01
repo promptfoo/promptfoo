@@ -15,6 +15,7 @@ import {
   getGoogleAccessToken,
   loadCredentials,
   normalizeTools,
+  resolveGoogleToolControl,
 } from './util';
 
 import type {
@@ -181,10 +182,11 @@ export class GoogleLiveProvider implements ApiProvider {
       this.config.systemInstruction,
       { useAssistantRole: this.config.useAssistantRole },
     );
+    const { toolConfig, toolsDisabled } = resolveGoogleToolControl(this.config);
     let contentIndex = 0;
 
     let statefulApi: ChildProcess | undefined;
-    if (this.config.functionToolStatefulApi?.file) {
+    if (!toolsDisabled && this.config.functionToolStatefulApi?.file) {
       try {
         // Use the validatePythonPath function to get the correct Python executable
         const pythonPath = await validatePythonPath(
@@ -298,7 +300,7 @@ export class GoogleLiveProvider implements ApiProvider {
         clearTimeout(timeout);
 
         // Retrieve final state from stateful API before shutting down
-        if (this.config.functionToolStatefulApi) {
+        if (!toolsDisabled && this.config.functionToolStatefulApi) {
           try {
             const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
             statefulApiState = await fetchJson(url);
@@ -396,8 +398,8 @@ export class GoogleLiveProvider implements ApiProvider {
               ...(enableAffectiveDialog ? { enable_affective_dialog: enableAffectiveDialog } : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
-            ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
+            ...(toolConfig ? { toolConfig } : {}),
+            ...(!toolsDisabled && normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
               ? { output_audio_transcription: outputAudioTranscription }
@@ -563,7 +565,7 @@ export class GoogleLiveProvider implements ApiProvider {
                 let callbackResponse = {};
                 const functionName = functionCall.name;
                 try {
-                  if (this.config.functionToolCallbacks?.[functionName]) {
+                  if (!toolsDisabled && this.config.functionToolCallbacks?.[functionName]) {
                     callbackResponse = await this.executeFunctionCallback(
                       functionName,
                       JSON.stringify(
@@ -572,7 +574,7 @@ export class GoogleLiveProvider implements ApiProvider {
                           : functionCall.args,
                       ),
                     );
-                  } else if (this.config.functionToolStatefulApi) {
+                  } else if (!toolsDisabled && this.config.functionToolStatefulApi) {
                     logger.warn(
                       'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
                     );

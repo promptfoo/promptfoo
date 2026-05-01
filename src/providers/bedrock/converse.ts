@@ -30,6 +30,7 @@ import { isClaudeOpus47Model } from '../anthropic/util';
 import {
   isOpenAIToolArray,
   isOpenAIToolChoice,
+  type OpenAIToolChoice,
   openaiToolChoiceToBedrock,
   openaiToolsToBedrock,
 } from '../shared';
@@ -94,7 +95,8 @@ export interface BedrockConverseOptions extends BedrockOptions {
 
   // Tool configuration
   tools?: BedrockConverseToolConfig[];
-  toolChoice?: 'auto' | 'any' | { tool: { name: string } };
+  tool_choice?: OpenAIToolChoice;
+  toolChoice?: OpenAIToolChoice | 'any' | { tool: { name: string } };
 
   // Function tool callbacks for executing tools locally
   // Keys are function names, values are file:// references or inline function strings
@@ -320,6 +322,18 @@ function convertToolChoiceToConverseFormat(toolChoice: unknown): ToolChoice | un
     return { tool: { name: toolChoice.tool.name } };
   }
   return { auto: {} };
+}
+
+function getEffectiveToolChoice(
+  promptConfig: Partial<BedrockConverseOptions> | undefined,
+  providerConfig: BedrockConverseOptions,
+): BedrockConverseOptions['toolChoice'] | BedrockConverseOptions['tool_choice'] | undefined {
+  return (
+    promptConfig?.tool_choice ??
+    promptConfig?.toolChoice ??
+    providerConfig.tool_choice ??
+    providerConfig.toolChoice
+  );
 }
 
 /**
@@ -841,6 +855,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     vars?: Record<string, VarValue>,
     promptConfig?: Partial<BedrockConverseOptions>,
   ): Promise<ToolConfiguration | undefined> {
+    const configToolChoice = getEffectiveToolChoice(promptConfig, this.config);
+    if (configToolChoice === 'none') {
+      return undefined;
+    }
+
     // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
     const configTools = promptConfig?.tools ?? this.config.tools;
     if (!configTools || configTools.length === 0) {
@@ -854,8 +873,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     const converseTools = convertToolsToConverseFormat(tools);
-    // Merge toolChoice from prompt.config or fall back to this.config
-    const configToolChoice = promptConfig?.toolChoice ?? this.config.toolChoice;
     const toolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
@@ -1028,7 +1045,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed);
+        const result = await this.parseResponse(parsed, Boolean(toolConfig));
         return { ...result, cached: true };
       }
     }
@@ -1078,13 +1095,16 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response);
+    return await this.parseResponse(response, Boolean(toolConfig));
   }
 
   /**
    * Parse the Converse API response into ProviderResponse format
    */
-  private async parseResponse(response: ConverseCommandOutput): Promise<ProviderResponse> {
+  private async parseResponse(
+    response: ConverseCommandOutput,
+    allowFunctionToolCallbacks: boolean,
+  ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
     const content = outputMessage?.content || [];
@@ -1167,7 +1187,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     // Handle function tool callbacks if configured
-    if (this.config.functionToolCallbacks) {
+    if (allowFunctionToolCallbacks && this.config.functionToolCallbacks) {
       const toolUseBlocks = content.filter(
         (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
           'toolUse' in block && block.toolUse !== undefined,

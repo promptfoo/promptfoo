@@ -10,6 +10,7 @@ import {
   loadCredentials,
   normalizeSafetySettings,
   normalizeTools,
+  resolveGoogleToolControl,
   resolveProjectId,
 } from './util';
 
@@ -234,6 +235,7 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private buildRequestBody(contents: any): Record<string, any> {
+    const { toolConfig, toolsDisabled } = resolveGoogleToolControl(this.config);
     const body: Record<string, any> = {
       contents,
       generationConfig: {
@@ -264,11 +266,11 @@ export class GeminiImageProvider implements ApiProvider {
     }
 
     // Add tool configuration if provided (e.g. Google Search grounding)
-    if (this.config.toolConfig) {
-      body.toolConfig = this.config.toolConfig;
+    if (toolConfig) {
+      body.toolConfig = toolConfig;
     }
 
-    if (Array.isArray(this.config.tools) && this.config.tools.length > 0) {
+    if (!toolsDisabled && Array.isArray(this.config.tools) && this.config.tools.length > 0) {
       body.tools = normalizeTools(this.config.tools);
     }
 

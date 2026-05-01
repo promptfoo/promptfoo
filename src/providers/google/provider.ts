@@ -30,6 +30,7 @@ import {
   getGoogleClient,
   loadCredentials,
   normalizeSafetySettings,
+  resolveGoogleToolControl,
 } from './util';
 
 import type {
@@ -297,6 +298,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context);
+    const { toolConfig, toolsDisabled } = resolveGoogleToolControl(config);
 
     const body: Record<string, any> = {
       contents,
@@ -309,8 +311,8 @@ export class GoogleProvider extends GoogleGenericProvider {
         ...config.generationConfig,
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
-      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(toolConfig ? { toolConfig } : {}),
+      ...(!toolsDisabled && allTools.length > 0 ? { tools: allTools } : {}),
       // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
       ...(systemInstruction
         ? this.isVertexMode
@@ -422,7 +424,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, context);
+    return this.parseGeminiResponse(data, cached, config, toolsDisabled, context);
   }
 
   /**
@@ -432,6 +434,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     data: GeminiApiResponse,
     cached: boolean,
     config: CompletionOptions,
+    toolsDisabled: boolean,
     _context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     try {
@@ -614,7 +617,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       };
 
       // Handle function tool callbacks
-      if (config.functionToolCallbacks && typeof output === 'string') {
+      if (!toolsDisabled && config.functionToolCallbacks && typeof output === 'string') {
         try {
           const parsed = JSON.parse(output);
           if (parsed.functionCall) {

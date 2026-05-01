@@ -420,6 +420,40 @@ describe('AwsBedrockConverseProvider', () => {
       expect(result.output).toBe('Result: 4');
     });
 
+    it('should not execute functionToolCallbacks when tools are disabled', async () => {
+      const callback = vi.fn(() => 'Result: 4');
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [
+            {
+              name: 'calculator',
+              description: 'A calculator',
+              input_schema: { type: 'object', properties: { expression: { type: 'string' } } },
+            },
+          ],
+          tool_choice: 'none',
+          functionToolCallbacks: {
+            calculator: callback,
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'calculator', input: { expression: '2+2' } },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('What is 2+2?');
+
+      expect(callback).not.toHaveBeenCalled();
+      const parsed = JSON.parse(result.output as string);
+      expect(parsed.type).toBe('tool_use');
+      expect(parsed.name).toBe('calculator');
+    });
+
     it('should fall back to tool_use output when callback is not defined for the function', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
@@ -1587,6 +1621,54 @@ Third line`;
           toolConfig: expect.objectContaining({
             toolChoice: { any: {} },
           }),
+        }),
+      );
+    });
+
+    it('should omit toolConfig for tool_choice "none"', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          tool_choice: 'none',
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          toolConfig: expect.anything(),
+        }),
+      );
+    });
+
+    it('should omit toolConfig for toolChoice "none"', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          toolChoice: 'none',
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          toolConfig: expect.anything(),
         }),
       );
     });

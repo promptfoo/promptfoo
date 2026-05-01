@@ -14,6 +14,7 @@ import {
   geminiFormatAndSystemInstructions,
   getCandidate,
   normalizeSafetySettings,
+  resolveGoogleToolControl,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -393,6 +394,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     // Get all tools (MCP + config tools) using base class method
     const allTools = await this.getAllTools(context);
+    const { toolConfig, toolsDisabled } = resolveGoogleToolControl(config);
 
     const body: Record<string, any> = {
       contents,
@@ -409,8 +411,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         ...config.generationConfig,
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
-      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(toolConfig ? { toolConfig } : {}),
+      ...(!toolsDisabled && allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 

@@ -394,6 +394,73 @@ describe('VertexChatProvider.callGeminiApi', () => {
     );
   });
 
+  it('should normalize snake_case tool_config none and omit tools from the request body', async () => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'get_weather',
+          },
+        ],
+      },
+    ];
+
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tool_config: {
+          function_calling_config: {
+            mode: 'none',
+          },
+        },
+        tools,
+      },
+    });
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callGeminiApi('test prompt');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'NONE',
+            },
+          },
+        }),
+      }),
+    );
+    const requestBody = mockRequest.mock.calls[0][0].data;
+    expect(requestBody.tools).toBeUndefined();
+  });
+
   it('should load tools from external file and render variables', async () => {
     const mockExternalTools = [
       {
@@ -684,6 +751,51 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
+  });
+
+  it('should not execute function callbacks when tool_choice disables tools', async () => {
+    const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({
+        cached: true,
+        output: JSON.stringify({
+          functionCall: {
+            name: 'get_weather',
+            args: '{"location":"New York"}',
+          },
+        }),
+        tokenUsage: {
+          total: 15,
+          prompt: 10,
+          completion: 5,
+        },
+      }),
+    );
+
+    const provider = new VertexChatProvider('gemini', {
+      config: {
+        tool_choice: 'none',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'get_weather',
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          get_weather: callback,
+        },
+      },
+    });
+
+    const result = await provider.callApi('Call the weather function');
+
+    expect(callback).not.toHaveBeenCalled();
+    expect(result.output).toBe(
+      '{"functionCall":{"name":"get_weather","args":"{\\"location\\":\\"New York\\"}"}}',
+    );
   });
 
   describe('External Function Callbacks', () => {

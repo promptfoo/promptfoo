@@ -1,6 +1,7 @@
 import type { GoogleAuthOptions } from 'google-auth-library';
 
 import type { MCPConfig } from '../mcp/types';
+import type { OpenAIToolChoice } from '../shared';
 
 /**
  * Model Armor configuration for Vertex AI integration.
@@ -238,10 +239,35 @@ export interface CompletionOptions {
 
   responseSchema?: string;
 
+  tool_choice?: OpenAIToolChoice;
+
   toolConfig?: {
     functionCallingConfig?: {
-      mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE';
+      mode?:
+        | 'mode_unspecified'
+        | 'auto'
+        | 'any'
+        | 'none'
+        | 'MODE_UNSPECIFIED'
+        | 'AUTO'
+        | 'ANY'
+        | 'NONE';
       allowedFunctionNames?: string[];
+    };
+  };
+
+  tool_config?: {
+    function_calling_config?: {
+      mode?:
+        | 'mode_unspecified'
+        | 'auto'
+        | 'any'
+        | 'none'
+        | 'MODE_UNSPECIFIED'
+        | 'AUTO'
+        | 'ANY'
+        | 'NONE';
+      allowed_function_names?: string[];
     };
   };
 

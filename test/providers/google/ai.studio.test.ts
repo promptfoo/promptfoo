@@ -1128,6 +1128,46 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it('should normalize camelCase mode none and omit tools from the request body', async () => {
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'none',
+            },
+          },
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('test prompt');
+
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls[0][1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toBeUndefined();
+    });
+
     it('should load tools from external file and render variables', async () => {
       const mockRenderString = vi.fn((str, _vars) => {
         if (str.startsWith('file://')) {
