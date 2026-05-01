@@ -76,8 +76,8 @@ export interface XAIMCPTool {
   type: 'mcp';
   /** MCP server URL */
   server_url: string;
-  /** Label used for tool-call prefixing */
-  server_label: string;
+  /** Optional label used for tool-call prefixing */
+  server_label?: string;
   /** Optional description of the server capabilities */
   server_description?: string;
   /** Optional bearer token for MCP server requests */
