@@ -1,6 +1,7 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createNativeAddonVersionMismatchError } from './factories/nativeAddonErrors';
 
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
@@ -112,6 +113,49 @@ describe('migrate', () => {
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Database migration failed:'),
+      );
+      expect(mockMigrate).not.toHaveBeenCalled();
+    });
+
+    it('should log native addon ABI mismatches without labeling them as migration failures', async () => {
+      const nativeAddonError = createNativeAddonVersionMismatchError();
+      mockGetDb.mockImplementation(() => {
+        throw nativeAddonError;
+      });
+
+      const { runDbMigrations } = await import('../src/migrate');
+      await expect(runDbMigrations()).rejects.toBe(nativeAddonError);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+        {
+          currentNodeVersion: process.version,
+          currentNodeAbi: '137',
+          installedBetterSqlite3Abi: '115',
+        },
+      );
+      expect(mockMigrate).not.toHaveBeenCalled();
+    });
+
+    it('should demote ABI mismatch log to debug when suppressNativeAddonLogging is set', async () => {
+      const nativeAddonError = createNativeAddonVersionMismatchError();
+      mockGetDb.mockImplementation(() => {
+        throw nativeAddonError;
+      });
+
+      const { runDbMigrations } = await import('../src/migrate');
+      await expect(runDbMigrations({ suppressNativeAddonLogging: true })).rejects.toBe(
+        nativeAddonError,
+      );
+
+      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+        {
+          currentNodeVersion: process.version,
+          currentNodeAbi: '137',
+          installedBetterSqlite3Abi: '115',
+        },
       );
       expect(mockMigrate).not.toHaveBeenCalled();
     });
