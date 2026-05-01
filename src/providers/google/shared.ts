@@ -36,19 +36,23 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
     },
   },
-
-  // Gemini 3.0 models (Preview)
   {
-    id: 'gemini-3-flash-preview',
-    cost: { input: 0.5 / 1e6, output: 3.0 / 1e6 },
-  },
-  {
-    id: 'gemini-3-pro-preview',
+    id: 'gemini-3.1-pro-preview-customtools',
     cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
     tieredCost: {
       threshold: 200_000,
       above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
     },
+  },
+  {
+    id: 'gemini-3.1-flash-lite-preview',
+    cost: { input: 0.25 / 1e6, output: 1.5 / 1e6 },
+  },
+
+  // Gemini 3.0 models (Preview)
+  {
+    id: 'gemini-3-flash-preview',
+    cost: { input: 0.5 / 1e6, output: 3.0 / 1e6 },
   },
 
   // Gemini 2.5 models
@@ -60,31 +64,24 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
     },
   },
-  ...[
-    'gemini-2.5-pro-preview-05-06',
-    'gemini-2.5-pro-preview-06-05',
-    'gemini-2.5-computer-use-preview-10-2025',
-  ].map((id) => ({
-    id,
+  {
+    id: 'gemini-2.5-computer-use-preview-10-2025',
     cost: { input: 1.25 / 1e6, output: 10.0 / 1e6 },
     tieredCost: {
       threshold: 200_000,
       above: { input: 2.5 / 1e6, output: 15.0 / 1e6 },
     },
-  })),
-  ...[
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-preview-04-17',
-    'gemini-2.5-flash-preview-05-20',
-    'gemini-2.5-flash-preview-09-2025',
-  ].map((id) => ({
-    id,
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
-  })),
-  ...['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite-preview-09-2025'].map((id) => ({
-    id,
+  },
+  ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17', 'gemini-2.5-flash-preview-09-2025'].map(
+    (id) => ({
+      id,
+      cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+    }),
+  ),
+  {
+    id: 'gemini-2.5-flash-lite',
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
-  })),
+  },
 
   // Gemini 2.0 models
   ...['gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp'].map((id) => ({
@@ -92,11 +89,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
     vertexCost: { input: 0.15 / 1e6, output: 0.6 / 1e6 },
   })),
-  ...[
-    'gemini-2.0-flash-lite',
-    'gemini-2.0-flash-lite-001',
-    'gemini-2.0-flash-lite-preview-02-05',
-  ].map((id) => ({
+  ...['gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-001'].map((id) => ({
     id,
     cost: { input: 0.075 / 1e6, output: 0.3 / 1e6 },
   })),
@@ -181,8 +174,8 @@ export const GOOGLE_MODELS: GoogleModel[] = [
 
   // Gemini Robotics
   {
-    id: 'gemini-robotics-er-1.5-preview',
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
+    id: 'gemini-robotics-er-1.6-preview',
+    cost: { input: 1.0 / 1e6, output: 5.0 / 1e6 },
   },
 
   // Gemini Embedding
