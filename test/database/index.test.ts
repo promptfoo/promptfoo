@@ -110,6 +110,29 @@ describe('database', () => {
       ).resolves.toEqual([{ id: 'a' }, { id: 'b' }]);
     });
 
+    it('should reuse the active transaction for nested root transactions', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE nested_transaction_test (id TEXT PRIMARY KEY)');
+
+      await expect(
+        Promise.race([
+          db.transaction(async (tx) => {
+            await tx.run("INSERT INTO nested_transaction_test (id) VALUES ('outer')");
+            await db.transaction(async (nestedTx) => {
+              await nestedTx.run("INSERT INTO nested_transaction_test (id) VALUES ('inner')");
+            });
+          }),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('nested transaction timed out')), 1_000);
+          }),
+        ]),
+      ).resolves.toBeUndefined();
+
+      await expect(
+        db.all<{ id: string }>('SELECT id FROM nested_transaction_test ORDER BY id'),
+      ).resolves.toEqual([{ id: 'inner' }, { id: 'outer' }]);
+    });
+
     it('should enforce foreign keys inside top-level transactions', async () => {
       const db = await getDb();
       await db.run('CREATE TABLE transaction_fk_parent (id TEXT PRIMARY KEY)');

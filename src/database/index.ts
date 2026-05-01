@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as path from 'path';
 
 import { type Client, createClient } from '@libsql/client/node';
@@ -67,13 +68,26 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
 
 function serializeTransactions(db: ReturnType<typeof drizzle>): ReturnType<typeof drizzle> {
   const transaction = db.transaction.bind(db);
+  type TransactionCallback = Parameters<typeof transaction>[0];
+  type TransactionContext = Parameters<TransactionCallback>[0];
+
+  const activeTransaction = new AsyncLocalStorage<TransactionContext>();
   let transactionQueue = Promise.resolve();
 
   // better-sqlite3 executed all writes synchronously on one connection. libsql opens a
   // fresh connection for each top-level transaction, so overlapping transactions on the
   // shared client can otherwise fail immediately with SQLITE_BUSY.
   db.transaction = ((callback, config) => {
-    const result = transactionQueue.then(() => transaction(callback, config));
+    const currentTransaction = activeTransaction.getStore();
+    if (currentTransaction) {
+      // Reuse the transaction already owned by this async call chain. Queueing here
+      // would deadlock because the outer callback is waiting for the nested promise.
+      return callback(currentTransaction);
+    }
+
+    const result = transactionQueue.then(() =>
+      transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config),
+    );
     transactionQueue = result.then(
       () => undefined,
       () => undefined,
