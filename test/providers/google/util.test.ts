@@ -2632,6 +2632,11 @@ describe('util', () => {
       expect(costAboveThreshold).toBeCloseTo(1.9, 10);
     });
 
+    it('should preserve tiered pricing for gemini-3-pro-preview alias', () => {
+      const cost = calculateGoogleCost('gemini-3-pro-preview', {}, 250000, 50000);
+      expect(cost).toBeCloseTo(1.9, 10);
+    });
+
     it('should calculate cost for gemini-3.1-flash-lite-preview', () => {
       // gemini-3.1-flash-lite-preview: input=0.25/1M, output=1.5/1M
       const cost = calculateGoogleCost('gemini-3.1-flash-lite-preview', {}, 1000, 500);
@@ -2701,11 +2706,9 @@ describe('util', () => {
 
     it('should return undefined for shutdown models', () => {
       const shutdownModels = [
-        'gemini-3-pro-preview',
         'gemini-2.5-pro-preview-05-06',
         'gemini-2.5-pro-preview-06-05',
         'gemini-2.5-flash-preview-05-20',
-        'gemini-2.5-flash-lite-preview-09-2025',
         'gemini-2.0-flash-lite-preview-02-05',
         'gemini-robotics-er-1.5-preview',
       ];

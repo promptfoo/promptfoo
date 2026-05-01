@@ -997,7 +997,7 @@ To enable code execution:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-05-20
+  - id: google:gemini-2.5-flash
     config:
       tools:
         - codeExecution: {}

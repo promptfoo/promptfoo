@@ -28,22 +28,16 @@ export interface GoogleModel {
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
   // Gemini 3.1 models (Preview)
-  {
-    id: 'gemini-3.1-pro-preview',
-    cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
-    tieredCost: {
-      threshold: 200_000,
-      above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
-    },
-  },
-  {
-    id: 'gemini-3.1-pro-preview-customtools',
-    cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
-    tieredCost: {
-      threshold: 200_000,
-      above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
-    },
-  },
+  ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-3-pro-preview'].map(
+    (id) => ({
+      id,
+      cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
+      tieredCost: {
+        threshold: 200_000,
+        above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
+      },
+    }),
+  ),
   {
     id: 'gemini-3.1-flash-lite-preview',
     cost: { input: 0.25 / 1e6, output: 1.5 / 1e6 },
@@ -78,10 +72,10 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
     }),
   ),
-  {
-    id: 'gemini-2.5-flash-lite',
+  ...['gemini-2.5-flash-lite', 'gemini-2.5-flash-lite-preview-09-2025'].map((id) => ({
+    id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
-  },
+  })),
 
   // Gemini 2.0 models
   ...['gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp'].map((id) => ({
