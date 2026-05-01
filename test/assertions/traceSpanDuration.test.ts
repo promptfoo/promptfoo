@@ -332,6 +332,25 @@ describe('handleTraceSpanDuration', () => {
     expect(result.score).toBe(1);
   });
 
+  it('should fail inverse assertions when no spans match and requirePresence is false', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-duration',
+        value: { pattern: 'missing_span_*', max: 1000 },
+      },
+      renderedValue: { pattern: 'missing_span_*', max: 1000 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('not-trace-span-duration');
+    expect(result.reason).toContain('latency budget was satisfied');
+  });
+
   it('should fail when no trace data is available', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -430,6 +449,22 @@ describe('handleTraceSpanDuration', () => {
     expect(result.reason).toContain('within threshold 1000ms');
     expect(result.reason).toContain('warning: small sample N=1');
     expect(result.assertion).toBe(params.assertion);
+  });
+
+  it('should reject percentile values outside the 0-100 range', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 1000, percentile: 101 },
+      },
+      renderedValue: { max: 1000, percentile: 101 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
   });
 
   it('should invert the result for not-trace-span-duration when latency budget is met', () => {

@@ -741,6 +741,7 @@ tests:
 - `name` or `pattern` to identify the traced tool call
 - `args` or `arguments` containing the expected payload
 - optional `mode`, either `partial` (default) or `exact`
+- optional `redactArgsInFailures`, which hides traced argument payloads from failed assertion reasons
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
 
@@ -994,6 +995,8 @@ Key features:
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds
 - `percentile` (optional): Check percentile instead of all spans (e.g., 50 for median, 95 for 95th percentile)
+- `method` (optional): Percentile method, either `nearest` (default) or `linear`
+- `requirePresence` (optional): Fail when no matching spans with complete timing data are present
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
 
@@ -1042,6 +1045,7 @@ Configuration options:
 - `max_count`: Maximum number of error spans allowed
 - `max_percentage`: Maximum error rate as a percentage (0-100)
 - `pattern`: Filter spans by name pattern
+- `requirePresence`: Fail when no matching spans are present
 
 The assertion provides detailed error information including span names and error messages to help with debugging.
 
