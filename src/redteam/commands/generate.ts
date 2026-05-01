@@ -11,6 +11,7 @@ import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   getUserEmail,
   promptForEmailUnverified,
@@ -1022,7 +1023,8 @@ export function redteamGenerateCommand(
           });
         } else if (error instanceof ConfigResolutionError) {
           logConfigResolutionError(error);
-        } else {
+        } else if (!(error instanceof EmailValidationError)) {
+          // EmailValidationError is already logged by account helpers.
           // Log the stack trace, which already includes the error message
           logger.error(
             error instanceof Error && error.stack

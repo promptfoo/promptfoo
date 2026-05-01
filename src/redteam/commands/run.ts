@@ -3,6 +3,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
+import { EmailValidationError } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { getConfigFromCloud } from '../../util/cloud';
@@ -112,7 +113,8 @@ export function redteamRunCommand(program: Command) {
           });
         } else if (error instanceof ConfigResolutionError) {
           logConfigResolutionError(error);
-        } else {
+        } else if (!(error instanceof EmailValidationError)) {
+          // EmailValidationError is already logged by account helpers.
           logger.error(
             `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
               error instanceof Error ? error.stack : ''
