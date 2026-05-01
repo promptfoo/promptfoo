@@ -164,6 +164,51 @@ describe('EvalResult', () => {
       });
     });
 
+    it('preserves trace linkage across single-row persistence', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-trace-linkage', {
+        ...mockEvaluateResult,
+        traceId: 'single-trace-id',
+        evaluationId: 'single-evaluation-id',
+        metadata: { source: 'single' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        traceId: 'single-trace-id',
+        evaluationId: 'single-evaluation-id',
+        metadata: { source: 'single' },
+      });
+    });
+
+    it('preserves user metadata alongside persisted trace linkage', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-user-metadata', {
+        ...mockEvaluateResult,
+        traceId: 'single-trace-id',
+        evaluationId: 'single-evaluation-id',
+        metadata: {
+          __traceId: 'user-trace-id',
+          __evaluationId: 'user-evaluation-id',
+          __promptfoo: { source: 'user' },
+        },
+      });
+
+      expect(result.metadata).toEqual({
+        __traceId: 'user-trace-id',
+        __evaluationId: 'user-evaluation-id',
+        __promptfoo: { source: 'user' },
+      });
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'single-trace-id',
+        evaluationId: 'single-evaluation-id',
+        metadata: {
+          __traceId: 'user-trace-id',
+          __evaluationId: 'user-evaluation-id',
+          __promptfoo: { source: 'user' },
+        },
+      });
+    });
+
     it('should properly handle circular references in provider', async () => {
       const evalId = 'test-eval-id';
 

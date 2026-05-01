@@ -239,12 +239,7 @@ describe('evaluatorTracing', () => {
 
       await startOtlpReceiverIfNeeded(testSuite);
 
-      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(
-        4318,
-        '0.0.0.0',
-        ['protobuf'],
-        expect.any(Object),
-      );
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['protobuf']);
     });
 
     it('should swallow receiver start errors by default', async () => {
@@ -342,12 +337,7 @@ describe('evaluatorTracing', () => {
 
       await startOtlpReceiverIfNeeded(testSuite);
 
-      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(
-        4318,
-        '0.0.0.0',
-        ['json', 'protobuf'],
-        expect.any(Object),
-      );
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['json', 'protobuf']);
     });
 
     it('resets command tool-name overrides when a later eval omits them', async () => {
