@@ -141,10 +141,7 @@ prompts:
 
 ## Node.js version mismatch error
 
-Older promptfoo versions used native SQLite bindings, so an older checkout or cached
-install can still show a `NODE_MODULE_VERSION` mismatch after switching Node.js
-versions. Current promptfoo releases use a different SQLite client, but other native
-dependencies can still need rebuilding when the active Node.js version changes.
+Native dependencies can need rebuilding when the active Node.js version changes.
 
 ### Solution: Remove npx cache and reinstall
 
@@ -161,8 +158,7 @@ npm install
 ```
 
 If the error names a specific native dependency, rebuild that package for the active
-Node.js version. For older promptfoo checkouts that still use `better-sqlite3`, that
-looks like:
+Node.js version:
 
 ```bash
 npm rebuild better-sqlite3
@@ -188,12 +184,7 @@ npm cache npx rm <key>
 npx -y promptfoo@latest
 ```
 
-Use the key shown next to `promptfoo@latest` in `npm cache npx ls`. If your npm
-version does not support `npm cache npx`, remove the older npx cache directory instead:
-
-```bash
-rm -rf ~/.npm/_npx && npx -y promptfoo@latest
-```
+Use the key shown next to `promptfoo@latest` in `npm cache npx ls`.
 
 ## Native build failures
 
