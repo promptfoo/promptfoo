@@ -23,7 +23,6 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import { EmailValidationError } from './globalConfig/accounts';
 import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
@@ -175,10 +174,9 @@ if (isMain) {
     }
   }
   // Re-throw unexpected errors after cleanup is complete. Config resolution
-  // errors and email-validation failures are expected user input failures that
-  // have already been rendered before reaching this boundary.
+  // errors are expected user input failures that have already been rendered here.
   if (mainError) {
-    if (mainError instanceof ConfigResolutionError || mainError instanceof EmailValidationError) {
+    if (mainError instanceof ConfigResolutionError) {
       // User-facing message has already been rendered.
     } else if (nativeAddonVersionMismatchMessage) {
       console.error(nativeAddonVersionMismatchMessage);

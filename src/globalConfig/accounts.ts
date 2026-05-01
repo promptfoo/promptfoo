@@ -28,25 +28,6 @@ export interface UserAuthInfo {
   authMethod: AuthMethod;
 }
 
-export type EmailValidationFailureReason =
-  | 'prompt_cancelled'
-  | 'exceeded_limit'
-  | 'email_verification_required';
-
-export class EmailValidationError extends Error {
-  constructor(
-    public readonly reason: EmailValidationFailureReason,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'EmailValidationError';
-  }
-}
-
-function failEmailValidation(reason: EmailValidationFailureReason, message: string): never {
-  throw new EmailValidationError(reason, message);
-}
-
 export function getUserAuthInfo(): UserAuthInfo {
   const globalConfig = readGlobalConfig();
   const email = globalConfig?.account?.email || null;
@@ -290,7 +271,8 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
     } catch (error) {
       const err = error as Error;
       if (err?.name === 'AbortPromptError' || err?.name === 'ExitPromptError') {
-        failEmailValidation('prompt_cancelled', 'Email prompt cancelled.');
+        // exit cleanly on interrupt
+        process.exit(1);
       }
       // Unknown error: rethrow
       logger.error(`failed to prompt for email: ${err}`);
@@ -327,11 +309,13 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   }
 
   if (result.status === EmailValidationStatus.EXCEEDED_LIMIT) {
-    const message =
-      'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.';
-    logger.error(message);
-    failEmailValidation('exceeded_limit', message);
-  } else if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+    logger.error(
+      'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
+    );
+    process.exit(1);
+  }
+
+  if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
     setUserEmailNeedsValidation(true);
     setUserEmailValidated(false);
     const message =
@@ -341,8 +325,10 @@ export async function checkEmailStatusAndMaybeExit(options?: {
       status: result.status,
       hasEmail: result.hasEmail,
     });
-    failEmailValidation('email_verification_required', message);
-  } else if (result.status === EmailValidationStatus.SHOW_USAGE_WARNING && result.message) {
+    process.exit(1);
+  }
+
+  if (result.status === EmailValidationStatus.SHOW_USAGE_WARNING && result.message) {
     const border = '='.repeat(TERMINAL_MAX_WIDTH);
     logger.info(chalk.yellow(border));
     logger.warn(chalk.yellow(result.message));
