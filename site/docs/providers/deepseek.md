@@ -50,21 +50,29 @@ The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro
 
 - General purpose V4 model for conversations and reasoning
 - 1M context window, up to 384K output tokens
-- Input: $0.028/1M (cache hit), $0.14/1M (cache miss)
+- Input: $0.0028/1M (cache hit), $0.14/1M (cache miss)
 - Output: $0.28/1M
 
 ### deepseek-v4-pro
 
 - Higher-capability V4 model with thinking and non-thinking modes
 - 1M context window, up to 384K output tokens
-- Input: $0.145/1M (cache hit), $1.74/1M (cache miss)
-- Output: $3.48/1M
+- Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
+- Output: $0.87/1M
+- Promotional pricing is documented through May 31, 2026
 
 ### Legacy aliases
 
-- `deepseek-chat` currently maps to non-thinking `deepseek-v4-flash`
-- `deepseek-reasoner` currently maps to thinking `deepseek-v4-flash`
-- Both aliases are scheduled for retirement on July 24, 2026
+### deepseek-chat
+
+- Legacy alias that currently maps to non-thinking `deepseek-v4-flash`
+- Scheduled for retirement on July 24, 2026
+
+### deepseek-reasoner
+
+- Legacy alias that currently maps to thinking `deepseek-v4-flash`
+- Scheduled for retirement on July 24, 2026
+- Supports showing or hiding reasoning content through the `showThinking` parameter
 
 :::warning
 
@@ -96,7 +104,9 @@ tests:
 
 ### Controlling Reasoning Output
 
-The DeepSeek-R1 model (deepseek-reasoner) includes detailed reasoning steps in its output. You can control whether this reasoning content is shown using the `showThinking` parameter:
+The legacy `deepseek-reasoner` alias uses V4 Flash thinking mode and includes detailed
+reasoning steps in its output. You can control whether this reasoning content is shown
+using the `showThinking` parameter:
 
 ```yaml
 providers:

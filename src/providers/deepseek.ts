@@ -19,24 +19,24 @@ export const DEEPSEEK_CHAT_MODELS = [
     cost: {
       input: 0.14 / 1e6,
       output: 0.28 / 1e6,
-      cache_read: 0.028 / 1e6,
+      cache_read: 0.0028 / 1e6,
     },
   },
   {
     id: 'deepseek-v4-pro',
     cost: {
-      input: 1.74 / 1e6,
-      output: 3.48 / 1e6,
-      cache_read: 0.145 / 1e6,
+      input: 0.435 / 1e6,
+      output: 0.87 / 1e6,
+      cache_read: 0.003625 / 1e6,
     },
   },
-  // Legacy aliases remain available until 2026-07-24 and currently map to V4 Flash.
+  // Legacy aliases retained for compatibility.
   {
     id: 'deepseek-chat',
     cost: {
       input: 0.14 / 1e6,
       output: 0.28 / 1e6,
-      cache_read: 0.028 / 1e6,
+      cache_read: 0.0028 / 1e6,
     },
   },
   {
@@ -44,7 +44,7 @@ export const DEEPSEEK_CHAT_MODELS = [
     cost: {
       input: 0.14 / 1e6,
       output: 0.28 / 1e6,
-      cache_read: 0.028 / 1e6,
+      cache_read: 0.0028 / 1e6,
     },
   },
 ];
@@ -176,6 +176,6 @@ export function createDeepSeekProvider(
   options: DeepSeekProviderOptions = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
-  const modelName = splits.slice(1).join(':') || 'deepseek-chat';
+  const modelName = splits.slice(1).join(':') || 'deepseek-v4-flash';
   return new DeepSeekProvider(modelName, options);
 }
