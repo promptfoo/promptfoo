@@ -77,9 +77,9 @@ describe('Mistral', () => {
       expect(customProvider.config).toEqual({ temperature: 0.7 });
     });
 
-    it('should support new Magistral reasoning models', () => {
-      const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2506');
-      expect(magistralSmallProvider.modelName).toBe('magistral-small-2506');
+    it('should support current Mistral model families', () => {
+      const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2509');
+      expect(magistralSmallProvider.modelName).toBe('magistral-small-2509');
       expect(magistralSmallProvider.config).toEqual({});
 
       const magistralMediumProvider = new MistralChatCompletionProvider('magistral-medium-latest', {
@@ -87,6 +87,16 @@ describe('Mistral', () => {
       });
       expect(magistralMediumProvider.modelName).toBe('magistral-medium-latest');
       expect(magistralMediumProvider.config).toEqual({ temperature: 0.7, max_tokens: 40960 });
+
+      expect(new MistralChatCompletionProvider('mistral-large-2512').modelName).toBe(
+        'mistral-large-2512',
+      );
+      expect(new MistralChatCompletionProvider('mistral-medium-3.5').modelName).toBe(
+        'mistral-medium-3.5',
+      );
+      expect(new MistralChatCompletionProvider('ministral-14b-latest').modelName).toBe(
+        'ministral-14b-latest',
+      );
     });
 
     it('should support Pixtral multimodal model', () => {
@@ -188,6 +198,72 @@ describe('Mistral', () => {
       expect(body.max_tokens).toBe(0);
     });
 
+    it('should pass through current chat completion options', async () => {
+      const advancedProvider = new MistralChatCompletionProvider('mistral-medium-3.5', {
+        config: {
+          frequency_penalty: 0.25,
+          presence_penalty: 0.5,
+          stop: ['END'],
+          n: 2,
+          safe_prompt: false,
+          prompt_mode: null,
+          reasoning_effort: 'high',
+          prediction: { type: 'content', content: 'Expected completion' },
+          metadata: { requestId: 'abc-123' },
+          guardrails: [{ block_on_error: true }],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'answer',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  answer: { type: 'string' },
+                },
+                required: ['answer'],
+              },
+            },
+          },
+        },
+      });
+      vi.spyOn(advancedProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: '{"answer":"ok"}' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await advancedProvider.callApi('Test prompt');
+
+      const requestInit = vi.mocked(fetchWithCache).mock.calls[0]?.[1];
+      expect(requestInit).toBeDefined();
+      const body = JSON.parse((requestInit as RequestInit).body as string);
+      expect(body).toMatchObject({
+        frequency_penalty: 0.25,
+        presence_penalty: 0.5,
+        stop: ['END'],
+        n: 2,
+        safe_prompt: false,
+        prompt_mode: null,
+        reasoning_effort: 'high',
+        prediction: { type: 'content', content: 'Expected completion' },
+        metadata: { requestId: 'abc-123' },
+        guardrails: [{ block_on_error: true }],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'answer',
+            strict: true,
+          },
+        },
+      });
+    });
+
     it('should include tools configuration in the request body', async () => {
       const tools = [
         {
@@ -238,7 +314,7 @@ describe('Mistral', () => {
     });
 
     it('should calculate cost correctly for Magistral models', async () => {
-      const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2506');
+      const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2509');
       vi.spyOn(magistralSmallProvider, 'getApiKey').mockReturnValue('fake-api-key');
 
       const mockResponse = {
@@ -257,6 +333,26 @@ describe('Mistral', () => {
       // Magistral Small: $0.5/M input, $1.5/M output
       // 100 prompt tokens * 0.5/1M + 900 completion tokens * 1.5/1M = 0.00005 + 0.00135 = 0.0014
       expect(result.cost).toBeCloseTo(0.0014, 6);
+    });
+
+    it('should calculate cost correctly for current latest aliases', async () => {
+      const latestProvider = new MistralChatCompletionProvider('mistral-large-latest');
+      vi.spyOn(latestProvider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Current latest response' } }],
+          usage: { total_tokens: 1000, prompt_tokens: 400, completion_tokens: 600 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await latestProvider.callApi('Test latest alias pricing');
+
+      // mistral-large-latest currently tracks Mistral Large 3 pricing: $0.5/M in, $1.5/M out
+      expect(result.cost).toBeCloseTo(0.0011, 6);
     });
 
     it('should use cache when enabled', async () => {
