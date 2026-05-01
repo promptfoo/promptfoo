@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleTokensUsed } from '../../src/assertions/tokensUsed';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
@@ -8,6 +8,10 @@ import type { TraceData } from '../../src/types/tracing';
 const mockProvider = createMockProvider({
   id: 'mock',
   response: createProviderResponse({ output: 'mock' }),
+});
+
+afterEach(() => {
+  vi.resetAllMocks();
 });
 
 const traceWithTokens: TraceData = {
@@ -128,6 +132,26 @@ describe('handleTokensUsed', () => {
     };
     const result = handleTokensUsed(params);
     expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 350');
+    expect(result.reason).toContain('source=response');
+  });
+
+  it('falls back to providerResponse.tokenUsage when trace data has no spans', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 100 } },
+      renderedValue: { max: 100 },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(false);
     expect(result.reason).toContain('Tokens used: 350');
     expect(result.reason).toContain('source=response');
   });

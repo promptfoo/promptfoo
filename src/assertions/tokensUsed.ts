@@ -87,7 +87,7 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
   const pattern = value.pattern ?? '*';
   const source = value.source ?? 'auto';
   const trace = params.assertionValueContext.trace;
-  const haveTrace = !!trace?.spans;
+  const haveTrace = (trace?.spans?.length ?? 0) > 0;
 
   let total = 0;
   let usedSource: 'trace' | 'response' = 'response';
