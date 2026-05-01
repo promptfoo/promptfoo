@@ -20,6 +20,12 @@ export interface GoogleModel {
   vertexCost?: GoogleModelCost;
 }
 
+const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6 };
+const GEMINI_3_PRO_TIERED_COST = {
+  threshold: 200_000,
+  above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
+};
+
 /**
  * Google AI Studio models with pricing data.
  * Prices are per token (from Google AI pricing page, converted from per-million).
@@ -28,16 +34,11 @@ export interface GoogleModel {
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
   // Gemini 3.1 models (Preview)
-  ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-3-pro-preview'].map(
-    (id) => ({
-      id,
-      cost: { input: 2.0 / 1e6, output: 12.0 / 1e6 },
-      tieredCost: {
-        threshold: 200_000,
-        above: { input: 4.0 / 1e6, output: 18.0 / 1e6 },
-      },
-    }),
-  ),
+  ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools'].map((id) => ({
+    id,
+    cost: GEMINI_3_PRO_COST,
+    tieredCost: GEMINI_3_PRO_TIERED_COST,
+  })),
   {
     id: 'gemini-3.1-flash-lite-preview',
     cost: { input: 0.25 / 1e6, output: 1.5 / 1e6 },
@@ -47,6 +48,11 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   {
     id: 'gemini-3-flash-preview',
     cost: { input: 0.5 / 1e6, output: 3.0 / 1e6 },
+  },
+  {
+    id: 'gemini-3-pro-preview',
+    cost: GEMINI_3_PRO_COST,
+    tieredCost: GEMINI_3_PRO_TIERED_COST,
   },
 
   // Gemini 2.5 models
