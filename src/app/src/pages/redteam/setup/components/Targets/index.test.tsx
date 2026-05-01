@@ -197,7 +197,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     selectedTarget: {
       id: 'custom',
       config: { temperature: 0.5 },
-      label: 'Custom Target',
+      label: 'Custom Provider',
     },
     rawConfigJson: JSON.stringify({ temperature: 0.5 }, null, 2),
     bodyError: null,
@@ -317,7 +317,7 @@ describe('updateCustomTarget function behavior', () => {
     const mockSelectedTarget = {
       id: 'custom',
       config: { temperature: 0.5 },
-      label: 'Custom Target',
+      label: 'Custom Provider',
     };
 
     // Simulate the updateCustomTarget function logic for the 'config' field

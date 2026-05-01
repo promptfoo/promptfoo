@@ -33,7 +33,7 @@ const legacyPredefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
 ];
 
-export const customTargetOption: RedteamUITarget = { value: 'custom', label: 'Custom Target' };
+export const customTargetOption: RedteamUITarget = { value: 'custom', label: 'Custom Provider' };
 
 export function findPredefinedTarget(value: string): RedteamUITarget | undefined {
   return (
