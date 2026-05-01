@@ -2213,6 +2213,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
@@ -2306,8 +2307,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
 
   // Qwen Models via Bedrock
+  'qwen.qwen3-coder-next': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-coder-480b-a35b-v1:0': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-coder-30b-a3b-v1:0': BEDROCK_MODEL.QWEN,
+  'qwen.qwen3-next-80b-a3b': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-235b-a22b-2507-v1:0': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-32b-v1:0': BEDROCK_MODEL.QWEN,
 
