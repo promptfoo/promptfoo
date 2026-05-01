@@ -6,7 +6,6 @@ import { spansTable, tracesTable } from '../../src/database/tables';
 import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
-  buildSafeJsonPath,
   combineFilterConditions,
   EvalQueries,
   escapeJsonPathKey,
@@ -1872,48 +1871,9 @@ describe('evaluator', () => {
 
       const injection2 = "field' OR 1=1; --";
       const escaped2 = escapeJsonPathKey(injection2);
-      // Single quotes pass through escapeJsonPathKey (handled by buildSafeJsonPath)
+      // Single quotes pass through unchanged; downstream callers parameterize the
+      // path so SQL string-literal escaping is no longer this helper's job.
       expect(escaped2).toBe("field' OR 1=1; --");
-    });
-  });
-
-  describe('buildSafeJsonPath', () => {
-    // Helper to extract the raw string from sql.raw() result
-    const getRawString = (result: ReturnType<typeof buildSafeJsonPath>) =>
-      (result.queryChunks[0] as { value: string[] }).value[0];
-
-    it('should build valid JSON paths for simple field names', () => {
-      const result = buildSafeJsonPath('field');
-      expect(getRawString(result)).toBe('\'$."field"\'');
-    });
-
-    it('should properly escape double quotes in field names', () => {
-      const result = buildSafeJsonPath('field"with"quotes');
-      expect(getRawString(result)).toBe('\'$."field\\"with\\"quotes"\'');
-    });
-
-    it('should properly escape single quotes for SQL safety', () => {
-      const result = buildSafeJsonPath("field'with'single'quotes");
-      // Single quotes become doubled for SQL string literal safety
-      expect(getRawString(result)).toBe("'$.\"field''with''single''quotes\"'");
-    });
-
-    it('should handle complex SQL injection attempts', () => {
-      // This attack attempts to break out of both JSON path and SQL string
-      const attack = `field"'; DROP TABLE users; --`;
-      const result = buildSafeJsonPath(attack);
-      // Double quotes escaped with backslash, single quote doubled for SQL
-      // Input: field"'; DROP TABLE users; --
-      // After escapeJsonPathKey: field\"'; DROP TABLE users; --
-      // As JSON path: $."field\"'; DROP TABLE users; --"
-      // After SQL escaping ('' for '): $."field\"''; DROP TABLE users; --"
-      // Final with outer quotes: '$."field\"''; DROP TABLE users; --"'
-      expect(getRawString(result)).toBe("'$.\"field\\\"''; DROP TABLE users; --\"'");
-    });
-
-    it('should handle backslashes correctly', () => {
-      const result = buildSafeJsonPath('path\\to\\field');
-      expect(getRawString(result)).toBe('\'$."path\\\\to\\\\field"\'');
     });
   });
 
@@ -2102,30 +2062,27 @@ describe('evaluator', () => {
   });
 
   describe('parameterization verification', () => {
-    it('should use parameterized queries for filter values', async () => {
-      // This test verifies that filter values are parameterized, not interpolated
-      // The "filters by metadata with special characters in field names" test above
-      // already exercises this with actual database queries.
-      //
-      // Here we verify the SQL structure at a unit level:
-      // The buildSafeJsonPath tests above verify JSON path escaping
-      // The combineFilterConditions tests verify SQL fragment composition
-      //
-      // A malicious value like "'; DROP TABLE evals; --" would:
-      // 1. Be passed as a parameterized value via sql`... ${value}`
-      // 2. Never be interpolated directly into the SQL string
-      // 3. Be treated as a literal string value by the database
-      //
-      // This is verified by the fact that:
-      // - All user values use Drizzle's sql template strings with ${value}
-      // - Only JSON paths use sql.raw(), and those are escaped by buildSafeJsonPath
-
-      // Unit test: verify buildSafeJsonPath escapes injection attempts
+    it('should use parameterized queries for filter field and value', async () => {
+      // Both metric and metadata filters now use json_each(...) WHERE key = ${field}
+      // AND value = ${value}, so user-controlled `field` and `value` are bound as
+      // parameters rather than interpolated. The "filters by metadata with special
+      // characters in field names" test above exercises this against the live DB —
+      // no string-escaping helper is needed because nothing reaches sql.raw().
       const attackField = "field'; DROP TABLE evals; --";
-      const safePath = buildSafeJsonPath(attackField);
-      // The path should be properly escaped (verified in buildSafeJsonPath tests)
-      expect(safePath).toBeDefined();
-      expect(safePath.queryChunks).toBeDefined();
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      await expect(
+        eval_.getTablePage({
+          filters: [
+            JSON.stringify({
+              type: 'metadata',
+              field: attackField,
+              operator: 'equals',
+              value: 'whatever',
+              logicOperator: 'AND',
+            }),
+          ],
+        }),
+      ).resolves.toBeDefined();
     });
 
     it('should safely handle search queries with SQL metacharacters', async () => {

@@ -126,28 +126,6 @@ export function escapeJsonPathKey(key: string): string {
 }
 
 /**
- * Builds a safe JSON path for use in SQLite json_extract() queries.
- *
- * SECURITY NOTE: This function uses sql.raw() which is normally unsafe, but is REQUIRED here
- * because SQLite's json_extract() function only accepts JSON paths as string literals,
- * not as parameterized values.
- *
- * Safety is ensured through double escaping:
- * 1. JSON path characters are escaped (backslashes and double quotes)
- * 2. SQL single quotes are escaped using standard SQL escaping ('' for ')
- *
- * @param field - The JSON field name from user input
- * @returns A sql.raw() fragment containing the safely escaped JSON path
- */
-export function buildSafeJsonPath(field: string): ReturnType<typeof sql.raw> {
-  const jsonPathContent = `$."${escapeJsonPathKey(field)}"`;
-  // Escape single quotes for SQL string literal (standard SQL escaping)
-  const sqlSafeJsonPath = jsonPathContent.replace(/'/g, "''");
-  // sql.raw() is safe here because we've fully escaped the content
-  return sql.raw(`'${sqlSafeJsonPath}'`);
-}
-
-/**
  * Represents a filter condition with its associated logic operator.
  */
 export interface FilterConditionWithOperator {
@@ -868,30 +846,62 @@ export default class Eval {
             return;
           }
 
-          const jsonPath = buildSafeJsonPath(metricKey);
-
           // Value must be a number
           const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
 
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
             // 'equals' without field: old format for backward compatibility
-            condition = sql`json_extract(named_scores, ${jsonPath}) IS NOT NULL`;
+            condition = sql`EXISTS (
+              SELECT 1
+              FROM json_each(named_scores)
+              WHERE json_each.key = ${metricKey}
+            )`;
           }
           // For the numeric operators, validate that the value is a number
           else if (Number.isFinite(numericValue)) {
             if (operator === 'eq') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) = ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) = ${numericValue}
+              )`;
             } else if (operator === 'neq') {
-              condition = sql`(json_extract(named_scores, ${jsonPath}) IS NOT NULL AND CAST(json_extract(named_scores, ${jsonPath}) AS REAL) != ${numericValue})`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) != ${numericValue}
+              )`;
             } else if (operator === 'gt') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) > ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) > ${numericValue}
+              )`;
             } else if (operator === 'gte') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) >= ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) >= ${numericValue}
+              )`;
             } else if (operator === 'lt') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) < ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) < ${numericValue}
+              )`;
             } else if (operator === 'lte') {
-              condition = sql`CAST(json_extract(named_scores, ${jsonPath}) AS REAL) <= ${numericValue}`;
+              condition = sql`EXISTS (
+                SELECT 1
+                FROM json_each(named_scores)
+                WHERE json_each.key = ${metricKey}
+                  AND CAST(json_each.value AS REAL) <= ${numericValue}
+              )`;
             }
           } else {
             // Invalid numeric value (NaN, Infinity, etc.)
