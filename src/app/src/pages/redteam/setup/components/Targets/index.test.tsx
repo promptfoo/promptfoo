@@ -116,7 +116,7 @@ vi.mock('./ProviderEditor', async () => {
             HTTP/HTTPS Endpoint
           </button>
 
-          <label htmlFor="provider-name">Provider Name</label>
+          <label htmlFor="provider-name">Target Name</label>
           <input
             id="provider-name"
             value={provider.label ?? ''}
@@ -197,7 +197,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     selectedTarget: {
       id: 'custom',
       config: { temperature: 0.5 },
-      label: 'Custom Provider',
+      label: 'Custom Target',
     },
     rawConfigJson: JSON.stringify({ temperature: 0.5 }, null, 2),
     bodyError: null,
@@ -208,7 +208,7 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     mockSetRawConfigJson = vi.fn();
   });
 
-  it('should use custom provider copy for the generic configuration screen', () => {
+  it('should use custom target copy for the generic configuration screen', () => {
     renderWithProviders(
       <CustomTargetConfiguration
         {...defaultProps}
@@ -217,8 +217,8 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
       />,
     );
 
-    expect(screen.getByText('Custom Provider Configuration')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Custom Provider documentation' })).toHaveAttribute(
+    expect(screen.getByText('Custom Target Configuration')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Custom target documentation' })).toHaveAttribute(
       'href',
       'https://www.promptfoo.dev/docs/red-team/configuration/#custom-providerstargets',
     );
@@ -333,7 +333,7 @@ describe('updateCustomTarget function behavior', () => {
     const mockSelectedTarget = {
       id: 'custom',
       config: { temperature: 0.5 },
-      label: 'Custom Provider',
+      label: 'Custom Target',
     };
 
     // Simulate the updateCustomTarget function logic for the 'config' field
@@ -589,7 +589,7 @@ Content-Type: application/json
       await user.keyboard('{Control>}a{/Control}');
       await user.paste('wss://example.com/ws');
 
-      const targetNameInput = screen.getByLabelText(/Provider Name/i);
+      const targetNameInput = screen.getByLabelText(/Target Name/i);
       await user.click(targetNameInput);
       await user.keyboard('{Control>}a{/Control}');
       await user.paste('My WebSocket Target');

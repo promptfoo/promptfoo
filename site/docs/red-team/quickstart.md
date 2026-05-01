@@ -241,11 +241,11 @@ targets:
     label: 'travel-agent-mini'
 ```
 
-Promptfoo supports dozens of model providers. For more information on supported targets, see [Custom Providers](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/prompts).
+Promptfoo supports dozens of model providers. For more information on supported targets, see [custom targets](/docs/red-team/configuration/#custom-providerstargets). For more information on supported prompt formats, see [prompts](/docs/configuration/prompts).
 
 ### Alternative: Talking directly to your app
 
-Promptfoo hooks directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom providers](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
+Promptfoo hooks directly into your existing LLM app to attack targets via Python, Javascript, RAG or agent workflows, HTTP API, and more. See [custom targets](/docs/red-team/configuration/#custom-providerstargets) for details on setting up:
 
 - [HTTP requests](/docs/red-team/configuration/#http-requests) to your API
 - [Custom Python scripts](/docs/red-team/configuration/#custom-scripts) for precise control

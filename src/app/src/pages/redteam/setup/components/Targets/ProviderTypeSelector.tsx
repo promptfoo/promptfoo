@@ -77,8 +77,8 @@ const allProviderOptions = [
   },
   {
     value: 'custom',
-    label: 'Custom Provider',
-    description: 'Other custom providers and implementations',
+    label: 'Custom Target',
+    description: 'Any other target via a custom provider',
     tag: 'app',
     last: true,
   },

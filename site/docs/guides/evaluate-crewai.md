@@ -477,7 +477,7 @@ Red teaming will stress-test your CrewAI setup, checking for vulnerabilities, bi
 Under **Target Type**, select:
 
 ```
-Custom Provider
+Custom Target
 ```
 
 Under Target Name, enter something meaningful like:
