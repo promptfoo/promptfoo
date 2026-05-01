@@ -63,6 +63,11 @@ export class CohereChatCompletionProvider implements ApiProvider {
     'tiny-aya-water',
     'c4ai-aya-expanse-32b',
     'c4ai-aya-vision-32b',
+    // Legacy aliases retained to avoid warning on existing configs.
+    'command',
+    'command-r',
+    'command-r-plus',
+    'command-r-v1',
   ];
 
   config: CohereChatOptions;

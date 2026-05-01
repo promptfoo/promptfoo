@@ -31,6 +31,9 @@ The following models are confirmed supported. For an up-to-date list of supporte
 - `c4ai-aya-expanse-32b`
 - `c4ai-aya-vision-32b`
 
+Legacy aliases such as `command`, `command-r`, and `command-r-plus` are still accepted for
+existing configs, but new configurations should use the current IDs above.
+
 Here's an example configuration:
 
 ```yaml
