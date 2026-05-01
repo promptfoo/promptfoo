@@ -360,7 +360,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     // Default fallback for custom and other providers
     default:
       return {
-        title: 'Custom Target Configuration',
+        title: 'Custom Provider Configuration',
         icon: <FileCode2 className="size-5 text-primary" />,
         targetIdLabel: 'Target ID',
         targetIdPlaceholder: 'e.g., openai:chat:gpt-4o or ./my-provider.py',
@@ -373,7 +373,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
               rel="noopener noreferrer"
               className="text-primary hover:underline"
             >
-              Custom Targets documentation
+              Custom Provider documentation
             </a>{' '}
             for more information.
           </>

@@ -459,7 +459,7 @@ npx promptfoo redteam init
 Under **Target Type**, select:
 
 ```
-Custom Target
+Custom Provider
 ```
 
 Under Target Name, enter something meaningful like:

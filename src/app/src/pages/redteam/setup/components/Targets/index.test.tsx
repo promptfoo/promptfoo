@@ -208,6 +208,22 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     mockSetRawConfigJson = vi.fn();
   });
 
+  it('should use custom provider copy for the generic configuration screen', () => {
+    renderWithProviders(
+      <CustomTargetConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setRawConfigJson={mockSetRawConfigJson}
+      />,
+    );
+
+    expect(screen.getByText('Custom Provider Configuration')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Custom Provider documentation' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/red-team/configuration/#custom-providerstargets',
+    );
+  });
+
   it('should call updateCustomTarget with "config" field when JSON is edited', async () => {
     const user = userEvent.setup();
     renderWithProviders(
