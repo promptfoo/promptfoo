@@ -1,11 +1,11 @@
 ---
 sidebar_label: WatsonX
-description: Configure IBM WatsonX's Granite and Llama models for enterprise-grade LLM testing, with specialized support for code generation, vision, and multilingual tasks
+description: Configure IBM WatsonX's text and chat models for enterprise-grade LLM testing, including Granite, Llama, code, and multilingual options
 ---
 
 # WatsonX
 
-[IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports several powerful models from the `Granite` and `Llama` series, along with additional models for code generation, multilingual tasks, vision processing, and more.
+[IBM WatsonX](https://www.ibm.com/watsonx) offers a range of enterprise-grade foundation models optimized for various business use cases. This provider supports text generation and chat models from the `Granite` and `Llama` series, along with additional models for code generation and multilingual tasks.
 
 ## Supported Models
 
