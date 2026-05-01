@@ -44,7 +44,6 @@ export class EmailValidationError extends Error {
 }
 
 function failEmailValidation(reason: EmailValidationFailureReason, message: string): never {
-  process.exitCode = 1;
   throw new EmailValidationError(reason, message);
 }
 

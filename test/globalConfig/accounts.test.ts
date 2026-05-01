@@ -382,7 +382,7 @@ describe('accounts', () => {
       await expect(promptForEmailUnverified()).rejects.toThrowError(
         new EmailValidationError('prompt_cancelled', 'Email prompt cancelled.'),
       );
-      expect(process.exitCode).toBe(1);
+      expect(process.exitCode).toBeUndefined();
     });
 
     describe('email validation', () => {
@@ -493,7 +493,7 @@ describe('accounts', () => {
         ),
       );
 
-      expect(process.exitCode).toBe(1);
+      expect(process.exitCode).toBeUndefined();
       expect(logger.error).toHaveBeenCalledWith(
         'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
       );
@@ -525,7 +525,7 @@ describe('accounts', () => {
         ),
       );
 
-      expect(process.exitCode).toBe(1);
+      expect(process.exitCode).toBeUndefined();
       expect(logger.error).toHaveBeenCalledWith(
         'Please verify your email address and try again.',
         expect.objectContaining({
