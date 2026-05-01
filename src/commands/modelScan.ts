@@ -32,6 +32,7 @@ import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit
 
 interface SpawnResult {
   code: number | null;
+  signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
 }
@@ -121,17 +122,43 @@ function hasErrorsInResults(results: ModelAuditScanResults): boolean {
 }
 
 /**
- * Check if exit code indicates a process error (signal termination or crash).
+ * Resolve abnormal subprocess termination into a non-zero wrapper exit code.
  *
  * modelaudit exit codes:
  * - 0: Scan completed successfully, no security issues found
  * - 1: Scan completed successfully, security issues were found (NOT an error)
- * - 2+: Fatal errors (e.g., invalid arguments, crash, signal termination)
+ * - 2+: Fatal errors (e.g., invalid arguments)
  *
- * This differs from standard Unix conventions where exit 1 = general failure.
+ * Child processes that terminate by signal report `code === null`, so they must be
+ * handled separately instead of collapsing to a successful wrapper exit.
  */
-function isProcessError(code: number | null): code is number {
-  return code !== null && code > 1;
+function getProcessErrorExitCode(result: Pick<SpawnResult, 'code' | 'signal'>): number | null {
+  if (result.signal !== null) {
+    return 1;
+  }
+
+  if (result.code === null) {
+    return 1;
+  }
+
+  return result.code > 1 ? result.code : null;
+}
+
+function logProcessError(result: Pick<SpawnResult, 'code' | 'signal'>): number | null {
+  const exitCode = getProcessErrorExitCode(result);
+  if (exitCode === null) {
+    return null;
+  }
+
+  if (result.signal !== null) {
+    logger.error(`Model scan process terminated by signal ${result.signal}`);
+  } else if (result.code === null) {
+    logger.error('Model scan process exited without an exit code');
+  } else {
+    logger.error(`Model scan process exited with code ${result.code}`);
+  }
+
+  return exitCode;
 }
 
 /**
@@ -209,17 +236,19 @@ function spawnModelAudit(
     const childProcess = spawn('modelaudit', args, spawnOptions);
 
     // Graceful shutdown - forward SIGINT/SIGTERM to child process
-    const cleanup = () => {
+    const forwardSignal = (signal: NodeJS.Signals) => () => {
       if (!childProcess.killed) {
-        childProcess.kill('SIGTERM');
+        childProcess.kill(signal);
       }
     };
-    process.once('SIGINT', cleanup);
-    process.once('SIGTERM', cleanup);
+    const forwardSigint = forwardSignal('SIGINT');
+    const forwardSigterm = forwardSignal('SIGTERM');
+    process.once('SIGINT', forwardSigint);
+    process.once('SIGTERM', forwardSigterm);
 
     const removeListeners = () => {
-      process.removeListener('SIGINT', cleanup);
-      process.removeListener('SIGTERM', cleanup);
+      process.removeListener('SIGINT', forwardSigint);
+      process.removeListener('SIGTERM', forwardSigterm);
     };
 
     if (options.captureOutput) {
@@ -245,13 +274,13 @@ function spawnModelAudit(
       reject(error);
     });
 
-    childProcess.on('close', (code: number | null) => {
+    childProcess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
       removeListeners();
       if (settled) {
         return;
       }
       settled = true;
-      resolve({ code, stdout, stderr });
+      resolve({ code, signal: signal ?? null, stdout, stderr });
     });
   });
 }
@@ -317,11 +346,17 @@ async function runPassthroughModelAudit(
 ): Promise<void> {
   try {
     const spawnResult = await spawnModelAudit(args, { captureOutput: false, env });
+    const processErrorExitCode = logProcessError(spawnResult);
+    if (processErrorExitCode !== null) {
+      process.exitCode = processErrorExitCode;
+      return;
+    }
+
     const isIssuesExit = treatExitOneAsIssues && spawnResult.code === 1;
     if (spawnResult.code !== null && spawnResult.code !== 0 && !isIssuesExit) {
       logger.error(`Model scan process exited with code ${spawnResult.code}`);
     }
-    process.exitCode = spawnResult.code || 0;
+    process.exitCode = spawnResult.code ?? 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`Failed to start modelaudit: ${message}`);
@@ -720,10 +755,10 @@ async function processScanResultsFromFile(
   };
 
   // Handle process errors (stderr already displayed via inherited stdio)
-  if (isProcessError(spawnResult.code)) {
-    logger.error(`Model scan process exited with code ${spawnResult.code}`);
+  const processErrorExitCode = logProcessError(spawnResult);
+  if (processErrorExitCode !== null) {
     await cleanupTempFile();
-    return spawnResult.code;
+    return processErrorExitCode;
   }
 
   // Read JSON from temp file
@@ -741,7 +776,7 @@ async function processScanResultsFromFile(
 
   return processJsonResults(
     jsonOutput,
-    spawnResult.code || 0,
+    spawnResult.code ?? 0,
     paths,
     options,
     currentScannerVersion,
@@ -761,12 +796,12 @@ async function processScanResultsFromStdout(
   existingAudit: ModelAudit | null,
 ): Promise<number> {
   // Handle process errors
-  if (isProcessError(spawnResult.code)) {
-    logger.error(`Model scan process exited with code ${spawnResult.code}`);
+  const processErrorExitCode = logProcessError(spawnResult);
+  if (processErrorExitCode !== null) {
     if (spawnResult.stderr) {
       logger.error(spawnResult.stderr);
     }
-    return spawnResult.code;
+    return processErrorExitCode;
   }
 
   const jsonOutput = spawnResult.stdout.trim();
@@ -778,7 +813,7 @@ async function processScanResultsFromStdout(
 
   return processJsonResults(
     jsonOutput,
-    spawnResult.code || 0,
+    spawnResult.code ?? 0,
     paths,
     options,
     currentScannerVersion,
