@@ -105,6 +105,7 @@ import { WatsonXChatProvider, WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
+import { createXAIEmbeddingProvider } from './xai/embedding';
 import { createXAIImageProvider } from './xai/image';
 import { createXAIResponsesProvider } from './xai/responses';
 import { createXAIVideoProvider } from './xai/video';
@@ -1290,6 +1291,14 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
+
+      // Handle xai:embedding:<model> and xai:embeddings:<model> formats
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        return createXAIEmbeddingProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
 
       // Handle xai:image:<model> format
       if (modelType === 'image') {

@@ -4,6 +4,7 @@ import {
   createXAIVoiceProvider,
   XAI_VOICE_COST_PER_MINUTE,
   XAI_VOICE_DEFAULT_API_URL,
+  XAI_VOICE_DEFAULT_MODEL,
   XAI_VOICE_DEFAULT_WS_URL,
   XAI_VOICE_DEFAULTS,
   type XAIFunctionCallOutput,
@@ -26,18 +27,18 @@ describe('XAI Voice Provider', () => {
 
   describe('Provider creation and configuration', () => {
     it('creates a provider with correct id', () => {
-      const provider = new XAIVoiceProvider('grok-3');
-      expect(provider.id()).toBe('xai:voice:grok-3');
+      const provider = new XAIVoiceProvider('grok-voice-fast-1.0');
+      expect(provider.id()).toBe('xai:voice:grok-voice-fast-1.0');
     });
 
     it('returns readable toString() description', () => {
-      const provider = new XAIVoiceProvider('grok-3');
-      expect(provider.toString()).toBe('[xAI Voice Provider grok-3]');
+      const provider = new XAIVoiceProvider('grok-voice-fast-1.0');
+      expect(provider.toString()).toBe('[xAI Voice Provider grok-voice-fast-1.0]');
     });
 
     it('uses default model when none specified via factory', () => {
       const provider = createXAIVoiceProvider('xai:voice:');
-      expect(provider.id()).toBe('xai:voice:grok-3');
+      expect(provider.id()).toBe('xai:voice:grok-voice-fast-1.0');
     });
 
     it('parses model name correctly from provider path', () => {
@@ -78,6 +79,10 @@ describe('XAI Voice Provider', () => {
 
     it('has correct cost per minute', () => {
       expect(XAI_VOICE_COST_PER_MINUTE).toBe(0.05);
+    });
+
+    it('has the current default voice model', () => {
+      expect(XAI_VOICE_DEFAULT_MODEL).toBe('grok-voice-fast-1.0');
     });
 
     it('has correct default voice', () => {
@@ -179,9 +184,21 @@ describe('XAI Voice Provider', () => {
 
     it('accepts turn detection configuration', () => {
       const provider = new XAIVoiceProvider('grok-3', {
-        config: { turn_detection: { type: 'server_vad' } },
+        config: {
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.75,
+            silence_duration_ms: 500,
+            prefix_padding_ms: 250,
+          },
+        },
       });
-      expect(provider.config.turn_detection).toEqual({ type: 'server_vad' });
+      expect(provider.config.turn_detection).toEqual({
+        type: 'server_vad',
+        threshold: 0.75,
+        silence_duration_ms: 500,
+        prefix_padding_ms: 250,
+      });
     });
 
     it('accepts null turn detection for manual mode', () => {
@@ -303,13 +320,13 @@ describe('XAI Voice Provider', () => {
 
   describe('createXAIVoiceProvider factory function', () => {
     it('creates provider instance', () => {
-      const provider = createXAIVoiceProvider('xai:voice:grok-3');
+      const provider = createXAIVoiceProvider('xai:voice:grok-voice-fast-1.0');
       expect(provider).toBeInstanceOf(XAIVoiceProvider);
     });
 
     it('uses default model when not specified', () => {
       const provider = createXAIVoiceProvider('xai:voice:');
-      expect(provider.id()).toBe('xai:voice:grok-3');
+      expect(provider.id()).toBe('xai:voice:grok-voice-fast-1.0');
     });
 
     it('passes through options correctly', () => {
@@ -338,19 +355,19 @@ describe('XAI Voice Provider', () => {
 
   describe('Provider interface', () => {
     it('implements id() method', () => {
-      const provider = new XAIVoiceProvider('grok-3');
+      const provider = new XAIVoiceProvider('grok-voice-fast-1.0');
       expect(typeof provider.id).toBe('function');
-      expect(provider.id()).toBe('xai:voice:grok-3');
+      expect(provider.id()).toBe('xai:voice:grok-voice-fast-1.0');
     });
 
     it('implements toString() method', () => {
-      const provider = new XAIVoiceProvider('grok-3');
+      const provider = new XAIVoiceProvider('grok-voice-fast-1.0');
       expect(typeof provider.toString).toBe('function');
-      expect(provider.toString()).toBe('[xAI Voice Provider grok-3]');
+      expect(provider.toString()).toBe('[xAI Voice Provider grok-voice-fast-1.0]');
     });
 
     it('implements callApi() method', () => {
-      const provider = new XAIVoiceProvider('grok-3');
+      const provider = new XAIVoiceProvider('grok-voice-fast-1.0');
       expect(typeof provider.callApi).toBe('function');
     });
   });
@@ -370,6 +387,13 @@ describe('XAI Voice Provider', () => {
       }
     }
 
+    it('adds the selected model to the default WebSocket URL', () => {
+      const provider = new TestableXAIVoiceProvider('grok-voice-think-fast-1.0');
+      expect(provider.getWebSocketUrl()).toBe(
+        'wss://api.x.ai/v1/realtime?model=grok-voice-think-fast-1.0',
+      );
+    });
+
     let originalEnvValue: string | undefined;
 
     beforeEach(() => {
@@ -386,25 +410,41 @@ describe('XAI Voice Provider', () => {
     });
 
     it('uses default URL when no custom URL is provided', () => {
-      const provider = new TestableXAIVoiceProvider('grok-3');
+      const provider = new TestableXAIVoiceProvider('grok-voice-fast-1.0');
       expect(provider.getApiUrl()).toBe('https://api.x.ai/v1');
-      expect(provider.getWebSocketUrl()).toBe('wss://api.x.ai/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe(
+        'wss://api.x.ai/v1/realtime?model=grok-voice-fast-1.0',
+      );
     });
 
     it('uses apiBaseUrl when provided', () => {
-      const provider = new TestableXAIVoiceProvider('grok-3', {
+      const provider = new TestableXAIVoiceProvider('grok-voice-fast-1.0', {
         config: { apiBaseUrl: 'https://my-proxy.com/v1' },
       });
       expect(provider.getApiUrl()).toBe('https://my-proxy.com/v1');
-      expect(provider.getWebSocketUrl()).toBe('wss://my-proxy.com/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe(
+        'wss://my-proxy.com/v1/realtime?model=grok-voice-fast-1.0',
+      );
+    });
+
+    it('uses a regional API URL when configured', () => {
+      const provider = new TestableXAIVoiceProvider('grok-voice-fast-1.0', {
+        config: { region: 'us-east-1' },
+      });
+      expect(provider.getApiUrl()).toBe('https://us-east-1.api.x.ai/v1');
+      expect(provider.getWebSocketUrl()).toBe(
+        'wss://us-east-1.api.x.ai/v1/realtime?model=grok-voice-fast-1.0',
+      );
     });
 
     it('uses apiHost when provided', () => {
-      const provider = new TestableXAIVoiceProvider('grok-3', {
+      const provider = new TestableXAIVoiceProvider('grok-voice-fast-1.0', {
         config: { apiHost: 'my-proxy.com' },
       });
       expect(provider.getApiUrl()).toBe('https://my-proxy.com/v1');
-      expect(provider.getWebSocketUrl()).toBe('wss://my-proxy.com/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe(
+        'wss://my-proxy.com/v1/realtime?model=grok-voice-fast-1.0',
+      );
     });
 
     it('apiHost takes priority over apiBaseUrl', () => {
@@ -421,35 +461,35 @@ describe('XAI Voice Provider', () => {
       const provider = new TestableXAIVoiceProvider('grok-3', {
         config: { apiBaseUrl: 'https://secure.example.com/v1' },
       });
-      expect(provider.getWebSocketUrl()).toBe('wss://secure.example.com/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe('wss://secure.example.com/v1/realtime?model=grok-3');
     });
 
     it('converts http to ws', () => {
       const provider = new TestableXAIVoiceProvider('grok-3', {
         config: { apiBaseUrl: 'http://localhost:8080/v1' },
       });
-      expect(provider.getWebSocketUrl()).toBe('ws://localhost:8080/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe('ws://localhost:8080/v1/realtime?model=grok-3');
     });
 
     it('strips trailing slashes from URL', () => {
       const provider = new TestableXAIVoiceProvider('grok-3', {
         config: { apiBaseUrl: 'https://my-proxy.com/v1/' },
       });
-      expect(provider.getWebSocketUrl()).toBe('wss://my-proxy.com/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe('wss://my-proxy.com/v1/realtime?model=grok-3');
     });
 
     it('strips multiple trailing slashes from URL', () => {
       const provider = new TestableXAIVoiceProvider('grok-3', {
         config: { apiBaseUrl: 'https://my-proxy.com/v1///' },
       });
-      expect(provider.getWebSocketUrl()).toBe('wss://my-proxy.com/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe('wss://my-proxy.com/v1/realtime?model=grok-3');
     });
 
     it('uses XAI_API_BASE_URL environment variable', () => {
       mockProcessEnv({ XAI_API_BASE_URL: 'https://env-proxy.com/v1' });
       const provider = new TestableXAIVoiceProvider('grok-3');
       expect(provider.getApiUrl()).toBe('https://env-proxy.com/v1');
-      expect(provider.getWebSocketUrl()).toBe('wss://env-proxy.com/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe('wss://env-proxy.com/v1/realtime?model=grok-3');
     });
 
     it('config apiBaseUrl takes priority over environment variable', () => {
@@ -465,7 +505,7 @@ describe('XAI Voice Provider', () => {
         env: { XAI_API_BASE_URL: 'https://override-proxy.com/v1' },
       });
       expect(provider.getApiUrl()).toBe('https://override-proxy.com/v1');
-      expect(provider.getWebSocketUrl()).toBe('wss://override-proxy.com/v1/realtime');
+      expect(provider.getWebSocketUrl()).toBe('wss://override-proxy.com/v1/realtime?model=grok-3');
     });
 
     it('env overrides take priority over environment variable', () => {
@@ -476,15 +516,17 @@ describe('XAI Voice Provider', () => {
       expect(provider.getApiUrl()).toBe('https://override-proxy.com/v1');
     });
 
-    it('accepts apiBaseUrl and apiHost in config', () => {
+    it('accepts apiBaseUrl, apiHost, and region in config', () => {
       const provider = new XAIVoiceProvider('grok-3', {
         config: {
           apiBaseUrl: 'https://custom.example.com/v1',
           apiHost: 'host.example.com',
+          region: 'us-east-1',
         },
       });
       expect(provider.config.apiBaseUrl).toBe('https://custom.example.com/v1');
       expect(provider.config.apiHost).toBe('host.example.com');
+      expect(provider.config.region).toBe('us-east-1');
     });
 
     it('uses websocketUrl exactly as provided', () => {

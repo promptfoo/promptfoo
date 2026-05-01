@@ -23,6 +23,11 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
+### Models
+
+- `grok-voice-think-fast-1.0` - Recommended voice model for the best experience
+- `grok-voice-fast-1.0` - Default realtime voice model
+
 ### Voices
 
 xAI Voice supports 5 different voices:

@@ -7,17 +7,13 @@ import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 /**
- * xAI Agent Tools API - Server-side tool types
+ * xAI Agent Tools API - server-side tool types.
  *
- * TODO: These interfaces are defined for future use when the xAI Responses API
- * is supported. Currently, Agent Tools (web_search, x_search, code_execution,
- * collections_search, mcp) require the Responses API endpoint which is different
- * from the Chat Completions API we currently use.
+ * Agent tools run through the Responses API. This chat-completions provider keeps
+ * support for legacy `search_parameters`; new tool-enabled configs should use
+ * `xai:responses:<model>` instead.
  *
- * For now, use `search_parameters` (Live Search) for real-time web/X search,
- * which works with the Chat Completions API.
- *
- * See: https://docs.x.ai/docs/tools/overview
+ * See: https://docs.x.ai/developers/tools/overview
  */
 export interface XAIWebSearchTool {
   type: 'web_search';
@@ -91,6 +87,76 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 };
 
 export const XAI_CHAT_MODELS = [
+  // Grok 4.20 Models (2M context window)
+  {
+    id: 'grok-4.20-0309-reasoning',
+    cost: {
+      input: 1.25 / 1e6,
+      output: 2.5 / 1e6,
+      cache_read: 0.2 / 1e6,
+    },
+    aliases: [
+      'grok-4.20',
+      'grok-4.20-reasoning',
+      'grok-4.20-reasoning-latest',
+      'grok-4.20-0309',
+      'grok-4.20-beta',
+      'grok-4.20-beta-0309',
+      'grok-4.20-beta-0309-reasoning',
+      'grok-4.20-beta-latest',
+      'grok-4.20-beta-latest-reasoning',
+      'grok-4.20-beta-reasoning',
+      'grok-4.20-experimental-beta-0304',
+      'grok-4.20-experimental-beta-0304-reasoning',
+      'grok-4.20-experimental-beta-latest',
+      'grok-4.20-experimental-beta-reasoning-latest',
+      'grok-4.20-reasoning-gv2',
+    ],
+  },
+  {
+    id: 'grok-4.20-0309-non-reasoning',
+    cost: {
+      input: 1.25 / 1e6,
+      output: 2.5 / 1e6,
+      cache_read: 0.2 / 1e6,
+    },
+    aliases: [
+      'grok-4.20-non-reasoning',
+      'grok-4.20-non-reasoning-latest',
+      'grok-4.20-beta-non-reasoning',
+      'grok-4.20-beta-latest-non-reasoning',
+      'grok-4.20-beta-0309-non-reasoning',
+      'grok-4.20-experimental-beta-0304-non-reasoning',
+      'grok-4.20-experimental-beta-non-reasoning-latest',
+      'grok-4.20-non-reasoning-gv2',
+    ],
+  },
+  {
+    id: 'grok-4.20-multi-agent-0309',
+    cost: {
+      input: 1.25 / 1e6,
+      output: 2.5 / 1e6,
+      cache_read: 0.2 / 1e6,
+    },
+    aliases: [
+      'grok-4.20-multi-agent',
+      'grok-4.20-multi-agent-latest',
+      'grok-4.20-multi-agent-beta-latest',
+      'grok-4.20-multi-agent-beta-0309',
+      'grok-4.20-multi-agent-experimental-beta-0304',
+      'grok-4.20-multi-agent-experimental-beta-latest',
+    ],
+  },
+  // Grok 4.3 Models (1M context window)
+  {
+    id: 'grok-4.3',
+    cost: {
+      input: 1.25 / 1e6,
+      output: 2.5 / 1e6,
+      cache_read: 0.2 / 1e6,
+    },
+    aliases: ['grok-4.3-latest'],
+  },
   // Grok 4.1 Fast Models (2M context window)
   {
     id: 'grok-4-1-fast-reasoning',
@@ -99,7 +165,7 @@ export const XAI_CHAT_MODELS = [
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
-    aliases: ['grok-4-1-fast', 'grok-4-1-fast-latest'],
+    aliases: ['grok-4-1-fast', 'grok-4-1-fast-latest', 'grok-4-1-fast-reasoning-latest'],
   },
   {
     id: 'grok-4-1-fast-non-reasoning',
@@ -108,6 +174,7 @@ export const XAI_CHAT_MODELS = [
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
+    aliases: ['grok-4-1-fast-non-reasoning-latest'],
   },
   // Grok Code Fast Models
   {
@@ -135,7 +202,7 @@ export const XAI_CHAT_MODELS = [
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
-    aliases: ['grok-4-fast', 'grok-4-fast-latest'],
+    aliases: ['grok-4-fast', 'grok-4-fast-latest', 'grok-4-fast-reasoning-latest'],
   },
   {
     id: 'grok-4-fast-non-reasoning',
@@ -144,6 +211,7 @@ export const XAI_CHAT_MODELS = [
       output: 0.5 / 1e6,
       cache_read: 0.05 / 1e6,
     },
+    aliases: ['grok-4-fast-non-reasoning-latest'],
   },
   // Grok-4 Models
   {
@@ -242,10 +310,38 @@ export const GROK_REASONING_EFFORT_MODELS = [
 
 // All reasoning models (including Grok-4 which doesn't support reasoning_effort)
 export const GROK_REASONING_MODELS = [
+  // Grok 4.20
+  'grok-4.20-0309-reasoning',
+  'grok-4.20-reasoning',
+  'grok-4.20',
+  'grok-4.20-reasoning-latest',
+  'grok-4.20-0309',
+  'grok-4.20-beta',
+  'grok-4.20-beta-0309',
+  'grok-4.20-beta-0309-reasoning',
+  'grok-4.20-beta-latest',
+  'grok-4.20-beta-latest-reasoning',
+  'grok-4.20-beta-reasoning',
+  'grok-4.20-experimental-beta-0304',
+  'grok-4.20-experimental-beta-0304-reasoning',
+  'grok-4.20-experimental-beta-latest',
+  'grok-4.20-experimental-beta-reasoning-latest',
+  'grok-4.20-reasoning-gv2',
+  'grok-4.20-multi-agent-0309',
+  'grok-4.20-multi-agent',
+  'grok-4.20-multi-agent-latest',
+  'grok-4.20-multi-agent-beta-latest',
+  'grok-4.20-multi-agent-beta-0309',
+  'grok-4.20-multi-agent-experimental-beta-0304',
+  'grok-4.20-multi-agent-experimental-beta-latest',
+  // Grok 4.3
+  'grok-4.3',
+  'grok-4.3-latest',
   // Grok 4.1 Fast reasoning
   'grok-4-1-fast-reasoning',
   'grok-4-1-fast',
   'grok-4-1-fast-latest',
+  'grok-4-1-fast-reasoning-latest',
   // Grok Code Fast
   'grok-code-fast-1',
   'grok-code-fast',
@@ -254,6 +350,7 @@ export const GROK_REASONING_MODELS = [
   'grok-4-fast-reasoning',
   'grok-4-fast',
   'grok-4-fast-latest',
+  'grok-4-fast-reasoning-latest',
   // Grok 4
   'grok-4-0709',
   'grok-4',
@@ -269,16 +366,56 @@ export const GROK_REASONING_MODELS = [
 
 // Grok-4+ models that have specific parameter restrictions (no presence_penalty, frequency_penalty, stop, reasoning_effort)
 export const GROK_4_MODELS = [
+  // Grok 4.20
+  'grok-4.20-0309-reasoning',
+  'grok-4.20-reasoning',
+  'grok-4.20',
+  'grok-4.20-reasoning-latest',
+  'grok-4.20-0309',
+  'grok-4.20-beta',
+  'grok-4.20-beta-0309',
+  'grok-4.20-beta-0309-reasoning',
+  'grok-4.20-beta-latest',
+  'grok-4.20-beta-latest-reasoning',
+  'grok-4.20-beta-reasoning',
+  'grok-4.20-experimental-beta-0304',
+  'grok-4.20-experimental-beta-0304-reasoning',
+  'grok-4.20-experimental-beta-latest',
+  'grok-4.20-experimental-beta-reasoning-latest',
+  'grok-4.20-reasoning-gv2',
+  'grok-4.20-0309-non-reasoning',
+  'grok-4.20-non-reasoning',
+  'grok-4.20-non-reasoning-latest',
+  'grok-4.20-beta-non-reasoning',
+  'grok-4.20-beta-latest-non-reasoning',
+  'grok-4.20-beta-0309-non-reasoning',
+  'grok-4.20-experimental-beta-0304-non-reasoning',
+  'grok-4.20-experimental-beta-non-reasoning-latest',
+  'grok-4.20-non-reasoning-gv2',
+  'grok-4.20-multi-agent-0309',
+  'grok-4.20-multi-agent',
+  'grok-4.20-multi-agent-latest',
+  'grok-4.20-multi-agent-beta-latest',
+  'grok-4.20-multi-agent-beta-0309',
+  'grok-4.20-multi-agent-experimental-beta-0304',
+  'grok-4.20-multi-agent-experimental-beta-latest',
+  // Grok 4.3
+  'grok-4.3',
+  'grok-4.3-latest',
   // Grok 4.1 Fast
   'grok-4-1-fast-reasoning',
   'grok-4-1-fast',
   'grok-4-1-fast-latest',
+  'grok-4-1-fast-reasoning-latest',
   'grok-4-1-fast-non-reasoning',
+  'grok-4-1-fast-non-reasoning-latest',
   // Grok 4 Fast
   'grok-4-fast-reasoning',
   'grok-4-fast',
   'grok-4-fast-latest',
+  'grok-4-fast-reasoning-latest',
   'grok-4-fast-non-reasoning',
+  'grok-4-fast-non-reasoning-latest',
   // Grok 4
   'grok-4-0709',
   'grok-4',
@@ -320,6 +457,14 @@ export function calculateXAICost(
   );
 
   return inputCostTotal + outputCostTotal;
+}
+
+export function getXAICostInUsd(usage?: { cost_in_usd_ticks?: number }): number | undefined {
+  if (typeof usage?.cost_in_usd_ticks !== 'number') {
+    return undefined;
+  }
+
+  return usage.cost_in_usd_ticks / 1e10;
 }
 
 class XAIProvider extends OpenAiChatCompletionProvider {
@@ -370,8 +515,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     }
 
     // Note: xAI Agent Tools (web_search, x_search, code_execution, etc.) require
-    // the Responses API endpoint which is not yet implemented. For now, use
-    // search_parameters for live search functionality.
+    // the Responses API endpoint. Use xai:responses:<model> for server-side tools;
+    // this chat-completions provider keeps legacy search_parameters support.
 
     return result;
   }
@@ -496,15 +641,28 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       }
 
       if (response.tokenUsage && !response.cached) {
+        const rawData =
+          typeof response.raw === 'string'
+            ? (() => {
+                try {
+                  return JSON.parse(response.raw);
+                } catch {
+                  return undefined;
+                }
+              })()
+            : response.raw;
+        const reportedCost = getXAICostInUsd(rawData?.usage);
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
 
-        response.cost = calculateXAICost(
-          this.modelName,
-          this.config || {},
-          response.tokenUsage.prompt,
-          response.tokenUsage.completion,
-          reasoningTokens,
-        );
+        response.cost =
+          reportedCost ??
+          calculateXAICost(
+            this.modelName,
+            this.config || {},
+            response.tokenUsage.prompt,
+            response.tokenUsage.completion,
+            reasoningTokens,
+          );
       }
 
       return response;
