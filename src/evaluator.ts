@@ -1244,7 +1244,9 @@ async function transformRunEvalResponse({
   };
 }
 
-function getTraceId(traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>) {
+function getTraceId(
+  traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined,
+) {
   if (!traceContext?.traceparent) {
     return undefined;
   }

@@ -239,7 +239,12 @@ describe('evaluatorTracing', () => {
 
       await startOtlpReceiverIfNeeded(testSuite);
 
-      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['protobuf']);
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(
+        4318,
+        '0.0.0.0',
+        ['protobuf'],
+        expect.any(Object),
+      );
     });
 
     it('should default acceptFormats to both when omitted', async () => {
@@ -260,7 +265,12 @@ describe('evaluatorTracing', () => {
 
       await startOtlpReceiverIfNeeded(testSuite);
 
-      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['json', 'protobuf']);
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(
+        4318,
+        '0.0.0.0',
+        ['json', 'protobuf'],
+        expect.any(Object),
+      );
     });
   });
 });
