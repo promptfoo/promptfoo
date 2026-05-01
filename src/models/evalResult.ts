@@ -279,13 +279,66 @@ function persistTraceMetadata(
   traceId: EvaluateResult['traceId'],
   evaluationId: EvaluateResult['evaluationId'],
 ): EvaluateResult['metadata'] {
-  return traceId || evaluationId
-    ? {
-        ...(metadata ?? {}),
-        ...(traceId ? { __traceId: traceId } : {}),
-        ...(evaluationId ? { __evaluationId: evaluationId } : {}),
-      }
-    : metadata;
+  if (!traceId && !evaluationId) {
+    return metadata;
+  }
+
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata =
+    metadataRecord.__promptfoo &&
+    typeof metadataRecord.__promptfoo === 'object' &&
+    !Array.isArray(metadataRecord.__promptfoo)
+      ? (metadataRecord.__promptfoo as Record<string, unknown>)
+      : {};
+
+  return {
+    ...metadataRecord,
+    __promptfoo: {
+      ...promptfooMetadata,
+      traceLinkage: {
+        ...(traceId ? { traceId } : {}),
+        ...(evaluationId ? { evaluationId } : {}),
+      },
+    },
+  };
+}
+
+function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefined): {
+  traceId?: string;
+  evaluationId?: string;
+  metadata: Record<string, unknown>;
+} {
+  const metadataRecord = metadata ?? {};
+  const promptfooMetadata =
+    metadataRecord.__promptfoo &&
+    typeof metadataRecord.__promptfoo === 'object' &&
+    !Array.isArray(metadataRecord.__promptfoo)
+      ? (metadataRecord.__promptfoo as Record<string, unknown>)
+      : undefined;
+  const traceLinkage =
+    promptfooMetadata?.traceLinkage &&
+    typeof promptfooMetadata.traceLinkage === 'object' &&
+    !Array.isArray(promptfooMetadata.traceLinkage)
+      ? (promptfooMetadata.traceLinkage as Record<string, unknown>)
+      : undefined;
+
+  const traceId = typeof traceLinkage?.traceId === 'string' ? traceLinkage.traceId : undefined;
+  const evaluationId =
+    typeof traceLinkage?.evaluationId === 'string' ? traceLinkage.evaluationId : undefined;
+
+  if (!traceLinkage || (!traceId && !evaluationId)) {
+    return { traceId, evaluationId, metadata: metadataRecord };
+  }
+
+  const { traceLinkage: _traceLinkage, ...remainingPromptfooMetadata } = promptfooMetadata ?? {};
+  const surfacedMetadata = { ...metadataRecord };
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    surfacedMetadata.__promptfoo = remainingPromptfooMetadata;
+  } else {
+    delete surfacedMetadata.__promptfoo;
+  }
+
+  return { traceId, evaluationId, metadata: surfacedMetadata };
 }
 
 export default class EvalResult {
@@ -312,9 +365,8 @@ export default class EvalResult {
       evaluationId,
     } = result;
 
-    // Persist traceId and evaluationId inside metadata so they survive the
-    // EvalResult round-trip without a Drizzle schema migration. toEvaluateResult
-    // hoists them back to top-level when reading.
+    // Persist trace linkage inside a private metadata namespace so it survives
+    // EvalResult round-trips without a Drizzle schema migration.
     const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
 
     // Normalize provider for storage and extract blobs from responses.
@@ -541,6 +593,8 @@ export default class EvalResult {
   cost: number;
   // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata: Record<string, any>;
+  traceId?: string;
+  evaluationId?: string;
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
@@ -584,7 +638,10 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    this.metadata = opts.metadata || {};
+    const surfacedTraceMetadata = surfaceTraceMetadata(opts.metadata);
+    this.metadata = surfacedTraceMetadata.metadata;
+    this.traceId = surfacedTraceMetadata.traceId;
+    this.evaluationId = surfacedTraceMetadata.evaluationId;
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -594,14 +651,18 @@ export default class EvalResult {
 
   async save() {
     const db = getDb();
+    const persistedValues = {
+      ...this,
+      metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
+    };
     //check if this exists in the db
     if (this.persisted) {
       await db
         .update(evalResultsTable)
-        .set({ ...this, updatedAt: getCurrentTimestamp() })
+        .set({ ...persistedValues, updatedAt: getCurrentTimestamp() })
         .where(eq(evalResultsTable.id, this.id));
     } else {
-      const result = await db.insert(evalResultsTable).values(this).returning();
+      const result = await db.insert(evalResultsTable).values(persistedValues).returning();
       this.id = result[0].id;
       this.persisted = true;
     }
@@ -636,19 +697,6 @@ export default class EvalResult {
         }
       : this.testCase;
 
-    // Hoist traceId/evaluationId back from metadata where they're persisted.
-    const metadataIn = (this.metadata ?? {}) as Record<string, unknown>;
-    const traceId = typeof metadataIn.__traceId === 'string' ? metadataIn.__traceId : undefined;
-    const evaluationId =
-      typeof metadataIn.__evaluationId === 'string' ? metadataIn.__evaluationId : undefined;
-    const surfacedMetadata = shouldStripMetadata
-      ? {}
-      : Object.fromEntries(
-          Object.entries(metadataIn).filter(
-            ([key]) => key !== '__traceId' && key !== '__evaluationId',
-          ),
-        );
-
     return {
       cost: this.cost,
       description: this.description || undefined,
@@ -660,8 +708,8 @@ export default class EvalResult {
       prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
-      ...(traceId ? { traceId } : {}),
-      ...(evaluationId ? { evaluationId } : {}),
+      ...(this.traceId ? { traceId: this.traceId } : {}),
+      ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
       score: this.score,
@@ -669,7 +717,7 @@ export default class EvalResult {
       testCase,
       testIdx: this.testIdx,
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
-      metadata: surfacedMetadata,
+      metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
     };
   }
