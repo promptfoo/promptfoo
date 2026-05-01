@@ -17,9 +17,9 @@ export function isGroqReasoningModel(modelName: string): boolean {
 }
 
 /**
- * Check if a Groq model supports temperature configuration.
- * Unlike some reasoning models (e.g., o1), Groq's reasoning models
- * (GPT-OSS, Qwen) support temperature settings.
+ * Check whether a Groq reasoning model supports temperature configuration.
+ * Regular Groq chat models are handled by the parent provider; this helper only
+ * captures the reasoning-model exception path used by the Groq subclasses.
  */
 export function groqSupportsTemperature(modelName: string): boolean {
   return isGroqReasoningModel(modelName);
