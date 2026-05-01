@@ -432,7 +432,14 @@ export default class Eval {
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
     const db = await getDb();
     const evals = await db
-      .select()
+      .select({
+        id: evalsTable.id,
+        createdAt: evalsTable.createdAt,
+        author: evalsTable.author,
+        description: evalsTable.description,
+        config: evalsTable.config,
+        prompts: evalsTable.prompts,
+      })
       .from(evalsTable)
       .limit(limit)
       .orderBy(desc(evalsTable.createdAt))
