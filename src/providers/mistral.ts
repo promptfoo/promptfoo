@@ -439,8 +439,17 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   return {};
 }
 
-function normalizeMistralContent(content: unknown): unknown {
+type MistralNormalizedContent = string | object | null | undefined;
+
+function normalizeMistralContent(content: unknown): MistralNormalizedContent {
   if (!Array.isArray(content)) {
+    return content as MistralNormalizedContent;
+  }
+
+  const onlyReasoningAndTextChunks = content.every(
+    (chunk) => chunk?.type === 'thinking' || chunk?.type === 'text',
+  );
+  if (!onlyReasoningAndTextChunks) {
     return content;
   }
 
@@ -668,7 +677,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     const message = data.choices[0].message;
     const normalizedContent = normalizeMistralContent(message.content);
-    let output: string | object;
+    let output: MistralNormalizedContent;
     if (normalizedContent && message.tool_calls?.length) {
       output = { ...message, content: normalizedContent };
     } else if (message.tool_calls?.length) {

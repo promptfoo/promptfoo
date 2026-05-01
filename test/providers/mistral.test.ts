@@ -822,6 +822,27 @@ describe('Mistral', () => {
       expect(result.output).toBe('Final answer');
     });
 
+    it('should preserve chunk arrays that contain non-reasoning metadata', async () => {
+      const content = [
+        { type: 'thinking', thinking: [{ type: 'text', text: 'Internal reasoning' }] },
+        { type: 'text', text: 'Final answer' },
+        { type: 'citation', url: 'https://example.com' },
+      ];
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content } }],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toEqual(content);
+    });
+
     it('should preserve all choices in metadata when n returns multiple completions', async () => {
       const choices = [
         { index: 0, message: { content: 'First response' } },
