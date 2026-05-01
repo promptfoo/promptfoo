@@ -23,6 +23,13 @@ describe('native addon errors', () => {
     expect(message).toContain('Installed better-sqlite3 ABI: 115');
     // Verify the call-to-action URL is present
     expect(message).toContain('troubleshooting/#nodejs-version-mismatch-error');
+
+    expect(message).toContain('If you are working from a project checkout:');
+    expect(message).toContain('Run: npm rebuild better-sqlite3');
+    expect(message).toContain('If promptfoo was installed globally with npm:');
+    expect(message).toContain('Run: npm install -g promptfoo@latest');
+    expect(message).toContain('If you are running through npx:');
+    expect(message).toContain('npx -y promptfoo@latest');
   });
 
   it('ignores unrelated errors', () => {
