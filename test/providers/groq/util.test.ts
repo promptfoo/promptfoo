@@ -17,6 +17,7 @@ describe('Groq utility functions', () => {
     it('should identify qwen models as reasoning', () => {
       expect(isGroqReasoningModel('qwen/qwen3-32b')).toBe(true);
       expect(isGroqReasoningModel('qwen-2.5')).toBe(true);
+      expect(isGroqReasoningModel('deepseek-r1-distill-qwen-32b')).toBe(true);
     });
 
     it('should not identify regular models as reasoning', () => {
