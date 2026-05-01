@@ -254,6 +254,40 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   return (mutated ? next : gradingResult) as T;
 }
 
+// Walk only the documented grading-result shape when stripping result metadata.
+// This preserves scores/reasons while removing metadata from nested components.
+function stripMetadataOnGradingResult<T>(gradingResult: T): T {
+  if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
+    return gradingResult;
+  }
+
+  const gr = gradingResult as Record<string, unknown>;
+  let mutated = false;
+  const next: Record<string, unknown> = { ...gr };
+
+  if ('metadata' in gr) {
+    delete next.metadata;
+    mutated = true;
+  }
+
+  if (Array.isArray(gr.componentResults)) {
+    let componentMutated = false;
+    const nextComponents = gr.componentResults.map((component) => {
+      const stripped = stripMetadataOnGradingResult(component);
+      if (stripped !== component) {
+        componentMutated = true;
+      }
+      return stripped;
+    });
+    if (componentMutated) {
+      next.componentResults = nextComponents;
+      mutated = true;
+    }
+  }
+
+  return (mutated ? next : gradingResult) as T;
+}
+
 function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {
   if (!response) {
     return response;
@@ -611,11 +645,17 @@ export default class EvalResult {
         }
       : this.testCase;
 
+    const gradingResult = shouldStripGradingResult
+      ? null
+      : shouldStripMetadata
+        ? stripMetadataOnGradingResult(this.gradingResult)
+        : this.gradingResult;
+
     return {
       cost: this.cost,
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult,
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,

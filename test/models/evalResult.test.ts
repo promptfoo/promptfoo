@@ -13,6 +13,7 @@ import {
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
+import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -840,6 +841,70 @@ describe('EvalResult', () => {
           },
         }),
       );
+    });
+
+    it('should strip grading metadata when metadata stripping is enabled', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+
+      try {
+        const result = new EvalResult({
+          id: 'test-id',
+          evalId: 'test-eval-id',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: mockTestCase,
+          prompt: mockPrompt,
+          success: true,
+          score: 1,
+          response: {
+            output: 'provider output',
+          },
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            metadata: {
+              renderedGradingPrompt: 'grader grading-secret',
+              context: 'context grading-secret',
+            },
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'component',
+                metadata: {
+                  renderedAssertionValue: 'assertion grading-secret',
+                },
+              },
+            ],
+          },
+          provider: mockProvider,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
+
+        const evaluateResult = result.toEvaluateResult();
+
+        expect(evaluateResult.metadata).toEqual({});
+        expect(evaluateResult.gradingResult).toEqual({
+          pass: true,
+          score: 1,
+          reason: 'ok',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'component',
+            },
+          ],
+        });
+        expect(JSON.stringify(evaluateResult)).not.toContain('grading-secret');
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
