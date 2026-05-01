@@ -77,7 +77,7 @@ The `inferenceModelType` config option supports the following values:
 - `claude` - For Anthropic Claude models
 - `nova` - For Amazon Nova models (v1)
 - `nova2` - For Amazon Nova 2 models (with reasoning support)
-- `llama` - Defaults to Llama 4 (latest version)
+- `llama` - For Meta Llama models (defaults to Llama 4)
 - `llama2` - For Meta Llama 2 models
 - `llama3` - For Meta Llama 3 models
 - `llama3.1` or `llama3_1` - For Meta Llama 3.1 models
@@ -891,10 +891,10 @@ config:
   top_k: 50
 ```
 
-Newer Mistral chat-completion models such as `mistral.mistral-large-2407-v1:0`,
-`mistral.devstral-2-123b`, and `mistral.pixtral-large-2502-v1:0` use `messages`
-requests and support the same options except `top_k`. For current Mistral model IDs,
-check the AWS model catalog instead of relying on a static list here.
+Mistral chat-completion models such as `mistral.mistral-large-2407-v1:0`,
+`mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
+`mistral.pixtral-large-2502-v1:0` use `messages` requests and support the same
+options except `top_k`.
 
 ### DeepSeek Models
 
@@ -916,14 +916,18 @@ config:
 - When set to `true` (default), thinking content will be included in the output
 - When set to `false`, thinking content will be excluded from the output
 
-Chat-completion style DeepSeek models such as `deepseek.v3-v1:0` use `messages`
-requests and return the final assistant message directly. Check the AWS model catalog
-for the current DeepSeek IDs available in your region.
+`deepseek.v3-v1:0` and `deepseek.v3.2` use chat-completion style `messages`
+requests and return the final assistant message directly.
 
 ### OpenAI Models
 
-OpenAI models on Bedrock use OpenAI-style request parameters. Check the AWS model
-catalog for the current Bedrock IDs available in your region.
+OpenAI models on Bedrock use OpenAI-style request parameters. Available model IDs
+include:
+
+- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter general-purpose model
+- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter general-purpose model
+- **`openai.gpt-oss-safeguard-120b`**: 120 billion parameter safety model
+- **`openai.gpt-oss-safeguard-20b`**: 20 billion parameter safety model
 
 ```yaml
 config:
@@ -974,8 +978,11 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 ### Qwen Models
 
-Qwen models support advanced features including hybrid thinking modes, tool calling,
-and extended context understanding.
+Qwen model IDs include `qwen.qwen3-coder-next`, `qwen.qwen3-next-80b-a3b`,
+`qwen.qwen3-vl-235b-a22b`, `qwen.qwen3-coder-480b-a35b-v1:0`,
+`qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, and
+`qwen.qwen3-32b-v1:0`. Qwen models support advanced features including hybrid
+thinking modes, tool calling, and extended context understanding.
 
 **Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home) or use `aws bedrock list-foundation-models` to verify which Qwen models are available in your target region, as availability varies by model and region.
 
@@ -1023,6 +1030,16 @@ config:
           required: ['expression']
   tool_choice: auto # 'auto', 'none', or specific function name
 ```
+
+#### Model Variants
+
+- **Qwen3-Coder-480B-A35B**: Mixture-of-experts model optimized for coding and agentic tasks with 480B total parameters and 35B active parameters
+- **Qwen3-Coder-30B-A3B**: Smaller MoE model with 30B total parameters and 3B active parameters, optimized for coding tasks
+- **Qwen3-Coder-Next**: Coding model exposed through Bedrock
+- **Qwen3-Next-80B-A3B**: General-purpose MoE model
+- **Qwen3-VL-235B-A22B**: Vision-language model that also accepts text prompts
+- **Qwen3-235B-A22B**: General-purpose MoE model with 235B total parameters and 22B active parameters for reasoning and coding
+- **Qwen3-32B**: Dense model with 32B parameters for consistent performance in resource-constrained environments
 
 #### Usage Example
 
