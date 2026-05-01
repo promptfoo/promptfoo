@@ -86,6 +86,34 @@ function createSignalTerminatedProcess(signal: NodeJS.Signals, stdout = ''): Chi
   return mockChildProcess;
 }
 
+function createProcessClosedWithoutExitCode(stdout = ''): ChildProcess {
+  const mockChildProcess = {
+    stdout: {
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'data' && stdout) {
+          callback(Buffer.from(stdout));
+        }
+        return mockChildProcess.stdout;
+      }),
+    },
+    stderr: {
+      on: vi.fn().mockImplementation(function () {
+        return mockChildProcess.stderr;
+      }),
+    },
+    killed: false,
+    kill: vi.fn(),
+    on: vi.fn().mockImplementation(function (event: string, callback: any) {
+      if (event === 'close') {
+        callback(null, null);
+      }
+      return mockChildProcess;
+    }),
+  } as unknown as ChildProcess;
+
+  return mockChildProcess;
+}
+
 async function resetModelScanTestMocks() {
   vi.clearAllMocks();
 
@@ -547,17 +575,7 @@ describe('Signal termination handling', () => {
   });
 
   it('fails closed when modelaudit closes without an exit code or signal', async () => {
-    const mockChildProcess = {
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn().mockImplementation(function (event: string, callback: any) {
-        if (event === 'close') {
-          callback(null, null);
-        }
-        return mockChildProcess;
-      }),
-    } as unknown as ChildProcess;
-    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+    (spawn as unknown as Mock).mockReturnValue(createProcessClosedWithoutExitCode());
 
     modelScanCommand(program);
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
@@ -566,6 +584,22 @@ describe('Signal termination handling', () => {
 
     expect(logger.error).toHaveBeenCalledWith('Model scan process exited without an exit code');
     expect(process.exitCode).toBe(1);
+  });
+
+  it('fails closed in stdout-capture mode after JSON output when modelaudit closes without an exit code or signal', async () => {
+    (spawn as unknown as Mock).mockReturnValue(
+      createProcessClosedWithoutExitCode(VALID_SCAN_OUTPUT),
+    );
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+
+    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+
+    expect(logger.error).toHaveBeenCalledWith('Model scan process exited without an exit code');
+    expect(process.exitCode).toBe(1);
+    expect(ModelAudit.create).not.toHaveBeenCalled();
   });
 
   it.each(
@@ -604,6 +638,26 @@ describe('Signal termination handling', () => {
     await command.parseAsync(['node', 'scan-model', 'model.pkl']);
 
     expect(logger.error).toHaveBeenCalledWith(`Model scan process terminated by signal ${signal}`);
+    expect(process.exitCode).toBe(1);
+    expect(ModelAudit.create).not.toHaveBeenCalled();
+  });
+
+  it('fails closed in temp-output mode after JSON output when modelaudit closes without an exit code or signal', async () => {
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
+    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
+    (spawn as unknown as Mock).mockImplementation((_command: string, args: string[]) => {
+      const outputFlagIndex = args.indexOf('--output');
+      writeFileSync(args[outputFlagIndex + 1], VALID_SCAN_OUTPUT);
+      return createProcessClosedWithoutExitCode();
+    });
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+
+    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+
+    expect(logger.error).toHaveBeenCalledWith('Model scan process exited without an exit code');
     expect(process.exitCode).toBe(1);
     expect(ModelAudit.create).not.toHaveBeenCalled();
   });
