@@ -274,6 +274,20 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+function persistTraceMetadata(
+  metadata: EvaluateResult['metadata'],
+  traceId: EvaluateResult['traceId'],
+  evaluationId: EvaluateResult['evaluationId'],
+): EvaluateResult['metadata'] {
+  return traceId || evaluationId
+    ? {
+        ...(metadata ?? {}),
+        ...(traceId ? { __traceId: traceId } : {}),
+        ...(evaluationId ? { __evaluationId: evaluationId } : {}),
+      }
+    : metadata;
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -301,14 +315,7 @@ export default class EvalResult {
     // Persist traceId and evaluationId inside metadata so they survive the
     // EvalResult round-trip without a Drizzle schema migration. toEvaluateResult
     // hoists them back to top-level when reading.
-    const persistedMetadata =
-      traceId || evaluationId
-        ? {
-            ...(metadata ?? {}),
-            ...(traceId ? { __traceId: traceId } : {}),
-            ...(evaluationId ? { __evaluationId: evaluationId } : {}),
-          }
-        : metadata;
+    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
 
     // Normalize provider for storage and extract blobs from responses.
     const preSanitizeTestCase = {
@@ -390,7 +397,11 @@ export default class EvalResult {
           response: sanitizeResponseForDb(sanitizeForDb(result.response)),
           gradingResult: sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
+          metadata: sanitizeMetadataForDb(
+            sanitizeForDb(
+              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+            ),
+          ),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = db
