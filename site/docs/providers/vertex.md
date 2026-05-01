@@ -42,7 +42,7 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-2.0-flash-exp` - Experimental: Enhanced capabilities
 - `vertex:gemini-2.0-flash-thinking-exp` - Experimental: Reasoning with thinking process in responses
 - `vertex:gemini-2.0-flash-lite` - Cost-effective for high throughput
-- `vertex:gemini-2.0-flash-lite-001` - Preview: Optimized for cost efficiency and low latency
+- `vertex:gemini-2.0-flash-lite-001` - GA version for existing customers; discontinuation scheduled for June 1, 2026
 
 ### Claude Models
 
