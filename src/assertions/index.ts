@@ -154,7 +154,23 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionUsesTrace);
   }
 
-  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+  const baseType = getAssertionBaseType(assertion);
+  if (baseType === 'tokens-used' && tokensUsedReadsOnlyResponse(assertion)) {
+    return false;
+  }
+
+  return TRACE_AWARE_ASSERTION_TYPES.has(baseType);
+}
+
+function tokensUsedReadsOnlyResponse(assertion: Assertion): boolean {
+  const value = assertion.value;
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    'source' in value &&
+    value.source === 'response'
+  );
 }
 
 function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
