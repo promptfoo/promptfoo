@@ -274,6 +274,20 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+function persistTraceMetadata(
+  metadata: EvaluateResult['metadata'],
+  traceId: EvaluateResult['traceId'],
+  evaluationId: EvaluateResult['evaluationId'],
+): EvaluateResult['metadata'] {
+  return traceId || evaluationId
+    ? {
+        ...(metadata ?? {}),
+        ...(traceId ? { __traceId: traceId } : {}),
+        ...(evaluationId ? { __evaluationId: evaluationId } : {}),
+      }
+    : metadata;
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -301,14 +315,7 @@ export default class EvalResult {
     // Persist traceId and evaluationId inside metadata so they survive the
     // EvalResult round-trip without a Drizzle schema migration. toEvaluateResult
     // hoists them back to top-level when reading.
-    const persistedMetadata =
-      traceId || evaluationId
-        ? {
-            ...(metadata ?? {}),
-            ...(traceId ? { __traceId: traceId } : {}),
-            ...(evaluationId ? { __evaluationId: evaluationId } : {}),
-          }
-        : metadata;
+    const persistedMetadata = persistTraceMetadata(metadata, traceId, evaluationId);
 
     // Normalize provider for storage and extract blobs from responses.
     const preSanitizeTestCase = {
@@ -390,7 +397,11 @@ export default class EvalResult {
           response: sanitizeResponseForDb(sanitizeForDb(result.response)),
           gradingResult: sanitizeGradingResultForDb(sanitizeForDb(result.gradingResult)),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeMetadataForDb(sanitizeForDb(result.metadata)),
+          metadata: sanitizeMetadataForDb(
+            sanitizeForDb(
+              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+            ),
+          ),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = db
@@ -533,10 +544,6 @@ export default class EvalResult {
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
-  /** W3C trace id for this row when tracing is enabled. Hoisted from persisted metadata. */
-  traceId?: string;
-  /** Evaluation id this row belongs to. Hoisted from persisted metadata. */
-  evaluationId?: string;
 
   constructor(opts: {
     id: string;
@@ -577,23 +584,7 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    // Hoist synthetic trace ids out of metadata so they don't pollute the
-    // user-visible metadata surface, and expose them as first-class fields.
-    const incomingMetadata = opts.metadata || {};
-    if (typeof incomingMetadata.__traceId === 'string') {
-      this.traceId = incomingMetadata.__traceId;
-    }
-    if (typeof incomingMetadata.__evaluationId === 'string') {
-      this.evaluationId = incomingMetadata.__evaluationId;
-    }
-    this.metadata =
-      this.traceId !== undefined || this.evaluationId !== undefined
-        ? Object.fromEntries(
-            Object.entries(incomingMetadata).filter(
-              ([key]) => key !== '__traceId' && key !== '__evaluationId',
-            ),
-          )
-        : incomingMetadata;
+    this.metadata = opts.metadata || {};
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -645,9 +636,18 @@ export default class EvalResult {
         }
       : this.testCase;
 
-    // traceId/evaluationId are hoisted off metadata in the constructor, so
-    // surfacing them here is just reading the first-class fields.
-    const surfacedMetadata = shouldStripMetadata ? {} : this.metadata;
+    // Hoist traceId/evaluationId back from metadata where they're persisted.
+    const metadataIn = (this.metadata ?? {}) as Record<string, unknown>;
+    const traceId = typeof metadataIn.__traceId === 'string' ? metadataIn.__traceId : undefined;
+    const evaluationId =
+      typeof metadataIn.__evaluationId === 'string' ? metadataIn.__evaluationId : undefined;
+    const surfacedMetadata = shouldStripMetadata
+      ? {}
+      : Object.fromEntries(
+          Object.entries(metadataIn).filter(
+            ([key]) => key !== '__traceId' && key !== '__evaluationId',
+          ),
+        );
 
     return {
       cost: this.cost,
@@ -660,8 +660,8 @@ export default class EvalResult {
       prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
-      ...(this.traceId ? { traceId: this.traceId } : {}),
-      ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
+      ...(traceId ? { traceId } : {}),
+      ...(evaluationId ? { evaluationId } : {}),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
       score: this.score,

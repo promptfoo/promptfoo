@@ -481,6 +481,28 @@ describe('handleTraceErrorSpans', () => {
     expect(result.reason).toContain('requirePresence: true');
   });
 
+  it('should fail inverse assertions when no spans match and requirePresence is false', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-error-spans',
+        value: { pattern: 'missing_*', max_count: 0 },
+      },
+      renderedValue: { pattern: 'missing_*', max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('not-trace-error-spans');
+    expect(result.reason).toContain('error budget was satisfied');
+  });
+
   it('should default to max_count 0 when no value specified', () => {
     const params: AssertionParams = {
       ...defaultParams,

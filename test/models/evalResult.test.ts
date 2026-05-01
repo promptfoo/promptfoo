@@ -784,6 +784,28 @@ describe('EvalResult', () => {
     });
   });
 
+  describe('createManyFromEvaluateResult', () => {
+    it('preserves trace linkage across bulk persistence', async () => {
+      const [result] = await EvalResult.createManyFromEvaluateResult(
+        [
+          {
+            ...mockEvaluateResult,
+            traceId: 'bulk-trace-id',
+            evaluationId: 'bulk-evaluation-id',
+            metadata: { source: 'import' },
+          },
+        ],
+        'test-eval-bulk-trace-linkage',
+      );
+
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'bulk-trace-id',
+        evaluationId: 'bulk-evaluation-id',
+        metadata: { source: 'import' },
+      });
+    });
+  });
+
   describe('save', () => {
     it('should save new results', async () => {
       const result = new EvalResult({

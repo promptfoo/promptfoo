@@ -217,6 +217,36 @@ describe('handleTrajectoryGoalSuccess', () => {
     });
   });
 
+  it('preserves grader failures verbatim under inverse instead of flipping to a pass', async () => {
+    // Regression: a grader transport/parse failure must not become a passing
+    // `not-trajectory:goal-success` result. This mirrors the inverse-aware
+    // semantics already enforced by `handleLlmRubric` and `handleGEval`.
+    const graderFailure: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Could not extract JSON from trajectory:goal-success response',
+      metadata: { graderError: true },
+    };
+    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue(graderFailure);
+
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trajectory:goal-success',
+        value: 'Resolve the order lookup task',
+      },
+    };
+
+    const result = await handleTrajectoryGoalSuccess(params);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata?.graderError).toBe(true);
+    expect(result.assertion).toBe(params.assertion);
+    expect(result.reason).toBe(graderFailure.reason);
+  });
+
   it('fails the assertion when the judge exceeds timeoutMs', async () => {
     vi.useFakeTimers();
     try {
@@ -289,36 +319,6 @@ describe('handleTrajectoryGoalSuccess', () => {
     await expect(handleTrajectoryGoalSuccess(params)).rejects.toThrow(
       'trajectory:goal-success timeoutMs must be a positive number',
     );
-  });
-
-  it('preserves grader failures verbatim under inverse instead of flipping to a pass', async () => {
-    // Regression: a grader transport/parse failure must not become a passing
-    // `not-trajectory:goal-success` result. This mirrors the inverse-aware
-    // semantics already enforced by `handleLlmRubric` and `handleGEval`.
-    const graderFailure: GradingResult = {
-      pass: false,
-      score: 0,
-      reason: 'Could not extract JSON from trajectory:goal-success response',
-      metadata: { graderError: true },
-    };
-    vi.mocked(matchesTrajectoryGoalSuccess).mockResolvedValue(graderFailure);
-
-    const params: AssertionParams = {
-      ...defaultParams,
-      inverse: true,
-      assertion: {
-        type: 'not-trajectory:goal-success',
-        value: 'Resolve the order lookup task',
-      },
-    };
-
-    const result = await handleTrajectoryGoalSuccess(params);
-
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0);
-    expect(result.metadata?.graderError).toBe(true);
-    expect(result.assertion).toBe(params.assertion);
-    expect(result.reason).toBe(graderFailure.reason);
   });
 
   it('throws when the assertion value does not include a goal', async () => {

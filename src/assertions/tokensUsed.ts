@@ -10,34 +10,40 @@ interface TokensUsedValue {
   source?: 'trace' | 'response' | 'auto';
 }
 
-const TOKEN_ATTRIBUTE_KEYS = [
-  // OTel GenAI semantic conventions (preferred)
-  'gen_ai.usage.input_tokens',
-  'gen_ai.usage.output_tokens',
-  'gen_ai.usage.total_tokens',
-  // OpenLLMetry / common shorthand
-  'llm.usage.total_tokens',
-  'llm.usage.prompt_tokens',
-  'llm.usage.completion_tokens',
-  // Promptfoo provider-emitted span attributes
-  'tokens.used',
-  'tokens.prompt',
-  'tokens.completion',
-];
+function positiveTokenValue(value: unknown): number | undefined {
+  const num = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(num) && num > 0 ? num : undefined;
+}
+
+function sumTokenFamily(
+  attributes: Record<string, unknown>,
+  keys: readonly string[],
+): number | undefined {
+  const values = keys
+    .map((key) => positiveTokenValue(attributes[key]))
+    .filter((value): value is number => value !== undefined);
+  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : undefined;
+}
 
 function sumTokenAttributes(attributes: Record<string, unknown> | undefined): number {
   if (!attributes) {
     return 0;
   }
-  let total = 0;
-  for (const key of TOKEN_ATTRIBUTE_KEYS) {
-    const raw = attributes[key];
-    const num = typeof raw === 'number' ? raw : Number(raw);
-    if (Number.isFinite(num) && num > 0) {
-      total += num;
-    }
+
+  const aggregateTotal =
+    positiveTokenValue(attributes['gen_ai.usage.total_tokens']) ??
+    positiveTokenValue(attributes['llm.usage.total_tokens']) ??
+    positiveTokenValue(attributes['tokens.used']);
+  if (aggregateTotal !== undefined) {
+    return aggregateTotal;
   }
-  return total;
+
+  return (
+    sumTokenFamily(attributes, ['gen_ai.usage.input_tokens', 'gen_ai.usage.output_tokens']) ??
+    sumTokenFamily(attributes, ['llm.usage.prompt_tokens', 'llm.usage.completion_tokens']) ??
+    sumTokenFamily(attributes, ['tokens.prompt', 'tokens.completion']) ??
+    0
+  );
 }
 
 function tokensFromTrace(spans: TraceSpan[], pattern: string): number {
@@ -97,8 +103,7 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
     if (haveTrace) {
       total = tokensFromTrace(trace!.spans as TraceSpan[], pattern);
       usedSource = 'trace';
-    }
-    if (total === 0) {
+    } else {
       total = tokensFromProviderResponse(params);
       usedSource = 'response';
     }

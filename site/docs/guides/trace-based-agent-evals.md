@@ -498,7 +498,7 @@ Use `trajectory:tool-args-match` when the tool call is only correct with specifi
 
 `mode: partial` checks that the expected object is a subset of the captured arguments. `mode: exact` requires deep equality. Use `partial` unless the full payload is part of the contract. Use `not-trajectory:tool-args-match` to forbid a sensitive or unsafe argument pattern.
 
-When the captured arguments contain sensitive data (PII, tokens, internal identifiers), set `redactArgsInFailures: true` to replace the args with `[redacted]` in the assertion reason — preserving pass/fail signal while keeping full payloads out of `output.json`, the trace DB, and uploaded artefacts:
+When the captured arguments contain sensitive data (PII, tokens, internal identifiers), set `redactArgsInFailures: true` to replace the args with `[redacted]` in the assertion reason. That keeps them out of failure reasons in `output.json`; it does not redact the original span attributes already stored in traces:
 
 ```yaml
 - type: trajectory:tool-args-match
@@ -891,8 +891,8 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
 
 **Hardening checklist for shared environments.**
 
-- Bind the OTLP receiver to `127.0.0.1` (the default). The receiver is designed for a single-machine eval environment and has no in-process auth, rate limiting, mTLS, or audit logging — those belong at a higher layer.
-- For any non-loopback deployment (multi-tenant CI runners, sibling containers, public hosts), put a reverse proxy in front of the receiver. Run nginx, Caddy, or your service mesh to terminate TLS, enforce mTLS or OAuth, rate-limit by source, and forward authenticated traffic to `127.0.0.1:4318`. The proxy is the right boundary for those concerns; application-layer auth on a loopback-default service does not change the threat surface meaningfully.
+- Bind the OTLP receiver to `127.0.0.1` for a single-machine eval. The config default is `0.0.0.0`, so set loopback explicitly when you want the receiver reachable only from the local host. The receiver has no in-process auth, rate limiting, mTLS, or audit logging — those belong at a higher layer.
+- For any non-loopback deployment (multi-tenant CI runners, sibling containers, public hosts), put a reverse proxy in front of the receiver. Run nginx, Caddy, or your service mesh to terminate TLS, enforce mTLS or OAuth, rate-limit by source, and forward authenticated traffic to `127.0.0.1:4318`. The proxy is the right boundary for those concerns; application-layer auth on this receiver does not replace a deployment boundary.
 
 - Use `tracing.otlp.http.redactAttributes` to redact sensitive attribute keys at the receiver, before they hit the SQLite store, the UI, or any forwarder. Substring match is case-insensitive:
 
@@ -988,8 +988,8 @@ Good trace assertions are specific about the risk and flexible about harmless im
 
 Trace-based evals are most reliable when you design for the current assertion surface:
 
-- `trace-span-duration` and `trace-error-spans` pass when no spans match. Add `trace-span-count` when span presence is required.
-- Inverse `not-trace-*` forms exist (see [Assertion matrix](#assertion-matrix)), but `not-trace-span-duration` and `not-trace-error-spans` don't currently flip in the no-match case. Pair inverse trace assertions with a `trace-span-count` presence check, or for a simple "must not occur" use `trace-span-count` with `max: 0`.
+- `trace-span-duration` and `trace-error-spans` pass when no spans match by default. Set `requirePresence: true` or add `trace-span-count` when span presence is required.
+- Inverse `not-trace-*` forms exist (see [Assertion matrix](#assertion-matrix)) and invert that base verdict too. If you need proof that spans existed before judging the inverse condition, pair the assertion with `requirePresence: true` or a `trace-span-count` presence check. For a simple "must not occur", use `trace-span-count` with `max: 0`.
 - `trajectory:tool-args-match` depends on captured structured arguments. Add `tool.arguments`, `tool.args`, or framework-specific tool-call argument attributes.
 - Use stable literal expected arguments in structured examples. If you need row-specific values inside nested argument objects, verify the rendered assertion value in the assertion reason.
 - `trajectory:goal-success` adds a judge model call, cost, latency, and nondeterminism. Keep it for high-level task success and use deterministic assertions for critical gates.

@@ -219,49 +219,38 @@ export class OTLPReceiver {
     this.app = express();
     this.acceptFormats = normalizeAcceptFormats(options.acceptFormats);
     this.traceStore = getTraceStore();
-    this.redactAttributePatterns = (options.redactAttributes ?? [])
-      .map((p) => (typeof p === 'string' ? p.trim().toLowerCase() : ''))
-      .filter((p) => p.length > 0);
+    this.setRedactAttributes(options.redactAttributes);
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
     this.setupRoutes();
   }
 
-  /**
-   * Returns true if the attribute key should be redacted given the configured patterns.
-   * Patterns are matched case-insensitively as substrings.
-   */
+  setRedactAttributes(redactAttributes?: string[]): void {
+    this.redactAttributePatterns = (redactAttributes ?? [])
+      .map((pattern) => (typeof pattern === 'string' ? pattern.trim().toLowerCase() : ''))
+      .filter((pattern) => pattern.length > 0);
+  }
+
   private shouldRedactAttribute(key: string): boolean {
     if (this.redactAttributePatterns.length === 0) {
       return false;
     }
     const lowered = key.toLowerCase();
-    return this.redactAttributePatterns.some((p) => lowered.includes(p));
+    return this.redactAttributePatterns.some((pattern) => lowered.includes(pattern));
   }
 
-  /**
-   * Apply ingest-time redaction to a span's attributes map. Returns a new map with
-   * sensitive values replaced by '[REDACTED]'. Mutates nothing.
-   */
   redactAttributes(attributes: Record<string, unknown> | undefined): Record<string, unknown> {
     if (!attributes || this.redactAttributePatterns.length === 0) {
       return attributes ?? {};
     }
-    const out: Record<string, unknown> = {};
+    const redacted: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(attributes)) {
-      out[key] = this.shouldRedactAttribute(key) ? '[REDACTED]' : value;
+      redacted[key] = this.shouldRedactAttribute(key) ? '[REDACTED]' : value;
     }
-    return out;
+    return redacted;
   }
 
   private setupMiddleware(): void {
-    // The OTLP receiver binds to 127.0.0.1 by default and is intended for a
-    // single-machine eval environment. There is no in-process auth or rate
-    // limiting: anything that can already reach the loopback port is on the
-    // box. For non-loopback deployments, run a reverse proxy (nginx, Caddy,
-    // a service mesh) in front of the receiver to terminate TLS and enforce
-    // auth, rate limiting, and audit at the layer where they belong.
-
     // Reject disabled content types before any body parser runs.
     this.app.use('/v1/traces', (req, res, next) => {
       if (req.method !== 'POST') {
@@ -926,6 +915,7 @@ let otlpReceiver: OTLPReceiver | null = null;
 function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
   if (otlpReceiver) {
     otlpReceiver.setAcceptFormats(options?.acceptFormats);
+    otlpReceiver.setRedactAttributes(options?.redactAttributes);
     return otlpReceiver;
   }
 

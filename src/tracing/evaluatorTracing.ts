@@ -75,13 +75,11 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     `[EvaluatorTracing] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`,
   );
 
-  // Apply configurable shell-tool-name extensions on every entry, even when the
-  // receiver is already started. The set is process-global so subsequent evals
-  // see the same configuration.
-  if (testSuite.tracing?.commandToolNames) {
-    const { setCommandToolNames } = await import('../assertions/trajectoryUtils');
-    setCommandToolNames(testSuite.tracing.commandToolNames);
-  }
+  // Apply shell-tool-name extensions on every entry, even when the receiver is
+  // already started. The set is process-global, so omitted config must reset it
+  // to defaults instead of inheriting a previous eval's override.
+  const { setCommandToolNames } = await import('../assertions/trajectoryUtils');
+  setCommandToolNames(testSuite.tracing?.commandToolNames);
 
   if (
     testSuite.tracing?.enabled &&
