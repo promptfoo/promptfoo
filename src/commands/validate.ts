@@ -7,7 +7,11 @@ import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
-import { resolveConfigs } from '../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
 import { isUuid } from '../util/uuid';
@@ -435,7 +439,11 @@ ${z.prettifyError(configParse.error)}`,
     }
     logger.info(chalk.green('Configuration is valid.'));
   } catch (err) {
-    logger.error(`Failed to validate configuration: ${err instanceof Error ? err.message : err}`);
+    if (err instanceof ConfigResolutionError) {
+      logConfigResolutionError(err);
+    } else {
+      logger.error(`Failed to validate configuration: ${err instanceof Error ? err.message : err}`);
+    }
     process.exitCode = 1;
   }
 }
@@ -470,11 +478,15 @@ export async function doValidateTarget(
       );
       await runProviderTests(undefined, config as UnifiedConfig);
     } catch (err) {
-      logger.error(
-        chalk.red(
-          `Failed to load configuration: ${err instanceof Error ? err.message : String(err)}`,
-        ),
-      );
+      if (err instanceof ConfigResolutionError) {
+        logConfigResolutionError(err);
+      } else {
+        logger.error(
+          chalk.red(
+            `Failed to load configuration: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
       process.exitCode = 1;
     }
   } else if (opts.target) {
