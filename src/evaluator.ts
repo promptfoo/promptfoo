@@ -954,6 +954,8 @@ function createEvaluateResult({
   setup,
   test,
   testIdx,
+  traceContext,
+  evalId,
   vars,
 }: {
   fileMetadata: Record<string, unknown>;
@@ -965,8 +967,12 @@ function createEvaluateResult({
   setup: RunEvalSetup;
   test: AtomicTestCase;
   testIdx: number;
+  traceContext?: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
+  evalId?: string;
   vars: Vars;
 }): EvaluateResult {
+  const traceId = getTraceId(traceContext);
+  const evaluationId = traceContext?.evaluationId ?? evalId;
   const ret: EvaluateResult = {
     ...setup,
     prompt: { ...rendered.setup.prompt, raw: rendered.renderedPrompt },
@@ -987,6 +993,8 @@ function createEvaluateResult({
     testCase: test,
     promptId: prompt.id || '',
     tokenUsage: createEmptyTokenUsage(),
+    ...(traceId ? { traceId } : {}),
+    ...(evaluationId ? { evaluationId } : {}),
   };
 
   if (!ret.metadata?.sessionIds && !ret.metadata?.sessionId) {
@@ -1369,6 +1377,8 @@ async function runEvalInternal({
       setup,
       test,
       testIdx,
+      traceContext,
+      evalId,
       vars: state.vars,
     });
 
