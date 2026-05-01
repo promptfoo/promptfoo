@@ -201,8 +201,8 @@ After running an evaluation, view traces in the web UI:
    promptfoo view
    ```
 
-3. Click the magnifying glass (🔎) icon on any test result
-4. Scroll to the "Trace Timeline" section
+3. Open any test result
+4. Switch to the **Traces** tab in the details panel
 
 ### 4. Assert on Traced Workflows
 
@@ -215,11 +215,6 @@ tests:
     assert:
       - type: trajectory:tool-used
         value: search_orders
-
-      - type: trajectory:tool-set
-        value:
-          - search_orders
-          - compose_reply
 
       - type: trajectory:tool-args-match
         value:
@@ -238,7 +233,7 @@ tests:
         provider: openai:gpt-5-mini
 ```
 
-Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, error detection, or token budgets, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans), or [`tokens-used`](/docs/configuration/expected-outputs/deterministic/#tokens-used).
+Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
 ## Configuration Reference
 
@@ -710,6 +705,7 @@ For more details on red team testing with tracing, see [How to Red Team LLM Agen
 
 ## Next Steps
 
+- Follow the [Trace-Based Agent Evals guide](/docs/guides/trace-based-agent-evals) to turn traces into trajectory and trace assertions
 - Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
 - Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python) - uses protobuf format
 - Try the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example)
