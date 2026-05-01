@@ -21,6 +21,9 @@ import type { Command } from 'commander';
 import type { UnifiedConfig } from '../types/index';
 import type { ApiProvider } from '../types/providers';
 
+const VALIDATE_FAILURE_PREFIX = 'Failed to validate configuration: ';
+const LOAD_FAILURE_PREFIX = 'Failed to load configuration: ';
+
 interface ValidateOptions {
   config?: string[];
   envPath?: string;
@@ -440,9 +443,9 @@ ${z.prettifyError(configParse.error)}`,
     logger.info(chalk.green('Configuration is valid.'));
   } catch (err) {
     if (err instanceof ConfigResolutionError) {
-      logConfigResolutionError(err, { prefix: 'Failed to validate configuration: ' });
+      logConfigResolutionError(err, VALIDATE_FAILURE_PREFIX);
     } else {
-      logger.error(`Failed to validate configuration: ${err instanceof Error ? err.message : err}`);
+      logger.error(`${VALIDATE_FAILURE_PREFIX}${err instanceof Error ? err.message : err}`);
     }
     process.exitCode = 1;
   }
@@ -479,12 +482,10 @@ export async function doValidateTarget(
       await runProviderTests(undefined, config as UnifiedConfig);
     } catch (err) {
       if (err instanceof ConfigResolutionError) {
-        logConfigResolutionError(err, { prefix: 'Failed to load configuration: ' });
+        logConfigResolutionError(err, LOAD_FAILURE_PREFIX);
       } else {
         logger.error(
-          chalk.red(
-            `Failed to load configuration: ${err instanceof Error ? err.message : String(err)}`,
-          ),
+          chalk.red(`${LOAD_FAILURE_PREFIX}${err instanceof Error ? err.message : String(err)}`),
         );
       }
       process.exitCode = 1;

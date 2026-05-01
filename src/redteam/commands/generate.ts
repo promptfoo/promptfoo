@@ -1024,8 +1024,7 @@ export function redteamGenerateCommand(
         } else if (error instanceof ConfigResolutionError) {
           logConfigResolutionError(error);
         } else if (!(error instanceof EmailValidationError)) {
-          // Account helpers already render the user-facing message before throwing
-          // EmailValidationError, so it intentionally falls through with no log.
+          // EmailValidationError is already logged by account helpers.
           // Log the stack trace, which already includes the error message
           logger.error(
             error instanceof Error && error.stack
