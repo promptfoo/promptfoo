@@ -106,14 +106,14 @@ export default function ProviderEditor({
       <p className="text-base">
         {description ||
           'A target is the specific LLM or endpoint you want to evaluate in your red teaming process.'}{' '}
-        For connection details and supported integrations, see our{' '}
+        For connection details and supported integrations, see the{' '}
         <a
           href="https://www.promptfoo.dev/docs/providers/"
           target="_blank"
           rel="noopener noreferrer"
           className="text-primary hover:underline"
         >
-          documentation
+          provider documentation
         </a>
         .
       </p>

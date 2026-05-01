@@ -144,7 +144,7 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
             process. You can configure additional targets later.
           </p>
           <p>
-            For connection details and supported integrations, see our{' '}
+            For connection details and supported integrations, see the{' '}
             <a
               href="https://www.promptfoo.dev/docs/providers/"
               target="_blank"

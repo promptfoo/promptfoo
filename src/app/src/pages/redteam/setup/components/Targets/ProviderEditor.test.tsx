@@ -69,6 +69,15 @@ describe('ProviderEditor', () => {
     vi.clearAllMocks();
   });
 
+  it('should link to provider documentation for integration details', () => {
+    renderWithProviders(<ProviderEditor provider={defaultHttpTarget()} setProvider={vi.fn()} />);
+
+    expect(screen.getByRole('link', { name: 'provider documentation' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/',
+    );
+  });
+
   it('should render the target name TextField and update provider label via setProvider when disableNameField is false or not set in opts', async () => {
     const user = userEvent.setup();
     const initialProvider: ProviderOptions = {
