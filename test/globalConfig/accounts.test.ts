@@ -383,6 +383,9 @@ describe('accounts', () => {
         new EmailValidationError('prompt_cancelled', 'Email prompt cancelled.'),
       );
       expect(process.exitCode).toBeUndefined();
+      // Ctrl+C should remain a silent exit; no error/warn output.
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     describe('email validation', () => {

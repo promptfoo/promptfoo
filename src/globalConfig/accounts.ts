@@ -331,9 +331,7 @@ export async function checkEmailStatusAndMaybeExit(options?: {
       'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.';
     logger.error(message);
     failEmailValidation('exceeded_limit', message);
-  }
-
-  if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+  } else if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
     setUserEmailNeedsValidation(true);
     setUserEmailValidated(false);
     const message =
@@ -344,9 +342,7 @@ export async function checkEmailStatusAndMaybeExit(options?: {
       hasEmail: result.hasEmail,
     });
     failEmailValidation('email_verification_required', message);
-  }
-
-  if (result.status === EmailValidationStatus.SHOW_USAGE_WARNING && result.message) {
+  } else if (result.status === EmailValidationStatus.SHOW_USAGE_WARNING && result.message) {
     const border = '='.repeat(TERMINAL_MAX_WIDTH);
     logger.info(chalk.yellow(border));
     logger.warn(chalk.yellow(result.message));

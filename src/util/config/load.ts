@@ -66,8 +66,12 @@ export class ConfigResolutionError extends Error {
   }
 }
 
-export function logConfigResolutionError(error: ConfigResolutionError): void {
-  logger[error.logLevel](error.cliMessage);
+export function logConfigResolutionError(
+  error: ConfigResolutionError,
+  options: { prefix?: string } = {},
+): void {
+  const message = options.prefix ? `${options.prefix}${error.cliMessage}` : error.cliMessage;
+  logger[error.logLevel](message);
 }
 
 function failConfigResolution(message: string, options?: ConfigResolutionErrorOptions): never {

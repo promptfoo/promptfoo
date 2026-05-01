@@ -440,7 +440,7 @@ ${z.prettifyError(configParse.error)}`,
     logger.info(chalk.green('Configuration is valid.'));
   } catch (err) {
     if (err instanceof ConfigResolutionError) {
-      logConfigResolutionError(err);
+      logConfigResolutionError(err, { prefix: 'Failed to validate configuration: ' });
     } else {
       logger.error(`Failed to validate configuration: ${err instanceof Error ? err.message : err}`);
     }
@@ -479,7 +479,7 @@ export async function doValidateTarget(
       await runProviderTests(undefined, config as UnifiedConfig);
     } catch (err) {
       if (err instanceof ConfigResolutionError) {
-        logConfigResolutionError(err);
+        logConfigResolutionError(err, { prefix: 'Failed to load configuration: ' });
       } else {
         logger.error(
           chalk.red(

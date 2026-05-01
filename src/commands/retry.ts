@@ -406,16 +406,16 @@ export function setupRetryCommand(program: Command) {
           logConfigResolutionError(error);
         } else {
           logger.error('Failed to retry evaluation', { error, evalId });
-        }
-        logger.info(
-          chalk.yellow(dedent`
+          logger.info(
+            chalk.yellow(dedent`
 
-            Recovery options:
-              - Run the same retry command again to continue
-              - Check API credentials and network connectivity
-              - Use --verbose for detailed error information
-          `),
-        );
+              Recovery options:
+                - Run the same retry command again to continue
+                - Check API credentials and network connectivity
+                - Use --verbose for detailed error information
+            `),
+          );
+        }
         process.exitCode = 1;
       }
     });

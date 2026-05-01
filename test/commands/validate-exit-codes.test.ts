@@ -148,14 +148,16 @@ describe('Validate Command Exit Codes', () => {
       expect(process.exitCode).toBe(1);
     });
 
-    it('should preserve config resolution messages without wrapping them', async () => {
+    it('should prefix config resolution messages with the validate context', async () => {
       vi.mocked(resolveConfigs).mockRejectedValue(
         new ConfigResolutionError('You must provide at least 1 prompt'),
       );
 
       await doValidate({ config: ['invalid-config.yaml'] }, defaultConfig, defaultConfigPath);
 
-      expect(logger.error).toHaveBeenCalledWith('You must provide at least 1 prompt');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to validate configuration: You must provide at least 1 prompt',
+      );
       expect(process.exitCode).toBe(1);
     });
   });
