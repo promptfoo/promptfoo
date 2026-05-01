@@ -599,7 +599,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'cohere') {
       setProvider(
         {
-          id: 'cohere:command-r-plus',
+          id: 'cohere:command-a-03-2025',
           config: {},
           label: currentLabel,
         },
