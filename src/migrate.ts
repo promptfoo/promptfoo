@@ -2,7 +2,14 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as path from 'path';
 
+import { migrate } from 'drizzle-orm/libsql/migrator';
+import { getDb } from './database/index';
 import { getDirectory } from './esm';
+import logger from './logger';
+import {
+  formatLibsqlBindingErrorMessage,
+  getLibsqlBindingTarget,
+} from './util/libsqlBindingErrors';
 
 /**
  * BUILD_FORMAT is a compile-time constant injected by tsup during the build process.
@@ -33,81 +40,60 @@ function getCurrentDir(): string {
   return currentDir;
 }
 
-import { migrate } from 'drizzle-orm/libsql/migrator';
-import { getDb } from './database/index';
-import logger from './logger';
-import {
-  formatNativeAddonVersionMismatchMessage,
-  getNativeAddonVersionMismatchDetails,
-} from './util/nativeAddonErrors';
-
 /**
  * Options for runDbMigrations.
  */
 export type RunDbMigrationsOptions = {
   /**
-   * When true, demotes the structured better-sqlite3 ABI mismatch log from error to debug.
+   * When true, demotes the structured libsql binding-miss log from error to debug.
    * Use this from callers (e.g. the CLI) that will display their own human-readable banner so
    * the user does not see the same information twice.
    */
-  suppressNativeAddonLogging?: boolean;
+  suppressBindingErrorLogging?: boolean;
 };
 
+function resolveMigrationsFolder(): string {
+  const dir = getCurrentDir();
+  if (dir.includes('dist/src')) {
+    // When running from bundled dist (e.g., npx promptfoo or dist/src/main.js)
+    // Navigate to project root and find drizzle folder in dist
+    const projectRoot = dir.split('dist/src')[0];
+    return path.join(projectRoot, 'dist', 'drizzle');
+  }
+  // PF Cloud runtime scans:
+  if (dir.includes('dist/server/src')) {
+    const projectRoot = dir.split('dist/server/src')[0];
+    return path.join(projectRoot, 'dist', 'promptfoo', 'drizzle');
+  }
+  // When running from source (e.g., src/migrate.ts)
+  return path.join(dir, '..', 'drizzle');
+}
+
 /**
- * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.
- *
- * Note: Migrations are async with the libsql driver, but we still yield one turn before startup
- * work begins so other pending async operations can run first.
+ * Run migrations on the database, skipping the ones already applied.
+ * Also creates the sqlite db file if it does not exist.
  */
 export async function runDbMigrations(options: RunDbMigrationsOptions = {}): Promise<void> {
-  return new Promise((resolve, reject) => {
-    setImmediate(async () => {
-      try {
-        const db = await getDb();
+  try {
+    const db = await getDb();
+    const migrationsFolder = resolveMigrationsFolder();
 
-        // Use getCurrentDir() which handles both ESM and CJS contexts
-        const dir = getCurrentDir();
-        let migrationsFolder: string;
-        if (dir.includes('dist/src')) {
-          // When running from bundled dist (e.g., npx promptfoo or dist/src/main.js)
-          // Navigate to project root and find drizzle folder in dist
-          const projectRoot = dir.split('dist/src')[0];
-          migrationsFolder = path.join(projectRoot, 'dist', 'drizzle');
-        }
-        // PF Cloud runtime scans:
-        else if (dir.includes('dist/server/src')) {
-          const projectRoot = dir.split('dist/server/src')[0];
-          migrationsFolder = path.join(projectRoot, 'dist', 'promptfoo', 'drizzle');
-        } else {
-          // When running from source (e.g., src/migrate.ts)
-          migrationsFolder = path.join(dir, '..', 'drizzle');
-        }
-
-        logger.debug(`Running database migrations from: ${migrationsFolder}`);
-        await migrate(db, { migrationsFolder });
-        logger.debug('Database migrations completed');
-        resolve();
-      } catch (error) {
-        const nativeAddonVersionMismatchDetails = getNativeAddonVersionMismatchDetails(error);
-        if (nativeAddonVersionMismatchDetails) {
-          const logNativeAddonMismatch = options.suppressNativeAddonLogging
-            ? logger.debug
-            : logger.error;
-          logNativeAddonMismatch(
-            'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
-            {
-              currentNodeVersion: process.version,
-              currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
-              installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
-            },
-          );
-        } else {
-          logger.error(`Database migration failed: ${error}`);
-        }
-        reject(error);
-      }
-    });
-  });
+    logger.debug(`Running database migrations from: ${migrationsFolder}`);
+    await migrate(db, { migrationsFolder });
+    logger.debug('Database migrations completed');
+  } catch (error) {
+    const libsqlBindingTarget = getLibsqlBindingTarget(error);
+    if (libsqlBindingTarget) {
+      const log = options.suppressBindingErrorLogging ? logger.debug : logger.error;
+      log('SQLite dependency failed to load because the libsql platform binding is missing.', {
+        platform: `${process.platform}-${process.arch}`,
+        missingPackage: `@libsql/${libsqlBindingTarget}`,
+      });
+    } else {
+      logger.error(`Database migration failed: ${error}`);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -139,13 +125,12 @@ if (shouldCheckDirectExecution) {
       (currentModulePath.endsWith('migrate.js') || currentModulePath.endsWith('migrate.ts'));
 
     if (isMigrateModuleMainExecution) {
-      // Run migrations and exit with appropriate code
-      runDbMigrations({ suppressNativeAddonLogging: true })
+      runDbMigrations({ suppressBindingErrorLogging: true })
         .then(() => process.exit(0))
         .catch((error) => {
-          const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
-          if (nativeAddonVersionMismatchMessage) {
-            console.error(nativeAddonVersionMismatchMessage);
+          const libsqlBindingErrorMessage = formatLibsqlBindingErrorMessage(error);
+          if (libsqlBindingErrorMessage) {
+            console.error(libsqlBindingErrorMessage);
           }
           process.exit(1);
         });

@@ -139,35 +139,38 @@ prompts:
 - Building new templates designed for object navigation
 - Working with complex nested data structures
 
-## Node.js version mismatch error
+## libsql binding not found
 
-Native dependencies can need rebuilding when the active Node.js version changes.
+You may see this error if the libsql platform binding for your OS/architecture is
+missing or wasn't installed:
 
-### Solution: Remove npx cache and reinstall
+```text
+Error: Cannot find module '@libsql/darwin-arm64'
+Require stack:
+- /path/to/node_modules/libsql/index.js
+```
+
+libsql ships prebuilt N-API bindings as optional peer packages
+(`@libsql/darwin-arm64`, `@libsql/linux-x64-gnu`, `@libsql/win32-x64-msvc`, etc.).
+N-API is ABI-stable across Node.js versions, so this is almost always a packaging
+issue (npm skipped optional deps, the cache is corrupt, or the platform isn't yet
+supported), not a Node.js version mismatch.
 
 Use the repair path that matches how you run promptfoo.
 
 **Project checkout**
 
-If you are working from a checkout, switch to the repo's Node.js version first, then
-refresh dependencies for that runtime:
-
 ```bash
-nvm use
 npm install
 ```
 
-If the error names a specific native dependency, rebuild that package for the active
-Node.js version:
+If `npm install` keeps skipping the binding, force optional dependencies on:
 
 ```bash
-npm rebuild better-sqlite3
+npm install --include=optional
 ```
 
 **Global npm install**
-
-If you installed promptfoo globally with npm, reinstall it under the active Node.js
-version:
 
 ```bash
 npm install -g promptfoo@latest
@@ -175,8 +178,8 @@ npm install -g promptfoo@latest
 
 **npx**
 
-If the error happens with `npx promptfoo@latest`, remove the cached npx install and
-run the command again. With newer npm versions, remove only the matching cache entry:
+Remove the cached npx install, then re-run. With newer npm versions, drop only the
+matching cache entry:
 
 ```bash
 npm cache npx ls
@@ -185,6 +188,14 @@ npx -y promptfoo@latest
 ```
 
 Use the key shown next to `promptfoo@latest` in `npm cache npx ls`.
+
+**Unsupported platform**
+
+If your `<platform>-<arch>` is not listed in the
+[libsql release matrix](https://github.com/tursodatabase/libsql-js/releases),
+file an issue at
+[promptfoo/promptfoo](https://github.com/promptfoo/promptfoo/issues) with your
+platform and architecture in the title.
 
 ## Native build failures
 
