@@ -180,6 +180,20 @@ describe('Provider Registry', () => {
       ).rejects.toThrow('Invalid Huggingface provider path');
     });
 
+    it('should handle atlascloud providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('atlascloud:deepseek-v3'));
+      expect(factory).toBeDefined();
+
+      const atlasOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const provider = await factory!.create('atlascloud:deepseek-v3', atlasOptions, mockContext);
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('atlascloud:deepseek-v3');
+    });
+
     it('should handle http/websocket providers correctly', async () => {
       const httpProvider = await registry.create('http://example.com', {
         options: {
@@ -685,6 +699,48 @@ describe('Provider Registry', () => {
       );
       expect((caught as Error).message).toContain('simulated registry load failure');
       expect((caught as Error).cause).toBe(cause);
+    });
+  });
+
+  describe('google: prefix routing', () => {
+    // Empty options so the provider computes its own id() rather than using
+    // a caller-supplied override.
+    const bareOptions: ProviderOptions = { config: {} };
+    const bareContext: LoadApiProviderContext = {
+      basePath: '/test',
+      options: bareOptions,
+    };
+
+    it.each([
+      ['google:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
+      ['google:embeddings:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
+      ['palm:embedding:gemini-embedding-001', 'google:embedding:gemini-embedding-001'],
+    ])('routes %s to the AI Studio embedding provider (id %s)', async (providerPath, expectedId) => {
+      const factory = providerMap.find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create(providerPath, bareOptions, bareContext);
+      expect(provider.id()).toBe(expectedId);
+      expect(typeof (provider as any).callEmbeddingApi).toBe('function');
+    });
+
+    it('does not route google:<model> (chat) to the embedding provider', async () => {
+      const factory = providerMap.find((f) => f.test('google:gemini-2.5-flash'));
+      expect(factory).toBeDefined();
+      const provider = await factory!.create('google:gemini-2.5-flash', bareOptions, bareContext);
+      expect(typeof (provider as any).callEmbeddingApi).not.toBe('function');
+      expect(provider.id()).toContain('gemini-2.5-flash');
+    });
+
+    it.each([
+      'google:embedding:',
+      'google:embeddings:',
+      'palm:embedding:',
+    ])('throws a clear error for %s with no model name', async (providerPath) => {
+      const factory = providerMap.find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        /Missing model name/,
+      );
     });
   });
 });

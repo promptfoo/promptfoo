@@ -8,6 +8,7 @@ import {
   clearUserEmail,
   getAuthMethod,
   getAuthor,
+  getUserAuthInfo,
   getUserEmail,
   getUserId,
   isLoggedIntoCloud,
@@ -153,6 +154,63 @@ describe('accounts', () => {
         id: 'test-id',
       });
       expect(getUserEmail()).toBeNull();
+    });
+  });
+
+  describe('getUserAuthInfo', () => {
+    it('should return the account and cloud auth snapshot from one config read', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+
+      expect(getUserAuthInfo()).toEqual({
+        email: 'test@example.com',
+        isLoggedIntoCloud: true,
+        authMethod: 'api-key',
+      });
+      expect(readGlobalConfig).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use the environment API key when cloud config has no API key', () => {
+      vi.stubEnv('PROMPTFOO_API_KEY', 'env-api-key');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+        cloud: {},
+      });
+
+      expect(getUserAuthInfo()).toEqual({
+        email: 'test@example.com',
+        isLoggedIntoCloud: true,
+        authMethod: 'api-key',
+      });
+    });
+
+    it('should report email auth when only email is configured', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+
+      expect(getUserAuthInfo()).toEqual({
+        email: 'test@example.com',
+        isLoggedIntoCloud: false,
+        authMethod: 'email',
+      });
+    });
+
+    it('should report no auth when no email or API key is configured', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+
+      expect(getUserAuthInfo()).toEqual({
+        email: null,
+        isLoggedIntoCloud: false,
+        authMethod: 'none',
+      });
     });
   });
 
