@@ -13,7 +13,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Be
 
 1. **Model Access**: Access rules vary by provider and can change over time.
    - Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) for the current access path and regional availability of the model you want to use
-   - **Anthropic models**: Require one-time use case submission through the model catalog (access granted immediately after submission)
+   - **Anthropic models**: May require one-time use case submission through the model catalog
    - **AWS Marketplace models**: Some third-party models require IAM permissions with `aws-marketplace:Subscribe`
    - **Access control**: Organizations maintain control through IAM policies and Service Control Policies (SCPs)
 
@@ -143,7 +143,9 @@ When using inference profiles, ensure the `inferenceModelType` matches the model
 
 ## Converse API
 
-The Converse API provides a unified interface across all Bedrock models with native support for extended thinking (reasoning), tool calling, and guardrails. Use the `bedrock:converse:` prefix to access this API.
+The Converse API provides a unified interface across supported Bedrock models with
+native support for extended thinking (reasoning), tool calling, and guardrails. Use
+the `bedrock:converse:` prefix to access this API.
 
 ### Basic Usage
 
@@ -222,7 +224,8 @@ as the source of truth for current support.
 
 ## Authentication
 
-Amazon Bedrock supports multiple authentication methods, including the new API key authentication for simplified access. Credentials are resolved in this priority order:
+Amazon Bedrock supports multiple authentication methods, including API key
+authentication for simplified access. Credentials are resolved in this priority order:
 
 ### Credential Resolution Order
 
@@ -641,7 +644,8 @@ Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials mu
 
 :::
 
-Nova Reel is available in **us-east-1** region.
+Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+for current Nova Reel regional availability.
 
 #### Basic Configuration
 
@@ -1341,17 +1345,17 @@ Make sure to:
 
 If you see this error, the cause depends on which model provider you're using:
 
-**For most serverless models** (Amazon, DeepSeek, Mistral, Meta, Qwen, OpenAI):
+**For models without provider-specific access steps**:
 
-- These models have instant access with no approval required
+- Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+  for the current access flow
 - Verify your IAM permissions include `bedrock:InvokeModel`
 - Check your region configuration matches the model's region
 
 **For Anthropic models (Claude)**:
 
-- First-time use requires submitting use case details in the Bedrock console
-- Access is granted immediately after submission
-- This is a one-time step per AWS account or organization
+- First-time use may require submitting use case details in the Bedrock console
+- Check the AWS documentation for the current access flow
 
 **For AWS Marketplace models**:
 
@@ -1513,11 +1517,8 @@ Generate videos using Luma Ray 2, which produces high-quality videos from text p
 
 **Provider ID:** `bedrock:video:luma.ray-v2:0`
 
-:::note
-
-Luma Ray 2 is currently available in **us-west-2** region only.
-
-:::
+Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+for current Luma Ray regional availability.
 
 #### Basic Configuration
 
