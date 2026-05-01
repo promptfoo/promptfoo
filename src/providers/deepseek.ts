@@ -15,18 +15,35 @@ type DeepSeekProviderOptions = Omit<ProviderOptions, 'config'> & {
 
 export const DEEPSEEK_CHAT_MODELS = [
   {
+    id: 'deepseek-v4-flash',
+    cost: {
+      input: 0.14 / 1e6,
+      output: 0.28 / 1e6,
+      cache_read: 0.028 / 1e6,
+    },
+  },
+  {
+    id: 'deepseek-v4-pro',
+    cost: {
+      input: 1.74 / 1e6,
+      output: 3.48 / 1e6,
+      cache_read: 0.145 / 1e6,
+    },
+  },
+  // Legacy aliases remain available until 2026-07-24 and currently map to V4 Flash.
+  {
     id: 'deepseek-chat',
     cost: {
-      input: 0.28 / 1e6,
-      output: 0.42 / 1e6,
+      input: 0.14 / 1e6,
+      output: 0.28 / 1e6,
       cache_read: 0.028 / 1e6,
     },
   },
   {
     id: 'deepseek-reasoner',
     cost: {
-      input: 0.28 / 1e6,
-      output: 0.42 / 1e6,
+      input: 0.14 / 1e6,
+      output: 0.28 / 1e6,
       cache_read: 0.028 / 1e6,
     },
   },
