@@ -236,7 +236,6 @@ interface MistralChatCompletionOptions {
         type: 'json_schema';
         json_schema: {
           name: string;
-          strict?: boolean;
           schema: Record<string, unknown>;
         };
       };
@@ -438,6 +437,21 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     }
   }
   return {};
+}
+
+function normalizeMistralContent(content: unknown): unknown {
+  if (!Array.isArray(content)) {
+    return content;
+  }
+
+  const textChunks = content
+    .filter(
+      (chunk): chunk is { type: 'text'; text: string } =>
+        chunk?.type === 'text' && typeof chunk.text === 'string',
+    )
+    .map((chunk) => chunk.text);
+
+  return textChunks.length > 0 ? textChunks.join('') : content;
 }
 
 function calculateMistralCost(
@@ -653,13 +667,14 @@ export class MistralChatCompletionProvider implements ApiProvider {
     }
 
     const message = data.choices[0].message;
+    const normalizedContent = normalizeMistralContent(message.content);
     let output: string | object;
-    if (message.content && message.tool_calls?.length) {
-      output = message;
+    if (normalizedContent && message.tool_calls?.length) {
+      output = { ...message, content: normalizedContent };
     } else if (message.tool_calls?.length) {
       output = message.tool_calls;
     } else {
-      output = message.content;
+      output = normalizedContent;
     }
 
     const result: ProviderResponse = {
@@ -672,6 +687,11 @@ export class MistralChatCompletionProvider implements ApiProvider {
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
       ),
+      ...(data.choices.length > 1 && {
+        metadata: {
+          choices: data.choices,
+        },
+      }),
     };
 
     if (isCacheEnabled()) {

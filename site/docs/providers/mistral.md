@@ -138,7 +138,6 @@ providers:
         type: json_schema
         json_schema:
           name: answer
-          strict: true
           schema:
             type: object
             properties:
@@ -196,8 +195,7 @@ You can specify which Mistral model to use in your configuration. The following 
 | `mistral-small-2603`      | 256k    | $0.15/1M    | $0.60/1M     | Hybrid instruct, reasoning, and coding |
 | `codestral-latest`        | 128k    | $0.30/1M    | $0.90/1M     | Code generation and FIM                |
 | `magistral-medium-latest` | 128k    | $2.00/1M    | $5.00/1M     | Native reasoning                       |
-| `magistral-small-latest`  | 128k    | $0.50/1M    | $1.50/1M     | Lower-cost native reasoning            |
-| `open-mistral-nemo`       | 128k    | $0.15/1M    | $0.15/1M     | Multilingual and research workloads    |
+| `open-mistral-nemo-2407`  | 128k    | $0.15/1M    | $0.15/1M     | Multilingual and research workloads    |
 | `ministral-14b-latest`    | 256k    | $0.20/1M    | $0.20/1M     | Compact multimodal deployments         |
 
 #### Legacy Models (Deprecated)
@@ -212,6 +210,7 @@ You can specify which Mistral model to use in your configuration. The following 
 8. `codestral-mamba-2407`, `open-codestral-mamba`, `codestral-mamba-latest`
 9. `open-mixtral-8x7b`, `mistral-small`, `mistral-small-2312`
 10. `open-mixtral-8x22b`, `open-mixtral-8x22b-2404`
+11. `magistral-small-latest`, `magistral-small-2509` - deprecated after April 30, 2026
 
 ### Embedding Model
 
@@ -223,16 +222,16 @@ Here's an example config that compares different Mistral models:
 providers:
   - mistral:mistral-medium-latest
   - mistral:mistral-small-latest
-  - mistral:open-mistral-nemo
+  - mistral:open-mistral-nemo-2407
   - mistral:magistral-medium-latest
-  - mistral:magistral-small-latest
 ```
 
 ## Reasoning Models
 
-Mistral's **Magistral** models are specialized native reasoning models. Current `-latest`
-aliases point to the 2509 generation, which uses tokenized thinking chunks and a 128k
-context window.
+Mistral's **Magistral** models are specialized native reasoning models. `magistral-medium-latest`
+currently points to the 2509 generation, which uses tokenized thinking chunks and a 128k
+context window. Mistral's public model card marks `magistral-small-2509` for deprecation
+after April 30, 2026.
 
 ### Key Features of Magistral Models
 
@@ -243,7 +242,6 @@ context window.
 
 ### Magistral Model Variants
 
-- **Magistral Small** (`magistral-small-latest` / `magistral-small-2509`)
 - **Magistral Medium** (`magistral-medium-latest` / `magistral-medium-2509`)
 
 ### Usage Recommendations
@@ -258,6 +256,9 @@ providers:
       top_p: 0.95
       max_tokens: 40960 # Recommended for reasoning tasks
 ```
+
+`n` requests multiple completions where the target model supports them. Mistral notes
+that `mistral-large-2512` does not currently support `n > 1`.
 
 ## Multimodal Capabilities
 
@@ -387,7 +388,7 @@ description: 'Compare reasoning capabilities across Mistral models'
 
 providers:
   - mistral:magistral-medium-latest
-  - mistral:magistral-small-latest
+  - mistral:mistral-medium-3.5
   - mistral:mistral-large-latest
   - mistral:mistral-small-latest
 

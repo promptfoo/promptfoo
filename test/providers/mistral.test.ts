@@ -215,7 +215,6 @@ describe('Mistral', () => {
             type: 'json_schema',
             json_schema: {
               name: 'answer',
-              strict: true,
               schema: {
                 type: 'object',
                 properties: {
@@ -258,7 +257,6 @@ describe('Mistral', () => {
           type: 'json_schema',
           json_schema: {
             name: 'answer',
-            strict: true,
           },
         },
       });
@@ -794,6 +792,55 @@ describe('Mistral', () => {
 
       expect(result.output).toEqual(mockToolCalls);
       expect(result.error).toBeUndefined();
+    });
+
+    it('should return final text from chunked reasoning content', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                content: [
+                  {
+                    type: 'thinking',
+                    thinking: [{ type: 'text', text: 'Internal reasoning' }],
+                  },
+                  { type: 'text', text: 'Final answer' },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('Final answer');
+    });
+
+    it('should preserve all choices in metadata when n returns multiple completions', async () => {
+      const choices = [
+        { index: 0, message: { content: 'First response' } },
+        { index: 1, message: { content: 'Second response' } },
+      ];
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices,
+          usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('First response');
+      expect(result.metadata?.choices).toEqual(choices);
     });
 
     it('should return full message when both content and tool_calls are present', async () => {
