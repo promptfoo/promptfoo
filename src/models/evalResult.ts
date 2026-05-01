@@ -29,6 +29,25 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   }) as ProviderConfig;
 }
 
+function projectTestCase(
+  testCase: AtomicTestCase,
+  options: { stripMetadata: boolean; stripVars: boolean },
+): AtomicTestCase {
+  if (!options.stripMetadata && !options.stripVars) {
+    return testCase;
+  }
+
+  const projectedTestCase = options.stripMetadata
+    ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
+    : { ...testCase };
+
+  if (options.stripVars) {
+    projectedTestCase.vars = undefined;
+  }
+
+  return projectedTestCase;
+}
+
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
@@ -604,12 +623,10 @@ export default class EvalResult {
         }
       : this.prompt;
 
-    const testCase = shouldStripTestVars
-      ? {
-          ...this.testCase,
-          vars: undefined,
-        }
-      : this.testCase;
+    const testCase = projectTestCase(this.testCase, {
+      stripMetadata: shouldStripMetadata,
+      stripVars: shouldStripTestVars,
+    });
 
     return {
       cost: this.cost,

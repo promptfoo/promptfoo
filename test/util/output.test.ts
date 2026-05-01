@@ -8,7 +8,7 @@ import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
-import { mockConsole } from './utils';
+import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
   getDb: vi.fn(),
@@ -174,6 +174,79 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.description).toBe('Test config');
+  });
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
+  ])('omits test-case metadata from $extension output when metadata stripping is enabled', async ({
+    extension,
+    parse,
+  }) => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_METADATA: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({});
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'provider' },
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+        },
+        response: {
+          output: 'Test output',
+        },
+        vars: {
+          customerEmail: 'secret@example.com',
+        },
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {
+          vars: {
+            customerEmail: 'secret@example.com',
+          },
+          metadata: {
+            goal: 'goal testcase-secret',
+            pluginConfig: {
+              policy: 'policy testcase-secret',
+            },
+            inputMaterialization: {
+              source: 'source testcase-secret',
+            },
+          },
+        },
+        promptId: 'prompt',
+        metadata: {
+          debug: 'top-level-secret',
+        },
+      });
+
+      await writeOutput(`output.${extension}`, eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = parse(written);
+      const result = parsed.results.results[0];
+      expect(result.metadata).toEqual({});
+      expect(result.testCase.metadata).toBeUndefined();
+      expect(result.testCase.vars).toBeUndefined();
+      expect(written).not.toContain('testcase-secret');
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('preserves deep non-secret config fields in JSON output', async () => {
