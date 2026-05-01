@@ -28,6 +28,26 @@ export interface UserAuthInfo {
   authMethod: AuthMethod;
 }
 
+export type EmailValidationFailureReason =
+  | 'prompt_cancelled'
+  | 'exceeded_limit'
+  | 'email_verification_required';
+
+export class EmailValidationError extends Error {
+  constructor(
+    public readonly reason: EmailValidationFailureReason,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'EmailValidationError';
+  }
+}
+
+function failEmailValidation(reason: EmailValidationFailureReason, message: string): never {
+  process.exitCode = 1;
+  throw new EmailValidationError(reason, message);
+}
+
 export function getUserAuthInfo(): UserAuthInfo {
   const globalConfig = readGlobalConfig();
   const email = globalConfig?.account?.email || null;
@@ -271,8 +291,7 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
     } catch (error) {
       const err = error as Error;
       if (err?.name === 'AbortPromptError' || err?.name === 'ExitPromptError') {
-        // exit cleanly on interrupt
-        process.exit(1);
+        failEmailValidation('prompt_cancelled', 'Email prompt cancelled.');
       }
       // Unknown error: rethrow
       logger.error(`failed to prompt for email: ${err}`);
@@ -309,10 +328,10 @@ export async function checkEmailStatusAndMaybeExit(options?: {
   }
 
   if (result.status === EmailValidationStatus.EXCEEDED_LIMIT) {
-    logger.error(
-      'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
-    );
-    process.exit(1);
+    const message =
+      'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.';
+    logger.error(message);
+    failEmailValidation('exceeded_limit', message);
   }
 
   if (result.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
@@ -325,7 +344,7 @@ export async function checkEmailStatusAndMaybeExit(options?: {
       status: result.status,
       hasEmail: result.hasEmail,
     });
-    process.exit(1);
+    failEmailValidation('email_verification_required', message);
   }
 
   if (result.status === EmailValidationStatus.SHOW_USAGE_WARNING && result.message) {

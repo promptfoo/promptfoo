@@ -23,6 +23,7 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
+import { EmailValidationError } from './globalConfig/accounts';
 import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
@@ -166,8 +167,13 @@ if (isMain) {
     }
   }
   // Re-throw unexpected errors after cleanup is complete. Config resolution
-  // errors are expected user input failures and have already been rendered here.
-  if (mainError && !(mainError instanceof ConfigResolutionError)) {
+  // errors and email-validation failures are expected user input failures that
+  // have already been rendered before reaching this boundary.
+  if (
+    mainError &&
+    !(mainError instanceof ConfigResolutionError) &&
+    !(mainError instanceof EmailValidationError)
+  ) {
     throw mainError;
   }
 }

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EmailValidationError } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
@@ -148,6 +149,23 @@ describe('redteamRunCommand', () => {
 
     // doRedteamRun should not be called
     expect(doRedteamRun).not.toHaveBeenCalled();
+  });
+
+  it('should not log an unexpected error for recoverable email validation failures', async () => {
+    vi.mocked(doRedteamRun).mockRejectedValueOnce(
+      new EmailValidationError(
+        'email_verification_required',
+        'Please verify your email address and try again.',
+      ),
+    );
+
+    const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCommand).toBeDefined();
+
+    await runCommand!.parseAsync(['node', 'test']);
+
+    expect(process.exitCode).toBe(1);
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('should throw error when target is not a UUID', async () => {
