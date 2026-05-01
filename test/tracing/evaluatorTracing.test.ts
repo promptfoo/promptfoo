@@ -239,7 +239,9 @@ describe('evaluatorTracing', () => {
 
       await startOtlpReceiverIfNeeded(testSuite);
 
-      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['protobuf']);
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['protobuf'], {
+        redactAttributes: undefined,
+      });
     });
 
     it('should swallow receiver start errors by default', async () => {
@@ -319,6 +321,30 @@ describe('evaluatorTracing', () => {
       expect(deleteOldTraces).not.toHaveBeenCalled();
     });
 
+    it('should pass redactAttributes to the OTLP receiver', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              redactAttributes: ['tool.arguments', 'authorization'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '127.0.0.1', ['json', 'protobuf'], {
+        redactAttributes: ['tool.arguments', 'authorization'],
+      });
+    });
+
     it('should default acceptFormats to both when omitted', async () => {
       const testSuite = {
         providers: [],
@@ -337,7 +363,9 @@ describe('evaluatorTracing', () => {
 
       await startOtlpReceiverIfNeeded(testSuite);
 
-      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['json', 'protobuf']);
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['json', 'protobuf'], {
+        redactAttributes: undefined,
+      });
     });
 
     it('resets command tool-name overrides when a later eval omits them', async () => {
