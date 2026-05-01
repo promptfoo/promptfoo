@@ -89,6 +89,37 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('expected at most 100');
   });
 
+  it('prefers aggregate totals instead of double counting component token attributes', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 400 } },
+      renderedValue: { max: 400 },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 's1',
+              name: 'llm.completion',
+              startTime: 0,
+              endTime: 100,
+              attributes: {
+                'gen_ai.usage.input_tokens': 200,
+                'gen_ai.usage.output_tokens': 50,
+                'gen_ai.usage.total_tokens': 250,
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 250');
+  });
+
   it('falls back to providerResponse.tokenUsage when no trace is present', () => {
     const params: AssertionParams = {
       ...baseParams,
@@ -159,5 +190,22 @@ describe('handleTokensUsed', () => {
     const result = handleTokensUsed(params);
     expect(result.pass).toBe(true);
     expect(result.reason).toContain('Tokens used: 350');
+  });
+
+  it('keeps source:auto on trace when a filtered trace contributes zero tokens', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: {
+        type: 'tokens-used',
+        value: { pattern: 'embeddings', max: 0 },
+      },
+      renderedValue: { pattern: 'embeddings', max: 0 },
+      assertionValueContext: { ...baseParams.assertionValueContext, trace: traceWithTokens },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 0');
+    expect(result.reason).toContain('source=trace');
   });
 });

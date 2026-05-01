@@ -56,6 +56,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
 | [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
 | [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
+| [trajectory:tool-set](#trajectorytool-set)                      | Ensure traced tool usage contains a required set of tools          |
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
@@ -75,6 +76,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
+| [tokens-used](#tokens-used)                                     | Check traced or response token usage against min/max budgets       |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
@@ -708,6 +710,29 @@ tests:
 - An array of strings, such as `['search_orders', 'compose_reply']`
 - An object with `pattern`, `min`, and optional `max`
 
+### trajectory:tool-set {#trajectorytool-set}
+
+The `trajectory:tool-set` assertion checks that traced tool usage contains a required set of tools, regardless of order.
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-set
+        value:
+          - search_corpus
+          - fetch_document
+          - rerank
+
+      - type: trajectory:tool-set
+        value:
+          tools:
+            - search_corpus
+            - fetch_document
+          mode: exact
+```
+
+Use an array value for the default `subset` mode, where extra tools are allowed. Use object form with `mode: exact` when the observed tool set must contain only the expected tools.
+
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 
 The `trajectory:tool-args-match` assertion checks traced tool-call arguments. Use it when the agent must not only invoke the right tool, but also pass the right parameters.
@@ -958,6 +983,30 @@ Common patterns:
 - `*llm*` - Matches spans with "llm" anywhere in the name
 - `api.*` - Matches spans starting with "api."
 - `*.error` - Matches spans ending with ".error"
+
+### Tokens-Used {#tokens-used}
+
+The `tokens-used` assertion checks token usage against a minimum and/or maximum budget. By default, it uses traced token attributes when trace data is available and falls back to provider response usage only when trace data is absent.
+
+```yaml
+assert:
+  - type: tokens-used
+    value:
+      max: 1200
+
+  - type: tokens-used
+    value:
+      pattern: 'llm.*'
+      max: 800
+      source: trace
+```
+
+Configuration options:
+
+- `min`: Minimum required token count
+- `max`: Maximum allowed token count
+- `pattern`: Span-name filter when reading from traces. Defaults to `*`
+- `source`: `auto` (default), `trace`, or `response`
 
 ### Trace-Span-Duration
 
