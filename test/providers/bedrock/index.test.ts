@@ -2804,6 +2804,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['meta.llama3-3-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_3);
     expect(AWS_BEDROCK_MODELS['mistral.mistral-large-2407-v1:0']).toBe(
       BEDROCK_MODEL.MISTRAL_LARGE_2407,
     );
@@ -3393,8 +3394,10 @@ describe('BEDROCK_MODEL.QWEN', () => {
 describe('Qwen model mapping', () => {
   it('should include all Qwen models in AWS_BEDROCK_MODELS', async () => {
     const qwenModels = [
+      'qwen.qwen3-coder-next',
       'qwen.qwen3-coder-480b-a35b-v1:0',
       'qwen.qwen3-coder-30b-a3b-v1:0',
+      'qwen.qwen3-next-80b-a3b',
       'qwen.qwen3-235b-a22b-2507-v1:0',
       'qwen.qwen3-32b-v1:0',
     ];
