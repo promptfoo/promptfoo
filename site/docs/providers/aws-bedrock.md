@@ -215,17 +215,10 @@ providers:
 
 ### Supported Models
 
-The Converse API works with all Bedrock models that support the Converse operation:
-
-- **Claude**: All Claude 3.x and 4.x models
-- **Amazon Nova**: Lite, Micro, Pro, Premier (not Sonic)
-- **Amazon Nova 2**: Lite (with reasoning support)
-- **Meta Llama**: 3.x, 4.x models
-- **Mistral**: All Mistral models
-- **Cohere**: Command R and R+ models
-- **AI21**: Jamba models
-- **DeepSeek**: R1 and other models
-- **Qwen**: Qwen3 models
+The Converse API works with Bedrock models that support the `Converse` operation.
+Because AWS changes that compatibility matrix over time, use the
+[AWS Converse supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html)
+as the source of truth for current support.
 
 ## Authentication
 
