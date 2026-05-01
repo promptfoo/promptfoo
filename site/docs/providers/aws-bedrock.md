@@ -7,12 +7,12 @@ description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, an
 
 # Bedrock
 
-The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, Alibaba's Qwen, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Bedrock model IDs directly, including regional IDs and inference profile IDs. Because AWS changes the Bedrock catalog over time, use the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html), [model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns), or `aws bedrock list-foundation-models` as the source of truth for current model IDs and regional availability.
 
 ## Setup
 
-1. **Model Access**: Amazon Bedrock provides automatic access to serverless foundation models with no manual approval required.
-   - **Most models**: Amazon, DeepSeek, Mistral, Meta, Qwen, and OpenAI models (including GPT-OSS and Qwen3) are available immediately - just start using them
+1. **Model Access**: Access rules vary by provider and can change over time.
+   - Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) for the current access path and regional availability of the model you want to use
    - **Anthropic models**: Require one-time use case submission through the model catalog (access granted immediately after submission)
    - **AWS Marketplace models**: Some third-party models require IAM permissions with `aws-marketplace:Subscribe`
    - **Access control**: Organizations maintain control through IAM policies and Service Control Policies (SCPs)
@@ -895,9 +895,9 @@ config:
 ```
 
 Newer Mistral chat-completion models such as `mistral.mistral-large-2407-v1:0`,
-`mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
-`mistral.pixtral-large-2502-v1:0` use `messages` requests and support the same
-options except `top_k`.
+`mistral.devstral-2-123b`, and `mistral.pixtral-large-2502-v1:0` use `messages`
+requests and support the same options except `top_k`. For current Mistral model IDs,
+check the AWS model catalog instead of relying on a static list here.
 
 ### DeepSeek Models
 
@@ -919,16 +919,14 @@ config:
 - When set to `true` (default), thinking content will be included in the output
 - When set to `false`, thinking content will be excluded from the output
 
-`deepseek.v3-v1:0` and `deepseek.v3.2` use chat-completion style `messages` requests and return the final assistant message directly.
+Chat-completion style DeepSeek models such as `deepseek.v3-v1:0` use `messages`
+requests and return the final assistant message directly. Check the AWS model catalog
+for the current DeepSeek IDs available in your region.
 
 ### OpenAI Models
 
-OpenAI's open-weight models are available through AWS Bedrock. The available models include:
-
-- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter model with strong reasoning capabilities
-- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter model, more cost-effective
-- **`openai.gpt-oss-safeguard-120b`**: 120 billion parameter safety model
-- **`openai.gpt-oss-safeguard-20b`**: 20 billion parameter safety model
+OpenAI models on Bedrock use OpenAI-style request parameters. Check the AWS model
+catalog for the current Bedrock IDs available in your region.
 
 ```yaml
 config:
@@ -943,7 +941,7 @@ config:
 
 #### Reasoning Effort
 
-The general-purpose GPT OSS models support adjustable reasoning effort through the `reasoning_effort` parameter:
+General-purpose GPT OSS models support adjustable reasoning effort through the `reasoning_effort` parameter:
 
 - **`low`**: Faster responses with basic reasoning
 - **`medium`**: Balanced performance and reasoning depth
@@ -979,11 +977,8 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 ### Qwen Models
 
-Alibaba's Qwen models (e.g., `qwen.qwen3-coder-next`, `qwen.qwen3-next-80b-a3b`,
-`qwen.qwen3-vl-235b-a22b`, `qwen.qwen3-coder-480b-a35b-v1:0`,
-`qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, and
-`qwen.qwen3-32b-v1:0`) support advanced features including hybrid thinking modes,
-tool calling, and extended context understanding.
+Qwen models support advanced features including hybrid thinking modes, tool calling,
+and extended context understanding.
 
 **Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home) or use `aws bedrock list-foundation-models` to verify which Qwen models are available in your target region, as availability varies by model and region.
 
@@ -1031,16 +1026,6 @@ config:
           required: ['expression']
   tool_choice: auto # 'auto', 'none', or specific function name
 ```
-
-#### Model Variants
-
-- **Qwen3-Coder-480B-A35B**: Mixture-of-experts model optimized for coding and agentic tasks with 480B total parameters and 35B active parameters
-- **Qwen3-Coder-30B-A3B**: Smaller MoE model with 30B total parameters and 3B active parameters, optimized for coding tasks
-- **Qwen3-Coder-Next**: Newer coding model exposed through Bedrock
-- **Qwen3-Next-80B-A3B**: Newer general-purpose MoE model
-- **Qwen3-VL-235B-A22B**: Vision-language model that also accepts text prompts
-- **Qwen3-235B-A22B**: General-purpose MoE model with 235B total parameters and 22B active parameters for reasoning and coding
-- **Qwen3-32B**: Dense model with 32B parameters for consistent performance in resource-constrained environments
 
 #### Usage Example
 
