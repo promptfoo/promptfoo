@@ -165,6 +165,26 @@ describe('handleTokensUsed', () => {
     expect(() => handleTokensUsed(params)).toThrow(/No trace data available/);
   });
 
+  it('treats source: trace with an empty trace as zero tokens', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 0, source: 'trace' } },
+      renderedValue: { max: 0, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 0');
+    expect(result.reason).toContain('source=trace');
+  });
+
   it('inverts the result for not-tokens-used (over budget passes)', () => {
     const params: AssertionParams = {
       ...baseParams,

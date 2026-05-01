@@ -65,6 +65,37 @@ function tokensFromProviderResponse(params: AssertionParams): number {
   return prompt + completion;
 }
 
+function resolveTokenUsage(
+  params: AssertionParams,
+  source: NonNullable<TokensUsedValue['source']>,
+  pattern: string,
+): { total: number; usedSource: 'trace' | 'response' } {
+  const trace = params.assertionValueContext.trace;
+
+  if (source === 'response') {
+    return { total: tokensFromProviderResponse(params), usedSource: 'response' };
+  }
+
+  if (source === 'trace') {
+    if (!trace) {
+      throw new Error('No trace data available for tokens-used assertion (source: trace)');
+    }
+    return {
+      total: tokensFromTrace((trace.spans ?? []) as TraceSpan[], pattern),
+      usedSource: 'trace',
+    };
+  }
+
+  if (trace?.spans && trace.spans.length > 0) {
+    return {
+      total: tokensFromTrace(trace.spans as TraceSpan[], pattern),
+      usedSource: 'trace',
+    };
+  }
+
+  return { total: tokensFromProviderResponse(params), usedSource: 'response' };
+}
+
 export const handleTokensUsed = (params: AssertionParams): GradingResult => {
   const value = (params.renderedValue ?? params.assertion.value) as TokensUsedValue | undefined;
   if (!value || typeof value !== 'object') {
@@ -86,28 +117,7 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
 
   const pattern = value.pattern ?? '*';
   const source = value.source ?? 'auto';
-  const trace = params.assertionValueContext.trace;
-  const haveTrace = (trace?.spans?.length ?? 0) > 0;
-
-  let total = 0;
-  let usedSource: 'trace' | 'response' = 'response';
-  if (source === 'trace') {
-    if (!haveTrace) {
-      throw new Error('No trace data available for tokens-used assertion (source: trace)');
-    }
-    total = tokensFromTrace(trace!.spans as TraceSpan[], pattern);
-    usedSource = 'trace';
-  } else if (source === 'response') {
-    total = tokensFromProviderResponse(params);
-  } else {
-    if (haveTrace) {
-      total = tokensFromTrace(trace!.spans as TraceSpan[], pattern);
-      usedSource = 'trace';
-    } else {
-      total = tokensFromProviderResponse(params);
-      usedSource = 'response';
-    }
-  }
+  const { total, usedSource } = resolveTokenUsage(params, source, pattern);
 
   const min = value.min;
   const max = value.max;
