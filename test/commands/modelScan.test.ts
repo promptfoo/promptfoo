@@ -126,7 +126,6 @@ describe('modelScanCommand', () => {
   afterEach(() => {
     mockExit.mockRestore();
     process.exitCode = 0;
-    vi.resetAllMocks();
   });
 
   it('should exit if no paths are provided', async () => {
@@ -520,6 +519,7 @@ describe('Signal termination handling', () => {
   afterEach(() => {
     mockExit.mockRestore();
     process.exitCode = 0;
+    vi.resetAllMocks();
   });
 
   it.each(
