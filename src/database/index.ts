@@ -1,12 +1,17 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import * as path from 'path';
 
-import { type Client, createClient } from '@libsql/client/node';
-import { drizzle } from 'drizzle-orm/libsql/node';
 import { DefaultLogger, type LogWriter } from 'drizzle-orm/logger';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
+
+// Lazy types; the runtime modules below are imported inside getDb() so that a
+// missing libsql platform binding (`@libsql/<target>`) surfaces as a catchable
+// error from getDb() rather than crashing module load before any handler can
+// translate it into a friendly message.
+type Client = import('@libsql/client/node').Client;
+type Drizzle = ReturnType<typeof import('drizzle-orm/libsql/node').drizzle>;
 
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
@@ -16,8 +21,8 @@ export class DrizzleLogWriter implements LogWriter {
   }
 }
 
-let dbInstance: ReturnType<typeof drizzle> | null = null;
-let dbPromise: Promise<ReturnType<typeof drizzle>> | null = null;
+let dbInstance: Drizzle | null = null;
+let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 
 export function getDbPath() {
@@ -66,7 +71,7 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   }
 }
 
-function serializeTransactions(db: ReturnType<typeof drizzle>): ReturnType<typeof drizzle> {
+function serializeTransactions(db: Drizzle): Drizzle {
   const transaction = db.transaction.bind(db);
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
@@ -99,33 +104,44 @@ function serializeTransactions(db: ReturnType<typeof drizzle>): ReturnType<typeo
 }
 
 export async function getDb() {
-  if (!dbInstance) {
-    if (!dbPromise) {
-      dbPromise = (async () => {
-        const isTesting = getEnvBool('IS_TESTING');
-        // libsql opens fresh connections for top-level transactions, so tests need a
-        // shared in-memory database rather than connection-local `:memory:`.
-        const dbUrl = isTesting ? 'file::memory:?cache=shared' : `file:${getDbPath()}`;
-        const client = createClient({ url: dbUrl });
-        sqliteInstance = client;
-
-        await configureDatabase(client, isTesting);
-
-        const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
-        dbInstance = serializeTransactions(drizzle(client, { logger: drizzleLogger }));
-        return dbInstance;
-      })().catch((error) => {
-        sqliteInstance?.close();
-        sqliteInstance = null;
-        dbInstance = null;
-        dbPromise = null;
-        throw error;
-      });
-    }
-
-    return dbPromise;
+  if (dbInstance) {
+    return dbInstance;
   }
-  return dbInstance;
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      // Imported lazily so that a missing platform binding (e.g. @libsql/darwin-arm64)
+      // surfaces here, where the friendly handler can translate it.
+      const [{ createClient }, { drizzle }] = await Promise.all([
+        import('@libsql/client/node'),
+        import('drizzle-orm/libsql/node'),
+      ]);
+      const isTesting = getEnvBool('IS_TESTING');
+      // libsql opens fresh connections for top-level transactions, so tests need a
+      // shared in-memory database rather than connection-local `:memory:`.
+      const dbUrl = isTesting ? 'file::memory:?cache=shared' : `file:${getDbPath()}`;
+      const client = createClient({ url: dbUrl });
+      sqliteInstance = client;
+
+      await configureDatabase(client, isTesting);
+
+      const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
+      dbInstance = serializeTransactions(drizzle(client, { logger: drizzleLogger }));
+      return dbInstance;
+    })().catch((error) => {
+      sqliteInstance?.close();
+      sqliteInstance = null;
+      dbInstance = null;
+      dbPromise = null;
+      throw error;
+    });
+  }
+  try {
+    return await dbPromise;
+  } finally {
+    // Once the in-flight init has settled (success or failure handled above),
+    // drop the promise reference so it can be garbage collected.
+    dbPromise = null;
+  }
 }
 
 export async function closeDb() {
@@ -141,6 +157,8 @@ export async function closeDb() {
         }
       }
 
+      // libsql Client.close() is synchronous; the WAL checkpoint above already
+      // awaited the I/O that needed to finish before the underlying connection drops.
       sqliteInstance.close();
       logger.debug('Database connection closed successfully');
     } catch (err) {
