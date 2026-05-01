@@ -24,7 +24,7 @@ providers:
       max_tokens: 4000
       apiKey: YOUR_DEEPSEEK_API_KEY
 
-  - id: deepseek:deepseek-reasoner # DeepSeek-R1 model
+  - id: deepseek:deepseek-reasoner # Legacy alias for V4 Flash thinking mode
     config:
       max_tokens: 8000
 ```
