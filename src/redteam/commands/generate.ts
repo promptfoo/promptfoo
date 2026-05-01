@@ -29,7 +29,11 @@ import {
   isCloudProvider,
   resolveTeamId,
 } from '../../util/cloud';
-import { resolveConfigs } from '../../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
@@ -1016,6 +1020,8 @@ export function redteamGenerateCommand(
           error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
+        } else if (error instanceof ConfigResolutionError) {
+          logConfigResolutionError(error);
         } else {
           // Log the stack trace, which already includes the error message
           logger.error(
