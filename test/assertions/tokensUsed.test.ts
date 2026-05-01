@@ -136,6 +136,49 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('source=response');
   });
 
+  it('throws when source: response has no provider token usage', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 500, source: 'response' } },
+      renderedValue: { max: 500, source: 'response' },
+      providerResponse: { output: 'o' },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(
+      /No token usage data available for tokens-used assertion from provider response/,
+    );
+  });
+
+  it('throws when source: auto has neither trace spans nor provider token usage', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 500 } },
+      renderedValue: { max: 500 },
+      providerResponse: { output: 'o' },
+    };
+
+    expect(() => handleTokensUsed(params)).toThrow(
+      /No token usage data available for tokens-used assertion from provider response/,
+    );
+  });
+
+  it('treats explicit zero provider usage as zero tokens', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 0, source: 'response' } },
+      renderedValue: { max: 0, source: 'response' },
+      providerResponse: {
+        output: 'o',
+        tokenUsage: { total: 0, prompt: 0, completion: 0 },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 0');
+    expect(result.reason).toContain('source=response');
+  });
+
   it('falls back to providerResponse.tokenUsage when trace data has no spans', () => {
     const params: AssertionParams = {
       ...baseParams,

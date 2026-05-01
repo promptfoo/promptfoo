@@ -1008,6 +1008,9 @@ Configuration options:
 - `pattern`: Span-name filter when reading from traces. Defaults to `*`
 - `source`: `auto` (default), `trace`, or `response`
 
+If `tokens-used` needs provider response usage and the provider does not return token
+usage metadata, the assertion throws instead of assuming zero tokens.
+
 ### Trace-Span-Duration
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.

@@ -15,6 +15,11 @@ function positiveTokenValue(value: unknown): number | undefined {
   return Number.isFinite(num) && num > 0 ? num : undefined;
 }
 
+function nonNegativeTokenValue(value: unknown): number | undefined {
+  const num = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(num) && num >= 0 ? num : undefined;
+}
+
 function sumTokenFamily(
   attributes: Record<string, unknown>,
   keys: readonly string[],
@@ -55,14 +60,25 @@ function tokensFromTrace(spans: TraceSpan[], pattern: string): number {
 function tokensFromProviderResponse(params: AssertionParams): number {
   const usage = params.providerResponse?.tokenUsage;
   if (!usage) {
-    return 0;
+    throw new Error(
+      'No token usage data available for tokens-used assertion from provider response',
+    );
   }
-  if (typeof usage.total === 'number' && usage.total > 0) {
-    return usage.total;
+
+  const total = nonNegativeTokenValue(usage.total);
+  if (total !== undefined) {
+    return total;
   }
-  const prompt = typeof usage.prompt === 'number' ? usage.prompt : 0;
-  const completion = typeof usage.completion === 'number' ? usage.completion : 0;
-  return prompt + completion;
+
+  const prompt = nonNegativeTokenValue(usage.prompt);
+  const completion = nonNegativeTokenValue(usage.completion);
+  if (prompt === undefined && completion === undefined) {
+    throw new Error(
+      'No token usage data available for tokens-used assertion from provider response',
+    );
+  }
+
+  return (prompt ?? 0) + (completion ?? 0);
 }
 
 function resolveTokenUsage(
