@@ -583,6 +583,64 @@ describe('OTLPReceiver', () => {
     });
   });
 
+  describe('Ingest-time redaction', () => {
+    it('replaces matched attribute values before persisting', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        redactAttributes: ['password', 'authorization', 'tool.arguments'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'a'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'tool.call',
+                      startTimeUnixNano: '1000000000',
+                      endTimeUnixNano: '2000000000',
+                      attributes: [
+                        { key: 'tool.name', value: { stringValue: 'lookup_user' } },
+                        {
+                          key: 'tool.arguments',
+                          value: { stringValue: '{"ssn":"123-45-6789"}' },
+                        },
+                        { key: 'http.password', value: { stringValue: 'pw123' } },
+                        { key: 'AUTHORIZATION', value: { stringValue: 'Bearer xyz' } },
+                        { key: 'tool.result', value: { stringValue: 'ok' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        [
+          expect.objectContaining({
+            attributes: expect.objectContaining({
+              AUTHORIZATION: '[REDACTED]',
+              'http.password': '[REDACTED]',
+              'tool.arguments': '[REDACTED]',
+              'tool.result': 'ok',
+            }),
+          }),
+        ],
+        { skipTraceCheck: true },
+      );
+    });
+  });
+
   describe('Base64 to hex conversion', () => {
     it('should correctly convert base64 trace IDs to hex', async () => {
       // Manually override the traceStore property for this test too

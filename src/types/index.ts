@@ -1101,6 +1101,7 @@ export const TestSuiteSchema = z.object({
               port: z.number(),
               host: z.string().optional(),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z
@@ -1234,7 +1235,7 @@ export const TestSuiteConfigSchema = z.object({
 
       // When the OTLP receiver fails to start (e.g. port already in use),
       // throw and fail the eval instead of silently continuing without traces.
-      failOnReceiverStartFailure: z.boolean().prefault(false),
+      failOnReceiverStartFailure: z.boolean().optional(),
 
       // Extra tool names (case-insensitive) that should normalize spans to the
       // `command` trajectory step type. The defaults are `shell`, `exec_command`,
@@ -1251,6 +1252,9 @@ export const TestSuiteConfigSchema = z.object({
               port: z.number().prefault(4318),
               host: z.string().prefault('0.0.0.0'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
+              // Attribute keys (case-insensitive substring match) whose values are
+              // replaced with [REDACTED] before persistence to the trace store.
+              redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
           grpc: z

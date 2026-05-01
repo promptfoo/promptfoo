@@ -349,5 +349,23 @@ describe('evaluatorTracing', () => {
         expect.any(Object),
       );
     });
+
+    it('resets command tool-name overrides when a later eval omits them', async () => {
+      const { getCommandToolNames } = await import('../../src/assertions/trajectoryUtils');
+
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: { enabled: false, commandToolNames: ['bash'] },
+      } as unknown as TestSuite);
+      expect(getCommandToolNames()).toContain('bash');
+
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: { enabled: false },
+      } as unknown as TestSuite);
+      expect(getCommandToolNames()).not.toContain('bash');
+    });
   });
 });

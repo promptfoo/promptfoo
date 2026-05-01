@@ -75,13 +75,11 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
     `[EvaluatorTracing] Full testSuite.tracing: ${JSON.stringify(testSuite.tracing, null, 2)}`,
   );
 
-  // Apply configurable shell-tool-name extensions on every entry, even when the
-  // receiver is already started. The set is process-global so subsequent evals
-  // see the same configuration.
-  if (testSuite.tracing?.commandToolNames) {
-    const { setCommandToolNames } = await import('../assertions/trajectoryUtils');
-    setCommandToolNames(testSuite.tracing.commandToolNames);
-  }
+  // Apply shell-tool-name extensions on every entry, even when the receiver is
+  // already started. The set is process-global, so omitted config must reset it
+  // to defaults instead of inheriting a previous eval's override.
+  const { setCommandToolNames } = await import('../assertions/trajectoryUtils');
+  setCommandToolNames(testSuite.tracing?.commandToolNames);
 
   if (
     testSuite.tracing?.enabled &&
@@ -97,8 +95,14 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       const port = testSuite.tracing.otlp.http.port || 4318;
       const host = testSuite.tracing.otlp.http.host || '127.0.0.1';
       const acceptFormats = normalizeOtlpAcceptFormats(testSuite.tracing.otlp.http.acceptFormats);
-      logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
-      await startOTLPReceiver(port, host, acceptFormats);
+      const redactAttributes = testSuite.tracing.otlp.http.redactAttributes;
+      logger.debug(
+        `[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}` +
+          (redactAttributes && redactAttributes.length > 0
+            ? ` (redact: ${redactAttributes.join(',')})`
+            : ''),
+      );
+      await startOTLPReceiver(port, host, acceptFormats, { redactAttributes });
       otlpReceiverStarted = true;
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,

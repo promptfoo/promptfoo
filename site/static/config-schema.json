@@ -2999,6 +2999,15 @@
         "enabled": {
           "type": "boolean"
         },
+        "failOnReceiverStartFailure": {
+          "type": "boolean"
+        },
+        "commandToolNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "otlp": {
           "type": "object",
           "properties": {
@@ -3019,6 +3028,12 @@
                   "items": {
                     "type": "string",
                     "enum": ["protobuf", "json"]
+                  }
+                },
+                "redactAttributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
                   }
                 }
               },

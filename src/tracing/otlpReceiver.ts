@@ -158,6 +158,8 @@ type OTLPFormat = 'json' | 'protobuf';
 
 interface OTLPReceiverOptions {
   acceptFormats?: OTLPFormat[];
+  /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
+  redactAttributes?: string[];
 }
 
 interface TraceInfo {
@@ -211,14 +213,41 @@ export class OTLPReceiver {
   private traceStore: TraceStore;
   private port?: number;
   private server?: any; // http.Server type
+  private redactAttributePatterns: string[] = [];
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
     this.acceptFormats = normalizeAcceptFormats(options.acceptFormats);
     this.traceStore = getTraceStore();
+    this.setRedactAttributes(options.redactAttributes);
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
     this.setupRoutes();
+  }
+
+  setRedactAttributes(redactAttributes?: string[]): void {
+    this.redactAttributePatterns = (redactAttributes ?? [])
+      .map((pattern) => (typeof pattern === 'string' ? pattern.trim().toLowerCase() : ''))
+      .filter((pattern) => pattern.length > 0);
+  }
+
+  private shouldRedactAttribute(key: string): boolean {
+    if (this.redactAttributePatterns.length === 0) {
+      return false;
+    }
+    const lowered = key.toLowerCase();
+    return this.redactAttributePatterns.some((pattern) => lowered.includes(pattern));
+  }
+
+  redactAttributes(attributes: Record<string, unknown> | undefined): Record<string, unknown> {
+    if (!attributes || this.redactAttributePatterns.length === 0) {
+      return attributes ?? {};
+    }
+    const redacted: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(attributes)) {
+      redacted[key] = this.shouldRedactAttribute(key) ? '[REDACTED]' : value;
+    }
+    return redacted;
   }
 
   private setupMiddleware(): void {
@@ -442,7 +471,14 @@ export class OTLPReceiver {
   private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-      await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+      const sanitized =
+        this.redactAttributePatterns.length > 0
+          ? spans.map((span) => ({
+              ...span,
+              attributes: this.redactAttributes(span.attributes),
+            }))
+          : spans;
+      await this.traceStore.addSpans(traceId, sanitized, { skipTraceCheck: true });
     }
   }
 
@@ -879,6 +915,7 @@ let otlpReceiver: OTLPReceiver | null = null;
 function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
   if (otlpReceiver) {
     otlpReceiver.setAcceptFormats(options?.acceptFormats);
+    otlpReceiver.setRedactAttributes(options?.redactAttributes);
     return otlpReceiver;
   }
 
@@ -890,9 +927,10 @@ export async function startOTLPReceiver(
   port?: number,
   host?: string,
   acceptFormats?: OTLPFormat[],
+  extra?: { redactAttributes?: string[] },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
-  const receiver = getOTLPReceiver({ acceptFormats });
+  const receiver = getOTLPReceiver({ acceptFormats, ...extra });
   await receiver.listen(port, host);
 }
 
