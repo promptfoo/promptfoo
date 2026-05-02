@@ -60,6 +60,23 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
   );
   const specifiers: string[] = [];
 
+  function addStaticCallSpecifier(node: ts.CallExpression): void {
+    if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
+      return;
+    }
+
+    if (
+      node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      (ts.isIdentifier(node.expression) && node.expression.text === 'require') ||
+      (ts.isPropertyAccessExpression(node.expression) &&
+        ts.isIdentifier(node.expression.expression) &&
+        node.expression.expression.text === 'require' &&
+        node.expression.name.text === 'resolve')
+    ) {
+      specifiers.push(node.arguments[0].text);
+    }
+  }
+
   function visit(node: ts.Node): void {
     if (
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
@@ -78,13 +95,8 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
       specifiers.push(node.moduleReference.expression.text);
     }
 
-    if (
-      ts.isCallExpression(node) &&
-      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-      node.arguments.length === 1 &&
-      ts.isStringLiteralLike(node.arguments[0])
-    ) {
-      specifiers.push(node.arguments[0].text);
+    if (ts.isCallExpression(node)) {
+      addStaticCallSpecifier(node);
     }
 
     ts.forEachChild(node, visit);
