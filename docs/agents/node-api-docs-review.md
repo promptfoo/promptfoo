@@ -28,7 +28,7 @@ Review the Node.js docs against three questions:
 | Keep generated with stronger prose or companion docs | `EvaluateOptions`, `Assertion`, `AssertionValueFunction`, `AssertionValueFunctionContext`, `GradingResult`, `ProviderResponse`, `assertions` |
 | Keep generated only while beta docs remain thin      | `guardrails`, `redteam`                                                                                                                      |
 | Remove from the curated Node API reference           | `PromptFunctionContext`                                                                                                                      |
-| Restore for signature closure                        | `EvaluateTestSuite`, `LoadApiProviderContext`, guardrail request/response types                                                              |
+| Restore for signature closure                        | `EvaluateTestSuite`, `LoadApiProviderContext`, `ProvidersConfig`, guardrail request/response types                                           |
 
 ## Cold-Read Tasks
 

@@ -34,7 +34,7 @@ Prompt strings, prompt objects, or inline prompt functions to evaluate.
 
 ### providers
 
-> **providers**: `ProvidersConfig`
+> **providers**: [`ProvidersConfig`](ProvidersConfig.md)
 
 Provider ids, provider functions, provider objects, or arrays of those forms.
 

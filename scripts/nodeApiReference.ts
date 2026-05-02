@@ -39,6 +39,7 @@ export type {
   ProviderFunction,
   ProviderOptions,
   ProviderResponse,
+  ProvidersConfig,
   TransformContext,
   TransformFunction,
   TransformPrompt,

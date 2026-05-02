@@ -39,6 +39,7 @@ compatibility types and helpers than we want to present as first-class docs.
 - [EnvOverrides](type-aliases/EnvOverrides.md)
 - [EvaluateTestSuite](type-aliases/EvaluateTestSuite.md)
 - [ProviderFunction](type-aliases/ProviderFunction.md)
+- [ProvidersConfig](type-aliases/ProvidersConfig.md)
 - [TransformFunction](type-aliases/TransformFunction.md)
 
 ## Variables

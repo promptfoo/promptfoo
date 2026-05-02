@@ -16,7 +16,7 @@ Load one or more providers from provider config input.
 
 ### providerPaths
 
-`ProvidersConfig`
+[`ProvidersConfig`](../type-aliases/ProvidersConfig.md)
 
 ### options?
 

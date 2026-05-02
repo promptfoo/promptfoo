@@ -60,6 +60,7 @@ the test suite itself; see
 | ----------------------- | --------- |
 | `evaluate()`            | Stable    |
 | `loadApiProvider()`     | Stable    |
+| `loadApiProviders()`    | Stable    |
 | `assertions.*`          | Stable    |
 | `cache.*`               | Stable    |
 | `generateTable()`       | Stable    |
