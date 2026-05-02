@@ -654,7 +654,7 @@ export async function doEval(
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        eventSource: 'cli',
+        eventSource: invocationOptions.isCliInvocation ? 'cli' : options.eventSource,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
       });

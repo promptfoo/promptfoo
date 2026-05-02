@@ -304,6 +304,38 @@ describe('evalCommand', () => {
     }
   });
 
+  it('should preserve reusable caller event sources when invoking the evaluator', async () => {
+    const mockEvalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval({}, defaultConfig, defaultConfigPath, { eventSource: 'mcp' });
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Eval),
+      expect.objectContaining({ eventSource: 'mcp' }),
+    );
+  });
+
+  it('should keep CLI event sources for CLI invocations', async () => {
+    const mockEvalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(
+      {},
+      defaultConfig,
+      defaultConfigPath,
+      { eventSource: 'mcp' },
+      { isCliInvocation: true },
+    );
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(Eval),
+      expect.objectContaining({ eventSource: 'cli' }),
+    );
+  });
+
   it('should handle redteam config', async () => {
     const cmdObj = {};
     const config = {
