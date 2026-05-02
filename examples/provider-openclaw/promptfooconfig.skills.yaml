@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw skill adherence
+
+prompts:
+  - 'skill probe alpha'
+
+providers:
+  - id: openclaw:agent
+    config:
+      thinking_level: minimal
+      timeoutMs: 120000
+
+tests:
+  - assert:
+      - type: equals
+        value: SKILL_ALPHA_OK

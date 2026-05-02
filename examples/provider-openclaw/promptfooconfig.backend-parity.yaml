@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw backend model parity
+
+prompts:
+  - 'Reply with exactly PARITY_OK.'
+
+providers:
+  - id: openclaw
+    label: default-agent
+  - id: openclaw
+    label: gpt-5.4
+    config:
+      backend_model: openai/gpt-5.4
+  - id: openclaw
+    label: gpt-5.5
+    config:
+      backend_model: openai/gpt-5.5
+
+tests:
+  - assert:
+      - type: equals
+        value: PARITY_OK

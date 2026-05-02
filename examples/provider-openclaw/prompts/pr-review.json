@@ -1,0 +1,21 @@
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Review the attached diff. If it removes the ownership check from order lookup, reply with exactly AUTH_GAP. Otherwise reply with exactly OK."
+      },
+      {
+        "type": "input_file",
+        "source": {
+          "type": "base64",
+          "media_type": "text/plain",
+          "data": "ZGlmZiAtLWdpdCBhL3NyYy9vcmRlcnMudHMgYi9zcmMvb3JkZXJzLnRzCkBACi1leHBvcnQgYXN5bmMgZnVuY3Rpb24gZ2V0T3JkZXIodXNlcklkOiBzdHJpbmcsIG9yZGVySWQ6IHN0cmluZykgewotICByZXR1cm4gZGIub3JkZXJzLmZpbmRGaXJzdCh7IHdoZXJlOiB7IGlkOiBvcmRlcklkLCB1c2VySWQgfSB9KTsKK2V4cG9ydCBhc3luYyBmdW5jdGlvbiBnZXRPcmRlcihfdXNlcklkOiBzdHJpbmcsIG9yZGVySWQ6IHN0cmluZykgeworICByZXR1cm4gZGIub3JkZXJzLmZpbmRGaXJzdCh7IHdoZXJlOiB7IGlkOiBvcmRlcklkIH0gfSk7CiB9Cg==",
+          "filename": "orders.diff"
+        }
+      }
+    ]
+  }
+]

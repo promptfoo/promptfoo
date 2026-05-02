@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw native agent loop
+
+prompts:
+  - 'Reply with exactly AGENT_OK.'
+
+providers:
+  - id: openclaw:agent
+    config:
+      thinking_level: minimal
+      timeoutMs: 120000
+
+tests:
+  - assert:
+      - type: equals
+        value: AGENT_OK

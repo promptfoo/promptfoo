@@ -99,6 +99,47 @@ For password-mode gateways, use `auth_password` or `OPENCLAW_GATEWAY_PASSWORD`.
 - Use `openclaw:tools:<tool>` for stable direct-tool checks and expected policy denials.
 - Measure cold-start and warm-turn latency separately; OpenClaw can spend real time loading runtime
   plugins, tools, and skills before the model answers.
+- Use `--max-concurrency 1` when you want clean latency or session measurements. Higher concurrency
+  can make gateway preparation and shared session writes contend with each other.
+
+## Experiment suite
+
+The example directory includes a broader suite than the default smoke config:
+
+| File                                   | What it covers                                                       |
+| -------------------------------------- | -------------------------------------------------------------------- |
+| `promptfooconfig.support-triage.yaml`  | Support-triage quality                                               |
+| `promptfooconfig.backend-parity.yaml`  | Backend-model override parity                                        |
+| `promptfooconfig.responses-tools.yaml` | Responses API client-function tool selection and argument extraction |
+| `promptfooconfig.responses-file.yaml`  | File input for a PR-review style workflow                            |
+| `promptfooconfig.responses-image.yaml` | Multimodal image input                                               |
+| `promptfooconfig.security.yaml`        | Indirect prompt-injection resistance for an untrusted file           |
+| `promptfooconfig.session.yaml`         | Explicit HTTP session continuity                                     |
+| `promptfooconfig.agent.yaml`           | Native WS agent loop                                                 |
+| `promptfooconfig.skills.yaml`          | Skill loading and adherence through the WS agent provider            |
+| `promptfooconfig.skill-csv.yaml`       | Skill-backed CSV analysis workflow                                   |
+| `promptfooconfig.embeddings.yaml`      | Embedding-backed similarity assertions                               |
+| `promptfooconfig.tools.yaml`           | Direct tool invocation on a stable built-in tool                     |
+
+Run one experiment at a time:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.support-triage.yaml
+npx promptfoo@latest eval -c promptfooconfig.backend-parity.yaml
+npx promptfoo@latest eval -c promptfooconfig.responses-tools.yaml
+npx promptfoo@latest eval -c promptfooconfig.responses-file.yaml
+```
+
+`scripts/probe-openresponses.mjs` covers gateway checks that are easier to express as direct protocol
+probes than as a static promptfoo config, including `/healthz`, model discovery, SSE streaming,
+`previous_response_id`, rich inputs, client-function round trips, and allow/deny behavior on
+`/tools/invoke`.
+
+```bash
+OPENCLAW_GATEWAY_URL=http://127.0.0.1:18789 \
+OPENCLAW_GATEWAY_TOKEN=your-token-here \
+node scripts/probe-openresponses.mjs
+```
 
 ## Skills
 
@@ -106,3 +147,11 @@ Promptfoo does not upload skills per request. To eval skill behavior, configure 
 OpenClaw first, usually in a dedicated agent workspace, verify it with
 `openclaw skills list --eligible`, and then target that agent from promptfoo. That keeps skill
 fixtures deterministic and avoids mixing skill setup with the thing you are measuring.
+
+This example includes `skills/qa-protocol/SKILL.md` as a deterministic fixture and
+`skills/csv-brief/SKILL.md` as a small realistic data-workflow fixture. Copy the relevant directory
+into the workspace used by the target agent, restart the gateway or start a new session, and then run
+`promptfooconfig.skills.yaml` or `promptfooconfig.skill-csv.yaml`.
+
+Skill-heavy WS agent workflows can need a larger `timeoutMs` on a cold gateway because runtime setup
+may dominate the first turn before the model starts answering.

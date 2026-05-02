@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw explicit session continuity
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: openclaw
+    config:
+      session_key: promptfoo-session-probe
+
+tests:
+  - vars:
+      message: Remember the codeword SESSION_314. Reply exactly ACK.
+    assert:
+      - type: equals
+        value: ACK
+  - vars:
+      message: What codeword did I give you? Reply with only the codeword.
+    assert:
+      - type: equals
+        value: SESSION_314

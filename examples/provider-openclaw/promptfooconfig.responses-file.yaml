@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw Responses file input for PR review
+
+prompts:
+  - file://prompts/pr-review.json
+
+providers:
+  - openclaw:responses
+
+tests:
+  - assert:
+      - type: equals
+        value: AUTH_GAP

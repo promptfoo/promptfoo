@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw Responses image input
+
+prompts:
+  - file://prompts/red-square.json
+
+providers:
+  - openclaw:responses
+
+tests:
+  - assert:
+      - type: equals
+        value: RED_SQUARE

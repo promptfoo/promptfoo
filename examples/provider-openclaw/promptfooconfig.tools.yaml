@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw direct tool invoke
+
+prompts:
+  - '{}'
+
+providers:
+  - id: openclaw:tools:sessions_list
+    config:
+      action: json
+
+tests:
+  - assert:
+      - type: contains
+        value: sessions

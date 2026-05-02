@@ -407,6 +407,31 @@ Measure cold-start and warm-turn latency separately. OpenClaw may spend meaningf
 runtime plugins, tools, and skill context before the model answers, so a first-turn benchmark can
 look very different from steady-state answer latency.
 
+Use `--max-concurrency 1` when you want clean latency or session measurements. Higher concurrency can
+add contention in gateway preparation and shared session writes. For heavier WS-agent workflows,
+raise `timeoutMs` above the default when the cold path itself is part of what you are measuring.
+
+The bundled example now includes runnable configs for a few common OpenClaw workloads:
+
+| Example file                           | Workload                                               |
+| -------------------------------------- | ------------------------------------------------------ |
+| `promptfooconfig.support-triage.yaml`  | Customer-support routing                               |
+| `promptfooconfig.backend-parity.yaml`  | Backend-model override parity                          |
+| `promptfooconfig.responses-file.yaml`  | PR-review style file analysis                          |
+| `promptfooconfig.responses-tools.yaml` | Client-function tool selection and argument extraction |
+| `promptfooconfig.responses-image.yaml` | Multimodal image understanding                         |
+| `promptfooconfig.security.yaml`        | Prompt-injection resistance on untrusted file input    |
+| `promptfooconfig.session.yaml`         | Deliberate memory continuity                           |
+| `promptfooconfig.agent.yaml`           | Native WS agent loop                                   |
+| `promptfooconfig.skills.yaml`          | Skill adherence                                        |
+| `promptfooconfig.skill-csv.yaml`       | Skill-backed CSV analysis                              |
+| `promptfooconfig.embeddings.yaml`      | Embedding-backed similarity                            |
+| `promptfooconfig.tools.yaml`           | Direct tool-policy checks                              |
+
+Use the direct probe script in the same example when you need to verify `previous_response_id`,
+streaming, rich inputs, client-function round trips, and `/tools/invoke` allow/deny behavior in one
+protocol-level run.
+
 ## Skills
 
 Promptfoo can evaluate skill behavior, but OpenClaw currently resolves skills on the OpenClaw side

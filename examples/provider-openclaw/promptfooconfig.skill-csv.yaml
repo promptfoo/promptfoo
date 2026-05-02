@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw CSV skill workflow
+
+prompts:
+  - |-
+    analyze sales csv
+
+    region,revenue
+    East,100
+    West,250
+    West,100
+
+providers:
+  - id: openclaw:agent
+    config:
+      thinking_level: minimal
+      timeoutMs: 240000
+
+tests:
+  - assert:
+      - type: equals
+        value: ROWS=3 TOTAL=450 TOP_REGION=West

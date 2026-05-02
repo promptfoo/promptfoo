@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw Responses client tool selection
+
+prompts:
+  - 'Please add {{a}} and {{b}}. Use the configured tool and reply with only the result.'
+
+providers:
+  - id: openclaw:responses
+    config:
+      tool_choice:
+        type: function
+        function:
+          name: addNumbers
+      tools:
+        - type: function
+          name: addNumbers
+          description: Add two numbers together.
+          parameters:
+            type: object
+            properties:
+              a:
+                type: number
+              b:
+                type: number
+            required: [a, b]
+
+tests:
+  - vars:
+      a: 17
+      b: 25
+    assert:
+      - type: javascript
+        value: |
+          const call = context.providerResponse?.raw?.output?.find(
+            (item) => item.type === 'function_call',
+          );
+          return call?.name === 'addNumbers' && call?.arguments === '{"a":17,"b":25}';

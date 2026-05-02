@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw embedding similarity
+
+prompts:
+  - 'The quick brown fox jumps over the lazy dog.'
+
+providers:
+  - echo
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: openclaw:embedding
+        config:
+          backend_model: openai/text-embedding-3-small
+
+tests:
+  - assert:
+      - type: similar
+        value: The quick brown fox jumps over the lazy dog.
+        threshold: 0.99

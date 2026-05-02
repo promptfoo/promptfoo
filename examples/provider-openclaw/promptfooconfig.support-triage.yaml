@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenClaw support triage
+
+prompts:
+  - |-
+    Classify the support request as exactly one label: billing, account, or technical.
+    Reply with only the label.
+
+    Request: {{ticket}}
+
+providers:
+  - openclaw
+
+tests:
+  - vars:
+      ticket: I was charged twice for the same invoice.
+    assert:
+      - type: equals
+        value: billing
+  - vars:
+      ticket: I cannot log in after resetting my password.
+    assert:
+      - type: equals
+        value: account
+  - vars:
+      ticket: The app returns a 500 error after I upload a CSV file.
+    assert:
+      - type: equals
+        value: technical
