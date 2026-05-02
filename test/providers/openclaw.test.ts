@@ -1010,6 +1010,17 @@ describe('OpenClaw Provider', () => {
         'openai/text-embedding-3-small',
       );
     });
+
+    it('should explain how to use embedding providers when called like text providers', async () => {
+      const provider = new OpenClawEmbeddingProvider('main', {});
+
+      const result = await provider.callApi('embed this');
+
+      expect(result.error).toContain(
+        'Cannot use an OpenClaw embedding provider as a text-generation provider',
+      );
+      expect(result.error).toContain('similar');
+    });
   });
 
   describe('OpenClawToolInvokeProvider', () => {

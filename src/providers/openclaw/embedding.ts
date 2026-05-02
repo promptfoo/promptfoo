@@ -7,7 +7,7 @@ import {
   normalizeOpenClawAgentId,
 } from './shared';
 
-import type { ProviderOptions } from '../../types/providers';
+import type { ProviderOptions, ProviderResponse } from '../../types/providers';
 
 /**
  * OpenClaw embedding provider extends the OpenAI-compatible embeddings provider.
@@ -47,5 +47,12 @@ export class OpenClawEmbeddingProvider extends OpenAiEmbeddingProvider {
   // Prevent fallback to OPENAI_API_HOST / OPENAI_BASE_URL.
   getApiUrl(): string {
     return this.config.apiBaseUrl || this.getApiUrlDefault();
+  }
+
+  async callApi(_prompt: string): Promise<ProviderResponse> {
+    return {
+      error:
+        'Cannot use an OpenClaw embedding provider as a text-generation provider. Use it with embedding-backed assertions such as `similar`, or call callEmbeddingApi() directly.',
+    };
   }
 }

@@ -80,8 +80,9 @@ not reuse your persistent OpenClaw session. Set `session_key` explicitly if you 
 WS provider signs OpenClaw's `connect.challenge`, persists issued device tokens, and retries once
 with a cached device token when the gateway recommends it.
 
-Use `openclaw:embedding` or `openclaw:embeddings:<agent-id>` for `/v1/embeddings`. Set
-`backend_model` when you want a specific embedding model such as `openai/text-embedding-3-small`.
+Use `openclaw:embedding` or `openclaw:embeddings:<agent-id>` as embedding providers for assertions
+such as `similar`. Set `backend_model` when you want a specific embedding model such as
+`openai/text-embedding-3-small`.
 
 For password-mode gateways, use `auth_password` or `OPENCLAW_GATEWAY_PASSWORD`.
 
@@ -96,6 +97,8 @@ For password-mode gateways, use `auth_password` or `OPENCLAW_GATEWAY_PASSWORD`.
 - Use `openclaw:responses` for item-based inputs, client tools, files, images, and
   `previous_response_id` flows.
 - Use `openclaw:tools:<tool>` for stable direct-tool checks and expected policy denials.
+- Measure cold-start and warm-turn latency separately; OpenClaw can spend real time loading runtime
+  plugins, tools, and skills before the model answers.
 
 ## Skills
 

@@ -61,13 +61,13 @@ openclaw gateway restart
 
 OpenClaw exposes five provider types, each targeting a different gateway API surface:
 
-| Provider    | Format                         | API                    | Use Case                                             |
-| ----------- | ------------------------------ | ---------------------- | ---------------------------------------------------- |
-| Chat        | `openclaw`                     | `/v1/chat/completions` | Standard chat completions (default)                  |
-| Responses   | `openclaw:responses`           | `/v1/responses`        | OpenResponses-compatible API with item-based inputs  |
-| Embeddings  | `openclaw:embedding`           | `/v1/embeddings`       | OpenAI-compatible embeddings through an agent target |
-| Agent       | `openclaw:agent`               | WebSocket RPC          | Full agent streaming via native WS protocol          |
-| Tool Invoke | `openclaw:tools:sessions_list` | `/tools/invoke`        | Direct tool invocation for stable built-in tools     |
+| Provider    | Format                         | API                    | Use Case                                            |
+| ----------- | ------------------------------ | ---------------------- | --------------------------------------------------- |
+| Chat        | `openclaw`                     | `/v1/chat/completions` | Standard chat completions (default)                 |
+| Responses   | `openclaw:responses`           | `/v1/responses`        | OpenResponses-compatible API with item-based inputs |
+| Embeddings  | `openclaw:embedding`           | `/v1/embeddings`       | Embedding provider for similarity-style assertions  |
+| Agent       | `openclaw:agent`               | WebSocket RPC          | Full agent streaming via native WS protocol         |
+| Tool Invoke | `openclaw:tools:sessions_list` | `/tools/invoke`        | Direct tool invocation for stable built-in tools    |
 
 ### Chat (default)
 
@@ -118,7 +118,9 @@ and `max_tool_calls`, so do not use those ignored fields as evidence that a run 
 
 Uses the OpenAI-compatible `/v1/embeddings` endpoint from the same HTTP compatibility surface. The
 `model` field selects the OpenClaw agent target, and `config.backend_model` can override the backend
-embedding model with the `x-openclaw-model` header.
+embedding model with the `x-openclaw-model` header. Use these ids as embedding providers for
+assertions such as `similar`; they are not text-generation providers in the top-level `providers`
+list.
 
 - `openclaw:embedding` - Default agent via Embeddings API
 - `openclaw:embedding:<agent-id>` - Custom agent by ID
@@ -303,13 +305,22 @@ prompts:
   - '{{text}}'
 
 providers:
-  - id: openclaw:embedding
-    config:
-      backend_model: openai/text-embedding-3-small
+  - echo
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: openclaw:embedding
+        config:
+          backend_model: openai/text-embedding-3-small
 
 tests:
   - vars:
       text: Promptfoo routes this through OpenClaw.
+    assert:
+      - type: similar
+        value: Promptfoo routes this through OpenClaw.
 ```
 
 ### Backend Model Override
@@ -391,6 +402,10 @@ Responses endpoint so OpenClaw's untrusted-content wrapping is part of the syste
 For clean comparisons, hold the agent constant while varying `backend_model`, then hold the backend
 model constant while varying agents, workspaces, or skills. That separates model quality from
 OpenClaw routing, memory, tool policy, and skill behavior.
+
+Measure cold-start and warm-turn latency separately. OpenClaw may spend meaningful time loading
+runtime plugins, tools, and skill context before the model answers, so a first-turn benchmark can
+look very different from steady-state answer latency.
 
 ## Skills
 
