@@ -25,11 +25,11 @@ providers:
       tools:
         - googleSearch: {}
 
-  # xAI Grok 4.1 Fast Reasoning with live web search
-  - id: xai:grok-4-1-fast-reasoning
+  # xAI Grok 4.3 with Responses API web search
+  - id: xai:responses:grok-4.3
     config:
-      search_parameters:
-        mode: 'on'
+      tools:
+        - type: web_search
 
   # Perplexity Sonar Pro with built-in search
   - perplexity:sonar-pro

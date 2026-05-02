@@ -29,6 +29,10 @@ function isOpenAiResponsesProvider(provider: ApiProvider, id: string): boolean {
   );
 }
 
+function isXAIResponsesProvider(provider: ApiProvider, id: string): boolean {
+  return id.includes('xai:responses') || provider.constructor?.name === 'XAIResponsesProvider';
+}
+
 /**
  * Check if a provider has web search capabilities
  * @param provider The provider to check
@@ -57,8 +61,12 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
     return true;
   }
 
-  // Check for xAI with search parameters
-  if (id.includes('xai') && provider.config?.search_parameters?.mode === 'on') {
+  // Check for xAI with either the current Responses API tools or legacy Live Search params.
+  if (
+    id.includes('xai') &&
+    (provider.config?.search_parameters?.mode === 'on' ||
+      (isXAIResponsesProvider(provider, id) && hasTool(provider, (t) => t.type === 'web_search')))
+  ) {
     return true;
   }
 
@@ -173,12 +181,12 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // xAI Grok 4.1 Fast Reasoning with live web search
+  // xAI Grok 4.3 with Responses API web search
   const loadXaiWebSearch = async () => {
     try {
-      return await loadApiProvider('xai:grok-4-1-fast-reasoning', {
+      return await loadApiProvider('xai:responses:grok-4.3', {
         options: {
-          config: { search_parameters: { mode: 'on' } },
+          config: { tools: [{ type: 'web_search' }] },
         },
       });
     } catch (err) {

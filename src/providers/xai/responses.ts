@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -8,7 +9,7 @@ import {
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs } from '../shared';
-import { calculateXAICost, GROK_4_MODELS } from './chat';
+import { calculateXAICost, GROK_4_MODELS, getXAICostInUsd } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -53,7 +54,7 @@ export interface XAIXSearchTool {
 }
 
 export interface XAICodeInterpreterTool {
-  type: 'code_interpreter';
+  type: 'code_execution' | 'code_interpreter';
   /** Container configuration */
   container?: {
     /** Pre-installed pip packages */
@@ -62,17 +63,25 @@ export interface XAICodeInterpreterTool {
 }
 
 export interface XAICollectionsSearchTool {
-  type: 'collections_search';
-  /** Collection IDs to search */
+  type: 'collections_search' | 'file_search';
+  /** Collection IDs to search when using `collections_search`. */
   collection_ids?: string[];
+  /** Collection IDs to search when using OpenAI-compatible `file_search`. */
+  vector_store_ids?: string[];
+  /** Maximum results for OpenAI-compatible `file_search`. */
+  max_num_results?: number;
 }
 
 export interface XAIMCPTool {
   type: 'mcp';
   /** MCP server URL */
   server_url: string;
-  /** Optional server label */
+  /** Optional label used for tool-call prefixing */
   server_label?: string;
+  /** Optional description of the server capabilities */
+  server_description?: string;
+  /** Optional bearer token for MCP server requests */
+  authorization?: string;
   /** Headers for MCP requests */
   headers?: Record<string, string>;
   /** Allowed tools from this server */
@@ -86,12 +95,135 @@ export type XAIAgentTool =
   | XAICollectionsSearchTool
   | XAIMCPTool;
 
+type XAIResponsesStreamEvent = {
+  type?: string;
+  response?: any;
+  delta?: string;
+  output_text?: { delta?: string };
+  output?: any[];
+  usage?: any;
+  [key: string]: any;
+};
+
+function parseSseEvent(chunk: string): XAIResponsesStreamEvent | undefined {
+  const data = chunk
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice('data:'.length).trimStart())
+    .join('\n')
+    .trim();
+
+  if (!data || data === '[DONE]') {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(data) as XAIResponsesStreamEvent;
+  } catch {
+    logger.debug('[xAI Responses] Ignoring malformed SSE payload', { data });
+    return undefined;
+  }
+}
+
+async function readStreamingResponse(response: Response): Promise<any> {
+  if (!response.body) {
+    throw new Error('xAI streaming response has no body');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let latestResponse: any;
+  let outputText = '';
+
+  const processChunk = (chunk: string) => {
+    const event = parseSseEvent(chunk);
+    if (!event) {
+      return;
+    }
+
+    if (event.response && typeof event.response === 'object') {
+      latestResponse = event.response;
+    } else if (Array.isArray(event.output)) {
+      latestResponse = event;
+    }
+
+    if (typeof event.delta === 'string') {
+      outputText += event.delta;
+    } else if (typeof event.output_text?.delta === 'string') {
+      outputText += event.output_text.delta;
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split(/\r?\n\r?\n/);
+    buffer = chunks.pop() || '';
+    for (const chunk of chunks) {
+      processChunk(chunk);
+    }
+  }
+
+  buffer += decoder.decode();
+  if (buffer.trim()) {
+    processChunk(buffer);
+  }
+
+  if (latestResponse) {
+    return latestResponse;
+  }
+
+  if (outputText) {
+    return {
+      output: [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: outputText }],
+        },
+      ],
+    };
+  }
+
+  throw new Error('xAI streaming response did not include output content');
+}
+
+function buildTextFormat(responseFormat: any) {
+  if (!responseFormat) {
+    return { format: { type: 'text' } };
+  }
+
+  if (responseFormat.type === 'json_object') {
+    return { format: { type: 'json_object' } };
+  }
+
+  if (responseFormat.type === 'json_schema') {
+    const schema = responseFormat.schema || responseFormat.json_schema?.schema;
+    const schemaName = responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
+    return {
+      format: {
+        type: 'json_schema',
+        name: schemaName,
+        schema,
+        strict: true,
+      },
+    };
+  }
+
+  return { format: { type: 'text' } };
+}
+
 export interface XAIResponsesConfig {
   /** API key (defaults to XAI_API_KEY env var) */
   apiKey?: string;
   /** API base URL (defaults to https://api.x.ai/v1) */
   apiBaseUrl?: string;
-  /** Region for regional endpoints (e.g., 'us-west-1') */
+  /** Region for regional endpoints (e.g., 'eu-west-1') */
   region?: string;
   /** Temperature (0-2) */
   temperature?: number;
@@ -99,6 +231,8 @@ export interface XAIResponsesConfig {
   top_p?: number;
   /** Maximum output tokens */
   max_output_tokens?: number;
+  /** Maximum number of tool calls allowed for the request */
+  max_tool_calls?: number;
   /** System instructions */
   instructions?: string;
   /** Response format (json_object, json_schema, or text) */
@@ -109,8 +243,16 @@ export interface XAIResponsesConfig {
   tool_choice?: 'auto' | 'required' | 'none' | { type: 'function'; function: { name: string } };
   /** Enable parallel tool calls */
   parallel_tool_calls?: boolean;
+  /** Stream partial response deltas from the API */
+  stream?: boolean;
   /** Store response for later retrieval */
   store?: boolean;
+  /** Additional response data to include, such as encrypted reasoning content */
+  include?: string[];
+  /** Multi-agent configuration for supported models */
+  reasoning?: {
+    effort?: 'low' | 'medium' | 'high' | 'xhigh';
+  };
   /** Previous response ID for multi-turn conversations */
   previous_response_id?: string;
   /** User identifier */
@@ -133,7 +275,7 @@ export interface XAIResponsesConfig {
  * and interact with MCP servers.
  *
  * Usage:
- *   xai:responses:grok-4-1-fast-reasoning
+ *   xai:responses:grok-4.3
  *   xai:responses:grok-4-fast
  *   xai:responses:grok-4
  */
@@ -158,12 +300,14 @@ export class XAIResponsesProvider implements ApiProvider {
       providerType: 'xai',
       functionCallbackHandler: this.functionCallbackHandler,
       costCalculator: (modelName: string, usage: any, config?: any) =>
+        getXAICostInUsd(usage) ??
         calculateXAICost(
           modelName,
           config || {},
           usage?.input_tokens || usage?.prompt_tokens,
           usage?.output_tokens || usage?.completion_tokens,
-        ) ?? 0,
+        ) ??
+        0,
     });
   }
 
@@ -187,12 +331,19 @@ export class XAIResponsesProvider implements ApiProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('XAI_API_KEY');
+    return this.config.apiKey || this.env?.XAI_API_KEY || getEnvString('XAI_API_KEY');
   }
 
   protected getApiUrl(): string {
     if (this.config.apiBaseUrl) {
       return this.config.apiBaseUrl;
+    }
+    if (this.env?.XAI_API_BASE_URL) {
+      return this.env.XAI_API_BASE_URL;
+    }
+    const envApiBaseUrl = getEnvString('XAI_API_BASE_URL');
+    if (envApiBaseUrl) {
+      return envApiBaseUrl;
     }
     if (this.config.region) {
       return `https://${this.config.region}.api.x.ai/v1`;
@@ -235,30 +386,7 @@ export class XAIResponsesProvider implements ApiProvider {
       context?.vars,
     );
 
-    // Build text format configuration
-    let textFormat;
-    if (responseFormat) {
-      if (responseFormat.type === 'json_object') {
-        textFormat = { format: { type: 'json_object' } };
-      } else if (responseFormat.type === 'json_schema') {
-        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
-        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
-        const schemaName =
-          responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
-        textFormat = {
-          format: {
-            type: 'json_schema',
-            name: schemaName,
-            schema,
-            strict: true,
-          },
-        };
-      } else {
-        textFormat = { format: { type: 'text' } };
-      }
-    } else {
-      textFormat = { format: { type: 'text' } };
-    }
+    const textFormat = buildTextFormat(responseFormat);
 
     // Load tools from external file if needed
     const loadedTools = config.tools
@@ -275,11 +403,15 @@ export class XAIResponsesProvider implements ApiProvider {
       ...(config.top_p === undefined ? {} : { top_p: config.top_p }),
       ...(loadedTools && loadedTools.length > 0 ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,
+      ...(config.include?.length ? { include: config.include } : {}),
+      ...(config.reasoning ? { reasoning: config.reasoning } : {}),
       ...('parallel_tool_calls' in config
         ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
         : {}),
+      ...(config.stream ? { stream: config.stream } : {}),
       ...('store' in config ? { store: Boolean(config.store) } : {}),
       ...(config.user ? { user: config.user } : {}),
       ...(config.passthrough || {}),
@@ -329,27 +461,67 @@ export class XAIResponsesProvider implements ApiProvider {
     let statusText: string;
 
     try {
-      const response = await fetchWithCache(
-        `${this.getApiUrl()}/responses`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-            ...config.headers,
-          },
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-        'json',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      );
+      if (body.stream) {
+        const timeoutMs = getRequestTimeoutMs();
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetchWithProxy(`${this.getApiUrl()}/responses`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+              ...config.headers,
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
 
-      data = response.data;
-      cached = response.cached;
-      status = response.status;
-      statusText = response.statusText;
+          status = response.status;
+          statusText = response.statusText;
+          // Streaming bypasses fetchWithCache, so cache-hit telemetry is always false.
+          cached = false;
+          if (status < 200 || status >= 300) {
+            const text = await response.text();
+            try {
+              data = JSON.parse(text);
+            } catch {
+              data = text;
+            }
+          } else {
+            data = await readStreamingResponse(response);
+          }
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw new Error(`xAI streaming response timed out after ${timeoutMs}ms`);
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutHandle);
+        }
+      } else {
+        const response = await fetchWithCache(
+          `${this.getApiUrl()}/responses`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+              ...config.headers,
+            },
+            body: JSON.stringify(body),
+          },
+          getRequestTimeoutMs(),
+          'json',
+          context?.bustCache ?? context?.debug,
+          this.config.maxRetries,
+        );
+
+        data = response.data;
+        cached = response.cached;
+        status = response.status;
+        statusText = response.statusText;
+      }
 
       if (status < 200 || status >= 300) {
         const errorMessage = `xAI API error: ${status} ${statusText}\n${
