@@ -15,6 +15,7 @@ import {
   ConfigResolutionError,
   combineConfigs,
   dereferenceConfig,
+  logConfigResolutionError,
   maybeReadConfig,
   readConfig,
   resolveCliProvidersWithConfig,
@@ -1826,6 +1827,23 @@ describe('resolveConfigs', () => {
         config: ollamaConfig,
       });
     });
+  });
+});
+
+describe('ConfigResolutionError', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should fall back to error logging for invalid runtime log levels', () => {
+    const error = new ConfigResolutionError('invalid log level', {
+      logLevel: 'debug' as any,
+    });
+
+    logConfigResolutionError(error);
+
+    expect(error.logLevel).toBe('error');
+    expect(logger.error).toHaveBeenCalledWith('invalid log level');
   });
 });
 
