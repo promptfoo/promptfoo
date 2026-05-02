@@ -1203,20 +1203,26 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env,
     };
 
-    // Cache handling using shared utilities
-    const cacheResult = await initializeAgenticCache(
-      {
-        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-        workingDir,
-        bustCache: context?.bustCache,
-        mcp: config.mcp?.servers?.length ? config.mcp : undefined,
-        cacheMcp: config.cache_mcp,
-      },
-      {
-        prompt,
-        cacheKeyQueryOptions,
-      },
-    );
+    // Cache handling using shared utilities. A user-supplied can_use_tool
+    // callback can change tool inputs/decisions in ways that aren't representable
+    // in the cache key, so we skip caching entirely when one is provided to avoid
+    // serving or poisoning entries across different callback implementations.
+    const userProvidedCanUseTool = Boolean(config.can_use_tool);
+    const cacheResult = userProvidedCanUseTool
+      ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+      : await initializeAgenticCache(
+          {
+            cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+            workingDir,
+            bustCache: context?.bustCache,
+            mcp: config.mcp?.servers?.length ? config.mcp : undefined,
+            cacheMcp: config.cache_mcp,
+          },
+          {
+            prompt,
+            cacheKeyQueryOptions,
+          },
+        );
 
     // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');

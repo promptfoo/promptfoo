@@ -166,13 +166,12 @@ export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
   setupEnv(options.envFile);
-  if (!options.cache) {
+  const cacheOverride = options.cache === false ? false : undefined;
+  if (cacheOverride === false) {
     logger.info('Cache is disabled');
   }
 
-  return withCacheEnabled(options.cache ? undefined : false, () =>
-    doGenerateRedteamInternal(options),
-  );
+  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
 }
 
 async function doGenerateRedteamInternal(

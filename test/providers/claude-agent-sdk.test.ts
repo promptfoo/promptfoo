@@ -3274,6 +3274,29 @@ describe('ClaudeCodeSDKProvider', () => {
         enableCache();
       });
 
+      it('should bypass cache when can_use_tool callback is provided', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        await clearCache();
+
+        const canUseTool = vi.fn(async (_toolName: string, input: Record<string, unknown>) => ({
+          behavior: 'allow' as const,
+          updatedInput: input,
+        }));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { can_use_tool: canUseTool },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
+
+        // Two real SDK calls — cache must be skipped because the user-supplied
+        // callback can change tool decisions in ways the cache key can't model.
+        expect(mockQuery).toHaveBeenCalledTimes(2);
+      });
+
       it('should handle cache errors gracefully', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 

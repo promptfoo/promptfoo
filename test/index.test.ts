@@ -926,6 +926,7 @@ describe('evaluate with external defaultTest', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -1796,6 +1797,7 @@ describe('evaluate sharing functionality', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
