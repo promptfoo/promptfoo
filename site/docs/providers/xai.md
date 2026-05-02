@@ -525,7 +525,7 @@ tests:
 
 ### Embeddings
 
-xAI does not currently expose a public embeddings API. Use [openai:embedding:\*](/docs/providers/openai/#embeddings) (or another embedding provider) for [similarity assertions](/docs/configuration/expected-outputs/similar).
+xAI does not currently expose a public embeddings API. Use the [OpenAI provider](/docs/providers/openai) (or another embedding provider) for [similarity assertions](/docs/configuration/expected-outputs/similar).
 
 ### Image Generation
 
