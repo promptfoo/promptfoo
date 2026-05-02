@@ -17,7 +17,7 @@ keeps reference material aligned with the code.
 - [x] Link the Node.js API docs from the nearby docs surfaces where users already
       encounter programmatic features.
 - [x] Add docs validation so generated/reference docs drift is caught in CI.
-- [ ] Run focused QA after each stage, including docs builds and PR-style review
+- [x] Run focused QA after each stage, including docs builds and PR-style review
       passes on each commit.
 
 ## Working Notes
