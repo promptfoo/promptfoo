@@ -29,7 +29,9 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
+  removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
 
@@ -284,10 +286,10 @@ export class GoogleProvider extends GoogleGenericProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
@@ -298,7 +300,8 @@ export class GoogleProvider extends GoogleGenericProvider {
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
+    const allTools = await this.getAllTools(context);
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
 
     const body: Record<string, any> = {
       contents,
@@ -312,7 +315,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
       ...(systemInstruction
         ? this.isVertexMode

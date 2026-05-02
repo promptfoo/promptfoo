@@ -14,7 +14,9 @@ import {
   geminiFormatAndSystemInstructions,
   getGoogleAccessToken,
   loadCredentials,
+  mergeGoogleCompletionOptions,
   normalizeTools,
+  removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
 
@@ -176,10 +178,10 @@ export class GoogleLiveProvider implements ApiProvider {
       );
     }
 
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
@@ -234,6 +236,9 @@ export class GoogleLiveProvider implements ApiProvider {
       : fileTools
         ? [fileTools]
         : [];
+    const requestTools = toolsDisabled
+      ? removeGoogleFunctionDeclarations(normalizedTools)
+      : normalizedTools;
 
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
@@ -404,7 +409,7 @@ export class GoogleLiveProvider implements ApiProvider {
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
             ...(toolConfig ? { toolConfig } : {}),
-            ...(!toolsDisabled && normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
+            ...(requestTools.length > 0 ? { tools: requestTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
               ? { output_audio_transcription: outputAudioTranscription }
@@ -564,55 +569,63 @@ export class GoogleLiveProvider implements ApiProvider {
             logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
           } else if (response.toolCall?.functionCalls) {
-            for (const functionCall of response.toolCall.functionCalls) {
-              function_calls_total.push(functionCall);
-              if (functionCall && functionCall.id && functionCall.name) {
-                let callbackResponse = {};
-                const functionName = functionCall.name;
-                try {
-                  if (!toolsDisabled && config.functionToolCallbacks?.[functionName]) {
-                    callbackResponse = await this.executeFunctionCallback(
-                      functionName,
-                      JSON.stringify(
-                        typeof functionCall.args === 'string'
-                          ? JSON.parse(functionCall.args)
-                          : functionCall.args,
-                      ),
-                    );
-                  } else if (!toolsDisabled && config.functionToolStatefulApi) {
-                    logger.warn(
-                      'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
-                    );
-                    const baseUrl = new URL(functionName, config.functionToolStatefulApi.url).href;
-                    try {
-                      callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
-                      logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
-                    } catch (err) {
-                      callbackResponse = {
-                        error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                      };
-                      logger.error(
-                        `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+            if (toolsDisabled) {
+              logger.warn('Ignoring function calls received while tools are disabled.');
+            } else {
+              for (const functionCall of response.toolCall.functionCalls) {
+                function_calls_total.push(functionCall);
+                if (functionCall && functionCall.id && functionCall.name) {
+                  let callbackResponse = {};
+                  const functionName = functionCall.name;
+                  try {
+                    if (config.functionToolCallbacks?.[functionName]) {
+                      callbackResponse = await this.executeFunctionCallback(
+                        functionName,
+                        JSON.stringify(
+                          typeof functionCall.args === 'string'
+                            ? JSON.parse(functionCall.args)
+                            : functionCall.args,
+                        ),
+                        config.functionToolCallbacks,
                       );
+                    } else if (config.functionToolStatefulApi) {
+                      logger.warn(
+                        'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
+                      );
+                      const baseUrl = new URL(functionName, config.functionToolStatefulApi.url)
+                        .href;
+                      try {
+                        callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
+                        logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
+                      } catch (err) {
+                        callbackResponse = {
+                          error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                        };
+                        logger.error(
+                          `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                        );
+                      }
                     }
+                  } catch (err) {
+                    callbackResponse = {
+                      error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                    };
+                    logger.error(
+                      `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+                    );
                   }
-                } catch (err) {
-                  callbackResponse = {
-                    error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                  };
-                  logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
-                }
-                const toolMessage = {
-                  tool_response: {
-                    function_responses: {
-                      id: functionCall.id,
-                      name: functionName,
-                      response: callbackResponse,
+                  const toolMessage = {
+                    tool_response: {
+                      function_responses: {
+                        id: functionCall.id,
+                        name: functionName,
+                        response: callbackResponse,
+                      },
                     },
-                  },
-                };
-                logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
-                ws.send(JSON.stringify(toolMessage));
+                  };
+                  logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
+                  ws.send(JSON.stringify(toolMessage));
+                }
               }
             }
           } else if (response.realtimeInput?.mediaChunks) {
@@ -759,14 +772,19 @@ export class GoogleLiveProvider implements ApiProvider {
   /**
    * Executes a function callback with proper error handling
    */
-  private async executeFunctionCallback(functionName: string, args: string): Promise<any> {
+  private async executeFunctionCallback(
+    functionName: string,
+    args: string,
+    callbacks = this.config.functionToolCallbacks,
+  ): Promise<any> {
     try {
+      const shouldUseSharedCache = callbacks === this.config.functionToolCallbacks;
       // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
+      let callback = shouldUseSharedCache ? this.loadedFunctionCallbacks[functionName] : undefined;
 
       // If not loaded yet, try to load it now
       if (!callback) {
-        const callbackRef = this.config.functionToolCallbacks?.[functionName];
+        const callbackRef = callbacks?.[functionName];
 
         if (callbackRef && typeof callbackRef === 'string') {
           const callbackStr: string = callbackRef;
@@ -776,11 +794,14 @@ export class GoogleLiveProvider implements ApiProvider {
             callback = new Function('return ' + callbackStr)();
           }
 
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
+          if (shouldUseSharedCache && callback) {
+            this.loadedFunctionCallbacks[functionName] = callback;
+          }
         } else if (typeof callbackRef === 'function') {
           callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
+          if (shouldUseSharedCache) {
+            this.loadedFunctionCallbacks[functionName] = callback;
+          }
         }
       }
 

@@ -50,6 +50,7 @@ function normalizeGoogleToolMode(
   switch (mode.toUpperCase()) {
     case 'MODE_UNSPECIFIED':
     case 'AUTO':
+    case 'VALIDATED':
     case 'ANY':
     case 'NONE':
       return mode.toUpperCase() as NonNullable<
@@ -64,29 +65,42 @@ function normalizeExplicitGoogleToolConfig(
   config: CompletionOptions,
 ): GoogleToolConfig | undefined {
   if (config.toolConfig?.functionCallingConfig) {
-    const mode = normalizeGoogleToolMode(config.toolConfig.functionCallingConfig.mode);
+    const {
+      mode: rawMode,
+      allowedFunctionNames,
+      ...restFunctionCallingConfig
+    } = config.toolConfig.functionCallingConfig;
+    const mode = normalizeGoogleToolMode(rawMode);
+    const functionCallingConfig = {
+      ...restFunctionCallingConfig,
+      ...(mode ? { mode } : {}),
+      ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
+    };
+    if (Object.keys(functionCallingConfig).length === 0) {
+      return undefined;
+    }
     return {
-      functionCallingConfig: {
-        ...(mode ? { mode } : {}),
-        ...(config.toolConfig.functionCallingConfig.allowedFunctionNames?.length
-          ? { allowedFunctionNames: config.toolConfig.functionCallingConfig.allowedFunctionNames }
-          : {}),
-      },
+      functionCallingConfig,
     };
   }
 
   if (config.tool_config?.function_calling_config) {
-    const mode = normalizeGoogleToolMode(config.tool_config.function_calling_config.mode);
+    const {
+      mode: rawMode,
+      allowed_function_names: allowedFunctionNames,
+      stream_function_call_arguments: streamFunctionCallArguments,
+    } = config.tool_config.function_calling_config;
+    const mode = normalizeGoogleToolMode(rawMode);
+    const functionCallingConfig = {
+      ...(mode ? { mode } : {}),
+      ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
+      ...(streamFunctionCallArguments === undefined ? {} : { streamFunctionCallArguments }),
+    };
+    if (Object.keys(functionCallingConfig).length === 0) {
+      return undefined;
+    }
     return {
-      functionCallingConfig: {
-        ...(mode ? { mode } : {}),
-        ...(config.tool_config.function_calling_config.allowed_function_names?.length
-          ? {
-              allowedFunctionNames:
-                config.tool_config.function_calling_config.allowed_function_names,
-            }
-          : {}),
-      },
+      functionCallingConfig,
     };
   }
 
@@ -104,9 +118,16 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
       ? (transformedToolChoice as GoogleToolConfig)
       : undefined;
   const explicitMode = normalizeGoogleToolMode(explicitConfig?.functionCallingConfig?.mode);
+  const camelCaseMode = normalizeGoogleToolMode(config.toolConfig?.functionCallingConfig?.mode);
+  const snakeCaseMode = normalizeGoogleToolMode(config.tool_config?.function_calling_config?.mode);
   const toolChoiceMode = normalizeGoogleToolMode(toolChoiceConfig?.functionCallingConfig?.mode);
 
-  if (explicitMode === 'NONE' || toolChoiceMode === 'NONE') {
+  if (
+    explicitMode === 'NONE' ||
+    camelCaseMode === 'NONE' ||
+    snakeCaseMode === 'NONE' ||
+    toolChoiceMode === 'NONE'
+  ) {
     return {
       toolConfig: { functionCallingConfig: { mode: 'NONE' } },
       toolsDisabled: true,
@@ -121,6 +142,45 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
         : {}),
     toolsDisabled: false,
   };
+}
+
+export function mergeGoogleCompletionOptions(
+  baseConfig: CompletionOptions,
+  promptConfig?: Partial<CompletionOptions>,
+): CompletionOptions {
+  const mergedConfig = {
+    ...baseConfig,
+    ...promptConfig,
+  };
+
+  if (
+    promptConfig &&
+    (Object.prototype.hasOwnProperty.call(promptConfig, 'tool_choice') ||
+      Object.prototype.hasOwnProperty.call(promptConfig, 'toolConfig') ||
+      Object.prototype.hasOwnProperty.call(promptConfig, 'tool_config'))
+  ) {
+    delete mergedConfig.tool_choice;
+    delete mergedConfig.toolConfig;
+    delete mergedConfig.tool_config;
+
+    if (Object.prototype.hasOwnProperty.call(promptConfig, 'tool_choice')) {
+      mergedConfig.tool_choice = promptConfig.tool_choice;
+    }
+    if (Object.prototype.hasOwnProperty.call(promptConfig, 'toolConfig')) {
+      mergedConfig.toolConfig = promptConfig.toolConfig;
+    }
+    if (Object.prototype.hasOwnProperty.call(promptConfig, 'tool_config')) {
+      mergedConfig.tool_config = promptConfig.tool_config;
+    }
+  }
+
+  return mergedConfig;
+}
+
+export function removeGoogleFunctionDeclarations(tools: Tool[]): Tool[] {
+  return tools.flatMap(({ functionDeclarations, ...tool }) =>
+    functionDeclarations && Object.keys(tool).length === 0 ? [] : [tool as Tool],
+  );
 }
 
 /**

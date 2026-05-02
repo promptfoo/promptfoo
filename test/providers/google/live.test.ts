@@ -664,6 +664,53 @@ describe('GoogleLiveProvider', () => {
     expect(sentMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
     expect(sentMessage.setup.tools).toBeUndefined();
     expect(mockAddNumbers).not.toHaveBeenCalled();
+    expect(
+      mockWs.send.mock.calls.some(([message]) => !!JSON.parse(message as string).tool_response),
+    ).toBe(false);
+  });
+
+  it('should execute prompt-level function callbacks', async () => {
+    const promptAddNumbers = vi.fn().mockResolvedValue({ sum: 11 });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'addNumbers', args: { a: 5, b: 6 }, id: 'function-call-prompt-level' },
+        ]);
+        simulateTextMessage(mockWs, 'The sum is 11.');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('What is the sum?', {
+      prompt: {
+        config: {
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'addNumbers',
+                  description: 'Add two numbers together',
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: {
+            addNumbers: promptAddNumbers,
+          },
+        },
+      },
+    } as any);
+
+    expect(promptAddNumbers).toHaveBeenCalledWith('{"a":5,"b":6}');
+    expect(response.output).toEqual(
+      expect.objectContaining({
+        text: 'The sum is 11.',
+      }),
+    );
   });
 
   it('should handle function tool calls to a spawned stateful api', async () => {

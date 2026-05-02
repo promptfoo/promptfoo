@@ -13,7 +13,9 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
+  removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
 } from './util';
 
@@ -265,10 +267,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
@@ -394,7 +396,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
+    const allTools = await this.getAllTools(context);
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
 
     const body: Record<string, any> = {
       contents,
@@ -412,7 +415,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 

@@ -27,9 +27,11 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
+  mergeGoogleCompletionOptions,
   mergeParts,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
+  removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
@@ -47,6 +49,7 @@ import type {
   ClaudeRequest,
   ClaudeResponse,
   ClaudeThinkingConfig,
+  CompletionOptions,
   GoogleProviderConfig,
 } from './types';
 import type {
@@ -440,10 +443,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
@@ -455,7 +458,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
+    const allTools = await this.getAllTools(context);
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -473,7 +477,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
         : {}),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
       // Model Armor integration: inject template configuration for prompt/response screening
       // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
