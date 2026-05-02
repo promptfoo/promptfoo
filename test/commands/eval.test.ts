@@ -127,6 +127,13 @@ describe('evalCommand', () => {
     program = new Command();
     vi.clearAllMocks();
     chokidarMocks.handlers.clear();
+    chokidarMocks.watcher.on
+      .mockReset()
+      .mockImplementation((event: string, handler: (...args: any[]) => unknown) => {
+        chokidarMocks.handlers.set(event, handler);
+        return chokidarMocks.watcher;
+      });
+    chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
@@ -259,18 +266,24 @@ describe('evalCommand', () => {
         basePath: path.resolve('/'),
       })
       .mockRejectedValueOnce(new ConfigResolutionError('You must provide at least 1 prompt'));
-    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
     const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-    await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
 
-    const onChange = chokidarMocks.handlers.get('change');
-    expect(onChange).toBeDefined();
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
 
-    await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
 
-    expect(loggerErrorSpy).toHaveBeenCalledWith('You must provide at least 1 prompt');
-    expect(resolveConfigs).toHaveBeenCalledTimes(2);
+      expect(loggerErrorSpy).toHaveBeenCalledWith('You must provide at least 1 prompt');
+      expect(resolveConfigs).toHaveBeenCalledTimes(2);
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
   });
 
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
