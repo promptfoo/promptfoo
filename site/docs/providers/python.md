@@ -258,6 +258,7 @@ class TokenUsage:
     total: int
     prompt: int
     completion: int
+    numRequests: int
 
 class ProviderResponse:
     output: Optional[Union[str, Dict[str, Any]]]
