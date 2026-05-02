@@ -1,3 +1,13 @@
+/**
+ * Programmatic API for running promptfoo evals from Node.js.
+ *
+ * The root package entrypoint is the supported public boundary for the Node.js
+ * API. Use the exported functions, namespaces, and types from this module rather
+ * than importing deep source files directly.
+ *
+ * @packageDocumentation
+ */
+
 import assertions from './assertions/index';
 import * as cache from './cache';
 import cliState from './cliState';
@@ -220,7 +230,36 @@ function createSerializableUnifiedConfig(
   return config;
 }
 
-async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
+/**
+ * Run an eval from a JavaScript or TypeScript program.
+ *
+ * `testSuite` uses the same concepts as a YAML config, but the Node.js API also
+ * accepts function-valued prompts, providers, assertions, and transforms where
+ * the corresponding types allow them.
+ *
+ * @param testSuite - Prompts, providers, tests, and other eval configuration.
+ * @param options - Runtime-only evaluation options such as caching and
+ * concurrency.
+ * @returns The completed eval record, including result rows and persisted state
+ * when `writeLatestResults` is enabled.
+ *
+ * @example
+ * ```ts
+ * import { evaluate } from 'promptfoo';
+ *
+ * const evalRecord = await evaluate({
+ *   prompts: ['Answer briefly: {{question}}'],
+ *   providers: ['openai:gpt-5-mini'],
+ *   tests: [{ vars: { question: 'What is 2 + 2?' } }],
+ * });
+ * ```
+ *
+ * @public
+ */
+async function evaluate(
+  testSuite: EvaluateTestSuite,
+  options: EvaluateOptions = {},
+): Promise<Eval> {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
   if (testSuiteConfig.writeLatestResults) {
@@ -376,6 +415,14 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   return ret;
 }
 
+/**
+ * Advanced red team helpers exposed through the Node.js package.
+ *
+ * This surface is still evolving; prefer the CLI and documented red team config
+ * flows unless you specifically need programmatic orchestration.
+ *
+ * @beta
+ */
 const redteam = {
   Extractors: {
     extractEntities,

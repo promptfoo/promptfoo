@@ -4,6 +4,11 @@ import { TERMINAL_MAX_WIDTH } from './constants';
 import { type EvaluateTable, ResultFailureReason } from './types/index';
 import { ellipsize } from './util/text';
 
+/**
+ * Render eval table data as terminal-friendly text.
+ *
+ * @public
+ */
 export function generateTable(
   evaluateTable: EvaluateTable,
   tableCellMaxLength = 250,

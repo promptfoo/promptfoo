@@ -8,7 +8,7 @@ keeps reference material aligned with the code.
 
 ## Checklist
 
-- [ ] Define the supported root Node API surface and add source-level stability
+- [x] Define the supported root Node API surface and add source-level stability
       annotations for the exports we intend to document.
 - [ ] Reshape the existing Node package guide into a concise Node.js API overview
       with clear next steps for advanced users.

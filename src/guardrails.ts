@@ -92,6 +92,11 @@ async function makeAdaptiveRequest(request: AdaptiveRequest): Promise<AdaptiveRe
   }
 }
 
+/**
+ * Programmatic access to promptfoo guardrail endpoints.
+ *
+ * @beta
+ */
 const guardrails = {
   async guard(input: string): Promise<GuardResult> {
     return makeRequest('/guard', input);

@@ -362,6 +362,14 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
+/**
+ * Run one assertion against a provider response.
+ *
+ * This is the supported low-level hook for advanced callers that want to reuse
+ * promptfoo assertion logic outside a full eval run.
+ *
+ * @public
+ */
 export async function runAssertion({
   prompt,
   provider,
@@ -625,6 +633,14 @@ export async function runAssertion({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
+/**
+ * Run all assertions for one test case and aggregate the grading result.
+ *
+ * This is the supported batch counterpart to `runAssertion()` for advanced
+ * callers that already have a provider response and test case in hand.
+ *
+ * @public
+ */
 export async function runAssertions({
   assertScoringFunction,
   latencyMs,
@@ -778,7 +794,15 @@ export async function readAssertions(filePath: string): Promise<Assertion[]> {
   }
 }
 
-// These exports are used by the node.js package (index.ts)
+/**
+ * Assertion helpers exposed through the Node.js package.
+ *
+ * `runAssertion()` and `runAssertions()` are the supported low-level execution
+ * hooks. The matcher helpers are also public and are useful when integrating
+ * promptfoo with test frameworks such as Jest or Vitest.
+ *
+ * @public
+ */
 export default {
   runAssertion,
   runAssertions,

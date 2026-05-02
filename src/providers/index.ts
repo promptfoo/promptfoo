@@ -78,6 +78,20 @@ function describeInvalidProvider(provider: unknown): string {
   }
 }
 
+/**
+ * Load one provider by id or config-file reference.
+ *
+ * Use this when you need to construct a provider before passing it into another
+ * public API. For ordinary evals, passing provider refs directly to `evaluate()`
+ * is usually simpler.
+ *
+ * @param providerPath - Provider id or supported provider config file reference.
+ * @param context - Optional base path, environment overrides, and provider
+ * options.
+ * @returns A resolved provider instance.
+ *
+ * @public
+ */
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
 // (src/util/providerRef.ts) to classify provider shapes before calling this function.
 export async function loadApiProvider(

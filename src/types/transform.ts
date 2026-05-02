@@ -32,7 +32,11 @@ export type TransformFunction<TIn = unknown, TOut = unknown> = (
   context: TransformContext,
 ) => TOut | Promise<TOut>;
 
-/** Runtime type guard for `TransformFunction` values. */
+/**
+ * Runtime type guard for `TransformFunction` values.
+ *
+ * @public
+ */
 export function isTransformFunction(value: unknown): value is TransformFunction {
   return typeof value === 'function';
 }

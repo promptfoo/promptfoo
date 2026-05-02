@@ -38,6 +38,11 @@ function getCacheTtlMs(): number {
   return getEnvInt('PROMPTFOO_CACHE_TTL', DEFAULT_CACHE_TTL_SECONDS) * 1000;
 }
 
+/**
+ * Return the active promptfoo cache instance.
+ *
+ * @public
+ */
 export function getCache() {
   const namespace = cacheNamespaceStorage.getStore()?.namespace;
   if (namespace) {
@@ -140,6 +145,11 @@ function getCurrentCacheNamespace() {
   return cacheNamespaceStorage.getStore()?.namespace;
 }
 
+/**
+ * Build the implementation-level cache key for the current namespace.
+ *
+ * @internal
+ */
 export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheNamespace()) {
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
@@ -186,6 +196,11 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
   return true;
 }
 
+/**
+ * Run an async operation inside an isolated cache namespace.
+ *
+ * @public
+ */
 export function withCacheNamespace<T>(namespace: string | undefined, fn: () => Promise<T>) {
   if (!namespace) {
     return fn();
@@ -200,6 +215,11 @@ export function withCacheNamespace<T>(namespace: string | undefined, fn: () => P
   return cacheNamespaceStorage.run({ namespace: scopedNamespace }, fn);
 }
 
+/**
+ * Metadata returned by `fetchWithCache()`.
+ *
+ * @public
+ */
 export type FetchWithCacheResult<T> = {
   data: T;
   cached: boolean;
@@ -489,6 +509,11 @@ async function prepareFetchResponse(
   }
 }
 
+/**
+ * Fetch a URL through promptfoo's retrying cache wrapper.
+ *
+ * @public
+ */
 export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: RequestInit = {},
@@ -564,20 +589,40 @@ export async function fetchWithCache<T = unknown>(
   return deserializeFetchResponse<T>(response, false, cache, cacheKey);
 }
 
+/**
+ * Enable the shared promptfoo cache.
+ *
+ * @public
+ */
 export function enableCache() {
   enabled = true;
 }
 
+/**
+ * Disable the shared promptfoo cache for future calls.
+ *
+ * @public
+ */
 export function disableCache() {
   enabled = false;
 }
 
+/**
+ * Clear the shared promptfoo cache.
+ *
+ * @public
+ */
 export async function clearCache() {
   inflightFetchResponses.clear();
   namespacedCacheInstances.clear();
   return getCacheInstance().clear();
 }
 
+/**
+ * Return whether the shared promptfoo cache is enabled.
+ *
+ * @public
+ */
 export function isCacheEnabled() {
   return enabled;
 }
