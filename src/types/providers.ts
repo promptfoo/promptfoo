@@ -9,6 +9,11 @@ import type { TransformFunction } from './transform';
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
 export type ProviderLabel = string;
+/**
+ * Function form accepted anywhere the Node.js API accepts a provider.
+ *
+ * @public
+ */
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 export type ProviderConfig =
@@ -63,6 +68,11 @@ export interface ModerationFlag {
   confidence: number;
 }
 
+/**
+ * Declarative provider configuration accepted by provider-loading APIs.
+ *
+ * @public
+ */
 export interface ProviderOptions {
   id?: ProviderId;
   label?: ProviderLabel;
@@ -74,6 +84,11 @@ export interface ProviderOptions {
   inputs?: Inputs;
 }
 
+/**
+ * Runtime context passed to custom provider functions.
+ *
+ * @public
+ */
 export interface CallApiContextParams {
   filters?: NunjucksFilterMap;
   getCache?: any;
@@ -115,6 +130,11 @@ export interface CallApiOptionsParams {
   abortSignal?: AbortSignal;
 }
 
+/**
+ * Provider object shape accepted by the Node.js API.
+ *
+ * @public
+ */
 export interface ApiProvider {
   id: () => string;
   callApi: CallApiFunction;
@@ -158,6 +178,11 @@ export interface GuardrailResponse {
   reason?: string;
 }
 
+/**
+ * Response shape returned by custom providers.
+ *
+ * @public
+ */
 export interface ProviderResponse {
   cached?: boolean;
   cost?: number;

@@ -16,7 +16,7 @@ Render eval table data as terminal-friendly text.
 
 ### evaluateTable
 
-[`EvaluateTable`](../interfaces/EvaluateTable.md)
+`EvaluateTable`
 
 ### tableCellMaxLength?
 

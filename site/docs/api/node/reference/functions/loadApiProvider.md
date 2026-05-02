@@ -26,7 +26,7 @@ Provider id or supported provider config file reference.
 
 ### context?
 
-[`LoadApiProviderContext`](../interfaces/LoadApiProviderContext.md) = `{}`
+`LoadApiProviderContext` = `{}`
 
 Optional base path, environment overrides, and provider
 options.

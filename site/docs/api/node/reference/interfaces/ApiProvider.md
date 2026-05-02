@@ -6,30 +6,25 @@
 
 # Interface: ApiProvider
 
-Defined in: [types/providers.ts:118](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L118)
+Defined in: [types/providers.ts:138](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L138)
 
-## Extended by
-
-- [`ApiEmbeddingProvider`](ApiEmbeddingProvider.md)
-- [`ApiSimilarityProvider`](ApiSimilarityProvider.md)
-- [`ApiClassificationProvider`](ApiClassificationProvider.md)
-- [`ApiModerationProvider`](ApiModerationProvider.md)
+Provider object shape accepted by the Node.js API.
 
 ## Properties
 
 ### callApi
 
-> **callApi**: [`CallApiFunction`](../type-aliases/CallApiFunction.md)
+> **callApi**: `CallApiFunction`
 
-Defined in: [types/providers.ts:120](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L120)
+Defined in: [types/providers.ts:140](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L140)
 
 ---
 
 ### callClassificationApi?
 
-> `optional` **callClassificationApi?**: (`prompt`) => `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
+> `optional` **callClassificationApi?**: (`prompt`) => `Promise`\<`ProviderClassificationResponse`\>
 
-Defined in: [types/providers.ts:121](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L121)
+Defined in: [types/providers.ts:141](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L141)
 
 #### Parameters
 
@@ -39,15 +34,15 @@ Defined in: [types/providers.ts:121](https://github.com/promptfoo/promptfoo/blob
 
 #### Returns
 
-`Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
+`Promise`\<`ProviderClassificationResponse`\>
 
 ---
 
 ### callEmbeddingApi?
 
-> `optional` **callEmbeddingApi?**: (`input`) => `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
+> `optional` **callEmbeddingApi?**: (`input`) => `Promise`\<`ProviderEmbeddingResponse`\>
 
-Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L122)
+Defined in: [types/providers.ts:142](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L142)
 
 #### Parameters
 
@@ -57,7 +52,7 @@ Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob
 
 #### Returns
 
-`Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
+`Promise`\<`ProviderEmbeddingResponse`\>
 
 ---
 
@@ -65,7 +60,7 @@ Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
-Defined in: [types/providers.ts:135](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L135)
+Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L155)
 
 Provider-wide cleanup hook for releasing long-lived resources such as worker
 processes, browser sessions, or pooled connections at eval shutdown.
@@ -81,7 +76,7 @@ Request-scoped cancellation should be implemented with `abortSignal`.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:123](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L123)
+Defined in: [types/providers.ts:143](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L143)
 
 ---
 
@@ -89,7 +84,7 @@ Defined in: [types/providers.ts:123](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L124)
+Defined in: [types/providers.ts:144](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L144)
 
 ---
 
@@ -97,7 +92,7 @@ Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **getSessionId?**: () => `string`
 
-Defined in: [types/providers.ts:125](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L125)
+Defined in: [types/providers.ts:145](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L145)
 
 #### Returns
 
@@ -109,7 +104,7 @@ Defined in: [types/providers.ts:125](https://github.com/promptfoo/promptfoo/blob
 
 > **id**: () => `string`
 
-Defined in: [types/providers.ts:119](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L119)
+Defined in: [types/providers.ts:139](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L139)
 
 #### Returns
 
@@ -121,7 +116,7 @@ Defined in: [types/providers.ts:119](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L126)
+Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L146)
 
 ---
 
@@ -129,7 +124,7 @@ Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:127](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L127)
+Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
 
 ---
 
@@ -137,7 +132,7 @@ Defined in: [types/providers.ts:127](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **toJSON?**: () => `any`
 
-Defined in: [types/providers.ts:129](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L129)
+Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L149)
 
 #### Returns
 
@@ -149,4 +144,4 @@ Defined in: [types/providers.ts:129](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:128](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L128)
+Defined in: [types/providers.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L148)

@@ -6,7 +6,9 @@
 
 # Interface: PromptFunctionContext
 
-Defined in: [types/prompts.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L17)
+Defined in: [types/prompts.ts:22](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L22)
+
+Runtime context passed to function-valued prompts.
 
 ## Properties
 
@@ -14,7 +16,7 @@ Defined in: [types/prompts.ts:17](https://github.com/promptfoo/promptfoo/blob/ma
 
 > **config**: `Record`\<`string`, `any`\>
 
-Defined in: [types/prompts.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L19)
+Defined in: [types/prompts.ts:24](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L24)
 
 ---
 
@@ -22,7 +24,7 @@ Defined in: [types/prompts.ts:19](https://github.com/promptfoo/promptfoo/blob/ma
 
 > **provider**: `object`
 
-Defined in: [types/prompts.ts:20](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L20)
+Defined in: [types/prompts.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L25)
 
 #### id
 
@@ -36,6 +38,6 @@ Defined in: [types/prompts.ts:20](https://github.com/promptfoo/promptfoo/blob/ma
 
 ### vars
 
-> **vars**: `Record`\<`string`, [`VarValue`](../type-aliases/VarValue.md)\>
+> **vars**: `Record`\<`string`, `VarValue`\>
 
-Defined in: [types/prompts.ts:18](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L18)
+Defined in: [types/prompts.ts:23](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L23)

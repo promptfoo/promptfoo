@@ -14,6 +14,11 @@ export interface PromptConfig {
   suffix?: string;
 }
 
+/**
+ * Runtime context passed to function-valued prompts.
+ *
+ * @public
+ */
 export interface PromptFunctionContext {
   vars: Record<string, VarValue>;
   config: Record<string, any>;
@@ -36,6 +41,11 @@ export interface PromptFunctionResult {
   config?: Record<string, any>;
 }
 
+/**
+ * Function form accepted anywhere the Node.js API accepts a prompt.
+ *
+ * @public
+ */
 export interface PromptFunction {
   (context: {
     vars: Record<string, string | any>;

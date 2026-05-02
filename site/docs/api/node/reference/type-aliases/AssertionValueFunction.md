@@ -6,9 +6,11 @@
 
 # Type Alias: AssertionValueFunction
 
-> **AssertionValueFunction** = (`output`, `context`) => [`AssertionValueFunctionResult`](AssertionValueFunctionResult.md) \| `Promise`\<[`AssertionValueFunctionResult`](AssertionValueFunctionResult.md)\>
+> **AssertionValueFunction** = (`output`, `context`) => `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>
 
-Defined in: [types/index.ts:740](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L740)
+Defined in: [types/index.ts:767](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L767)
+
+Function form accepted by JavaScript assertions.
 
 ## Parameters
 
@@ -22,4 +24,4 @@ Defined in: [types/index.ts:740](https://github.com/promptfoo/promptfoo/blob/mai
 
 ## Returns
 
-[`AssertionValueFunctionResult`](AssertionValueFunctionResult.md) \| `Promise`\<[`AssertionValueFunctionResult`](AssertionValueFunctionResult.md)\>
+`AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>

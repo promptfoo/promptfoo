@@ -20,13 +20,13 @@ the corresponding types allow them.
 
 ### testSuite
 
-[`EvaluateTestSuite`](../type-aliases/EvaluateTestSuite.md)
+`EvaluateTestSuite`
 
 Prompts, providers, tests, and other eval configuration.
 
 ### options?
 
-[`EvaluateOptions`](../type-aliases/EvaluateOptions.md) = `{}`
+[`EvaluateOptions`](../interfaces/EvaluateOptions.md) = `{}`
 
 Runtime-only evaluation options such as caching and
 concurrency.

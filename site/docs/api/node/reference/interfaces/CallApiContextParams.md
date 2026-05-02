@@ -6,7 +6,9 @@
 
 # Interface: CallApiContextParams
 
-Defined in: [types/providers.ts:77](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L77)
+Defined in: [types/providers.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L92)
+
+Runtime context passed to custom provider functions.
 
 ## Properties
 
@@ -14,7 +16,7 @@ Defined in: [types/providers.ts:77](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **bustCache?**: `boolean`
 
-Defined in: [types/providers.ts:88](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L88)
+Defined in: [types/providers.ts:103](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L103)
 
 ---
 
@@ -22,7 +24,7 @@ Defined in: [types/providers.ts:88](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **debug?**: `boolean`
 
-Defined in: [types/providers.ts:84](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L84)
+Defined in: [types/providers.ts:99](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L99)
 
 ---
 
@@ -30,15 +32,15 @@ Defined in: [types/providers.ts:84](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **evaluationId?**: `string`
 
-Defined in: [types/providers.ts:95](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L95)
+Defined in: [types/providers.ts:110](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L110)
 
 ---
 
 ### filters?
 
-> `optional` **filters?**: [`NunjucksFilterMap`](../type-aliases/NunjucksFilterMap.md)
+> `optional` **filters?**: `NunjucksFilterMap`
 
-Defined in: [types/providers.ts:78](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L78)
+Defined in: [types/providers.ts:93](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L93)
 
 ---
 
@@ -46,7 +48,7 @@ Defined in: [types/providers.ts:78](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **getCache?**: `any`
 
-Defined in: [types/providers.ts:79](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L79)
+Defined in: [types/providers.ts:94](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L94)
 
 ---
 
@@ -54,7 +56,7 @@ Defined in: [types/providers.ts:79](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **logger?**: `Logger`
 
-Defined in: [types/providers.ts:80](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L80)
+Defined in: [types/providers.ts:95](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L95)
 
 ---
 
@@ -62,15 +64,15 @@ Defined in: [types/providers.ts:80](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **originalProvider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:81](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L81)
+Defined in: [types/providers.ts:96](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L96)
 
 ---
 
 ### prompt
 
-> **prompt**: [`Prompt`](Prompt.md)
+> **prompt**: `Prompt`
 
-Defined in: [types/providers.ts:82](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L82)
+Defined in: [types/providers.ts:97](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L97)
 
 ---
 
@@ -78,7 +80,7 @@ Defined in: [types/providers.ts:82](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **promptIdx?**: `number`
 
-Defined in: [types/providers.ts:106](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L106)
+Defined in: [types/providers.ts:121](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L121)
 
 Index of the prompt within the current evaluation (column in results table).
 Used for correlating blob references and other per-result metadata.
@@ -89,7 +91,7 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **repeatIndex?**: `number`
 
-Defined in: [types/providers.ts:107](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L107)
+Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L122)
 
 ---
 
@@ -97,7 +99,7 @@ Defined in: [types/providers.ts:107](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **test?**: `AtomicTestCase`
 
-Defined in: [types/providers.ts:87](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L87)
+Defined in: [types/providers.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L102)
 
 ---
 
@@ -105,7 +107,7 @@ Defined in: [types/providers.ts:87](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **testCaseId?**: `string`
 
-Defined in: [types/providers.ts:96](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L96)
+Defined in: [types/providers.ts:111](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L111)
 
 ---
 
@@ -113,7 +115,7 @@ Defined in: [types/providers.ts:96](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **testIdx?**: `number`
 
-Defined in: [types/providers.ts:101](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L101)
+Defined in: [types/providers.ts:116](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L116)
 
 Index of the test case within the current evaluation (row in results table).
 Used for correlating blob references and other per-result metadata.
@@ -124,7 +126,7 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **traceparent?**: `string`
 
-Defined in: [types/providers.ts:91](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L91)
+Defined in: [types/providers.ts:106](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L106)
 
 ---
 
@@ -132,12 +134,12 @@ Defined in: [types/providers.ts:91](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **tracestate?**: `string`
 
-Defined in: [types/providers.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L92)
+Defined in: [types/providers.ts:107](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L107)
 
 ---
 
 ### vars
 
-> **vars**: `Record`\<`string`, [`VarValue`](../type-aliases/VarValue.md)\>
+> **vars**: `Record`\<`string`, `VarValue`\>
 
-Defined in: [types/providers.ts:83](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L83)
+Defined in: [types/providers.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L98)

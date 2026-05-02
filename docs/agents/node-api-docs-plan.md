@@ -12,8 +12,8 @@ keeps reference material aligned with the code.
       annotations for the exports we intend to document.
 - [x] Reshape the existing Node package guide into a concise Node.js API overview
       with clear next steps for advanced users.
-- [x] Add generated API reference docs from the public package entrypoint rather
-      than hand-maintaining a large mirror of the source.
+- [x] Add generated API reference docs from a curated public surface rather than
+      hand-maintaining a large mirror of the source.
 - [x] Link the Node.js API docs from the nearby docs surfaces where users already
       encounter programmatic features.
 - [x] Add docs validation so generated/reference docs drift is caught in CI.
@@ -23,7 +23,8 @@ keeps reference material aligned with the code.
 ## Working Notes
 
 - Treat `package.json` `exports` plus `src/index.ts` as the canonical public API
-  boundary unless we deliberately decide to expand it.
+  boundary unless we deliberately decide to expand it; use the curated TypeDoc
+  entrypoint to decide what deserves first-class reference pages.
 - Preserve useful Node-specific guidance already present in the docs, especially
   function-valued transforms and serialization caveats.
 - Avoid promoting deep source exports solely because they are reachable in the

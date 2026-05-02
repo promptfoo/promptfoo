@@ -1,6 +1,6 @@
 {
   "$schema": "https://typedoc.org/schema.json",
-  "entryPoints": ["src/index.ts"],
+  "entryPoints": ["scripts/nodeApiReference.ts"],
   "plugin": ["typedoc-plugin-markdown"],
   "out": "site/docs/api/node/reference",
   "gitRevision": "main",

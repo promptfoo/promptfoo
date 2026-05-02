@@ -6,10 +6,10 @@ description: Generated reference and stability guide for promptfoo's supported N
 
 # Node.js API reference
 
-The Node.js API reference is generated from the root `promptfoo` package
-entrypoint. That entrypoint is the supported public boundary for programmatic
-use. If a symbol is not exported from `promptfoo`, treat it as internal unless
-the docs say otherwise.
+The Node.js API reference is generated from a curated list of symbols exported
+by the root `promptfoo` package entrypoint. That entrypoint is still the
+supported public boundary for programmatic use, but the reference intentionally
+focuses on APIs that are useful to call directly from application code.
 
 ## Stability
 
@@ -30,11 +30,11 @@ The most commonly used public surfaces are:
 
 ## Browse the generated reference
 
-- [Functions](./reference/functions/evaluate)
-- [Interfaces](./reference/interfaces/ApiProvider)
-- [Type aliases](./reference/type-aliases/EvaluateTestSuite)
-- [Variables](./reference/variables/assertions)
-- [Full generated index](./reference/)
+- [Core functions](./reference/functions/evaluate)
+- [Provider interfaces](./reference/interfaces/ApiProvider)
+- [Assertion helpers](./reference/variables/assertions)
+- [Function callbacks](./reference/interfaces/PromptFunction)
+- [Transform helpers](./reference/type-aliases/TransformFunction)
 
 For a task-oriented introduction, start with
 [Using the Node.js API](/docs/usage/node-package).

@@ -298,6 +298,12 @@ export const EvaluateOptionsSchema = z.object({
    */
   filterRange: FilterRangeSchema,
 });
+/**
+ * Runtime-only options accepted by `evaluate()`.
+ *
+ * @interface
+ * @public
+ */
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
   abortSignal?: AbortSignal;
 };
@@ -497,6 +503,11 @@ export interface ResultSuggestion {
   value: string;
 }
 
+/**
+ * Result returned by assertions and matcher helpers.
+ *
+ * @public
+ */
 export interface GradingResult {
   // Whether the test passed or failed
   pass: boolean;
@@ -717,6 +728,12 @@ export const AssertionSchema = z.object({
   contextTransform: StringOrFunctionSchema.optional(),
 });
 
+/**
+ * Assertion configuration accepted by eval tests and low-level assertion APIs.
+ *
+ * @interface
+ * @public
+ */
 export type Assertion = z.infer<typeof AssertionSchema>;
 
 /**
@@ -726,6 +743,11 @@ export type Assertion = z.infer<typeof AssertionSchema>;
 export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
 export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
+/**
+ * Runtime context passed to function-valued assertions.
+ *
+ * @public
+ */
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
   vars: Record<string, VarValue>;
@@ -737,6 +759,11 @@ export interface AssertionValueFunctionContext {
   trace?: TraceData;
 }
 
+/**
+ * Function form accepted by JavaScript assertions.
+ *
+ * @public
+ */
 export type AssertionValueFunction = (
   output: string,
   context: AssertionValueFunctionContext,
