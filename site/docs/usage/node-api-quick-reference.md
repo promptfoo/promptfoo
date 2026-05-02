@@ -1,6 +1,8 @@
 ---
 sidebar_label: Node API Quick Reference
-sidebar_position: 6
+sidebar_position: 23
+title: Node API quick reference
+description: Quick lookup for promptfoo's Node.js API, covering common eval, provider, assertion, cache, guardrail, red team, and utility tasks.
 ---
 
 # Node API Quick Reference
@@ -13,27 +15,26 @@ Quick lookup guide for the promptfoo Node module API. Find what you need fast.
 import {
   // Main function
   evaluate,
-  
+
   // Providers
   loadApiProvider,
   loadApiProviders,
-  resolveProvider,
-  
+
   // Assertions
   assertions,
-  
+
   // Caching
   cache,
-  
+
   // Safety
   guardrails,
-  
+
   // Adversarial testing
   redteam,
-  
+
   // Types and utilities
   generateTable,
-  isTransformFunction
+  isTransformFunction,
 } from 'promptfoo';
 ```
 
@@ -49,14 +50,17 @@ Run evaluation tests.
 await evaluate({
   prompts: ['What is 2+2?'],
   providers: ['openai:gpt-4'],
-  tests: [{
-    vars: {},
-    assert: [{ type: 'contains', value: '4' }]
-  }]
+  tests: [
+    {
+      vars: {},
+      assert: [{ type: 'contains', value: '4' }],
+    },
+  ],
 });
 ```
 
 **Key Options:**
+
 - `cache: boolean` - Enable/disable caching
 - `maxConcurrency: number` - Parallel execution limit
 - `outputPath: string` - Save results to file
@@ -71,7 +75,7 @@ Test a single output.
 await assertions.runAssertion({
   assertion: { type: 'contains', value: 'yes' },
   test: { vars: { question: 'test' } },
-  providerResponse: { output: 'yes, I agree' }
+  providerResponse: { output: 'yes, I agree' },
 });
 ```
 
@@ -83,11 +87,12 @@ Load a provider.
 
 ```typescript
 const provider = await loadApiProvider('openai:gpt-4', {
-  env: { OPENAI_API_KEY: process.env.KEY }
+  env: { OPENAI_API_KEY: process.env.KEY },
 });
 ```
 
 **Supported providers:**
+
 - `openai:gpt-4`, `openai:gpt-4-turbo`
 - `anthropic:claude-3-opus`, `anthropic:claude-3-sonnet`
 - `vertex:*`, `bedrock:*`, `azure-openai:*`
@@ -100,14 +105,11 @@ const provider = await loadApiProvider('openai:gpt-4', {
 ### Task: Test Multiple Providers
 
 ```typescript
-const providers = await loadApiProviders([
-  'openai:gpt-4',
-  'anthropic:claude-3-opus'
-]);
+const providers = await loadApiProviders(['openai:gpt-4', 'anthropic:claude-3-opus']);
 
 for (const p of providers) {
-  const resp = await p.callApi({ prompt: 'test' });
-  console.log(`${p.id}: ${resp.output}`);
+  const resp = await p.callApi('test');
+  console.log(`${p.id()}: ${resp.output}`);
 }
 ```
 
@@ -132,7 +134,7 @@ for (const p of providers) {
 
 ```typescript
 await evaluate(testSuite, {
-  outputPath: 'results.json'
+  outputPath: 'results.json',
 });
 ```
 
@@ -144,7 +146,7 @@ await evaluate(testSuite, {
 import { cache } from 'promptfoo';
 
 cache.disableCache();
-const results = await evaluate(testSuite);
+const evalRecord = await evaluate(testSuite);
 cache.enableCache();
 ```
 
@@ -164,59 +166,58 @@ await cache.withCacheNamespace('v1', async () => {
 
 ### Evaluation Functions
 
-| Function | Purpose | Stability |
-|----------|---------|-----------|
-| `evaluate()` | Run full test suite | ✅ Stable |
-| `assertions.runAssertion()` | Test single output | ✅ Stable |
+| Function                     | Purpose                  | Stability |
+| ---------------------------- | ------------------------ | --------- |
+| `evaluate()`                 | Run full test suite      | ✅ Stable |
+| `assertions.runAssertion()`  | Test single output       | ✅ Stable |
 | `assertions.runAssertions()` | Test multiple assertions | ✅ Stable |
 
 ### Provider Functions
 
-| Function | Purpose | Stability |
-|----------|---------|-----------|
-| `loadApiProvider()` | Load one provider | ✅ Stable |
+| Function             | Purpose                 | Stability |
+| -------------------- | ----------------------- | --------- |
+| `loadApiProvider()`  | Load one provider       | ✅ Stable |
 | `loadApiProviders()` | Load multiple providers | ✅ Stable |
-| `resolveProvider()` | Resolve provider config | ✅ Stable |
 
 ### Cache Functions
 
-| Function | Purpose | Stability |
-|----------|---------|-----------|
-| `cache.enableCache()` | Turn on caching | ✅ Stable |
-| `cache.disableCache()` | Turn off caching | ✅ Stable |
-| `cache.clearCache()` | Delete cached data | ✅ Stable |
-| `cache.withCacheNamespace()` | Isolate cache | ✅ Stable |
-| `cache.fetchWithCache()` | Cached HTTP fetch | ✅ Stable |
+| Function                     | Purpose            | Stability |
+| ---------------------------- | ------------------ | --------- |
+| `cache.enableCache()`        | Turn on caching    | ✅ Stable |
+| `cache.disableCache()`       | Turn off caching   | ✅ Stable |
+| `cache.clearCache()`         | Delete cached data | ✅ Stable |
+| `cache.withCacheNamespace()` | Isolate cache      | ✅ Stable |
+| `cache.fetchWithCache()`     | Cached HTTP fetch  | ✅ Stable |
 
 ### Assertion Functions
 
-| Function | Purpose | Stability |
-|----------|---------|-----------|
-| `assertions.runAssertion()` | Run one assertion | ✅ Stable |
-| `assertions.runAssertions()` | Run multiple | ✅ Stable |
+| Function                     | Purpose           | Stability |
+| ---------------------------- | ----------------- | --------- |
+| `assertions.runAssertion()`  | Run one assertion | ✅ Stable |
+| `assertions.runAssertions()` | Run multiple      | ✅ Stable |
 
 ### Guardrails Functions
 
-| Function | Purpose | Stability |
-|----------|---------|-----------|
+| Function             | Purpose          | Stability |
+| -------------------- | ---------------- | --------- |
 | `guardrails.guard()` | Moderation check | ✅ Stable |
-| `guardrails.pii()` | PII detection | ✅ Stable |
-| `guardrails.harm()` | Harm detection | ✅ Stable |
+| `guardrails.pii()`   | PII detection    | ✅ Stable |
+| `guardrails.harm()`  | Harm detection   | ✅ Stable |
 
 ### Red Team Functions
 
-| Function | Purpose | Stability |
-|----------|---------|-----------|
-| `redteam.generate()` | Generate attacks | ⚠️ Experimental |
-| `redteam.run()` | Run red team test | ⚠️ Experimental |
-| `redteam.Plugins` | Attack plugins | ⚠️ Experimental |
+| Function             | Purpose           | Stability       |
+| -------------------- | ----------------- | --------------- |
+| `redteam.generate()` | Generate attacks  | ⚠️ Experimental |
+| `redteam.run()`      | Run red team test | ⚠️ Experimental |
+| `redteam.Plugins`    | Attack plugins    | ⚠️ Experimental |
 | `redteam.Strategies` | Attack strategies | ⚠️ Experimental |
 
 ### Utility Functions
 
-| Function | Purpose | Stability |
-|----------|---------|-----------|
-| `generateTable()` | Format results | ✅ Stable |
+| Function                | Purpose            | Stability |
+| ----------------------- | ------------------ | --------- |
+| `generateTable()`       | Format results     | ✅ Stable |
 | `isTransformFunction()` | Check if transform | ✅ Stable |
 
 ---
@@ -243,13 +244,13 @@ await cache.withCacheNamespace('v1', async () => {
 
 ```typescript
 // Grade with custom rubric
-{ 
+{
   type: 'llm-rubric',
   value: 'Is the output helpful? 1-5.'
 }
 
 // Similarity check
-{ 
+{
   type: 'similarity',
   value: 'reference text',
   threshold: 0.8
@@ -277,24 +278,26 @@ await cache.withCacheNamespace('v1', async () => {
 ### Pattern: Generate Tests Dynamically
 
 ```typescript
-const tests = dataArray.map(item => ({
+const tests = dataArray.map((item) => ({
   vars: item,
-  assert: [{ type: 'contains', value: item.expected }]
+  assert: [{ type: 'contains', value: item.expected }],
 }));
 ```
 
 ### Pattern: A/B Test Models
 
 ```typescript
-const v1 = await cache.withCacheNamespace('v1', () =>
-  evaluate({ ...suite, providers: ['openai:gpt-4'] })
+const v1Eval = await cache.withCacheNamespace('v1', () =>
+  evaluate({ ...suite, providers: ['openai:gpt-4'] }),
 );
 
-const v2 = await cache.withCacheNamespace('v2', () =>
-  evaluate({ ...suite, providers: ['openai:gpt-4-turbo'] })
+const v2Eval = await cache.withCacheNamespace('v2', () =>
+  evaluate({ ...suite, providers: ['openai:gpt-4-turbo'] }),
 );
 
-console.log(`v1: ${v1.stats.passCount}, v2: ${v2.stats.passCount}`);
+const v1 = await v1Eval.toEvaluateSummary();
+const v2 = await v2Eval.toEvaluateSummary();
+console.log(`v1: ${v1.stats.successes}, v2: ${v2.stats.successes}`);
 ```
 
 ### Pattern: Streaming Results
@@ -302,8 +305,8 @@ console.log(`v1: ${v1.stats.passCount}, v2: ${v2.stats.passCount}`);
 ```typescript
 await evaluate(testSuite, {
   onTestComplete: (result) => {
-    console.log(`${result.description}: ${result.pass ? '✓' : '✗'}`);
-  }
+    console.log(`${result.testCase.description ?? 'test'}: ${result.success ? '✓' : '✗'}`);
+  },
 });
 ```
 
@@ -313,7 +316,7 @@ await evaluate(testSuite, {
 const providers = await loadApiProviders([...]);
 
 for (const p of providers) {
-  const result = await p.callApi({ prompt });
+  const result = await p.callApi(prompt);
   const grading = await assertions.runAssertion({
     provider: p,
     assertion: {...},
@@ -352,24 +355,27 @@ ANTHROPIC_API_KEY=sk-ant-...
 ### Common Errors
 
 **"Provider not found"**
+
 ```typescript
 // Check provider is spelled correctly
-'openai:gpt-4'  // ✓ Correct
-'gpt-4'         // ✗ Missing provider prefix
+'openai:gpt-4'; // ✓ Correct
+'gpt-4'; // ✗ Missing provider prefix
 ```
 
 **"API key required"**
+
 ```typescript
 // Ensure env var is set
-process.env.OPENAI_API_KEY  // Must exist
+process.env.OPENAI_API_KEY; // Must exist
 
 // Or pass via context
 await loadApiProvider('openai:gpt-4', {
-  env: { OPENAI_API_KEY: key }
+  env: { OPENAI_API_KEY: key },
 });
 ```
 
 **"Cache error"**
+
 ```typescript
 // Clear cache if corrupted
 await cache.clearCache();
@@ -391,7 +397,7 @@ import type {
   EvaluateSummary,
   Assertion,
   ApiProvider,
-  GradingResult
+  GradingResult,
 } from 'promptfoo';
 ```
 
@@ -399,8 +405,8 @@ import type {
 
 ## Getting Help
 
-- **API Reference**: Full documentation at `/docs/api-reference`
-- **Examples**: Advanced examples at `/docs/node-api-examples`
+- **API Reference**: Full documentation at `/docs/usage/node-api-reference`
+- **Examples**: Advanced examples at `/docs/usage/node-api-examples`
 - **Issues**: GitHub issues at https://github.com/promptfoo/promptfoo/issues
 - **Discord**: Community at https://discord.gg/promptfoo
 
@@ -418,6 +424,6 @@ import type {
 
 ## Next Steps
 
-- Read [API Reference](/docs/api-reference) for complete docs
-- Check [Examples](/docs/node-api-examples) for real-world patterns
-- Try [Configuration Guide](/docs/configuration/overview) for YAML setup
+- Read [API Reference](/docs/usage/node-api-reference) for complete docs
+- Check [Examples](/docs/usage/node-api-examples) for real-world patterns
+- Try [Configuration Guide](/docs/configuration/guide) for YAML setup

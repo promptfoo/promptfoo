@@ -240,13 +240,13 @@ function createSerializableUnifiedConfig(
  * @param options.onTestComplete Callback invoked after each test completes
  * @param options.nunjucksFilters Custom Nunjucks template filters
  *
- * @returns Promise resolving to EvaluateSummary with results and statistics
+ * @returns Eval record with persisted results and helper methods such as `toEvaluateSummary()`
  *
  * @example Basic usage
  * ```typescript
  * import { evaluate } from 'promptfoo';
  *
- * const results = await evaluate({
+ * const evalRecord = await evaluate({
  *   prompts: ['What is 2+2?'],
  *   providers: ['openai:gpt-4'],
  *   tests: [
@@ -257,12 +257,13 @@ function createSerializableUnifiedConfig(
  *   ]
  * });
  *
- * console.log(`${results.stats.passCount}/${results.stats.totalCount} passed`);
+ * const summary = await evalRecord.toEvaluateSummary();
+ * console.log(`${summary.stats.successes}/${summary.results.length} passed`);
  * ```
  *
  * @example With output file and caching disabled
  * ```typescript
- * const results = await evaluate(
+ * const evalRecord = await evaluate(
  *   {
  *     prompts: ['prompts.txt'],
  *     providers: ['openai:gpt-4', 'anthropic:claude-3-opus'],
@@ -452,16 +453,7 @@ const redteam = {
   run: doRedteamRun,
 };
 
-export {
-  assertions,
-  cache,
-  evaluate,
-  guardrails,
-  loadApiProvider,
-  loadApiProviders,
-  resolveProvider,
-  redteam,
-};
+export { assertions, cache, evaluate, guardrails, loadApiProvider, loadApiProviders, redteam };
 
 export default {
   assertions,
@@ -470,6 +462,5 @@ export default {
   guardrails,
   loadApiProvider,
   loadApiProviders,
-  resolveProvider,
   redteam,
 };

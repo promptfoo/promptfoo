@@ -386,9 +386,9 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  *
  * @example Basic usage
  * ```typescript
- * import { runAssertion } from 'promptfoo';
+ * import { assertions } from 'promptfoo';
  *
- * const result = await runAssertion({
+ * const result = await assertions.runAssertion({
  *   assertion: { type: 'contains', value: '4' },
  *   test: { vars: { question: 'What is 2+2?' } },
  *   providerResponse: { output: 'The answer is 4' }
@@ -689,9 +689,9 @@ export async function runAssertion({
  *
  * @example Basic usage
  * ```typescript
- * import { runAssertions } from 'promptfoo';
+ * import { assertions } from 'promptfoo';
  *
- * const result = await runAssertions({
+ * const result = await assertions.runAssertions({
  *   assertions: [
  *     { type: 'contains', value: '4' },
  *     { type: 'regex', value: '^The answer is' }

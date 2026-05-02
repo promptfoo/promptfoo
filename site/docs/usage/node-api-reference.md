@@ -1,6 +1,8 @@
 ---
 sidebar_label: Node API Reference
-sidebar_position: 4
+sidebar_position: 21
+title: Node API reference
+description: Reference guide for promptfoo's Node.js APIs, including evals, providers, assertions, caching, guardrails, red teaming, and utilities.
 ---
 
 # Node Module API Reference
@@ -8,12 +10,13 @@ sidebar_position: 4
 This guide documents the **Node.js module API** for advanced programmatic usage of promptfoo. It covers all publicly exported functions, namespaces, and types.
 
 :::info
-For standard YAML-based evaluation configuration, see [Configuration Guide](/docs/configuration/overview). This API reference is for users building programmatic evaluation workflows directly in JavaScript/TypeScript.
+For standard YAML-based evaluation configuration, see [Configuration Guide](/docs/configuration/guide). This API reference is for users building programmatic evaluation workflows directly in JavaScript/TypeScript.
 :::
 
 ## Overview
 
 The promptfoo Node module provides programmatic access to:
+
 - **Core evaluation engine** (`evaluate()`)
 - **Provider management** (load and resolve LLM providers)
 - **Assertion execution** (run assertions independently)
@@ -28,23 +31,22 @@ The promptfoo Node module provides programmatic access to:
 The main entry point for running evaluations programmatically.
 
 ```typescript
-async function evaluate(
-  testSuite: EvaluateTestSuite,
-  options?: EvaluateOptions
-): Promise<EvaluateSummary>
+async function evaluate(testSuite: EvaluateTestSuite, options?: EvaluateOptions): Promise<Eval>;
 ```
 
 **Parameters:**
+
 - `testSuite`: Configuration object containing `prompts`, `providers`, and `tests`
 - `options`: Optional evaluation settings (caching, output, concurrency, etc.)
 
-**Returns:** Summary object with evaluation results, statistics, and detailed test outcomes
+**Returns:** `Eval` record. Call `toEvaluateSummary()` when you need the serializable results summary.
 
 **Example:**
+
 ```typescript
 import { evaluate } from 'promptfoo';
 
-const results = await evaluate({
+const evalRecord = await evaluate({
   prompts: ['What is 2+2?'],
   providers: ['openai:gpt-4', 'anthropic:claude-3-opus'],
   tests: [
@@ -54,18 +56,20 @@ const results = await evaluate({
         {
           type: 'contains',
           value: '4',
-          metric: 'is_correct'
-        }
-      ]
-    }
-  ]
+          metric: 'is_correct',
+        },
+      ],
+    },
+  ],
 });
+const results = await evalRecord.toEvaluateSummary();
 
-console.log(`Passed: ${results.stats.passCount}/${results.stats.totalCount}`);
-console.log(`Shareable URL: ${results.shareableUrl}`);
+console.log(`Passed: ${results.stats.successes}/${results.results.length}`);
+console.log(`Shareable URL: ${evalRecord.shareableUrl}`);
 ```
 
 **Common Options:**
+
 ```typescript
 interface EvaluateOptions {
   // Output and format
@@ -99,33 +103,33 @@ Load a single provider instance by path or identifier.
 ```typescript
 async function loadApiProvider(
   providerPath: string,
-  context?: LoadApiProviderContext
-): Promise<ApiProvider>
+  context?: LoadApiProviderContext,
+): Promise<ApiProvider>;
 ```
 
 **Parameters:**
+
 - `providerPath`: Provider identifier (e.g., `'openai:gpt-4'`, `'anthropic:claude-3-opus'`, or `'file://./custom-provider.js'`)
 - `context`: Optional context with environment overrides
 
 **Returns:** Configured `ApiProvider` instance ready to call
 
 **Example:**
+
 ```typescript
 import { loadApiProvider } from 'promptfoo';
 
 const openaiProvider = await loadApiProvider('openai:gpt-4', {
-  env: { OPENAI_API_KEY: process.env.MY_SECRET_KEY }
+  env: { OPENAI_API_KEY: process.env.MY_SECRET_KEY },
 });
 
-const response = await openaiProvider.callApi({
-  prompt: 'Hello, world!',
-  model: 'gpt-4'
-});
+const response = await openaiProvider.callApi('Hello, world!');
 
 console.log(response.output);
 ```
 
 **Supported Provider Types:**
+
 - `openai:*` (GPT models)
 - `anthropic:*` (Claude models)
 - `azure-openai:*`
@@ -146,17 +150,19 @@ Load multiple providers in parallel.
 ```typescript
 async function loadApiProviders(
   providers: ProvidersConfig,
-  options?: { env?: Record<string, string> }
-): Promise<ApiProvider[]>
+  options?: { env?: Record<string, string> },
+): Promise<ApiProvider[]>;
 ```
 
 **Parameters:**
+
 - `providers`: Array of provider identifiers or config objects
 - `options`: Optional environment overrides
 
 **Returns:** Array of configured provider instances
 
 **Example:**
+
 ```typescript
 import { loadApiProviders } from 'promptfoo';
 
@@ -167,14 +173,14 @@ const providers = await loadApiProviders([
     id: 'custom-provider',
     config: {
       model: 'my-model',
-      temperature: 0.7
-    }
-  }
+      temperature: 0.7,
+    },
+  },
 ]);
 
 for (const provider of providers) {
-  const result = await provider.callApi({ prompt: 'Test' });
-  console.log(`${provider.id}: ${result.output}`);
+  const result = await provider.callApi('Test');
+  console.log(`${provider.id()}: ${result.output}`);
 }
 ```
 
@@ -201,6 +207,7 @@ async function runAssertion({
 ```
 
 **Parameters:**
+
 - `assertion`: The assertion to run (e.g., `{ type: 'contains', value: 'expected' }`)
 - `test`: The test case context
 - `providerResponse`: The output from the provider to evaluate
@@ -209,22 +216,22 @@ async function runAssertion({
 - `traceData`: Distributed trace data for debugging (optional)
 
 **Returns:**
+
 ```typescript
 interface GradingResult {
-  pass: boolean;              // Did the assertion pass?
-  score?: number;             // 0-1 score
-  reason?: string;            // Explanation
-  assertion: Assertion;       // The original assertion
-  metric?: string;            // Metric name
-  error?: string;             // Error message if failed
+  pass: boolean; // Did the assertion pass?
+  score?: number; // 0-1 score
+  reason?: string; // Explanation
+  assertion: Assertion; // The original assertion
+  metric?: string; // Metric name
+  error?: string; // Error message if failed
 }
 ```
 
 **Example: Custom Assertion Logic**
+
 ```typescript
 import { assertions } from 'promptfoo';
-
-const result = await assertions.runAssertions({
 
 const result = await assertions.runAssertion({
   assertion: {
@@ -235,45 +242,47 @@ const result = await assertions.runAssertion({
       return {
         pass: score >= 0.8,
         score,
-        reason: `Output contains required keyword`
+        reason: `Output contains required keyword`,
       };
-    }
+    },
   },
   test: {
     vars: { question: 'Is the sky blue?' },
-    assert: [] // populated with assertion
+    assert: [], // populated with assertion
   },
   providerResponse: {
     output: 'Yes, the sky is blue in most places.',
-    tokenUsage: { total: 15 }
-  }
+    tokenUsage: { total: 15 },
+  },
 });
 
 console.log(`Pass: ${result.pass}, Score: ${result.score}`);
 ```
 
 **Assertion Value Function Context:**
+
 ```typescript
 interface AssertionValueFunctionContext {
   // Test and evaluation metadata
   prompt: string | undefined;
-  vars: Record<string, unknown>;      // Template variables
-  test: AtomicTestCase;               // Full test context
-  
+  vars: Record<string, unknown>; // Template variables
+  test: AtomicTestCase; // Full test context
+
   // Provider info
   provider: ApiProvider | undefined;
   providerResponse: ProviderResponse | undefined;
-  
+
   // Output metadata
-  logProbs?: number[];                // Token log probabilities
-  
+  logProbs?: number[]; // Token log probabilities
+
   // Advanced: Tracing
-  trace?: TraceData;                  // Distributed trace with spans
-  config?: Record<string, any>;       // Custom assertion config
+  trace?: TraceData; // Distributed trace with spans
+  config?: Record<string, any>; // Custom assertion config
 }
 ```
 
 **Using Trace Data:**
+
 ```typescript
 import { assertions } from 'promptfoo';
 
@@ -283,11 +292,11 @@ const result = await assertions.runAssertion({
     value: (output, context) => {
       // Access trace data for latency analysis
       if (context.trace?.spans) {
-        const ttft = context.trace.spans.find(s => s.name === 'time_to_first_token');
+        const ttft = context.trace.spans.find((s) => s.name === 'time_to_first_token');
         console.log(`Time to first token: ${ttft?.duration}ms`);
       }
       return { pass: true };
-    }
+    },
   },
   test: { vars: {} },
   providerResponse: { output: 'test' },
@@ -297,10 +306,10 @@ const result = await assertions.runAssertion({
       {
         name: 'time_to_first_token',
         startTime: Date.now(),
-        duration: 250
-      }
-    ]
-  }
+        duration: 250,
+      },
+    ],
+  },
 });
 ```
 
@@ -324,18 +333,26 @@ async function runAssertions({
 ```
 
 **Returns:**
+
 ```typescript
 interface GradingResult {
   pass: boolean;
-  score: number;              // Aggregate score across all assertions
+  score: number; // Aggregate score across all assertions
   reason?: string;
   componentResults?: GradingResult[]; // Per-assertion results
   namedScores?: Record<string, number>;
-  tokensUsed?: { total: number; prompt: number; completion: number; cached: number; numRequests: number };
+  tokensUsed?: {
+    total: number;
+    prompt: number;
+    completion: number;
+    cached: number;
+    numRequests: number;
+  };
 }
 ```
 
 **Example:**
+
 ```typescript
 import { assertions } from 'promptfoo';
 
@@ -343,10 +360,10 @@ const result = await assertions.runAssertions({
   assertions: [
     { type: 'contains', value: '4' },
     { type: 'regex', value: '^The answer is \\d+$' },
-    { type: 'not-regex', value: '(?i)error|failed' }
+    { type: 'not-regex', value: '(?i)error|failed' },
   ],
   test: { vars: { question: 'What is 2+2?' } },
-  providerResponse: { output: 'The answer is 4.' }
+  providerResponse: { output: 'The answer is 4.' },
 });
 
 console.log(`All passed: ${result.pass}`);
@@ -365,10 +382,11 @@ Control promptfoo's caching layer for LLM provider calls.
 Enable caching for provider calls (default).
 
 ```typescript
-export function enableCache(): void
+export function enableCache(): void;
 ```
 
 **Example:**
+
 ```typescript
 import { cache, evaluate } from 'promptfoo';
 
@@ -382,16 +400,17 @@ cache.enableCache();
 Disable caching. Useful during development/testing to always hit the provider.
 
 ```typescript
-export function disableCache(): void
+export function disableCache(): void;
 ```
 
 **Example:**
+
 ```typescript
-import { cache } from 'promptfoo';
+import { cache, evaluate } from 'promptfoo';
 
 // Disable for fresh results
 cache.disableCache();
-const results = await promptfoo.evaluate(testSuite);
+const evalRecord = await evaluate(testSuite);
 cache.enableCache();
 ```
 
@@ -402,7 +421,7 @@ cache.enableCache();
 Check if caching is currently enabled.
 
 ```typescript
-export function isCacheEnabled(): boolean
+export function isCacheEnabled(): boolean;
 ```
 
 ---
@@ -412,16 +431,17 @@ export function isCacheEnabled(): boolean
 Clear all cached results.
 
 ```typescript
-export async function clearCache(): Promise<void>
+export async function clearCache(): Promise<void>;
 ```
 
 **Example:**
+
 ```typescript
-import { cache } from 'promptfoo';
+import { cache, evaluate } from 'promptfoo';
 
 // Clear old cache
 await cache.clearCache();
-await evaluate(testSuite);  // Will refetch all provider calls
+await evaluate(testSuite); // Will refetch all provider calls
 ```
 
 ---
@@ -433,16 +453,18 @@ Run evaluation with isolated cache namespace.
 ```typescript
 export function withCacheNamespace<T>(
   namespace: string | undefined,
-  fn: () => Promise<T>
-): Promise<T>
+  fn: () => Promise<T>,
+): Promise<T>;
 ```
 
 **Use Cases:**
+
 - Isolate caches for different test runs
 - Prevent cache collisions across environments
 - Version-specific caching
 
 **Example:**
+
 ```typescript
 import { cache, evaluate } from 'promptfoo';
 
@@ -463,7 +485,7 @@ const v2Results = await cache.withCacheNamespace('v2', async () => {
 Get the underlying cache instance for advanced operations.
 
 ```typescript
-export function getCache(): Cache
+export function getCache(): Cache;
 
 interface Cache {
   get(key: string): Promise<unknown>;
@@ -475,7 +497,7 @@ interface Cache {
 
 ---
 
-### `fetchWithCache(url, options?, ttl?, type?)`
+### `fetchWithCache(url, options?, timeout?, format?, bust?, maxRetries?)`
 
 Fetch with caching enabled.
 
@@ -483,29 +505,32 @@ Fetch with caching enabled.
 export async function fetchWithCache<T>(
   url: string,
   options?: RequestInit,
-  ttl?: number,
-  type?: 'json' | 'text'
-): Promise<FetchWithCacheResult<T>>
+  timeout?: number,
+  format?: 'json' | 'text',
+  bust?: boolean,
+  maxRetries?: number,
+): Promise<FetchWithCacheResult<T>>;
 ```
 
 **Example:**
+
 ```typescript
 import { cache } from 'promptfoo';
 
-// Fetch with 1-hour TTL
 const result = await cache.fetchWithCache(
   'https://api.example.com/data',
   { method: 'GET' },
-  3600 * 1000,  // 1 hour TTL in ms
-  'json'
+  undefined,
+  'json',
 );
 
-console.log(result.cached);  // true if from cache
-console.log(result.data);    // the fetched data
+console.log(result.cached); // true if from cache
+console.log(result.data); // the fetched data
 ```
 
 **Configuration:**
 Set cache location and TTL via environment variables:
+
 ```bash
 # Cache directory (default: ~/.promptfoo/cache)
 export PROMPTFOO_CACHE_PATH=/path/to/cache
@@ -528,22 +553,24 @@ Content safety and security layer. Use guardrails to detect PII, harmful content
 Run general content moderation.
 
 ```typescript
-async function guard(input: string): Promise<GuardResult>
+async function guard(input: string): Promise<GuardResult>;
 ```
 
 **Returns:**
+
 ```typescript
 interface GuardResult {
   model: string;
   results: Array<{
-    categories: Record<string, boolean>;      // e.g., { hate: false, violence: true }
-    category_scores: Record<string, number>;  // Scores 0-1
-    flagged: boolean;                         // Any category flagged?
+    categories: Record<string, boolean>; // e.g., { hate: false, violence: true }
+    category_scores: Record<string, number>; // Scores 0-1
+    flagged: boolean; // Any category flagged?
   }>;
 }
 ```
 
 **Example:**
+
 ```typescript
 import { guardrails } from 'promptfoo';
 
@@ -566,12 +593,13 @@ if (result.results[0].flagged) {
 Detect personally identifiable information (PII).
 
 ```typescript
-async function pii(input: string): Promise<GuardResult>
+async function pii(input: string): Promise<GuardResult>;
 ```
 
 **Returns:** GuardResult with PII detection details
 
 **Example:**
+
 ```typescript
 import { guardrails } from 'promptfoo';
 
@@ -580,7 +608,7 @@ const result = await guardrails.pii('John Doe, john@example.com, SSN: 123-45-678
 if (result.results[0].flagged) {
   console.log('PII detected:');
   if (result.results[0].payload?.pii) {
-    result.results[0].payload.pii.forEach(item => {
+    result.results[0].payload.pii.forEach((item) => {
       console.log(`  ${item.type}: ${item.value}`);
     });
   }
@@ -594,7 +622,7 @@ if (result.results[0].flagged) {
 Detect harmful content (violence, hate speech, etc.).
 
 ```typescript
-async function harm(input: string): Promise<GuardResult>
+async function harm(input: string): Promise<GuardResult>;
 ```
 
 ---
@@ -604,7 +632,7 @@ async function harm(input: string): Promise<GuardResult>
 Run adaptive guardrails with custom configuration.
 
 ```typescript
-async function adaptive(request: AdaptiveRequest): Promise<AdaptiveResult>
+async function adaptive(request: AdaptiveRequest): Promise<AdaptiveResult>;
 ```
 
 ---
@@ -618,7 +646,7 @@ Adversarial testing framework for finding vulnerabilities in LLM systems.
 Generate adversarial test cases.
 
 ```typescript
-async function generate(config: RedteamGenerateConfig): Promise<RedteamGenerateResult>
+async function generate(config: RedteamGenerateConfig): Promise<RedteamGenerateResult>;
 ```
 
 See [Red Teaming Guide](/docs/red-team/) for full documentation.
@@ -630,7 +658,7 @@ See [Red Teaming Guide](/docs/red-team/) for full documentation.
 Run full red team evaluation against a system.
 
 ```typescript
-async function run(config: RedteamRunConfig): Promise<RedteamRunResult>
+async function run(config: RedteamRunConfig): Promise<RedteamRunResult>;
 ```
 
 ---
@@ -641,18 +669,19 @@ Registry of available red team attack plugins.
 
 ```typescript
 interface Plugins {
-  [pluginName: string]: typeof RedteamPluginBase
+  [pluginName: string]: typeof RedteamPluginBase;
 }
 
 // Example plugins
-Plugins['prompt-injection']   // Injection attacks
-Plugins['jailbreak']          // Jailbreak attempts
-Plugins['rbac']               // RBAC bypasses
-Plugins['sql-injection']      // SQL injection
+Plugins['prompt-injection']; // Injection attacks
+Plugins['jailbreak']; // Jailbreak attempts
+Plugins['rbac']; // RBAC bypasses
+Plugins['sql-injection']; // SQL injection
 // ... and many more
 ```
 
 **Creating Custom Plugins:**
+
 ```typescript
 import { redteam } from 'promptfoo';
 
@@ -661,7 +690,7 @@ class MyCustomPlugin extends redteam.Base.Plugin {
     // Custom attack logic
     return {
       generated: ['attack1', 'attack2'],
-      stats: { duration: 100 }
+      stats: { duration: 100 },
     };
   }
 }
@@ -678,11 +707,11 @@ Registry of red team strategies for composing attacks.
 
 ```typescript
 interface Strategies {
-  [strategyName: string]: RedteamStrategy
+  [strategyName: string]: RedteamStrategy;
 }
 ```
 
-See [Red Teaming Strategies](/docs/red-team/strategies.md) for details.
+See [Red Teaming Strategies](/docs/red-team/strategies/) for details.
 
 ---
 
@@ -692,18 +721,19 @@ Extract system information for targeted attacks.
 
 ```typescript
 const {
-  extractEntities,        // Extract named entities from system
-  extractMcpToolsInfo,    // Extract MCP tool metadata
-  extractSystemPurpose    // Extract system purpose and goal
+  extractEntities, // Extract named entities from system
+  extractMcpToolsInfo, // Extract MCP tool metadata
+  extractSystemPurpose, // Extract system purpose and goal
 } = redteam.Extractors;
 ```
 
 **Example:**
+
 ```typescript
 import { redteam } from 'promptfoo';
 
 const purpose = await redteam.Extractors.extractSystemPurpose({
-  prompt: 'You are a helpful assistant...'
+  prompt: 'You are a helpful assistant...',
 });
 
 console.log(`System purpose: ${purpose}`);
@@ -722,7 +752,7 @@ abstract class RedteamPluginBase {
     injectVar?: string;
     conversationHistory?: Message[];
     options?: Record<string, unknown>;
-  }): Promise<RedteamPluginResult>
+  }): Promise<RedteamPluginResult>;
 }
 ```
 
@@ -736,11 +766,7 @@ Base class for custom red team graders.
 
 ```typescript
 abstract class RedteamGraderBase {
-  async grade(params: {
-    prompt: string;
-    output: string;
-    rubric: string;
-  }): Promise<GradingResult>
+  async grade(params: { prompt: string; output: string; rubric: string }): Promise<GradingResult>;
 }
 ```
 
@@ -748,24 +774,26 @@ abstract class RedteamGraderBase {
 
 ## Utilities
 
-### `generateTable(results, options?)`
+### `generateTable(evaluateTable, tableCellMaxLength?, maxRows?)`
 
 Format evaluation results as a display table.
 
 ```typescript
 export function generateTable(
-  results: EvaluateSummary,
-  options?: { maxLen?: number; format?: 'markdown' | 'csv' | 'json' }
-): string
+  evaluateTable: EvaluateTable,
+  tableCellMaxLength?: number,
+  maxRows?: number,
+): string;
 ```
 
 **Example:**
+
 ```typescript
 import { evaluate, generateTable } from 'promptfoo';
 
-const results = await evaluate(testSuite);
-const table = generateTable(results);
-console.log(table);
+const evalRecord = await evaluate(testSuite);
+const table = await evalRecord.getTable();
+console.log(generateTable(table));
 ```
 
 ---
@@ -775,10 +803,11 @@ console.log(table);
 Check if a value is a transform function (for custom prompt/variable transforms).
 
 ```typescript
-export function isTransformFunction(value: unknown): value is TransformFunction
+export function isTransformFunction(value: unknown): value is TransformFunction;
 ```
 
 **Example:**
+
 ```typescript
 import { isTransformFunction } from 'promptfoo';
 
@@ -798,26 +827,26 @@ Dynamically generate test cases:
 import { evaluate } from 'promptfoo';
 
 const generateTests = (questions) => {
-  return questions.map(q => ({
+  return questions.map((q) => ({
     vars: { question: q },
     assert: [
       { type: 'contains', value: 'verified-fact' },
       {
         type: 'custom-llm-rubric',
-        value: 'Is the answer accurate?'
-      }
-    ]
+        value: 'Is the answer accurate?',
+      },
+    ],
   }));
 };
 
-const results = await evaluate({
+const evalRecord = await evaluate({
   prompts: ['Answer: {{ question }}'],
   providers: ['openai:gpt-4'],
   tests: generateTests([
     'What is the capital of France?',
     'What is 2+2?',
-    'What is photosynthesis?'
-  ])
+    'What is photosynthesis?',
+  ]),
 });
 ```
 
@@ -830,7 +859,7 @@ Use provider response data in assertions:
 ```typescript
 import { evaluate } from 'promptfoo';
 
-const results = await evaluate({
+const evalRecord = await evaluate({
   prompts: ['Analyze: {{ text }}'],
   providers: ['openai:gpt-4'],
   tests: [
@@ -844,13 +873,13 @@ const results = await evaluate({
             const tokens = context.providerResponse?.tokenUsage?.total || 0;
             return {
               pass: tokens < 100,
-              reason: `Used ${tokens} tokens`
+              reason: `Used ${tokens} tokens`,
             };
-          }
-        }
-      ]
-    }
-  ]
+          },
+        },
+      ],
+    },
+  ],
 });
 ```
 
@@ -863,25 +892,22 @@ Load providers and test in parallel:
 ```typescript
 import { assertions, loadApiProviders } from 'promptfoo';
 
-const providers = await loadApiProviders([
-  'openai:gpt-4',
-  'anthropic:claude-3-opus'
-]);
+const providers = await loadApiProviders(['openai:gpt-4', 'anthropic:claude-3-opus']);
 
 const testCases = ['2+2=?', 'What is AI?'];
 
 for (const provider of providers) {
-  console.log(`Testing ${provider.id}:`);
+  console.log(`Testing ${provider.id()}:`);
   for (const test of testCases) {
-    const response = await provider.callApi({ prompt: test });
-    
+    const response = await provider.callApi(test);
+
     const result = await assertions.runAssertion({
       provider,
       assertion: { type: 'contains', value: 'answer' },
       test: { vars: { prompt: test } },
-      providerResponse: response
+      providerResponse: response,
     });
-    
+
     console.log(`  ${test}: ${result.pass ? '✓' : '✗'}`);
   }
 }
@@ -897,26 +923,27 @@ Compare two model versions with isolated caches:
 import { cache, evaluate } from 'promptfoo';
 
 async function compareModels(oldVersion, newVersion, testSuite) {
-  const oldResults = await cache.withCacheNamespace(
-    `model-${oldVersion}`,
-    () => evaluate({
+  const oldEval = await cache.withCacheNamespace(`model-${oldVersion}`, () =>
+    evaluate({
       ...testSuite,
-      providers: [`openai:gpt-4-${oldVersion}`]
-    })
+      providers: [`openai:gpt-4-${oldVersion}`],
+    }),
   );
 
-  const newResults = await cache.withCacheNamespace(
-    `model-${newVersion}`,
-    () => evaluate({
+  const newEval = await cache.withCacheNamespace(`model-${newVersion}`, () =>
+    evaluate({
       ...testSuite,
-      providers: [`openai:gpt-4-${newVersion}`]
-    })
+      providers: [`openai:gpt-4-${newVersion}`],
+    }),
   );
+
+  const oldResults = await oldEval.toEvaluateSummary();
+  const newResults = await newEval.toEvaluateSummary();
 
   return {
-    oldPass: oldResults.stats.passCount,
-    newPass: newResults.stats.passCount,
-    improvement: newResults.stats.passCount - oldResults.stats.passCount
+    oldPass: oldResults.stats.successes,
+    newPass: newResults.stats.successes,
+    improvement: newResults.stats.successes - oldResults.stats.successes,
   };
 }
 ```
@@ -934,26 +961,26 @@ import type {
   EvaluateOptions,
   EvaluateSummary,
   EvaluateResult,
-  
+
   // Test configuration
   TestCase,
   AtomicTestCase,
   Assertion,
   AssertionSet,
-  
+
   // Provider types
   ApiProvider,
   ProviderResponse,
   ProviderConfig,
-  
+
   // Evaluation types
   GradingResult,
   AssertionValueFunctionContext,
-  
+
   // Transform types
   TransformFunction,
   TransformContext,
-  
+
   // Extension hooks
   BeforeAllExtensionHookContext,
   AfterEachExtensionHookContext,
@@ -966,6 +993,7 @@ import type {
 ## API Stability
 
 ### Stable APIs (Safe for production)
+
 - `evaluate()`
 - `loadApiProvider()`, `loadApiProviders()`
 - `assertions.runAssertion()`, `assertions.runAssertions()`
@@ -973,10 +1001,12 @@ import type {
 - Guardrails namespace
 
 ### Experimental APIs (May change)
+
 - `redteam.*` (plugin/strategy system)
 - Trace data structures
 
 ### Internal APIs (Don't use directly)
+
 - Functions not exported from main `promptfoo` module
 - Test utilities
 - CLI-specific functions
@@ -986,6 +1016,7 @@ import type {
 ## Troubleshooting
 
 **Cache issues?**
+
 ```typescript
 // Clear cache if stale
 import { cache } from 'promptfoo';
@@ -996,16 +1027,18 @@ cache.disableCache();
 ```
 
 **Type errors with custom assertions?**
+
 ```typescript
 import type { AssertionValueFunctionContext } from 'promptfoo';
 
 // Type-safe context usage
 value: (output, context: AssertionValueFunctionContext) => {
   // Full autocomplete and type checking
-}
+};
 ```
 
 **Need to debug evaluation flow?**
+
 ```typescript
 // Enable verbose logging
 process.env.LOG_LEVEL = 'debug';
@@ -1013,7 +1046,7 @@ process.env.LOG_LEVEL = 'debug';
 // Or check trace data in assertions
 const result = await assertions.runAssertion({
   // ...
-  traceData: trace,  // Access timing information
+  traceData: trace, // Access timing information
 });
 ```
 
@@ -1027,7 +1060,7 @@ Find runnable examples in the [promptfoo examples](https://github.com/promptfoo/
 
 ## See Also
 
-- [Configuration Guide](/docs/configuration/overview) - YAML-based setup
+- [Configuration Guide](/docs/configuration/guide) - YAML-based setup
 - [Red Teaming Guide](/docs/red-team/) - Adversarial testing
-- [Assertions Reference](/docs/configuration/assertions.md) - Assertion types
+- [Assertions Reference](/docs/configuration/expected-outputs/) - Assertion types
 - [Providers Reference](/docs/providers/) - LLM provider setup
