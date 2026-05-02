@@ -3,6 +3,9 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNativeAddonVersionMismatchError } from './factories/nativeAddonErrors';
 
+const TEST_CURRENT_NODE_ABI = '137';
+const TEST_INSTALLED_BETTER_SQLITE3_ABI = '115';
+
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
 const mockGetDb = vi.fn().mockReturnValue(mockDb);
@@ -130,8 +133,8 @@ describe('migrate', () => {
         'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
         {
           currentNodeVersion: process.version,
-          currentNodeAbi: '137',
-          installedBetterSqlite3Abi: '115',
+          currentNodeAbi: TEST_CURRENT_NODE_ABI,
+          installedBetterSqlite3Abi: TEST_INSTALLED_BETTER_SQLITE3_ABI,
         },
       );
       expect(mockMigrate).not.toHaveBeenCalled();
@@ -153,8 +156,8 @@ describe('migrate', () => {
         'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
         {
           currentNodeVersion: process.version,
-          currentNodeAbi: '137',
-          installedBetterSqlite3Abi: '115',
+          currentNodeAbi: TEST_CURRENT_NODE_ABI,
+          installedBetterSqlite3Abi: TEST_INSTALLED_BETTER_SQLITE3_ABI,
         },
       );
       expect(mockMigrate).not.toHaveBeenCalled();
