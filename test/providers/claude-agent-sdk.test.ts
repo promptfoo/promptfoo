@@ -487,6 +487,104 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.metadata?.structuredOutput).toBeUndefined();
       });
 
+      it('should return main agent result when background sub-agents emit interleaved result messages', async () => {
+        // Reproduces #9054: when the main agent spawns a background sub-agent
+        // (Task tool with run_in_background: true), the SDK interleaves the
+        // sub-agent's `result` message into the parent stream before the main
+        // agent's terminal `result` arrives. SDKResultMessage has no
+        // parent_tool_use_id, so position is the only signal — the main agent's
+        // result is always last.
+        const subAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-session',
+          uuid: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent summary that should NOT be surfaced',
+          usage: createMockUsage(5, 5),
+          total_cost_usd: 0.0005,
+          duration_ms: 200,
+          duration_api_ms: 150,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+        };
+        const mainAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          uuid: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Main agent final answer',
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: false,
+          num_turns: 4,
+          permission_denials: [],
+          terminal_reason: 'completed',
+        };
+
+        mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentResult]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Main agent final answer');
+        expect(result.sessionId).toBe('main-session');
+        expect(result.cost).toBe(0.003);
+        expect(result.tokenUsage).toEqual({ prompt: 20, completion: 30, total: 50 });
+        expect(result.metadata?.numTurns).toBe(4);
+        expect(result.metadata?.terminalReason).toBe('completed');
+        // Raw should reflect the main agent's result, not the sub-agent's
+        expect(JSON.parse(result.raw as string).session_id).toBe('main-session');
+      });
+
+      it('should surface main agent error when sub-agent succeeds first', async () => {
+        // Inverse of the previous test: sub-agent finishes successfully but the
+        // main agent ultimately errors. The error must win — otherwise we'd
+        // mask main-agent failures behind a green sub-agent summary.
+        const subAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-session',
+          uuid: 'cccccccc-cccc-cccc-cccc-cccccccccccc' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent summary',
+          usage: createMockUsage(5, 5),
+          total_cost_usd: 0.0005,
+          duration_ms: 200,
+          duration_api_ms: 150,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+        };
+        const mainAgentError: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'error_max_turns',
+          session_id: 'main-session',
+          uuid: 'dddddddd-dddd-dddd-dddd-dddddddddddd' as `${string}-${string}-${string}-${string}-${string}`,
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: true,
+          num_turns: 4,
+          permission_denials: [],
+        };
+
+        mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentError]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe('Claude Agent SDK call failed: error_max_turns');
+        expect(result.sessionId).toBe('main-session');
+      });
+
       it('should return error when API key is missing', async () => {
         // ensure process env won't provide the key or any other Claude Agent SDK env vars
         mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
