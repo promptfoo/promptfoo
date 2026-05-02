@@ -273,6 +273,31 @@ describe('XAIResponsesProvider', () => {
     expect(result.output).toBe('hello');
   });
 
+  it('accumulates nested output_text deltas from streamed Responses API events', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.output_text.delta","output_text":{"delta":"hel"}}',
+          '',
+          'data: {"type":"response.output_text.delta","output_text":{"delta":"lo"}}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      ),
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('hello');
+  });
+
   it('returns an error when a streamed response has no output content', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,
