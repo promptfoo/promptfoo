@@ -630,6 +630,24 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).not.toHaveBeenCalled();
       });
 
+      it('should allow v2 session resumes with empty permission configs', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            permission: {},
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sessionID: 'existing-session',
+          }),
+        );
+      });
+
       it('should reuse session when persist_sessions is true without cache', async () => {
         const provider = new OpenCodeSDKProvider({
           config: { persist_sessions: true },
