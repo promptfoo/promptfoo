@@ -793,7 +793,7 @@ providers:
             allowManagedDomainsOnly: true
 ```
 
-## Tool Configuration
+## Per-Tool Configuration
 
 Customize built-in tool behavior with `tool_config`:
 
