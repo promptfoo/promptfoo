@@ -121,10 +121,10 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     }
     if (!isValidSelection()) {
       if (!selectedTarget.id && !selectedTarget.label?.trim()) {
-        return 'Please select a target provider';
+        return 'Please select a target';
       }
       if (selectedTarget.id === '' && !selectedTarget.label?.trim()) {
-        return 'Please enter a label for your custom provider';
+        return 'Please enter a label for your custom target';
       }
       return 'Please complete the target selection';
     }

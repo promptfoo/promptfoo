@@ -37,6 +37,10 @@ function projectProviderResponse(
     return response;
   }
 
+  if (!options.stripMetadata && !options.stripOutput) {
+    return response;
+  }
+
   const projectedResponse = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
@@ -46,6 +50,25 @@ function projectProviderResponse(
   }
 
   return projectedResponse;
+}
+
+function projectTestCase(
+  testCase: AtomicTestCase,
+  options: { stripMetadata: boolean; stripVars: boolean },
+): AtomicTestCase {
+  if (!options.stripMetadata && !options.stripVars) {
+    return testCase;
+  }
+
+  const projectedTestCase = options.stripMetadata
+    ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
+    : { ...testCase };
+
+  if (options.stripVars) {
+    projectedTestCase.vars = undefined;
+  }
+
+  return projectedTestCase;
 }
 
 // Removes circular references from the provider object and ensures consistent format
@@ -620,12 +643,10 @@ export default class EvalResult {
         }
       : this.prompt;
 
-    const testCase = shouldStripTestVars
-      ? {
-          ...this.testCase,
-          vars: undefined,
-        }
-      : this.testCase;
+    const testCase = projectTestCase(this.testCase, {
+      stripMetadata: shouldStripMetadata,
+      stripVars: shouldStripTestVars,
+    });
 
     return {
       cost: this.cost,

@@ -34,6 +34,7 @@ import type {
   PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
+  SDKResultMessage,
   SettingSource,
   Settings,
   SpawnedProcess,
@@ -1350,6 +1351,18 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             toolStartTimes.clear();
           };
 
+          // The Claude Agent SDK interleaves a `result` message for each background
+          // sub-agent (Task tool with run_in_background: true) into the parent
+          // session's stream before the main agent's terminal `result` arrives.
+          // SDKResultMessage has no parent_tool_use_id, so position is the only
+          // signal we have: in current SDK behavior the main agent's result is
+          // the last `result` message in the stream. Stash the latest one and
+          // process it after the stream closes — otherwise we'd return the first
+          // sub-agent's summary and skip the main agent's actual final response.
+          // See https://github.com/promptfoo/promptfoo/issues/9054.
+          let lastResultMsg: SDKResultMessage | undefined;
+          let resultMsgCount = 0;
+
           for await (const msg of res) {
             if (msg.type === 'assistant') {
               // Extract tool_use content blocks from assistant messages
@@ -1386,100 +1399,133 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 }
               }
             } else if (msg.type === 'result') {
-              const raw = JSON.stringify(msg);
-              const tokenUsage: ProviderResponse['tokenUsage'] = {
-                prompt: msg.usage?.input_tokens,
-                completion: msg.usage?.output_tokens,
-                total:
-                  msg.usage?.input_tokens && msg.usage?.output_tokens
-                    ? msg.usage?.input_tokens + msg.usage?.output_tokens
-                    : undefined,
-              };
-              const cost = msg.total_cost_usd ?? 0;
-              const sessionId = msg.session_id;
-
-              const toolCallsArray = Array.from(toolCallsMap.values());
-              const skillCalls = deriveSkillCalls(toolCallsArray);
-
-              // The stream is about to close; emit any orphan tool spans first so
-              // abort/hook-stop runs don't silently drop them.
-              drainOrphans();
-
-              // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
-              // Mark the provider span ERROR directly — without poisoning the
-              // response's `output`/`error` contract, since any produced output is
-              // still useful and downstream assertions may depend on it.
-              const abortedTerminalReason =
-                typeof msg.terminal_reason === 'string' &&
-                (msg.terminal_reason.startsWith('aborted_') ||
-                  msg.terminal_reason === 'hook_stopped')
-                  ? msg.terminal_reason
-                  : undefined;
-              if (abortedTerminalReason) {
-                otelTrace.getActiveSpan()?.setStatus({
-                  code: SpanStatusCode.ERROR,
-                  message: `aborted: ${abortedTerminalReason}`,
-                });
-              }
-
-              if (msg.subtype === 'success') {
-                logger.debug(`Claude Agent SDK response: ${raw}`);
-                // When structured output is enabled and available, use it as the output
-                // Otherwise fall back to the text result
-                const output =
-                  msg.structured_output === undefined ? msg.result : msg.structured_output;
-                const response: ProviderResponse = {
-                  output,
-                  tokenUsage,
-                  cost,
-                  raw,
-                  sessionId,
-                  metadata: {
-                    skillCalls,
-                    toolCalls: toolCallsArray,
-                    numTurns: msg.num_turns,
-                    durationMs: msg.duration_ms,
-                    durationApiMs: msg.duration_api_ms,
-                    modelUsage: msg.modelUsage,
-                    permissionDenials: msg.permission_denials,
-                    ...(msg.terminal_reason === undefined
-                      ? {}
-                      : { terminalReason: msg.terminal_reason }),
-                    ...(msg.structured_output === undefined
-                      ? {}
-                      : { structuredOutput: msg.structured_output }),
-                  },
-                };
-
-                // Cache the response using shared utilities
-                await cacheResponse(cacheResult, response, 'Claude Agent SDK');
-                return response;
-              } else {
-                return {
-                  error: `Claude Agent SDK call failed: ${msg.subtype}`,
-                  tokenUsage,
-                  cost,
-                  raw,
-                  sessionId,
-                  metadata: {
-                    skillCalls,
-                    toolCalls: toolCallsArray,
-                    numTurns: msg.num_turns,
-                    durationMs: msg.duration_ms,
-                    durationApiMs: msg.duration_api_ms,
-                    modelUsage: msg.modelUsage,
-                    permissionDenials: msg.permission_denials,
-                    ...(msg.terminal_reason === undefined
-                      ? {}
-                      : { terminalReason: msg.terminal_reason }),
-                  },
-                };
-              }
+              lastResultMsg = msg;
+              resultMsgCount++;
             }
           }
 
+          // The stream is about to close; emit any orphan tool spans first so
+          // abort/hook-stop runs don't silently drop them.
           drainOrphans();
-          return { error: "Claude Agent SDK call didn't return a result" };
+
+          if (!lastResultMsg) {
+            return { error: "Claude Agent SDK call didn't return a result" };
+          }
+
+          const finalMsg = lastResultMsg;
+
+          // If we observed >1 result messages, the last one is a success, and
+          // it has no terminal_reason, the main agent's result may not actually
+          // be last (truncated stream after a sub-agent finished). Surface this
+          // so downstream evals don't silently grade a sub-agent summary as the
+          // model's answer.
+          //
+          // Gate on subtype === 'success' because non-success subtypes
+          // ('error_during_execution', 'error_max_turns', etc.) are themselves
+          // a definitive terminal signal — they're how the SDK reports the
+          // run ending in error, not a truncation indicator. Warning on those
+          // would be a false positive on every legitimate main-agent failure
+          // that follows a background sub-agent.
+          if (
+            resultMsgCount > 1 &&
+            finalMsg.subtype === 'success' &&
+            finalMsg.terminal_reason === undefined
+          ) {
+            logger.warn(
+              `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
+            );
+            otelTrace.getActiveSpan()?.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: 'stream closed without terminal_reason after multiple result messages',
+            });
+          }
+          const raw = JSON.stringify(finalMsg);
+          const tokenUsage: ProviderResponse['tokenUsage'] = {
+            prompt: finalMsg.usage?.input_tokens,
+            completion: finalMsg.usage?.output_tokens,
+            total:
+              finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
+                ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
+                : undefined,
+          };
+          const cost = finalMsg.total_cost_usd ?? 0;
+          const sessionId = finalMsg.session_id;
+
+          const toolCallsArray = Array.from(toolCallsMap.values());
+          const skillCalls = deriveSkillCalls(toolCallsArray);
+
+          // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
+          // Mark the provider span ERROR directly — without poisoning the
+          // response's `output`/`error` contract, since any produced output is
+          // still useful and downstream assertions may depend on it.
+          const abortedTerminalReason =
+            typeof finalMsg.terminal_reason === 'string' &&
+            (finalMsg.terminal_reason.startsWith('aborted_') ||
+              finalMsg.terminal_reason === 'hook_stopped')
+              ? finalMsg.terminal_reason
+              : undefined;
+          if (abortedTerminalReason) {
+            otelTrace.getActiveSpan()?.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: `aborted: ${abortedTerminalReason}`,
+            });
+          }
+
+          if (finalMsg.subtype === 'success') {
+            logger.debug(`Claude Agent SDK response: ${raw}`);
+            // When structured output is enabled and available, use it as the output
+            // Otherwise fall back to the text result
+            const output =
+              finalMsg.structured_output === undefined
+                ? finalMsg.result
+                : finalMsg.structured_output;
+            const response: ProviderResponse = {
+              output,
+              tokenUsage,
+              cost,
+              raw,
+              sessionId,
+              metadata: {
+                skillCalls,
+                toolCalls: toolCallsArray,
+                numTurns: finalMsg.num_turns,
+                durationMs: finalMsg.duration_ms,
+                durationApiMs: finalMsg.duration_api_ms,
+                modelUsage: finalMsg.modelUsage,
+                permissionDenials: finalMsg.permission_denials,
+                ...(finalMsg.terminal_reason === undefined
+                  ? {}
+                  : { terminalReason: finalMsg.terminal_reason }),
+                ...(finalMsg.structured_output === undefined
+                  ? {}
+                  : { structuredOutput: finalMsg.structured_output }),
+              },
+            };
+
+            // Cache the response using shared utilities
+            await cacheResponse(cacheResult, response, 'Claude Agent SDK');
+            return response;
+          }
+
+          return {
+            error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
+            tokenUsage,
+            cost,
+            raw,
+            sessionId,
+            metadata: {
+              skillCalls,
+              toolCalls: toolCallsArray,
+              numTurns: finalMsg.num_turns,
+              durationMs: finalMsg.duration_ms,
+              durationApiMs: finalMsg.duration_api_ms,
+              modelUsage: finalMsg.modelUsage,
+              permissionDenials: finalMsg.permission_denials,
+              ...(finalMsg.terminal_reason === undefined
+                ? {}
+                : { terminalReason: finalMsg.terminal_reason }),
+            },
+          };
         },
         (response) => {
           const metadata = response.metadata ?? {};
