@@ -275,7 +275,7 @@ export interface XAIResponsesConfig {
  * and interact with MCP servers.
  *
  * Usage:
- *   xai:responses:grok-4.20-reasoning
+ *   xai:responses:grok-4.3
  *   xai:responses:grok-4-fast
  *   xai:responses:grok-4
  */
@@ -462,27 +462,42 @@ export class XAIResponsesProvider implements ApiProvider {
 
     try {
       if (body.stream) {
-        const response = await fetchWithProxy(`${this.getApiUrl()}/responses`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-            ...config.headers,
-          },
-          body: JSON.stringify(body),
-        });
+        const timeoutMs = getRequestTimeoutMs();
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetchWithProxy(`${this.getApiUrl()}/responses`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+              ...config.headers,
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
 
-        status = response.status;
-        statusText = response.statusText;
-        if (status < 200 || status >= 300) {
-          const text = await response.text();
-          try {
-            data = JSON.parse(text);
-          } catch {
-            data = text;
+          status = response.status;
+          statusText = response.statusText;
+          // Streaming bypasses fetchWithCache, so cache-hit telemetry is always false.
+          cached = false;
+          if (status < 200 || status >= 300) {
+            const text = await response.text();
+            try {
+              data = JSON.parse(text);
+            } catch {
+              data = text;
+            }
+          } else {
+            data = await readStreamingResponse(response);
           }
-        } else {
-          data = await readStreamingResponse(response);
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw new Error(`xAI streaming response timed out after ${timeoutMs}ms`);
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutHandle);
         }
       } else {
         const response = await fetchWithCache(

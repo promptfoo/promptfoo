@@ -25,8 +25,7 @@ npx promptfoo@latest eval
 
 ### Models
 
-- `grok-voice-think-fast-1.0` - Recommended voice model for the best experience
-- `grok-voice-fast-1.0` - Default realtime voice model
+- `grok-voice-think-fast-1.0` - The voice model documented by xAI's [Voice Agent API guide](https://docs.x.ai/docs/guides/voice). The model is selected via the `?model=` query parameter on the realtime WebSocket URL.
 
 ### Voices
 

@@ -102,56 +102,42 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('supported models', () => {
-    it('includes the current Grok 4.20 family', () => {
+    it('includes Grok 4.3 and 4.20 in the reasoning and Grok-4 parameter-restriction lists', () => {
       expect(XAI_CHAT_MODELS).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({
-            id: 'grok-4.20-0309-reasoning',
-          }),
-          expect.objectContaining({
-            id: 'grok-4.20-0309-non-reasoning',
-          }),
-          expect.objectContaining({
-            id: 'grok-4.20-multi-agent-0309',
-          }),
+          expect.objectContaining({ id: 'grok-4.3' }),
+          expect.objectContaining({ id: 'grok-4.20-0309-reasoning' }),
+          expect.objectContaining({ id: 'grok-4.20-0309-non-reasoning' }),
+          expect.objectContaining({ id: 'grok-4.20-multi-agent-0309' }),
         ]),
       );
       expect(GROK_REASONING_MODELS).toEqual(
-        expect.arrayContaining([
-          'grok-4.20-0309-reasoning',
-          'grok-4.20-reasoning',
-          'grok-4.20',
-          'grok-4.20-multi-agent-0309',
-          'grok-4.20-multi-agent',
-        ]),
+        expect.arrayContaining(['grok-4.3', 'grok-4.3-latest', 'grok-4.20-reasoning', 'grok-4.20']),
       );
       expect(GROK_4_MODELS).toEqual(
         expect.arrayContaining([
-          'grok-4.20-0309-reasoning',
+          'grok-4.3',
           'grok-4.20-reasoning',
-          'grok-4.20',
-          'grok-4.20-0309-non-reasoning',
           'grok-4.20-non-reasoning',
-          'grok-4.20-multi-agent-0309',
           'grok-4.20-multi-agent',
         ]),
       );
     });
 
-    it('tracks every current public text model id', () => {
+    it('tracks every current public text model id reported by xAI /v1/language-models', () => {
       const currentPublicTextModelIds = [
-        'grok-4-1-fast-reasoning',
-        'grok-4.20-0309-reasoning',
-        'grok-4.20-multi-agent-0309',
-        'grok-code-fast-1',
-        'grok-4-fast-non-reasoning',
-        'grok-4-fast-reasoning',
         'grok-3',
-        'grok-4.20-0309-non-reasoning',
-        'grok-4.3',
+        'grok-3-mini',
         'grok-4-0709',
         'grok-4-1-fast-non-reasoning',
-        'grok-3-mini',
+        'grok-4-1-fast-reasoning',
+        'grok-4-fast-non-reasoning',
+        'grok-4-fast-reasoning',
+        'grok-4.20-0309-non-reasoning',
+        'grok-4.20-0309-reasoning',
+        'grok-4.20-multi-agent-0309',
+        'grok-4.3',
+        'grok-code-fast-1',
       ];
       const trackedModelIds = XAI_CHAT_MODELS.flatMap((model) => [
         model.id,
@@ -527,16 +513,17 @@ describe('xAI Chat Provider', () => {
       expect(grok4?.cost?.output).toBeDefined();
     });
 
-    it('includes Grok 4.3 in XAI_CHAT_MODELS with current pricing', () => {
+    it('includes Grok 4.3 in XAI_CHAT_MODELS with API-sourced pricing', () => {
       const grok43 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-4.3');
       expect(grok43).toBeDefined();
       expect(grok43?.aliases).toContain('grok-4.3-latest');
+      // Verified against xAI /v1/language-models/grok-4.3 (12500/25000/2000 ticks).
       expect(grok43?.cost?.input).toBe(1.25 / 1e6);
       expect(grok43?.cost?.output).toBe(2.5 / 1e6);
       expect(grok43?.cost?.cache_read).toBe(0.2 / 1e6);
     });
 
-    it('includes Grok 4.20 family pricing from the current public catalog', () => {
+    it('includes Grok 4.20 family with API-sourced pricing', () => {
       for (const modelId of [
         'grok-4.20-0309-reasoning',
         'grok-4.20-0309-non-reasoning',
@@ -647,10 +634,15 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBe(2.5);
     });
 
-    it('handles reasoning tokens correctly', () => {
-      // reasoningTokens is passed as 5th argument but doesn't affect calculation currently
-      const costWithReasoning = calculateXAICost('grok-3-mini-beta', {}, 500, 500, 200);
-      expect(costWithReasoning).toBeDefined();
+    it('bills reasoning tokens at the output rate', () => {
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M.
+      const baseline = calculateXAICost('grok-3-mini-beta', {}, 500, 500);
+      // 500 input @ 0.30/M + 500 output @ 0.50/M = 0.00015 + 0.00025 = 0.0004
+      expect(baseline).toBeCloseTo(0.0004, 10);
+
+      const withReasoning = calculateXAICost('grok-3-mini-beta', {}, 500, 500, 200);
+      // Adds 200 reasoning @ 0.50/M = 0.0001 → total 0.0005
+      expect(withReasoning).toBeCloseTo(0.0005, 10);
     });
   });
 

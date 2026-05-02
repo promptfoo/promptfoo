@@ -119,7 +119,7 @@ describe('XAIResponsesProvider', () => {
   });
 
   it('uses regional endpoints when configured', () => {
-    const provider = new TestableXAIResponsesProvider('grok-4.20-reasoning', {
+    const provider = new TestableXAIResponsesProvider('grok-4.3', {
       config: {
         region: 'eu-west-1',
       },

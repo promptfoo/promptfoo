@@ -236,7 +236,8 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else if (useXAIDefaults) {
     logger.debug('Using xAI default providers');
     providers = {
-      moderationProvider: OpenAiModerationProvider,
+      embeddingProvider: OpenAiEmbeddingProvider, // xAI doesn't expose an embeddings API
+      moderationProvider: OpenAiModerationProvider, // xAI doesn't expose a moderation API
       ...getXAIProviders(env),
     };
   } else if (useCodexDefaults) {

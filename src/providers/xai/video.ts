@@ -23,6 +23,7 @@ import {
   storeCacheMapping,
   storeVideoContent,
 } from '../video';
+import { getXAICostInUsd } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -213,11 +214,16 @@ export class XAIVideoProvider implements ApiProvider {
   }
 
   /**
-   * Get API base URL
+   * Get API base URL.
+   * Precedence: apiBaseUrl > XAI_API_BASE_URL env > region > default.
    */
   getApiUrl(): string {
     if (this.config.apiBaseUrl) {
       return this.config.apiBaseUrl;
+    }
+    const envApiBaseUrl = getEnvString('XAI_API_BASE_URL');
+    if (envApiBaseUrl) {
+      return envApiBaseUrl;
     }
     if (this.config.region) {
       return `https://${this.config.region}.api.x.ai/v1`;
@@ -375,10 +381,7 @@ export class XAIVideoProvider implements ApiProvider {
           return {
             videoUrl: data.video.url,
             videoDuration: data.video.duration,
-            reportedCost:
-              typeof data.usage?.cost_in_usd_ticks === 'number'
-                ? data.usage.cost_in_usd_ticks / 1e10
-                : undefined,
+            reportedCost: getXAICostInUsd(data.usage),
           };
         }
 

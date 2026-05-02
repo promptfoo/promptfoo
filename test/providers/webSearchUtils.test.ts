@@ -111,7 +111,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for xAI Responses provider with web_search tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'xai:responses:grok-4.20-reasoning',
+        id: () => 'xai:responses:grok-4.3',
         config: {
           tools: [{ type: 'web_search' }],
         },

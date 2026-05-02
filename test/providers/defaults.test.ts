@@ -27,6 +27,7 @@ import {
 } from '../../src/providers/openai/codexDefaults';
 import {
   DefaultModerationProvider,
+  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
@@ -209,7 +210,8 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders();
 
-    expect(providers.embeddingProvider.id()).toBe('xai:embedding:v1');
+    // xAI has no public embeddings/moderation API, so we fall back to OpenAI for those.
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
     expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
     expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
@@ -264,7 +266,7 @@ describe('Provider override tests', () => {
     const providers = await getDefaultProviders();
 
     expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
-    expect(providers.embeddingProvider.id()).toBe('xai:embedding:v1');
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
   });
 
   it('should probe Google default credentials once per provider resolution', async () => {
@@ -306,7 +308,7 @@ describe('Provider override tests', () => {
 
     const providers = await getDefaultProviders(envOverrides);
 
-    expect(providers.embeddingProvider.id()).toBe('xai:embedding:v1');
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
     expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
     expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
     expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');

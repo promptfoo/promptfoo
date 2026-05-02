@@ -86,8 +86,11 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
   };
 };
 
+// Pricing here is sourced from xAI's `/v1/language-models/<id>` endpoint, which
+// reports per-token prices in "ticks" (1 tick = $1e-10). The same scale is used
+// by `usage.cost_in_usd_ticks` on chat/responses results.
 export const XAI_CHAT_MODELS = [
-  // Grok 4.20 Models (2M context window)
+  // Grok 4.20 Models
   {
     id: 'grok-4.20-0309-reasoning',
     cost: {
@@ -147,7 +150,7 @@ export const XAI_CHAT_MODELS = [
       'grok-4.20-multi-agent-experimental-beta-latest',
     ],
   },
-  // Grok 4.3 Models (1M context window)
+  // Grok 4.3 Models
   {
     id: 'grok-4.3',
     cost: {
@@ -219,6 +222,7 @@ export const XAI_CHAT_MODELS = [
     cost: {
       input: 3.0 / 1e6,
       output: 15.0 / 1e6,
+      cache_read: 0.75 / 1e6,
     },
     aliases: ['grok-4', 'grok-4-latest'],
   },
@@ -228,14 +232,16 @@ export const XAI_CHAT_MODELS = [
     cost: {
       input: 3.0 / 1e6,
       output: 15.0 / 1e6,
+      cache_read: 0.75 / 1e6,
     },
     aliases: ['grok-3', 'grok-3-latest'],
   },
   {
     id: 'grok-3-fast-beta',
     cost: {
-      input: 5.0 / 1e6,
-      output: 25.0 / 1e6,
+      input: 3.0 / 1e6,
+      output: 15.0 / 1e6,
+      cache_read: 0.75 / 1e6,
     },
     aliases: ['grok-3-fast', 'grok-3-fast-latest'],
   },
@@ -244,14 +250,16 @@ export const XAI_CHAT_MODELS = [
     cost: {
       input: 0.3 / 1e6,
       output: 0.5 / 1e6,
+      cache_read: 0.075 / 1e6,
     },
     aliases: ['grok-3-mini', 'grok-3-mini-latest'],
   },
   {
     id: 'grok-3-mini-fast-beta',
     cost: {
-      input: 0.6 / 1e6,
-      output: 4.0 / 1e6,
+      input: 0.3 / 1e6,
+      output: 0.5 / 1e6,
+      cache_read: 0.075 / 1e6,
     },
     aliases: ['grok-3-mini-fast', 'grok-3-mini-fast-latest'],
   },
@@ -446,8 +454,13 @@ export function calculateXAICost(
   const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
   const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
 
+  // xAI bills reasoning tokens at the same per-token rate as completion tokens.
+  // The OpenAI base provider reports them separately in completion_tokens_details
+  // (and getTokenUsage hoists them out of `completion`), so include them here.
+  const billableOutputTokens = completionTokens + (reasoningTokens ?? 0);
+
   const inputCostTotal = inputCost * promptTokens;
-  const outputCostTotal = outputCost * completionTokens;
+  const outputCostTotal = outputCost * billableOutputTokens;
 
   logger.debug(
     `XAI cost calculation for ${modelName}: ` +
@@ -641,28 +654,18 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       }
 
       if (response.tokenUsage && !response.cached) {
-        const rawData =
-          typeof response.raw === 'string'
-            ? (() => {
-                try {
-                  return JSON.parse(response.raw);
-                } catch {
-                  return undefined;
-                }
-              })()
-            : response.raw;
-        const reportedCost = getXAICostInUsd(rawData?.usage);
+        // The OpenAI base provider does not surface the raw API body, so
+        // `usage.cost_in_usd_ticks` (which xAI does return for chat completions)
+        // is not reachable here. Fall back to local pricing math, which now
+        // includes reasoning tokens at the output rate.
         const reasoningTokens = response.tokenUsage.completionDetails?.reasoning || 0;
-
-        response.cost =
-          reportedCost ??
-          calculateXAICost(
-            this.modelName,
-            this.config || {},
-            response.tokenUsage.prompt,
-            response.tokenUsage.completion,
-            reasoningTokens,
-          );
+        response.cost = calculateXAICost(
+          this.modelName,
+          this.config || {},
+          response.tokenUsage.prompt,
+          response.tokenUsage.completion,
+          reasoningTokens,
+        );
       }
 
       return response;

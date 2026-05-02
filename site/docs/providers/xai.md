@@ -1,25 +1,12 @@
 ---
 title: xAI (Grok) Provider
-description: Use xAI Grok models for text, embeddings, image, video, and voice workflows, including Grok 4.3, Grok Imagine, regional endpoints, and Responses API tools.
-keywords:
-  [
-    xai,
-    grok,
-    grok-4.3,
-    grok-imagine-image,
-    grok-4,
-    grok-3,
-    embeddings,
-    reasoning,
-    vision,
-    llm,
-    agentic,
-  ]
+description: Use xAI Grok models for text, image, video, and voice workflows, including Grok 4.3, Grok Imagine, regional endpoints, and Responses API tools.
+keywords: [xai, grok, grok-4.3, grok-imagine-image, grok-4, grok-3, reasoning, vision, llm, agentic]
 ---
 
 # xAI (Grok)
 
-The `xai` provider supports [xAI's Grok models](https://x.ai/) through an API interface compatible with OpenAI's format, including text, embeddings, vision, image generation, video generation, and voice workflows.
+The `xai` provider supports [xAI's Grok models](https://x.ai/) through an API interface compatible with OpenAI's format, including text, vision, image generation, video generation, and voice workflows.
 
 ## Setup
 
@@ -29,7 +16,7 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for embeddings, grading, suggestions, synthesis, and web search. Explicit provider IDs in your config still take precedence.
+When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
 
 ## Supported Models
 
@@ -37,19 +24,19 @@ The xAI provider includes support for the following model formats. xAI's public 
 
 ### Grok 4.3 Models
 
-- `xai:grok-4.3` - General-purpose reasoning model (1M context)
+- `xai:grok-4.3` - General-purpose reasoning model
 - `xai:grok-4.3-latest` - Alias for the Grok 4.3 family
 
 ### Grok 4.20 Models
 
-- `xai:grok-4.20-0309-reasoning` - Reasoning model (2M context)
+- `xai:grok-4.20-0309-reasoning` - Reasoning model
 - `xai:grok-4.20` - Alias for the Grok 4.20 reasoning family
 - `xai:grok-4.20-reasoning` - Alias for the Grok 4.20 reasoning family
 - `xai:grok-4.20-reasoning-latest` - Alias for the Grok 4.20 reasoning family
-- `xai:grok-4.20-0309-non-reasoning` - Non-reasoning model (2M context)
+- `xai:grok-4.20-0309-non-reasoning` - Non-reasoning variant
 - `xai:grok-4.20-non-reasoning` - Alias for the Grok 4.20 non-reasoning family
 - `xai:grok-4.20-non-reasoning-latest` - Alias for the Grok 4.20 non-reasoning family
-- `xai:grok-4.20-multi-agent-0309` - Multi-agent research model
+- `xai:grok-4.20-multi-agent-0309` - Multi-agent variant
 - `xai:grok-4.20-multi-agent` - Alias for the Grok 4.20 multi-agent family
 - `xai:grok-4.20-multi-agent-latest` - Alias for the Grok 4.20 multi-agent family
 
@@ -130,8 +117,6 @@ Multiple Grok models support reasoning capabilities:
 
 **Grok 4.3**: General-purpose reasoning model recommended by xAI's public model catalog. It reasons automatically and does not support `reasoning_effort`.
 
-**Grok 4.20**: Large-context family that reasons automatically. `grok-4.20-reasoning` does not support `reasoning_effort`; `grok-4.20-multi-agent` uses `reasoning.effort` to choose the agent count for Responses API requests.
-
 **Grok Code Fast Models**: The `grok-code-fast-1` family are reasoning models optimized for agentic coding workflows. They support:
 
 - Function calling and tool usage
@@ -153,23 +138,6 @@ providers:
     config:
       temperature: 0.7
       max_completion_tokens: 4096
-```
-
-### Grok 4.20 Specific Behavior
-
-Grok 4.20 is useful when you need its larger context window or multi-agent mode:
-
-- **Automatic reasoning**: `grok-4.20-reasoning` does not accept `reasoning_effort`
-- **Multi-agent mode**: `grok-4.20-multi-agent` accepts `reasoning.effort` in Responses API requests to select between smaller and larger agent teams
-- **Unsupported parameters**: Grok 4.20 models ignore or reject the same legacy reasoning-era parameters documented by xAI, including `reasoning_effort`
-
-```yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-providers:
-  - id: xai:responses:grok-4.20-reasoning
-    config:
-      temperature: 0.7
-      max_output_tokens: 4096
 ```
 
 **Grok-3 Models**: The `grok-3-mini-beta` and `grok-3-mini-fast-beta` models support reasoning through the `reasoning_effort` parameter:
@@ -421,9 +389,9 @@ tests:
 The Responses API works with current Grok models, including:
 
 - `grok-4.3`
+- `grok-4.20-reasoning`
 - `grok-4.20-non-reasoning`
 - `grok-4.20-multi-agent`
-- `grok-4.20-reasoning`
 - `grok-4-1-fast-reasoning` (recommended for agentic workflows)
 - `grok-4-1-fast-non-reasoning`
 - `grok-4-fast-reasoning`
@@ -557,32 +525,7 @@ tests:
 
 ### Embeddings
 
-Use the `xai:embedding:` prefix, or the plural `xai:embeddings:` alias, to call xAI's `/v1/embeddings` endpoint:
-
-- `xai:embedding:v1` - Current xAI text embedding model
-
-Embedding providers are typically used for [similarity assertions](/docs/configuration/expected-outputs/similar):
-
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-prompts:
-  - 'Answer in one word: What color are {{item}}?'
-
-providers:
-  - xai:grok-4.3
-
-defaultTest:
-  options:
-    provider:
-      embedding: xai:embedding:v1
-
-tests:
-  - vars:
-      item: bananas
-    assert:
-      - type: similar
-        value: yellow
-```
+xAI does not currently expose a public embeddings API. Use [openai:embedding:\*](/docs/providers/openai/#embeddings) (or another embedding provider) for [similarity assertions](/docs/configuration/expected-outputs/similar).
 
 ### Image Generation
 
@@ -596,7 +539,6 @@ providers:
 Current Grok Imagine image model IDs include:
 
 - `xai:image:grok-imagine-image`
-- `xai:image:grok-imagine-image-2026-03-02`
 - `xai:image:grok-imagine-image-pro`
 
 Example configuration for image generation:
@@ -973,12 +915,6 @@ For examples demonstrating text generation, image creation, and web search, see 
 
 ```bash
 npx promptfoo@latest init --example xai/chat
-```
-
-For semantic similarity with xAI embeddings, see the [xai embeddings example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai/embeddings).
-
-```bash
-npx promptfoo@latest init --example xai/embeddings
 ```
 
 For real-time voice conversations with Grok, see the [xai-voice example](https://github.com/promptfoo/promptfoo/tree/main/examples/xai/voice).

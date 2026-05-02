@@ -1,5 +1,4 @@
 import { createXAIProvider } from './chat';
-import { XAIEmbeddingProvider } from './embedding';
 import { XAIResponsesProvider } from './responses';
 
 import type { EnvOverrides } from '../../types/env';
@@ -11,7 +10,6 @@ export function getXAIProviders(
   env?: EnvOverrides,
 ): Pick<
   DefaultProviders,
-  | 'embeddingProvider'
   | 'gradingJsonProvider'
   | 'gradingProvider'
   | 'suggestionsProvider'
@@ -20,16 +18,20 @@ export function getXAIProviders(
 > {
   const gradingProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, { env });
 
-  return {
-    embeddingProvider: new XAIEmbeddingProvider('v1', { env }),
-    gradingJsonProvider: createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
-      env,
+  // The outer `config` is `ProviderOptions.config`; the xAI chat provider then reads
+  // its model-specific options from the *nested* `config.config` (see XAIProvider's
+  // constructor in ./chat.ts), so the double nesting is intentional.
+  const gradingJsonProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
+    env,
+    config: {
       config: {
-        config: {
-          response_format: { type: 'json_object' },
-        },
+        response_format: { type: 'json_object' },
       },
-    }),
+    },
+  });
+
+  return {
+    gradingJsonProvider,
     gradingProvider,
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,

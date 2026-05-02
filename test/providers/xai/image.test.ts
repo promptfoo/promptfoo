@@ -83,6 +83,7 @@ describe('XAI Image Provider', () => {
     });
 
     it('supports current Grok Imagine image aliases and pro model', () => {
+      // Both verified against xAI /v1/image-generation-models.
       expect(createXAIImageProvider('xai:image:grok-imagine-image-2026-03-02').id()).toBe(
         'xai:image:grok-imagine-image-2026-03-02',
       );

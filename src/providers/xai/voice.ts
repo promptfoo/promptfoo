@@ -29,7 +29,7 @@ import type {
 export const XAI_VOICE_DEFAULT_API_URL = 'https://api.x.ai/v1';
 export const XAI_VOICE_DEFAULT_WS_URL = 'wss://api.x.ai/v1/realtime';
 export const XAI_VOICE_COST_PER_MINUTE = 0.05;
-export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-fast-1.0';
+export const XAI_VOICE_DEFAULT_MODEL = 'grok-voice-think-fast-1.0';
 
 export const XAI_VOICE_DEFAULTS = {
   voice: 'Ara' as const,
@@ -238,7 +238,6 @@ function generateEventId(): string {
  * Provides real-time voice conversations with Grok models.
  *
  * Usage:
- *   xai:voice:grok-voice-fast-1.0
  *   xai:voice:grok-voice-think-fast-1.0
  */
 export class XAIVoiceProvider implements ApiProvider {
@@ -269,21 +268,23 @@ export class XAIVoiceProvider implements ApiProvider {
 
   /**
    * Get the HTTP(S) API base URL
-   * Priority: apiHost > apiBaseUrl > XAI_API_BASE_URL env > default
+   * Priority: apiHost > apiBaseUrl > XAI_API_BASE_URL env > region > default
    */
   protected getApiUrl(): string {
     if (this.config.apiHost) {
       return `https://${this.config.apiHost}/v1`;
     }
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
+    }
+    const envApiBaseUrl = this.env?.XAI_API_BASE_URL || getEnvString('XAI_API_BASE_URL');
+    if (envApiBaseUrl) {
+      return envApiBaseUrl;
+    }
     if (this.config.region) {
       return `https://${this.config.region}.api.x.ai/v1`;
     }
-    return (
-      this.config.apiBaseUrl ||
-      this.env?.XAI_API_BASE_URL ||
-      getEnvString('XAI_API_BASE_URL') ||
-      XAI_VOICE_DEFAULT_API_URL
-    );
+    return XAI_VOICE_DEFAULT_API_URL;
   }
 
   /**
@@ -303,6 +304,8 @@ export class XAIVoiceProvider implements ApiProvider {
     if (this.config.websocketUrl) {
       return this.config.websocketUrl;
     }
+    // xAI's realtime WS expects the model in the URL query string
+    // (see https://docs.x.ai/docs/guides/voice).
     const url = new URL(`${this.getWebSocketBase()}/realtime`);
     url.searchParams.set('model', this.modelName || XAI_VOICE_DEFAULT_MODEL);
     return url.toString();

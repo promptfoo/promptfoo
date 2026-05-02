@@ -68,10 +68,9 @@ The recommended starting point for general text workflows:
 
 ### Grok 4.20
 
-Large-context family for workflows that need its 2M context window or multi-agent mode:
-
 - `xai:grok-4.20-reasoning` - Reasoning model
 - `xai:grok-4.20-non-reasoning` - Non-reasoning model
+- `xai:grok-4.20-multi-agent` - Multi-agent variant
 
 ### Grok 4.1 Fast
 

@@ -105,7 +105,6 @@ import { WatsonXChatProvider, WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
-import { createXAIEmbeddingProvider } from './xai/embedding';
 import { createXAIImageProvider } from './xai/image';
 import { createXAIResponsesProvider } from './xai/responses';
 import { createXAIVideoProvider } from './xai/video';
@@ -1292,12 +1291,13 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
 
-      // Handle xai:embedding:<model> and xai:embeddings:<model> formats
+      // xAI does not expose a public embeddings API. Fail fast with a clear message
+      // rather than silently routing `xai:embedding:*` to a different sub-type.
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return createXAIEmbeddingProvider(providerPath, {
-          ...providerOptions,
-          env: context.env,
-        });
+        throw new Error(
+          `xAI does not currently expose a public embeddings API; "${providerPath}" cannot be resolved. ` +
+            `Use openai:embedding:* or another embedding provider instead.`,
+        );
       }
 
       // Handle xai:image:<model> format

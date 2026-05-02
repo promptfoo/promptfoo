@@ -8,6 +8,7 @@ import {
   OpenAiImageProvider,
 } from '../openai/image';
 import { getRequestTimeoutMs } from '../shared';
+import { getXAICostInUsd } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -74,6 +75,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
   private getApiModelName(): string {
     const modelMap: Record<string, string> = {
       'grok-imagine-image': 'grok-imagine-image',
+      // Dated alias for grok-imagine-image, as listed by xAI's image-generation-models API.
       'grok-imagine-image-2026-03-02': 'grok-imagine-image',
       'grok-imagine-image-pro': 'grok-imagine-image-pro',
       'grok-2-image': 'grok-2-image',
@@ -185,10 +187,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
         return formattedOutput;
       }
 
-      const reportedCost =
-        typeof data.usage?.cost_in_usd_ticks === 'number'
-          ? data.usage.cost_in_usd_ticks / 1e10
-          : undefined;
+      const reportedCost = getXAICostInUsd(data.usage);
       const cost = cached ? 0 : (reportedCost ?? this.calculateImageCost(model, config.n || 1));
       const images = buildStructuredImageOutputs(data);
 
