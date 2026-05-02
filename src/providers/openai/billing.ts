@@ -126,6 +126,7 @@ setRates(
 setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-5.3-chat-latest', 'gpt-5.3-codex'], perMillion(0.175));
 setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-5.3-codex-spark'], perMillion(0.05));
 setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'], perMillion(0.075));
+setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-5-codex-mini'], perMillion(0.05));
 setRates(
   STANDARD_CACHED_INPUT_RATES,
   ['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'],

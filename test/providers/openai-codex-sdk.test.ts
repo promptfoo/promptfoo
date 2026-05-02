@@ -1524,6 +1524,26 @@ describe('OpenAICodexSDKProvider', () => {
         expect(result.cost).toBeCloseTo(0.0023875, 6);
       });
 
+      it('should calculate cost for gpt-5-codex-mini model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5-codex-mini' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // Preserve the previously supported Codex SDK rate card for this legacy model.
+        expect(result.cost).toBeCloseTo(0.002775, 6);
+      });
+
       it('should return undefined cost when model pricing not found', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
