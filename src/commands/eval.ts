@@ -560,7 +560,8 @@ export async function doEval(
         (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions))
     ) {
       options.generateSuggestions = true;
-      options.suggestionsCount = suggestPrompts ?? options.suggestionsCount ?? 1;
+      options.suggestionsCount =
+        suggestPrompts ?? commandLineOptions?.suggestionsCount ?? options.suggestionsCount ?? 1;
     }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {

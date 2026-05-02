@@ -128,6 +128,7 @@ export const CommandLineOptionsSchema = z.object({
   var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),

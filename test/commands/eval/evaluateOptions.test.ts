@@ -508,6 +508,25 @@ describe('evaluateOptions behavior', () => {
       expect(options.suggestionsCount).toBe(2);
     });
 
+    it('should respect commandLineOptions.suggestionsCount from config defaults', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-suggestions-count.yaml', {
+        commandLineOptions: {
+          generateSuggestions: true,
+          suggestionsCount: 3,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+      });
+
+      expect(options.generateSuggestions).toBe(true);
+      expect(options.suggestionsCount).toBe(3);
+    });
+
     it('should persist CLI filterRange without applying it twice for regular test suites', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-range.yaml', {
         providers: ['echo'],
