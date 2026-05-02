@@ -18,7 +18,7 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { providerRegistry } from '../providerRegistry';
-import { calculateOpenAIUsageCost } from './billing';
+import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -2174,21 +2174,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     tokenUsage: ProviderResponse['tokenUsage'],
     model: string | undefined,
   ): number | undefined {
-    if (!tokenUsage || !model) {
-      return undefined;
-    }
-
-    return calculateOpenAIUsageCost(
-      model,
-      {},
-      {
-        prompt_tokens: tokenUsage.prompt,
-        completion_tokens: tokenUsage.completion,
-        prompt_tokens_details: {
-          cached_tokens: tokenUsage.cached ?? 0,
-        },
-      },
-    );
+    return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
   }
 
   private async cleanupCodexTurn(

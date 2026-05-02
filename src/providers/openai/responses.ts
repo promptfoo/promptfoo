@@ -147,10 +147,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       modelName: this.modelName,
       providerType: 'openai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        calculateOpenAIUsageCost(modelName, config, usage, {
-          serviceTier: config?.service_tier,
-        }),
+      costCalculator: () => undefined,
     });
   }
 
@@ -180,6 +177,38 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
     return this.modelName;
+  }
+
+  protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
+    return data.usage;
+  }
+
+  protected applyBilling(
+    result: ProviderResponse,
+    data: any,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): ProviderResponse {
+    const serviceTier =
+      (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
+    const billingModelName = this.getBillingModelName(config);
+    const responseCost = calculateOpenAIUsageCost(
+      billingModelName,
+      config,
+      this.getBillingUsage(data, config),
+      {
+        cachedResponse: cached,
+        serviceTier,
+      },
+    );
+    const observableToolCost = cached
+      ? 0
+      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+
+    return {
+      ...result,
+      ...(responseCost === undefined ? {} : { cost: responseCost + observableToolCost }),
+    };
   }
 
   private isAzureOpenAiEndpoint(value: string | undefined): boolean {
@@ -551,23 +580,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Use shared processor for consistent behavior with Azure
     const result = await this.processor.processResponseOutput(data, config, cached);
-    const serviceTier =
-      (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
-    const billingModelName = this.getBillingModelName(config);
-    const responseCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
-      cachedResponse: cached,
-      serviceTier,
-    });
-    const observableToolCost = cached
-      ? 0
-      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+    const billedResult = this.applyBilling(result, data, config, cached);
 
     // Merge HTTP metadata with any existing metadata from the processor
     return {
-      ...result,
-      ...(responseCost === undefined ? {} : { cost: responseCost + observableToolCost }),
+      ...billedResult,
       metadata: {
-        ...result.metadata,
+        ...billedResult.metadata,
         http: {
           status,
           statusText,

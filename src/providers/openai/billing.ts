@@ -49,109 +49,75 @@ function perMillion(value: number): number {
   return value * PER_MILLION;
 }
 
-function setRates<T>(target: Record<string, T>, modelNames: string[], rates: T): Record<string, T> {
-  for (const modelName of modelNames) {
-    target[modelName] = rates;
+type RateGroup<T> = {
+  models: string[];
+  rates: T;
+};
+
+function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
+  const table: Record<string, T> = {};
+  for (const { models, rates } of groups) {
+    for (const modelName of models) {
+      table[modelName] = rates;
+    }
   }
-  return target;
+  return table;
 }
 
-const STANDARD_CACHED_INPUT_RATES = setRates(
-  setRates(
-    setRates(
-      setRates(
-        setRates(
-          setRates(
-            setRates(
-              setRates(
-                setRates(
-                  setRates(
-                    setRates(
-                      setRates(
-                        {} as Record<string, number>,
-                        ['gpt-5.5', 'gpt-5.5-2026-04-23'],
-                        perMillion(0.5),
-                      ),
-                      ['gpt-5.4', 'gpt-5.4-2026-03-05'],
-                      perMillion(0.25),
-                    ),
-                    ['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'],
-                    perMillion(0.075),
-                  ),
-                  ['gpt-5.4-nano', 'gpt-5.4-nano-2026-03-17'],
-                  perMillion(0.02),
-                ),
-                ['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest', 'gpt-5.2-codex'],
-                perMillion(0.175),
-              ),
-              [
-                'gpt-5.1',
-                'gpt-5.1-2025-11-13',
-                'gpt-5.1-chat-latest',
-                'gpt-5.1-codex',
-                'gpt-5.1-codex-max',
-              ],
-              perMillion(0.125),
-            ),
-            ['gpt-5.1-mini', 'gpt-5.1-codex-mini'],
-            perMillion(0.025),
-          ),
-          ['gpt-5.1-nano'],
-          perMillion(0.005),
-        ),
-        ['gpt-5', 'gpt-5-2025-08-07', 'gpt-5-chat', 'gpt-5-chat-latest', 'gpt-5-codex'],
-        perMillion(0.125),
-      ),
-      ['gpt-5-mini', 'gpt-5-mini-2025-08-07'],
-      perMillion(0.025),
-    ),
-    ['gpt-5-nano', 'gpt-5-nano-2025-08-07'],
-    perMillion(0.005),
-  ),
-  ['gpt-4.1', 'gpt-4.1-2025-04-14'],
-  perMillion(0.5),
-);
+const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
+  { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(0.5) },
+  { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.25) },
+  { models: ['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'], rates: perMillion(0.075) },
+  { models: ['gpt-5.4-nano', 'gpt-5.4-nano-2026-03-17'], rates: perMillion(0.02) },
+  {
+    models: ['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest', 'gpt-5.2-codex'],
+    rates: perMillion(0.175),
+  },
+  {
+    models: [
+      'gpt-5.1',
+      'gpt-5.1-2025-11-13',
+      'gpt-5.1-chat-latest',
+      'gpt-5.1-codex',
+      'gpt-5.1-codex-max',
+    ],
+    rates: perMillion(0.125),
+  },
+  { models: ['gpt-5.1-mini', 'gpt-5.1-codex-mini'], rates: perMillion(0.025) },
+  { models: ['gpt-5.1-nano'], rates: perMillion(0.005) },
+  {
+    models: ['gpt-5', 'gpt-5-2025-08-07', 'gpt-5-chat', 'gpt-5-chat-latest', 'gpt-5-codex'],
+    rates: perMillion(0.125),
+  },
+  { models: ['gpt-5-mini', 'gpt-5-mini-2025-08-07'], rates: perMillion(0.025) },
+  { models: ['gpt-5-nano', 'gpt-5-nano-2025-08-07'], rates: perMillion(0.005) },
+  { models: ['gpt-4.1', 'gpt-4.1-2025-04-14'], rates: perMillion(0.5) },
+  { models: ['gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'], rates: perMillion(0.1) },
+  { models: ['gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14'], rates: perMillion(0.025) },
+  { models: ['gpt-4o', 'gpt-4o-2024-08-06', 'gpt-4o-2024-11-20'], rates: perMillion(1.25) },
+  { models: ['gpt-5.3-chat-latest', 'gpt-5.3-codex'], rates: perMillion(0.175) },
+  { models: ['gpt-5.3-codex-spark'], rates: perMillion(0.05) },
+  { models: ['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'], rates: perMillion(0.075) },
+  { models: ['gpt-5-codex-mini'], rates: perMillion(0.05) },
+  {
+    models: ['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'],
+    rates: perMillion(7.5),
+  },
+  { models: ['o3', 'o3-2025-04-16'], rates: perMillion(0.5) },
+  { models: ['o4-mini', 'o4-mini-2025-04-16'], rates: perMillion(0.275) },
+  { models: ['o3-mini', 'o3-mini-2025-01-31'], rates: perMillion(0.55) },
+  { models: ['o1-mini', 'o1-mini-2024-09-12'], rates: perMillion(0.55) },
+  { models: ['o3-deep-research', 'o3-deep-research-2025-06-26'], rates: perMillion(2.5) },
+  {
+    models: ['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'],
+    rates: perMillion(0.5),
+  },
+]);
 
-setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'], perMillion(0.1));
-setRates(
-  STANDARD_CACHED_INPUT_RATES,
-  ['gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14'],
-  perMillion(0.025),
-);
-setRates(
-  STANDARD_CACHED_INPUT_RATES,
-  ['gpt-4o', 'gpt-4o-2024-08-06', 'gpt-4o-2024-11-20'],
-  perMillion(1.25),
-);
-setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-5.3-chat-latest', 'gpt-5.3-codex'], perMillion(0.175));
-setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-5.3-codex-spark'], perMillion(0.05));
-setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'], perMillion(0.075));
-setRates(STANDARD_CACHED_INPUT_RATES, ['gpt-5-codex-mini'], perMillion(0.05));
-setRates(
-  STANDARD_CACHED_INPUT_RATES,
-  ['o1', 'o1-2024-12-17', 'o1-preview', 'o1-preview-2024-09-12'],
-  perMillion(7.5),
-);
-setRates(STANDARD_CACHED_INPUT_RATES, ['o3', 'o3-2025-04-16'], perMillion(0.5));
-setRates(STANDARD_CACHED_INPUT_RATES, ['o4-mini', 'o4-mini-2025-04-16'], perMillion(0.275));
-setRates(STANDARD_CACHED_INPUT_RATES, ['o3-mini', 'o3-mini-2025-01-31'], perMillion(0.55));
-setRates(STANDARD_CACHED_INPUT_RATES, ['o1-mini', 'o1-mini-2024-09-12'], perMillion(0.55));
-setRates(
-  STANDARD_CACHED_INPUT_RATES,
-  ['o3-deep-research', 'o3-deep-research-2025-06-26'],
-  perMillion(2.5),
-);
-setRates(
-  STANDARD_CACHED_INPUT_RATES,
-  ['o4-mini-deep-research', 'o4-mini-deep-research-2025-06-26'],
-  perMillion(0.5),
-);
-
-const LONG_CONTEXT_CACHED_INPUT_RATES = setRates(
-  setRates({}, ['gpt-5.5', 'gpt-5.5-2026-04-23'], perMillion(1)),
-  ['gpt-5.4', 'gpt-5.4-2026-03-05'],
-  perMillion(0.5),
-);
+const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
+  { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
+  { models: ['gpt-5.4', 'gpt-5.4-2026-03-05'], rates: perMillion(0.5) },
+]);
 
 const FLEX_SUPPORTED_TEXT_MODELS = new Set([
   'gpt-5.5',
@@ -187,89 +153,84 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
   'o4-mini-2025-04-16',
 ]);
 
-const PRIORITY_TEXT_RATES = setRates(
-  setRates(
-    setRates(
-      setRates(
-        setRates(
-          setRates(
-            setRates(
-              setRates(
-                setRates(
-                  setRates(
-                    {} as Record<string, OpenAITextRates>,
-                    ['gpt-5.5', 'gpt-5.5-2026-04-23'],
-                    {
-                      input: perMillion(12.5),
-                      cachedInput: perMillion(1.25),
-                      output: perMillion(75),
-                    },
-                  ),
-                  ['gpt-5.4', 'gpt-5.4-2026-03-05'],
-                  { input: perMillion(5), cachedInput: perMillion(0.5), output: perMillion(30) },
-                ),
-                ['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'],
-                { input: perMillion(1.5), cachedInput: perMillion(0.15), output: perMillion(9) },
-              ),
-              ['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest', 'gpt-5.2-codex'],
-              { input: perMillion(3.5), cachedInput: perMillion(0.35), output: perMillion(28) },
-            ),
-            ['gpt-5.1', 'gpt-5.1-2025-11-13', 'gpt-5.1-chat-latest'],
-            { input: perMillion(2.5), cachedInput: perMillion(0.25), output: perMillion(20) },
-          ),
-          ['gpt-5', 'gpt-5-2025-08-07', 'gpt-5-chat', 'gpt-5-chat-latest'],
-          { input: perMillion(2.5), cachedInput: perMillion(0.25), output: perMillion(20) },
-        ),
-        ['gpt-5-mini', 'gpt-5-mini-2025-08-07'],
-        { input: perMillion(0.45), cachedInput: perMillion(0.045), output: perMillion(3.6) },
-      ),
-      ['gpt-4.1', 'gpt-4.1-2025-04-14'],
-      { input: perMillion(3.5), cachedInput: perMillion(0.875), output: perMillion(14) },
-    ),
-    ['gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'],
-    { input: perMillion(0.7), cachedInput: perMillion(0.175), output: perMillion(2.8) },
-  ),
-  ['gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14'],
-  { input: perMillion(0.2), cachedInput: perMillion(0.05), output: perMillion(0.8) },
-);
+const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
+  {
+    models: ['gpt-5.5', 'gpt-5.5-2026-04-23'],
+    rates: { input: perMillion(12.5), cachedInput: perMillion(1.25), output: perMillion(75) },
+  },
+  {
+    models: ['gpt-5.4', 'gpt-5.4-2026-03-05'],
+    rates: { input: perMillion(5), cachedInput: perMillion(0.5), output: perMillion(30) },
+  },
+  {
+    models: ['gpt-5.4-mini', 'gpt-5.4-mini-2026-03-17'],
+    rates: { input: perMillion(1.5), cachedInput: perMillion(0.15), output: perMillion(9) },
+  },
+  {
+    models: ['gpt-5.2', 'gpt-5.2-2025-12-11', 'gpt-5.2-chat-latest', 'gpt-5.2-codex'],
+    rates: { input: perMillion(3.5), cachedInput: perMillion(0.35), output: perMillion(28) },
+  },
+  {
+    models: ['gpt-5.1', 'gpt-5.1-2025-11-13', 'gpt-5.1-chat-latest'],
+    rates: { input: perMillion(2.5), cachedInput: perMillion(0.25), output: perMillion(20) },
+  },
+  {
+    models: ['gpt-5', 'gpt-5-2025-08-07', 'gpt-5-chat', 'gpt-5-chat-latest'],
+    rates: { input: perMillion(2.5), cachedInput: perMillion(0.25), output: perMillion(20) },
+  },
+  {
+    models: ['gpt-5-mini', 'gpt-5-mini-2025-08-07'],
+    rates: { input: perMillion(0.45), cachedInput: perMillion(0.045), output: perMillion(3.6) },
+  },
+  {
+    models: ['gpt-4.1', 'gpt-4.1-2025-04-14'],
+    rates: { input: perMillion(3.5), cachedInput: perMillion(0.875), output: perMillion(14) },
+  },
+  {
+    models: ['gpt-4.1-mini', 'gpt-4.1-mini-2025-04-14'],
+    rates: { input: perMillion(0.7), cachedInput: perMillion(0.175), output: perMillion(2.8) },
+  },
+  {
+    models: ['gpt-4.1-nano', 'gpt-4.1-nano-2025-04-14'],
+    rates: { input: perMillion(0.2), cachedInput: perMillion(0.05), output: perMillion(0.8) },
+  },
+  {
+    models: ['gpt-4o', 'gpt-4o-2024-08-06', 'gpt-4o-2024-11-20'],
+    rates: { input: perMillion(4.25), cachedInput: perMillion(2.125), output: perMillion(17) },
+  },
+  {
+    models: ['gpt-4o-2024-05-13'],
+    rates: { input: perMillion(8.75), output: perMillion(26.25) },
+  },
+  {
+    models: ['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'],
+    rates: { input: perMillion(0.25), cachedInput: perMillion(0.125), output: perMillion(1) },
+  },
+  {
+    models: ['o3', 'o3-2025-04-16'],
+    rates: { input: perMillion(3.5), cachedInput: perMillion(0.875), output: perMillion(14) },
+  },
+  {
+    models: ['o4-mini', 'o4-mini-2025-04-16'],
+    rates: { input: perMillion(2), cachedInput: perMillion(0.5), output: perMillion(8) },
+  },
+]);
 
-setRates(PRIORITY_TEXT_RATES, ['gpt-4o', 'gpt-4o-2024-08-06', 'gpt-4o-2024-11-20'], {
-  input: perMillion(4.25),
-  cachedInput: perMillion(2.125),
-  output: perMillion(17),
-});
-setRates(PRIORITY_TEXT_RATES, ['gpt-4o-2024-05-13'], {
-  input: perMillion(8.75),
-  output: perMillion(26.25),
-});
-setRates(PRIORITY_TEXT_RATES, ['gpt-4o-mini', 'gpt-4o-mini-2024-07-18'], {
-  input: perMillion(0.25),
-  cachedInput: perMillion(0.125),
-  output: perMillion(1),
-});
-setRates(PRIORITY_TEXT_RATES, ['o3', 'o3-2025-04-16'], {
-  input: perMillion(3.5),
-  cachedInput: perMillion(0.875),
-  output: perMillion(14),
-});
-setRates(PRIORITY_TEXT_RATES, ['o4-mini', 'o4-mini-2025-04-16'], {
-  input: perMillion(2),
-  cachedInput: perMillion(0.5),
-  output: perMillion(8),
-});
-
-const IMAGE_MODEL_RATES = setRates(
-  setRates(
-    setRates({} as Record<string, OpenAIModelRates>, ['gpt-image-2', 'gpt-image-2-2026-04-21'], {
+const IMAGE_MODEL_RATES = buildRateTable<OpenAIModelRates>([
+  {
+    models: ['gpt-image-2', 'gpt-image-2-2026-04-21'],
+    rates: {
       text: { input: perMillion(5), cachedInput: perMillion(1.25) },
       image: {
         input: perMillion(8),
         cachedInput: perMillion(2),
         output: perMillion(30),
       },
-    }),
-    ['gpt-image-1.5', 'gpt-image-1.5-2025-12-16'],
-    {
+    },
+  },
+  {
+    models: ['gpt-image-1.5', 'gpt-image-1.5-2025-12-16'],
+    rates: {
       text: {
         input: perMillion(5),
         cachedInput: perMillion(1.25),
@@ -281,47 +242,50 @@ const IMAGE_MODEL_RATES = setRates(
         output: perMillion(32),
       },
     },
-  ),
-  ['gpt-image-1'],
+  },
   {
-    text: { input: perMillion(5), cachedInput: perMillion(1.25) },
-    image: {
-      input: perMillion(10),
-      cachedInput: perMillion(2.5),
-      output: perMillion(40),
+    models: ['gpt-image-1'],
+    rates: {
+      text: { input: perMillion(5), cachedInput: perMillion(1.25) },
+      image: {
+        input: perMillion(10),
+        cachedInput: perMillion(2.5),
+        output: perMillion(40),
+      },
     },
   },
-);
-
-setRates(IMAGE_MODEL_RATES, ['gpt-image-1-mini'], {
-  text: { input: perMillion(2), cachedInput: perMillion(0.2) },
-  image: {
-    input: perMillion(2.5),
-    cachedInput: perMillion(0.25),
-    output: perMillion(8),
-  },
-});
-
-const REALTIME_MODAL_RATES = setRates(
-  setRates(
-    setRates(
-      {} as Record<string, OpenAIModelRates>,
-      ['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'],
-      {
-        text: { input: perMillion(4), cachedInput: perMillion(0.4), output: perMillion(16) },
-        audio: {
-          input: perMillion(32),
-          cachedInput: perMillion(0.4),
-          output: perMillion(64),
-        },
-        image: {
-          input: perMillion(5),
-          cachedInput: perMillion(0.5),
-        },
+  {
+    models: ['gpt-image-1-mini'],
+    rates: {
+      text: { input: perMillion(2), cachedInput: perMillion(0.2) },
+      image: {
+        input: perMillion(2.5),
+        cachedInput: perMillion(0.25),
+        output: perMillion(8),
       },
-    ),
-    ['gpt-4o-realtime-preview', 'gpt-4o-realtime-preview-2024-12-17'],
-    {
+    },
+  },
+]);
+
+const REALTIME_MODAL_RATES = buildRateTable<OpenAIModelRates>([
+  {
+    models: ['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'],
+    rates: {
+      text: { input: perMillion(4), cachedInput: perMillion(0.4), output: perMillion(16) },
+      audio: {
+        input: perMillion(32),
+        cachedInput: perMillion(0.4),
+        output: perMillion(64),
+      },
+      image: {
+        input: perMillion(5),
+        cachedInput: perMillion(0.5),
+      },
+    },
+  },
+  {
+    models: ['gpt-4o-realtime-preview', 'gpt-4o-realtime-preview-2024-12-17'],
+    rates: {
       text: { input: perMillion(5), cachedInput: perMillion(2.5), output: perMillion(20) },
       audio: {
         input: perMillion(40),
@@ -329,58 +293,123 @@ const REALTIME_MODAL_RATES = setRates(
         output: perMillion(80),
       },
     },
-  ),
-  ['gpt-4o-mini-realtime-preview', 'gpt-4o-mini-realtime-preview-2024-12-17'],
+  },
   {
-    text: { input: perMillion(0.6), cachedInput: perMillion(0.3), output: perMillion(2.4) },
-    audio: {
-      input: perMillion(10),
-      cachedInput: perMillion(0.3),
-      output: perMillion(20),
+    models: ['gpt-4o-mini-realtime-preview', 'gpt-4o-mini-realtime-preview-2024-12-17'],
+    rates: {
+      text: { input: perMillion(0.6), cachedInput: perMillion(0.3), output: perMillion(2.4) },
+      audio: {
+        input: perMillion(10),
+        cachedInput: perMillion(0.3),
+        output: perMillion(20),
+      },
     },
   },
-);
-
-setRates(REALTIME_MODAL_RATES, ['gpt-4o-realtime-preview-2024-10-01'], {
-  text: { input: perMillion(5), cachedInput: perMillion(2.5), output: perMillion(20) },
-  audio: {
-    input: perMillion(100),
-    cachedInput: perMillion(2.5),
-    output: perMillion(200),
+  {
+    models: ['gpt-4o-realtime-preview-2024-10-01'],
+    rates: {
+      text: { input: perMillion(5), cachedInput: perMillion(2.5), output: perMillion(20) },
+      audio: {
+        input: perMillion(100),
+        cachedInput: perMillion(2.5),
+        output: perMillion(200),
+      },
+    },
   },
-});
-
-setRates(REALTIME_MODAL_RATES, ['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15'], {
-  text: { input: perMillion(0.6), cachedInput: perMillion(0.06), output: perMillion(2.4) },
-  audio: {
-    input: perMillion(10),
-    cachedInput: perMillion(0.3),
-    output: perMillion(20),
+  {
+    models: ['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15'],
+    rates: {
+      text: { input: perMillion(0.6), cachedInput: perMillion(0.06), output: perMillion(2.4) },
+      audio: {
+        input: perMillion(10),
+        cachedInput: perMillion(0.3),
+        output: perMillion(20),
+      },
+      image: {
+        input: perMillion(0.8),
+        cachedInput: perMillion(0.08),
+      },
+    },
   },
-  image: {
-    input: perMillion(0.8),
-    cachedInput: perMillion(0.08),
+]);
+
+const EMBEDDING_RATES = buildRateTable<OpenAITextRates>([
+  {
+    models: ['text-embedding-3-small'],
+    rates: { input: perMillion(0.02) },
   },
-});
+  {
+    models: ['text-embedding-3-large'],
+    rates: { input: perMillion(0.13) },
+  },
+  {
+    models: ['text-embedding-ada-002'],
+    rates: { input: perMillion(0.1) },
+  },
+]);
 
-const EMBEDDING_RATES = setRates(
-  setRates({} as Record<string, OpenAITextRates>, ['text-embedding-3-small'], {
-    input: perMillion(0.02),
-  }),
-  ['text-embedding-3-large'],
-  { input: perMillion(0.13) },
-);
+const ALL_TEXT_MODELS = [
+  ...OPENAI_CHAT_MODELS,
+  ...OPENAI_COMPLETION_MODELS,
+  ...OPENAI_REALTIME_MODELS,
+  ...OPENAI_RESPONSES_ONLY_MODELS,
+  ...OPENAI_DEEP_RESEARCH_MODELS,
+];
 
-setRates(EMBEDDING_RATES, ['text-embedding-ada-002'], { input: perMillion(0.1) });
+const TEXT_MODELS_BY_ID = new Map(ALL_TEXT_MODELS.map((model) => [model.id, model]));
 
-function getAllTextModels() {
-  return [
-    ...OPENAI_CHAT_MODELS,
-    ...OPENAI_COMPLETION_MODELS,
-    ...OPENAI_REALTIME_MODELS,
-    ...OPENAI_RESPONSES_ONLY_MODELS,
-    ...OPENAI_DEEP_RESEARCH_MODELS,
-  ];
+type OpenAIUsageParts = {
+  usage: any;
+  inputDetails: any;
+  outputDetails: any;
+  hasOutputBreakdown: boolean;
+};
+
+function getOpenAIUsageParts(rawUsage: any): OpenAIUsageParts {
+  const usage = rawUsage?.usage ?? rawUsage ?? {};
+  const inputDetails =
+    usage.prompt_tokens_details ?? usage.input_tokens_details ?? usage.input_token_details ?? {};
+  const outputDetails =
+    usage.completion_tokens_details ??
+    usage.output_tokens_details ??
+    usage.output_token_details ??
+    {};
+
+  return {
+    usage,
+    inputDetails,
+    outputDetails,
+    hasOutputBreakdown: ['text_tokens', 'image_tokens', 'audio_tokens'].some(
+      (key) => typeof outputDetails[key] === 'number',
+    ),
+  };
+}
+
+export type OpenAITokenUsageSummary = {
+  prompt?: number;
+  completion?: number;
+  cached?: number;
+};
+
+export function calculateOpenAIUsageCostFromTokenUsage(
+  modelName: string | undefined,
+  tokenUsage: OpenAITokenUsageSummary | undefined,
+): number | undefined {
+  if (!modelName || !tokenUsage) {
+    return undefined;
+  }
+
+  return calculateOpenAIUsageCost(
+    modelName,
+    {},
+    {
+      prompt_tokens: tokenUsage.prompt,
+      completion_tokens: tokenUsage.completion,
+      prompt_tokens_details: {
+        cached_tokens: tokenUsage.cached ?? 0,
+      },
+    },
+  );
 }
 
 function normalizeServiceTier(serviceTier: string | null | undefined): OpenAIProcessingTier {
@@ -398,7 +427,7 @@ function getBaseTextRates(
   modelName: string,
   totalInputTokens: number,
 ): OpenAITextRates | undefined {
-  const model = getAllTextModels().find((entry) => entry.id === modelName);
+  const model = TEXT_MODELS_BY_ID.get(modelName);
   if (!model?.cost) {
     return undefined;
   }
@@ -463,7 +492,7 @@ function getModelRates(
     return undefined;
   }
 
-  const model = getAllTextModels().find((entry) => entry.id === modelName);
+  const model = TEXT_MODELS_BY_ID.get(modelName);
   const discountedText =
     tier === 'batch' || (tier === 'flex' && FLEX_SUPPORTED_TEXT_MODELS.has(modelName))
       ? {
@@ -495,14 +524,7 @@ function getNumericValue(value: unknown): number {
 }
 
 export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
-  const usage = rawUsage?.usage ?? rawUsage ?? {};
-  const inputDetails =
-    usage.prompt_tokens_details ?? usage.input_tokens_details ?? usage.input_token_details ?? {};
-  const outputDetails =
-    usage.completion_tokens_details ??
-    usage.output_tokens_details ??
-    usage.output_token_details ??
-    {};
+  const { usage, inputDetails, outputDetails } = getOpenAIUsageParts(rawUsage);
 
   const totalOutputTokens = getNumericValue(usage.completion_tokens ?? usage.output_tokens);
   const reportedInputTokens = getNumericValue(usage.prompt_tokens ?? usage.input_tokens);
@@ -666,16 +688,7 @@ export function calculateOpenAIUsageCost(
     return 0;
   }
 
-  const rawOutputDetails =
-    rawUsage?.usage?.completion_tokens_details ??
-    rawUsage?.usage?.output_tokens_details ??
-    rawUsage?.completion_tokens_details ??
-    rawUsage?.output_tokens_details;
-  const hasOutputBreakdown =
-    rawOutputDetails &&
-    ['text_tokens', 'image_tokens', 'audio_tokens'].some(
-      (key) => typeof rawOutputDetails[key] === 'number',
-    );
+  const { hasOutputBreakdown } = getOpenAIUsageParts(rawUsage);
 
   if (
     rates.image?.output &&

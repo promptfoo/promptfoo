@@ -1,4 +1,3 @@
-import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from '../openai/billing';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   buildOpenClawModelName,
@@ -80,28 +79,14 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
     return resolveOpenClawBillingModelName(config) || this.modelName;
   }
 
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    const result = await super.callApi(prompt, context, callApiOptions);
-    const usage = result.raw?.usage;
+  protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
+    const usage = data.usage;
     const inferredCachedTokens = inferHiddenCachedInputTokensFromOpenClawUsage(usage);
     if (inferredCachedTokens <= 0) {
-      return result;
+      return usage;
     }
 
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
-    const { body, config: effectiveConfig } = await this.getOpenAiBody(
-      prompt,
-      context,
-      callApiOptions,
-    );
-    const billingUsage = {
+    return {
       ...usage,
       input_tokens: (usage?.input_tokens ?? 0) + inferredCachedTokens,
       input_tokens_details: {
@@ -109,21 +94,21 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
         cached_tokens: inferredCachedTokens,
       },
     };
-    const billingModelName = this.getBillingModelName(config);
-    const responseCost = calculateOpenAIUsageCost(billingModelName, config, billingUsage, {
-      cachedResponse: result.cached,
-      serviceTier:
-        (result.raw as { service_tier?: string | null })?.service_tier ?? config.service_tier,
-    });
-    const observableToolCost = result.cached
-      ? 0
-      : calculateObservableOpenAIToolCost(
-          result.raw,
-          billingModelName,
-          Array.isArray(body.tools) ? effectiveConfig : config,
-        );
+  }
 
-    return {
+  protected applyBilling(
+    result: ProviderResponse,
+    data: any,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): ProviderResponse {
+    const usage = data.usage;
+    const inferredCachedTokens = inferHiddenCachedInputTokensFromOpenClawUsage(usage);
+    if (inferredCachedTokens <= 0) {
+      return super.applyBilling(result, data, config, cached);
+    }
+
+    const adjustedResult = {
       ...result,
       tokenUsage: result.tokenUsage
         ? {
@@ -135,8 +120,9 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
             },
           }
         : result.tokenUsage,
-      ...(responseCost === undefined ? {} : { cost: responseCost + observableToolCost }),
     };
+
+    return super.applyBilling(adjustedResult, data, config, cached);
   }
 
   async getOpenAiBody(
