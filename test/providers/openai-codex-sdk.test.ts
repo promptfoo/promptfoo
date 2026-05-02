@@ -1018,6 +1018,30 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should resolve relative additional_directories from cliState.basePath', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        cliState.basePath = '/test/basePath';
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            working_dir: './workspace',
+            additional_directories: ['./extra', '../shared'],
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: path.resolve('/test/basePath', 'workspace'),
+          skipGitRepoCheck: false,
+          additionalDirectories: [
+            path.resolve('/test/basePath', 'extra'),
+            path.resolve('/test/basePath', '../shared'),
+          ],
+        });
+      });
+
       it('should not include additionalDirectories when empty', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 

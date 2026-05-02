@@ -1962,9 +1962,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const apiKey = this.getApiKey(config);
     const workingDirectory =
       resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
+    const additionalDirectories = config.additional_directories?.map(
+      (directory) => resolveAgenticWorkingDir(directory, cliState.basePath) ?? directory,
+    );
     const resolvedConfig: OpenAICodexSDKConfig = {
       ...config,
       working_dir: workingDirectory,
+      ...(additionalDirectories ? { additional_directories: additionalDirectories } : {}),
     };
 
     // Prepare environment with OTEL config for deep tracing

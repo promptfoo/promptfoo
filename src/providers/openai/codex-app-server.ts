@@ -1357,7 +1357,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (!config.working_dir) {
       return process.cwd();
     }
-    return resolveAgenticWorkingDir(config.working_dir, basePath) as string;
+    return resolveAgenticWorkingDir(config.working_dir, basePath) ?? process.cwd();
   }
 
   private resolveAdditionalDirectories(config: CodexAppServerConfig): string[] | undefined {

@@ -1065,8 +1065,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.warnOnIgnoredBaseUrlConfig(config);
 
     if (config.working_dir) {
-      const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
-      const workingDir = resolveAgenticWorkingDir(config.working_dir, basePath);
+      const workingDir =
+        resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
 
       let stats: fs.Stats;
       try {
