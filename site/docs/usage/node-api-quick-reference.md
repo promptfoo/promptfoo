@@ -48,7 +48,7 @@ Run evaluation tests.
 ```typescript
 await evaluate({
   prompts: ['What is 2+2?'],
-  providers: ['openai:gpt-4'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [
     {
       vars: {},
@@ -85,16 +85,16 @@ await assertions.runAssertion({
 Load a provider.
 
 ```typescript
-const provider = await loadApiProvider('openai:gpt-4', {
+const provider = await loadApiProvider('openai:chat:gpt-5.5', {
   env: { OPENAI_API_KEY: process.env.KEY },
 });
 ```
 
 **Supported providers:**
 
-- `openai:gpt-4`, `openai:gpt-4-turbo`
-- `anthropic:claude-3-opus`, `anthropic:claude-3-sonnet`
-- `vertex:*`, `bedrock:*`, `azure-openai:*`
+- `openai:chat:gpt-5.5`, `openai:responses:gpt-5.5`
+- `anthropic:messages:claude-opus-4-7`, `anthropic:messages:claude-sonnet-4-6`
+- `vertex:claude-opus-4-7`, `bedrock:*`, `azure:chat:gpt-5.4`
 - `file://./custom.js`
 
 ---
@@ -105,7 +105,9 @@ const provider = await loadApiProvider('openai:gpt-4', {
 
 ```typescript
 const providers = await Promise.all(
-  ['openai:gpt-4', 'anthropic:claude-3-opus'].map((providerPath) => loadApiProvider(providerPath)),
+  ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'].map((providerPath) =>
+    loadApiProvider(providerPath),
+  ),
 );
 
 for (const p of providers) {
@@ -288,11 +290,11 @@ const tests = dataArray.map((item) => ({
 
 ```typescript
 const v1Eval = await cache.withCacheNamespace('v1', () =>
-  evaluate({ ...suite, providers: ['openai:gpt-4'] }),
+  evaluate({ ...suite, providers: ['openai:chat:gpt-5.4'] }),
 );
 
 const v2Eval = await cache.withCacheNamespace('v2', () =>
-  evaluate({ ...suite, providers: ['openai:gpt-4-turbo'] }),
+  evaluate({ ...suite, providers: ['openai:chat:gpt-5.5'] }),
 );
 
 const v1 = await v1Eval.toEvaluateSummary();
@@ -313,7 +315,7 @@ await evaluate(testSuite, {
 ### Pattern: Batch Testing Providers
 
 ```typescript
-const providerPaths = ['openai:gpt-4', 'anthropic:claude-3-opus'];
+const providerPaths = ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'];
 const providers = await Promise.all(
   providerPaths.map((providerPath) => loadApiProvider(providerPath)),
 );
@@ -361,8 +363,8 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ```typescript
 // Check provider is spelled correctly
-'openai:gpt-4'; // ✓ Correct
-'gpt-4'; // ✗ Missing provider prefix
+'openai:chat:gpt-5.5'; // ✓ Correct
+'gpt-5.5'; // ✗ Missing provider prefix
 ```
 
 **"API key required"**
@@ -372,7 +374,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 process.env.OPENAI_API_KEY; // Must exist
 
 // Or pass via context
-await loadApiProvider('openai:gpt-4', {
+await loadApiProvider('openai:chat:gpt-5.5', {
   env: { OPENAI_API_KEY: key },
 });
 ```
