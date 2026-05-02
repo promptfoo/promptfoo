@@ -256,7 +256,7 @@ export const EvaluateOptionsSchema = z.object({
   generateSuggestions: z.boolean().optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
-   * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
+   * @remarks Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
    * @author mldangelo
    */
   interactiveProviders: z.boolean().optional(),

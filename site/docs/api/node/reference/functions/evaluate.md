@@ -1,0 +1,51 @@
+[**promptfoo**](../README.md)
+
+---
+
+[promptfoo](../README.md) / evaluate
+
+# Function: evaluate()
+
+> **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`\>
+
+Defined in: [index.ts:259](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/index.ts#L259)
+
+Run an eval from a JavaScript or TypeScript program.
+
+`testSuite` uses the same concepts as a YAML config, but the Node.js API also
+accepts function-valued prompts, providers, assertions, and transforms where
+the corresponding types allow them.
+
+## Parameters
+
+### testSuite
+
+[`EvaluateTestSuite`](../type-aliases/EvaluateTestSuite.md)
+
+Prompts, providers, tests, and other eval configuration.
+
+### options?
+
+[`EvaluateOptions`](../type-aliases/EvaluateOptions.md) = `{}`
+
+Runtime-only evaluation options such as caching and
+concurrency.
+
+## Returns
+
+`Promise`\<`Eval`\>
+
+The completed eval record, including result rows and persisted state
+when `writeLatestResults` is enabled.
+
+## Example
+
+```ts
+import { evaluate } from 'promptfoo';
+
+const evalRecord = await evaluate({
+  prompts: ['Answer briefly: {{question}}'],
+  providers: ['openai:gpt-5-mini'],
+  tests: [{ vars: { question: 'What is 2 + 2?' } }],
+});
+```

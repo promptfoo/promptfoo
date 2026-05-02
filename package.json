@@ -47,6 +47,8 @@
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
     "db:studio": "npx drizzle-kit studio",
+    "docs:api": "typedoc --options typedoc.json",
+    "docs:api:check": "npm run docs:api && git diff --exit-code -- site/docs/api/node/reference",
     "openapi:generate": "tsx scripts/generateOpenApi.ts",
     "openapi:check": "tsx scripts/generateOpenApi.ts --check",
     "dev:app": "npm run dev --prefix src/app",
@@ -211,6 +213,8 @@
     "supertest": "^7.2.2",
     "ts-dedent": "^2.2.0",
     "tsdown": "0.21.9",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.0",
     "winston-transport": "^4.9.0"

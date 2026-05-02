@@ -12,11 +12,11 @@ keeps reference material aligned with the code.
       annotations for the exports we intend to document.
 - [ ] Reshape the existing Node package guide into a concise Node.js API overview
       with clear next steps for advanced users.
-- [ ] Add generated API reference docs from the public package entrypoint rather
+- [x] Add generated API reference docs from the public package entrypoint rather
       than hand-maintaining a large mirror of the source.
 - [ ] Link the Node.js API docs from the nearby docs surfaces where users already
       encounter programmatic features.
-- [ ] Add docs validation so generated/reference docs drift is caught in CI.
+- [x] Add docs validation so generated/reference docs drift is caught in CI.
 - [ ] Run focused QA after each stage, including docs builds and PR-style review
       passes on each commit.
 

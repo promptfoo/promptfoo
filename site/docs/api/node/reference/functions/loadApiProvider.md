@@ -1,0 +1,38 @@
+[**promptfoo**](../README.md)
+
+---
+
+[promptfoo](../README.md) / loadApiProvider
+
+# Function: loadApiProvider()
+
+> **loadApiProvider**(`providerPath`, `context?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)\>
+
+Defined in: [providers/index.ts:97](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/providers/index.ts#L97)
+
+Load one provider by id or config-file reference.
+
+Use this when you need to construct a provider before passing it into another
+public API. For ordinary evals, passing provider refs directly to `evaluate()`
+is usually simpler.
+
+## Parameters
+
+### providerPath
+
+`string`
+
+Provider id or supported provider config file reference.
+
+### context?
+
+[`LoadApiProviderContext`](../interfaces/LoadApiProviderContext.md) = `{}`
+
+Optional base path, environment overrides, and provider
+options.
+
+## Returns
+
+`Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)\>
+
+A resolved provider instance.
