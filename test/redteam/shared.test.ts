@@ -356,6 +356,14 @@ describe('doRedteamRun', () => {
       expect(initVerboseToggle).toHaveBeenCalled();
     });
 
+    it('should provide Ctrl+C delegation for CLI invocations', async () => {
+      await doRedteamRun({}, { isCliInvocation: true });
+
+      expect(initVerboseToggle).toHaveBeenCalledWith({
+        onInterrupt: expect.any(Function),
+      });
+    });
+
     it('should NOT initialize verbose toggle when logCallback is provided', async () => {
       const mockLogCallback = vi.fn();
 

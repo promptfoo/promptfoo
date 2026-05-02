@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/envars')>()),
+  isCI: vi.fn(() => false),
+}));
+
 describe('verboseToggle', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -58,5 +63,49 @@ describe('verboseToggle', () => {
   it('disableVerboseToggle should not throw when not initialized', async () => {
     const { disableVerboseToggle } = await import('../../src/util/verboseToggle');
     expect(() => disableVerboseToggle()).not.toThrow();
+  });
+
+  it('should delegate Ctrl+C to the caller without exiting the process', async () => {
+    const originalStdinIsTTY = process.stdin.isTTY;
+    const originalStdoutIsTTY = process.stdout.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
+    const onInterrupt = vi.fn();
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: vi.fn(),
+      configurable: true,
+    });
+
+    try {
+      const { initVerboseToggle, isVerboseToggleActive } = await import(
+        '../../src/util/verboseToggle'
+      );
+
+      initVerboseToggle({ onInterrupt });
+      process.stdin.emit('data', '\u0003');
+
+      expect(onInterrupt).toHaveBeenCalledTimes(1);
+      expect(exitSpy).not.toHaveBeenCalled();
+      expect(isVerboseToggleActive()).toBe(false);
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalStdinIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalStdoutIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
+        configurable: true,
+      });
+      stderrWriteSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
   });
 });

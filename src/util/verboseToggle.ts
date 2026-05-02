@@ -5,6 +5,10 @@ import { getLogLevel, setLogLevel } from '../logger';
 let isVerboseToggleEnabled = false;
 let cleanupFn: (() => void) | null = null;
 
+export interface VerboseToggleOptions {
+  onInterrupt?: () => void;
+}
+
 /**
  * Shows a brief status message that doesn't interfere with progress bars
  */
@@ -27,7 +31,7 @@ function showToggleStatus(isVerbose: boolean): void {
  *
  * @returns cleanup function to disable the toggle, or null if not enabled
  */
-export function initVerboseToggle(): (() => void) | null {
+export function initVerboseToggle(options: VerboseToggleOptions = {}): (() => void) | null {
   // Don't enable in CI or non-interactive environments
   if (isCI() || !process.stdin.isTTY || !process.stdout.isTTY) {
     return null;
@@ -47,10 +51,12 @@ export function initVerboseToggle(): (() => void) | null {
     process.stdin.setEncoding('utf8');
 
     const handleKeypress = (key: string): void => {
-      // Handle Ctrl+C to exit gracefully
+      // In raw mode Ctrl+C arrives as stdin data instead of SIGINT. Restore the
+      // terminal first, then let the caller decide how interruption should work.
       if (key === '\u0003') {
         disableVerboseToggle();
-        process.exit();
+        options.onInterrupt?.();
+        return;
       }
 
       // Toggle verbose on 'v' or 'V'

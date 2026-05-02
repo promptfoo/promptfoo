@@ -33,7 +33,13 @@ export async function doRedteamRun(
 
   // Enable live verbose toggle (press 'v' to toggle debug logs)
   // Only works in interactive TTY mode, not in CI or web UI
-  const verboseToggleCleanup = options.logCallback ? null : initVerboseToggle();
+  const verboseToggleCleanup = options.logCallback
+    ? null
+    : initVerboseToggle({
+        onInterrupt: invocationOptions.isCliInvocation
+          ? () => process.kill(process.pid, 'SIGINT')
+          : undefined,
+      });
 
   let configPath: string = options.config ?? 'promptfooconfig.yaml';
 
