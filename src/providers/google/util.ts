@@ -8,7 +8,12 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
-import { calculateCost, type ProviderConfig, parseChatPrompt } from '../shared';
+import {
+  calculateCost,
+  type ProviderConfig,
+  parseChatPrompt,
+  transformToolChoice,
+} from '../shared';
 import { loadCredentials } from './auth';
 import { GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
@@ -31,6 +36,91 @@ export function normalizeSafetySettings(
     category,
     threshold: threshold || probability || '',
   }));
+}
+
+type GoogleToolConfig = NonNullable<CompletionOptions['toolConfig']>;
+
+function normalizeGoogleToolMode(
+  mode: unknown,
+): NonNullable<NonNullable<GoogleToolConfig['functionCallingConfig']>['mode']> | undefined {
+  if (typeof mode !== 'string') {
+    return undefined;
+  }
+
+  switch (mode.toUpperCase()) {
+    case 'MODE_UNSPECIFIED':
+    case 'AUTO':
+    case 'ANY':
+    case 'NONE':
+      return mode.toUpperCase() as NonNullable<
+        NonNullable<GoogleToolConfig['functionCallingConfig']>['mode']
+      >;
+    default:
+      return undefined;
+  }
+}
+
+function normalizeExplicitGoogleToolConfig(
+  config: CompletionOptions,
+): GoogleToolConfig | undefined {
+  if (config.toolConfig?.functionCallingConfig) {
+    const mode = normalizeGoogleToolMode(config.toolConfig.functionCallingConfig.mode);
+    return {
+      functionCallingConfig: {
+        ...(mode ? { mode } : {}),
+        ...(config.toolConfig.functionCallingConfig.allowedFunctionNames?.length
+          ? { allowedFunctionNames: config.toolConfig.functionCallingConfig.allowedFunctionNames }
+          : {}),
+      },
+    };
+  }
+
+  if (config.tool_config?.function_calling_config) {
+    const mode = normalizeGoogleToolMode(config.tool_config.function_calling_config.mode);
+    return {
+      functionCallingConfig: {
+        ...(mode ? { mode } : {}),
+        ...(config.tool_config.function_calling_config.allowed_function_names?.length
+          ? {
+              allowedFunctionNames:
+                config.tool_config.function_calling_config.allowed_function_names,
+            }
+          : {}),
+      },
+    };
+  }
+
+  return undefined;
+}
+
+export function resolveGoogleToolConfig(config: CompletionOptions): {
+  toolConfig?: GoogleToolConfig;
+  toolsDisabled: boolean;
+} {
+  const explicitConfig = normalizeExplicitGoogleToolConfig(config);
+  const transformedToolChoice = transformToolChoice(config.tool_choice, 'google');
+  const toolChoiceConfig =
+    transformedToolChoice && typeof transformedToolChoice === 'object'
+      ? (transformedToolChoice as GoogleToolConfig)
+      : undefined;
+  const explicitMode = normalizeGoogleToolMode(explicitConfig?.functionCallingConfig?.mode);
+  const toolChoiceMode = normalizeGoogleToolMode(toolChoiceConfig?.functionCallingConfig?.mode);
+
+  if (explicitMode === 'NONE' || toolChoiceMode === 'NONE') {
+    return {
+      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+      toolsDisabled: true,
+    };
+  }
+
+  return {
+    ...(explicitConfig
+      ? { toolConfig: explicitConfig }
+      : toolChoiceConfig
+        ? { toolConfig: toolChoiceConfig }
+        : {}),
+    toolsDisabled: false,
+  };
 }
 
 /**

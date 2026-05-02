@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  transformMCPConfigToClaudeCode,
   transformMCPToolsToAnthropic,
   transformMCPToolsToGoogle,
   transformMCPToolsToOpenAi,
@@ -243,6 +244,39 @@ describe('transformMCPToolsToOpenAi', () => {
       type: 'object',
       properties: {},
     });
+  });
+});
+
+describe('transformMCPConfigToClaudeCode', () => {
+  it('returns no servers when MCP is disabled', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: false,
+        server: {
+          name: 'disabled',
+          command: 'npx',
+          args: ['disabled-server'],
+        },
+      }),
+    ).resolves.toEqual({});
+  });
+
+  it('rejects unsupported tool filters instead of silently dropping them', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
+        tools: ['safe_tool'],
+      }),
+    ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
+
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ name: 'filtered', command: 'npx', args: ['filtered-server'] }],
+        exclude_tools: ['dangerous_tool'],
+      }),
+    ).rejects.toThrow(/does not support MCP tool allowlists or exclusions/);
   });
 });
 

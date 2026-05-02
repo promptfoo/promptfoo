@@ -404,6 +404,83 @@ describe('OpenAiAgentsProvider', () => {
     expect(toolResult).toEqual({ status: 'mocked' });
   });
 
+  it('recursively mocks handoff agent tools when executeTools is mock', async () => {
+    const childTool = vi.mocked(tool)({
+      name: 'lookup_child_order',
+      description: 'Look up a child order',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real-child' }),
+    });
+    const childAgent = new Agent({
+      name: 'Child Agent',
+      instructions: 'Help the child user.',
+      tools: [childTool],
+    });
+    const baseAgent = new Agent({
+      name: 'Support Agent',
+      instructions: 'Help the user.',
+      handoffs: [childAgent],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: baseAgent,
+        executeTools: 'mock',
+        toolMocks: {
+          lookup_child_order: { status: 'mocked-child' },
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    const agent = mockRun.mock.calls[0][0];
+    const childToolResult = await agent.handoffs[0].tools[0].invoke({}, '{}');
+
+    expect(childToolResult).toEqual({ status: 'mocked-child' });
+  });
+
+  it('rejects MCP servers in mock mode', async () => {
+    const baseAgent = new Agent({
+      name: 'Support Agent',
+      instructions: 'Help the user.',
+      mcpServers: [{ name: 'live-server' } as any],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: baseAgent,
+        executeTools: 'mock',
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).rejects.toThrow(/does not support MCP/);
+  });
+
+  it('rejects non-function tools in mock mode', async () => {
+    const baseAgent = new Agent({
+      name: 'Support Agent',
+      instructions: 'Help the user.',
+      tools: [{ type: 'hosted', name: 'hosted_search' } as any],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: baseAgent,
+        executeTools: 'mock',
+      },
+    });
+
+    await expect(provider.callApi('Where is my order?')).rejects.toThrow(
+      /only supports function tools/,
+    );
+  });
+
   it('preserves explicit zero-valued token usage fields', async () => {
     mockRun.mockResolvedValue({
       finalOutput: 'Agent answer',

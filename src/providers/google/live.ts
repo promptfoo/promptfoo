@@ -15,6 +15,7 @@ import {
   getGoogleAccessToken,
   loadCredentials,
   normalizeTools,
+  resolveGoogleToolConfig,
 } from './util';
 
 import type {
@@ -396,8 +397,13 @@ export class GoogleLiveProvider implements ApiProvider {
               ...(enableAffectiveDialog ? { enable_affective_dialog: enableAffectiveDialog } : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
-            ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
+            ...(() => {
+              const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(this.config);
+              return {
+                ...(toolConfig ? { toolConfig } : {}),
+                ...(!toolsDisabled && normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
+              };
+            })(),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
               ? { output_audio_transcription: outputAudioTranscription }
@@ -563,7 +569,8 @@ export class GoogleLiveProvider implements ApiProvider {
                 let callbackResponse = {};
                 const functionName = functionCall.name;
                 try {
-                  if (this.config.functionToolCallbacks?.[functionName]) {
+                  const { toolsDisabled } = resolveGoogleToolConfig(this.config);
+                  if (!toolsDisabled && this.config.functionToolCallbacks?.[functionName]) {
                     callbackResponse = await this.executeFunctionCallback(
                       functionName,
                       JSON.stringify(
@@ -572,7 +579,7 @@ export class GoogleLiveProvider implements ApiProvider {
                           : functionCall.args,
                       ),
                     );
-                  } else if (this.config.functionToolStatefulApi) {
+                  } else if (!toolsDisabled && this.config.functionToolStatefulApi) {
                     logger.warn(
                       'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
                     );

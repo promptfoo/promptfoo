@@ -30,6 +30,7 @@ import {
   mergeParts,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
+  resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
 
@@ -452,8 +453,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context);
+    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -470,7 +472,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...(config.safetySettings
         ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
         : {}),
-      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
+      ...(toolConfig ? { toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
       // Model Armor integration: inject template configuration for prompt/response screening
@@ -788,7 +790,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
     try {
       // Handle function tool callbacks
-      if (config.functionToolCallbacks && isValidJson(response.output)) {
+      if (!toolsDisabled && config.functionToolCallbacks && isValidJson(response.output)) {
         const structured_output = JSON.parse(response.output);
         if (structured_output.functionCall) {
           const results = [];

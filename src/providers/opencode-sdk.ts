@@ -1149,6 +1149,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     const sessionQuery = this.buildQuery(config, workingDir);
     if (config.session_id) {
+      if (config.permission && this.opencodeModule.apiVersion === 'v2') {
+        throw new Error(
+          'OpenCode SDK v2 applies permissions when sessions are created; explicit session_id resumes cannot safely rebind permission rules.',
+        );
+      }
+
       return {
         sessionId: config.session_id,
         sessionQuery,

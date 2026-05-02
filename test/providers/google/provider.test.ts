@@ -857,6 +857,65 @@ describe('GoogleProvider', () => {
       const body = JSON.parse(calledOptions.body);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'ANY' } });
     });
+
+    it.each([
+      [{ tool_choice: 'none' }],
+      [{ toolConfig: { functionCallingConfig: { mode: 'none' } } }],
+      [{ tool_config: { function_calling_config: { mode: 'none' } } }],
+    ])('should enforce documented no-tools controls: %j', async (toolDisableConfig) => {
+      const callback = vi.fn(async () => 'callback result');
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'test_function',
+                  description: 'Test function',
+                  parameters: { type: 'OBJECT', properties: {} },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: { test_function: callback },
+          ...toolDisableConfig,
+        } as any,
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      functionCall: { name: 'test_function', args: {} },
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toBeUndefined();
+      expect(callback).not.toHaveBeenCalled();
+      expect(result.output).toBe(
+        JSON.stringify({ functionCall: { name: 'test_function', args: {} } }),
+      );
+    });
   });
 
   describe('error handling', () => {

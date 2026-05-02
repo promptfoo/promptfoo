@@ -1314,6 +1314,44 @@ describe('OpenAICodexSDKProvider', () => {
         expect(mockRun).toHaveBeenCalledTimes(2); // But ran twice
       });
 
+      it('should not reuse an explicit thread cache entry across authority changes', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+
+        expect(mockResumeThread).toHaveBeenNthCalledWith(1, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'danger-full-access',
+          approvalPolicy: 'never',
+        });
+        expect(mockResumeThread).toHaveBeenNthCalledWith(2, 'existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: process.cwd(),
+          sandboxMode: 'read-only',
+          approvalPolicy: 'on-request',
+        });
+      });
+
       it('should enforce thread pool size limits', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 

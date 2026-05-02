@@ -281,10 +281,30 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       return agent;
     }
 
+    return this.wrapAgentForMockMode(agent, new WeakSet<object>());
+  }
+
+  private wrapAgentForMockMode(
+    agent: Agent<any, any>,
+    visitedAgents: WeakSet<object>,
+  ): Agent<any, any> {
+    if (visitedAgents.has(agent as object)) {
+      return agent;
+    }
+    visitedAgents.add(agent as object);
+
+    if (agent.mcpServers?.length) {
+      throw new Error(
+        "executeTools: 'mock' does not support MCP servers because they can execute outside mocked function tools",
+      );
+    }
+
     const toolMocks = this.agentConfig.toolMocks ?? {};
     const tools = agent.tools.map((tool) => {
       if (tool.type !== 'function') {
-        return tool;
+        throw new Error(
+          "executeTools: 'mock' only supports function tools; remove hosted or non-function tools",
+        );
       }
 
       const mockValue = toolMocks[tool.name];
@@ -294,7 +314,20 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       };
     });
 
-    return agent.clone({ tools });
+    const handoffs = agent.handoffs.map((agentHandoff) => {
+      if (isAgentLike(agentHandoff)) {
+        return this.wrapAgentForMockMode(agentHandoff, visitedAgents);
+      }
+
+      if (isHandoffLike(agentHandoff)) {
+        agentHandoff.agent = this.wrapAgentForMockMode(agentHandoff.agent, visitedAgents);
+        return agentHandoff;
+      }
+
+      throw new Error("executeTools: 'mock' cannot safely wrap an unknown handoff shape");
+    });
+
+    return agent.clone({ tools, handoffs });
   }
 
   private parsePromptInput(prompt: string): string | AgentInputItem[] {
@@ -343,4 +376,19 @@ function parseAgentInputItems(value: unknown): AgentInputItem[] | undefined {
   }
 
   return [parsedItem.data];
+}
+
+function isAgentLike(value: unknown): value is Agent<any, any> {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'clone' in value &&
+    typeof (value as Agent<any, any>).clone === 'function' &&
+    'tools' in value &&
+    Array.isArray((value as Agent<any, any>).tools)
+  );
+}
+
+function isHandoffLike(value: unknown): value is { agent: Agent<any, any> } {
+  return !!value && typeof value === 'object' && 'agent' in value && isAgentLike(value.agent);
 }
