@@ -9,12 +9,12 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
-import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
   generateCacheKey,
   getCachedResponse,
   initializeAgenticCache,
+  resolveAgenticWorkingDir,
 } from './agentic-utils';
 
 import type { EnvOverrides } from '../types/env';
@@ -1066,7 +1066,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     if (config.working_dir) {
       const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
-      const workingDir = safeResolve(basePath, config.working_dir);
+      const workingDir = resolveAgenticWorkingDir(config.working_dir, basePath);
 
       let stats: fs.Stats;
       try {
