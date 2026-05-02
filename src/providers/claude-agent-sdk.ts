@@ -1414,12 +1414,23 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
           const finalMsg = lastResultMsg;
 
-          // If we observed >1 result messages but the last one has no
-          // terminal_reason, the main agent's result may not actually be last
-          // (truncated stream after a sub-agent finished). Surface this so
-          // downstream evals don't silently grade a sub-agent summary as the
+          // If we observed >1 result messages, the last one is a success, and
+          // it has no terminal_reason, the main agent's result may not actually
+          // be last (truncated stream after a sub-agent finished). Surface this
+          // so downstream evals don't silently grade a sub-agent summary as the
           // model's answer.
-          if (resultMsgCount > 1 && finalMsg.terminal_reason === undefined) {
+          //
+          // Gate on subtype === 'success' because non-success subtypes
+          // ('error_during_execution', 'error_max_turns', etc.) are themselves
+          // a definitive terminal signal — they're how the SDK reports the
+          // run ending in error, not a truncation indicator. Warning on those
+          // would be a false positive on every legitimate main-agent failure
+          // that follows a background sub-agent.
+          if (
+            resultMsgCount > 1 &&
+            finalMsg.subtype === 'success' &&
+            finalMsg.terminal_reason === undefined
+          ) {
             logger.warn(
               `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
             );

@@ -776,6 +776,57 @@ describe('ClaudeCodeSDKProvider', () => {
         }
       });
 
+      it('should not warn when the final result is a non-success error subtype after a sub-agent', async () => {
+        // Negative case for the truncation heuristic: a non-success subtype
+        // like 'error_max_turns' is itself a definitive terminal signal — the
+        // SDK is reporting the run ended in error. Warning on this would be
+        // a false positive on every legitimate main-agent failure that
+        // follows a background sub-agent.
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+        try {
+          const subAgentResult: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'success',
+            session_id: 'sub-session',
+            uuid: 'cccc1111-cccc-cccc-cccc-cccccccccccc' as `${string}-${string}-${string}-${string}-${string}`,
+            result: 'Sub-agent finished',
+            usage: createMockUsage(5, 5),
+            total_cost_usd: 0.0005,
+            duration_ms: 200,
+            duration_api_ms: 150,
+            is_error: false,
+            num_turns: 1,
+            permission_denials: [],
+          };
+          const mainAgentError: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'error_max_turns',
+            session_id: 'main-session',
+            uuid: 'dddd2222-dddd-dddd-dddd-dddddddddddd' as `${string}-${string}-${string}-${string}-${string}`,
+            usage: createMockUsage(20, 30),
+            total_cost_usd: 0.003,
+            duration_ms: 1500,
+            duration_api_ms: 1200,
+            is_error: true,
+            num_turns: 4,
+            permission_denials: [],
+            // Intentionally no terminal_reason: error subtype is the signal.
+          };
+
+          mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentError]));
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBe('Claude Agent SDK call failed: error_max_turns');
+          expect(warnSpy).not.toHaveBeenCalled();
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
+
       it('should not warn when a single result message has no terminal_reason', async () => {
         // Negative case: a single non-terminal result is the normal pre-fix
         // path, not a truncation signal. We must not spam warnings.
