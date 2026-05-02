@@ -97,6 +97,7 @@ describe('redteamRunCommand', () => {
         loadedFromCloud: true,
         target: targetUUID,
       }),
+      { isCliInvocation: true },
     );
   });
 
@@ -223,6 +224,7 @@ describe('redteamRunCommand', () => {
         loadedFromCloud: true,
         target: targetUUID,
       }),
+      { isCliInvocation: true },
     );
   });
 
@@ -265,6 +267,7 @@ describe('redteamRunCommand', () => {
             description: customDescription,
           }),
         }),
+        { isCliInvocation: true },
       );
     });
 
@@ -304,6 +307,7 @@ describe('redteamRunCommand', () => {
             description: originalDescription,
           }),
         }),
+        { isCliInvocation: true },
       );
     });
 
