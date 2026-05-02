@@ -1,5 +1,1 @@
-# Google Agent Development Kit
-google-adk
-
-# Optional: for enhanced development experience
-python-dotenv
+google-adk>=1.32.0,<2
