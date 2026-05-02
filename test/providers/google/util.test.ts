@@ -13,6 +13,7 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 import logger from '../../../src/logger';
+import { GOOGLE_MODELS } from '../../../src/providers/google/shared';
 import {
   calculateGoogleCost,
   clearCachedAuth,
@@ -2611,6 +2612,37 @@ describe('util', () => {
       expect(costAboveThreshold).toBeCloseTo(1.9, 10);
     });
 
+    it('should apply tiered pricing for gemini-3.1-pro-preview-customtools when above threshold', () => {
+      // gemini-3.1-pro-preview-customtools: base input=2.0/1M, output=12.0/1M
+      // tiered (>200k): input=4.0/1M, output=18.0/1M
+      const costBelowThreshold = calculateGoogleCost(
+        'gemini-3.1-pro-preview-customtools',
+        {},
+        100000,
+        50000,
+      );
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost(
+        'gemini-3.1-pro-preview-customtools',
+        {},
+        250000,
+        50000,
+      );
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
+    it('should preserve tiered pricing for gemini-3-pro-preview alias', () => {
+      const cost = calculateGoogleCost('gemini-3-pro-preview', {}, 250000, 50000);
+      expect(cost).toBeCloseTo(1.9, 10);
+    });
+
+    it('should calculate cost for gemini-3.1-flash-lite-preview', () => {
+      // gemini-3.1-flash-lite-preview: input=0.25/1M, output=1.5/1M
+      const cost = calculateGoogleCost('gemini-3.1-flash-lite-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.001, 10);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M
@@ -2666,22 +2698,38 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0015, 10);
     });
 
-    it('should calculate cost for gemini-robotics-er-1.5-preview', () => {
-      // gemini-robotics-er-1.5-preview: input=0.3/1M, output=2.5/1M
-      const cost = calculateGoogleCost('gemini-robotics-er-1.5-preview', {}, 1000, 500);
+    it('should calculate cost for gemini-robotics-er-1.6-preview', () => {
+      // gemini-robotics-er-1.6-preview: input=1.0/1M, output=5.0/1M
+      const cost = calculateGoogleCost('gemini-robotics-er-1.6-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.0035, 10);
+    });
+
+    it('should calculate cost for gemini-flash-latest using flash pricing', () => {
+      // gemini-flash-latest aliases the current Flash snapshot: input=0.3/1M, output=2.5/1M
+      const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.00155, 10);
     });
 
-    it('should apply tiered pricing for gemini-3-pro-preview when above threshold', () => {
-      // gemini-3-pro-preview: base input=2.0/1M, output=12.0/1M
-      // tiered (>200k): input=4.0/1M, output=18.0/1M
-      const costBelowThreshold = calculateGoogleCost('gemini-3-pro-preview', {}, 100000, 50000);
-      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
-      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+    it('should calculate cost for gemini-flash-lite-latest using flash-lite pricing', () => {
+      // gemini-flash-lite-latest aliases the current Flash-Lite snapshot: input=0.1/1M, output=0.4/1M
+      const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.0003, 10);
+    });
 
-      const costAboveThreshold = calculateGoogleCost('gemini-3-pro-preview', {}, 250000, 50000);
-      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
-      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    it('should return undefined for shutdown models', () => {
+      const shutdownModels = [
+        'gemini-2.5-pro-preview-05-06',
+        'gemini-2.5-pro-preview-06-05',
+        'gemini-2.5-flash-preview-05-20',
+        'gemini-2.0-flash-lite-preview-02-05',
+        'gemini-robotics-er-1.5-preview',
+      ];
+      const catalogModelIds = GOOGLE_MODELS.map((model) => model.id);
+
+      for (const model of shutdownModels) {
+        expect(catalogModelIds).not.toContain(model);
+        expect(calculateGoogleCost(model, {}, 1000, 500)).toBeUndefined();
+      }
     });
 
     it('should return undefined for models without pricing data', () => {

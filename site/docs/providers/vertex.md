@@ -19,6 +19,8 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 **Gemini 3.1 (Preview):**
 
 - `vertex:gemini-3.1-pro-preview` - Improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
+- `vertex:gemini-3.1-pro-preview-customtools` - Custom-tools variant with the same pricing as Gemini 3.1 Pro
+- `vertex:gemini-3.1-flash-lite-preview` - Cost-efficient model optimized for high-volume agentic tasks ($0.25/1M text/image/video input, $1.50/1M output)
 
 **Gemini 3.0 (Preview):**
 
@@ -39,8 +41,8 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 - `vertex:gemini-2.0-flash-001` - Multimodal model for daily tasks with strong performance and real-time streaming
 - `vertex:gemini-2.0-flash-exp` - Experimental: Enhanced capabilities
 - `vertex:gemini-2.0-flash-thinking-exp` - Experimental: Reasoning with thinking process in responses
-- `vertex:gemini-2.0-flash-lite-preview-02-05` - Preview: Cost-effective for high throughput
-- `vertex:gemini-2.0-flash-lite-001` - Preview: Optimized for cost efficiency and low latency
+- `vertex:gemini-2.0-flash-lite` - Cost-effective for high throughput
+- `vertex:gemini-2.0-flash-lite-001` - GA version for existing customers; discontinuation scheduled for June 1, 2026
 
 ### Claude Models
 
