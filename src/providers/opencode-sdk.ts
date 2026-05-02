@@ -9,6 +9,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger, { getLogLevel } from '../logger';
+import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
   generateCacheKey,
@@ -1064,9 +1065,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.warnOnIgnoredBaseUrlConfig(config);
 
     if (config.working_dir) {
-      const workingDir = path.isAbsolute(config.working_dir)
-        ? config.working_dir
-        : path.resolve(process.cwd(), config.working_dir);
+      const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
+      const workingDir = safeResolve(basePath, config.working_dir);
 
       let stats: fs.Stats;
       try {
