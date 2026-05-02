@@ -156,12 +156,18 @@ describe('Provider Registry', () => {
       const factory = providerMap.find((f) => f.test('xai:embedding:v1'));
       expect(factory).toBeDefined();
 
-      await expect(factory!.create('xai:embedding:v1', {}, mockContext)).rejects.toThrow(
-        /xAI does not currently expose a public embeddings API/,
-      );
-      await expect(factory!.create('xai:embeddings:v1', {}, mockContext)).rejects.toThrow(
-        /xAI does not currently expose a public embeddings API/,
-      );
+      const embeddingAliases = [
+        'xai:embedding:v1',
+        'xai:embeddings:v1',
+        'xai:embedding',
+        'xai:embeddings',
+      ];
+
+      for (const alias of embeddingAliases) {
+        await expect(factory!.create(alias, {}, mockContext)).rejects.toThrow(
+          /xAI does not currently expose a public embeddings API/,
+        );
+      }
     });
 
     it('should handle python provider correctly', async () => {

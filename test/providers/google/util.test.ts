@@ -2710,13 +2710,16 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00155, 10);
     });
 
-    it('should calculate cost for gemini-flash-lite-latest using flash-lite pricing', () => {
-      // gemini-flash-lite-latest aliases the current Flash-Lite snapshot: input=0.1/1M, output=0.4/1M
+    it('should calculate cost for gemini-flash-lite-latest using current 2.5 flash-lite alias pricing', () => {
+      // gemini-flash-lite-latest currently aliases gemini-2.5-flash-lite-preview-09-2025: input=0.1/1M, output=0.4/1M
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.0003, 10);
     });
 
     it('should return undefined for shutdown models', () => {
+      // Deprecated/shutdown Google model IDs: these should not appear in GOOGLE_MODELS
+      // and should return undefined pricing if referenced directly.
+      // Keep this list aligned with Google's model lifecycle/deprecation documentation.
       const shutdownModels = [
         'gemini-2.5-pro-preview-05-06',
         'gemini-2.5-pro-preview-06-05',
