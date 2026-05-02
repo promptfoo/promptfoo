@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { evaluate } from '../../src/evaluator';
+import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { generatePrompts } from '../../src/suggestions';
 import { promptYesNo } from '../../src/util/readline';
@@ -38,15 +38,17 @@ describe('generated prompt selection', () => {
     };
   }
 
-  it('does not mutate process.exitCode for reusable callers', async () => {
+  it('throws without mutating process.exitCode for reusable callers', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
 
     try {
-      await evaluate(createTestSuite(), new Eval({}), {
-        eventSource: 'library',
-        generateSuggestions: true,
-      });
+      await expect(
+        evaluate(createTestSuite(), new Eval({}), {
+          eventSource: 'library',
+          generateSuggestions: true,
+        }),
+      ).rejects.toEqual(expect.any(PromptSuggestionsRejectedError));
 
       expect(process.exitCode).toBeUndefined();
     } finally {
@@ -71,6 +73,8 @@ describe('generated prompt selection', () => {
   });
 
   it('passes the requested suggestion count to the generator', async () => {
+    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
+
     await evaluate(createTestSuite(), new Eval({}), {
       eventSource: 'library',
       generateSuggestions: true,

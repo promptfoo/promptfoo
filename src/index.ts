@@ -38,6 +38,7 @@ import type {
 import type { ApiProvider } from './types/providers';
 
 export { EvalRunError } from './commands/eval';
+export { PromptSuggestionsRejectedError } from './evaluator';
 export { EmailValidationError } from './globalConfig/accounts';
 export { generateTable } from './table';
 export * from './types/index';

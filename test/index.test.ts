@@ -87,6 +87,7 @@ describe('index.ts exports', () => {
     'ConfigResolutionError',
     'EmailValidationError',
     'EvalRunError',
+    'PromptSuggestionsRejectedError',
     'assertions',
     'buildInputPromptDescription',
     'cache',

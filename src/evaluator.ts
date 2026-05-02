@@ -89,6 +89,14 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
+
+export class PromptSuggestionsRejectedError extends Error {
+  constructor(message = 'No prompts selected. Aborting.') {
+    super(message);
+    this.name = 'PromptSuggestionsRejectedError';
+  }
+}
+
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -1820,8 +1828,9 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
   logger.info(chalk.red('No prompts selected. Aborting.'));
   if (options.eventSource === 'cli') {
     process.exitCode = 1;
+    return false;
   }
-  return false;
+  throw new PromptSuggestionsRejectedError();
 }
 
 function createDefaultPromptMetrics(): PromptMetrics {
