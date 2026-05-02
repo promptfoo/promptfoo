@@ -1815,7 +1815,9 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
     return true;
   }
   logger.info(chalk.red('No prompts selected. Aborting.'));
-  process.exitCode = 1;
+  if (options.eventSource === 'cli') {
+    process.exitCode = 1;
+  }
   return false;
 }
 
