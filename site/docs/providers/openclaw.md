@@ -11,6 +11,11 @@ OpenClaw is a personal AI assistant gateway with agent routing, tools, skills, a
 surfaces. Promptfoo can test its OpenAI-compatible HTTP endpoints, native WebSocket agent protocol,
 and direct tool invocation path from one provider family.
 
+If you are deciding whether the assistant you built is actually good, start with
+[How to Know If Your Agent Is Actually Good](/docs/guides/evaluate-agent-quality). This page is the
+provider reference; the guide explains how to turn task quality, tool behavior, skills, memory, and
+safety into an eval program.
+
 ## Prerequisites
 
 1. Install OpenClaw:
