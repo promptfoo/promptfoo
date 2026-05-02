@@ -192,7 +192,7 @@ describe('server', () => {
 
     it('should close file watcher on shutdown', async () => {
       const mockWatcher = { close: vi.fn(), on: vi.fn() };
-      vi.mocked(setupSignalWatcher).mockReturnValue(mockWatcher as never);
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
 
       const serverPromise = startServer(0);
 
