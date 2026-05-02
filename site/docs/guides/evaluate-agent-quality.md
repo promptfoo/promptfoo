@@ -53,7 +53,8 @@ Most agents need evidence on several axes:
 
 The right assertion is the cheapest one that proves the behavior you care about. Use exact or
 programmatic checks when the answer is objective. Use model-graded rubrics when quality is genuinely
-open-ended. Use traces or tool metadata when the path matters as much as the final text.
+open-ended, and calibrate those rubrics against human-labeled examples before treating them as a
+release gate. Use traces or tool metadata when the path matters as much as the final text.
 
 ## Build an Evidence Ladder
 
@@ -69,7 +70,8 @@ You do not need the complete suite on day one. Build it in layers.
    and compare old vs new.
 
 The first four layers tell you whether the agent is useful. The last three tell you whether you can
-keep improving it without fooling yourself.
+keep improving it without fooling yourself. If the agent is stochastic, repeat the important cases
+enough times to see variance before declaring a new version better.
 
 ## Worked Example: Evaluate an OpenClaw Assistant
 
@@ -285,7 +287,14 @@ evidence that the agent is good.
 
 ## A Practical Run Order
 
-For the bundled OpenClaw example, a useful progression is:
+Create the bundled OpenClaw example, then run the suite from that directory:
+
+```bash
+npx promptfoo@latest init --example provider-openclaw
+cd provider-openclaw
+```
+
+A useful progression is:
 
 ```bash
 # 1. Ordinary task quality
