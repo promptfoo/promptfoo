@@ -236,6 +236,9 @@ To create a shareable URL, combine `writeLatestResults: true` with
 
 ## Next steps
 
+- Read the [Node API guide](/docs/usage/node-api-reference)
+- Browse the [Node API examples](/docs/usage/node-api-examples)
+- Keep the [Node API quick reference](/docs/usage/node-api-quick-reference) nearby
 - Browse the [Node.js API reference](/docs/api/node/)
 - Read [Assertions & metrics](/docs/configuration/expected-outputs/)
 - Learn how to build [custom providers](/docs/providers/custom-api)

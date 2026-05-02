@@ -124,7 +124,11 @@ describe('xAI Chat Provider', () => {
       );
     });
 
-    it('tracks every current public text model id reported by xAI /v1/language-models', () => {
+    it('tracks a reviewed snapshot of public text model ids reported by xAI /v1/language-models', () => {
+      // Maintenance note:
+      // This is a point-in-time snapshot of xAI public text model ids.
+      // Review and update periodically (or whenever models are added/renamed/deprecated)
+      // against xAI /v1/language-models.
       const currentPublicTextModelIds = [
         'grok-3',
         'grok-3-mini',

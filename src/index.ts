@@ -442,7 +442,7 @@ const redteam = {
   run: doRedteamRun,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
+export { assertions, cache, evaluate, guardrails, loadApiProvider, loadApiProviders, redteam };
 
 export default {
   assertions,
@@ -450,5 +450,6 @@ export default {
   evaluate,
   guardrails,
   loadApiProvider,
+  loadApiProviders,
   redteam,
 };

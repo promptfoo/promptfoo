@@ -105,6 +105,18 @@ type XAIResponsesStreamEvent = {
   [key: string]: any;
 };
 
+/**
+ * Parses a single Server-Sent Events (SSE) chunk into an xAI Responses stream event.
+ *
+ * The parser extracts and concatenates `data:` lines, then attempts to parse JSON.
+ * It intentionally returns `undefined` for:
+ * - empty payloads,
+ * - the terminal `[DONE]` marker, and
+ * - malformed JSON payloads.
+ *
+ * Malformed payloads are ignored for stream robustness and logged at debug level
+ * to aid troubleshooting of intermittent streaming issues.
+ */
 function parseSseEvent(chunk: string): XAIResponsesStreamEvent | undefined {
   const data = chunk
     .split(/\r?\n/)

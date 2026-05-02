@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { XAIResponsesProvider } from '../../../src/providers/xai/responses';
 
+const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn());
+
 const mockFetchWithCache = vi.hoisted(() => vi.fn());
 const mockFetchWithProxy = vi.hoisted(() => vi.fn());
 
@@ -24,6 +26,11 @@ vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
   fetchWithProxy: (...args: any[]) => mockFetchWithProxy(...args),
 }));
 
+vi.mock('../../../src/util/index', async (importOriginal) => ({
+  ...(await importOriginal()),
+  maybeLoadToolsFromExternalFile: mockMaybeLoadToolsFromExternalFile,
+}));
+
 vi.mock('../../../src/logger');
 
 function createSSEStream(events: string) {
@@ -41,6 +48,8 @@ describe('XAIResponsesProvider', () => {
     vi.clearAllMocks();
     mockFetchWithCache.mockReset();
     mockFetchWithProxy.mockReset();
+    // Default passthrough: return whatever tools array is passed in
+    mockMaybeLoadToolsFromExternalFile.mockImplementation((tools: any) => Promise.resolve(tools));
     mockFetchWithCache.mockResolvedValue({
       data: {
         id: 'resp_123',
@@ -66,6 +75,30 @@ describe('XAIResponsesProvider', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+  });
+
+  it('calls maybeLoadToolsFromExternalFile when tools are configured', async () => {
+    const tools = [
+      { type: 'code_execution' },
+      {
+        type: 'file_search',
+        vector_store_ids: ['collection_123'],
+        max_num_results: 3,
+      },
+    ];
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: {
+        apiKey: 'test-key',
+        tools,
+      },
+    });
+
+    mockMaybeLoadToolsFromExternalFile.mockResolvedValue(tools);
+
+    await provider.callApi('hello');
+
+    expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledTimes(1);
+    expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(tools, undefined);
   });
 
   it('builds current xAI Responses tool payloads', async () => {
