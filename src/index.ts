@@ -220,6 +220,65 @@ function createSerializableUnifiedConfig(
   return config;
 }
 
+/**
+ * Run an evaluation test suite.
+ *
+ * This is the main entry point for programmatic evaluation. It executes all tests
+ * against all providers, runs assertions, and returns a comprehensive summary.
+ *
+ * @param testSuite Configuration containing prompts, providers, tests, and metadata
+ * @param testSuite.prompts Array of prompts (strings or file paths)
+ * @param testSuite.providers Array of provider configurations (e.g., 'openai:gpt-4')
+ * @param testSuite.tests Array of test cases with variables and assertions
+ * @param testSuite.sharing Optional sharing configuration
+ * @param testSuite.writeLatestResults Whether to persist results to database
+ *
+ * @param options Optional evaluation settings
+ * @param options.cache Whether to use cached provider responses (default: true)
+ * @param options.outputPath File path(s) for saving results (JSON format)
+ * @param options.maxConcurrency Max parallel provider calls (default: 10)
+ * @param options.onTestComplete Callback invoked after each test completes
+ * @param options.nunjucksFilters Custom Nunjucks template filters
+ *
+ * @returns Promise resolving to EvaluateSummary with results and statistics
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { evaluate } from 'promptfoo';
+ *
+ * const results = await evaluate({
+ *   prompts: ['What is 2+2?'],
+ *   providers: ['openai:gpt-4'],
+ *   tests: [
+ *     {
+ *       vars: {},
+ *       assert: [{ type: 'contains', value: '4' }]
+ *     }
+ *   ]
+ * });
+ *
+ * console.log(`${results.stats.passCount}/${results.stats.totalCount} passed`);
+ * ```
+ *
+ * @example With output file and caching disabled
+ * ```typescript
+ * const results = await evaluate(
+ *   {
+ *     prompts: ['prompts.txt'],
+ *     providers: ['openai:gpt-4', 'anthropic:claude-3-opus'],
+ *     tests: testCases
+ *   },
+ *   {
+ *     cache: false,
+ *     outputPath: 'eval-results.json',
+ *     maxConcurrency: 5
+ *   }
+ * );
+ * ```
+ *
+ * @see loadApiProvider for loading individual providers
+ * @see runAssertion for testing specific outputs
+ */
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
@@ -393,7 +452,16 @@ const redteam = {
   run: doRedteamRun,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
+export {
+  assertions,
+  cache,
+  evaluate,
+  guardrails,
+  loadApiProvider,
+  loadApiProviders,
+  resolveProvider,
+  redteam,
+};
 
 export default {
   assertions,
@@ -401,5 +469,7 @@ export default {
   evaluate,
   guardrails,
   loadApiProvider,
+  loadApiProviders,
+  resolveProvider,
   redteam,
 };
