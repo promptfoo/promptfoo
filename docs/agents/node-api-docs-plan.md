@@ -29,7 +29,7 @@ keeps reference material aligned with the code.
       reference.
 - [x] Record which remaining pages should stay generated, gain prose, or move to
       hand-written docs.
-- [ ] Re-run docs QA and PR-style review after the follow-up pass.
+- [x] Re-run docs QA and PR-style review after the follow-up pass.
 
 ## Working Notes
 
