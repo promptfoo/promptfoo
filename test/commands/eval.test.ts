@@ -350,7 +350,7 @@ describe('evalCommand', () => {
   it('should leave SIGINT ownership with reusable callers', async () => {
     const processOnSpy = vi.spyOn(process, 'on');
     const mockEvalRecord = new Eval(defaultConfig);
-    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+    vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
 
     try {
       await doEval({ write: true }, defaultConfig, defaultConfigPath, {});
@@ -362,7 +362,7 @@ describe('evalCommand', () => {
 
   it('should preserve reusable caller event sources when invoking the evaluator', async () => {
     const mockEvalRecord = new Eval(defaultConfig);
-    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+    vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
 
     await doEval({}, defaultConfig, defaultConfigPath, { eventSource: 'mcp' });
 

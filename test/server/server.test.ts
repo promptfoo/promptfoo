@@ -170,7 +170,7 @@ describe('server', () => {
       const startupError = new Error('Address in use') as NodeJS.ErrnoException;
       startupError.code = 'EADDRINUSE';
       const mockWatcher = { close: vi.fn(), on: vi.fn() };
-      vi.mocked(setupSignalWatcher).mockReturnValue(mockWatcher as never);
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
 
       mockHttpServer.listen = vi.fn().mockImplementation(function (this: MockHttpServer) {
         setImmediate(() => this.emit('error', startupError));
