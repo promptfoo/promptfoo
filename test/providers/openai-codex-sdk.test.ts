@@ -1352,6 +1352,34 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should evict stale explicit thread cache entries when options change', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            thread_id: 'existing-thread-123',
+            persist_threads: true,
+            sandbox_mode: 'danger-full-access',
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Broad prompt');
+        await provider.callApi('Restricted prompt', {
+          prompt: {
+            raw: 'Restricted prompt',
+            config: {
+              sandbox_mode: 'read-only',
+              approval_policy: 'on-request',
+            },
+          },
+        } as any);
+        await provider.callApi('Broad prompt again');
+
+        expect(mockResumeThread).toHaveBeenCalledTimes(3);
+      });
+
       it('should enforce thread pool size limits', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 

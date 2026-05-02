@@ -571,6 +571,67 @@ describe('OpenAiAgentsProvider', () => {
     });
   });
 
+  it('preserves dynamic SDK handoff targets in mock mode', async () => {
+    const staticTool = vi.mocked(tool)({
+      name: 'lookup_static_order',
+      description: 'Look up a static order',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real-static' }),
+    });
+    const dynamicTool = vi.mocked(tool)({
+      name: 'lookup_dynamic_order',
+      description: 'Look up a dynamic order',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      execute: async () => ({ status: 'real-dynamic' }),
+    });
+    const staticAgent = new Agent({
+      name: 'Static Agent',
+      instructions: 'Handle static requests.',
+      tools: [staticTool],
+    });
+    const dynamicAgent = new Agent({
+      name: 'Dynamic Agent',
+      instructions: 'Handle dynamic requests.',
+      tools: [dynamicTool],
+    });
+    const dynamicHandoff = vi.mocked(handoff)(staticAgent);
+    dynamicHandoff.onInvokeHandoff = vi.fn(async () => dynamicAgent);
+    const rootAgent = new Agent({
+      name: 'Root Agent',
+      instructions: 'Handle requests.',
+      handoffs: [dynamicHandoff],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: rootAgent,
+        executeTools: 'mock',
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    const agent = mockRun.mock.calls[0][0];
+    const wrappedHandoff = agent.handoffs[0];
+    const returnedAgent = await wrappedHandoff.onInvokeHandoff({}, '');
+
+    expect(returnedAgent).not.toBe(dynamicAgent);
+    await expect(returnedAgent.tools[0].invoke({}, '{}')).resolves.toEqual({
+      mocked: true,
+      tool: 'lookup_dynamic_order',
+    });
+  });
+
   it('rejects MCP servers in mock mode', async () => {
     const baseAgent = new Agent({
       name: 'Support Agent',

@@ -295,7 +295,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
     if (agent.mcpServers?.length) {
       throw new Error(
-        "executeTools: 'mock' does not support MCP servers because they can execute outside mocked function tools",
+        "executeTools: false/'mock' does not support MCP servers because they can execute outside mocked function tools",
       );
     }
 
@@ -303,7 +303,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     const tools = agent.tools.map((tool) => {
       if (tool.type !== 'function') {
         throw new Error(
-          "executeTools: 'mock' only supports function tools; remove hosted or non-function tools",
+          "executeTools: false/'mock' only supports function tools; remove hosted or non-function tools",
         );
       }
 
@@ -330,8 +330,8 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
           {
             agent: wrappedHandoffAgent,
             onInvokeHandoff: async (...args: Parameters<typeof agentHandoff.onInvokeHandoff>) => {
-              await agentHandoff.onInvokeHandoff(...args);
-              return wrappedHandoffAgent;
+              const nextAgent = await agentHandoff.onInvokeHandoff(...args);
+              return this.wrapAgentForMockMode(nextAgent, wrappedAgents);
             },
           },
         );
