@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
 import {
@@ -3700,6 +3701,48 @@ describe('target ID extraction for retry strategy', () => {
         limit: 100_000,
         remaining: 100_000,
       });
+    });
+
+    it.each([
+      { label: 'cache: false', cache: false, expectOverride: false, expectInfoLog: true },
+      { label: 'cache: true', cache: true, expectOverride: undefined, expectInfoLog: false },
+      {
+        label: 'cache: undefined',
+        cache: undefined,
+        expectOverride: undefined,
+        expectInfoLog: false,
+      },
+    ])('should respect $label without leaking globals', async ({
+      cache,
+      expectOverride,
+      expectInfoLog,
+    }) => {
+      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+        withinLimit: true,
+        used: 0,
+        limit: 100_000,
+        remaining: 100_000,
+      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      const withCacheEnabledSpy = vi.spyOn(cacheModule, 'withCacheEnabled');
+
+      await doGenerateRedteam({
+        purpose: 'test purpose',
+        output: 'output.yaml',
+        cache,
+        force: true,
+      });
+
+      expect(withCacheEnabledSpy).toHaveBeenCalledWith(expectOverride, expect.any(Function));
+      if (expectInfoLog) {
+        expect(logger.info).toHaveBeenCalledWith('Cache is disabled');
+      } else {
+        expect(logger.info).not.toHaveBeenCalledWith('Cache is disabled');
+      }
+
+      withCacheEnabledSpy.mockRestore();
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
     });
 
     it('should not block generation when within probe limit', async () => {

@@ -487,7 +487,7 @@ export class ProbeLimitExceededError extends Error {
 
   constructor(used: number, limit: number) {
     super(
-      `Monthly redteam probe limit reached: ${used.toLocaleString()}/${limit.toLocaleString()}`,
+      `Monthly redteam probe limit reached: ${used.toLocaleString('en-US')}/${limit.toLocaleString('en-US')}`,
     );
     this.name = 'ProbeLimitExceededError';
     this.used = used;

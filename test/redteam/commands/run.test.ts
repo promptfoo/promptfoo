@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
+import { ProbeLimitExceededError } from '../../../src/redteam/types';
 import { getConfigFromCloud } from '../../../src/util/cloud';
 
 vi.mock('../../../src/cliState', () => ({
@@ -319,6 +320,37 @@ describe('redteamRunCommand', () => {
 
       // Verify that the description was overridden using short flag
       expect(mockConfig.description).toBe(customDescription);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should suppress stack trace when doRedteamRun throws ProbeLimitExceededError', async () => {
+      vi.mocked(doRedteamRun).mockRejectedValueOnce(new ProbeLimitExceededError(100, 100));
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test']);
+
+      expect(logger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('An unexpected error occurred during red team run'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should still log unexpected errors with stack', async () => {
+      const boom = new Error('boom');
+      vi.mocked(doRedteamRun).mockRejectedValueOnce(boom);
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('An unexpected error occurred during red team run: boom'),
+      );
+      expect(process.exitCode).toBe(1);
     });
   });
 });

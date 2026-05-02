@@ -1208,6 +1208,11 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // in the cache key, so we skip caching entirely when one is provided to avoid
     // serving or poisoning entries across different callback implementations.
     const userProvidedCanUseTool = Boolean(config.can_use_tool);
+    if (userProvidedCanUseTool) {
+      logger.debug(
+        '[ClaudeCodeSDKProvider] Bypassing cache: user-supplied can_use_tool callback present',
+      );
+    }
     const cacheResult = userProvidedCanUseTool
       ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
       : await initializeAgenticCache(
