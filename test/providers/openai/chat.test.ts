@@ -243,6 +243,7 @@ describe('OpenAI Provider', () => {
       expect(result2.output).toBe('Test output 2');
       // Cached responses don't count as new requests, so numRequests is not included
       expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.cost).toBe(0);
     });
 
     it('should handle disabled cache correctly', async () => {

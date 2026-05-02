@@ -10,7 +10,8 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
+import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
+import { formatOpenAiError, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -147,8 +148,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       providerType: 'openai',
       functionCallbackHandler: this.functionCallbackHandler,
       costCalculator: (modelName: string, usage: any, config?: any) =>
-        calculateOpenAICost(modelName, config, usage?.input_tokens, usage?.output_tokens, 0, 0) ??
-        0,
+        calculateOpenAIUsageCost(modelName, config, usage, {
+          serviceTier: config?.service_tier,
+        }),
     });
   }
 
@@ -174,6 +176,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // OpenAI's o1 and o3 models don't support temperature but some 3rd
     // party reasoning models do.
     return !this.isReasoningModel();
+  }
+
+  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
+    return this.modelName;
   }
 
   private isAzureOpenAiEndpoint(value: string | undefined): boolean {
@@ -545,10 +551,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Use shared processor for consistent behavior with Azure
     const result = await this.processor.processResponseOutput(data, config, cached);
+    const serviceTier =
+      (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
+    const billingModelName = this.getBillingModelName(config);
+    const responseCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
+      cachedResponse: cached,
+      serviceTier,
+    });
+    const observableToolCost = cached
+      ? 0
+      : calculateObservableOpenAIToolCost(data, billingModelName, config);
 
     // Merge HTTP metadata with any existing metadata from the processor
     return {
       ...result,
+      ...(responseCost === undefined ? {} : { cost: responseCost + observableToolCost }),
       metadata: {
         ...result.metadata,
         http: {
