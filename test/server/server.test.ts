@@ -190,6 +190,26 @@ describe('server', () => {
       );
     });
 
+    it('should close the live server before rejecting runtime server errors', async () => {
+      const runtimeError = new Error('Unexpected runtime failure') as NodeJS.ErrnoException;
+      const mockWatcher = { close: vi.fn(), on: vi.fn() };
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
+
+      const serverPromise = startServer(0);
+
+      await vi.waitFor(() =>
+        expect(logger.info).toHaveBeenCalledWith(
+          'Server running at http://localhost:0 and monitoring for new evals.',
+        ),
+      );
+      mockHttpServer.emit('error', runtimeError);
+
+      await expect(serverPromise).rejects.toBe(runtimeError);
+      expect(mockWatcher.close).toHaveBeenCalled();
+      expect(mockHttpServer.close).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Server error: Unexpected runtime failure');
+    });
+
     it('should close file watcher on shutdown', async () => {
       const mockWatcher = { close: vi.fn(), on: vi.fn() };
       vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);

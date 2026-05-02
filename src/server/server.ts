@@ -411,19 +411,19 @@ export async function startServer(
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
   return new Promise<void>((resolve, reject) => {
-    // Register shutdown handlers to gracefully close the server
-    // Use once() to prevent handler accumulation if startServer is called multiple times
-    const shutdown = () => {
-      logger.info('Shutting down server...');
+    const removeShutdownHandlers = () => {
+      process.removeListener('SIGINT', shutdown);
+      process.removeListener('SIGTERM', shutdown);
+    };
 
-      // Close the file watcher first to stop monitoring
+    const closeRunningServer = (onClosed: () => void) => {
       watcher.close();
 
       // Set a timeout in case connections don't close gracefully
       const SHUTDOWN_TIMEOUT_MS = 5000;
       const forceCloseTimeout = setTimeout(() => {
         logger.warn('Server close timeout - forcing shutdown');
-        resolve();
+        onClosed();
       }, SHUTDOWN_TIMEOUT_MS);
 
       // Close Socket.io connections (this also closes the underlying HTTP server)
@@ -433,7 +433,7 @@ export async function startServer(
         if (!httpServer.listening) {
           clearTimeout(forceCloseTimeout);
           logger.info('Server closed');
-          resolve();
+          onClosed();
           return;
         }
 
@@ -443,32 +443,47 @@ export async function startServer(
             logger.warn(`Error closing server: ${err.message}`);
           }
           logger.info('Server closed');
-          resolve();
+          onClosed();
         });
       });
+    };
+
+    // Register shutdown handlers to gracefully close the server
+    // Use once() to prevent handler accumulation if startServer is called multiple times
+    const shutdown = () => {
+      logger.info('Shutting down server...');
+      removeShutdownHandlers();
+      httpServer.removeListener('error', handleRuntimeError);
+      closeRunningServer(resolve);
     };
 
     const handleStartupError = (error: NodeJS.ErrnoException) => {
       watcher.close();
-      process.removeListener('SIGINT', shutdown);
-      process.removeListener('SIGTERM', shutdown);
+      removeShutdownHandlers();
       reject(handleServerError(error, port));
     };
 
-    httpServer
-      .listen(port, () => {
-        const url = `http://localhost:${port}`;
-        logger.info(`Server running at ${url} and monitoring for new evals.`);
-        openBrowser(browserBehavior, port).catch((error) => {
-          logger.error(
-            `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
-          );
-        });
-        // Don't resolve - server runs until shutdown signal
-      })
-      .on('error', (error: NodeJS.ErrnoException) => {
-        handleStartupError(error);
+    const handleRuntimeError = (error: NodeJS.ErrnoException) => {
+      logger.error(`Server error: ${error instanceof Error ? error.message : error}`);
+      removeShutdownHandlers();
+      httpServer.removeListener('error', handleRuntimeError);
+      closeRunningServer(() => reject(error));
+    };
+
+    httpServer.once('error', handleStartupError);
+    httpServer.listen(port, () => {
+      httpServer.removeListener('error', handleStartupError);
+      httpServer.on('error', handleRuntimeError);
+
+      const url = `http://localhost:${port}`;
+      logger.info(`Server running at ${url} and monitoring for new evals.`);
+      openBrowser(browserBehavior, port).catch((error) => {
+        logger.error(
+          `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+        );
       });
+      // Don't resolve - server runs until shutdown signal
+    });
 
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);
