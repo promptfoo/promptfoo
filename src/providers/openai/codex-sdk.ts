@@ -17,6 +17,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 
 import type { EnvOverrides } from '../../types/env';
@@ -1963,7 +1964,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // This allows the Codex CLI to export its internal spans as children of our span
     const currentTraceparent = getTraceparent();
     const apiKey = this.getApiKey(config);
-    const workingDirectory = config.working_dir ?? process.cwd();
+    const workingDirectory =
+      resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
     const resolvedConfig: OpenAICodexSDKConfig = {
       ...config,
       working_dir: workingDirectory,
