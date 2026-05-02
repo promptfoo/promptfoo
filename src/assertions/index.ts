@@ -683,7 +683,9 @@ export async function runAssertion({
  * @param params.vars Template variables (overrides test.vars if provided)
  * @param params.traceId Distributed trace ID (optional)
  *
- * @returns GradingResult aggregating all assertion results
+ * @returns GradingResult aggregating all assertion results. The returned result
+ *          includes `componentResults` and `namedScores` rather than a nested
+ *          `results` array.
  *
  * @example Basic usage
  * ```typescript
@@ -700,8 +702,8 @@ export async function runAssertion({
  *
  * console.log(`All passed: ${result.pass}`);
  * console.log(`Average score: ${result.score}`);
- * result.results.forEach(r => {
- *   console.log(`  ${r.metric}: ${r.pass ? '✓' : '✗'} (${r.score})`);
+ * result.componentResults.forEach((r) => {
+ *   console.log(`  ${r.assertion?.type}: ${r.pass ? '✓' : '✗'} (${r.score})`);
  * });
  * ```
  *

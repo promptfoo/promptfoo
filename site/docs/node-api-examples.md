@@ -192,7 +192,7 @@ const results = await evaluate({
 Load multiple providers and evaluate them independently:
 
 ```typescript
-import { loadApiProviders, runAssertion } from 'promptfoo';
+import { assertions, loadApiProviders } from 'promptfoo';
 
 async function batchTestProviders() {
   const providers = await loadApiProviders([
@@ -221,7 +221,7 @@ async function batchTestProviders() {
         model: provider.id.split(':')[1] // Extract model from provider ID
       });
 
-      const result = await runAssertion({
+      const result = await assertions.runAssertion({
         provider,
         assertion: { 
           type: 'javascript',

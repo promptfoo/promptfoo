@@ -182,7 +182,7 @@ for (const provider of providers) {
 
 ## Assertions API
 
-### `runAssertion(params)`
+### `assertions.runAssertion(params)`
 
 Execute a single assertion against provider output. **Powerful for custom evaluation logic.**
 
@@ -222,9 +222,11 @@ interface GradingResult {
 
 **Example: Custom Assertion Logic**
 ```typescript
-import { runAssertion } from 'promptfoo';
+import { assertions } from 'promptfoo';
 
-const result = await runAssertion({
+const result = await assertions.runAssertions({
+
+const result = await assertions.runAssertion({
   assertion: {
     type: 'javascript',
     value: (output, context) => {
@@ -273,9 +275,9 @@ interface AssertionValueFunctionContext {
 
 **Using Trace Data:**
 ```typescript
-import { runAssertion } from 'promptfoo';
+import { assertions } from 'promptfoo';
 
-const result = await runAssertion({
+const result = await assertions.runAssertion({
   assertion: {
     type: 'javascript',
     value: (output, context) => {
@@ -304,7 +306,7 @@ const result = await runAssertion({
 
 ---
 
-### `runAssertions(params)`
+### `assertions.runAssertions(params)`
 
 Execute multiple assertions in batch against provider output.
 
@@ -323,19 +325,21 @@ async function runAssertions({
 
 **Returns:**
 ```typescript
-interface AssertionsResult {
-  results: GradingResult[];
-  score: number;              // Average score across all assertions
-  pass: boolean;              // All assertions passed?
-  error?: string;
+interface GradingResult {
+  pass: boolean;
+  score: number;              // Aggregate score across all assertions
+  reason?: string;
+  componentResults?: GradingResult[]; // Per-assertion results
+  namedScores?: Record<string, number>;
+  tokensUsed?: { total: number; prompt: number; completion: number; cached: number; numRequests: number };
 }
 ```
 
 **Example:**
 ```typescript
-import { runAssertions } from 'promptfoo';
+import { assertions } from 'promptfoo';
 
-const result = await runAssertions({
+const result = await assertions.runAssertions({
   assertions: [
     { type: 'contains', value: '4' },
     { type: 'regex', value: '^The answer is \\d+$' },
@@ -347,7 +351,7 @@ const result = await runAssertions({
 
 console.log(`All passed: ${result.pass}`);
 console.log(`Average score: ${result.score}`);
-result.results.forEach(r => console.log(`  ${r.metric}: ${r.pass}`));
+result.componentResults?.forEach((r) => console.log(`  ${r.assertion?.type}: ${r.pass}`));
 ```
 
 ---
@@ -366,7 +370,7 @@ export function enableCache(): void
 
 **Example:**
 ```typescript
-import { cache } from 'promptfoo';
+import { cache, evaluate } from 'promptfoo';
 
 cache.enableCache();
 ```
@@ -510,7 +514,7 @@ export PROMPTFOO_CACHE_PATH=/path/to/cache
 export PROMPTFOO_CACHE_TTL=604800
 
 # Disable cache via env
-export PROMPTFOO_DISABLE_CACHE=true
+export PROMPTFOO_CACHE_ENABLED=false
 ```
 
 ---
@@ -547,8 +551,10 @@ const result = await guardrails.guard('This is a test message');
 
 if (result.results[0].flagged) {
   console.log('Content flagged for safety issues:');
-  result.results[0].categories.forEach((cat, name) => {
-    if (cat) console.log(`  ${name}: ${result.results[0].category_scores[name]}`);
+  Object.entries(result.results[0].categories).forEach(([name, flagged]) => {
+    if (flagged) {
+      console.log(`  ${name}: ${result.results[0].category_scores[name]}`);
+    }
   });
 }
 ```
@@ -855,7 +861,7 @@ const results = await evaluate({
 Load providers and test in parallel:
 
 ```typescript
-import { loadApiProviders, runAssertion } from 'promptfoo';
+import { assertions, loadApiProviders } from 'promptfoo';
 
 const providers = await loadApiProviders([
   'openai:gpt-4',
@@ -869,7 +875,7 @@ for (const provider of providers) {
   for (const test of testCases) {
     const response = await provider.callApi({ prompt: test });
     
-    const result = await runAssertion({
+    const result = await assertions.runAssertion({
       provider,
       assertion: { type: 'contains', value: 'answer' },
       test: { vars: { prompt: test } },
@@ -962,7 +968,7 @@ import type {
 ### Stable APIs (Safe for production)
 - `evaluate()`
 - `loadApiProvider()`, `loadApiProviders()`
-- `runAssertion()`, `runAssertions()`
+- `assertions.runAssertion()`, `assertions.runAssertions()`
 - Cache namespace functions
 - Guardrails namespace
 
@@ -1005,7 +1011,7 @@ value: (output, context: AssertionValueFunctionContext) => {
 process.env.LOG_LEVEL = 'debug';
 
 // Or check trace data in assertions
-const result = await runAssertion({
+const result = await assertions.runAssertion({
   // ...
   traceData: trace,  // Access timing information
 });

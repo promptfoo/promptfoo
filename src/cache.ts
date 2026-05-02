@@ -113,33 +113,41 @@ function getNamespacedCache(namespace: string) {
 
   const cache = getCacheInstance();
   const namespacedCache = {
-    ...cache,
-    get: (key: string) => cache.get(getScopedCacheKey(key, namespace)),
-    set: (key: string, value: unknown, ttl?: number) =>
-      cache.set(getScopedCacheKey(key, namespace), value, ttl),
-    del: (key: string) => cache.del(getScopedCacheKey(key, namespace)),
-    mget: <T>(keys: string[]) =>
-      cache.mget<T>(keys.map((key) => getScopedCacheKey(key, namespace))),
-    mset: async <T>(list: Array<{ key: string; value: T; ttl?: number }>) => {
-      const scopedList = list.map(({ key, value, ttl }) => ({
-        key: getScopedCacheKey(key, namespace),
-        value,
-        ttl,
-      }));
-      const savedList = await cache.mset<T>(scopedList);
-      return (savedList ?? scopedList).map(({ key, value, ttl }) => ({
-        key: getUnscopedCacheKey(key, namespace),
-        value,
-        ttl,
-      }));
-    },
-    mdel: (keys: string[]) => cache.mdel(keys.map((key) => getScopedCacheKey(key, namespace))),
-    ttl: (key: string) => cache.ttl(getScopedCacheKey(key, namespace)),
-    clear: () => clearNamespacedCache(cache, namespace),
-    wrap: (...args: Parameters<Cache['wrap']>) =>
-      cache.wrap(
-        getScopedCacheKey(args[0] as string, namespace),
-        ...(args.slice(1) as Parameters<Cache['wrap']> extends [string, ...infer Rest]
+    /**
+     * Fetch a URL with automatic caching.
+     *
+     * Caches HTTP responses with configurable TTL. Useful for fetching external
+     * data files, embeddings, or API responses that don't change frequently.
+     *
+     * @param url URL to fetch
+     * @param options Fetch options (method, headers, body, etc.)
+     * @param timeout Request timeout in milliseconds (default: standard timeout)
+     * @param format Response format: 'json' or 'text' (default: 'json')
+     * @param bust Bypass cache for this request (default: false)
+     * @param maxRetries Maximum number of retries on transient errors
+     *
+     * @returns FetchWithCacheResult with data, cache status, and HTTP metadata
+     *
+     * @example
+     * ```typescript
+     * import { cache } from 'promptfoo';
+     *
+     * // Fetch with 1-hour TTL
+     * const result = await cache.fetchWithCache(
+     *   'https://api.example.com/data',
+     *   { method: 'GET' },
+     *   undefined,
+     *   'json'
+     * );
+     *
+     * console.log(result.cached); // true if from cache
+     * console.log(result.data); // the fetched data
+     * console.log(result.status); // HTTP status code
+     * ```
+     *
+     * @see withCacheNamespace for cache isolation
+     * @see enableCache / disableCache for cache control
+     */
           ? Rest
           : never),
       ),
@@ -553,7 +561,16 @@ async function prepareFetchResponse(
  *   undefined,
  *   'json'
  * );
- *\n * console.log(result.cached);  // true if from cache\n * console.log(result.data);    // the fetched data\n * console.log(result.status);  // HTTP status code\n * ```\n *\n * @see withCacheNamespace for cache isolation\n * @see enableCache / disableCache for cache control\n */\nexport async function fetchWithCache<T = unknown>(
+ *
+ * console.log(result.cached); // true if from cache
+ * console.log(result.data); // the fetched data
+ * console.log(result.status); // HTTP status code
+ * ```
+ *
+ * @see withCacheNamespace for cache isolation
+ * @see enableCache / disableCache for cache control
+ */
+export async function fetchWithCache<T = unknown>(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number = getRequestTimeoutMs(),

@@ -63,7 +63,7 @@ await evaluate({
 
 ---
 
-### 2. **`runAssertion(params)`** ⭐
+### 2. **`assertions.runAssertion(params)`** ⭐
 
 Test a single output.
 
@@ -167,8 +167,8 @@ await cache.withCacheNamespace('v1', async () => {
 | Function | Purpose | Stability |
 |----------|---------|-----------|
 | `evaluate()` | Run full test suite | ✅ Stable |
-| `runAssertion()` | Test single output | ✅ Stable |
-| `runAssertions()` | Test multiple assertions | ✅ Stable |
+| `assertions.runAssertion()` | Test single output | ✅ Stable |
+| `assertions.runAssertions()` | Test multiple assertions | ✅ Stable |
 
 ### Provider Functions
 
