@@ -5,7 +5,7 @@ import path from 'path';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
-import { setLogCallback } from '../../src/logger';
+import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
@@ -50,6 +50,7 @@ vi.mock('../../src/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+  clearLogCallbackIfOwned: vi.fn(),
   setLogCallback: vi.fn(),
   setLogLevel: vi.fn(),
 }));
@@ -410,7 +411,7 @@ describe('doRedteamRun', () => {
 
       await expect(doRedteamRun({})).rejects.toThrow('eval failed');
 
-      expect(setLogCallback).toHaveBeenCalledWith(null);
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(null);
       expect(mockCleanup).toHaveBeenCalled();
     });
 
@@ -422,7 +423,7 @@ describe('doRedteamRun', () => {
       await expect(doRedteamRun({ logCallback: mockLogCallback })).rejects.toThrow('eval failed');
 
       expect(setLogCallback).toHaveBeenNthCalledWith(1, mockLogCallback);
-      expect(setLogCallback).toHaveBeenLastCalledWith(null);
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(mockLogCallback);
     });
   });
 
