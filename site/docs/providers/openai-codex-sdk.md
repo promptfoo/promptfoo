@@ -101,7 +101,7 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now u
 
 ### Basic Usage
 
-By default, the Codex SDK runs in the current working directory and requires that directory to be inside a Git repository unless you disable the check. For pure code-generation evals that should not touch the filesystem, use `sandbox_mode: read-only`.
+By default, the Codex SDK runs in the current working directory and requires that directory to be inside a Git repository unless you disable the check. When you set `working_dir`, relative values are resolved from the directory containing the config file. For pure code-generation evals that should not touch the filesystem, use `sandbox_mode: read-only`.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -652,7 +652,7 @@ tests:
         value: token-skill
 ```
 
-The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional. They are useful when you want to run the same config from a different current working directory, such as the repository root in CI.
+The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional. `working_dir` paths in the config resolve from the config file's directory, so `CODEX_SKILLS_WORKING_DIR` is mainly useful when you want to point at a different sample project. Codex resolves `CODEX_HOME` itself, so set `CODEX_HOME_OVERRIDE` to an absolute path when you run the example from another working directory or want Codex to use a different home directory.
 
 :::note
 
