@@ -44,6 +44,7 @@ import { isUuid } from '../util/uuid';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
+import { getFailingGroups, groupResultsByTest } from './eval/repeatPassRate';
 import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
@@ -950,6 +951,27 @@ export async function doEval(
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
         return ret;
+      }
+
+      const repeatPassRateThreshold = getEnvFloat('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
+      if (repeatPassRateThreshold !== undefined && repeat > 1) {
+        const results = await evalRecord.getResults();
+        const groups = groupResultsByTest(results);
+        const failing = getFailingGroups(groups, repeatPassRateThreshold);
+
+        if (failing.length > 0) {
+          logger.info(chalk.white('Per-test repeat pass rate check failed:'));
+          for (const group of failing) {
+            const groupPassRate = (group.pass / group.total) * 100;
+            logger.info(
+              chalk.white(
+                `  ${chalk.cyan(group.description)}: ${chalk.red.bold(groupPassRate.toFixed(2))}${chalk.red('%')} (${group.pass}/${group.total}) is below threshold of ${chalk.red.bold(String(repeatPassRateThreshold))}${chalk.red('%')}`,
+              ),
+            );
+          }
+          process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+          return ret;
+        }
       }
     }
     if (testSuite.redteam) {
