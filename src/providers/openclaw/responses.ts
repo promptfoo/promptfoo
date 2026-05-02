@@ -1,4 +1,4 @@
-import { calculateOpenAIUsageCost } from '../openai/billing';
+import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from '../openai/billing';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import {
   buildOpenClawModelName,
@@ -111,9 +111,13 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
     };
     const billingModelName = this.getBillingModelName(config);
     const responseCost = calculateOpenAIUsageCost(billingModelName, config, billingUsage, {
+      cachedResponse: result.cached,
       serviceTier:
         (result.raw as { service_tier?: string | null })?.service_tier ?? config.service_tier,
     });
+    const observableToolCost = result.cached
+      ? 0
+      : calculateObservableOpenAIToolCost(result.raw, billingModelName, config);
 
     return {
       ...result,
@@ -128,7 +132,7 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
             },
           }
         : result.tokenUsage,
-      ...(responseCost === undefined ? {} : { cost: responseCost }),
+      ...(responseCost === undefined ? {} : { cost: responseCost + observableToolCost }),
     };
   }
 

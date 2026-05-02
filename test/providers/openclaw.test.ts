@@ -1022,6 +1022,70 @@ describe('OpenClaw Provider', () => {
       });
       expect(result.cost).toBeGreaterThan(0);
     });
+
+    it('should preserve hosted tool cost when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+            {
+              type: 'file_search_call',
+              status: 'completed',
+            },
+          ],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeGreaterThan(0.0025);
+    });
+
+    it('should preserve zero cost for cached responses when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBe(0);
+    });
   });
 
   describe('OpenClawEmbeddingProvider', () => {

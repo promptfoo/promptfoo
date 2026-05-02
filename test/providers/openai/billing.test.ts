@@ -26,6 +26,9 @@ describe('OpenAI billing helpers', () => {
     ).toEqual({
       totalInputTokens: 220,
       cachedInputTokens: 12,
+      cachedTextInputTokens: 0,
+      cachedAudioInputTokens: 0,
+      cachedImageInputTokens: 0,
       textInputTokens: 20,
       audioInputTokens: 6,
       imageInputTokens: 194,
@@ -45,6 +48,11 @@ describe('OpenAI billing helpers', () => {
           text_tokens: 21,
           audio_tokens: 9,
           cached_tokens: 4,
+          cached_tokens_details: {
+            text_tokens: 3,
+            audio_tokens: 1,
+            image_tokens: 0,
+          },
         },
         output_token_details: {
           text_tokens: 16,
@@ -54,6 +62,9 @@ describe('OpenAI billing helpers', () => {
     ).toEqual({
       totalInputTokens: 30,
       cachedInputTokens: 4,
+      cachedTextInputTokens: 3,
+      cachedAudioInputTokens: 1,
+      cachedImageInputTokens: 0,
       textInputTokens: 21,
       audioInputTokens: 9,
       imageInputTokens: 0,
@@ -229,6 +240,38 @@ describe('OpenAI billing helpers', () => {
 
     expect(cost).toBeCloseTo(
       (900 * 0.6 + 100 * 0.06 + 20 * 10 + 10 * 0.8 + 20 * 2.4 + 10 * 20) / 1e6,
+      10,
+    );
+  });
+
+  it('uses explicit cached modality splits when realtime payloads provide them', () => {
+    const cost = calculateOpenAIUsageCost(
+      'gpt-realtime-mini',
+      {},
+      {
+        input_tokens: 1_030,
+        output_tokens: 30,
+        input_token_details: {
+          text_tokens: 1_000,
+          audio_tokens: 20,
+          image_tokens: 10,
+          cached_tokens: 100,
+          cached_tokens_details: {
+            text_tokens: 70,
+            audio_tokens: 20,
+            image_tokens: 10,
+          },
+        },
+        output_token_details: {
+          text_tokens: 20,
+          audio_tokens: 10,
+        },
+      },
+      {},
+    );
+
+    expect(cost).toBeCloseTo(
+      (930 * 0.6 + 70 * 0.06 + 20 * 0.3 + 10 * 0.08 + 20 * 2.4 + 10 * 20) / 1e6,
       10,
     );
   });

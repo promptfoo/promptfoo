@@ -31,6 +31,9 @@ export type OpenAIProcessingTier = 'standard' | 'batch' | 'flex' | 'priority';
 export type OpenAIBillingUsage = {
   totalInputTokens: number;
   cachedInputTokens: number;
+  cachedTextInputTokens: number;
+  cachedAudioInputTokens: number;
+  cachedImageInputTokens: number;
   textInputTokens: number;
   audioInputTokens: number;
   imageInputTokens: number;
@@ -521,10 +524,14 @@ export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
     outputDetails.text_tokens ??
       Math.max(totalOutputTokens - audioOutputTokens - imageOutputTokens, 0),
   );
+  const cachedInputDetails = inputDetails.cached_tokens_details ?? {};
 
   return {
     totalInputTokens,
     cachedInputTokens: getNumericValue(inputDetails.cached_tokens ?? usage.cached_input_tokens),
+    cachedTextInputTokens: getNumericValue(cachedInputDetails.text_tokens),
+    cachedAudioInputTokens: getNumericValue(cachedInputDetails.audio_tokens),
+    cachedImageInputTokens: getNumericValue(cachedInputDetails.image_tokens),
     textInputTokens,
     audioInputTokens,
     imageInputTokens,
@@ -543,6 +550,16 @@ function splitCachedInputTokens(
       textInputTokens: 0,
       audioInputTokens: 0,
       imageInputTokens: 0,
+    };
+  }
+
+  const explicitCachedInputTokens =
+    usage.cachedTextInputTokens + usage.cachedAudioInputTokens + usage.cachedImageInputTokens;
+  if (explicitCachedInputTokens > 0) {
+    return {
+      textInputTokens: Math.min(usage.cachedTextInputTokens, usage.textInputTokens),
+      audioInputTokens: Math.min(usage.cachedAudioInputTokens, usage.audioInputTokens),
+      imageInputTokens: Math.min(usage.cachedImageInputTokens, usage.imageInputTokens),
     };
   }
 
@@ -570,8 +587,8 @@ function splitCachedInputTokens(
     };
   }
 
-  // OpenAI currently reports a single cached-token count rather than a per-modality split.
-  // Attribute mixed-modality cached input to text so the total remains deterministic.
+  // Older payloads expose only a total cached-token count.
+  // Attribute mixed-modality cached input to text so the fallback remains deterministic.
   return {
     textInputTokens: Math.min(usage.cachedInputTokens, usage.textInputTokens),
     audioInputTokens: 0,
