@@ -228,7 +228,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
     // Load tools before creating WebSocket Promise
     const fileTools =
-      !toolsDisabled && config.tools
+      config.tools && (!toolsDisabled || !isExternalToolFile(config.tools))
         ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
         : [];
     const normalizedTools = Array.isArray(fileTools)
@@ -819,4 +819,8 @@ export class GoogleLiveProvider implements ApiProvider {
       throw error; // Re-throw so caller can handle fallback behavior
     }
   }
+}
+
+function isExternalToolFile(tools: unknown): tools is string {
+  return typeof tools === 'string' && tools.startsWith('file://');
 }

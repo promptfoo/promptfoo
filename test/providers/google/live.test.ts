@@ -613,6 +613,36 @@ describe('GoogleLiveProvider', () => {
     expect(mockFetchWithProxy).not.toHaveBeenCalled();
   });
 
+  it('should preserve non-function tools when function calling is disabled', async () => {
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tool_choice: 'none',
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setImmediate(() => {
+          mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
+        });
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('Use search but no functions');
+
+    const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(sentMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+    expect(sentMessage.setup.tools).toEqual([{ googleSearch: {} }]);
+  });
+
   it('should honor prompt-level disabled-tool overrides', async () => {
     const mockAddNumbers = vi.fn().mockResolvedValue({ sum: 11 });
 

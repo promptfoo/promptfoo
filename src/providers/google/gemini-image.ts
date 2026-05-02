@@ -10,6 +10,7 @@ import {
   loadCredentials,
   normalizeSafetySettings,
   normalizeTools,
+  removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
@@ -271,8 +272,14 @@ export class GeminiImageProvider implements ApiProvider {
       body.toolConfig = toolConfig;
     }
 
-    if (!toolsDisabled && Array.isArray(this.config.tools) && this.config.tools.length > 0) {
-      body.tools = normalizeTools(this.config.tools);
+    if (Array.isArray(this.config.tools) && this.config.tools.length > 0) {
+      const normalizedTools = normalizeTools(this.config.tools);
+      const requestTools = toolsDisabled
+        ? removeGoogleFunctionDeclarations(normalizedTools)
+        : normalizedTools;
+      if (requestTools.length > 0) {
+        body.tools = requestTools;
+      }
     }
 
     return body;
