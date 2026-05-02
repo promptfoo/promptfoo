@@ -153,24 +153,27 @@ export function mergeGoogleCompletionOptions(
     ...promptConfig,
   };
 
-  if (
-    promptConfig &&
-    (Object.prototype.hasOwnProperty.call(promptConfig, 'tool_choice') ||
-      Object.prototype.hasOwnProperty.call(promptConfig, 'toolConfig') ||
-      Object.prototype.hasOwnProperty.call(promptConfig, 'tool_config'))
-  ) {
+  // When the prompt explicitly sets any tool-policy field, replace the entire
+  // base policy so semantics from base (e.g. allowedFunctionNames) don't leak
+  // through under a different field name. We treat `undefined` as "not set" so
+  // a defaulted variable like `{ tool_choice: undefined }` doesn't blank the base.
+  const promptHasToolChoice = promptConfig?.tool_choice !== undefined;
+  const promptHasToolConfig = promptConfig?.toolConfig !== undefined;
+  const promptHasSnakeToolConfig = promptConfig?.tool_config !== undefined;
+
+  if (promptHasToolChoice || promptHasToolConfig || promptHasSnakeToolConfig) {
     delete mergedConfig.tool_choice;
     delete mergedConfig.toolConfig;
     delete mergedConfig.tool_config;
 
-    if (Object.prototype.hasOwnProperty.call(promptConfig, 'tool_choice')) {
-      mergedConfig.tool_choice = promptConfig.tool_choice;
+    if (promptHasToolChoice) {
+      mergedConfig.tool_choice = promptConfig!.tool_choice;
     }
-    if (Object.prototype.hasOwnProperty.call(promptConfig, 'toolConfig')) {
-      mergedConfig.toolConfig = promptConfig.toolConfig;
+    if (promptHasToolConfig) {
+      mergedConfig.toolConfig = promptConfig!.toolConfig;
     }
-    if (Object.prototype.hasOwnProperty.call(promptConfig, 'tool_config')) {
-      mergedConfig.tool_config = promptConfig.tool_config;
+    if (promptHasSnakeToolConfig) {
+      mergedConfig.tool_config = promptConfig!.tool_config;
     }
   }
 

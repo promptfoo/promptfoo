@@ -20,9 +20,12 @@ import {
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
   resolveProjectId,
   sanitizeSchemaForGemini,
   validateFunctionCall,
@@ -2834,6 +2837,98 @@ describe('util', () => {
         { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
         { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
       ]);
+    });
+  });
+
+  describe('resolveGoogleToolConfig', () => {
+    it('any disable signal forces NONE, even when explicit toolConfig says AUTO', () => {
+      // Documents the safety bias: a "no tools" signal from any source wins.
+      // If this needs to flip, update the test with the new precedence rule.
+      const result = resolveGoogleToolConfig({
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        tool_choice: 'none',
+      });
+      expect(result).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        toolsDisabled: true,
+      });
+    });
+
+    it('preserves AUTO when no disable signal is present', () => {
+      const result = resolveGoogleToolConfig({
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+      });
+      expect(result).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        toolsDisabled: false,
+      });
+    });
+
+    it('falls back to tool_choice when explicit toolConfig has invalid mode', () => {
+      const result = resolveGoogleToolConfig({
+        toolConfig: { functionCallingConfig: { mode: 'BOGUS' as any } },
+        tool_choice: 'required',
+      });
+      expect(result).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        toolsDisabled: false,
+      });
+    });
+  });
+
+  describe('removeGoogleFunctionDeclarations', () => {
+    it('drops tools that only contain functionDeclarations', () => {
+      const tools = [{ functionDeclarations: [{ name: 'foo' }] }, { googleSearch: {} }] as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('drops empty functionDeclarations entries', () => {
+      const tools = [{ functionDeclarations: [] }] as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([]);
+    });
+
+    it('strips functionDeclarations from mixed-capability tool entries', () => {
+      const tools = [
+        {
+          functionDeclarations: [{ name: 'foo' }],
+          googleSearch: {},
+        },
+      ] as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('passes through non-function tools unchanged', () => {
+      const tools = [{ googleSearch: {} }, { codeExecution: {} }] as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([
+        { googleSearch: {} },
+        { codeExecution: {} },
+      ]);
+    });
+  });
+
+  describe('mergeGoogleCompletionOptions', () => {
+    it('treats prompt-level undefined as "not set" and preserves base policy', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        },
+        { tool_choice: undefined } as any,
+      );
+      expect(merged.toolConfig).toEqual({ functionCallingConfig: { mode: 'AUTO' } });
+      expect(merged.tool_choice).toBeUndefined();
+    });
+
+    it('replaces all three policy fields when prompt sets any one explicitly', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+          tool_config: { function_calling_config: { mode: 'AUTO' } },
+        },
+        { tool_choice: 'none' },
+      );
+      expect(merged.tool_choice).toBe('none');
+      expect(merged.toolConfig).toBeUndefined();
+      expect(merged.tool_config).toBeUndefined();
     });
   });
 });

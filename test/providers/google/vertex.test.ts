@@ -394,6 +394,105 @@ describe('VertexChatProvider.callGeminiApi', () => {
     );
   });
 
+  it.each([
+    ['tool_choice', 'none' as const],
+    ['toolConfig', { functionCallingConfig: { mode: 'NONE' as const } }],
+    ['tool_config', { function_calling_config: { mode: 'none' as const } }],
+  ])('should disable function calling via %s', async (key, value) => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'get_weather',
+            description: 'Get weather information',
+            parameters: { type: 'OBJECT' as const, properties: {} },
+          },
+        ],
+      },
+      { googleSearch: {} },
+    ];
+
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tools,
+        [key]: value,
+      } as any,
+    });
+
+    const mockResponse = {
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
+          usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
+        },
+      ],
+    };
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((c) => c as any);
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callGeminiApi('hi');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tools: [{ googleSearch: {} }],
+        }),
+      }),
+    );
+  });
+
+  it('should not invoke functionToolCallbacks when tools are disabled', async () => {
+    // Use a cached response so executeFunctionCallback would normally fire if not gated.
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({
+        cached: true,
+        output: JSON.stringify({
+          functionCall: { name: 'should_not_run', args: '{}' },
+        }),
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      }),
+    );
+
+    const callback = vi.fn().mockResolvedValue('should not be called');
+
+    const provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tool_choice: 'none',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'should_not_run',
+                description: 'Test',
+                parameters: { type: 'OBJECT', properties: {} },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: { should_not_run: callback },
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(callback).not.toHaveBeenCalled();
+    // Output remains the original functionCall envelope when callbacks are gated.
+    expect(result.output).toBe(
+      JSON.stringify({ functionCall: { name: 'should_not_run', args: '{}' } }),
+    );
+
+    // Reset cache state so other tests aren't affected.
+    mockIsCacheEnabled.mockReturnValue(false);
+    mockCacheGet.mockReset();
+  });
+
   it('should load tools from external file and render variables', async () => {
     const mockExternalTools = [
       {

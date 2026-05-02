@@ -613,6 +613,44 @@ describe('GoogleLiveProvider', () => {
     expect(mockFetchWithProxy).not.toHaveBeenCalled();
   });
 
+  it('should not load arrays containing file:// references when tools are disabled', async () => {
+    const mockSpawn = vi.mocked((await import('child_process')).spawn);
+    mockImportModule.mockReset();
+
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tool_choice: 'none',
+        // Mixed array: an inline tool and a file:// reference. Without the
+        // recursive guard, maybeLoadToolsFromExternalFile would still execute
+        // the JS module to load tool definitions.
+        tools: [{ googleSearch: {} }, 'file://tools.js:getTools'] as any,
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setImmediate(() => {
+          mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
+        });
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('Do not use tools');
+
+    const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(sentMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+    expect(sentMessage.setup.tools).toBeUndefined();
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(mockImportModule).not.toHaveBeenCalled();
+  });
+
   it('should preserve non-function tools when function calling is disabled', async () => {
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
@@ -694,9 +732,18 @@ describe('GoogleLiveProvider', () => {
     expect(sentMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
     expect(sentMessage.setup.tools).toBeUndefined();
     expect(mockAddNumbers).not.toHaveBeenCalled();
-    expect(
-      mockWs.send.mock.calls.some(([message]) => !!JSON.parse(message as string).tool_response),
-    ).toBe(false);
+
+    // The provider should reply with an error tool_response so the model can
+    // complete its turn instead of stalling until the websocket times out.
+    const toolResponses = mockWs.send.mock.calls
+      .map(([message]) => JSON.parse(message as string))
+      .filter((m) => m.tool_response);
+    expect(toolResponses).toHaveLength(1);
+    expect(toolResponses[0].tool_response.function_responses).toEqual({
+      id: 'function-call-disabled',
+      name: 'addNumbers',
+      response: { error: 'Tool calls are disabled for this request.' },
+    });
   });
 
   it('should execute prompt-level function callbacks', async () => {

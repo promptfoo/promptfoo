@@ -382,10 +382,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,

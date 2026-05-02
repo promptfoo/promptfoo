@@ -226,9 +226,12 @@ export class GoogleLiveProvider implements ApiProvider {
       }
     }
 
-    // Load tools before creating WebSocket Promise
+    // Load tools before creating WebSocket Promise.
+    // When tools are disabled, skip the loader entirely if config.tools contains any
+    // file:// reference — maybeLoadToolsFromExternalFile recursively executes Python/JS
+    // for those refs, which is exactly the side effect we want to avoid.
     const fileTools =
-      config.tools && (!toolsDisabled || !isExternalToolFile(config.tools))
+      config.tools && (!toolsDisabled || !containsExternalToolFile(config.tools))
         ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
         : [];
     const normalizedTools = Array.isArray(fileTools)
@@ -570,7 +573,24 @@ export class GoogleLiveProvider implements ApiProvider {
             ws.send(JSON.stringify(contentMessage));
           } else if (response.toolCall?.functionCalls) {
             if (toolsDisabled) {
+              // Reply with an error tool_response so the model can complete its turn
+              // instead of waiting for a response that will never come (which would
+              // otherwise stall the websocket until the 30s timeoutMs fires).
               logger.warn('Ignoring function calls received while tools are disabled.');
+              for (const functionCall of response.toolCall.functionCalls) {
+                if (functionCall?.id && functionCall.name) {
+                  const toolMessage = {
+                    tool_response: {
+                      function_responses: {
+                        id: functionCall.id,
+                        name: functionCall.name,
+                        response: { error: 'Tool calls are disabled for this request.' },
+                      },
+                    },
+                  };
+                  ws.send(JSON.stringify(toolMessage));
+                }
+              }
             } else {
               for (const functionCall of response.toolCall.functionCalls) {
                 function_calls_total.push(functionCall);
@@ -823,4 +843,14 @@ export class GoogleLiveProvider implements ApiProvider {
 
 function isExternalToolFile(tools: unknown): tools is string {
   return typeof tools === 'string' && tools.startsWith('file://');
+}
+
+function containsExternalToolFile(tools: unknown): boolean {
+  if (isExternalToolFile(tools)) {
+    return true;
+  }
+  if (Array.isArray(tools)) {
+    return tools.some(containsExternalToolFile);
+  }
+  return false;
 }
