@@ -107,7 +107,17 @@ describe('XAI Image Provider', () => {
       const provider = new XAIImageProvider('grok-imagine-image', {
         config: { region: 'eu-west-1' },
       });
+      // The OpenAI base reads `apiBaseUrl` directly, so the regional URL must be
+      // baked in at construction time — not just exposed via getApiUrlDefault().
+      expect(provider.getApiUrl()).toBe('https://eu-west-1.api.x.ai/v1');
       expect(provider.getApiUrlDefault()).toBe('https://eu-west-1.api.x.ai/v1');
+    });
+
+    it('user-provided apiBaseUrl wins over region', () => {
+      const provider = new XAIImageProvider('grok-imagine-image', {
+        config: { region: 'eu-west-1', apiBaseUrl: 'https://my-proxy.example.com/v1' },
+      });
+      expect(provider.getApiUrl()).toBe('https://my-proxy.example.com/v1');
     });
 
     it('uses correct model mapping', () => {

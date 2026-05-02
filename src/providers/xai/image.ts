@@ -39,15 +39,24 @@ export class XAIImageProvider extends OpenAiImageProvider {
     modelName: string,
     options: { config?: XaiImageOptions; id?: string; env?: EnvOverrides } = {},
   ) {
+    const userConfig = options.config || {};
+    // Resolve the base URL up front so `region` actually takes effect: the OpenAI
+    // base provider reads `config.apiBaseUrl` directly and never calls our
+    // `getApiUrlDefault()` when it's set, so an unconditional default would
+    // silently swallow a regional override.
+    const apiBaseUrl =
+      userConfig.apiBaseUrl ??
+      (userConfig.region ? `https://${userConfig.region}.api.x.ai/v1` : 'https://api.x.ai/v1');
+
     super(modelName, {
       ...options,
       config: {
-        ...options.config,
+        ...userConfig,
         apiKeyEnvar: 'XAI_API_KEY',
-        apiBaseUrl: 'https://api.x.ai/v1',
+        apiBaseUrl,
       },
     });
-    this.config = options.config || {};
+    this.config = userConfig;
   }
 
   getApiKey(): string | undefined {
