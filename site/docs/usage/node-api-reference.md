@@ -143,16 +143,40 @@ console.log(response.output);
 
 ---
 
-To load several providers for manual testing, call `loadApiProvider()` for each one:
+### `loadApiProviders(providers, options?)`
+
+Load multiple providers in parallel. Accepts the same `ProvidersConfig` shape that `evaluate()` uses internally, so you can mix string identifiers with inline config objects or functions.
 
 ```typescript
-import { loadApiProvider } from 'promptfoo';
+async function loadApiProviders(
+  providers: ProvidersConfig,
+  options?: { env?: Record<string, string> },
+): Promise<ApiProvider[]>;
+```
 
-const providers = await Promise.all(
-  ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'].map((providerPath) =>
-    loadApiProvider(providerPath),
-  ),
-);
+**Parameters:**
+
+- `providers`: Array of provider identifiers or config objects
+- `options`: Optional environment overrides
+
+**Returns:** Array of configured provider instances
+
+**Example:**
+
+```typescript
+import { loadApiProviders } from 'promptfoo';
+
+const providers = await loadApiProviders([
+  'openai:chat:gpt-5.5',
+  'anthropic:messages:claude-opus-4-7',
+  {
+    id: 'custom-provider',
+    config: {
+      model: 'my-model',
+      temperature: 0.7,
+    },
+  },
+]);
 
 for (const provider of providers) {
   const result = await provider.callApi('Test');
@@ -866,13 +890,12 @@ const evalRecord = await evaluate({
 Load providers and test in parallel:
 
 ```typescript
-import { assertions, loadApiProvider } from 'promptfoo';
+import { assertions, loadApiProviders } from 'promptfoo';
 
-const providers = await Promise.all(
-  ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'].map((providerPath) =>
-    loadApiProvider(providerPath),
-  ),
-);
+const providers = await loadApiProviders([
+  'openai:chat:gpt-5.5',
+  'anthropic:messages:claude-opus-4-7',
+]);
 
 const testCases = ['2+2=?', 'What is AI?'];
 
@@ -975,7 +998,7 @@ import type {
 ### Stable APIs (Safe for production)
 
 - `evaluate()`
-- `loadApiProvider()`
+- `loadApiProvider()`, `loadApiProviders()`
 - `assertions.runAssertion()`, `assertions.runAssertions()`
 - Cache namespace functions
 - Guardrails namespace
