@@ -217,9 +217,9 @@ describe('ModelAuditHistory', () => {
     expect(screen.getByText('Issues Found')).toBeInTheDocument();
   });
 
-  it('should show issues found when failed checks exist without issue rows', () => {
+  it('should show issues found for persisted failed-check-only scans', () => {
     const failedChecksOnly = {
-      ...createMockScan('failed', 'Failed Checks Only', false),
+      ...createMockScan('failed', 'Failed Checks Only', true),
       failedChecks: 1,
       results: {
         path: '/test',

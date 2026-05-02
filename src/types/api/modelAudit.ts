@@ -90,6 +90,16 @@ export const ScanRequestSchema = z.object({
       name: z.string().optional(),
       author: z.string().optional(),
     })
+    .superRefine((options, ctx) => {
+      if (options.maxTotalSize !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['maxTotalSize'],
+          message:
+            'options.maxTotalSize is no longer supported. Use options.maxSize for the scanner limit.',
+        });
+      }
+    })
     .optional()
     .default({}),
 });

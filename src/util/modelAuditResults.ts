@@ -44,9 +44,13 @@ export function getModelAuditVerdict(results: ModelAuditScanResults): {
   const hasBlockingIssue = issues.some(
     (issue) => issue.severity === 'critical' || issue.severity === 'error',
   );
+  const hasReviewableIssue = issues.some(
+    (issue) =>
+      issue.severity === 'critical' || issue.severity === 'error' || issue.severity === 'warning',
+  );
 
   return {
-    hasFindings: Boolean(results.has_errors || hasFailedChecks || issues.length > 0),
+    hasFindings: Boolean(results.has_errors || hasFailedChecks || hasReviewableIssue),
     hasErrors: Boolean(results.has_errors || hasFailedChecks || hasBlockingIssue),
     hasFailedChecks,
   };

@@ -99,6 +99,11 @@ export const hasModelAuditFindings = (results: {
     results.has_errors ||
       (results.failed_checks ?? results.failedChecks ?? 0) > 0 ||
       results.checks?.some((check) => check.status === 'failed') ||
-      (results.issues?.length ?? 0) > 0,
+      results.issues?.some(
+        (issue) =>
+          issue.severity === 'critical' ||
+          issue.severity === 'error' ||
+          issue.severity === 'warning',
+      ),
   );
 };

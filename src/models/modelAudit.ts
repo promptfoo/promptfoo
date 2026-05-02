@@ -83,7 +83,7 @@ export default class ModelAudit {
     this.checks = data.checks || data.results?.checks || null;
     this.issues = data.issues || data.results?.issues || null;
 
-    // Ensure hasErrors is properly set based on actual critical/error findings
+    // Preserve non-clean scan outcomes for callers that still read the legacy hasErrors field.
     const issues = data.issues || data.results?.issues;
     const verdict = getModelAuditVerdict({
       ...(data.results ?? {}),
@@ -131,8 +131,8 @@ export default class ModelAudit {
     const createdAtDate = new Date(now);
     const id = createScanId(createdAtDate);
 
-    // Ensure hasErrors is properly set based on actual critical/error findings
-    const hasActualErrors = getModelAuditVerdict(params.results).hasFindings;
+    // Preserve non-clean scan outcomes for callers that still read the legacy hasErrors field.
+    const hasFindings = getModelAuditVerdict(params.results).hasFindings;
 
     const data = {
       id,
@@ -145,7 +145,7 @@ export default class ModelAudit {
       results: params.results,
       checks: params.results.checks || null,
       issues: params.results.issues || null,
-      hasErrors: hasActualErrors,
+      hasErrors: hasFindings,
       totalChecks: params.results.total_checks || null,
       passedChecks: params.results.passed_checks || null,
       failedChecks: params.results.failed_checks || null,
@@ -253,6 +253,17 @@ export default class ModelAudit {
 
     logger.debug(`Found existing scan for ${modelId} (id: ${result.id})`);
     return new ModelAudit({ ...result, persisted: true });
+  }
+
+  static async findLatestByModelId(modelId: string): Promise<ModelAudit | null> {
+    const result = await getDb()
+      .select()
+      .from(modelAuditsTable)
+      .where(eq(modelAuditsTable.modelId, modelId))
+      .orderBy(desc(modelAuditsTable.createdAt))
+      .get();
+
+    return result ? new ModelAudit({ ...result, persisted: true }) : null;
   }
 
   /**

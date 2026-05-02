@@ -13,7 +13,7 @@ import telemetry from '../../telemetry';
 import { ModelAuditSchemas } from '../../types/api/modelAudit';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
 import { parseCompleteModelAuditResults } from '../../util/modelAuditResults';
-import { sendError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';
@@ -195,7 +195,7 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = ModelAuditSchemas.Scan.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    replyValidationError(res, bodyResult.error);
     return;
   }
 
@@ -249,28 +249,22 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       return;
     }
 
-    if (options.maxTotalSize !== undefined) {
-      res.status(400).json({
-        error:
-          'options.maxTotalSize is no longer supported. Use options.maxSize for the scanner limit.',
-      });
-      return;
-    }
-
     const normalizedOptions = {
       ...options,
       maxSize: options.maxSize ?? options.maxFileSize,
     };
 
     // Use the centralized CLI parser to build command arguments
+    const effectiveVerbose = normalizedOptions.verbose !== false;
+    const effectiveTimeout = normalizedOptions.timeout || 3600;
     const { args } = parseModelAuditArgs(resolvedPaths, {
       ...normalizedOptions,
       // Force JSON format for API responses (required for parsing)
       format: 'json',
       // Enable verbose mode by default for better debugging information
-      verbose: normalizedOptions.verbose !== false, // Allow explicit false to disable
+      verbose: effectiveVerbose, // Allow explicit false to disable
       // Set default timeout to 1 hour for large model scans
-      timeout: normalizedOptions.timeout || 3600,
+      timeout: effectiveTimeout,
       // Note: We handle persistence ourselves in this server route
     });
 
@@ -287,8 +281,8 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       hasScannerSelection: Boolean(
         normalizedOptions.scanners?.length || normalizedOptions.excludeScanner?.length,
       ),
-      timeout: normalizedOptions.timeout ?? 0,
-      verbose: normalizedOptions.verbose ?? false,
+      timeout: effectiveTimeout,
+      verbose: effectiveVerbose,
       persist,
     });
 

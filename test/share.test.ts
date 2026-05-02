@@ -305,6 +305,13 @@ describe('determineShareDomain', () => {
 describe('model audit sharing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(envars.getEnvBool).mockReset();
+    vi.mocked(cloudConfig.isEnabled).mockReset();
+    vi.mocked(cloudConfig.getApiHost).mockReset();
+    vi.mocked(cloudConfig.getAppUrl).mockReset();
+    vi.mocked(cloudConfig.getApiKey).mockReset();
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReset();
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReset();
     vi.mocked(envars.getEnvBool).mockReturnValue(false);
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
     vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');

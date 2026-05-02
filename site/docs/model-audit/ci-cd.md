@@ -78,7 +78,7 @@ jobs:
       - name: Get changed model files
         id: changed-files
         run: |
-          MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
+          MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|pmml|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
           CHANGED=$(git diff --name-only --diff-filter=ACM \
             ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | \
             grep -Ei "\.(${MODEL_EXTENSIONS})$" || true)
@@ -185,6 +185,7 @@ jobs:
       - name: Scan models directory
         run: |
           promptfoo scan-model models/ \
+            --no-write \
             --format sarif \
             --output modelaudit.sarif
 
@@ -259,7 +260,7 @@ jobs:
             exit 1
           fi
 
-      - name: Create issue if critical found
+      - name: Create issue if scan fails closed
         if: failure() && steps.check-issues.outputs.critical == 'true'
         uses: actions/github-script@v7
         with:
@@ -267,20 +268,21 @@ jobs:
             const fs = require('fs');
             const results = JSON.parse(fs.readFileSync('scan_results.json', 'utf8'));
 
-            if (results.has_errors && results.issues) {
-              const criticalIssues = results.issues
-                .filter(i => i.severity === 'critical')
+            const issues = Array.isArray(results.issues) ? results.issues : [];
+            const criticalIssues = issues
+                .filter(i => i.severity === 'critical' || i.severity === 'error')
                 .map(i => `- ${i.message}`)
                 .join('\n');
+            const failedCheckCount = results.failed_checks || 0;
+            const findingsSummary = criticalIssues || `- Failed checks: ${failedCheckCount}`;
 
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: '🚨 Critical Model Security Issues Detected',
-                body: `Weekly security scan found critical issues:\n\n${criticalIssues}`,
-                labels: ['security', 'critical', 'model-audit']
-              });
-            }
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Critical Model Security Issues Detected',
+              body: `Weekly security scan found non-clean results:\n\n${findingsSummary}`,
+              labels: ['security', 'critical', 'model-audit']
+            });
 
       - name: Upload artifacts
         if: always()
@@ -360,7 +362,7 @@ model-security-scan:
 
   script:
     - |
-      MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
+      MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|pmml|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
       CHANGED=$(git diff --name-only --diff-filter=ACM $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA | \
         grep -Ei "\.(${MODEL_EXTENSIONS})$" || true)
 
@@ -409,7 +411,7 @@ pipeline {
                 script {
                     def changed = sh(
                         script: '''
-                            MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
+                            MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|pmml|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
                             git diff --name-only HEAD~1 HEAD | \
                             grep -Ei "\\.(${MODEL_EXTENSIONS})$" || true
                         ''',
@@ -489,7 +491,7 @@ jobs:
       - run:
           name: Scan changed models
           command: |
-            MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
+            MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|pmml|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
             CHANGED=$(git diff --name-only origin/main...HEAD | \
               grep -Ei "\.(${MODEL_EXTENSIONS})$" || true)
 

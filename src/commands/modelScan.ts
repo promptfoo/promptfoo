@@ -120,9 +120,9 @@ export async function checkModelAuditInstalled(): Promise<{
 }
 
 /**
- * Determine if scan results contain errors.
+ * Determine if scan results contain any non-clean findings.
  */
-function hasErrorsInResults(results: ModelAuditScanResults): boolean {
+function hasFindingsInResults(results: ModelAuditScanResults): boolean {
   return getModelAuditVerdict(results).hasFindings;
 }
 
@@ -396,7 +396,9 @@ async function checkExistingScan(
 
     const parsed = parseHuggingFaceModel(paths[0]);
     const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : paths[0];
-    const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
+    const existing =
+      (await ModelAudit.findByRevision(modelId, metadata.sha)) ??
+      (await ModelAudit.findLatestByModelId(modelId));
     const huggingFaceRevision = {
       modelId: metadata.modelId,
       sha: metadata.sha,
@@ -605,12 +607,17 @@ async function saveAuditRecord(
     },
   };
 
-  if (existingAudit) {
+  const shouldCreateNewAudit =
+    existingAudit?.contentHash &&
+    revisionInfo.contentHash &&
+    existingAudit.contentHash !== revisionInfo.contentHash;
+
+  if (existingAudit && !shouldCreateNewAudit) {
     // Update existing record with new scan results
     existingAudit.results = results;
     existingAudit.checks = results.checks ?? null;
     existingAudit.issues = results.issues ?? null;
-    existingAudit.hasErrors = hasErrorsInResults(results);
+    existingAudit.hasErrors = hasFindingsInResults(results);
     existingAudit.totalChecks = results.total_checks ?? null;
     existingAudit.passedChecks = results.passed_checks ?? null;
     existingAudit.failedChecks = results.failed_checks ?? null;
@@ -622,6 +629,10 @@ async function saveAuditRecord(
     }
     await existingAudit.save();
     return existingAudit;
+  }
+
+  if (shouldCreateNewAudit) {
+    logger.debug('Creating new audit because model content changed since the previous scan');
   }
 
   return ModelAudit.create({
@@ -705,15 +716,9 @@ async function processJsonResults(
     displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
   }
 
-  // Save to user-specified output file if requested
+  // Save to user-specified output file if requested. Persisted scans always emit
+  // Promptfoo's normalized JSON payload; use --no-write for raw ModelAudit output.
   if (options.output) {
-    if (options.format && options.format !== 'json') {
-      logger.error(
-        `Cannot write ${options.format} output while saving the scan to the database. Re-run with --no-write to preserve the requested report format.`,
-      );
-      return 1;
-    }
-
     try {
       await fs.writeFile(options.output, JSON.stringify(results, null, 2));
       logger.info(`Results also saved to ${options.output}`);

@@ -15,6 +15,9 @@ vi.mock('../../src/database', () => ({
       from: () => ({
         where: () => ({
           get: vi.fn().mockResolvedValue(null),
+          orderBy: () => ({
+            get: vi.fn().mockResolvedValue(null),
+          }),
         }),
         orderBy: () => ({
           all: vi.fn().mockResolvedValue([]),
