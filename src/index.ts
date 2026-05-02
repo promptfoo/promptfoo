@@ -9,6 +9,7 @@ import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
+import { ClaudeCodeSDKProvider } from './providers/claude-agent-sdk';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers/index';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
@@ -51,6 +52,7 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+export type { ClaudeCodeOptions } from './providers/claude-agent-sdk';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
 /**
@@ -310,11 +312,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
-  // Other settings
-  if (options.cache === false) {
-    cache.disableCache();
-  }
-
   const parsedProviderPromptMap = readProviderPromptMap(
     testSuiteConfig,
     constructedTestSuite.prompts,
@@ -333,17 +330,19 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     : new Eval(unifiedConfig, { author });
 
   // Run the eval!
-  const ret = await doEvaluate(
-    {
-      ...constructedTestSuite,
-      providerPromptMap: parsedProviderPromptMap,
-    },
-    evalRecord,
-    {
-      eventSource: 'library',
-      isRedteam: Boolean(testSuiteConfig.redteam),
-      ...options,
-    },
+  const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
+    doEvaluate(
+      {
+        ...constructedTestSuite,
+        providerPromptMap: parsedProviderPromptMap,
+      },
+      evalRecord,
+      {
+        eventSource: 'library',
+        isRedteam: Boolean(testSuiteConfig.redteam),
+        ...options,
+      },
+    ),
   );
 
   // Handle sharing if enabled
@@ -393,7 +392,7 @@ const redteam = {
   run: doRedteamRun,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
+export { assertions, ClaudeCodeSDKProvider, cache, evaluate, guardrails, loadApiProvider, redteam };
 
 export default {
   assertions,

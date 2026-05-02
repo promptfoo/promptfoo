@@ -17,6 +17,7 @@ import {
   fetchWithCache,
   getCache,
   isCacheEnabled,
+  withCacheEnabled,
   withCacheNamespace,
 } from '../src/cache';
 import { fetchWithRetries } from '../src/util/fetch/index';
@@ -285,6 +286,16 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('should scope cache disabling to the current async context', async () => {
+      expect(isCacheEnabled()).toBe(true);
+
+      await withCacheEnabled(false, async () => {
+        expect(isCacheEnabled()).toBe(false);
+      });
+
+      expect(isCacheEnabled()).toBe(true);
+    });
+
     it('should isolate direct cache access by namespace', async () => {
       const cache = getCache();
 

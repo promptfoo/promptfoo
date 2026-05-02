@@ -564,6 +564,13 @@ export interface ClaudeCodeOptions {
   on_elicitation?: OnElicitation;
 
   /**
+   * Callback forwarded to Claude Agent SDK's `canUseTool` option.
+   * Available only in programmatic configs because functions cannot be
+   * represented in YAML.
+   */
+  can_use_tool?: CanUseTool;
+
+  /**
    * Enable beta features. Currently supports:
    * - 'context-1m-2025-08-07' - Enable 1M token context window (Sonnet 4/4.5 only)
    *
@@ -1103,9 +1110,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Create canUseTool callback for ask_user_question convenience option
     // AskUserQuestion is handled via canUseTool per SDK documentation
-    let canUseTool: CanUseTool | undefined;
+    let canUseTool = config.can_use_tool;
     if (config.ask_user_question) {
-      canUseTool = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
+      canUseTool = createAskUserQuestionCanUseTool(
+        config.ask_user_question.behavior,
+        config.can_use_tool,
+      );
     }
 
     // Just the keys we'll use to compute the cache key first

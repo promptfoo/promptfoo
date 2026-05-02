@@ -183,6 +183,7 @@ prompts:
 | `agent_progress_summaries`           | boolean          | Enable periodic AI progress summaries for subagents                                                          | false                    |
 | `settings`                           | string/object    | Additional [settings](#settings) (file path or inline object)                                                | None                     |
 | `managed_settings`                   | object           | Policy-tier [settings](#settings) the SDK loads above user/project layers (for embedders enforcing policy)   | None                     |
+| `can_use_tool`                       | function         | Callback forwarded to Claude Agent SDK's `canUseTool` option (programmatic only)                             | None                     |
 | `on_elicitation`                     | function         | Callback for MCP elicitation requests (programmatic only)                                                    | Auto-decline             |
 | `resume`                             | string           | Resume from a specific session ID                                                                            | None                     |
 | `fork_session`                       | boolean          | Fork from an existing session instead of continuing                                                          | false                    |
@@ -930,8 +931,20 @@ import { ClaudeCodeSDKProvider } from 'promptfoo';
 const provider = new ClaudeCodeSDKProvider({
   config: {
     append_allowed_tools: ['AskUserQuestion'],
+    can_use_tool: async (toolName, input) => {
+      if (toolName !== 'AskUserQuestion') {
+        return { behavior: 'allow', updatedInput: input };
+      }
+
+      return {
+        behavior: 'allow',
+        updatedInput: {
+          ...input,
+          answers: { 'Which environment?': 'Staging' },
+        },
+      };
+    },
   },
-  // Custom canUseTool passed via SDK options
 });
 ```
 

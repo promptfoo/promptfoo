@@ -8,10 +8,9 @@ import telemetry from '../../telemetry';
 import { getConfigFromCloud } from '../../util/cloud';
 import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
+import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 import type { Command } from 'commander';
-
-import type { RedteamRunOptions } from '../types';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
@@ -109,7 +108,7 @@ export function redteamRunCommand(program: Command) {
           error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
-        } else {
+        } else if (!(error instanceof ProbeLimitExceededError)) {
           logger.error(
             `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
               error instanceof Error ? error.stack : ''

@@ -6,7 +6,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { z } from 'zod';
-import { disableCache } from '../../cache';
+import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import {
@@ -52,7 +52,7 @@ import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
-import { PartialGenerationError } from '../types';
+import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -168,9 +168,16 @@ export async function doGenerateRedteam(
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
-    disableCache();
   }
 
+  return withCacheEnabled(options.cache ? undefined : false, () =>
+    doGenerateRedteamInternal(options),
+  );
+}
+
+async function doGenerateRedteamInternal(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<Partial<UnifiedConfig> | null> {
   // Check monthly probe limit for non-cloud users
   const probeLimitResult = checkRedteamProbeLimit();
   if (!probeLimitResult.withinLimit) {
@@ -185,8 +192,7 @@ export async function doGenerateRedteam(
 
       For enterprise plans, contact ${chalk.cyan('inquiries@promptfoo.dev')}
     `);
-    process.exitCode = 1;
-    return null;
+    throw new ProbeLimitExceededError(probeLimitResult.used, MONTHLY_PROBE_LIMIT);
   }
 
   let testSuite: TestSuite;
@@ -1016,7 +1022,7 @@ export function redteamGenerateCommand(
           error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
-        } else {
+        } else if (!(error instanceof ProbeLimitExceededError)) {
           // Log the stack trace, which already includes the error message
           logger.error(
             error instanceof Error && error.stack

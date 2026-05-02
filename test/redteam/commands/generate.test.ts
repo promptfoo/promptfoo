@@ -19,7 +19,7 @@ import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { PartialGenerationError } from '../../../src/redteam/types';
+import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -3679,22 +3679,21 @@ describe('target ID extraction for retry strategy', () => {
         remaining: 0,
       });
 
-      const result = await doGenerateRedteam({
-        config: 'test-config.yaml',
-        output: 'output.yaml',
-        cache: true,
-        force: true,
-      });
+      await expect(
+        doGenerateRedteam({
+          config: 'test-config.yaml',
+          output: 'output.yaml',
+          cache: true,
+          force: true,
+        }),
+      ).rejects.toThrow(ProbeLimitExceededError);
 
-      expect(result).toBeNull();
-      expect(process.exitCode).toBe(1);
+      expect(process.exitCode).toBeUndefined();
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Monthly probe limit reached'),
       );
       expect(synthesize).not.toHaveBeenCalled();
 
-      // Reset
-      process.exitCode = 0;
       vi.mocked(checkRedteamProbeLimit).mockReturnValue({
         withinLimit: true,
         used: 0,

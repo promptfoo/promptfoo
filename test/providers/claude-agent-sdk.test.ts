@@ -1493,6 +1493,59 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('passes through programmatic can_use_tool callbacks', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async (_toolName, input) => ({
+            behavior: 'allow' as const,
+            updatedInput: input,
+          }));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              canUseTool,
+            }),
+          });
+        });
+
+        it('wraps programmatic can_use_tool callbacks for AskUserQuestion automation', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async (_toolName, input) => ({
+            behavior: 'allow' as const,
+            updatedInput: input,
+          }));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: { behavior: 'first_option' },
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls[0][0];
+          await callArgs.options.canUseTool(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: new AbortController().signal, toolUseID: 'test-id' },
+          );
+
+          expect(canUseTool).toHaveBeenCalledWith(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id' },
+          );
+        });
+
         it('with includePartialMessages configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
