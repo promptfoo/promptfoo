@@ -1,8 +1,8 @@
 """Focused tests for provider helper behavior."""
 
-from pathlib import Path
 import sys
 import unittest
+from pathlib import Path
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
 if str(EXAMPLE_DIR) not in sys.path:

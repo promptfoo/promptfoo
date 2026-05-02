@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import contextmanager
 import json
 import os
-from pathlib import Path
 import sys
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Iterator
 
 from google.adk.artifacts import InMemoryArtifactService
@@ -114,7 +114,11 @@ def _provider_span(context: dict[str, Any], otlp_endpoint: str) -> Iterator[None
 
 def _final_text_from_events(events: list[Any]) -> str:
     for event in reversed(events):
-        if not event.is_final_response() or not event.content or not event.content.parts:
+        if (
+            not event.is_final_response()
+            or not event.content
+            or not event.content.parts
+        ):
             continue
         text = "".join(part.text or "" for part in event.content.parts)
         if text.strip():
@@ -241,7 +245,9 @@ async def _run_workflow_provider(
     return {"output": json.dumps(summary, ensure_ascii=False, sort_keys=True)}
 
 
-def call_api(prompt: str, options: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+def call_api(
+    prompt: str, options: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
     """Run the conversational Google ADK example."""
 
     try:
