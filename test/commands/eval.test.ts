@@ -12,6 +12,7 @@ import {
 import { evaluate } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   promptForEmailUnverified,
 } from '../../src/globalConfig/accounts';
@@ -128,6 +129,13 @@ describe('evalCommand', () => {
     program = new Command();
     vi.clearAllMocks();
     chokidarMocks.handlers.clear();
+    chokidarMocks.watcher.on
+      .mockReset()
+      .mockImplementation((event: string, handler: (...args: any[]) => unknown) => {
+        chokidarMocks.handlers.set(event, handler);
+        return chokidarMocks.watcher;
+      });
+    chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
@@ -260,17 +268,56 @@ describe('evalCommand', () => {
         basePath: path.resolve('/'),
       })
       .mockRejectedValueOnce(new ConfigResolutionError('You must provide at least 1 prompt'));
-    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
     const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith('You must provide at least 1 prompt');
+      expect(resolveConfigs).toHaveBeenCalledTimes(2);
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
+  });
+
+  it('should keep watching after email validation fails on a file change', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      redteam: { plugins: ['harmful'] as any },
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { prompt: 'test' } }],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
     await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
 
     const onChange = chokidarMocks.handlers.get('change');
     expect(onChange).toBeDefined();
 
-    await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+    vi.mocked(checkEmailStatusAndMaybeExit).mockRejectedValueOnce(
+      new EmailValidationError('email_verification_required', 'Please verify your email'),
+    );
 
-    expect(loggerErrorSpy).toHaveBeenCalledWith('You must provide at least 1 prompt');
+    await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
     expect(resolveConfigs).toHaveBeenCalledTimes(2);
   });
 
