@@ -37,6 +37,7 @@ import type {
 } from './types/index';
 import type { ApiProvider } from './types/providers';
 
+export { EvalRunError } from './commands/eval';
 export { EmailValidationError } from './globalConfig/accounts';
 export { generateTable } from './table';
 export * from './types/index';

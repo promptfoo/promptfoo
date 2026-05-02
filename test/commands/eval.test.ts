@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest'
 import { disableCache } from '../../src/cache';
 import {
   doEval,
+  EvalRunError,
   evalCommand,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
@@ -243,6 +244,59 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
     expect(runDbMigrations).toHaveBeenCalledTimes(1);
+  });
+
+  it('should throw without mutating process.exitCode for reusable callers', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      await expect(
+        doEval({ resume: true, retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+      ).rejects.toEqual(
+        expect.objectContaining<EvalRunError>({
+          name: 'EvalRunError',
+          exitCode: 1,
+          message: 'Cannot use --resume and --retry-errors together. Please use one or the other.',
+        }),
+      );
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('should preserve CLI exit-code behavior for recoverable eval failures', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      const result = await doEval(
+        { resume: true, retryErrors: true },
+        defaultConfig,
+        defaultConfigPath,
+        {},
+        { isCliInvocation: true },
+      );
+
+      expect(result.persisted).toBe(false);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('should leave SIGINT ownership with reusable callers', async () => {
+    const processOnSpy = vi.spyOn(process, 'on');
+    const mockEvalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    try {
+      await doEval({ write: true }, defaultConfig, defaultConfigPath, {});
+      expect(processOnSpy).not.toHaveBeenCalledWith('SIGINT', expect.any(Function));
+    } finally {
+      processOnSpy.mockRestore();
+    }
   });
 
   it('should handle redteam config', async () => {
