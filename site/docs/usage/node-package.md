@@ -42,10 +42,28 @@ console.log(evalRecord.results);
 support for function-valued prompts, providers, assertions, and transforms. It
 returns the completed eval record, including result rows and any persisted state.
 
+## Runtime options
+
+Pass runtime-only options as the second argument to `evaluate()`:
+
+```ts
+await evaluate(testSuite, {
+  cache: false,
+  maxConcurrency: 2,
+});
+```
+
+See [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions) for
+the supported options. `progressCallback` receives the current row context and
+aggregate prompt metrics; see
+[`RunEvalOptions`](/docs/configuration/reference#runevaloptions) and
+[`PromptMetrics`](/docs/configuration/reference#promptmetrics).
+
 ## Public API map
 
-The generated [Node.js API reference](/docs/api/node/) is the detailed source of
-truth for exported symbols. The main surfaces are:
+The generated [Node.js API reference](/docs/api/node/) documents the curated
+public Node.js surface. Use the broader [configuration reference](/docs/configuration/reference)
+for the full config schema. The main Node-facing surfaces are:
 
 | API                                                        | Stability | Use it for                                                      |
 | ---------------------------------------------------------- | --------- | --------------------------------------------------------------- |
@@ -118,7 +136,21 @@ await evaluate({
 
 For lower-level reuse, `assertions.runAssertion()` and
 `assertions.runAssertions()` let you run promptfoo grading logic against a
-provider response you already have. See the
+provider response you already have:
+
+```ts
+import { assertions } from 'promptfoo';
+
+const result = await assertions.runAssertion({
+  assertion: { type: 'contains', value: 'Ada' },
+  test: { vars: {} },
+  providerResponse: { output: 'Hello Ada' },
+});
+
+console.log(result.pass);
+```
+
+See the
 [generated assertion reference](/docs/api/node/reference/variables/assertions)
 and [assertions documentation](/docs/configuration/expected-outputs/).
 

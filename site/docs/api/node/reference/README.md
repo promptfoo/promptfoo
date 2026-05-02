@@ -16,14 +16,17 @@ compatibility types and helpers than we want to present as first-class docs.
 
 ## Interfaces
 
+- [AdaptiveRequest](interfaces/AdaptiveRequest.md)
+- [AdaptiveResult](interfaces/AdaptiveResult.md)
 - [ApiProvider](interfaces/ApiProvider.md)
 - [Assertion](interfaces/Assertion.md)
 - [AssertionValueFunctionContext](interfaces/AssertionValueFunctionContext.md)
 - [CallApiContextParams](interfaces/CallApiContextParams.md)
 - [EvaluateOptions](interfaces/EvaluateOptions.md)
 - [GradingResult](interfaces/GradingResult.md)
+- [GuardResult](interfaces/GuardResult.md)
+- [LoadApiProviderContext](interfaces/LoadApiProviderContext.md)
 - [PromptFunction](interfaces/PromptFunction.md)
-- [PromptFunctionContext](interfaces/PromptFunctionContext.md)
 - [PromptFunctionResult](interfaces/PromptFunctionResult.md)
 - [ProviderOptions](interfaces/ProviderOptions.md)
 - [ProviderResponse](interfaces/ProviderResponse.md)
@@ -33,6 +36,8 @@ compatibility types and helpers than we want to present as first-class docs.
 ## Type Aliases
 
 - [AssertionValueFunction](type-aliases/AssertionValueFunction.md)
+- [EnvOverrides](type-aliases/EnvOverrides.md)
+- [EvaluateTestSuite](type-aliases/EvaluateTestSuite.md)
 - [ProviderFunction](type-aliases/ProviderFunction.md)
 - [TransformFunction](type-aliases/TransformFunction.md)
 

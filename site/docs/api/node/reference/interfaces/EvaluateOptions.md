@@ -6,7 +6,7 @@
 
 # Interface: EvaluateOptions
 
-Defined in: [types/index.ts:307](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L307)
+Defined in: [types/index.ts:334](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L334)
 
 Runtime-only options accepted by `evaluate()`.
 
@@ -16,7 +16,9 @@ Runtime-only options accepted by `evaluate()`.
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: [types/index.ts:308](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L308)
+Defined in: [types/index.ts:338](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L338)
+
+Signal used to cancel the eval and pass cancellation through to providers.
 
 ---
 
@@ -24,7 +26,9 @@ Defined in: [types/index.ts:308](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **cache?**: `boolean`
 
-Defined in: [types/index.ts:253](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L253)
+Defined in: [types/index.ts:256](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L256)
+
+Whether to reuse cached provider responses during the eval.
 
 ---
 
@@ -32,7 +36,9 @@ Defined in: [types/index.ts:253](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/index.ts:254](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L254)
+Defined in: [types/index.ts:260](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L260)
+
+Delay in milliseconds between provider calls.
 
 ---
 
@@ -40,7 +46,9 @@ Defined in: [types/index.ts:254](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **eventSource?**: `string`
 
-Defined in: [types/index.ts:255](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L255)
+Defined in: [types/index.ts:264](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L264)
+
+Optional label recorded with the eval for telemetry and downstream reporting.
 
 ---
 
@@ -48,7 +56,7 @@ Defined in: [types/index.ts:255](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **filterRange?**: `string` = `FilterRangeSchema`
 
-Defined in: [types/index.ts:299](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L299)
+Defined in: [types/index.ts:326](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L326)
 
 Zero-based test index range in start:end format (end exclusive).
 Persisted on the eval record so resume runs reproduce the original slice.
@@ -59,7 +67,9 @@ Persisted on the eval record so resume runs reproduce the original slice.
 
 > `optional` **generateSuggestions?**: `boolean`
 
-Defined in: [types/index.ts:256](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L256)
+Defined in: [types/index.ts:268](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L268)
+
+Whether to generate follow-up suggestions after the eval completes.
 
 ---
 
@@ -67,7 +77,7 @@ Defined in: [types/index.ts:256](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **interactiveProviders?**: `boolean`
 
-Defined in: [types/index.ts:262](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L262)
+Defined in: [types/index.ts:274](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L274)
 
 #### Deprecated
 
@@ -87,7 +97,9 @@ mldangelo
 
 > `optional` **isRedteam?**: `boolean`
 
-Defined in: [types/index.ts:289](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L289)
+Defined in: [types/index.ts:316](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L316)
+
+Marks the eval as a red team run for downstream behavior and reporting.
 
 ---
 
@@ -95,7 +107,9 @@ Defined in: [types/index.ts:289](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **maxConcurrency?**: `number`
 
-Defined in: [types/index.ts:263](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L263)
+Defined in: [types/index.ts:278](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L278)
+
+Maximum number of provider calls to run concurrently.
 
 ---
 
@@ -103,7 +117,7 @@ Defined in: [types/index.ts:263](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **maxEvalTimeMs?**: `number`
 
-Defined in: [types/index.ts:288](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L288)
+Defined in: [types/index.ts:312](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L312)
 
 Maximum total runtime in milliseconds for the entire evaluation process.
 When reached, all remaining tests are marked as errors and the evaluation ends.
@@ -115,7 +129,9 @@ Default is 0 (no limit).
 
 > `optional` **progressCallback?**: (`completed`, `total`, `index`, `evalStep`, `metrics`) => `void`
 
-Defined in: [types/index.ts:264](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L264)
+Defined in: [types/index.ts:282](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L282)
+
+Callback invoked as rows finish during evaluation.
 
 #### Parameters
 
@@ -307,7 +323,9 @@ Defined in: [types/index.ts:264](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **repeat?**: `number`
 
-Defined in: [types/index.ts:275](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L275)
+Defined in: [types/index.ts:296](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L296)
+
+Number of times to repeat each test case.
 
 ---
 
@@ -315,7 +333,9 @@ Defined in: [types/index.ts:275](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **showProgressBar?**: `boolean`
 
-Defined in: [types/index.ts:276](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L276)
+Defined in: [types/index.ts:300](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L300)
+
+Whether CLI-oriented callers should render a progress bar.
 
 ---
 
@@ -323,7 +343,7 @@ Defined in: [types/index.ts:276](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **silent?**: `boolean`
 
-Defined in: [types/index.ts:294](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L294)
+Defined in: [types/index.ts:321](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L321)
 
 When true, suppresses informational output like "Starting evaluation" messages.
 Useful for internal evaluations like provider validation.
@@ -334,7 +354,7 @@ Useful for internal evaluations like provider validation.
 
 > `optional` **timeoutMs?**: `number`
 
-Defined in: [types/index.ts:282](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L282)
+Defined in: [types/index.ts:306](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L306)
 
 Timeout in milliseconds for each individual test case/provider API call.
 When reached, that specific test is marked as an error.

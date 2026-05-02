@@ -6,7 +6,7 @@
 
 # Interface: AssertionValueFunctionContext
 
-Defined in: [types/index.ts:751](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L751)
+Defined in: [types/index.ts:781](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L781)
 
 Runtime context passed to function-valued assertions.
 
@@ -16,7 +16,7 @@ Runtime context passed to function-valued assertions.
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/index.ts:756](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L756)
+Defined in: [types/index.ts:786](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L786)
 
 ---
 
@@ -24,7 +24,7 @@ Defined in: [types/index.ts:756](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **logProbs**: `number`[] \| `undefined`
 
-Defined in: [types/index.ts:755](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L755)
+Defined in: [types/index.ts:785](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L785)
 
 ---
 
@@ -32,7 +32,7 @@ Defined in: [types/index.ts:755](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **prompt**: `string` \| `undefined`
 
-Defined in: [types/index.ts:752](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L752)
+Defined in: [types/index.ts:782](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L782)
 
 ---
 
@@ -40,7 +40,7 @@ Defined in: [types/index.ts:752](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **provider**: [`ApiProvider`](ApiProvider.md) \| `undefined`
 
-Defined in: [types/index.ts:757](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L757)
+Defined in: [types/index.ts:787](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L787)
 
 ---
 
@@ -48,7 +48,7 @@ Defined in: [types/index.ts:757](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **providerResponse**: [`ProviderResponse`](ProviderResponse.md) \| `undefined`
 
-Defined in: [types/index.ts:758](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L758)
+Defined in: [types/index.ts:788](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L788)
 
 ---
 
@@ -56,7 +56,7 @@ Defined in: [types/index.ts:758](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **test**: `object`
 
-Defined in: [types/index.ts:754](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L754)
+Defined in: [types/index.ts:784](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L784)
 
 #### assert?
 
@@ -544,7 +544,7 @@ in > 0.38.0. Use `transform` instead.
 
 > `optional` **trace?**: `TraceData`
 
-Defined in: [types/index.ts:759](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L759)
+Defined in: [types/index.ts:789](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L789)
 
 ---
 
@@ -552,4 +552,4 @@ Defined in: [types/index.ts:759](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **vars**: `Record`\<`string`, `VarValue`\>
 
-Defined in: [types/index.ts:753](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L753)
+Defined in: [types/index.ts:783](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L783)

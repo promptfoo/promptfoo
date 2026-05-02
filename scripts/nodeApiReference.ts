@@ -20,15 +20,20 @@ export {
 } from '../src/index';
 
 export type {
+  AdaptiveRequest,
+  AdaptiveResult,
   ApiProvider,
   Assertion,
   AssertionValueFunction,
   AssertionValueFunctionContext,
   CallApiContextParams,
+  EnvOverrides,
   EvaluateOptions,
+  EvaluateTestSuite,
   GradingResult,
+  GuardResult,
+  LoadApiProviderContext,
   PromptFunction,
-  PromptFunctionContext,
   PromptFunctionResult,
   ProviderFunction,
   ProviderOptions,

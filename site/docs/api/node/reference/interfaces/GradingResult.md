@@ -6,7 +6,7 @@
 
 # Interface: GradingResult
 
-Defined in: [types/index.ts:511](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L511)
+Defined in: [types/index.ts:541](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L541)
 
 Result returned by assertions and matcher helpers.
 
@@ -16,7 +16,7 @@ Result returned by assertions and matcher helpers.
 
 > `optional` **assertion?**: `object`
 
-Defined in: [types/index.ts:535](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L535)
+Defined in: [types/index.ts:565](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L565)
 
 #### config?
 
@@ -64,7 +64,7 @@ Defined in: [types/index.ts:535](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **comment?**: `string`
 
-Defined in: [types/index.ts:538](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L538)
+Defined in: [types/index.ts:568](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L568)
 
 ---
 
@@ -72,7 +72,7 @@ Defined in: [types/index.ts:538](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **componentResults?**: `GradingResult`[]
 
-Defined in: [types/index.ts:531](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L531)
+Defined in: [types/index.ts:561](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L561)
 
 ---
 
@@ -80,7 +80,7 @@ Defined in: [types/index.ts:531](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/index.ts:544](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L544)
+Defined in: [types/index.ts:574](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L574)
 
 #### Index Signature
 
@@ -124,7 +124,7 @@ Defined in: [types/index.ts:544](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **namedScores?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:522](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L522)
+Defined in: [types/index.ts:552](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L552)
 
 ---
 
@@ -132,7 +132,7 @@ Defined in: [types/index.ts:522](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:525](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L525)
+Defined in: [types/index.ts:555](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L555)
 
 ---
 
@@ -140,7 +140,7 @@ Defined in: [types/index.ts:525](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **pass**: `boolean`
 
-Defined in: [types/index.ts:513](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L513)
+Defined in: [types/index.ts:543](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L543)
 
 ---
 
@@ -148,7 +148,7 @@ Defined in: [types/index.ts:513](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **reason**: `string`
 
-Defined in: [types/index.ts:519](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L519)
+Defined in: [types/index.ts:549](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L549)
 
 ---
 
@@ -156,7 +156,7 @@ Defined in: [types/index.ts:519](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **score**: `number`
 
-Defined in: [types/index.ts:516](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L516)
+Defined in: [types/index.ts:546](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L546)
 
 ---
 
@@ -164,7 +164,7 @@ Defined in: [types/index.ts:516](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **suggestions?**: `ResultSuggestion`[]
 
-Defined in: [types/index.ts:541](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L541)
+Defined in: [types/index.ts:571](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L571)
 
 ---
 
@@ -172,7 +172,7 @@ Defined in: [types/index.ts:541](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **tokensUsed?**: `object`
 
-Defined in: [types/index.ts:528](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L528)
+Defined in: [types/index.ts:558](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L558)
 
 #### assertions?
 

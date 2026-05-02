@@ -30,7 +30,7 @@ Defined in: [types/providers.ts:82](https://github.com/promptfoo/promptfoo/blob/
 
 ### env?
 
-> `optional` **env?**: `EnvOverrides`
+> `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
 Defined in: [types/providers.ts:83](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L83)
 

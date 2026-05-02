@@ -8,9 +8,11 @@
 
 > **generateTable**(`evaluateTable`, `tableCellMaxLength?`, `maxRows?`): `string`
 
-Defined in: [table.ts:12](https://github.com/promptfoo/promptfoo/blob/main/src/table.ts#L12)
+Defined in: [table.ts:14](https://github.com/promptfoo/promptfoo/blob/main/src/table.ts#L14)
 
 Render eval table data as terminal-friendly text.
+
+Usually pass the table from a completed eval record returned by `evaluate()`.
 
 ## Parameters
 

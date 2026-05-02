@@ -7,6 +7,8 @@ import { ellipsize } from './util/text';
 /**
  * Render eval table data as terminal-friendly text.
  *
+ * Usually pass the table from a completed eval record returned by `evaluate()`.
+ *
  * @public
  */
 export function generateTable(

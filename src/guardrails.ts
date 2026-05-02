@@ -4,6 +4,11 @@ import logger from './logger';
 
 const API_BASE_URL = `${getShareApiBaseUrl()}/v1`;
 
+/**
+ * Response returned by the `guard()`, `pii()`, and `harm()` guardrail helpers.
+ *
+ * @beta
+ */
 export interface GuardResult {
   model: string;
   results: Array<{
@@ -21,11 +26,21 @@ export interface GuardResult {
   }>;
 }
 
+/**
+ * Request accepted by `guardrails.adaptive()`.
+ *
+ * @beta
+ */
 export interface AdaptiveRequest {
   prompt: string;
   policies?: string[];
 }
 
+/**
+ * Response returned by `guardrails.adaptive()`.
+ *
+ * @beta
+ */
 export interface AdaptiveResult {
   model: string;
   adaptedPrompt: string;

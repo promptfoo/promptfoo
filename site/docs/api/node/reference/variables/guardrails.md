@@ -8,7 +8,7 @@
 
 > `const` **guardrails**: `object`
 
-Defined in: [guardrails.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L100)
+Defined in: [guardrails.ts:115](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L115)
 
 **`Beta`**
 
@@ -18,21 +18,21 @@ Programmatic access to promptfoo guardrail endpoints.
 
 ### adaptive()
 
-> **adaptive**(`request`): `Promise`\<`AdaptiveResult`\>
+> **adaptive**(`request`): `Promise`\<[`AdaptiveResult`](../interfaces/AdaptiveResult.md)\>
 
 #### Parameters
 
 ##### request
 
-`AdaptiveRequest`
+[`AdaptiveRequest`](../interfaces/AdaptiveRequest.md)
 
 #### Returns
 
-`Promise`\<`AdaptiveResult`\>
+`Promise`\<[`AdaptiveResult`](../interfaces/AdaptiveResult.md)\>
 
 ### guard()
 
-> **guard**(`input`): `Promise`\<`GuardResult`\>
+> **guard**(`input`): `Promise`\<[`GuardResult`](../interfaces/GuardResult.md)\>
 
 #### Parameters
 
@@ -42,11 +42,11 @@ Programmatic access to promptfoo guardrail endpoints.
 
 #### Returns
 
-`Promise`\<`GuardResult`\>
+`Promise`\<[`GuardResult`](../interfaces/GuardResult.md)\>
 
 ### harm()
 
-> **harm**(`input`): `Promise`\<`GuardResult`\>
+> **harm**(`input`): `Promise`\<[`GuardResult`](../interfaces/GuardResult.md)\>
 
 #### Parameters
 
@@ -56,11 +56,11 @@ Programmatic access to promptfoo guardrail endpoints.
 
 #### Returns
 
-`Promise`\<`GuardResult`\>
+`Promise`\<[`GuardResult`](../interfaces/GuardResult.md)\>
 
 ### pii()
 
-> **pii**(`input`): `Promise`\<`GuardResult`\>
+> **pii**(`input`): `Promise`\<[`GuardResult`](../interfaces/GuardResult.md)\>
 
 #### Parameters
 
@@ -70,4 +70,4 @@ Programmatic access to promptfoo guardrail endpoints.
 
 #### Returns
 
-`Promise`\<`GuardResult`\>
+`Promise`\<[`GuardResult`](../interfaces/GuardResult.md)\>

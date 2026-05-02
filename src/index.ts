@@ -61,6 +61,8 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+export type { AdaptiveRequest, AdaptiveResult, GuardResult } from './guardrails';
+export type { EnvOverrides } from './types/env';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
 /**

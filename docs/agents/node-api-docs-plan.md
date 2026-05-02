@@ -20,6 +20,17 @@ keeps reference material aligned with the code.
 - [x] Run focused QA after each stage, including docs builds and PR-style review
       passes on each commit.
 
+## Critical Review Pass
+
+- [x] Audit the remaining generated pages for usefulness, not just correctness.
+- [x] Check that public signatures do not dead-end on undocumented or
+      unimportable types.
+- [x] Reconcile wording between the Node guide and the curated generated
+      reference.
+- [x] Record which remaining pages should stay generated, gain prose, or move to
+      hand-written docs.
+- [ ] Re-run docs QA and PR-style review after the follow-up pass.
+
 ## Working Notes
 
 - Treat `package.json` `exports` plus `src/index.ts` as the canonical public API

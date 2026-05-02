@@ -250,9 +250,21 @@ export interface RunEvalOptions {
 }
 
 export const EvaluateOptionsSchema = z.object({
+  /**
+   * Whether to reuse cached provider responses during the eval.
+   */
   cache: z.boolean().optional(),
+  /**
+   * Delay in milliseconds between provider calls.
+   */
   delay: z.number().optional(),
+  /**
+   * Optional label recorded with the eval for telemetry and downstream reporting.
+   */
   eventSource: z.string().optional(),
+  /**
+   * Whether to generate follow-up suggestions after the eval completes.
+   */
   generateSuggestions: z.boolean().optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
@@ -260,7 +272,13 @@ export const EvaluateOptionsSchema = z.object({
    * @author mldangelo
    */
   interactiveProviders: z.boolean().optional(),
+  /**
+   * Maximum number of provider calls to run concurrently.
+   */
   maxConcurrency: z.number().optional(),
+  /**
+   * Callback invoked as rows finish during evaluation.
+   */
   progressCallback: z
     .custom<
       (
@@ -272,7 +290,13 @@ export const EvaluateOptionsSchema = z.object({
       ) => void
     >((v) => typeof v === 'function')
     .optional(),
+  /**
+   * Number of times to repeat each test case.
+   */
   repeat: z.number().optional(),
+  /**
+   * Whether CLI-oriented callers should render a progress bar.
+   */
   showProgressBar: z.boolean().optional(),
   /**
    * Timeout in milliseconds for each individual test case/provider API call.
@@ -286,6 +310,9 @@ export const EvaluateOptionsSchema = z.object({
    * Default is 0 (no limit).
    */
   maxEvalTimeMs: z.number().optional(),
+  /**
+   * Marks the eval as a red team run for downstream behavior and reporting.
+   */
   isRedteam: z.boolean().optional(),
   /**
    * When true, suppresses informational output like "Starting evaluation" messages.
@@ -305,6 +332,9 @@ export const EvaluateOptionsSchema = z.object({
  * @public
  */
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
+  /**
+   * Signal used to cancel the eval and pass cancellation through to providers.
+   */
   abortSignal?: AbortSignal;
 };
 
@@ -1339,10 +1369,26 @@ export interface EvalWithMetadata {
   description?: string;
 }
 
-// node.js package interface
+/**
+ * Test-suite shape accepted by the Node.js `evaluate()` API.
+ *
+ * Additional config fields follow the same schema as the YAML configuration
+ * reference. See the configuration docs for the full config model.
+ *
+ * @public
+ */
 export type EvaluateTestSuite = {
+  /**
+   * Prompt strings, prompt objects, or inline prompt functions to evaluate.
+   */
   prompts: (string | object | PromptFunction)[];
+  /**
+   * Provider ids, provider functions, provider objects, or arrays of those forms.
+   */
   providers: ProvidersConfig;
+  /**
+   * Persist the eval so it is available to local result storage and the web UI.
+   */
   writeLatestResults?: boolean;
   /**
    * Author to attribute the evaluation to.
@@ -1438,9 +1484,23 @@ export const OutputFileExtension = z.enum([
 ]);
 export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
 
+/**
+ * Optional context accepted by `loadApiProvider()`.
+ *
+ * @public
+ */
 export interface LoadApiProviderContext {
+  /**
+   * Provider-specific options to merge into the resolved provider.
+   */
   options?: ProviderOptions;
+  /**
+   * Base path used to resolve relative config-file references.
+   */
   basePath?: string;
+  /**
+   * Environment overrides available while loading the provider.
+   */
   env?: EnvOverrides;
 }
 
