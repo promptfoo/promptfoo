@@ -535,9 +535,7 @@ class AgentProviderTests(unittest.TestCase):
                     prompt_tokens=20,
                     completion_tokens=10,
                     prompt_tokens_details=types.SimpleNamespace(cached_tokens=5),
-                    completion_tokens_details=types.SimpleNamespace(
-                        reasoning_tokens=3
-                    ),
+                    completion_tokens_details=types.SimpleNamespace(reasoning_tokens=3),
                 )
             ),
         ]
