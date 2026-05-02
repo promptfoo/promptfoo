@@ -20,7 +20,7 @@ import type { ProviderOptions } from '../../types/providers';
  *      including gateway.remote.url and gateway.tls.enabled
  *
  * Usage:
- *   openclaw              - default agent (main)
+ *   openclaw              - configured default agent
  *   openclaw:main         - specific agent
  *   openclaw:coding-agent - named agent
  */

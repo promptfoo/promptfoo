@@ -22,7 +22,7 @@ import type {
  * Requires `gateway.http.endpoints.responses.enabled=true` in OpenClaw config.
  *
  * Usage:
- *   openclaw:responses       - default agent (main)
+ *   openclaw:responses       - configured default agent
  *   openclaw:responses:main  - explicit agent ID
  *   openclaw:responses:X     - custom agent ID
  */

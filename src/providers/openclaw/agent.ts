@@ -136,7 +136,7 @@ function buildOpenClawAgentSessionKey(agentId: string | undefined, sessionKey: s
  *   6. Resolve on agent.wait response
  *
  * Usage:
- *   openclaw:agent           - default agent (main)
+ *   openclaw:agent           - configured default agent
  *   openclaw:agent:main      - explicit agent ID
  *   openclaw:agent:my-agent  - custom agent ID
  */
