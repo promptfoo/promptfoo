@@ -396,9 +396,7 @@ async function checkExistingScan(
 
     const parsed = parseHuggingFaceModel(paths[0]);
     const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : paths[0];
-    const existing =
-      (await ModelAudit.findByRevision(modelId, metadata.sha)) ??
-      (await ModelAudit.findLatestByModelId(modelId));
+    const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
     const huggingFaceRevision = {
       modelId: metadata.modelId,
       sha: metadata.sha,
@@ -472,9 +470,7 @@ async function fetchRevisionInfo(
             `HuggingFace revision changed during scan for ${metadata.modelId}; omitting cached revision SHA`,
           );
         } else {
-          logger.debug(
-            `Omitting revision SHA for mutable HuggingFace alias ${metadata.modelId}; scanner did not confirm a pinned artifact`,
-          );
+          revisionInfo.revisionSha = metadata.sha;
         }
       }
     } catch (error) {
@@ -607,28 +603,50 @@ async function saveAuditRecord(
     },
   };
 
-  const shouldCreateNewAudit =
-    existingAudit?.contentHash &&
-    revisionInfo.contentHash &&
-    existingAudit.contentHash !== revisionInfo.contentHash;
+  const matchedAudit =
+    existingAudit ??
+    (revisionInfo.modelId
+      ? await ModelAudit.findByRevision(
+          revisionInfo.modelId,
+          revisionInfo.revisionSha,
+          revisionInfo.contentHash,
+        )
+      : null);
 
-  if (existingAudit && !shouldCreateNewAudit) {
+  const shouldCreateNewAudit =
+    matchedAudit?.contentHash &&
+    revisionInfo.contentHash &&
+    matchedAudit.contentHash !== revisionInfo.contentHash;
+
+  if (matchedAudit && !shouldCreateNewAudit) {
     // Update existing record with new scan results
-    existingAudit.results = results;
-    existingAudit.checks = results.checks ?? null;
-    existingAudit.issues = results.issues ?? null;
-    existingAudit.hasErrors = hasFindingsInResults(results);
-    existingAudit.totalChecks = results.total_checks ?? null;
-    existingAudit.passedChecks = results.passed_checks ?? null;
-    existingAudit.failedChecks = results.failed_checks ?? null;
-    existingAudit.scannerVersion = currentScannerVersion ?? null;
-    existingAudit.metadata = auditMetadata;
-    existingAudit.updatedAt = Date.now();
-    if (revisionInfo.contentHash) {
-      existingAudit.contentHash = revisionInfo.contentHash;
+    matchedAudit.results = results;
+    matchedAudit.checks = results.checks ?? null;
+    matchedAudit.issues = results.issues ?? null;
+    matchedAudit.hasErrors = hasFindingsInResults(results);
+    matchedAudit.totalChecks = results.total_checks ?? null;
+    matchedAudit.passedChecks = results.passed_checks ?? null;
+    matchedAudit.failedChecks = results.failed_checks ?? null;
+    matchedAudit.scannerVersion = currentScannerVersion ?? null;
+    matchedAudit.metadata = auditMetadata;
+    matchedAudit.updatedAt = Date.now();
+    if (revisionInfo.modelId) {
+      matchedAudit.modelId = revisionInfo.modelId;
     }
-    await existingAudit.save();
-    return existingAudit;
+    if (revisionInfo.revisionSha) {
+      matchedAudit.revisionSha = revisionInfo.revisionSha;
+    }
+    if (revisionInfo.contentHash) {
+      matchedAudit.contentHash = revisionInfo.contentHash;
+    }
+    if (revisionInfo.modelSource) {
+      matchedAudit.modelSource = revisionInfo.modelSource;
+    }
+    if (revisionInfo.sourceLastModified) {
+      matchedAudit.sourceLastModified = revisionInfo.sourceLastModified;
+    }
+    await matchedAudit.save();
+    return matchedAudit;
   }
 
   if (shouldCreateNewAudit) {
