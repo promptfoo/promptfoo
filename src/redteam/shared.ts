@@ -5,7 +5,7 @@ import * as path from 'path';
 import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
-import logger, { setLogCallback, setLogLevel } from '../logger';
+import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { pathExists } from '../util/file';
@@ -192,7 +192,7 @@ export async function doRedteamRun(
 
     return evalResult;
   } finally {
-    setLogCallback(null);
+    clearLogCallbackIfOwned(options.logCallback ?? null);
     if (verboseToggleCleanup) {
       verboseToggleCleanup();
     }
