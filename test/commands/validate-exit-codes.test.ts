@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
@@ -29,6 +29,10 @@ describe('Validate Command Exit Codes', () => {
 
     // Reset exit code before each test
     process.exitCode = 0;
+  });
+
+  afterEach(() => {
+    vi.mocked(resolveConfigs).mockReset();
   });
 
   describe('Success scenarios - should set exit code 0', () => {
