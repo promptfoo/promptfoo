@@ -55,7 +55,11 @@ export function initVerboseToggle(options: VerboseToggleOptions = {}): (() => vo
       // terminal first, then let the caller decide how interruption should work.
       if (key === '\u0003') {
         disableVerboseToggle();
-        options.onInterrupt?.();
+        if (options.onInterrupt) {
+          options.onInterrupt();
+        } else {
+          process.kill(process.pid, 'SIGINT');
+        }
         return;
       }
 

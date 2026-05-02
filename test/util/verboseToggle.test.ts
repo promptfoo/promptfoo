@@ -108,4 +108,46 @@ describe('verboseToggle', () => {
       exitSpy.mockRestore();
     }
   });
+
+  it('should re-emit SIGINT when no interrupt callback is provided', async () => {
+    const originalStdinIsTTY = process.stdin.isTTY;
+    const originalStdoutIsTTY = process.stdout.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdin, 'setRawMode', {
+      value: vi.fn(),
+      configurable: true,
+    });
+
+    try {
+      const { initVerboseToggle, isVerboseToggleActive } = await import(
+        '../../src/util/verboseToggle'
+      );
+
+      initVerboseToggle();
+      process.stdin.emit('data', '\u0003');
+
+      expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGINT');
+      expect(isVerboseToggleActive()).toBe(false);
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalStdinIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalStdoutIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
+        configurable: true,
+      });
+      stderrWriteSpy.mockRestore();
+      killSpy.mockRestore();
+    }
+  });
 });
