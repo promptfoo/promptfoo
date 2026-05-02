@@ -11,6 +11,7 @@ import {
 import { evaluate } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   promptForEmailUnverified,
 } from '../../src/globalConfig/accounts';
@@ -284,6 +285,39 @@ describe('evalCommand', () => {
     } finally {
       loggerErrorSpy.mockRestore();
     }
+  });
+
+  it('should keep watching after email validation fails on a file change', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      redteam: { plugins: ['harmful'] as any },
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { prompt: 'test' } }],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+    await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+    const onChange = chokidarMocks.handlers.get('change');
+    expect(onChange).toBeDefined();
+
+    vi.mocked(checkEmailStatusAndMaybeExit).mockRejectedValueOnce(
+      new EmailValidationError('email_verification_required', 'Please verify your email'),
+    );
+
+    await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+    expect(resolveConfigs).toHaveBeenCalledTimes(2);
   });
 
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {

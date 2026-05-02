@@ -13,6 +13,7 @@ import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   promptForEmailUnverified,
 } from '../globalConfig/accounts';
@@ -936,6 +937,10 @@ export async function doEval(
             } catch (error) {
               if (error instanceof ConfigResolutionError) {
                 logConfigResolutionError(error);
+                return;
+              }
+              if (error instanceof EmailValidationError) {
+                // Account helpers already render these user-facing failures.
                 return;
               }
               throw error;
