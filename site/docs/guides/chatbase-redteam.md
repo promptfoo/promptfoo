@@ -25,7 +25,7 @@ In Promptfoo, this state is managed through a `conversationId` that links messag
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 20.20+ or 22.22+
 - promptfoo CLI (`npm install -g promptfoo`)
 - Chatbase API credentials:
   - API Bearer Token (from your Chatbase dashboard)

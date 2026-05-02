@@ -62,7 +62,7 @@ export class ConfigResolutionError extends Error {
     super(message);
     this.name = 'ConfigResolutionError';
     this.cliMessage = options.cliMessage ?? message;
-    this.logLevel = options.logLevel ?? 'error';
+    this.logLevel = options.logLevel === 'warn' ? 'warn' : 'error';
   }
 }
 
