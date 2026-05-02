@@ -2704,6 +2704,18 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.0035, 10);
     });
 
+    it('should calculate cost for gemini-flash-latest using flash pricing', () => {
+      // gemini-flash-latest aliases the current Flash snapshot: input=0.3/1M, output=2.5/1M
+      const cost = calculateGoogleCost('gemini-flash-latest', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    it('should calculate cost for gemini-flash-lite-latest using flash-lite pricing', () => {
+      // gemini-flash-lite-latest aliases the current Flash-Lite snapshot: input=0.1/1M, output=0.4/1M
+      const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.0003, 10);
+    });
+
     it('should return undefined for shutdown models', () => {
       const shutdownModels = [
         'gemini-2.5-pro-preview-05-06',

@@ -287,8 +287,8 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
 - `google:gemini-2.5-flash-preview-09-2025` - Gemini 2.5 Flash preview with quality improvements
 - `google:gemini-2.5-flash-lite-preview-09-2025` - Gemini 2.5 Flash Lite preview with cost and latency optimizations
-- `google:gemini-flash-latest` - Alias for the latest Gemini Flash release
-- `google:gemini-flash-lite-latest` - Alias for the latest Gemini Flash-Lite release
+- `google:gemini-flash-latest` - Alias for the latest Gemini Flash release (currently `gemini-2.5-flash-preview-09-2025`)
+- `google:gemini-flash-lite-latest` - Alias for the latest Gemini Flash-Lite release (currently `gemini-2.5-flash-lite-preview-09-2025`)
 - `google:gemini-2.0-pro` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
