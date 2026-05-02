@@ -88,6 +88,8 @@ For password-mode gateways, use `auth_password` or `OPENCLAW_GATEWAY_PASSWORD`.
 ## What to test
 
 - Use `openclaw` for baseline answer quality and default-agent routing.
+- Hold the agent constant while varying `backend_model`, then hold the backend model constant while
+  varying agents or skills, so you can separate model quality from gateway behavior.
 - Use `session_key` to compare intentional continuity against the default stateless HTTP behavior.
 - Use `openclaw:agent:<agent-id>` for full agent-loop behavior such as reasoning level, streaming,
   and skill-following workflows.

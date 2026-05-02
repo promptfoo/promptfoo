@@ -377,6 +377,7 @@ OpenClaw is broader than a single chat model, so the useful eval set is usually 
 | Eval target                     | Recommended provider                        | What it proves                                                               |
 | ------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------- |
 | Baseline response quality       | `openclaw` or `openclaw:<agent-id>`         | Prompt handling, backend model choice, and default-agent routing             |
+| Backend-model parity            | `openclaw` plus `backend_model`             | Whether differences come from the selected model instead of agent setup      |
 | Session isolation vs continuity | HTTP with/without `session_key`; WS Agent   | Whether state leaks across tests and whether intentional memory is preserved |
 | Agent workflow behavior         | `openclaw:agent:<agent-id>`                 | Streaming, reasoning level, system-prompt overrides, and long-running turns  |
 | Skill adherence                 | Dedicated OpenClaw agent + `openclaw:agent` | Whether the configured skill set changes tool choice or procedure following  |
@@ -387,6 +388,9 @@ OpenClaw is broader than a single chat model, so the useful eval set is usually 
 For browser-capable agents, combine normal provider evals with red-team strategies such as
 [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn). For file-based workflows, use the
 Responses endpoint so OpenClaw's untrusted-content wrapping is part of the system under test.
+For clean comparisons, hold the agent constant while varying `backend_model`, then hold the backend
+model constant while varying agents, workspaces, or skills. That separates model quality from
+OpenClaw routing, memory, tool policy, and skill behavior.
 
 ## Skills
 
@@ -411,6 +415,7 @@ as deterministic fixture setup.
 - [Tools invoke API](https://docs.openclaw.ai/gateway/tools-invoke-http-api)
 - [Skills](https://docs.openclaw.ai/tools/skills)
 - [Creating skills](https://docs.openclaw.ai/tools/creating-skills)
+- [Testing](https://docs.openclaw.ai/help/testing)
 - [Security](https://docs.openclaw.ai/gateway/security)
 
 ## Troubleshooting
