@@ -8,7 +8,7 @@
 
 > **EvalTableDTO** = `object`
 
-Defined in: [types/index.ts:482](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L482)
+Defined in: [types/index.ts:482](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L482)
 
 ## Properties
 
@@ -16,7 +16,7 @@ Defined in: [types/index.ts:482](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **author**: `string` \| `null`
 
-Defined in: [types/index.ts:488](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L488)
+Defined in: [types/index.ts:488](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L488)
 
 ---
 
@@ -24,7 +24,7 @@ Defined in: [types/index.ts:488](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **config**: `Partial`\<[`UnifiedConfig`](UnifiedConfig.md)\>
 
-Defined in: [types/index.ts:487](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L487)
+Defined in: [types/index.ts:487](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L487)
 
 ---
 
@@ -32,7 +32,7 @@ Defined in: [types/index.ts:487](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **filteredCount**: `number`
 
-Defined in: [types/index.ts:485](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L485)
+Defined in: [types/index.ts:485](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L485)
 
 ---
 
@@ -40,7 +40,7 @@ Defined in: [types/index.ts:485](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **filteredMetrics**: [`PromptMetrics`](PromptMetrics.md)[] \| `null`
 
-Defined in: [types/index.ts:486](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L486)
+Defined in: [types/index.ts:486](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L486)
 
 ---
 
@@ -48,7 +48,7 @@ Defined in: [types/index.ts:486](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **id**: `string`
 
-Defined in: [types/index.ts:490](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L490)
+Defined in: [types/index.ts:490](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L490)
 
 ---
 
@@ -56,7 +56,7 @@ Defined in: [types/index.ts:490](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **stats?**: [`EvaluateStats`](../interfaces/EvaluateStats.md)
 
-Defined in: [types/index.ts:491](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L491)
+Defined in: [types/index.ts:491](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L491)
 
 ---
 
@@ -64,7 +64,7 @@ Defined in: [types/index.ts:491](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **table**: [`EvaluateTable`](../interfaces/EvaluateTable.md)
 
-Defined in: [types/index.ts:483](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L483)
+Defined in: [types/index.ts:483](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L483)
 
 ---
 
@@ -72,7 +72,7 @@ Defined in: [types/index.ts:483](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **totalCount**: `number`
 
-Defined in: [types/index.ts:484](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L484)
+Defined in: [types/index.ts:484](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L484)
 
 ---
 
@@ -80,4 +80,4 @@ Defined in: [types/index.ts:484](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **version**: `number`
 
-Defined in: [types/index.ts:489](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L489)
+Defined in: [types/index.ts:489](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L489)

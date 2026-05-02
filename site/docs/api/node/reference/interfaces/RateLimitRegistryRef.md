@@ -6,7 +6,7 @@
 
 # Interface: RateLimitRegistryRef
 
-Defined in: [types/index.ts:43](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L43)
+Defined in: [types/index.ts:43](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L43)
 
 Minimal interface for RateLimitRegistry to avoid circular dependency.
 The actual implementation is in scheduler/rateLimitRegistry.ts.
@@ -17,7 +17,7 @@ The actual implementation is in scheduler/rateLimitRegistry.ts.
 
 > **dispose**: () => `void`
 
-Defined in: [types/index.ts:53](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L53)
+Defined in: [types/index.ts:53](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L53)
 
 #### Returns
 
@@ -29,7 +29,7 @@ Defined in: [types/index.ts:53](https://github.com/promptfoo/promptfoo/blob/6b35
 
 > **execute**: \<`T`\>(`provider`, `callFn`, `options?`) => `Promise`\<`T`\>
 
-Defined in: [types/index.ts:44](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L44)
+Defined in: [types/index.ts:44](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L44)
 
 #### Type Parameters
 

@@ -6,7 +6,7 @@
 
 # Interface: ProviderOptions
 
-Defined in: [types/providers.ts:66](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L66)
+Defined in: [types/providers.ts:66](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L66)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/providers.ts:66](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:69](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L69)
+Defined in: [types/providers.ts:69](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L69)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/providers.ts:69](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:72](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L72)
+Defined in: [types/providers.ts:72](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L72)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/providers.ts:72](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/providers.ts:73](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L73)
+Defined in: [types/providers.ts:73](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L73)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/providers.ts:73](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **id?**: `string`
 
-Defined in: [types/providers.ts:67](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L67)
+Defined in: [types/providers.ts:67](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L67)
 
 ---
 
@@ -46,7 +46,7 @@ Defined in: [types/providers.ts:67](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:74](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L74)
+Defined in: [types/providers.ts:74](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L74)
 
 ---
 
@@ -54,7 +54,7 @@ Defined in: [types/providers.ts:74](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:68](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L68)
+Defined in: [types/providers.ts:68](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L68)
 
 ---
 
@@ -62,7 +62,7 @@ Defined in: [types/providers.ts:68](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **prompts?**: `string`[]
 
-Defined in: [types/providers.ts:70](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L70)
+Defined in: [types/providers.ts:70](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L70)
 
 ---
 
@@ -70,4 +70,4 @@ Defined in: [types/providers.ts:70](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:71](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L71)
+Defined in: [types/providers.ts:71](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L71)

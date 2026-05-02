@@ -8,7 +8,7 @@
 
 > **TransformFunction**\<`TIn`, `TOut`\> = (`output`, `context`) => `TOut` \| `Promise`\<`TOut`\>
 
-Defined in: [types/transform.ts:30](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/transform.ts#L30)
+Defined in: [types/transform.ts:30](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L30)
 
 A function that transforms output or vars at various stages of the evaluation pipeline.
 Function-valued transforms are only reachable via the Node.js package API; YAML configs

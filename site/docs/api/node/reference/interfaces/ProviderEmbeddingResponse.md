@@ -6,7 +6,7 @@
 
 # Interface: ProviderEmbeddingResponse
 
-Defined in: [types/providers.ts:265](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L265)
+Defined in: [types/providers.ts:265](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L265)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/providers.ts:265](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **cached?**: `boolean`
 
-Defined in: [types/providers.ts:266](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L266)
+Defined in: [types/providers.ts:266](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L266)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/providers.ts:266](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **cost?**: `number`
 
-Defined in: [types/providers.ts:267](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L267)
+Defined in: [types/providers.ts:267](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L267)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/providers.ts:267](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **embedding?**: `number`[]
 
-Defined in: [types/providers.ts:269](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L269)
+Defined in: [types/providers.ts:269](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L269)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/providers.ts:269](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **error?**: `string`
 
-Defined in: [types/providers.ts:268](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L268)
+Defined in: [types/providers.ts:268](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L268)
 
 ---
 
@@ -46,7 +46,7 @@ Defined in: [types/providers.ts:268](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [types/providers.ts:270](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L270)
+Defined in: [types/providers.ts:270](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L270)
 
 ---
 
@@ -54,7 +54,7 @@ Defined in: [types/providers.ts:270](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/providers.ts:272](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L272)
+Defined in: [types/providers.ts:272](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L272)
 
 #### Index Signature
 
@@ -74,4 +74,4 @@ Defined in: [types/providers.ts:272](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **tokenUsage?**: `Partial`\<\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}\>
 
-Defined in: [types/providers.ts:271](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L271)
+Defined in: [types/providers.ts:271](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L271)

@@ -6,7 +6,7 @@
 
 # Interface: PromptFunctionResult
 
-Defined in: [types/prompts.ts:34](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/prompts.ts#L34)
+Defined in: [types/prompts.ts:34](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L34)
 
 Result type for prompt functions.
 
@@ -22,7 +22,7 @@ Prompt functions can return:
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/prompts.ts:36](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/prompts.ts#L36)
+Defined in: [types/prompts.ts:36](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L36)
 
 ---
 
@@ -30,4 +30,4 @@ Defined in: [types/prompts.ts:36](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **prompt**: `any`
 
-Defined in: [types/prompts.ts:35](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/prompts.ts#L35)
+Defined in: [types/prompts.ts:35](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L35)

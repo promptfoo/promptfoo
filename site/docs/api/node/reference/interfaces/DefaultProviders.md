@@ -6,7 +6,7 @@
 
 # Interface: DefaultProviders
 
-Defined in: [types/providers.ts:338](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L338)
+Defined in: [types/providers.ts:338](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L338)
 
 Interface defining the default providers used by the application
 
@@ -16,7 +16,7 @@ Interface defining the default providers used by the application
 
 > **embeddingProvider**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:339](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L339)
+Defined in: [types/providers.ts:339](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L339)
 
 ---
 
@@ -24,7 +24,7 @@ Defined in: [types/providers.ts:339](https://github.com/promptfoo/promptfoo/blob
 
 > **gradingJsonProvider**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:340](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L340)
+Defined in: [types/providers.ts:340](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L340)
 
 ---
 
@@ -32,7 +32,7 @@ Defined in: [types/providers.ts:340](https://github.com/promptfoo/promptfoo/blob
 
 > **gradingProvider**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:341](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L341)
+Defined in: [types/providers.ts:341](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L341)
 
 ---
 
@@ -40,7 +40,7 @@ Defined in: [types/providers.ts:341](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **llmRubricProvider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:342](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L342)
+Defined in: [types/providers.ts:342](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L342)
 
 ---
 
@@ -48,7 +48,7 @@ Defined in: [types/providers.ts:342](https://github.com/promptfoo/promptfoo/blob
 
 > **moderationProvider**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:343](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L343)
+Defined in: [types/providers.ts:343](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L343)
 
 ---
 
@@ -56,7 +56,7 @@ Defined in: [types/providers.ts:343](https://github.com/promptfoo/promptfoo/blob
 
 > **suggestionsProvider**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:344](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L344)
+Defined in: [types/providers.ts:344](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L344)
 
 ---
 
@@ -64,7 +64,7 @@ Defined in: [types/providers.ts:344](https://github.com/promptfoo/promptfoo/blob
 
 > **synthesizeProvider**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:345](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L345)
+Defined in: [types/providers.ts:345](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L345)
 
 ---
 
@@ -72,4 +72,4 @@ Defined in: [types/providers.ts:345](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **webSearchProvider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:346](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L346)
+Defined in: [types/providers.ts:346](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L346)

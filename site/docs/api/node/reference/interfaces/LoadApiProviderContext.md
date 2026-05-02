@@ -6,7 +6,7 @@
 
 # Interface: LoadApiProviderContext
 
-Defined in: [types/index.ts:1414](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1414)
+Defined in: [types/index.ts:1414](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1414)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:1414](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **basePath?**: `string`
 
-Defined in: [types/index.ts:1416](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1416)
+Defined in: [types/index.ts:1416](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1416)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:1416](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/index.ts:1417](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1417)
+Defined in: [types/index.ts:1417](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1417)
 
 ---
 
@@ -30,4 +30,4 @@ Defined in: [types/index.ts:1417](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **options?**: [`ProviderOptions`](ProviderOptions.md)
 
-Defined in: [types/index.ts:1415](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1415)
+Defined in: [types/index.ts:1415](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1415)

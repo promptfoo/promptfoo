@@ -6,7 +6,7 @@
 
 # Interface: ApiClassificationProvider
 
-Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L146)
+Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L146)
 
 ## Extends
 
@@ -18,7 +18,7 @@ Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob
 
 > **callApi**: [`CallApiFunction`](../type-aliases/CallApiFunction.md)
 
-Defined in: [types/providers.ts:120](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L120)
+Defined in: [types/providers.ts:120](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L120)
 
 #### Inherited from
 
@@ -30,7 +30,7 @@ Defined in: [types/providers.ts:120](https://github.com/promptfoo/promptfoo/blob
 
 > **callClassificationApi**: (`prompt`) => `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
 
-Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L147)
+Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
 
 #### Parameters
 
@@ -52,7 +52,7 @@ Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **callEmbeddingApi?**: (`input`) => `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
 
-Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L122)
+Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L122)
 
 #### Parameters
 
@@ -74,7 +74,7 @@ Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
-Defined in: [types/providers.ts:135](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L135)
+Defined in: [types/providers.ts:135](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L135)
 
 Provider-wide cleanup hook for releasing long-lived resources such as worker
 processes, browser sessions, or pooled connections at eval shutdown.
@@ -94,7 +94,7 @@ Request-scoped cancellation should be implemented with `abortSignal`.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:123](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L123)
+Defined in: [types/providers.ts:123](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L123)
 
 #### Inherited from
 
@@ -106,7 +106,7 @@ Defined in: [types/providers.ts:123](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L124)
+Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L124)
 
 #### Inherited from
 
@@ -118,7 +118,7 @@ Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **getSessionId?**: () => `string`
 
-Defined in: [types/providers.ts:125](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L125)
+Defined in: [types/providers.ts:125](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L125)
 
 #### Returns
 
@@ -134,7 +134,7 @@ Defined in: [types/providers.ts:125](https://github.com/promptfoo/promptfoo/blob
 
 > **id**: () => `string`
 
-Defined in: [types/providers.ts:119](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L119)
+Defined in: [types/providers.ts:119](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L119)
 
 #### Returns
 
@@ -150,7 +150,7 @@ Defined in: [types/providers.ts:119](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L126)
+Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L126)
 
 #### Inherited from
 
@@ -162,7 +162,7 @@ Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:127](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L127)
+Defined in: [types/providers.ts:127](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L127)
 
 #### Inherited from
 
@@ -174,7 +174,7 @@ Defined in: [types/providers.ts:127](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **toJSON?**: () => `any`
 
-Defined in: [types/providers.ts:129](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L129)
+Defined in: [types/providers.ts:129](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L129)
 
 #### Returns
 
@@ -190,7 +190,7 @@ Defined in: [types/providers.ts:129](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:128](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L128)
+Defined in: [types/providers.ts:128](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L128)
 
 #### Inherited from
 

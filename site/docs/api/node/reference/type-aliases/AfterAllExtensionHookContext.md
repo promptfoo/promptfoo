@@ -8,7 +8,7 @@
 
 > **AfterAllExtensionHookContext** = `object`
 
-Defined in: [evaluatorHelpers.ts:591](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L591)
+Defined in: [evaluatorHelpers.ts:591](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L591)
 
 Context passed to afterAll extension hooks.
 Called once after all evaluations complete.
@@ -32,7 +32,7 @@ module.exports = {
 
 > **config**: `Partial`\<[`UnifiedConfig`](UnifiedConfig.md)\>
 
-Defined in: [evaluatorHelpers.ts:601](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L601)
+Defined in: [evaluatorHelpers.ts:601](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L601)
 
 The full evaluation configuration
 
@@ -42,7 +42,7 @@ The full evaluation configuration
 
 > **evalId**: `string`
 
-Defined in: [evaluatorHelpers.ts:599](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L599)
+Defined in: [evaluatorHelpers.ts:599](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L599)
 
 Unique identifier for this evaluation run
 
@@ -52,7 +52,7 @@ Unique identifier for this evaluation run
 
 > **prompts**: [`CompletedPrompt`](CompletedPrompt.md)[]
 
-Defined in: [evaluatorHelpers.ts:597](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L597)
+Defined in: [evaluatorHelpers.ts:597](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L597)
 
 Completed prompts with metrics
 
@@ -62,7 +62,7 @@ Completed prompts with metrics
 
 > **results**: [`EvaluateResult`](../interfaces/EvaluateResult.md)[]
 
-Defined in: [evaluatorHelpers.ts:595](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L595)
+Defined in: [evaluatorHelpers.ts:595](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L595)
 
 All evaluation results as plain data objects
 
@@ -72,6 +72,6 @@ All evaluation results as plain data objects
 
 > **suite**: [`TestSuite`](TestSuite.md)
 
-Defined in: [evaluatorHelpers.ts:593](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L593)
+Defined in: [evaluatorHelpers.ts:593](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L593)
 
 The test suite configuration

@@ -8,7 +8,7 @@
 
 > **FetchWithCacheResult**\<`T`\> = `object`
 
-Defined in: [cache.ts:223](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L223)
+Defined in: [cache.ts:223](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L223)
 
 Metadata returned by `fetchWithCache()`.
 
@@ -24,7 +24,7 @@ Metadata returned by `fetchWithCache()`.
 
 > **cached**: `boolean`
 
-Defined in: [cache.ts:225](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L225)
+Defined in: [cache.ts:225](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L225)
 
 ---
 
@@ -32,7 +32,7 @@ Defined in: [cache.ts:225](https://github.com/promptfoo/promptfoo/blob/6b351a0b3
 
 > **data**: `T`
 
-Defined in: [cache.ts:224](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L224)
+Defined in: [cache.ts:224](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L224)
 
 ---
 
@@ -40,7 +40,7 @@ Defined in: [cache.ts:224](https://github.com/promptfoo/promptfoo/blob/6b351a0b3
 
 > `optional` **deleteFromCache?**: () => `Promise`\<`void`\>
 
-Defined in: [cache.ts:230](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L230)
+Defined in: [cache.ts:230](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L230)
 
 #### Returns
 
@@ -52,7 +52,7 @@ Defined in: [cache.ts:230](https://github.com/promptfoo/promptfoo/blob/6b351a0b3
 
 > `optional` **headers?**: `Record`\<`string`, `string`\>
 
-Defined in: [cache.ts:228](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L228)
+Defined in: [cache.ts:228](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L228)
 
 ---
 
@@ -60,7 +60,7 @@ Defined in: [cache.ts:228](https://github.com/promptfoo/promptfoo/blob/6b351a0b3
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [cache.ts:229](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L229)
+Defined in: [cache.ts:229](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L229)
 
 ---
 
@@ -68,7 +68,7 @@ Defined in: [cache.ts:229](https://github.com/promptfoo/promptfoo/blob/6b351a0b3
 
 > **status**: `number`
 
-Defined in: [cache.ts:226](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L226)
+Defined in: [cache.ts:226](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L226)
 
 ---
 
@@ -76,4 +76,4 @@ Defined in: [cache.ts:226](https://github.com/promptfoo/promptfoo/blob/6b351a0b3
 
 > **statusText**: `string`
 
-Defined in: [cache.ts:227](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L227)
+Defined in: [cache.ts:227](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L227)

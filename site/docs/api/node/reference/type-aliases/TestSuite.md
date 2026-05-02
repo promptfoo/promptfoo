@@ -8,4 +8,4 @@
 
 > **TestSuite** = `z.infer`\<_typeof_ [`TestSuiteSchema`](../variables/TestSuiteSchema.md)\>
 
-Defined in: [types/index.ts:1125](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1125)
+Defined in: [types/index.ts:1125](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1125)

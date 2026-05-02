@@ -6,7 +6,7 @@
 
 # Interface: SynthesizeOptions
 
-Defined in: [redteam/types.ts:286](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L286)
+Defined in: [redteam/types.ts:286](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L286)
 
 ## Extends
 
@@ -18,7 +18,7 @@ Defined in: [redteam/types.ts:286](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: [redteam/types.ts:287](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L287)
+Defined in: [redteam/types.ts:287](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L287)
 
 ---
 
@@ -26,7 +26,7 @@ Defined in: [redteam/types.ts:287](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **contexts?**: [`RedteamContext`](RedteamContext.md)[]
 
-Defined in: [redteam/types.ts:243](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L243)
+Defined in: [redteam/types.ts:243](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L243)
 
 #### Inherited from
 
@@ -38,7 +38,7 @@ Defined in: [redteam/types.ts:243](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **delay?**: `number`
 
-Defined in: [redteam/types.ts:246](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L246)
+Defined in: [redteam/types.ts:246](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L246)
 
 #### Inherited from
 
@@ -50,7 +50,7 @@ Defined in: [redteam/types.ts:246](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **entities?**: `string`[]
 
-Defined in: [redteam/types.ts:288](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L288)
+Defined in: [redteam/types.ts:288](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L288)
 
 ---
 
@@ -58,7 +58,7 @@ Defined in: [redteam/types.ts:288](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **excludeTargetOutputFromAgenticAttackGeneration?**: `boolean`
 
-Defined in: [redteam/types.ts:249](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L249)
+Defined in: [redteam/types.ts:249](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L249)
 
 #### Inherited from
 
@@ -70,7 +70,7 @@ Defined in: [redteam/types.ts:249](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **frameworks?**: (`"mitre:atlas"` \| `"nist:ai:measure"` \| `"owasp:api"` \| `"owasp:llm"` \| `"owasp:agentic"` \| `"eu:ai-act"` \| `"iso:42001"` \| `"gdpr"` \| `"dod:ai:ethics"`)[]
 
-Defined in: [redteam/types.ts:245](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L245)
+Defined in: [redteam/types.ts:245](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L245)
 
 #### Inherited from
 
@@ -82,7 +82,7 @@ Defined in: [redteam/types.ts:245](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **injectVar?**: `string`
 
-Defined in: [redteam/types.ts:237](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L237)
+Defined in: [redteam/types.ts:237](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L237)
 
 #### Inherited from
 
@@ -94,7 +94,7 @@ Defined in: [redteam/types.ts:237](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [redteam/types.ts:290](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L290)
+Defined in: [redteam/types.ts:290](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L290)
 
 ---
 
@@ -102,7 +102,7 @@ Defined in: [redteam/types.ts:290](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **language?**: `string` \| `string`[]
 
-Defined in: [redteam/types.ts:291](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L291)
+Defined in: [redteam/types.ts:291](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L291)
 
 #### Overrides
 
@@ -114,7 +114,7 @@ Defined in: [redteam/types.ts:291](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **maxCharsPerMessage?**: `number`
 
-Defined in: [redteam/types.ts:251](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L251)
+Defined in: [redteam/types.ts:251](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L251)
 
 #### Inherited from
 
@@ -126,7 +126,7 @@ Defined in: [redteam/types.ts:251](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **maxConcurrency?**: `number`
 
-Defined in: [redteam/types.ts:292](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L292)
+Defined in: [redteam/types.ts:292](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L292)
 
 #### Overrides
 
@@ -138,7 +138,7 @@ Defined in: [redteam/types.ts:292](https://github.com/promptfoo/promptfoo/blob/6
 
 > **numTests**: `number`
 
-Defined in: [redteam/types.ts:293](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L293)
+Defined in: [redteam/types.ts:293](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L293)
 
 #### Overrides
 
@@ -150,7 +150,7 @@ Defined in: [redteam/types.ts:293](https://github.com/promptfoo/promptfoo/blob/6
 
 > **plugins**: `ConfigurableObject` & `WithNumTests` & `object` & `object`[]
 
-Defined in: [redteam/types.ts:294](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L294)
+Defined in: [redteam/types.ts:294](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L294)
 
 #### Overrides
 
@@ -162,7 +162,7 @@ Defined in: [redteam/types.ts:294](https://github.com/promptfoo/promptfoo/blob/6
 
 > **prompts**: \[`string`, `...string[]`\]
 
-Defined in: [redteam/types.ts:295](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L295)
+Defined in: [redteam/types.ts:295](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L295)
 
 ---
 
@@ -170,7 +170,7 @@ Defined in: [redteam/types.ts:295](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **provider?**: `string` \| [`ApiProvider`](ApiProvider.md) \| [`ProviderOptions`](ProviderOptions.md)
 
-Defined in: [redteam/types.ts:241](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L241)
+Defined in: [redteam/types.ts:241](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L241)
 
 #### Inherited from
 
@@ -182,7 +182,7 @@ Defined in: [redteam/types.ts:241](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **purpose?**: `string`
 
-Defined in: [redteam/types.ts:242](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L242)
+Defined in: [redteam/types.ts:242](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L242)
 
 #### Inherited from
 
@@ -194,7 +194,7 @@ Defined in: [redteam/types.ts:242](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **remote?**: `boolean`
 
-Defined in: [redteam/types.ts:247](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L247)
+Defined in: [redteam/types.ts:247](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L247)
 
 #### Inherited from
 
@@ -206,7 +206,7 @@ Defined in: [redteam/types.ts:247](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **sharing?**: `boolean`
 
-Defined in: [redteam/types.ts:248](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L248)
+Defined in: [redteam/types.ts:248](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L248)
 
 #### Inherited from
 
@@ -218,7 +218,7 @@ Defined in: [redteam/types.ts:248](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **showProgressBar?**: `boolean`
 
-Defined in: [redteam/types.ts:298](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L298)
+Defined in: [redteam/types.ts:298](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L298)
 
 ---
 
@@ -226,7 +226,7 @@ Defined in: [redteam/types.ts:298](https://github.com/promptfoo/promptfoo/blob/6
 
 > **strategies**: [`RedteamStrategyObject`](../type-aliases/RedteamStrategyObject.md)[]
 
-Defined in: [redteam/types.ts:296](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L296)
+Defined in: [redteam/types.ts:296](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L296)
 
 #### Overrides
 
@@ -238,7 +238,7 @@ Defined in: [redteam/types.ts:296](https://github.com/promptfoo/promptfoo/blob/6
 
 > **targetIds**: `string`[]
 
-Defined in: [redteam/types.ts:297](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L297)
+Defined in: [redteam/types.ts:297](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L297)
 
 ---
 
@@ -246,7 +246,7 @@ Defined in: [redteam/types.ts:297](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **testGenerationInstructions?**: `string`
 
-Defined in: [redteam/types.ts:250](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L250)
+Defined in: [redteam/types.ts:250](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L250)
 
 #### Inherited from
 
@@ -258,7 +258,7 @@ Defined in: [redteam/types.ts:250](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **tracing?**: [`TracingConfig`](TracingConfig.md)
 
-Defined in: [redteam/types.ts:253](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L253)
+Defined in: [redteam/types.ts:253](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L253)
 
 #### Inherited from
 

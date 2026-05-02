@@ -6,7 +6,7 @@
 
 # Interface: Job
 
-Defined in: [types/index.ts:1392](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1392)
+Defined in: [types/index.ts:1392](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1392)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:1392](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **evalId**: `string` \| `null`
 
-Defined in: [types/index.ts:1393](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1393)
+Defined in: [types/index.ts:1393](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1393)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:1393](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **logs**: `string`[]
 
-Defined in: [types/index.ts:1398](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1398)
+Defined in: [types/index.ts:1398](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1398)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/index.ts:1398](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **progress**: `number`
 
-Defined in: [types/index.ts:1395](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1395)
+Defined in: [types/index.ts:1395](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1395)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/index.ts:1395](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **result**: [`EvaluateSummaryV3`](EvaluateSummaryV3.md) \| [`EvaluateSummaryV2`](EvaluateSummaryV2.md) \| `null`
 
-Defined in: [types/index.ts:1397](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1397)
+Defined in: [types/index.ts:1397](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1397)
 
 ---
 
@@ -46,7 +46,7 @@ Defined in: [types/index.ts:1397](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **status**: `"error"` \| `"in-progress"` \| `"complete"`
 
-Defined in: [types/index.ts:1394](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1394)
+Defined in: [types/index.ts:1394](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1394)
 
 ---
 
@@ -54,4 +54,4 @@ Defined in: [types/index.ts:1394](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **total**: `number`
 
-Defined in: [types/index.ts:1396](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1396)
+Defined in: [types/index.ts:1396](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1396)

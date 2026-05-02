@@ -6,7 +6,7 @@
 
 # Interface: EvaluateTableRow
 
-Defined in: [types/index.ts:440](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L440)
+Defined in: [types/index.ts:440](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L440)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:440](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **description?**: `string`
 
-Defined in: [types/index.ts:441](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L441)
+Defined in: [types/index.ts:441](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L441)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:441](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **outputs**: [`EvaluateTableOutput`](EvaluateTableOutput.md)[]
 
-Defined in: [types/index.ts:442](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L442)
+Defined in: [types/index.ts:442](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L442)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/index.ts:442](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **test**: `object`
 
-Defined in: [types/index.ts:444](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L444)
+Defined in: [types/index.ts:444](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L444)
 
 #### assert?
 
@@ -518,7 +518,7 @@ in > 0.38.0. Use `transform` instead.
 
 > **testIdx**: `number`
 
-Defined in: [types/index.ts:445](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L445)
+Defined in: [types/index.ts:445](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L445)
 
 ---
 
@@ -526,4 +526,4 @@ Defined in: [types/index.ts:445](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:443](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L443)
+Defined in: [types/index.ts:443](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L443)

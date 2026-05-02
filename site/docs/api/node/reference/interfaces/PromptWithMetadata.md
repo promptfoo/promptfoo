@@ -6,7 +6,7 @@
 
 # Interface: PromptWithMetadata
 
-Defined in: [types/index.ts:338](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L338)
+Defined in: [types/index.ts:338](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L338)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:338](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **count**: `number`
 
-Defined in: [types/index.ts:348](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L348)
+Defined in: [types/index.ts:348](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L348)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:348](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **evals**: `object`[]
 
-Defined in: [types/index.ts:343](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L343)
+Defined in: [types/index.ts:343](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L343)
 
 #### datasetId
 
@@ -42,7 +42,7 @@ Defined in: [types/index.ts:343](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **id**: `string`
 
-Defined in: [types/index.ts:339](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L339)
+Defined in: [types/index.ts:339](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L339)
 
 ---
 
@@ -50,7 +50,7 @@ Defined in: [types/index.ts:339](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **prompt**: [`Prompt`](Prompt.md)
 
-Defined in: [types/index.ts:340](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L340)
+Defined in: [types/index.ts:340](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L340)
 
 ---
 
@@ -58,7 +58,7 @@ Defined in: [types/index.ts:340](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **recentEvalDate**: `Date`
 
-Defined in: [types/index.ts:341](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L341)
+Defined in: [types/index.ts:341](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L341)
 
 ---
 
@@ -66,4 +66,4 @@ Defined in: [types/index.ts:341](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **recentEvalId**: `string`
 
-Defined in: [types/index.ts:342](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L342)
+Defined in: [types/index.ts:342](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L342)

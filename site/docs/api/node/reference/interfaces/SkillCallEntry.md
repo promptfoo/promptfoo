@@ -6,7 +6,7 @@
 
 # Interface: SkillCallEntry
 
-Defined in: [types/providers.ts:32](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L32)
+Defined in: [types/providers.ts:32](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L32)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/providers.ts:32](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **input?**: `unknown`
 
-Defined in: [types/providers.ts:34](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L34)
+Defined in: [types/providers.ts:34](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L34)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/providers.ts:34](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **is_error?**: `boolean`
 
-Defined in: [types/providers.ts:37](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L37)
+Defined in: [types/providers.ts:37](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L37)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/providers.ts:37](https://github.com/promptfoo/promptfoo/blob/
 
 > **name**: `string`
 
-Defined in: [types/providers.ts:33](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L33)
+Defined in: [types/providers.ts:33](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L33)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/providers.ts:33](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **path?**: `string`
 
-Defined in: [types/providers.ts:35](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L35)
+Defined in: [types/providers.ts:35](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L35)
 
 ---
 
@@ -46,4 +46,4 @@ Defined in: [types/providers.ts:35](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **source?**: `"tool"` \| `"heuristic"`
 
-Defined in: [types/providers.ts:36](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L36)
+Defined in: [types/providers.ts:36](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L36)

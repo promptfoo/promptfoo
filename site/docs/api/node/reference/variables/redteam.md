@@ -8,7 +8,7 @@
 
 > `const` **redteam**: `object`
 
-Defined in: [index.ts:426](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/index.ts#L426)
+Defined in: [index.ts:426](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L426)
 
 **`Beta`**
 

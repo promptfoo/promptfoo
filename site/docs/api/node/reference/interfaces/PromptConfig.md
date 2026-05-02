@@ -6,7 +6,7 @@
 
 # Interface: PromptConfig
 
-Defined in: [types/prompts.ts:12](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/prompts.ts#L12)
+Defined in: [types/prompts.ts:12](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L12)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/prompts.ts:12](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **prefix?**: `string`
 
-Defined in: [types/prompts.ts:13](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/prompts.ts#L13)
+Defined in: [types/prompts.ts:13](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L13)
 
 ---
 
@@ -22,4 +22,4 @@ Defined in: [types/prompts.ts:13](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **suffix?**: `string`
 
-Defined in: [types/prompts.ts:14](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/prompts.ts#L14)
+Defined in: [types/prompts.ts:14](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L14)

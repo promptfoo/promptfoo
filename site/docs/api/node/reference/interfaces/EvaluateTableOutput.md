@@ -6,7 +6,7 @@
 
 # Interface: EvaluateTableOutput
 
-Defined in: [types/index.ts:395](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L395)
+Defined in: [types/index.ts:395](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L395)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:395](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **audio?**: `object`
 
-Defined in: [types/index.ts:412](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L412)
+Defined in: [types/index.ts:412](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L412)
 
 #### blobRef?
 
@@ -58,7 +58,7 @@ Defined in: [types/index.ts:412](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **cost**: `number`
 
-Defined in: [types/index.ts:396](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L396)
+Defined in: [types/index.ts:396](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L396)
 
 ---
 
@@ -66,7 +66,7 @@ Defined in: [types/index.ts:396](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **error?**: `string` \| `null`
 
-Defined in: [types/index.ts:411](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L411)
+Defined in: [types/index.ts:411](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L411)
 
 ---
 
@@ -74,7 +74,7 @@ Defined in: [types/index.ts:411](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **failureReason**: [`ResultFailureReason`](../type-aliases/ResultFailureReason.md)
 
-Defined in: [types/index.ts:397](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L397)
+Defined in: [types/index.ts:397](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L397)
 
 ---
 
@@ -82,7 +82,7 @@ Defined in: [types/index.ts:397](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **gradingResult?**: [`GradingResult`](GradingResult.md) \| `null`
 
-Defined in: [types/index.ts:398](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L398)
+Defined in: [types/index.ts:398](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L398)
 
 ---
 
@@ -90,7 +90,7 @@ Defined in: [types/index.ts:398](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **id**: `string`
 
-Defined in: [types/index.ts:399](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L399)
+Defined in: [types/index.ts:399](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L399)
 
 ---
 
@@ -98,7 +98,7 @@ Defined in: [types/index.ts:399](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **images?**: [`ImageOutput`](ImageOutput.md)[]
 
-Defined in: [types/index.ts:437](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L437)
+Defined in: [types/index.ts:437](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L437)
 
 ---
 
@@ -106,7 +106,7 @@ Defined in: [types/index.ts:437](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **latencyMs**: `number`
 
-Defined in: [types/index.ts:400](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L400)
+Defined in: [types/index.ts:400](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L400)
 
 ---
 
@@ -114,7 +114,7 @@ Defined in: [types/index.ts:400](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **metadata?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/index.ts:401](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L401)
+Defined in: [types/index.ts:401](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L401)
 
 ---
 
@@ -122,7 +122,7 @@ Defined in: [types/index.ts:401](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **namedScores**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:402](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L402)
+Defined in: [types/index.ts:402](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L402)
 
 ---
 
@@ -130,7 +130,7 @@ Defined in: [types/index.ts:402](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **pass**: `boolean`
 
-Defined in: [types/index.ts:403](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L403)
+Defined in: [types/index.ts:403](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L403)
 
 ---
 
@@ -138,7 +138,7 @@ Defined in: [types/index.ts:403](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **prompt**: `string`
 
-Defined in: [types/index.ts:404](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L404)
+Defined in: [types/index.ts:404](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L404)
 
 ---
 
@@ -146,7 +146,7 @@ Defined in: [types/index.ts:404](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **provider?**: `string`
 
-Defined in: [types/index.ts:405](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L405)
+Defined in: [types/index.ts:405](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L405)
 
 ---
 
@@ -154,7 +154,7 @@ Defined in: [types/index.ts:405](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **response?**: [`ProviderResponse`](ProviderResponse.md)
 
-Defined in: [types/index.ts:406](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L406)
+Defined in: [types/index.ts:406](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L406)
 
 ---
 
@@ -162,7 +162,7 @@ Defined in: [types/index.ts:406](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **score**: `number`
 
-Defined in: [types/index.ts:407](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L407)
+Defined in: [types/index.ts:407](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L407)
 
 ---
 
@@ -170,7 +170,7 @@ Defined in: [types/index.ts:407](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **testCase**: `object`
 
-Defined in: [types/index.ts:408](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L408)
+Defined in: [types/index.ts:408](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L408)
 
 #### assert?
 
@@ -658,7 +658,7 @@ in > 0.38.0. Use `transform` instead.
 
 > **text**: `string`
 
-Defined in: [types/index.ts:409](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L409)
+Defined in: [types/index.ts:409](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L409)
 
 ---
 
@@ -666,7 +666,7 @@ Defined in: [types/index.ts:409](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **tokenUsage?**: `Partial`\<\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}\>
 
-Defined in: [types/index.ts:410](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L410)
+Defined in: [types/index.ts:410](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L410)
 
 ---
 
@@ -674,7 +674,7 @@ Defined in: [types/index.ts:410](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **video?**: `object`
 
-Defined in: [types/index.ts:423](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L423)
+Defined in: [types/index.ts:423](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L423)
 
 #### aspectRatio?
 

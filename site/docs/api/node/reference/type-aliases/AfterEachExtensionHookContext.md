@@ -8,7 +8,7 @@
 
 > **AfterEachExtensionHookContext** = `object`
 
-Defined in: [evaluatorHelpers.ts:568](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L568)
+Defined in: [evaluatorHelpers.ts:568](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L568)
 
 Context passed to afterEach extension hooks.
 Called after each test case is evaluated.
@@ -23,7 +23,7 @@ into the evaluation result and persisted.
 
 > **result**: [`EvaluateResult`](../interfaces/EvaluateResult.md)
 
-Defined in: [evaluatorHelpers.ts:572](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L572)
+Defined in: [evaluatorHelpers.ts:572](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L572)
 
 The result of the evaluation (namedScores, metadata, and response.metadata are mutable)
 
@@ -33,6 +33,6 @@ The result of the evaluation (namedScores, metadata, and response.metadata are m
 
 > **test**: [`TestCase`](TestCase.md)
 
-Defined in: [evaluatorHelpers.ts:570](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/evaluatorHelpers.ts#L570)
+Defined in: [evaluatorHelpers.ts:570](https://github.com/promptfoo/promptfoo/blob/main/src/evaluatorHelpers.ts#L570)
 
 The test case that was evaluated

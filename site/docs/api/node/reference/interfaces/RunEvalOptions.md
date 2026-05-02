@@ -6,7 +6,7 @@
 
 # Interface: RunEvalOptions
 
-Defined in: [types/index.ts:202](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L202)
+Defined in: [types/index.ts:202](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L202)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:202](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: [types/index.ts:232](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L232)
+Defined in: [types/index.ts:232](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L232)
 
 AbortSignal that can be used to cancel the evaluation
 This is passed to the provider's callApi function
@@ -25,7 +25,7 @@ This is passed to the provider's callApi function
 
 > `optional` **concurrency?**: `number`
 
-Defined in: [types/index.ts:220](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L220)
+Defined in: [types/index.ts:220](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L220)
 
 ---
 
@@ -33,7 +33,7 @@ Defined in: [types/index.ts:220](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **conversations?**: [`EvalConversations`](../type-aliases/EvalConversations.md)
 
-Defined in: [types/index.ts:216](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L216)
+Defined in: [types/index.ts:216](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L216)
 
 ---
 
@@ -41,7 +41,7 @@ Defined in: [types/index.ts:216](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **deferGrading?**: `boolean`
 
-Defined in: [types/index.ts:244](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L244)
+Defined in: [types/index.ts:244](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L244)
 
 Defers assertion grading so the evaluator can group model-graded provider
 calls across rows. Intended for serial evaluation orchestration.
@@ -52,7 +52,7 @@ calls across rows. Intended for serial evaluation orchestration.
 
 > **delay**: `number`
 
-Defined in: [types/index.ts:205](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L205)
+Defined in: [types/index.ts:205](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L205)
 
 ---
 
@@ -60,7 +60,7 @@ Defined in: [types/index.ts:205](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **evalId?**: `string`
 
-Defined in: [types/index.ts:226](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L226)
+Defined in: [types/index.ts:226](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L226)
 
 Evaluation ID for tracking blob references in the database.
 When set, allows blob storage to record references for access control.
@@ -71,7 +71,7 @@ When set, allows blob storage to record references for access control.
 
 > `optional` **evaluateOptions?**: [`EvaluateOptions`](../type-aliases/EvaluateOptions.md)
 
-Defined in: [types/index.ts:210](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L210)
+Defined in: [types/index.ts:210](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L210)
 
 ---
 
@@ -79,7 +79,7 @@ Defined in: [types/index.ts:210](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **isRedteam**: `boolean`
 
-Defined in: [types/index.ts:218](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L218)
+Defined in: [types/index.ts:218](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L218)
 
 ---
 
@@ -87,7 +87,7 @@ Defined in: [types/index.ts:218](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **nunjucksFilters?**: [`NunjucksFilterMap`](../type-aliases/NunjucksFilterMap.md)
 
-Defined in: [types/index.ts:209](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L209)
+Defined in: [types/index.ts:209](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L209)
 
 ---
 
@@ -95,7 +95,7 @@ Defined in: [types/index.ts:209](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **prompt**: [`Prompt`](Prompt.md)
 
-Defined in: [types/index.ts:204](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L204)
+Defined in: [types/index.ts:204](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L204)
 
 ---
 
@@ -103,7 +103,7 @@ Defined in: [types/index.ts:204](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **promptIdx**: `number`
 
-Defined in: [types/index.ts:213](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L213)
+Defined in: [types/index.ts:213](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L213)
 
 ---
 
@@ -111,7 +111,7 @@ Defined in: [types/index.ts:213](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **provider**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/index.ts:203](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L203)
+Defined in: [types/index.ts:203](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L203)
 
 ---
 
@@ -119,7 +119,7 @@ Defined in: [types/index.ts:203](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **providerCallQueue?**: [`ProviderCallQueueRef`](ProviderCallQueueRef.md)
 
-Defined in: [types/index.ts:249](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L249)
+Defined in: [types/index.ts:249](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L249)
 
 Queue used while deferred grading is active to group grader provider calls.
 
@@ -129,7 +129,7 @@ Queue used while deferred grading is active to group grader provider calls.
 
 > `optional` **rateLimitRegistry?**: [`RateLimitRegistryRef`](RateLimitRegistryRef.md)
 
-Defined in: [types/index.ts:238](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L238)
+Defined in: [types/index.ts:238](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L238)
 
 Rate limit registry for adaptive concurrency control.
 When provided, provider calls are wrapped with rate limiting and retry logic.
@@ -140,7 +140,7 @@ When provided, provider calls are wrapped with rate limiting and retry logic.
 
 > `optional` **registers?**: [`EvalRegisters`](../type-aliases/EvalRegisters.md)
 
-Defined in: [types/index.ts:217](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L217)
+Defined in: [types/index.ts:217](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L217)
 
 ---
 
@@ -148,7 +148,7 @@ Defined in: [types/index.ts:217](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **repeatIndex**: `number`
 
-Defined in: [types/index.ts:214](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L214)
+Defined in: [types/index.ts:214](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L214)
 
 ---
 
@@ -156,7 +156,7 @@ Defined in: [types/index.ts:214](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **test**: `object`
 
-Defined in: [types/index.ts:207](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L207)
+Defined in: [types/index.ts:207](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L207)
 
 #### assert?
 
@@ -644,7 +644,7 @@ in > 0.38.0. Use `transform` instead.
 
 > **testIdx**: `number`
 
-Defined in: [types/index.ts:212](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L212)
+Defined in: [types/index.ts:212](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L212)
 
 ---
 
@@ -652,7 +652,7 @@ Defined in: [types/index.ts:212](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **testSuite?**: `object`
 
-Defined in: [types/index.ts:208](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L208)
+Defined in: [types/index.ts:208](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L208)
 
 #### defaultTest?
 

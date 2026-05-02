@@ -6,7 +6,7 @@
 
 # Interface: RedteamMediaData
 
-Defined in: [redteam/types.ts:381](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L381)
+Defined in: [redteam/types.ts:381](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L381)
 
 Media data (audio or image) for redteam history entries
 
@@ -16,7 +16,7 @@ Media data (audio or image) for redteam history entries
 
 > `optional` **data?**: `string`
 
-Defined in: [redteam/types.ts:390](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L390)
+Defined in: [redteam/types.ts:390](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L390)
 
 Media payload for rendering/transport.
 
@@ -31,4 +31,4 @@ Optional because some code paths only know the format and store the payload else
 
 > **format**: `string`
 
-Defined in: [redteam/types.ts:391](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L391)
+Defined in: [redteam/types.ts:391](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L391)

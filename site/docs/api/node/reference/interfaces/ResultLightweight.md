@@ -6,7 +6,7 @@
 
 # Interface: ResultLightweight
 
-Defined in: [types/index.ts:1350](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1350)
+Defined in: [types/index.ts:1350](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1350)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:1350](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **createdAt**: `number`
 
-Defined in: [types/index.ts:1353](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1353)
+Defined in: [types/index.ts:1353](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1353)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:1353](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **datasetId**: `string` \| `null`
 
-Defined in: [types/index.ts:1352](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1352)
+Defined in: [types/index.ts:1352](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1352)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/index.ts:1352](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **description**: `string` \| `null`
 
-Defined in: [types/index.ts:1354](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1354)
+Defined in: [types/index.ts:1354](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1354)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/index.ts:1354](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **evalId**: `string`
 
-Defined in: [types/index.ts:1351](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1351)
+Defined in: [types/index.ts:1351](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1351)
 
 ---
 
@@ -46,7 +46,7 @@ Defined in: [types/index.ts:1351](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **isRedteam?**: `boolean`
 
-Defined in: [types/index.ts:1356](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1356)
+Defined in: [types/index.ts:1356](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1356)
 
 ---
 
@@ -54,4 +54,4 @@ Defined in: [types/index.ts:1356](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **numTests**: `number`
 
-Defined in: [types/index.ts:1355](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1355)
+Defined in: [types/index.ts:1355](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1355)

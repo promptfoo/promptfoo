@@ -6,7 +6,7 @@
 
 # Interface: ResultsFile
 
-Defined in: [types/index.ts:1338](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1338)
+Defined in: [types/index.ts:1338](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1338)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:1338](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **author**: `string` \| `null`
 
-Defined in: [types/index.ts:1343](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1343)
+Defined in: [types/index.ts:1343](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1343)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:1343](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **config**: `Partial`\<[`UnifiedConfig`](../type-aliases/UnifiedConfig.md)\>
 
-Defined in: [types/index.ts:1342](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1342)
+Defined in: [types/index.ts:1342](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1342)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/index.ts:1342](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **createdAt**: `string`
 
-Defined in: [types/index.ts:1340](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1340)
+Defined in: [types/index.ts:1340](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1340)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/index.ts:1340](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **datasetId?**: `string` \| `null`
 
-Defined in: [types/index.ts:1346](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1346)
+Defined in: [types/index.ts:1346](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1346)
 
 ---
 
@@ -46,7 +46,7 @@ Defined in: [types/index.ts:1346](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **prompts?**: `object`[]
 
-Defined in: [types/index.ts:1344](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1344)
+Defined in: [types/index.ts:1344](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1344)
 
 #### config?
 
@@ -254,7 +254,7 @@ in > 0.59.0. Use `label` instead.
 
 > **results**: [`EvaluateSummaryV3`](EvaluateSummaryV3.md) \| [`EvaluateSummaryV2`](EvaluateSummaryV2.md)
 
-Defined in: [types/index.ts:1341](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1341)
+Defined in: [types/index.ts:1341](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1341)
 
 ---
 
@@ -262,4 +262,4 @@ Defined in: [types/index.ts:1341](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **version**: `number`
 
-Defined in: [types/index.ts:1339](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L1339)
+Defined in: [types/index.ts:1339](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1339)

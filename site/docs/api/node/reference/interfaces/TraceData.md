@@ -6,7 +6,7 @@
 
 # Interface: TraceData
 
-Defined in: [types/tracing.ts:12](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/tracing.ts#L12)
+Defined in: [types/tracing.ts:12](https://github.com/promptfoo/promptfoo/blob/main/src/types/tracing.ts#L12)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/tracing.ts:12](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **evaluationId**: `string`
 
-Defined in: [types/tracing.ts:14](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/tracing.ts#L14)
+Defined in: [types/tracing.ts:14](https://github.com/promptfoo/promptfoo/blob/main/src/types/tracing.ts#L14)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/tracing.ts:14](https://github.com/promptfoo/promptfoo/blob/6b
 
 > `optional` **metadata?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/tracing.ts:16](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/tracing.ts#L16)
+Defined in: [types/tracing.ts:16](https://github.com/promptfoo/promptfoo/blob/main/src/types/tracing.ts#L16)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/tracing.ts:16](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **spans**: [`TraceSpan`](TraceSpan.md)[]
 
-Defined in: [types/tracing.ts:17](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/tracing.ts#L17)
+Defined in: [types/tracing.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/types/tracing.ts#L17)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/tracing.ts:17](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **testCaseId**: `string`
 
-Defined in: [types/tracing.ts:15](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/tracing.ts#L15)
+Defined in: [types/tracing.ts:15](https://github.com/promptfoo/promptfoo/blob/main/src/types/tracing.ts#L15)
 
 ---
 
@@ -46,4 +46,4 @@ Defined in: [types/tracing.ts:15](https://github.com/promptfoo/promptfoo/blob/6b
 
 > **traceId**: `string`
 
-Defined in: [types/tracing.ts:13](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/tracing.ts#L13)
+Defined in: [types/tracing.ts:13](https://github.com/promptfoo/promptfoo/blob/main/src/types/tracing.ts#L13)

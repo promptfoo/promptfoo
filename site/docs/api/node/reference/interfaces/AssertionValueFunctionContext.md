@@ -6,7 +6,7 @@
 
 # Interface: AssertionValueFunctionContext
 
-Defined in: [types/index.ts:729](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L729)
+Defined in: [types/index.ts:729](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L729)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:729](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/index.ts:734](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L734)
+Defined in: [types/index.ts:734](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L734)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:734](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **logProbs**: `number`[] \| `undefined`
 
-Defined in: [types/index.ts:733](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L733)
+Defined in: [types/index.ts:733](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L733)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/index.ts:733](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **prompt**: `string` \| `undefined`
 
-Defined in: [types/index.ts:730](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L730)
+Defined in: [types/index.ts:730](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L730)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/index.ts:730](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **provider**: [`ApiProvider`](ApiProvider.md) \| `undefined`
 
-Defined in: [types/index.ts:735](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L735)
+Defined in: [types/index.ts:735](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L735)
 
 ---
 
@@ -46,7 +46,7 @@ Defined in: [types/index.ts:735](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **providerResponse**: [`ProviderResponse`](ProviderResponse.md) \| `undefined`
 
-Defined in: [types/index.ts:736](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L736)
+Defined in: [types/index.ts:736](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L736)
 
 ---
 
@@ -54,7 +54,7 @@ Defined in: [types/index.ts:736](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **test**: `object`
 
-Defined in: [types/index.ts:732](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L732)
+Defined in: [types/index.ts:732](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L732)
 
 #### assert?
 
@@ -542,7 +542,7 @@ in > 0.38.0. Use `transform` instead.
 
 > `optional` **trace?**: [`TraceData`](TraceData.md)
 
-Defined in: [types/index.ts:737](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L737)
+Defined in: [types/index.ts:737](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L737)
 
 ---
 
@@ -550,4 +550,4 @@ Defined in: [types/index.ts:737](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **vars**: `Record`\<`string`, [`VarValue`](../type-aliases/VarValue.md)\>
 
-Defined in: [types/index.ts:731](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L731)
+Defined in: [types/index.ts:731](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L731)

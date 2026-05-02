@@ -6,7 +6,7 @@
 
 # Interface: RedteamHistoryEntry
 
-Defined in: [redteam/types.ts:397](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L397)
+Defined in: [redteam/types.ts:397](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L397)
 
 Single entry in redteam conversation history
 
@@ -16,7 +16,7 @@ Single entry in redteam conversation history
 
 > `optional` **inputVars?**: `Record`\<`string`, `string`\>
 
-Defined in: [redteam/types.ts:409](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L409)
+Defined in: [redteam/types.ts:409](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L409)
 
 Extracted input variables for multi-input mode
 
@@ -26,7 +26,7 @@ Extracted input variables for multi-input mode
 
 > **output**: `string`
 
-Defined in: [redteam/types.ts:399](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L399)
+Defined in: [redteam/types.ts:399](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L399)
 
 ---
 
@@ -34,7 +34,7 @@ Defined in: [redteam/types.ts:399](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **outputAudio?**: [`RedteamMediaData`](RedteamMediaData.md)
 
-Defined in: [redteam/types.ts:405](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L405)
+Defined in: [redteam/types.ts:405](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L405)
 
 Audio data from the target response
 
@@ -44,7 +44,7 @@ Audio data from the target response
 
 > `optional` **outputImage?**: [`RedteamMediaData`](RedteamMediaData.md)
 
-Defined in: [redteam/types.ts:407](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L407)
+Defined in: [redteam/types.ts:407](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L407)
 
 Image data from the target response
 
@@ -54,7 +54,7 @@ Image data from the target response
 
 > **prompt**: `string`
 
-Defined in: [redteam/types.ts:398](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L398)
+Defined in: [redteam/types.ts:398](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L398)
 
 ---
 
@@ -62,7 +62,7 @@ Defined in: [redteam/types.ts:398](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **promptAudio?**: [`RedteamMediaData`](RedteamMediaData.md)
 
-Defined in: [redteam/types.ts:401](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L401)
+Defined in: [redteam/types.ts:401](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L401)
 
 Audio data for the prompt (when using audio transforms)
 
@@ -72,6 +72,6 @@ Audio data for the prompt (when using audio transforms)
 
 > `optional` **promptImage?**: [`RedteamMediaData`](RedteamMediaData.md)
 
-Defined in: [redteam/types.ts:403](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L403)
+Defined in: [redteam/types.ts:403](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L403)
 
 Image data for the prompt (when using image transforms)

@@ -6,7 +6,7 @@
 
 # Interface: EvaluateResult
 
-Defined in: [types/index.ts:372](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L372)
+Defined in: [types/index.ts:372](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L372)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:372](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **cost?**: `number`
 
-Defined in: [types/index.ts:390](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L390)
+Defined in: [types/index.ts:390](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L390)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:390](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **description?**: `string`
 
-Defined in: [types/index.ts:374](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L374)
+Defined in: [types/index.ts:374](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L374)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/index.ts:374](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **error?**: `string` \| `null`
 
-Defined in: [types/index.ts:383](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L383)
+Defined in: [types/index.ts:383](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L383)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/index.ts:383](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **failureReason**: [`ResultFailureReason`](../type-aliases/ResultFailureReason.md)
 
-Defined in: [types/index.ts:384](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L384)
+Defined in: [types/index.ts:384](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L384)
 
 ---
 
@@ -46,7 +46,7 @@ Defined in: [types/index.ts:384](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **gradingResult?**: [`GradingResult`](GradingResult.md) \| `null`
 
-Defined in: [types/index.ts:388](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L388)
+Defined in: [types/index.ts:388](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L388)
 
 ---
 
@@ -54,7 +54,7 @@ Defined in: [types/index.ts:388](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **id?**: `string`
 
-Defined in: [types/index.ts:373](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L373)
+Defined in: [types/index.ts:373](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L373)
 
 ---
 
@@ -62,7 +62,7 @@ Defined in: [types/index.ts:373](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **latencyMs**: `number`
 
-Defined in: [types/index.ts:387](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L387)
+Defined in: [types/index.ts:387](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L387)
 
 ---
 
@@ -70,7 +70,7 @@ Defined in: [types/index.ts:387](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **metadata?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/index.ts:391](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L391)
+Defined in: [types/index.ts:391](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L391)
 
 ---
 
@@ -78,7 +78,7 @@ Defined in: [types/index.ts:391](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **namedScores**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:389](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L389)
+Defined in: [types/index.ts:389](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L389)
 
 ---
 
@@ -86,7 +86,7 @@ Defined in: [types/index.ts:389](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **prompt**: [`Prompt`](Prompt.md)
 
-Defined in: [types/index.ts:380](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L380)
+Defined in: [types/index.ts:380](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L380)
 
 ---
 
@@ -94,7 +94,7 @@ Defined in: [types/index.ts:380](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **promptId**: `string`
 
-Defined in: [types/index.ts:378](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L378)
+Defined in: [types/index.ts:378](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L378)
 
 ---
 
@@ -102,7 +102,7 @@ Defined in: [types/index.ts:378](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **promptIdx**: `number`
 
-Defined in: [types/index.ts:375](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L375)
+Defined in: [types/index.ts:375](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L375)
 
 ---
 
@@ -110,7 +110,7 @@ Defined in: [types/index.ts:375](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **provider**: `Pick`\<[`ProviderOptions`](ProviderOptions.md), `"id"` \| `"label"`\>
 
-Defined in: [types/index.ts:379](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L379)
+Defined in: [types/index.ts:379](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L379)
 
 ---
 
@@ -118,7 +118,7 @@ Defined in: [types/index.ts:379](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **response?**: [`ProviderResponse`](ProviderResponse.md)
 
-Defined in: [types/index.ts:382](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L382)
+Defined in: [types/index.ts:382](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L382)
 
 ---
 
@@ -126,7 +126,7 @@ Defined in: [types/index.ts:382](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **score**: `number`
 
-Defined in: [types/index.ts:386](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L386)
+Defined in: [types/index.ts:386](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L386)
 
 ---
 
@@ -134,7 +134,7 @@ Defined in: [types/index.ts:386](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **success**: `boolean`
 
-Defined in: [types/index.ts:385](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L385)
+Defined in: [types/index.ts:385](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L385)
 
 ---
 
@@ -142,7 +142,7 @@ Defined in: [types/index.ts:385](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **testCase**: `object`
 
-Defined in: [types/index.ts:377](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L377)
+Defined in: [types/index.ts:377](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L377)
 
 #### assert?
 
@@ -630,7 +630,7 @@ in > 0.38.0. Use `transform` instead.
 
 > **testIdx**: `number`
 
-Defined in: [types/index.ts:376](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L376)
+Defined in: [types/index.ts:376](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L376)
 
 ---
 
@@ -638,7 +638,7 @@ Defined in: [types/index.ts:376](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > `optional` **tokenUsage?**: `Required`\<\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}\>
 
-Defined in: [types/index.ts:392](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L392)
+Defined in: [types/index.ts:392](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L392)
 
 ---
 
@@ -646,4 +646,4 @@ Defined in: [types/index.ts:392](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **vars**: [`Vars`](../type-aliases/Vars.md)
 
-Defined in: [types/index.ts:381](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L381)
+Defined in: [types/index.ts:381](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L381)

@@ -6,7 +6,7 @@
 
 # Interface: EvaluateSummaryV2
 
-Defined in: [types/index.ts:474](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L474)
+Defined in: [types/index.ts:474](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L474)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/index.ts:474](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **results**: [`EvaluateResult`](EvaluateResult.md)[]
 
-Defined in: [types/index.ts:477](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L477)
+Defined in: [types/index.ts:477](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L477)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/index.ts:477](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **stats**: [`EvaluateStats`](EvaluateStats.md)
 
-Defined in: [types/index.ts:479](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L479)
+Defined in: [types/index.ts:479](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L479)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/index.ts:479](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **table**: [`EvaluateTable`](EvaluateTable.md)
 
-Defined in: [types/index.ts:478](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L478)
+Defined in: [types/index.ts:478](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L478)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [types/index.ts:478](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **timestamp**: `string`
 
-Defined in: [types/index.ts:476](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L476)
+Defined in: [types/index.ts:476](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L476)
 
 ---
 
@@ -46,4 +46,4 @@ Defined in: [types/index.ts:476](https://github.com/promptfoo/promptfoo/blob/6b3
 
 > **version**: `number`
 
-Defined in: [types/index.ts:475](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L475)
+Defined in: [types/index.ts:475](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L475)

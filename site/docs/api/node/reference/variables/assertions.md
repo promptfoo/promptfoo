@@ -8,7 +8,7 @@
 
 > **assertions**: `object`
 
-Defined in: [assertions/index.ts:806](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/assertions/index.ts#L806)
+Defined in: [assertions/index.ts:806](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L806)
 
 Assertion helpers exposed through the Node.js package.
 

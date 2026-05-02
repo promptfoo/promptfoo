@@ -6,7 +6,7 @@
 
 # Interface: AgentCancelledPayload
 
-Defined in: [types/agent.ts:23](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/agent.ts#L23)
+Defined in: [types/agent.ts:23](https://github.com/promptfoo/promptfoo/blob/main/src/types/agent.ts#L23)
 
 Payload for agent:cancelled events
 
@@ -16,4 +16,4 @@ Payload for agent:cancelled events
 
 > **clientType**: `string`
 
-Defined in: [types/agent.ts:24](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/agent.ts#L24)
+Defined in: [types/agent.ts:24](https://github.com/promptfoo/promptfoo/blob/main/src/types/agent.ts#L24)

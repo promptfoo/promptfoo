@@ -8,7 +8,7 @@
 
 > **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bust?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
 
-Defined in: [cache.ts:517](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/cache.ts#L517)
+Defined in: [cache.ts:517](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L517)
 
 Fetch a URL through promptfoo's retrying cache wrapper.
 

@@ -8,4 +8,4 @@
 
 > **EvalConversations** = `Record`\<`string`, `object`[]\>
 
-Defined in: [types/index.ts:195](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/index.ts#L195)
+Defined in: [types/index.ts:195](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L195)

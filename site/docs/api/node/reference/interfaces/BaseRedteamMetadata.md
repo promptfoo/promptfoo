@@ -6,7 +6,7 @@
 
 # Interface: BaseRedteamMetadata
 
-Defined in: [redteam/types.ts:415](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L415)
+Defined in: [redteam/types.ts:415](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L415)
 
 Base metadata interface shared by all redteam providers
 
@@ -16,7 +16,7 @@ Base metadata interface shared by all redteam providers
 
 > **messages**: `Record`\<`string`, `any`\>[]
 
-Defined in: [redteam/types.ts:417](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L417)
+Defined in: [redteam/types.ts:417](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L417)
 
 ---
 
@@ -24,7 +24,7 @@ Defined in: [redteam/types.ts:417](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **redteamFinalPrompt?**: `string`
 
-Defined in: [redteam/types.ts:416](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L416)
+Defined in: [redteam/types.ts:416](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L416)
 
 ---
 
@@ -32,7 +32,7 @@ Defined in: [redteam/types.ts:416](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **redteamHistory?**: [`RedteamHistoryEntry`](RedteamHistoryEntry.md)[]
 
-Defined in: [redteam/types.ts:419](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L419)
+Defined in: [redteam/types.ts:419](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L419)
 
 ---
 
@@ -40,7 +40,7 @@ Defined in: [redteam/types.ts:419](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **sessionId?**: `string`
 
-Defined in: [redteam/types.ts:421](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L421)
+Defined in: [redteam/types.ts:421](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L421)
 
 ---
 
@@ -48,7 +48,7 @@ Defined in: [redteam/types.ts:421](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **sessionIds?**: `string`[]
 
-Defined in: [redteam/types.ts:420](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L420)
+Defined in: [redteam/types.ts:420](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L420)
 
 ---
 
@@ -56,4 +56,4 @@ Defined in: [redteam/types.ts:420](https://github.com/promptfoo/promptfoo/blob/6
 
 > **stopReason**: `string`
 
-Defined in: [redteam/types.ts:418](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L418)
+Defined in: [redteam/types.ts:418](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L418)

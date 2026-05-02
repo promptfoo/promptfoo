@@ -6,7 +6,7 @@
 
 # Interface: RedteamContext
 
-Defined in: [redteam/types.ts:229](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L229)
+Defined in: [redteam/types.ts:229](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L229)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [redteam/types.ts:229](https://github.com/promptfoo/promptfoo/blob/6
 
 > **id**: `string`
 
-Defined in: [redteam/types.ts:230](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L230)
+Defined in: [redteam/types.ts:230](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L230)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [redteam/types.ts:230](https://github.com/promptfoo/promptfoo/blob/6
 
 > **purpose**: `string`
 
-Defined in: [redteam/types.ts:231](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L231)
+Defined in: [redteam/types.ts:231](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L231)
 
 ---
 
@@ -30,4 +30,4 @@ Defined in: [redteam/types.ts:231](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **vars?**: `Record`\<`string`, `string`\>
 
-Defined in: [redteam/types.ts:232](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L232)
+Defined in: [redteam/types.ts:232](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L232)

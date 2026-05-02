@@ -6,7 +6,7 @@
 
 # Interface: ProviderResponse
 
-Defined in: [types/providers.ts:161](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L161)
+Defined in: [types/providers.ts:161](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L161)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/providers.ts:161](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **audio?**: `object`
 
-Defined in: [types/providers.ts:231](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L231)
+Defined in: [types/providers.ts:231](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L231)
 
 #### blobRef?
 
@@ -58,7 +58,7 @@ Defined in: [types/providers.ts:231](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **cached?**: `boolean`
 
-Defined in: [types/providers.ts:162](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L162)
+Defined in: [types/providers.ts:162](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L162)
 
 ---
 
@@ -66,7 +66,7 @@ Defined in: [types/providers.ts:162](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **conversationEnded?**: `boolean`
 
-Defined in: [types/providers.ts:222](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L222)
+Defined in: [types/providers.ts:222](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L222)
 
 Indicates the target intentionally ended the active conversation/session.
 Multi-turn redteam strategies can use this to stop probing gracefully.
@@ -77,7 +77,7 @@ Multi-turn redteam strategies can use this to stop probing gracefully.
 
 > `optional` **conversationEndReason?**: `string`
 
-Defined in: [types/providers.ts:227](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L227)
+Defined in: [types/providers.ts:227](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L227)
 
 Optional machine-readable reason explaining why the conversation ended.
 Example: `thread_closed`.
@@ -88,7 +88,7 @@ Example: `thread_closed`.
 
 > `optional` **cost?**: `number`
 
-Defined in: [types/providers.ts:163](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L163)
+Defined in: [types/providers.ts:163](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L163)
 
 ---
 
@@ -96,7 +96,7 @@ Defined in: [types/providers.ts:163](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **error?**: `string`
 
-Defined in: [types/providers.ts:164](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L164)
+Defined in: [types/providers.ts:164](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L164)
 
 ---
 
@@ -104,7 +104,7 @@ Defined in: [types/providers.ts:164](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **finishReason?**: `string`
 
-Defined in: [types/providers.ts:230](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L230)
+Defined in: [types/providers.ts:230](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L230)
 
 ---
 
@@ -112,7 +112,7 @@ Defined in: [types/providers.ts:230](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **format?**: `string`
 
-Defined in: [types/providers.ts:182](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L182)
+Defined in: [types/providers.ts:182](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L182)
 
 Optional format hint for `output` (e.g. `'json'` when `output` is a JSON string).
 
@@ -122,7 +122,7 @@ Optional format hint for `output` (e.g. `'json'` when `output` is a JSON string)
 
 > `optional` **guardrails?**: [`GuardrailResponse`](GuardrailResponse.md)
 
-Defined in: [types/providers.ts:229](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L229)
+Defined in: [types/providers.ts:229](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L229)
 
 ---
 
@@ -130,7 +130,7 @@ Defined in: [types/providers.ts:229](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **images?**: [`ImageOutput`](ImageOutput.md)[]
 
-Defined in: [types/providers.ts:256](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L256)
+Defined in: [types/providers.ts:256](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L256)
 
 ---
 
@@ -138,7 +138,7 @@ Defined in: [types/providers.ts:256](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **inputMaterialization?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [types/providers.ts:210](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L210)
+Defined in: [types/providers.ts:210](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L210)
 
 Input materialization metadata returned by a remote Promptfoo server.
 
@@ -148,7 +148,7 @@ Input materialization metadata returned by a remote Promptfoo server.
 
 > `optional` **isBase64?**: `boolean`
 
-Defined in: [types/providers.ts:178](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L178)
+Defined in: [types/providers.ts:178](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L178)
 
 Indicates that `output` contains base64-encoded binary data (often as JSON like OpenAI `b64_json`).
 Used to enable blob externalization and avoid token bloat in downstream grading/agentic strategies.
@@ -159,7 +159,7 @@ Used to enable blob externalization and avoid token bloat in downstream grading/
 
 > `optional` **isRefusal?**: `boolean`
 
-Defined in: [types/providers.ts:217](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L217)
+Defined in: [types/providers.ts:217](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L217)
 
 ---
 
@@ -167,7 +167,7 @@ Defined in: [types/providers.ts:217](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [types/providers.ts:184](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L184)
+Defined in: [types/providers.ts:184](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L184)
 
 ---
 
@@ -175,7 +175,7 @@ Defined in: [types/providers.ts:184](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **logProbs?**: `number`[]
 
-Defined in: [types/providers.ts:183](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L183)
+Defined in: [types/providers.ts:183](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L183)
 
 ---
 
@@ -183,7 +183,7 @@ Defined in: [types/providers.ts:183](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **materializationHandled?**: `boolean`
 
-Defined in: [types/providers.ts:169](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L169)
+Defined in: [types/providers.ts:169](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L169)
 
 Indicates that a remote Promptfoo server already materialized multi-input vars
 for this response. When true, callers must not re-materialize locally.
@@ -194,7 +194,7 @@ for this response. When true, callers must not re-materialize locally.
 
 > `optional` **materializedVars?**: `Record`\<`string`, `string`\>
 
-Defined in: [types/providers.ts:173](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L173)
+Defined in: [types/providers.ts:173](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L173)
 
 Materialized per-input vars returned by a remote Promptfoo server.
 
@@ -204,7 +204,7 @@ Materialized per-input vars returned by a remote Promptfoo server.
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/providers.ts:185](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L185)
+Defined in: [types/providers.ts:185](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L185)
 
 #### Index Signature
 
@@ -240,7 +240,7 @@ Defined in: [types/providers.ts:185](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **output?**: `any`
 
-Defined in: [types/providers.ts:206](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L206)
+Defined in: [types/providers.ts:206](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L206)
 
 ---
 
@@ -248,7 +248,7 @@ Defined in: [types/providers.ts:206](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **prompt?**: `string` \| [`ChatMessage`](ChatMessage.md)[]
 
-Defined in: [types/providers.ts:204](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L204)
+Defined in: [types/providers.ts:204](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L204)
 
 The actual prompt sent to the LLM. If set by a provider, this overrides
 the rendered prompt for display and assertions.
@@ -264,7 +264,7 @@ Can be a simple string or an array of chat messages.
 
 > `optional` **providerTransformedOutput?**: `any`
 
-Defined in: [types/providers.ts:215](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L215)
+Defined in: [types/providers.ts:215](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L215)
 
 Output after provider-level transform. Used by contextTransform to ensure
 it operates on provider-normalized output, independent of test transforms.
@@ -275,7 +275,7 @@ it operates on provider-normalized output, independent of test transforms.
 
 > `optional` **raw?**: `any`
 
-Defined in: [types/providers.ts:205](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L205)
+Defined in: [types/providers.ts:205](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L205)
 
 ---
 
@@ -283,7 +283,7 @@ Defined in: [types/providers.ts:205](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **sessionId?**: `string`
 
-Defined in: [types/providers.ts:228](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L228)
+Defined in: [types/providers.ts:228](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L228)
 
 ---
 
@@ -291,7 +291,7 @@ Defined in: [types/providers.ts:228](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **tokenUsage?**: `object`
 
-Defined in: [types/providers.ts:216](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L216)
+Defined in: [types/providers.ts:216](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L216)
 
 #### assertions?
 
@@ -391,7 +391,7 @@ Defined in: [types/providers.ts:216](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **video?**: `object`
 
-Defined in: [types/providers.ts:242](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L242)
+Defined in: [types/providers.ts:242](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L242)
 
 #### aspectRatio?
 

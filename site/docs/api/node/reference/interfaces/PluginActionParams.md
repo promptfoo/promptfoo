@@ -6,7 +6,7 @@
 
 # Interface: PluginActionParams
 
-Defined in: [redteam/types.ts:219](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L219)
+Defined in: [redteam/types.ts:219](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L219)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [redteam/types.ts:219](https://github.com/promptfoo/promptfoo/blob/6
 
 > `optional` **config?**: `object`
 
-Defined in: [redteam/types.ts:225](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L225)
+Defined in: [redteam/types.ts:225](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L225)
 
 #### \_\_nonce?
 
@@ -350,7 +350,7 @@ Defined in: [redteam/types.ts:225](https://github.com/promptfoo/promptfoo/blob/6
 
 > **delayMs**: `number`
 
-Defined in: [redteam/types.ts:224](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L224)
+Defined in: [redteam/types.ts:224](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L224)
 
 ---
 
@@ -358,7 +358,7 @@ Defined in: [redteam/types.ts:224](https://github.com/promptfoo/promptfoo/blob/6
 
 > **injectVar**: `string`
 
-Defined in: [redteam/types.ts:222](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L222)
+Defined in: [redteam/types.ts:222](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L222)
 
 ---
 
@@ -366,7 +366,7 @@ Defined in: [redteam/types.ts:222](https://github.com/promptfoo/promptfoo/blob/6
 
 > **n**: `number`
 
-Defined in: [redteam/types.ts:223](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L223)
+Defined in: [redteam/types.ts:223](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L223)
 
 ---
 
@@ -374,7 +374,7 @@ Defined in: [redteam/types.ts:223](https://github.com/promptfoo/promptfoo/blob/6
 
 > **provider**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [redteam/types.ts:220](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L220)
+Defined in: [redteam/types.ts:220](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L220)
 
 ---
 
@@ -382,4 +382,4 @@ Defined in: [redteam/types.ts:220](https://github.com/promptfoo/promptfoo/blob/6
 
 > **purpose**: `string`
 
-Defined in: [redteam/types.ts:221](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/redteam/types.ts#L221)
+Defined in: [redteam/types.ts:221](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L221)

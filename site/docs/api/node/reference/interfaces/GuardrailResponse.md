@@ -6,7 +6,7 @@
 
 # Interface: GuardrailResponse
 
-Defined in: [types/providers.ts:154](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L154)
+Defined in: [types/providers.ts:154](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L154)
 
 ## Properties
 
@@ -14,7 +14,7 @@ Defined in: [types/providers.ts:154](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **flagged?**: `boolean`
 
-Defined in: [types/providers.ts:157](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L157)
+Defined in: [types/providers.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L157)
 
 ---
 
@@ -22,7 +22,7 @@ Defined in: [types/providers.ts:157](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **flaggedInput?**: `boolean`
 
-Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L155)
+Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L155)
 
 ---
 
@@ -30,7 +30,7 @@ Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **flaggedOutput?**: `boolean`
 
-Defined in: [types/providers.ts:156](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L156)
+Defined in: [types/providers.ts:156](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L156)
 
 ---
 
@@ -38,4 +38,4 @@ Defined in: [types/providers.ts:156](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **reason?**: `string`
 
-Defined in: [types/providers.ts:158](https://github.com/promptfoo/promptfoo/blob/6b351a0b374cb2eb7e8305361baf5611e052f630/src/types/providers.ts#L158)
+Defined in: [types/providers.ts:158](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L158)
