@@ -4,12 +4,10 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies BEFORE imports
-vi.mock('../../../src/index', () => ({
-  default: {
-    evaluate: vi.fn().mockResolvedValue({
-      toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
-    }),
-  },
+vi.mock('../../../src/node', () => ({
+  evaluate: vi.fn().mockResolvedValue({
+    toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
+  }),
 }));
 
 vi.mock('../../../src/util/sharing', () => ({
@@ -23,15 +21,15 @@ vi.mock('../../../src/models/eval', () => ({
 }));
 vi.mock('../../../src/globalConfig/accounts');
 
-import promptfoo from '../../../src/index';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
+import { evaluate } from '../../../src/node';
 import { createApp } from '../../../src/server/server';
 import { shouldShareResults } from '../../../src/util/sharing';
 
 const errorSpy = vi.spyOn(logger, 'error');
 const mockedEvalCreate = vi.mocked(Eval.create);
-const mockedEvaluate = vi.mocked(promptfoo.evaluate);
+const mockedEvaluate = vi.mocked(evaluate);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
 describe('Eval Routes - Sharing behavior', () => {
