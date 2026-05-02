@@ -189,17 +189,19 @@ const evalRecord = await evaluate({
 Load multiple providers and evaluate them independently:
 
 ```typescript
-import { assertions, loadApiProviders } from 'promptfoo';
+import { assertions, loadApiProvider } from 'promptfoo';
 
 async function batchTestProviders() {
-  const providers = await loadApiProviders(
-    ['openai:gpt-4', 'anthropic:claude-3-opus', 'vertex:claude-3-sonnet'],
-    {
-      env: {
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
-      },
-    },
+  const providerPaths = ['openai:gpt-4', 'anthropic:claude-3-opus', 'vertex:claude-3-sonnet'];
+  const providers = await Promise.all(
+    providerPaths.map((providerPath) =>
+      loadApiProvider(providerPath, {
+        env: {
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        },
+      }),
+    ),
   );
 
   const testQuestions = [

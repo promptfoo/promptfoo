@@ -98,7 +98,6 @@ describe('index.ts exports', () => {
     'isResultFailureReason',
     'isTransformFunction',
     'loadApiProvider',
-    'loadApiProviders',
     'normalizeInputDefinition',
     'normalizeInputs',
     'redteam',
@@ -197,7 +196,6 @@ describe('index.ts exports', () => {
       evaluate: index.evaluate,
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
-      loadApiProviders: index.loadApiProviders,
       redteam: index.redteam,
     });
   });

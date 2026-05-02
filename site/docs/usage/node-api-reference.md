@@ -143,40 +143,14 @@ console.log(response.output);
 
 ---
 
-### `loadApiProviders(providers, options?)`
-
-Load multiple providers in parallel.
+To load several providers for manual testing, call `loadApiProvider()` for each one:
 
 ```typescript
-async function loadApiProviders(
-  providers: ProvidersConfig,
-  options?: { env?: Record<string, string> },
-): Promise<ApiProvider[]>;
-```
+import { loadApiProvider } from 'promptfoo';
 
-**Parameters:**
-
-- `providers`: Array of provider identifiers or config objects
-- `options`: Optional environment overrides
-
-**Returns:** Array of configured provider instances
-
-**Example:**
-
-```typescript
-import { loadApiProviders } from 'promptfoo';
-
-const providers = await loadApiProviders([
-  'openai:gpt-4',
-  'anthropic:claude-3-opus',
-  {
-    id: 'custom-provider',
-    config: {
-      model: 'my-model',
-      temperature: 0.7,
-    },
-  },
-]);
+const providers = await Promise.all(
+  ['openai:gpt-4', 'anthropic:claude-3-opus'].map((providerPath) => loadApiProvider(providerPath)),
+);
 
 for (const provider of providers) {
   const result = await provider.callApi('Test');
@@ -890,9 +864,11 @@ const evalRecord = await evaluate({
 Load providers and test in parallel:
 
 ```typescript
-import { assertions, loadApiProviders } from 'promptfoo';
+import { assertions, loadApiProvider } from 'promptfoo';
 
-const providers = await loadApiProviders(['openai:gpt-4', 'anthropic:claude-3-opus']);
+const providers = await Promise.all(
+  ['openai:gpt-4', 'anthropic:claude-3-opus'].map((providerPath) => loadApiProvider(providerPath)),
+);
 
 const testCases = ['2+2=?', 'What is AI?'];
 
@@ -995,7 +971,7 @@ import type {
 ### Stable APIs (Safe for production)
 
 - `evaluate()`
-- `loadApiProvider()`, `loadApiProviders()`
+- `loadApiProvider()`
 - `assertions.runAssertion()`, `assertions.runAssertions()`
 - Cache namespace functions
 - Guardrails namespace

@@ -18,7 +18,6 @@ import {
 
   // Providers
   loadApiProvider,
-  loadApiProviders,
 
   // Assertions
   assertions,
@@ -105,7 +104,9 @@ const provider = await loadApiProvider('openai:gpt-4', {
 ### Task: Test Multiple Providers
 
 ```typescript
-const providers = await loadApiProviders(['openai:gpt-4', 'anthropic:claude-3-opus']);
+const providers = await Promise.all(
+  ['openai:gpt-4', 'anthropic:claude-3-opus'].map((providerPath) => loadApiProvider(providerPath)),
+);
 
 for (const p of providers) {
   const resp = await p.callApi('test');
@@ -174,10 +175,9 @@ await cache.withCacheNamespace('v1', async () => {
 
 ### Provider Functions
 
-| Function             | Purpose                 | Stability |
-| -------------------- | ----------------------- | --------- |
-| `loadApiProvider()`  | Load one provider       | ✅ Stable |
-| `loadApiProviders()` | Load multiple providers | ✅ Stable |
+| Function            | Purpose           | Stability |
+| ------------------- | ----------------- | --------- |
+| `loadApiProvider()` | Load one provider | ✅ Stable |
 
 ### Cache Functions
 
@@ -313,7 +313,10 @@ await evaluate(testSuite, {
 ### Pattern: Batch Testing Providers
 
 ```typescript
-const providers = await loadApiProviders([...]);
+const providerPaths = ['openai:gpt-4', 'anthropic:claude-3-opus'];
+const providers = await Promise.all(
+  providerPaths.map((providerPath) => loadApiProvider(providerPath)),
+);
 
 for (const p of providers) {
   const result = await p.callApi(prompt);
