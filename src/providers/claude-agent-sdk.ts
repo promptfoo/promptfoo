@@ -1354,12 +1354,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // The Claude Agent SDK interleaves a `result` message for each background
           // sub-agent (Task tool with run_in_background: true) into the parent
           // session's stream before the main agent's terminal `result` arrives.
-          // SDKResultMessage has no parent_tool_use_id, so the only signal that a
-          // result is the main agent's is its position: the main agent's result is
-          // always last. Stash the latest result and process it after the stream
-          // closes — otherwise we'd return the first sub-agent's summary and skip
-          // the main agent's actual final response.
+          // SDKResultMessage has no parent_tool_use_id, so position is the only
+          // signal we have: in current SDK behavior the main agent's result is
+          // the last `result` message in the stream. Stash the latest one and
+          // process it after the stream closes — otherwise we'd return the first
+          // sub-agent's summary and skip the main agent's actual final response.
+          // See https://github.com/promptfoo/promptfoo/issues/9054.
           let lastResultMsg: SDKResultMessage | undefined;
+          let resultMsgCount = 0;
 
           for await (const msg of res) {
             if (msg.type === 'assistant') {
@@ -1398,6 +1400,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               }
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
+              resultMsgCount++;
             }
           }
 
@@ -1410,6 +1413,21 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           }
 
           const finalMsg = lastResultMsg;
+
+          // If we observed >1 result messages but the last one has no
+          // terminal_reason, the main agent's result may not actually be last
+          // (truncated stream after a sub-agent finished). Surface this so
+          // downstream evals don't silently grade a sub-agent summary as the
+          // model's answer.
+          if (resultMsgCount > 1 && finalMsg.terminal_reason === undefined) {
+            logger.warn(
+              `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
+            );
+            otelTrace.getActiveSpan()?.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: 'stream closed without terminal_reason after multiple result messages',
+            });
+          }
           const raw = JSON.stringify(finalMsg);
           const tokenUsage: ProviderResponse['tokenUsage'] = {
             prompt: finalMsg.usage?.input_tokens,
