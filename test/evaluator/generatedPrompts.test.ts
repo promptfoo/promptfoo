@@ -69,4 +69,14 @@ describe('generated prompt selection', () => {
       process.exitCode = previousExitCode;
     }
   });
+
+  it('passes the requested suggestion count to the generator', async () => {
+    await evaluate(createTestSuite(), new Eval({}), {
+      eventSource: 'library',
+      generateSuggestions: true,
+      suggestionsCount: 3,
+    });
+
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 3);
+  });
 });

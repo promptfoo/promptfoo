@@ -185,6 +185,7 @@ Set default values for command-line options. These defaults will be used unless 
 | promptPrefix             | string             | Text to prepend to every prompt                                                                                       |
 | promptSuffix             | string             | Text to append to every prompt                                                                                        |
 | generateSuggestions      | boolean            | Generate new prompts and append them to the prompt list                                                               |
+| suggestionsCount         | number             | Number of prompt variations to generate when `generateSuggestions` is enabled (default `1`)                           |
 | **Test Execution**       |                    |                                                                                                                       |
 | maxConcurrency           | number             | Maximum number of concurrent requests                                                                                 |
 | repeat                   | number             | Number of times to run each test case                                                                                 |
@@ -1119,6 +1120,7 @@ interface EvaluateOptions {
   delay?: number;
   eventSource?: string;
   generateSuggestions?: boolean;
+  suggestionsCount?: number;
   /** Deprecated: use maxConcurrency: 1 or -j 1 instead. */
   interactiveProviders?: boolean;
   maxConcurrency?: number;

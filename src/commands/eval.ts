@@ -64,6 +64,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
+  suggestPrompts: z.coerce.number().int().positive().optional(),
   extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
   resume: z.union([z.string(), z.boolean()]).optional(),
@@ -552,8 +553,14 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
+    const suggestPrompts = (cmdObj as EvalCommandOptions).suggestPrompts;
+    if (
+      !resumeEval &&
+      (suggestPrompts !== undefined ||
+        (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions))
+    ) {
       options.generateSuggestions = true;
+      options.suggestionsCount = suggestPrompts ?? options.suggestionsCount ?? 1;
     }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
@@ -1003,6 +1010,7 @@ export function evalCommand(
   const evaluateOptions: EvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+    evaluateOptions.suggestionsCount = defaultConfig.evaluateOptions.suggestionsCount;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
     evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
   }

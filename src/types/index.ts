@@ -254,6 +254,7 @@ export const EvaluateOptionsSchema = z.object({
   delay: z.number().optional(),
   eventSource: z.string().optional(),
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.number().int().positive().optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
    * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
