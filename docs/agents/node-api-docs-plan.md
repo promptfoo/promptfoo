@@ -14,7 +14,7 @@ keeps reference material aligned with the code.
       with clear next steps for advanced users.
 - [x] Add generated API reference docs from the public package entrypoint rather
       than hand-maintaining a large mirror of the source.
-- [ ] Link the Node.js API docs from the nearby docs surfaces where users already
+- [x] Link the Node.js API docs from the nearby docs surfaces where users already
       encounter programmatic features.
 - [x] Add docs validation so generated/reference docs drift is caught in CI.
 - [ ] Run focused QA after each stage, including docs builds and PR-style review
