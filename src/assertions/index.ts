@@ -362,6 +362,44 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
+/**
+ * Execute a single assertion against provider output.
+ *
+ * This is a core API for programmatic assertion execution. Use this when:
+ * - Running assertions independently outside of the main evaluate() flow
+ * - Implementing custom evaluation pipelines
+ * - Testing specific provider outputs
+ * - Building custom grading systems
+ *
+ * @param params Configuration for assertion execution
+ * @param params.prompt The prompt that was sent to the provider (optional, for context)
+ * @param params.provider The API provider instance (optional, for context in assertions)
+ * @param params.assertion The assertion to run (e.g., `{ type: 'contains', value: 'expected' }`)
+ * @param params.test The test case context containing variables and configuration
+ * @param params.vars Template variables from the test (overrides test.vars if provided)
+ * @param params.providerResponse The provider's response to evaluate
+ * @param params.latencyMs Provider response latency in milliseconds (optional)
+ * @param params.traceId Distributed trace ID for debugging (optional)
+ * @param params.traceData Trace spans with timing information (optional)
+ *
+ * @returns GradingResult with pass/fail status, score, and reason
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertion({
+ *   assertion: { type: 'contains', value: '4' },
+ *   test: { vars: { question: 'What is 2+2?' } },
+ *   providerResponse: { output: 'The answer is 4' }
+ * });
+ *
+ * console.log(`Pass: ${result.pass}, Score: ${result.score}`);
+ * ```
+ *
+ * @see runAssertions for batch assertion execution
+ * @see evaluate for full evaluation pipeline
+ */
 export async function runAssertion({
   prompt,
   provider,
@@ -625,6 +663,53 @@ export async function runAssertion({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
+/**
+ * Execute multiple assertions in batch against provider output.
+ *
+ * This function runs all assertions defined in a test case and returns aggregated results.
+ * It handles:
+ * - Multiple assertion types (contains, regex, LLM-graded, etc.)
+ * - Nested assertion-sets with logical operators
+ * - Custom scoring functions
+ * - Combined pass/fail and scoring logic
+ *
+ * @param params Configuration for batch assertion execution
+ * @param params.assertScoringFunction Custom scoring function (optional)
+ * @param params.latencyMs Provider response latency in milliseconds
+ * @param params.prompt The prompt that was sent to the provider (optional)
+ * @param params.provider The API provider instance (optional)
+ * @param params.providerResponse The provider's response to evaluate
+ * @param params.test The test case with assertions to run
+ * @param params.vars Template variables (overrides test.vars if provided)
+ * @param params.traceId Distributed trace ID (optional)
+ *
+ * @returns GradingResult aggregating all assertion results. The returned result
+ *          includes `componentResults` and `namedScores` rather than a nested
+ *          `results` array.
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertions({
+ *   assertions: [
+ *     { type: 'contains', value: '4' },
+ *     { type: 'regex', value: '^The answer is' }
+ *   ],
+ *   test: { vars: { question: 'What is 2+2?' } },
+ *   providerResponse: { output: 'The answer is 4' }
+ * });
+ *
+ * console.log(`All passed: ${result.pass}`);
+ * console.log(`Average score: ${result.score}`);
+ * result.componentResults.forEach((r) => {
+ *   console.log(`  ${r.assertion?.type}: ${r.pass ? '✓' : '✗'} (${r.score})`);
+ * });
+ * ```
+ *
+ * @see runAssertion for single assertion execution
+ * @see evaluate for full evaluation pipeline
+ */
 export async function runAssertions({
   assertScoringFunction,
   latencyMs,
