@@ -76,13 +76,27 @@ export function setJavaScriptMimeType(
 /**
  * Handles server startup errors with proper logging and graceful shutdown.
  */
-export function handleServerError(error: NodeJS.ErrnoException, port: number): void {
-  if (error.code === 'EADDRINUSE') {
-    logger.error(`Port ${port} is already in use. Do you have another Promptfoo instance running?`);
-  } else {
-    logger.error(`Failed to start server: ${error instanceof Error ? error.message : error}`);
+export class ServerStartupError extends Error {
+  readonly code?: string;
+  readonly port: number;
+
+  constructor(error: NodeJS.ErrnoException, port: number) {
+    super(
+      error.code === 'EADDRINUSE'
+        ? `Port ${port} is already in use. Do you have another Promptfoo instance running?`
+        : `Failed to start server: ${error instanceof Error ? error.message : error}`,
+      { cause: error },
+    );
+    this.name = 'ServerStartupError';
+    this.code = error.code;
+    this.port = port;
   }
-  process.exit(1);
+}
+
+export function handleServerError(error: NodeJS.ErrnoException, port: number): ServerStartupError {
+  const startupError = new ServerStartupError(error, port);
+  logger.error(startupError.message);
+  return startupError;
 }
 
 /**
@@ -396,24 +410,7 @@ export async function startServer(
 
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
-  return new Promise<void>((resolve) => {
-    httpServer
-      .listen(port, () => {
-        const url = `http://localhost:${port}`;
-        logger.info(`Server running at ${url} and monitoring for new evals.`);
-        openBrowser(browserBehavior, port).catch((error) => {
-          logger.error(
-            `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
-          );
-        });
-        // Don't resolve - server runs until shutdown signal
-      })
-      .on('error', (error: NodeJS.ErrnoException) => {
-        // handleServerError calls process.exit(1), so this error handler
-        // only provides logging before the process terminates
-        handleServerError(error, port);
-      });
-
+  return new Promise<void>((resolve, reject) => {
     // Register shutdown handlers to gracefully close the server
     // Use once() to prevent handler accumulation if startServer is called multiple times
     const shutdown = () => {
@@ -450,6 +447,28 @@ export async function startServer(
         });
       });
     };
+
+    const handleStartupError = (error: NodeJS.ErrnoException) => {
+      watcher.close();
+      process.removeListener('SIGINT', shutdown);
+      process.removeListener('SIGTERM', shutdown);
+      reject(handleServerError(error, port));
+    };
+
+    httpServer
+      .listen(port, () => {
+        const url = `http://localhost:${port}`;
+        logger.info(`Server running at ${url} and monitoring for new evals.`);
+        openBrowser(browserBehavior, port).catch((error) => {
+          logger.error(
+            `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+          );
+        });
+        // Don't resolve - server runs until shutdown signal
+      })
+      .on('error', (error: NodeJS.ErrnoException) => {
+        handleStartupError(error);
+      });
 
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);

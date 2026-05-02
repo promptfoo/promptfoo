@@ -40,41 +40,44 @@ vi.mock('../../src/models/eval', () => ({
 import { setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
 // Import after mocks are set up
-import { handleServerError, startServer } from '../../src/server/server';
+import { handleServerError, ServerStartupError, startServer } from '../../src/server/server';
 
 describe('server', () => {
   describe('handleServerError', () => {
-    const originalExit = process.exit;
-
     beforeEach(() => {
-      process.exit = vi.fn() as never;
       vi.clearAllMocks();
-    });
-
-    afterEach(() => {
-      process.exit = originalExit;
     });
 
     it('should log specific message for EADDRINUSE error', () => {
       const error = new Error('Address in use') as NodeJS.ErrnoException;
       error.code = 'EADDRINUSE';
 
-      handleServerError(error, 3000);
+      const startupError = handleServerError(error, 3000);
 
       expect(logger.error).toHaveBeenCalledWith(
         'Port 3000 is already in use. Do you have another Promptfoo instance running?',
       );
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(startupError).toBeInstanceOf(ServerStartupError);
+      expect(startupError).toMatchObject({
+        code: 'EADDRINUSE',
+        message: 'Port 3000 is already in use. Do you have another Promptfoo instance running?',
+        port: 3000,
+      });
     });
 
     it('should log generic message for other errors', () => {
       const error = new Error('Some other error') as NodeJS.ErrnoException;
       error.code = 'ENOENT';
 
-      handleServerError(error, 3000);
+      const startupError = handleServerError(error, 3000);
 
       expect(logger.error).toHaveBeenCalledWith('Failed to start server: Some other error');
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(startupError).toBeInstanceOf(ServerStartupError);
+      expect(startupError).toMatchObject({
+        code: 'ENOENT',
+        message: 'Failed to start server: Some other error',
+        port: 3000,
+      });
     });
   });
 
@@ -161,6 +164,30 @@ describe('server', () => {
       // Trigger shutdown to complete the promise
       triggerSignal('SIGINT');
       await serverPromise;
+    });
+
+    it('should reject startup errors without exiting the process', async () => {
+      const startupError = new Error('Address in use') as NodeJS.ErrnoException;
+      startupError.code = 'EADDRINUSE';
+      const mockWatcher = { close: vi.fn(), on: vi.fn() };
+      vi.mocked(setupSignalWatcher).mockReturnValue(mockWatcher as never);
+
+      mockHttpServer.listen = vi.fn().mockImplementation(function (this: MockHttpServer) {
+        setImmediate(() => this.emit('error', startupError));
+        return this;
+      });
+
+      await expect(startServer(3000)).rejects.toMatchObject({
+        name: 'ServerStartupError',
+        code: 'EADDRINUSE',
+        message: 'Port 3000 is already in use. Do you have another Promptfoo instance running?',
+        port: 3000,
+      });
+
+      expect(mockWatcher.close).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        'Port 3000 is already in use. Do you have another Promptfoo instance running?',
+      );
     });
 
     it('should close file watcher on shutdown', async () => {
