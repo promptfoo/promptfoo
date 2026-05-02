@@ -252,7 +252,12 @@ describe('evalCommand', () => {
 
     try {
       await expect(
-        doEval({ resume: true, retryErrors: true }, defaultConfig, defaultConfigPath, {}),
+        doEval(
+          { resume: true, retryErrors: true } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          defaultConfigPath,
+          {},
+        ),
       ).rejects.toEqual(
         expect.objectContaining<EvalRunError>({
           name: 'EvalRunError',
@@ -272,7 +277,7 @@ describe('evalCommand', () => {
 
     try {
       const result = await doEval(
-        { resume: true, retryErrors: true },
+        { resume: true, retryErrors: true } as Parameters<typeof doEval>[0],
         defaultConfig,
         defaultConfigPath,
         {},

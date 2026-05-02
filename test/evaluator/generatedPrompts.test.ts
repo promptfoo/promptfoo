@@ -3,6 +3,7 @@ import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { generatePrompts } from '../../src/suggestions';
 import { promptYesNo } from '../../src/util/readline';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { createMockProvider } from '../factories/provider';
 
 import type { TestSuite } from '../../src/types';
@@ -18,7 +19,10 @@ vi.mock('../../src/util/readline', () => ({
 describe('generated prompt selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(generatePrompts).mockResolvedValue({ prompts: ['Generated prompt'] });
+    vi.mocked(generatePrompts).mockResolvedValue({
+      prompts: ['Generated prompt'],
+      tokensUsed: createEmptyTokenUsage(),
+    });
     vi.mocked(promptYesNo).mockResolvedValue(false);
   });
 
