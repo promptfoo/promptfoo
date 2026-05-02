@@ -12,6 +12,7 @@ export interface LayerDefinition {
 
 export interface LayerConfig {
   publicFacade: string;
+  leafLayers?: string[];
   layers: LayerDefinition[];
 }
 

@@ -13,12 +13,13 @@ import { Plugins } from './redteam/plugins/index';
 import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
 
-export { generateTable } from './table';
-export * from './types/index';
 // Transform types and runtime guard for users passing inline transform functions
 // via the Node.js package.
-export { isTransformFunction } from './types/transform';
+export { isTransformFunction } from './contracts/transform';
+export { generateTable } from './table';
+export * from './types/index';
 
+export type { TransformContext, TransformFunction, TransformPrompt } from './contracts/transform';
 // Extension hook context types for users writing custom extensions
 export type {
   AfterAllExtensionHookContext,
@@ -27,7 +28,6 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
-export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
 const redteam = {
   Extractors: {
