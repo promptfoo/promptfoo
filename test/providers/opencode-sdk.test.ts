@@ -614,6 +614,22 @@ describe('OpenCodeSDKProvider', () => {
         );
       });
 
+      it('should reject v2 session resumes that try to rebind permissions', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: {
+            session_id: 'existing-session',
+            permission: { bash: 'deny' },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await expect(provider.callApi('Test prompt')).resolves.toEqual({
+          error:
+            'Error calling OpenCode SDK: OpenCode SDK v2 applies permissions when sessions are created; explicit session_id resumes cannot safely rebind permission rules.',
+        });
+        expect(mockSessionPrompt).not.toHaveBeenCalled();
+      });
+
       it('should reuse session when persist_sessions is true without cache', async () => {
         const provider = new OpenCodeSDKProvider({
           config: { persist_sessions: true },

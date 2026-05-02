@@ -1493,6 +1493,32 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with ask_user_question denies unrelated permission requests by default', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: { behavior: 'first_option' },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls[0][0];
+          const canUseTool = callArgs.options.canUseTool;
+
+          await expect(
+            canUseTool(
+              'Bash',
+              { command: 'uname -a' },
+              { signal: new AbortController().signal, toolUseID: 'bash-id' },
+            ),
+          ).resolves.toEqual({
+            behavior: 'deny',
+            message: 'Tool permission request is not handled by ask_user_question automation',
+          });
+        });
+
         it('with includePartialMessages configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 

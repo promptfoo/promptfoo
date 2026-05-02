@@ -118,7 +118,17 @@ export function transformMCPToolsToGoogle(tools: MCPTool[]): GoogleTool[] {
 export async function transformMCPConfigToClaudeCode(
   config: MCPConfig,
 ): Promise<Record<string, ClaudeCodeMcpServerConfig>> {
-  const serverConfigs = config.servers ?? [];
+  if (config.enabled === false) {
+    return {};
+  }
+
+  if (config.tools?.length || config.exclude_tools?.length) {
+    throw new Error(
+      'Claude Agent SDK MCP integration does not support MCP tool allowlists or exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
+    );
+  }
+
+  const serverConfigs = [...(config.servers ?? [])];
   if (config.server) {
     serverConfigs.push(config.server);
   }

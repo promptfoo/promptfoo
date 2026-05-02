@@ -886,11 +886,15 @@ function createAskUserQuestionCanUseTool(
   return async (toolName, input, options): Promise<PermissionResult> => {
     // Only handle AskUserQuestion tool
     if (toolName !== 'AskUserQuestion') {
-      // Defer to wrapped callback or allow by default
+      // Defer to a wrapped callback when one exists. Otherwise fail closed so
+      // enabling automated question answers cannot widen unrelated tool access.
       if (wrappedCanUseTool) {
         return wrappedCanUseTool(toolName, input, options);
       }
-      return { behavior: 'allow', updatedInput: input };
+      return {
+        behavior: 'deny',
+        message: 'Tool permission request is not handled by ask_user_question automation',
+      };
     }
 
     // Deny the tool use if configured to do so

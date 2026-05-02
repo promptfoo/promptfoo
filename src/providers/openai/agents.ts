@@ -281,10 +281,30 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       return agent;
     }
 
+    return this.wrapAgentForMockMode(agent, new WeakMap<object, Agent<any, any>>());
+  }
+
+  private wrapAgentForMockMode(
+    agent: Agent<any, any>,
+    wrappedAgents: WeakMap<object, Agent<any, any>>,
+  ): Agent<any, any> {
+    const existingWrappedAgent = wrappedAgents.get(agent as object);
+    if (existingWrappedAgent) {
+      return existingWrappedAgent;
+    }
+
+    if (agent.mcpServers?.length) {
+      throw new Error(
+        "executeTools: 'mock' does not support MCP servers because they can execute outside mocked function tools",
+      );
+    }
+
     const toolMocks = this.agentConfig.toolMocks ?? {};
     const tools = agent.tools.map((tool) => {
       if (tool.type !== 'function') {
-        return tool;
+        throw new Error(
+          "executeTools: 'mock' only supports function tools; remove hosted or non-function tools",
+        );
       }
 
       const mockValue = toolMocks[tool.name];
@@ -294,7 +314,34 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       };
     });
 
-    return agent.clone({ tools });
+    const wrappedAgent = agent.clone({ tools, handoffs: [] });
+    wrappedAgents.set(agent as object, wrappedAgent);
+
+    wrappedAgent.handoffs = agent.handoffs.map((agentHandoff) => {
+      if (isAgentLike(agentHandoff)) {
+        return this.wrapAgentForMockMode(agentHandoff, wrappedAgents);
+      }
+
+      if (isHandoffLike(agentHandoff)) {
+        const wrappedHandoffAgent = this.wrapAgentForMockMode(agentHandoff.agent, wrappedAgents);
+        const wrappedHandoff = Object.assign(
+          Object.create(Object.getPrototypeOf(agentHandoff)) as typeof agentHandoff,
+          agentHandoff,
+          {
+            agent: wrappedHandoffAgent,
+            onInvokeHandoff: async (...args: Parameters<typeof agentHandoff.onInvokeHandoff>) => {
+              await agentHandoff.onInvokeHandoff(...args);
+              return wrappedHandoffAgent;
+            },
+          },
+        );
+        return wrappedHandoff;
+      }
+
+      throw new Error("executeTools: 'mock' cannot safely wrap an unknown handoff shape");
+    });
+
+    return wrappedAgent;
   }
 
   private parsePromptInput(prompt: string): string | AgentInputItem[] {
@@ -343,4 +390,19 @@ function parseAgentInputItems(value: unknown): AgentInputItem[] | undefined {
   }
 
   return [parsedItem.data];
+}
+
+function isAgentLike(value: unknown): value is Agent<any, any> {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'clone' in value &&
+    typeof (value as Agent<any, any>).clone === 'function' &&
+    'tools' in value &&
+    Array.isArray((value as Agent<any, any>).tools)
+  );
+}
+
+function isHandoffLike(value: unknown): value is { agent: Agent<any, any> } {
+  return !!value && typeof value === 'object' && 'agent' in value && isAgentLike(value.agent);
 }

@@ -4185,6 +4185,74 @@ describe('OpenAICodexAppServerProvider', () => {
     await resultPromise;
   });
 
+  it('does not read inherited user input or dynamic tool policy entries', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+        server_request_policy: {
+          user_input: {},
+          dynamic_tools: {},
+        },
+      },
+    });
+
+    const resultPromise = provider.callApi('Hello');
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_inherited' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_inherited', status: 'inProgress' } },
+    });
+
+    server.send({
+      id: 301,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thr_inherited',
+        turnId: 'turn_inherited',
+        questions: [{ id: 'toString', label: 'Inherited answer' }],
+      },
+    });
+    const userInputResponse = await waitForMessage(server, (message) => message.id === 301);
+    expect(userInputResponse.result.answers.toString).toEqual({ answers: [] });
+
+    server.send({
+      id: 302,
+      method: 'item/tool/call',
+      params: {
+        threadId: 'thr_inherited',
+        turnId: 'turn_inherited',
+        callId: 'tool_inherited',
+        tool: 'toString',
+        arguments: {},
+      },
+    });
+    const dynamicToolResponse = await waitForMessage(server, (message) => message.id === 302);
+    expect(dynamicToolResponse.result).toEqual({
+      contentItems: [{ type: 'inputText', text: 'No dynamic tool response configured.' }],
+      success: false,
+    });
+
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_inherited',
+        turnId: 'turn_inherited',
+        turn: { id: 'turn_inherited' },
+      },
+    });
+    await resultPromise;
+  });
+
   it('propagates base_url to spawn environment', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);

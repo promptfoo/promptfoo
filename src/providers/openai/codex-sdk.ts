@@ -969,7 +969,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Resume specific thread
     if (config.thread_id) {
-      const threadIdCacheKey = `${instanceKey}:${config.thread_id}`;
+      const threadIdCacheKey = this.getExplicitThreadCacheKey(config, instanceKey);
       const cached = this.threads.get(threadIdCacheKey);
       if (cached) {
         return cached;
@@ -1745,6 +1745,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     return undefined;
+  }
+
+  private getExplicitThreadCacheKey(config: OpenAICodexSDKConfig, instanceKey: string): string {
+    return `${instanceKey}:${config.thread_id}:${JSON.stringify(this.buildThreadOptions(config))}`;
   }
 
   private async runSerializedThreadTurn<T>(

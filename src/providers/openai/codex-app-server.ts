@@ -2416,7 +2416,9 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         continue;
       }
 
-      const configuredAnswer = policy[question.id];
+      const configuredAnswer = Object.prototype.hasOwnProperty.call(policy, question.id)
+        ? policy[question.id]
+        : undefined;
       answers[question.id] = {
         answers: Array.isArray(configuredAnswer)
           ? configuredAnswer
@@ -2438,7 +2440,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     >;
     success: boolean;
   } {
-    const configured = typeof params?.tool === 'string' ? tools?.[params.tool] : undefined;
+    const configured =
+      typeof params?.tool === 'string' &&
+      tools &&
+      Object.prototype.hasOwnProperty.call(tools, params.tool)
+        ? tools[params.tool]
+        : undefined;
     if (!configured) {
       return {
         contentItems: [{ type: 'inputText', text: 'No dynamic tool response configured.' }],
