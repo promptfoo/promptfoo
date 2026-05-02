@@ -18,22 +18,24 @@ import {
   guardrails,
   isTransformFunction,
   loadApiProvider,
+  loadApiProviders,
   redteam,
 } from 'promptfoo';
 ```
 
 ## Most-used calls
 
-| Task                       | API                                                                                                              |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Run an eval                | [`evaluate()`](/docs/api/node/reference/functions/evaluate)                                                      |
-| Build one provider         | [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)                                        |
-| Run one assertion          | [`assertions.runAssertion()`](/docs/api/node/reference/variables/assertions)                                     |
-| Run assertion sets         | [`assertions.runAssertions()`](/docs/api/node/reference/variables/assertions)                                    |
-| Disable cache for one eval | `evaluate(testSuite, { cache: false })`                                                                          |
-| Isolate cached work        | [`cache.withCacheNamespace()`](/docs/api/node/reference/promptfoo/namespaces/cache/functions/withCacheNamespace) |
-| Render a table             | [`generateTable()`](/docs/api/node/reference/functions/generateTable)                                            |
-| Narrow a transform value   | [`isTransformFunction()`](/docs/api/node/reference/functions/isTransformFunction)                                |
+| Task                        | API                                                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Run an eval                 | [`evaluate()`](/docs/api/node/reference/functions/evaluate)                                                      |
+| Build one provider          | [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)                                        |
+| Build one or many providers | [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)                                      |
+| Run one assertion           | [`assertions.runAssertion()`](/docs/api/node/reference/variables/assertions)                                     |
+| Run assertion sets          | [`assertions.runAssertions()`](/docs/api/node/reference/variables/assertions)                                    |
+| Disable cache for one eval  | `evaluate(testSuite, { cache: false })`                                                                          |
+| Isolate cached work         | [`cache.withCacheNamespace()`](/docs/api/node/reference/promptfoo/namespaces/cache/functions/withCacheNamespace) |
+| Render a table              | [`generateTable()`](/docs/api/node/reference/functions/generateTable)                                            |
+| Narrow a transform value    | [`isTransformFunction()`](/docs/api/node/reference/functions/isTransformFunction)                                |
 
 ## Runtime options
 

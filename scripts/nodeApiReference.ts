@@ -16,6 +16,7 @@ export {
   guardrails,
   isTransformFunction,
   loadApiProvider,
+  loadApiProviders,
   redteam,
 } from '../src/index';
 

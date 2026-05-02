@@ -379,6 +379,11 @@ async function loadProvidersFromFile(
   );
 }
 
+/**
+ * Load one or more providers from provider config input.
+ *
+ * @public
+ */
 export async function loadApiProviders(
   providerPaths: ProvidersConfig,
   options: {

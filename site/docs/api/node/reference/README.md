@@ -53,3 +53,4 @@ compatibility types and helpers than we want to present as first-class docs.
 - [generateTable](functions/generateTable.md)
 - [isTransformFunction](functions/isTransformFunction.md)
 - [loadApiProvider](functions/loadApiProvider.md)
+- [loadApiProviders](functions/loadApiProviders.md)

@@ -20,6 +20,7 @@ import deep files from `dist/` or `src/`.
 | --------------------------------------------------------------------------------- | --------- | --------------------------------------------------- |
 | [`evaluate()`](/docs/api/node/reference/functions/evaluate)                       | Stable    | Running an eval programmatically                    |
 | [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)         | Stable    | Building one provider instance from code            |
+| [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)       | Stable    | Building one or many provider instances from config |
 | [`assertions`](/docs/api/node/reference/variables/assertions)                     | Stable    | Reusing assertion logic or test-framework matchers  |
 | [`cache`](/docs/api/node/reference/promptfoo/namespaces/cache/)                   | Stable    | Shared caching, cache isolation, and cached fetches |
 | [`generateTable()`](/docs/api/node/reference/functions/generateTable)             | Stable    | Rendering eval tables in terminal-friendly text     |
@@ -58,7 +59,10 @@ Use [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)
 when you need to construct a provider once and pass it into another API. Use the
 [`ProviderFunction`](/docs/api/node/reference/type-aliases/ProviderFunction)
 and [`ProviderResponse`](/docs/api/node/reference/interfaces/ProviderResponse)
-reference pages when implementing your own provider.
+reference pages when implementing your own provider. Use
+[`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)
+when you need promptfoo to normalize provider config input into provider
+instances for you.
 
 For assertions, start with the task-oriented
 [assertions documentation](/docs/configuration/expected-outputs/). Drop to

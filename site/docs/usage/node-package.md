@@ -65,17 +65,17 @@ The generated [Node.js API reference](/docs/api/node/) documents the curated
 public Node.js surface. Use the broader [configuration reference](/docs/configuration/reference)
 for the full config schema. The main Node-facing surfaces are:
 
-| API                                                        | Stability | Use it for                                                      |
-| ---------------------------------------------------------- | --------- | --------------------------------------------------------------- |
-| `evaluate()`                                               | Stable    | Running an eval programmatically                                |
-| `loadApiProvider()`                                        | Stable    | Building a provider instance before passing it into another API |
-| `assertions.runAssertion()` / `assertions.runAssertions()` | Stable    | Reusing promptfoo assertion logic outside a full eval           |
-| `assertions.matches*()` helpers                            | Stable    | Building Jest, Vitest, or Mocha matchers                        |
-| `cache.*`                                                  | Stable    | Shared caching, cache isolation, and cached fetches             |
-| `generateTable()`                                          | Stable    | Rendering eval tables in terminal-friendly text                 |
-| `isTransformFunction()`                                    | Stable    | Narrowing inline transform values at runtime                    |
-| `guardrails.*`                                             | Beta      | Calling promptfoo guardrail endpoints from code                 |
-| `redteam.*`                                                | Beta      | Advanced red team orchestration from code                       |
+| API                                                        | Stability | Use it for                                            |
+| ---------------------------------------------------------- | --------- | ----------------------------------------------------- |
+| `evaluate()`                                               | Stable    | Running an eval programmatically                      |
+| `loadApiProvider()` / `loadApiProviders()`                 | Stable    | Building one or many provider instances from code     |
+| `assertions.runAssertion()` / `assertions.runAssertions()` | Stable    | Reusing promptfoo assertion logic outside a full eval |
+| `assertions.matches*()` helpers                            | Stable    | Building Jest, Vitest, or Mocha matchers              |
+| `cache.*`                                                  | Stable    | Shared caching, cache isolation, and cached fetches   |
+| `generateTable()`                                          | Stable    | Rendering eval tables in terminal-friendly text       |
+| `isTransformFunction()`                                    | Stable    | Narrowing inline transform values at runtime          |
+| `guardrails.*`                                             | Beta      | Calling promptfoo guardrail endpoints from code       |
+| `redteam.*`                                                | Beta      | Advanced red team orchestration from code             |
 
 Functions that are not exported from the root `promptfoo` package are not part of
 the supported Node.js API, even if they exist in the repository source.
