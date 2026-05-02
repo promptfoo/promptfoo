@@ -4,6 +4,7 @@ import {
   buildOpenClawProviderOptions,
   DEFAULT_GATEWAY_HOST,
   DEFAULT_GATEWAY_PORT,
+  normalizeOpenClawAgentId,
 } from './shared';
 
 import type { ProviderOptions } from '../../types/providers';
@@ -24,19 +25,23 @@ import type { ProviderOptions } from '../../types/providers';
  *   openclaw:coding-agent - named agent
  */
 export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
-  private agentId: string;
+  private agentId: string | undefined;
 
-  constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    super(buildOpenClawModelName(agentId), buildOpenClawProviderOptions(agentId, providerOptions));
-    this.agentId = agentId;
+  constructor(agentId: string | undefined, providerOptions: ProviderOptions = {}) {
+    const normalizedAgentId = normalizeOpenClawAgentId(agentId);
+    super(
+      buildOpenClawModelName(normalizedAgentId),
+      buildOpenClawProviderOptions(normalizedAgentId, providerOptions),
+    );
+    this.agentId = normalizedAgentId;
   }
 
   id(): string {
-    return `openclaw:${this.agentId}`;
+    return `openclaw:${this.agentId ?? 'default'}`;
   }
 
   toString(): string {
-    return `[OpenClaw Provider ${this.agentId}]`;
+    return `[OpenClaw Provider ${this.agentId ?? 'default'}]`;
   }
 
   getApiUrlDefault(): string {

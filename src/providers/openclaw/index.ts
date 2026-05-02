@@ -13,6 +13,7 @@ export { OpenClawEmbeddingProvider } from './embedding';
 export { OpenClawResponsesProvider } from './responses';
 export {
   buildOpenClawModelName,
+  normalizeOpenClawAgentId,
   readOpenClawConfig,
   resetConfigCache,
   resolveAuthSecret,
@@ -26,16 +27,16 @@ export { OpenClawToolInvokeProvider } from './tools';
  * Create an OpenClaw provider from a provider path string.
  *
  * Routing:
- *   openclaw                → OpenClawChatProvider('main')
+ *   openclaw                → OpenClawChatProvider(default agent)
  *   openclaw:main           → OpenClawChatProvider('main')
  *   openclaw:my-agent       → OpenClawChatProvider('my-agent')
- *   openclaw:responses      → OpenClawResponsesProvider('main')
+ *   openclaw:responses      → OpenClawResponsesProvider(default agent)
  *   openclaw:responses:X    → OpenClawResponsesProvider('X')
- *   openclaw:embedding      → OpenClawEmbeddingProvider('main')
+ *   openclaw:embedding      → OpenClawEmbeddingProvider(default agent)
  *   openclaw:embedding:X    → OpenClawEmbeddingProvider('X')
- *   openclaw:embeddings     → OpenClawEmbeddingProvider('main')
+ *   openclaw:embeddings     → OpenClawEmbeddingProvider(default agent)
  *   openclaw:embeddings:X   → OpenClawEmbeddingProvider('X')
- *   openclaw:agent          → OpenClawAgentProvider('main')
+ *   openclaw:agent          → OpenClawAgentProvider(default agent)
  *   openclaw:agent:X        → OpenClawAgentProvider('X')
  *   openclaw:tools:sessions_list → OpenClawToolInvokeProvider('sessions_list')
  */
@@ -49,17 +50,17 @@ export function createOpenClawProvider(
   const opts = { ...providerOptions, env };
 
   if (keyword === 'responses') {
-    const agentId = splits[2] || 'main';
+    const agentId = splits[2] || undefined;
     return new OpenClawResponsesProvider(agentId, opts);
   }
 
   if (keyword === 'embedding' || keyword === 'embeddings') {
-    const agentId = splits[2] || 'main';
+    const agentId = splits[2] || undefined;
     return new OpenClawEmbeddingProvider(agentId, opts);
   }
 
   if (keyword === 'agent') {
-    const agentId = splits[2] || 'main';
+    const agentId = splits[2] || undefined;
     return new OpenClawAgentProvider(agentId, opts);
   }
 
@@ -72,6 +73,6 @@ export function createOpenClawProvider(
   }
 
   // Default: chat provider
-  const agentId = splits.length > 1 ? splits.slice(1).join(':') : 'main';
+  const agentId = splits.length > 1 ? splits.slice(1).join(':') || undefined : undefined;
   return new OpenClawChatProvider(agentId, opts);
 }

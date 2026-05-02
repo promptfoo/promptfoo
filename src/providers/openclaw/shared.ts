@@ -328,24 +328,32 @@ export function resolveAuthToken(
 /**
  * Build the canonical OpenClaw model id for OpenAI-compatible endpoints.
  */
-export function buildOpenClawModelName(agentId: string): string {
-  const trimmedAgentId = agentId.trim();
+export function normalizeOpenClawAgentId(agentId?: string): string | undefined {
+  const trimmedAgentId = agentId?.trim() ?? '';
   if (!trimmedAgentId || trimmedAgentId === 'default' || trimmedAgentId === 'openclaw') {
-    return 'openclaw/default';
+    return undefined;
   }
   if (trimmedAgentId.startsWith('openclaw/')) {
     const targetAgentId = trimmedAgentId.slice('openclaw/'.length).trim();
-    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
+    return targetAgentId || undefined;
   }
   if (trimmedAgentId.startsWith('openclaw:')) {
     const targetAgentId = trimmedAgentId.slice('openclaw:'.length).trim();
-    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
+    return targetAgentId || undefined;
   }
   if (trimmedAgentId.startsWith('agent:')) {
     const targetAgentId = trimmedAgentId.slice('agent:'.length).trim();
-    return targetAgentId ? `openclaw/${targetAgentId}` : 'openclaw/default';
+    return targetAgentId || undefined;
   }
-  return `openclaw/${trimmedAgentId}`;
+  return trimmedAgentId;
+}
+
+/**
+ * Build the canonical OpenClaw model id for OpenAI-compatible endpoints.
+ */
+export function buildOpenClawModelName(agentId?: string): string {
+  const normalizedAgentId = normalizeOpenClawAgentId(agentId);
+  return normalizedAgentId ? `openclaw/${normalizedAgentId}` : 'openclaw/default';
 }
 
 function normalizeHeaderValue(value: string | undefined): string | undefined {
@@ -388,12 +396,13 @@ export function buildOpenClawContextHeaders(config?: OpenClawConfig): Record<str
  * passed as an RPC param there, not as an HTTP header.
  */
 export function buildOpenClawHeaders(
-  agentId: string,
+  agentId: string | undefined,
   config?: OpenClawConfig,
 ): Record<string, string> {
-  const headers: Record<string, string> = {
-    'x-openclaw-agent-id': agentId,
-  };
+  const headers: Record<string, string> = {};
+  if (agentId) {
+    headers['x-openclaw-agent-id'] = agentId;
+  }
   if (config?.session_key) {
     headers['x-openclaw-session-key'] = config.session_key;
   }
@@ -408,7 +417,7 @@ export function buildOpenClawHeaders(
  * Resolves gateway URL, auth token, and merges OpenClaw-specific headers.
  */
 export function buildOpenClawProviderOptions(
-  agentId: string,
+  agentId: string | undefined,
   providerOptions: ProviderOptions,
 ): ProviderOptions {
   const config = (providerOptions.config || {}) as Record<string, unknown>;

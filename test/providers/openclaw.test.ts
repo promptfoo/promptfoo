@@ -548,6 +548,7 @@ describe('OpenClaw Provider', () => {
 
   describe('buildOpenClawModelName', () => {
     it('should build slash-style OpenClaw agent target model names', () => {
+      expect(buildOpenClawModelName()).toBe('openclaw/default');
       expect(buildOpenClawModelName('main')).toBe('openclaw/main');
       expect(buildOpenClawModelName('default')).toBe('openclaw/default');
       expect(buildOpenClawModelName('openclaw:beta')).toBe('openclaw/beta');
@@ -695,6 +696,20 @@ describe('OpenClaw Provider', () => {
       expect(provider.id()).toBe('openclaw:main');
     });
 
+    it('should target the configured default agent when no agent ID is provided', () => {
+      const provider = new OpenClawChatProvider(undefined, {});
+      expect(provider.id()).toBe('openclaw:default');
+      expect(provider.modelName).toBe('openclaw/default');
+      expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
+    });
+
+    it('should normalize the explicit default alias without sending a literal default agent header', () => {
+      const provider = new OpenClawChatProvider('default', {});
+      expect(provider.id()).toBe('openclaw:default');
+      expect(provider.modelName).toBe('openclaw/default');
+      expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
+    });
+
     it('should return correct string representation', () => {
       const provider = new OpenClawChatProvider('coding-agent', {});
       expect(provider.toString()).toBe('[OpenClaw Provider coding-agent]');
@@ -816,6 +831,13 @@ describe('OpenClaw Provider', () => {
       expect(provider.id()).toBe('openclaw:responses:main');
     });
 
+    it('should target the configured default agent when no agent ID is provided', () => {
+      const provider = new OpenClawResponsesProvider(undefined, {});
+      expect(provider.id()).toBe('openclaw:responses:default');
+      expect(provider.modelName).toBe('openclaw/default');
+      expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
+    });
+
     it('should return correct string representation', () => {
       const provider = new OpenClawResponsesProvider('coding-agent', {});
       expect(provider.toString()).toBe('[OpenClaw Responses Provider coding-agent]');
@@ -914,6 +936,13 @@ describe('OpenClaw Provider', () => {
     it('should initialize with correct agent ID', () => {
       const provider = new OpenClawEmbeddingProvider('main', {});
       expect(provider.id()).toBe('openclaw:embedding:main');
+    });
+
+    it('should target the configured default agent when no agent ID is provided', () => {
+      const provider = new OpenClawEmbeddingProvider(undefined, {});
+      expect(provider.id()).toBe('openclaw:embedding:default');
+      expect(provider.modelName).toBe('openclaw/default');
+      expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
     });
 
     it('should return correct string representation', () => {
@@ -1318,6 +1347,11 @@ describe('OpenClaw Provider', () => {
     it('should initialize with correct agent ID', () => {
       const provider = new OpenClawAgentProvider('main', {});
       expect(provider.id()).toBe('openclaw:agent:main');
+    });
+
+    it('should target the configured default agent when no agent ID is provided', () => {
+      const provider = new OpenClawAgentProvider(undefined, {});
+      expect(provider.id()).toBe('openclaw:agent:default');
     });
 
     it('should return correct string representation', () => {
@@ -1825,6 +1859,27 @@ describe('OpenClaw Provider', () => {
 
       expect(agentReq.params.agentId).toBe('dev');
       expect(agentReq.params.sessionKey).toMatch(/^agent:dev:promptfoo-[0-9a-f-]{36}$/);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      await promise;
+    });
+
+    it('should omit agentId and keep generated session keys unscoped for the default agent', async () => {
+      const provider = new OpenClawAgentProvider(undefined, {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.agentId).toBeUndefined();
+      expect(agentReq.params.sessionKey).toMatch(/^promptfoo-[0-9a-f-]{36}$/);
 
       onMessage(
         Buffer.from(
@@ -2574,10 +2629,17 @@ describe('OpenClaw Provider', () => {
       expect(provider.id()).toBe('openclaw:main');
     });
 
-    it('should default to main agent when no agent specified', () => {
+    it('should treat openclaw:default as the configured default agent alias', () => {
+      const provider = createOpenClawProvider('openclaw:default') as OpenClawChatProvider;
+      expect(provider).toBeInstanceOf(OpenClawChatProvider);
+      expect(provider.id()).toBe('openclaw:default');
+      expect(provider.config.headers?.['x-openclaw-agent-id']).toBeUndefined();
+    });
+
+    it('should default to the configured default agent when no agent is specified', () => {
       const provider = createOpenClawProvider('openclaw');
       expect(provider).toBeInstanceOf(OpenClawChatProvider);
-      expect(provider.id()).toBe('openclaw:main');
+      expect(provider.id()).toBe('openclaw:default');
     });
 
     it('should support custom agent IDs for chat', () => {
@@ -2589,7 +2651,7 @@ describe('OpenClaw Provider', () => {
     it('should create responses provider for openclaw:responses', () => {
       const provider = createOpenClawProvider('openclaw:responses');
       expect(provider).toBeInstanceOf(OpenClawResponsesProvider);
-      expect(provider.id()).toBe('openclaw:responses:main');
+      expect(provider.id()).toBe('openclaw:responses:default');
     });
 
     it('should create responses provider with agent ID', () => {
@@ -2601,7 +2663,7 @@ describe('OpenClaw Provider', () => {
     it('should create embedding provider for openclaw:embedding', () => {
       const provider = createOpenClawProvider('openclaw:embedding');
       expect(provider).toBeInstanceOf(OpenClawEmbeddingProvider);
-      expect(provider.id()).toBe('openclaw:embedding:main');
+      expect(provider.id()).toBe('openclaw:embedding:default');
     });
 
     it('should create embedding provider with agent ID and plural alias', () => {
@@ -2613,7 +2675,7 @@ describe('OpenClaw Provider', () => {
     it('should create agent provider for openclaw:agent', () => {
       const provider = createOpenClawProvider('openclaw:agent');
       expect(provider).toBeInstanceOf(OpenClawAgentProvider);
-      expect(provider.id()).toBe('openclaw:agent:main');
+      expect(provider.id()).toBe('openclaw:agent:default');
     });
 
     it('should create agent provider with agent ID', () => {

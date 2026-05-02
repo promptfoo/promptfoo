@@ -11,7 +11,7 @@ import {
   loadOrCreateOpenClawDeviceIdentity,
   storeOpenClawDeviceAuthToken,
 } from './device-auth';
-import { resolveAuthSecret, resolveGatewayWsUrl } from './shared';
+import { normalizeOpenClawAgentId, resolveAuthSecret, resolveGatewayWsUrl } from './shared';
 
 import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../types/providers';
 import type { OpenClawDeviceIdentity } from './device-auth';
@@ -103,14 +103,18 @@ function stripRetryMarker(result: OpenClawAgentCallResult): ProviderResponse {
   return providerResponse;
 }
 
-function buildOpenClawAgentSessionKey(agentId: string, sessionKey: string): string {
+function buildOpenClawAgentSessionKey(agentId: string | undefined, sessionKey: string): string {
   const trimmedSessionKey = sessionKey.trim();
   if (!trimmedSessionKey || trimmedSessionKey.toLowerCase().startsWith('agent:')) {
     return trimmedSessionKey;
   }
 
-  const trimmedAgentId = agentId.trim();
-  if (!trimmedAgentId || trimmedAgentId.toLowerCase() === 'main') {
+  const trimmedAgentId = agentId?.trim() ?? '';
+  if (
+    !trimmedAgentId ||
+    trimmedAgentId.toLowerCase() === 'default' ||
+    trimmedAgentId.toLowerCase() === 'main'
+  ) {
     return trimmedSessionKey;
   }
 
@@ -137,7 +141,7 @@ function buildOpenClawAgentSessionKey(agentId: string, sessionKey: string): stri
  *   openclaw:agent:my-agent  - custom agent ID
  */
 export class OpenClawAgentProvider implements ApiProvider {
-  private agentId: string;
+  private agentId: string | undefined;
   private gatewayUrl: string;
   private authKind: 'password' | 'token' | undefined;
   private authSecret: string | undefined;
@@ -147,8 +151,8 @@ export class OpenClawAgentProvider implements ApiProvider {
   private hasExplicitScopes: boolean;
   private activeConnections = new Set<WebSocket>();
 
-  constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    this.agentId = agentId;
+  constructor(agentId: string | undefined, providerOptions: ProviderOptions = {}) {
+    this.agentId = normalizeOpenClawAgentId(agentId);
     this.openclawConfig = (providerOptions.config || {}) as OpenClawConfig;
     const env = providerOptions.env as Record<string, string | undefined> | undefined;
     this.gatewayUrl = resolveGatewayWsUrl(this.openclawConfig, env);
@@ -164,11 +168,11 @@ export class OpenClawAgentProvider implements ApiProvider {
   }
 
   id(): string {
-    return `openclaw:agent:${this.agentId}`;
+    return `openclaw:agent:${this.agentId ?? 'default'}`;
   }
 
   toString(): string {
-    return `[OpenClaw Agent Provider ${this.agentId}]`;
+    return `[OpenClaw Agent Provider ${this.agentId ?? 'default'}]`;
   }
 
   toJSON() {
@@ -352,7 +356,7 @@ export class OpenClawAgentProvider implements ApiProvider {
   private buildAgentRequestParams(state: AgentConnectionState): Record<string, unknown> {
     return {
       message: state.prompt,
-      agentId: this.agentId,
+      ...(this.agentId && { agentId: this.agentId }),
       idempotencyKey: state.idempotencyKey,
       sessionKey: state.sessionKey,
       ...(this.openclawConfig.message_channel && {
