@@ -6,7 +6,7 @@
 
 # Interface: ApiProvider
 
-Defined in: [types/providers.ts:138](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L138)
+Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L146)
 
 Provider object shape accepted by the Node.js API.
 
@@ -16,7 +16,7 @@ Provider object shape accepted by the Node.js API.
 
 > **callApi**: `CallApiFunction`
 
-Defined in: [types/providers.ts:140](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L140)
+Defined in: [types/providers.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L148)
 
 ---
 
@@ -24,7 +24,7 @@ Defined in: [types/providers.ts:140](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **callClassificationApi?**: (`prompt`) => `Promise`\<`ProviderClassificationResponse`\>
 
-Defined in: [types/providers.ts:141](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L141)
+Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L149)
 
 #### Parameters
 
@@ -42,7 +42,7 @@ Defined in: [types/providers.ts:141](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **callEmbeddingApi?**: (`input`) => `Promise`\<`ProviderEmbeddingResponse`\>
 
-Defined in: [types/providers.ts:142](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L142)
+Defined in: [types/providers.ts:150](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L150)
 
 #### Parameters
 
@@ -60,7 +60,7 @@ Defined in: [types/providers.ts:142](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
-Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L155)
+Defined in: [types/providers.ts:163](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L163)
 
 Provider-wide cleanup hook for releasing long-lived resources such as worker
 processes, browser sessions, or pooled connections at eval shutdown.
@@ -76,7 +76,7 @@ Request-scoped cancellation should be implemented with `abortSignal`.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:143](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L143)
+Defined in: [types/providers.ts:151](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L151)
 
 ---
 
@@ -84,7 +84,7 @@ Defined in: [types/providers.ts:143](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:144](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L144)
+Defined in: [types/providers.ts:152](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L152)
 
 ---
 
@@ -92,7 +92,7 @@ Defined in: [types/providers.ts:144](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **getSessionId?**: () => `string`
 
-Defined in: [types/providers.ts:145](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L145)
+Defined in: [types/providers.ts:153](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L153)
 
 #### Returns
 
@@ -104,7 +104,7 @@ Defined in: [types/providers.ts:145](https://github.com/promptfoo/promptfoo/blob
 
 > **id**: () => `string`
 
-Defined in: [types/providers.ts:139](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L139)
+Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
 
 #### Returns
 
@@ -116,7 +116,7 @@ Defined in: [types/providers.ts:139](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L146)
+Defined in: [types/providers.ts:154](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L154)
 
 ---
 
@@ -124,7 +124,7 @@ Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
+Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L155)
 
 ---
 
@@ -132,7 +132,7 @@ Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **toJSON?**: () => `any`
 
-Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L149)
+Defined in: [types/providers.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L157)
 
 #### Returns
 
@@ -144,4 +144,4 @@ Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L148)
+Defined in: [types/providers.ts:156](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L156)

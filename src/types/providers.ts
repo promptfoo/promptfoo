@@ -22,6 +22,14 @@ export type ProviderConfig =
   | ApiProvider
   | ProviderOptions
   | ProviderOptionsMap;
+/**
+ * Provider input accepted by `evaluate()` and `loadApiProviders()`.
+ *
+ * Pass one provider id, provider function, provider object, or an array that
+ * mixes the supported provider config forms.
+ *
+ * @public
+ */
 export type ProvidersConfig = ProviderId | ProviderFunction | ApiProvider | ProviderConfig[];
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
