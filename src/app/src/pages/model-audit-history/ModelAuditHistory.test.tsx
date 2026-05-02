@@ -217,6 +217,31 @@ describe('ModelAuditHistory', () => {
     expect(screen.getByText('Issues Found')).toBeInTheDocument();
   });
 
+  it('should show issues found when failed checks exist without issue rows', () => {
+    const failedChecksOnly = {
+      ...createMockScan('failed', 'Failed Checks Only', false),
+      failedChecks: 1,
+      results: {
+        path: '/test',
+        success: true,
+        issues: [],
+        failed_checks: 1,
+        checks: [{ name: 'pickle', status: 'failed', message: 'Check failed' }],
+      },
+    };
+
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: [failedChecksOnly],
+      totalCount: 1,
+    } as any);
+
+    renderComponent();
+
+    expect(screen.getByText('Issues Found')).toBeInTheDocument();
+    expect(screen.queryByText('Clean')).not.toBeInTheDocument();
+  });
+
   it('should request server-supported sorts for status and checks columns', async () => {
     const user = userEvent.setup();
     const mockScans = [

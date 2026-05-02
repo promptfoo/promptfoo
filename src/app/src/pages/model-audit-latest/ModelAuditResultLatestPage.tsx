@@ -12,6 +12,7 @@ import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
 import ScanResultHeader from '../model-audit/components/ScanResultHeader';
 import { useSeverityCounts } from '../model-audit/hooks';
+import { hasModelAuditFindings } from '../model-audit/utils';
 
 import type { HistoricalScan } from '../model-audit/stores';
 
@@ -68,6 +69,9 @@ export default function ModelAuditResultLatestPage() {
   }, []);
 
   const severityCounts = useSeverityCounts(latestScan?.results?.issues);
+  const hasFindings = latestScan
+    ? latestScan.hasErrors || hasModelAuditFindings(latestScan.results)
+    : false;
 
   if (isLoading) {
     return (
@@ -145,6 +149,7 @@ export default function ModelAuditResultLatestPage() {
         modelPath={latestScan.modelPath}
         createdAt={new Date(latestScan.createdAt).toISOString()}
         severityCounts={severityCounts}
+        hasFindings={hasFindings}
         size="sm"
       />
 

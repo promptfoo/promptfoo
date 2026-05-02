@@ -30,6 +30,7 @@ import { formatDataGridDate } from '@app/utils/date';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { type ListScansQuery, MODEL_AUDIT_SORT_FIELDS } from '../../../../types/api/modelAudit';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
+import { hasModelAuditFindings } from '../model-audit/utils';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import type { HistoricalScan } from '../model-audit/stores';
@@ -178,9 +179,10 @@ export default function ModelAuditHistory() {
         accessorKey: 'hasErrors',
         header: 'Status',
         size: 130,
-        accessorFn: (row) => (row.hasErrors ? 'Issues Found' : 'Clean'),
+        accessorFn: (row) =>
+          row.hasErrors || hasModelAuditFindings(row.results) ? 'Issues Found' : 'Clean',
         cell: ({ row }) => {
-          const hasErrors = row.original.hasErrors;
+          const hasErrors = row.original.hasErrors || hasModelAuditFindings(row.original.results);
           return (
             <Badge
               variant={hasErrors ? 'critical' : 'success'}

@@ -115,7 +115,7 @@ describe('createTempOutputPath', () => {
 
   it('should generate UUID-based unique paths', () => {
     const uuidPattern =
-      /promptfoo-modelscan-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/;
+      /promptfoo-modelscan-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[A-Za-z0-9]{6}\/results\.json$/;
     const tempPath = createTempOutputPath();
     expect(tempPath).toMatch(uuidPattern);
   });

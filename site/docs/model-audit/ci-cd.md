@@ -78,9 +78,10 @@ jobs:
       - name: Get changed model files
         id: changed-files
         run: |
+          MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
           CHANGED=$(git diff --name-only --diff-filter=ACM \
             ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | \
-            grep -E '\.(pkl|pickle|pth|pt|h5|hdf5|onnx|pb|tflite|safetensors|gguf|bin|keras)$' || true)
+            grep -Ei "\.(${MODEL_EXTENSIONS})$" || true)
 
           if [ -z "$CHANGED" ]; then
             echo "has_changes=false" >> $GITHUB_OUTPUT
@@ -97,9 +98,10 @@ jobs:
           while IFS= read -r file; do
             if [ -f "$file" ]; then
               echo "Scanning: $file"
+              report_id=$(printf '%s' "$file" | sha256sum | cut -d ' ' -f1)
               promptfoo scan-model "$file" \
                 --format json \
-                --output "scan_results/$(basename "$file").json" || true
+                --output "scan_results/${report_id}.json" || true
             fi
           done < changed_files.txt
 
@@ -113,13 +115,23 @@ jobs:
       - name: Check for critical issues
         if: steps.changed-files.outputs.has_changes == 'true'
         run: |
-          CRITICAL_COUNT=$(jq -s '[.[] | select(.has_errors == true)] | length' scan_results/*.json)
-          WARNING_COUNT=$(jq -s '[.[] | select(.issues | any(.severity == "warning"))] | length' scan_results/*.json)
+          jq -es '
+            all(.[];
+              type == "object" and
+              (.issues | type == "array") and
+              (.checks | type == "array") and
+              (.has_errors | type == "boolean") and
+              (.failed_checks | type == "number") and
+              (.has_errors == false) and
+              (.failed_checks == 0) and
+              ([.checks[]? | select(.status == "failed")] | length == 0) and
+              ([.issues[]? | select(.severity == "critical" or .severity == "error")] | length == 0)
+            )
+          ' scan_results/*.json >/dev/null
 
-          if [ "$CRITICAL_COUNT" -gt 0 ]; then
-            echo "❌ Found critical security issues in $CRITICAL_COUNT file(s)"
-            exit 1
-          elif [ "$WARNING_COUNT" -gt 0 ]; then
+          WARNING_COUNT=$(jq -es '[.[] | .issues[]? | select(.severity == "warning")] | length' scan_results/*.json)
+
+          if [ "$WARNING_COUNT" -gt 0 ]; then
             echo "⚠️  Found warnings in $WARNING_COUNT file(s)"
             exit 0
           else
@@ -232,8 +244,17 @@ jobs:
       - name: Check for critical issues
         id: check-issues
         run: |
-          HAS_ERRORS=$(jq -r '.has_errors // false' scan_results.json)
-          if [ "$HAS_ERRORS" = "true" ]; then
+          if ! jq -e '
+            type == "object" and
+            (.issues | type == "array") and
+            (.checks | type == "array") and
+            (.has_errors | type == "boolean") and
+            (.failed_checks | type == "number") and
+            (.has_errors == false) and
+            (.failed_checks == 0) and
+            ([.checks[]? | select(.status == "failed")] | length == 0) and
+            ([.issues[]? | select(.severity == "critical" or .severity == "error")] | length == 0)
+          ' scan_results.json >/dev/null; then
             echo "critical=true" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -339,8 +360,9 @@ model-security-scan:
 
   script:
     - |
+      MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
       CHANGED=$(git diff --name-only --diff-filter=ACM $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA | \
-        grep -E '\.(pkl|pth|h5|onnx|pb|tflite|safetensors|gguf)$' || true)
+        grep -Ei "\.(${MODEL_EXTENSIONS})$" || true)
 
       if [ -n "$CHANGED" ]; then
         echo "$CHANGED" | while read -r file; do
@@ -387,31 +409,47 @@ pipeline {
                 script {
                     def changed = sh(
                         script: '''
+                            MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
                             git diff --name-only HEAD~1 HEAD | \
-                            grep -E '\\.(pkl|pth|h5|onnx|pb|tflite|safetensors|gguf)$' || true
+                            grep -Ei "\\.(${MODEL_EXTENSIONS})$" || true
                         ''',
                         returnStdout: true
                     ).trim()
 
                     if (changed) {
                         changed.split('\n').each { file ->
-                            sh """
-                                promptfoo scan-model ${file} \
-                                  --format json \
-                                  --output scan_${file.replaceAll('/', '_')}.json
-                            """
+                            def reportFile = "scan_${file.bytes.encodeHex().toString()}.json"
+                            withEnv(["MODEL_FILE=${file}", "REPORT_FILE=${reportFile}"]) {
+                                sh '''
+                                    promptfoo scan-model "$MODEL_FILE" \
+                                      --format json \
+                                      --output "$REPORT_FILE"
+                                '''
+                            }
                         }
 
                         // Check for critical issues
                         def critical = sh(
                             script: '''
-                                jq -s '[.[] | select(.has_errors == true)] | length' scan_*.json
+                                jq -es '
+                                  all(.[];
+                                    type == "object" and
+                                    (.issues | type == "array") and
+                                    (.checks | type == "array") and
+                                    (.has_errors | type == "boolean") and
+                                    (.failed_checks | type == "number") and
+                                    (.has_errors == false) and
+                                    (.failed_checks == 0) and
+                                    ([.checks[]? | select(.status == "failed")] | length == 0) and
+                                    ([.issues[]? | select(.severity == "critical" or .severity == "error")] | length == 0)
+                                  )
+                                ' scan_*.json >/dev/null
                             ''',
-                            returnStdout: true
-                        ).trim().toInteger()
+                            returnStatus: true
+                        )
 
-                        if (critical > 0) {
-                            error("Found ${critical} model(s) with critical security issues")
+                        if (critical != 0) {
+                            error("Found model scan failures or critical security issues")
                         }
                     }
                 }
@@ -451,8 +489,9 @@ jobs:
       - run:
           name: Scan changed models
           command: |
+            MODEL_EXTENSIONS='pkl|pickle|dill|pth|pt|ckpt|checkpoint|orbax-checkpoint|h5|hdf5|keras|onnx|pb|tflite|safetensors|gguf|ggml|ggmf|ggjt|ggla|ggsa|bin|engine|plan|msgpack|flax|orbax|jax|joblib|skops|npy|npz|zip|tar|7z|json|yaml|yml|xml|toml|config|jinja|j2|template|bst|model|ubj'
             CHANGED=$(git diff --name-only origin/main...HEAD | \
-              grep -E '\.(pkl|pth|h5|onnx|pb|tflite|safetensors|gguf)$' || true)
+              grep -Ei "\.(${MODEL_EXTENSIONS})$" || true)
 
             if [ -n "$CHANGED" ]; then
               echo "$CHANGED" | while read -r file; do

@@ -51,6 +51,7 @@ const VALID_SCAN_OUTPUT = JSON.stringify({
   total_checks: 10,
   passed_checks: 10,
   failed_checks: 0,
+  has_errors: false,
   files_scanned: 1,
   bytes_scanned: 1024,
   duration: 1000,
@@ -663,6 +664,93 @@ describe('Signal termination handling', () => {
   });
 });
 
+describe('Result verdict handling', () => {
+  let program: Command;
+  let mockExit: MockInstance;
+
+  beforeEach(async () => {
+    program = new Command();
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
+      return undefined as never;
+    });
+    process.exitCode = 0;
+    await resetModelScanTestMocks();
+  });
+
+  afterEach(() => {
+    mockExit.mockRestore();
+    process.exitCode = 0;
+  });
+
+  it('returns exit code 1 when stdout JSON contains findings even if modelaudit exits 0', async () => {
+    const findingsOutput = JSON.stringify({
+      ...JSON.parse(VALID_SCAN_OUTPUT),
+      has_errors: false,
+      failed_checks: 1,
+      issues: [{ severity: 'critical', message: 'synthetic critical finding' }],
+    });
+    const child = {
+      stdout: {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
+          if (event === 'data') {
+            callback(Buffer.from(findingsOutput));
+          }
+        }),
+      },
+      stderr: { on: vi.fn() },
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return child;
+      }),
+    } as unknown as ChildProcess;
+    (spawn as unknown as Mock).mockReturnValue(child);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+
+    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('returns exit code 1 when temp-file JSON contains findings even if modelaudit exits 0', async () => {
+    const { getModelAuditCurrentVersion } = await import('../../src/updates');
+    vi.mocked(getModelAuditCurrentVersion).mockResolvedValue('0.2.20');
+    const findingsOutput = JSON.stringify({
+      ...JSON.parse(VALID_SCAN_OUTPUT),
+      has_errors: false,
+      failed_checks: 1,
+      issues: [{ severity: 'critical', message: 'synthetic critical finding' }],
+    });
+    (spawn as unknown as Mock).mockImplementation((_command: string, args: string[]) => {
+      const outputFlagIndex = args.indexOf('--output');
+      writeFileSync(args[outputFlagIndex + 1], findingsOutput);
+      const child = {
+        killed: false,
+        kill: vi.fn(),
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
+          if (event === 'close') {
+            callback(0);
+          }
+          return child;
+        }),
+      } as unknown as ChildProcess;
+      return child;
+    });
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+
+    await command.parseAsync(['node', 'scan-model', 'model.pkl']);
+
+    expect(process.exitCode).toBe(1);
+  });
+});
+
 describe('Re-scan on version change behavior', () => {
   let program: Command;
   let mockExit: MockInstance;
@@ -679,7 +767,7 @@ describe('Re-scan on version change behavior', () => {
     mockExit.mockRestore();
   });
 
-  it('should skip scan when model already scanned with same version', async () => {
+  it('should re-scan a mutable HuggingFace alias even when the same revision was seen before', async () => {
     const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
       '../../src/util/huggingfaceMetadata'
     );
@@ -693,7 +781,9 @@ describe('Re-scan on version change behavior', () => {
       repo: 'test-model',
     });
     (getHuggingFaceMetadata as Mock).mockResolvedValue({
+      modelId: 'test-owner/test-model',
       sha: 'abc123',
+      lastModified: '2026-04-27T00:00:00.000Z',
       siblings: [],
     });
 
@@ -706,15 +796,15 @@ describe('Re-scan on version change behavior', () => {
 
     // Mock getModelAuditCurrentVersion to return same version (0.2.16)
     (getModelAuditCurrentVersion as Mock).mockResolvedValue('0.2.16');
+    (spawn as unknown as Mock).mockReturnValue(createSignalTerminatedProcess('SIGTERM'));
 
     modelScanCommand(program);
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
     await command?.parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
 
-    // Should exit early without scanning (exit code 0)
+    // Mutable aliases should not be trusted as a cache hit.
     expect(mockExit).not.toHaveBeenCalled();
-    // Should not call spawn for actual scan (version check uses getModelAuditCurrentVersion)
-    expect(spawn).not.toHaveBeenCalled();
+    expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it('should not reuse a revision match when scanner selection is requested', async () => {
@@ -729,7 +819,9 @@ describe('Re-scan on version change behavior', () => {
       repo: 'test-model',
     });
     (getHuggingFaceMetadata as Mock).mockResolvedValue({
+      modelId: 'test-owner/test-model',
       sha: 'abc123',
+      lastModified: '2026-04-27T00:00:00.000Z',
       siblings: [],
     });
     const existingAudit = {
@@ -745,6 +837,7 @@ describe('Re-scan on version change behavior', () => {
       total_checks: 10,
       passed_checks: 10,
       failed_checks: 0,
+      has_errors: false,
       files_scanned: 1,
       bytes_scanned: 1024,
       duration: 1000,
@@ -803,7 +896,9 @@ describe('Re-scan on version change behavior', () => {
       repo: 'test-model',
     });
     (getHuggingFaceMetadata as Mock).mockResolvedValue({
+      modelId: 'test-owner/test-model',
       sha: 'abc123',
+      lastModified: '2026-04-27T00:00:00.000Z',
       siblings: [],
     });
     const existingAudit = {
@@ -824,6 +919,7 @@ describe('Re-scan on version change behavior', () => {
       total_checks: 10,
       passed_checks: 10,
       failed_checks: 0,
+      has_errors: false,
       files_scanned: 1,
       bytes_scanned: 1024,
       duration: 1000,
@@ -878,7 +974,9 @@ describe('Re-scan on version change behavior', () => {
       repo: 'test-model',
     });
     (getHuggingFaceMetadata as Mock).mockResolvedValue({
+      modelId: 'test-owner/test-model',
       sha: 'abc123',
+      lastModified: '2026-04-27T00:00:00.000Z',
       siblings: [],
     });
 
@@ -900,9 +998,12 @@ describe('Re-scan on version change behavior', () => {
       total_checks: 10,
       passed_checks: 10,
       failed_checks: 0,
+      has_errors: false,
       files_scanned: 5,
       bytes_scanned: 1024,
       duration: 1000,
+      issues: [],
+      checks: [],
     });
 
     const mockScanProcess = {
@@ -950,7 +1051,9 @@ describe('Re-scan on version change behavior', () => {
       repo: 'test-model',
     });
     (getHuggingFaceMetadata as Mock).mockResolvedValue({
+      modelId: 'test-owner/test-model',
       sha: 'abc123',
+      lastModified: '2026-04-27T00:00:00.000Z',
       siblings: [],
     });
 
@@ -972,9 +1075,12 @@ describe('Re-scan on version change behavior', () => {
       total_checks: 10,
       passed_checks: 10,
       failed_checks: 0,
+      has_errors: false,
       files_scanned: 5,
       bytes_scanned: 1024,
       duration: 1000,
+      issues: [],
+      checks: [],
     });
 
     const mockScanProcess = {
@@ -1436,9 +1542,12 @@ describe('Sharing behavior', () => {
       total_checks: 10,
       passed_checks: 10,
       failed_checks: 0,
+      has_errors: false,
       files_scanned: 5,
       bytes_scanned: 1024,
       duration: 1000,
+      issues: [],
+      checks: [],
     });
 
     const mockProcess = {

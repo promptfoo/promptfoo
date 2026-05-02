@@ -87,3 +87,18 @@ export const mapSeverityForFiltering = (
 
   return issueSeverity === selectedSeverity;
 };
+
+export const hasModelAuditFindings = (results: {
+  has_errors?: boolean;
+  failed_checks?: number;
+  failedChecks?: number;
+  checks?: Array<{ status?: string }>;
+  issues?: Array<{ severity?: string }>;
+}): boolean => {
+  return Boolean(
+    results.has_errors ||
+      (results.failed_checks ?? results.failedChecks ?? 0) > 0 ||
+      results.checks?.some((check) => check.status === 'failed') ||
+      (results.issues?.length ?? 0) > 0,
+  );
+};
