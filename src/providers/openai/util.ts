@@ -712,7 +712,6 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
-        ...(cachedInputTokens > 0 ? { cached: cachedInputTokens } : {}),
         numRequests: 1,
         ...(data.usage.completion_tokens_details
           ? {

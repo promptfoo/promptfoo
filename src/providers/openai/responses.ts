@@ -380,7 +380,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config: {
         ...config,
-        tools: loadedTools, // Include loaded tools for downstream validation
+        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation
         response_format: responseFormat,
       },
     };

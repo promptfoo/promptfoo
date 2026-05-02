@@ -1015,12 +1015,51 @@ describe('OpenClaw Provider', () => {
 
       expect(result.tokenUsage).toMatchObject({
         prompt: 8,
-        cached: 4,
         completion: 2,
         total: 10,
         completionDetails: { cacheReadInputTokens: 4 },
       });
       expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should not double count explicit cached input from OpenClaw Responses usage', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'OpenClaw response' }],
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5,
+            total_tokens: 15,
+            input_tokens_details: { cached_tokens: 4 },
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4-mini',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        completionDetails: { cacheReadInputTokens: 4 },
+      });
     });
 
     it('should preserve hosted tool cost when inferring hidden cached input', async () => {
@@ -1055,6 +1094,33 @@ describe('OpenClaw Provider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.cost).toBeGreaterThan(0.0025);
+    });
+
+    it('should use effective passthrough tools when inferring hidden cached input', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+          usage: { input_tokens: 4, output_tokens: 2, total_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawResponsesProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-4o',
+          gateway_url: 'http://test:18789',
+          tools: [{ type: 'web_search_preview' }],
+          passthrough: { tools: [{ type: 'web_search' }] },
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeGreaterThan(0.01);
+      expect(result.cost).toBeLessThan(0.011);
     });
 
     it('should preserve zero cost for cached responses when inferring hidden cached input', async () => {

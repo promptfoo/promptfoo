@@ -131,7 +131,6 @@ describe('getTokenUsage', () => {
       total: 100,
       prompt: 40,
       completion: 60,
-      cached: 32,
       numRequests: 1,
       completionDetails: {
         cacheReadInputTokens: 32,

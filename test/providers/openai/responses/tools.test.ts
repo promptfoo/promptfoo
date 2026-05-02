@@ -326,6 +326,43 @@ describe('OpenAiResponsesProvider tool handling', () => {
     expect(result.cost).toBeCloseTo((1_000 * 0.25 + 100 * 2) / 1e6 + 0.0125, 10);
   });
 
+  it('should price observable web search fees from effective passthrough tools', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_cost456',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'web_search_call',
+            action: { type: 'search', query: 'pricing' },
+            status: 'completed',
+          },
+        ],
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          total_tokens: 0,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        tools: [{ type: 'web_search_preview' }],
+        passthrough: { tools: [{ type: 'web_search' }] },
+      },
+    });
+
+    const result = await provider.callApi('Search the web');
+
+    expect(result.cost).toBeCloseTo(0.01, 10);
+  });
+
   it('should price from the tier returned by OpenAI rather than the requested tier', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {

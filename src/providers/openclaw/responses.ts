@@ -16,12 +16,7 @@ import type {
 } from '../../types/providers';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
-function inferCachedInputTokensFromOpenClawUsage(usage: any): number {
-  const explicitCachedTokens = usage?.input_tokens_details?.cached_tokens;
-  if (typeof explicitCachedTokens === 'number') {
-    return explicitCachedTokens;
-  }
-
+function inferHiddenCachedInputTokensFromOpenClawUsage(usage: any): number {
   const inputTokens = usage?.input_tokens;
   const outputTokens = usage?.output_tokens;
   const totalTokens = usage?.total_tokens;
@@ -92,7 +87,7 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
   ): Promise<ProviderResponse> {
     const result = await super.callApi(prompt, context, callApiOptions);
     const usage = result.raw?.usage;
-    const inferredCachedTokens = inferCachedInputTokensFromOpenClawUsage(usage);
+    const inferredCachedTokens = inferHiddenCachedInputTokensFromOpenClawUsage(usage);
     if (inferredCachedTokens <= 0) {
       return result;
     }
@@ -101,6 +96,11 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const { body, config: effectiveConfig } = await this.getOpenAiBody(
+      prompt,
+      context,
+      callApiOptions,
+    );
     const billingUsage = {
       ...usage,
       input_tokens: (usage?.input_tokens ?? 0) + inferredCachedTokens,
@@ -117,7 +117,11 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
     });
     const observableToolCost = result.cached
       ? 0
-      : calculateObservableOpenAIToolCost(result.raw, billingModelName, config);
+      : calculateObservableOpenAIToolCost(
+          result.raw,
+          billingModelName,
+          Array.isArray(body.tools) ? effectiveConfig : config,
+        );
 
     return {
       ...result,
@@ -125,7 +129,6 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
         ? {
             ...result.tokenUsage,
             prompt: (result.tokenUsage.prompt ?? 0) + inferredCachedTokens,
-            cached: inferredCachedTokens,
             completionDetails: {
               ...result.tokenUsage.completionDetails,
               cacheReadInputTokens: inferredCachedTokens,

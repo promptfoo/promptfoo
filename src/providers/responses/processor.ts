@@ -57,7 +57,6 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         total: totalTokens,
         prompt: promptTokens,
         completion: completionTokens,
-        ...(cachedInputTokens > 0 ? { cached: cachedInputTokens } : {}),
         numRequests: 1,
         ...(data.usage.completion_tokens_details
           ? {
