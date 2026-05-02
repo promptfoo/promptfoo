@@ -573,6 +573,99 @@ describe('GoogleLiveProvider', () => {
     });
   });
 
+  it('should skip tool side effects when tools are disabled', async () => {
+    const mockSpawn = vi.mocked((await import('child_process')).spawn);
+    mockImportModule.mockReset();
+
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tool_choice: 'none',
+        tools: 'file://tools.js:getTools',
+        functionToolStatefulApi: {
+          file: 'examples/google-live/counter_api.py',
+          url: 'http://127.0.0.1:8765',
+        },
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        setImmediate(() => {
+          mockWs.onclose?.({ wasClean: true, code: 1000 } as WebSocket.CloseEvent);
+        });
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('Do not use tools');
+
+    const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(sentMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+    expect(sentMessage.setup.tools).toBeUndefined();
+    expect(mockSpawn).not.toHaveBeenCalled();
+    expect(mockImportModule).not.toHaveBeenCalled();
+    expect(mockFetchWithProxy).not.toHaveBeenCalled();
+  });
+
+  it('should honor prompt-level disabled-tool overrides', async () => {
+    const mockAddNumbers = vi.fn().mockResolvedValue({ sum: 11 });
+
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'addNumbers',
+                description: 'Add two numbers together',
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          addNumbers: mockAddNumbers,
+        },
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateFunctionCallMessage(mockWs, [
+          { name: 'addNumbers', args: { a: 5, b: 6 }, id: 'function-call-disabled' },
+        ]);
+        simulateTextMessage(mockWs, 'No tools were used.');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('Do not use tools', {
+      prompt: {
+        config: {
+          tool_choice: 'none',
+        },
+      },
+    } as any);
+
+    const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(sentMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+    expect(sentMessage.setup.tools).toBeUndefined();
+    expect(mockAddNumbers).not.toHaveBeenCalled();
+  });
+
   it('should handle function tool calls to a spawned stateful api', async () => {
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {

@@ -15,6 +15,7 @@ import {
   getGoogleAccessToken,
   loadCredentials,
   normalizeTools,
+  resolveGoogleToolConfig,
 } from './util';
 
 import type {
@@ -175,27 +176,32 @@ export class GoogleLiveProvider implements ApiProvider {
       );
     }
 
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
+
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
-      this.config.systemInstruction,
-      { useAssistantRole: this.config.useAssistantRole },
+      config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
     let contentIndex = 0;
 
     let statefulApi: ChildProcess | undefined;
-    if (this.config.functionToolStatefulApi?.file) {
+    if (!toolsDisabled && config.functionToolStatefulApi?.file) {
       try {
         // Use the validatePythonPath function to get the correct Python executable
         const pythonPath = await validatePythonPath(
-          this.config.functionToolStatefulApi.pythonExecutable ||
+          config.functionToolStatefulApi.pythonExecutable ||
             getEnvString('PROMPTFOO_PYTHON') ||
             'python3',
-          !!this.config.functionToolStatefulApi.pythonExecutable ||
-            !!getEnvString('PROMPTFOO_PYTHON'),
+          !!config.functionToolStatefulApi.pythonExecutable || !!getEnvString('PROMPTFOO_PYTHON'),
         );
         logger.debug(`Spawning API with Python executable: ${pythonPath}`);
-        statefulApi = spawn(pythonPath, [this.config.functionToolStatefulApi.file]);
+        statefulApi = spawn(pythonPath, [config.functionToolStatefulApi.file]);
 
         // Add error handling for the Python process
         statefulApi.on('error', (err) => {
@@ -219,9 +225,10 @@ export class GoogleLiveProvider implements ApiProvider {
     }
 
     // Load tools before creating WebSocket Promise
-    const fileTools = this.config.tools
-      ? await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars)
-      : [];
+    const fileTools =
+      !toolsDisabled && config.tools
+        ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+        : [];
     const normalizedTools = Array.isArray(fileTools)
       ? normalizeTools(fileTools)
       : fileTools
@@ -239,7 +246,7 @@ export class GoogleLiveProvider implements ApiProvider {
         }
       };
 
-      let { apiVersion } = this.config;
+      let { apiVersion } = config;
       if (!apiVersion) {
         apiVersion = 'v1alpha';
       }
@@ -266,23 +273,23 @@ export class GoogleLiveProvider implements ApiProvider {
       let hasFinalized = false;
 
       const isTextExpected =
-        this.config.generationConfig?.response_modalities?.includes('text') ?? false;
+        config.generationConfig?.response_modalities?.includes('text') ?? false;
       const isAudioExpected =
-        this.config.generationConfig?.response_modalities?.includes('audio') ?? false;
+        config.generationConfig?.response_modalities?.includes('audio') ?? false;
 
       let hasTextStreamEnded = !isTextExpected;
       let hasAudioStreamEnded = !isAudioExpected;
 
       // Extract transcription config for use in message handler
-      const hasOutputTranscription = !!this.config.generationConfig?.outputAudioTranscription;
-      const hasInputTranscription = !!this.config.generationConfig?.inputAudioTranscription;
+      const hasOutputTranscription = !!config.generationConfig?.outputAudioTranscription;
+      const hasInputTranscription = !!config.generationConfig?.inputAudioTranscription;
 
       // Set a standard 30-second timeout for the WebSocket connection (like OpenAI)
       const timeout = setTimeout(() => {
         logger.error('WebSocket connection timed out after 30 seconds');
         ws.close();
         safeResolve({ error: 'WebSocket request timed out' });
-      }, this.config.timeoutMs || 30000);
+      }, config.timeoutMs || 30000);
 
       const finalizeResponse = async () => {
         // Prevent multiple calls to finalizeResponse
@@ -298,9 +305,9 @@ export class GoogleLiveProvider implements ApiProvider {
         clearTimeout(timeout);
 
         // Retrieve final state from stateful API before shutting down
-        if (this.config.functionToolStatefulApi) {
+        if (!toolsDisabled && config.functionToolStatefulApi) {
           try {
-            const url = new URL('get_state', this.config.functionToolStatefulApi.url).href;
+            const url = new URL('get_state', config.functionToolStatefulApi.url).href;
             statefulApiState = await fetchJson(url);
             logger.debug(`Stateful api state: ${JSON.stringify(statefulApiState)}`);
           } catch (err) {
@@ -357,7 +364,7 @@ export class GoogleLiveProvider implements ApiProvider {
           enableAffectiveDialog,
           proactivity,
           ...restGenerationConfig
-        } = this.config.generationConfig || {};
+        } = config.generationConfig || {};
 
         let formattedSpeechConfig;
         if (speechConfig) {
@@ -384,20 +391,20 @@ export class GoogleLiveProvider implements ApiProvider {
           setup: {
             model: `models/${this.modelName}`,
             generation_config: {
-              context: this.config.context,
-              examples: this.config.examples,
-              stopSequences: this.config.stopSequences,
-              temperature: this.config.temperature,
-              maxOutputTokens: this.config.maxOutputTokens,
-              topP: this.config.topP,
-              topK: this.config.topK,
+              context: config.context,
+              examples: config.examples,
+              stopSequences: config.stopSequences,
+              temperature: config.temperature,
+              maxOutputTokens: config.maxOutputTokens,
+              topP: config.topP,
+              topK: config.topK,
               ...restGenerationConfig,
               ...(formattedSpeechConfig ? { speech_config: formattedSpeechConfig } : {}),
               ...(enableAffectiveDialog ? { enable_affective_dialog: enableAffectiveDialog } : {}),
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
-            ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
+            ...(toolConfig ? { toolConfig } : {}),
+            ...(!toolsDisabled && normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
               ? { output_audio_transcription: outputAudioTranscription }
@@ -563,7 +570,7 @@ export class GoogleLiveProvider implements ApiProvider {
                 let callbackResponse = {};
                 const functionName = functionCall.name;
                 try {
-                  if (this.config.functionToolCallbacks?.[functionName]) {
+                  if (!toolsDisabled && config.functionToolCallbacks?.[functionName]) {
                     callbackResponse = await this.executeFunctionCallback(
                       functionName,
                       JSON.stringify(
@@ -572,12 +579,11 @@ export class GoogleLiveProvider implements ApiProvider {
                           : functionCall.args,
                       ),
                     );
-                  } else if (this.config.functionToolStatefulApi) {
+                  } else if (!toolsDisabled && config.functionToolStatefulApi) {
                     logger.warn(
                       'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
                     );
-                    const baseUrl = new URL(functionName, this.config.functionToolStatefulApi.url)
-                      .href;
+                    const baseUrl = new URL(functionName, config.functionToolStatefulApi.url).href;
                     try {
                       callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
                       logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);

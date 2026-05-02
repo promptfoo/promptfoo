@@ -240,10 +240,19 @@ export interface CompletionOptions {
 
   toolConfig?: {
     functionCallingConfig?: {
-      mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE';
+      mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE' | 'auto' | 'any' | 'none';
       allowedFunctionNames?: string[];
     };
   };
+
+  tool_config?: {
+    function_calling_config?: {
+      mode?: 'MODE_UNSPECIFIED' | 'AUTO' | 'ANY' | 'NONE' | 'auto' | 'any' | 'none';
+      allowed_function_names?: string[];
+    };
+  };
+
+  tool_choice?: 'auto' | 'none' | 'required' | { type: 'function'; function: { name: string } };
 
   tools?: Tool[];
 
