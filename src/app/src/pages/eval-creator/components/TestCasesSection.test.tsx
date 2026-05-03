@@ -88,6 +88,28 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Test 1')).toBeInTheDocument();
   });
 
+  it('labels the test case edit action', () => {
+    (useStore as any).mockReturnValue({
+      config: {
+        tests: [
+          {
+            description: 'Test 1',
+            vars: { input: 'hello' },
+          },
+        ],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Edit test case' })).toBeInTheDocument();
+  });
+
   describe('File Upload', () => {
     // Helper to create FileReader mock
     const createFileReaderMock = (fileContent: string) => {

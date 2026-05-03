@@ -211,6 +211,18 @@ describe('PromptsSection', () => {
     expect(screen.getAllByText(/Translate the following sentence to French/)).toHaveLength(2);
   });
 
+  it('labels the prompt edit action', () => {
+    setupStore(['Write a short story about a cat.']);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Edit prompt 1' })).toBeInTheDocument();
+  });
+
   it('should remove a prompt from the list when the delete icon is clicked for a prompt row and the deletion is confirmed in the dialog', async () => {
     const user = userEvent.setup();
     const initialPrompts = ['Prompt 1', 'Prompt 2', 'Prompt 3'];

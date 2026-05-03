@@ -360,6 +360,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                                 setEditingTestCaseIndex(index);
                                 setTestCaseDialogOpen(true);
                               }}
+                              aria-label="Edit test case"
                             >
                               <EditIcon className="size-4" />
                             </Button>

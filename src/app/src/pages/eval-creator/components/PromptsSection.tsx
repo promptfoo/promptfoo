@@ -169,6 +169,7 @@ const PromptsSection = () => {
                           e.stopPropagation();
                           handleEditPrompt(index);
                         }}
+                        aria-label={`Edit prompt ${index + 1}`}
                       >
                         <EditIcon className="size-4" />
                       </Button>
