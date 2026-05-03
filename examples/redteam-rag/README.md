@@ -30,4 +30,4 @@ To re-generate tests and run the red team eval:
 npx promptfoo@latest redteam run
 ```
 
-If you are not authenticated to Promptfoo Cloud, set `OPENAI_API_KEY` and add `--grader openai:gpt-4.1-mini` to grade locally instead of using cloud grading.
+If you are not authenticated to Promptfoo Cloud, set `OPENAI_API_KEY` and add `--grader openai:gpt-4.1-mini` to grade locally instead of using cloud grading. Some hosted attack strategies in the pre-generated suite still require Promptfoo Cloud access, so sign in before running the full generated set.
