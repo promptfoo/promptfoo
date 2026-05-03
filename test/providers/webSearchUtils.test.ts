@@ -109,6 +109,27 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
     });
 
+    it('should return true for xAI Responses provider with web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'xai:responses:grok-4.3',
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return false for xAI chat provider with Responses-only web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'xai:grok-4.3',
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      };
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
     it('should return false for xAI provider without search_parameters', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'xai:grok-4-1-fast-reasoning',
@@ -423,9 +444,9 @@ describe('webSearchUtils', () => {
       );
     });
 
-    it('should configure xAI provider with search_parameters', async () => {
+    it('should configure xAI provider with Responses API web search', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'xai:grok-4-1-fast-reasoning',
+        id: () => 'xai:responses:grok-4.3',
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -438,11 +459,11 @@ describe('webSearchUtils', () => {
       await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'xai:grok-4-1-fast-reasoning',
+        'xai:responses:grok-4.3',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
-              search_parameters: { mode: 'on' },
+              tools: [{ type: 'web_search' }],
             }),
           }),
         }),

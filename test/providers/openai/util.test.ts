@@ -113,6 +113,30 @@ describe('getTokenUsage', () => {
       },
     });
   });
+
+  it('should preserve provider-side cached input tokens', () => {
+    const data = {
+      usage: {
+        total_tokens: 100,
+        prompt_tokens: 40,
+        completion_tokens: 60,
+        prompt_tokens_details: {
+          cached_tokens: 32,
+        },
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+      completionDetails: {
+        cacheReadInputTokens: 32,
+      },
+    });
+  });
 });
 
 describe('calculateOpenAICost', () => {
@@ -308,7 +332,7 @@ describe('calculateOpenAICost', () => {
 
   it('should calculate cost correctly for gpt-5.2-pro', () => {
     const cost = calculateOpenAICost('gpt-5.2-pro', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 15 + 500 * 120) / 1e6, 6);
+    expect(cost).toBeCloseTo((1000 * 21 + 500 * 168) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5.5-pro', () => {
@@ -319,6 +343,11 @@ describe('calculateOpenAICost', () => {
   it('should calculate cost correctly for gpt-5.5-pro-2026-04-23', () => {
     const cost = calculateOpenAICost('gpt-5.5-pro-2026-04-23', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
+  });
+
+  it('should calculate long-context cost correctly for gpt-5.5-pro', () => {
+    const cost = calculateOpenAICost('gpt-5.5-pro', {}, 300_000, 1_000);
+    expect(cost).toBeCloseTo((300_000 * 60 + 1_000 * 270) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5.4-pro', () => {

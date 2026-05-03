@@ -255,7 +255,7 @@ describe('OpenAICodexSDKProvider', () => {
             total: 30, // 10 + 20
             cached: 5,
           },
-          cost: 0,
+          cost: undefined,
           raw: expect.any(String),
           sessionId: 'test-thread-123',
         });
@@ -1496,9 +1496,9 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.1-codex: $2/1M input, $8/1M output
-        // Cost = (1000 * 2/1000000) + (500 * 8/1000000) = 0.002 + 0.004 = 0.006
-        expect(result.cost).toBeCloseTo(0.006, 6);
+        // gpt-5.1-codex: $1.25/1M input, $10/1M output
+        // Cost = (1000 * 1.25/1000000) + (500 * 10/1000000) = 0.00125 + 0.005 = 0.00625
+        expect(result.cost).toBeCloseTo(0.00625, 6);
       });
 
       it('should calculate cost for gpt-5.1-codex-mini model', async () => {
@@ -1517,14 +1517,34 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.1-codex-mini: $0.5/1M input, $0.05/1M cache_read, $2/1M output
+        // gpt-5.1-codex-mini: $0.25/1M input, $0.025/1M cache_read, $2/1M output
         // uncached input = 2000 - 500 = 1500, cached = 500
-        // Cost = (1500 * 0.5/1000000) + (500 * 0.05/1000000) + (1000 * 2/1000000)
-        //      = 0.00075 + 0.000025 + 0.002 = 0.002775
+        // Cost = (1500 * 0.25/1000000) + (500 * 0.025/1000000) + (1000 * 2/1000000)
+        //      = 0.000375 + 0.0000125 + 0.002 = 0.0023875
+        expect(result.cost).toBeCloseTo(0.0023875, 6);
+      });
+
+      it('should calculate cost for gpt-5-codex-mini model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5-codex-mini' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // Preserve the previously supported Codex SDK rate card for this legacy model.
         expect(result.cost).toBeCloseTo(0.002775, 6);
       });
 
-      it('should return 0 cost when model pricing not found', async () => {
+      it('should return undefined cost when model pricing not found', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 100,
@@ -1539,10 +1559,10 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBe(0);
+        expect(result.cost).toBeUndefined();
       });
 
-      it('should return 0 cost when no model specified', async () => {
+      it('should return undefined cost when no model specified', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 100,
@@ -1556,10 +1576,10 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBe(0);
+        expect(result.cost).toBeUndefined();
       });
 
-      it('should return 0 cost when no usage data', async () => {
+      it('should return undefined cost when no usage data', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
@@ -1569,7 +1589,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBe(0);
+        expect(result.cost).toBeUndefined();
       });
     });
 

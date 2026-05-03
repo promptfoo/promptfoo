@@ -583,7 +583,7 @@ The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the cor
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js 20+, npm
+- **Dependencies**: Node.js 20.20+ or 22.22+, npm
 
 ### Server Requirements (Hosting the Web UI/API)
 

@@ -517,6 +517,41 @@ class AgentProviderTests(unittest.TestCase):
         ):
             AGENT_PROVIDER._build_steps("task", {"steps": []})
 
+    def test_extract_token_usage_preserves_request_and_billing_details(self):
+        raw_responses = [
+            types.SimpleNamespace(
+                usage=types.SimpleNamespace(
+                    total_tokens=150,
+                    input_tokens=100,
+                    output_tokens=50,
+                    requests=2,
+                    input_tokens_details=types.SimpleNamespace(cached_tokens=40),
+                    output_tokens_details=types.SimpleNamespace(reasoning_tokens=10),
+                )
+            ),
+            types.SimpleNamespace(
+                usage=types.SimpleNamespace(
+                    total_tokens=30,
+                    prompt_tokens=20,
+                    completion_tokens=10,
+                    prompt_tokens_details=types.SimpleNamespace(cached_tokens=5),
+                    completion_tokens_details=types.SimpleNamespace(reasoning_tokens=3),
+                )
+            ),
+        ]
+
+        self.assertEqual(
+            AGENT_PROVIDER._extract_token_usage(raw_responses),
+            {
+                "total": 180,
+                "prompt": 120,
+                "completion": 60,
+                "cached": 45,
+                "numRequests": 3,
+                "completionDetails": {"reasoning": 13},
+            },
+        )
+
     def test_call_api_returns_error_for_invalid_steps_json(self):
         result = AGENT_PROVIDER.call_api(
             "overall task", {}, {"vars": {"steps_json": "{not json"}}
