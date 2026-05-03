@@ -34,6 +34,7 @@
     "src/app": {
       "entry": ["src/tests/browser-mode/browserApis.browser.ts"],
       "project": ["src/**/*.{js,ts,tsx}"],
+      "ignoreFiles": ["src/polyfills/scroll-timeline.d.ts"],
       "ignoreDependencies": ["@promptfoo/*", "@kurkle/color", "tailwindcss"],
       "paths": {
         "@app/*": ["./src/*"],
