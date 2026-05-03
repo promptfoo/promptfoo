@@ -103,6 +103,20 @@ describe('PageWrapper', () => {
       const nextButton = screen.queryByRole('button', { name: 'Next' });
       expect(nextButton).toBeNull();
     });
+
+    it('keeps footer navigation full-width on mobile and offset on desktop', () => {
+      render(
+        <PageWrapper title="Test Page" onNext={() => {}}>
+          <div>Child Content</div>
+        </PageWrapper>,
+      );
+
+      expect(screen.getByTestId('page-navigation')).toHaveClass(
+        'left-0',
+        'right-0',
+        'md:left-[240px]',
+      );
+    });
   });
 
   describe('Navigation Button Disabling', () => {
