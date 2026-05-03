@@ -1,50 +1,38 @@
-# redteam-atr-mcp-defense (MCP Red Team with Deterministic Defense)
+# redteam-atr-mcp-defense (MCP Red Team with Deterministic Output Scanning)
 
-This example adds a deterministic defense layer to Promptfoo's MCP red teaming using [ATR (Agent Threat Rules)](https://github.com/Agent-Threat-Rule/agent-threat-rules) -- 108 open-source regex rules for AI agent threat detection.
+This example shows how to add a deterministic output-scanning layer to Promptfoo's MCP red teaming with [ATR (Agent Threat Rules)](https://github.com/Agent-Threat-Rule/agent-threat-rules).
 
 ## Why?
 
-Promptfoo's LLM-based grading catches novel attacks through semantic understanding. ATR catches known attack patterns through regex in <5ms without LLM calls. They complement each other:
+Promptfoo's LLM-based grading catches novel attacks through semantic understanding. ATR catches known text patterns with regex and can run without additional LLM calls. They complement each other:
 
-| Layer             | Method          | Catches                                                | Latency | Cost      |
-| ----------------- | --------------- | ------------------------------------------------------ | ------- | --------- |
-| Promptfoo grading | LLM rubric      | Novel/semantic attacks                                 | seconds | API calls |
-| ATR assertion     | 108 regex rules | Known tool poisoning, injection, exfiltration patterns | <5ms    | free      |
+| Layer             | Method     | Catches                                     | Cost      |
+| ----------------- | ---------- | ------------------------------------------- | --------- |
+| Promptfoo grading | LLM rubric | Novel/semantic attacks                      | API calls |
+| ATR assertion     | Regex      | Known text patterns in model output strings | None      |
 
 ## Getting Started
 
 ```bash
 npx promptfoo@latest init --example redteam-atr-mcp-defense
 cd redteam-atr-mcp-defense
+npm install agent-threat-rules
 export ANTHROPIC_API_KEY=your_key_here
 npx promptfoo redteam run
 ```
 
-## Adding ATR Deterministic Defense (Optional)
+## How the ATR Layer Works
 
-Add the ATR assertion to your `defaultTest` block for regex-based threat detection alongside Promptfoo's LLM grading:
+The `atr-assertion.mjs` file:
 
-```bash
-npm install agent-threat-rules
-```
-
-Then add to `promptfooconfig.yaml`:
-
-```yaml
-defaultTest:
-  assert:
-    - type: javascript
-      value: file://atr-assertion.js
-```
-
-The `atr-assertion.js` file:
-
-1. Loads ATR's 108 rules once (cached across test cases)
-2. Scans each LLM output for known threat patterns
+1. Loads ATR once and caches the engine across test cases
+2. Scans each final model output for known threat patterns
 3. Fails the test if any high/critical severity patterns match
 4. Reports the specific ATR rule IDs that triggered
 
 This runs alongside Promptfoo's built-in assertions, adding a fast deterministic check without replacing LLM-based evaluation.
+
+This example scans final assistant outputs only. It does not inspect raw MCP tool descriptions or raw MCP tool responses, so it should not be treated as a standalone detector for tool poisoning in the MCP layer itself.
 
 ## What ATR Catches
 
@@ -54,11 +42,11 @@ This runs alongside Promptfoo's built-in assertions, adding a fast deterministic
 - Privilege escalation (unauthorized admin operations, shell commands)
 - Supply chain attacks (skill impersonation, rug pulls, name squatting)
 
-Full rule list: [ATR rule categories](https://github.com/Agent-Threat-Rule/agent-threat-rules#what-atr-detects-108-rules-9-categories)
+Full rule list: [ATR rule categories](https://github.com/Agent-Threat-Rule/agent-threat-rules#what-atr-detects)
 
 ## Customization
 
-Adjust severity threshold in `atr-assertion.js`:
+Adjust severity threshold in `atr-assertion.mjs`:
 
 ```javascript
 // Include medium severity for stricter scanning
@@ -81,11 +69,11 @@ ATR uses regex detection. It cannot catch:
 
 - Novel semantic attacks that paraphrase known patterns
 - Context-dependent threats requiring conversation history
-- Encoded attacks not covered by the current 108 rules
+- Encoded attacks not covered by its current rules
 
 For these, Promptfoo's LLM-based grading is the right tool. Use both together.
 
 ## Further Reading
 
-- [ATR Limitations](https://github.com/Agent-Threat-Rule/agent-threat-rules/blob/main/docs/LIMITATIONS.md)
+- [ATR Limitations](https://github.com/Agent-Threat-Rule/agent-threat-rules/blob/main/LIMITATIONS.md)
 - [Promptfoo MCP Red Teaming](https://www.promptfoo.dev/docs/red-team/plugins/mcp/)

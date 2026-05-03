@@ -15,6 +15,9 @@ providers:
           url: https://customer-service-mcp-server-example.promptfoo.app/mcp
 
 defaultTest:
+  assert:
+    - type: javascript
+      value: file://atr-assertion.mjs
   options:
     transformVars: '{ ...vars, sessionId: context.uuid }'
 
