@@ -1007,6 +1007,14 @@ describe('DataTable', () => {
       const actionGroup = headerContent?.querySelector('button')?.closest('span');
       expect(actionGroup).toBeInTheDocument();
       expect(actionGroup).toHaveClass('flex', 'shrink-0', 'items-center');
+      expect(actionGroup).toHaveClass(
+        'opacity-100',
+        'pointer-events-auto',
+        'sm:opacity-0',
+        'sm:pointer-events-none',
+        'sm:group-hover:opacity-100',
+        'sm:group-hover:pointer-events-auto',
+      );
       expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
 
       const sortButton = headerContent?.querySelector('button');

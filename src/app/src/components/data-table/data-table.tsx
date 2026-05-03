@@ -104,7 +104,7 @@ function renderDataTableHeaderActions<TData, TValue>({
     <span
       className={cn(
         'flex shrink-0 items-center gap-0.5',
-        'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
+        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto',
         (sortDirection || isFiltered) && 'opacity-100 pointer-events-auto',
       )}
     >
