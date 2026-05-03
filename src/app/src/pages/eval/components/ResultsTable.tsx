@@ -189,7 +189,12 @@ function TableHeader({
           {resourceId && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank" className="action">
+                <Link
+                  to={ROUTES.PROMPT_DETAIL(resourceId)}
+                  target="_blank"
+                  aria-label="View other evals and datasets for this prompt"
+                  className="action"
+                >
                   <ExternalLink className="size-4" />
                 </Link>
               </TooltipTrigger>
@@ -1394,6 +1399,7 @@ function ResultsTableHeader({
         <button
           type="button"
           onClick={() => setStickyHeader(false)}
+          aria-label="Dismiss sticky header"
           className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
         >
           <X className="size-4" />
@@ -2289,7 +2295,7 @@ function ResultsTable({
               }}
               disabled={filteredResultsCount <= 10}
             >
-              <SelectTrigger className="w-20 h-8">
+              <SelectTrigger aria-label="Results per page" className="w-20 h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -2331,6 +2337,7 @@ function ResultsTable({
                 }
               }}
               className="w-[60px] h-8 text-center"
+              aria-label="Go to page"
               min={1}
               max={pageCount || 1}
               disabled={pageCount === 1}
@@ -2343,6 +2350,7 @@ function ResultsTable({
               variant="outline"
               size="icon"
               className="rounded-r-none"
+              aria-label="Previous page"
               onClick={() => {
                 setPagination((prev) => ({
                   ...prev,
@@ -2359,6 +2367,7 @@ function ResultsTable({
               variant="outline"
               size="icon"
               className="rounded-l-none -ml-px"
+              aria-label="Next page"
               onClick={() => {
                 setPagination((prev) => ({
                   ...prev,
