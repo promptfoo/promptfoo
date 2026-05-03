@@ -262,7 +262,7 @@ describe('TestCaseDialog', () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
 
       // Plugin dropdown should be directly visible (not behind a popover)
-      expect(screen.getByTestId('plugin-dropdown')).toBeInTheDocument();
+      expect(screen.getByTestId('plugin-dropdown')).toHaveClass('w-full', 'sm:w-[280px]');
     });
 
     it('should NOT show plugin dropdown when allowPluginChange is false', () => {

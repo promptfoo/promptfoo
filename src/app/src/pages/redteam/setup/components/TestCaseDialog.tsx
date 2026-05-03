@@ -159,7 +159,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         className="z-[10000] flex max-h-[85vh] flex-col sm:max-w-3xl"
         data-testid="test-case-dialog"
       >
-        <DialogHeader className="flex flex-row items-start justify-between gap-4 pr-8">
+        <DialogHeader className="flex flex-col items-start gap-4 pr-8 sm:flex-row sm:justify-between">
           <div>
             <DialogTitle>
               {allowPluginChange
@@ -182,7 +182,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                 }
               }}
             >
-              <SelectTrigger className="w-[280px]" data-testid="plugin-dropdown">
+              <SelectTrigger className="w-full sm:w-[280px]" data-testid="plugin-dropdown">
                 <SelectValue placeholder="Select plugin" />
               </SelectTrigger>
               <SelectContent className="z-[10001]">
