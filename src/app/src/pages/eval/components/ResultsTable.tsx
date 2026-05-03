@@ -2252,7 +2252,7 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-      <div className="pagination sticky bottom-0 z-10 flex shrink-0 items-center gap-4 flex-wrap justify-between bg-background border-t border-border w-screen px-4 -mx-4 shadow-lg py-2">
+      <div className="pagination sticky bottom-0 z-10 flex w-screen shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg -mx-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
           Showing{' '}
           {filteredResultsCount === 0 ? (
@@ -2280,10 +2280,10 @@ function ResultsTable({
           </div>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* PAGE SIZE SELECTOR */}
           <div className="flex items-center gap-2">
-            <span>Results per page:</span>
+            <span className="whitespace-nowrap">Results per page:</span>
             <Select
               value={String(pagination.pageSize)}
               onValueChange={(value) => {
@@ -2323,7 +2323,7 @@ function ResultsTable({
               pageCount <= 1 && 'opacity-50 pointer-events-none',
             )}
           >
-            <span>Go to:</span>
+            <span className="whitespace-nowrap">Go to:</span>
             <NumberInput
               value={pagination.pageIndex + 1}
               onChange={(v) => {
