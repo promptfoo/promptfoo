@@ -1,9 +1,49 @@
+import fs from 'fs/promises';
+
+import confirm from '@inquirer/confirm';
+import editor from '@inquirer/editor';
+import input from '@inquirer/input';
+import select from '@inquirer/select';
 import yaml from 'js-yaml';
-import { describe, expect, it } from 'vitest';
-import { renderRedteamConfig } from '../../../src/redteam/commands/init';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
+import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
+import { redteamInit, renderRedteamConfig } from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
+import { ProbeLimitExceededError } from '../../../src/redteam/types';
 
 import type { RedteamFileConfig } from '../../../src/redteam/types';
+
+vi.mock('fs/promises');
+vi.mock('@inquirer/confirm');
+vi.mock('@inquirer/editor');
+vi.mock('@inquirer/input');
+vi.mock('@inquirer/select');
+vi.mock('../../../src/globalConfig/accounts', () => ({
+  getUserEmail: vi.fn(),
+  setUserEmail: vi.fn(),
+}));
+vi.mock('../../../src/globalConfig/globalConfig', () => ({
+  readGlobalConfig: vi.fn(),
+  writeGlobalConfigPartial: vi.fn(),
+}));
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+vi.mock('../../../src/redteam/commands/generate', () => ({
+  doGenerateRedteam: vi.fn(),
+}));
+vi.mock('../../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+    saveConsent: vi.fn(),
+  },
+}));
 
 describe('renderRedteamConfig', () => {
   it('should generate valid YAML that conforms to RedteamFileConfig', () => {
@@ -132,5 +172,41 @@ describe('renderRedteamConfig', () => {
         baseUrl: 'https://api.custom.com',
       },
     });
+  });
+});
+
+describe('redteamInit', () => {
+  let originalExitCode: number | string | null | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'clear').mockImplementation(() => {});
+    originalExitCode = process.exitCode;
+    process.exitCode = 0;
+
+    vi.mocked(input).mockResolvedValue('target');
+    vi.mocked(select)
+      .mockResolvedValueOnce('prompt_model_chatbot')
+      .mockResolvedValueOnce('now')
+      .mockResolvedValueOnce('openai:gpt-5-mini')
+      .mockResolvedValueOnce('default')
+      .mockResolvedValueOnce('default');
+    vi.mocked(editor).mockResolvedValue('User query: {{prompt}}');
+    vi.mocked(confirm).mockResolvedValue(true);
+    vi.mocked(readGlobalConfig).mockReturnValue({ hasHarmfulRedteamConsent: true } as any);
+    vi.mocked(fs.writeFile).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    process.exitCode = originalExitCode;
+    vi.restoreAllMocks();
+  });
+
+  it('should treat probe-limit exhaustion as an expected CLI failure', async () => {
+    vi.mocked(doGenerateRedteam).mockRejectedValueOnce(new ProbeLimitExceededError(100, 100));
+
+    await expect(redteamInit(undefined)).resolves.toBeUndefined();
+
+    expect(process.exitCode).toBe(1);
   });
 });

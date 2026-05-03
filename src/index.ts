@@ -2,7 +2,7 @@ import assertions from './assertions/index';
 import * as cache from './cache';
 import guardrails from './guardrails';
 import { evaluate } from './node';
-import { loadApiProvider } from './providers/index';
+import { loadApiProvider, loadApiProviders } from './providers/index';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
 import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
@@ -13,11 +13,13 @@ import { Plugins } from './redteam/plugins/index';
 import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
 
+export { EmailValidationError } from './globalConfig/accounts';
 export { generateTable } from './table';
 export * from './types/index';
 // Transform types and runtime guard for users passing inline transform functions
 // via the Node.js package.
 export { isTransformFunction } from './types/transform';
+export { ConfigResolutionError } from './util/config/load';
 
 // Extension hook context types for users writing custom extensions
 export type {
@@ -46,7 +48,7 @@ const redteam = {
   run: doRedteamRun,
 };
 
-export { assertions, cache, evaluate, guardrails, loadApiProvider, redteam };
+export { assertions, cache, evaluate, guardrails, loadApiProvider, loadApiProviders, redteam };
 
 export default {
   assertions,
@@ -54,5 +56,6 @@ export default {
   evaluate,
   guardrails,
   loadApiProvider,
+  loadApiProviders,
   redteam,
 };
