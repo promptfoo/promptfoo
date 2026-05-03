@@ -47,11 +47,13 @@ import type {
 } from './types/index';
 import type { ApiProvider } from './types/providers';
 
+export { EmailValidationError } from './globalConfig/accounts';
 export { generateTable } from './table';
 export * from './types/index';
 // Transform types and runtime guard for users passing inline transform functions
 // via the Node.js package.
 export { isTransformFunction } from './types/transform';
+export { ConfigResolutionError } from './util/config/load';
 
 // Extension hook context types for users writing custom extensions
 export type {
@@ -251,7 +253,7 @@ function createSerializableUnifiedConfig(
  *
  * const evalRecord = await evaluate({
  *   prompts: ['Answer briefly: {{question}}'],
- *   providers: ['openai:gpt-5-mini'],
+ *   providers: ['openai:chat:gpt-5.5'],
  *   tests: [{ vars: { question: 'What is 2 + 2?' } }],
  * });
  * ```
@@ -351,11 +353,6 @@ async function evaluate(
     }
   }
 
-  // Other settings
-  if (options.cache === false) {
-    cache.disableCache();
-  }
-
   const parsedProviderPromptMap = readProviderPromptMap(
     testSuiteConfig,
     constructedTestSuite.prompts,
@@ -374,17 +371,19 @@ async function evaluate(
     : new Eval(unifiedConfig, { author });
 
   // Run the eval!
-  const ret = await doEvaluate(
-    {
-      ...constructedTestSuite,
-      providerPromptMap: parsedProviderPromptMap,
-    },
-    evalRecord,
-    {
-      eventSource: 'library',
-      isRedteam: Boolean(testSuiteConfig.redteam),
-      ...options,
-    },
+  const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
+    doEvaluate(
+      {
+        ...constructedTestSuite,
+        providerPromptMap: parsedProviderPromptMap,
+      },
+      evalRecord,
+      {
+        eventSource: 'library',
+        isRedteam: Boolean(testSuiteConfig.redteam),
+        ...options,
+      },
+    ),
   );
 
   // Handle sharing if enabled

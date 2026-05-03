@@ -17,7 +17,7 @@ import { evaluate } from 'promptfoo';
 
 const evalRecord = await evaluate({
   prompts: ['Translate to Spanish: {{text}}'],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [
     {
       vars: { text: 'Hello' },
@@ -52,7 +52,7 @@ import { evaluate } from 'promptfoo';
 
 await evaluate({
   prompts: ['Say hello to {{name}}'],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [
     {
       vars: { name: 'Ada' },
@@ -109,11 +109,11 @@ aggregate [`PromptMetrics`](/docs/configuration/reference#promptmetrics).
 import { cache, evaluate } from 'promptfoo';
 
 const baseline = await cache.withCacheNamespace('baseline', () =>
-  evaluate({ ...testSuite, providers: ['openai:gpt-5-mini'] }),
+  evaluate({ ...testSuite, providers: ['openai:chat:gpt-5.5'] }),
 );
 
 const candidate = await cache.withCacheNamespace('candidate', () =>
-  evaluate({ ...testSuite, providers: ['openai:gpt-5-mini'] }),
+  evaluate({ ...testSuite, providers: ['openai:chat:gpt-5.5'] }),
 );
 
 console.log(baseline.results.length, candidate.results.length);

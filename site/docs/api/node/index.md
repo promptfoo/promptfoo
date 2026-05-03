@@ -30,6 +30,7 @@ The most commonly used public surfaces are:
 
 ## Browse the generated reference
 
+- [Reference overview](./reference/)
 - [Core functions](./reference/functions/evaluate)
 - [Provider interfaces](./reference/interfaces/ApiProvider)
 - [Assertion helpers](./reference/variables/assertions)

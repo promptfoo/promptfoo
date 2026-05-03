@@ -580,6 +580,11 @@ export async function runAssertion({
       }
     : undefined;
 
+  const finalTest = getFinalTest(
+    vars === undefined ? test : { ...test, vars: resolvedVars },
+    assertion,
+  );
+
   const assertionParams: AssertionParams = {
     assertion,
     baseType: getAssertionBaseType(assertion),
@@ -595,7 +600,7 @@ export async function runAssertion({
     provider,
     providerResponse,
     renderedValue,
-    test: getFinalTest(test, assertion),
+    test: finalTest,
     valueFromScript,
   };
 

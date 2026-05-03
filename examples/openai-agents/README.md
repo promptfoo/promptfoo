@@ -52,6 +52,8 @@ Open any result and inspect the **Trace Timeline** tab. You should see agent, ha
 
 If you also want a provider-level Python OpenTelemetry span alongside the SDK spans, run the eval with `PROMPTFOO_ENABLE_OTEL=true`.
 
+The provider returns aggregate token usage with the SDK's real request count, cached-input tokens, and reasoning-token detail. It intentionally does not return a dollar cost: a generic Python agent graph can mix models and hosted tools, so exact spend should be returned only by provider code that can account for every billed step.
+
 ## What The Eval Asserts
 
 - the agent used `lookup_reservation`, `update_seat`, and `faq_lookup`

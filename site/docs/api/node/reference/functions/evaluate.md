@@ -8,7 +8,7 @@
 
 > **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`\>
 
-Defined in: [index.ts:261](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L261)
+Defined in: [index.ts:263](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L263)
 
 Run an eval from a JavaScript or TypeScript program.
 
@@ -45,7 +45,7 @@ import { evaluate } from 'promptfoo';
 
 const evalRecord = await evaluate({
   prompts: ['Answer briefly: {{question}}'],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [{ vars: { question: 'What is 2 + 2?' } }],
 });
 ```

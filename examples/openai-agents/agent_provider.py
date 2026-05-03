@@ -245,8 +245,15 @@ def _apply_reservation_to_context(
     airline_context.seat_number = reservation["seat_number"]
 
 
-def _extract_token_usage(raw_responses: Iterable[Any]) -> dict[str, int]:
-    usage = {"total": 0, "prompt": 0, "completion": 0}
+def _extract_token_usage(raw_responses: Iterable[Any]) -> dict[str, Any]:
+    usage: dict[str, Any] = {
+        "total": 0,
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "numRequests": 0,
+    }
+    reasoning_tokens = 0
     for response in raw_responses:
         response_usage = getattr(response, "usage", None)
         if response_usage is None:
@@ -263,7 +270,18 @@ def _extract_token_usage(raw_responses: Iterable[Any]) -> dict[str, int]:
             or getattr(response_usage, "completion_tokens", 0)
             or 0
         )
+        input_details = getattr(
+            response_usage, "input_tokens_details", None
+        ) or getattr(response_usage, "prompt_tokens_details", None)
+        output_details = getattr(
+            response_usage, "output_tokens_details", None
+        ) or getattr(response_usage, "completion_tokens_details", None)
+        usage["cached"] += int(getattr(input_details, "cached_tokens", 0) or 0)
+        reasoning_tokens += int(getattr(output_details, "reasoning_tokens", 0) or 0)
+        usage["numRequests"] += int(getattr(response_usage, "requests", 0) or 1)
 
+    if reasoning_tokens:
+        usage["completionDetails"] = {"reasoning": reasoning_tokens}
     return usage
 
 

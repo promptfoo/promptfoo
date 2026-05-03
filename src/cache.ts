@@ -21,6 +21,7 @@ let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
+const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
@@ -213,6 +214,23 @@ export function withCacheNamespace<T>(namespace: string | undefined, fn: () => P
 
   const scopedNamespace = parentNamespace ? `${parentNamespace}:${namespace}` : namespace;
   return cacheNamespaceStorage.run({ namespace: scopedNamespace }, fn);
+}
+
+/**
+ * Run an operation with a request-local cache override.
+ *
+ * @internal
+ */
+export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: () => Promise<T>) {
+  if (enabledOverride === undefined) {
+    return fn();
+  }
+
+  return cacheEnabledStorage.run({ enabled: enabledOverride }, fn);
+}
+
+function getEffectiveCacheEnabled() {
+  return cacheEnabledStorage.getStore()?.enabled ?? enabled;
 }
 
 /**
@@ -528,9 +546,10 @@ export async function fetchWithCache<T = unknown>(
   const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
-  const cacheKey = enabled && !bust ? getFetchCacheKey(url, options, method, format) : null;
+  const cacheEnabled = getEffectiveCacheEnabled();
+  const cacheKey = cacheEnabled && !bust ? getFetchCacheKey(url, options, method, format) : null;
 
-  if (!enabled || bust || cacheKey == null) {
+  if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
       options,
@@ -624,5 +643,5 @@ export async function clearCache() {
  * @public
  */
 export function isCacheEnabled() {
-  return enabled;
+  return getEffectiveCacheEnabled();
 }

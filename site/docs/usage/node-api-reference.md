@@ -45,7 +45,7 @@ import { evaluate } from 'promptfoo';
 const evalRecord = await evaluate(
   {
     prompts: ['Answer briefly: {{question}}'],
-    providers: ['openai:gpt-5-mini'],
+    providers: ['openai:chat:gpt-5.5'],
     tests: [{ vars: { question: 'What is 2 + 2?' } }],
   },
   {

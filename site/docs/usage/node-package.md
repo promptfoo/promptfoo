@@ -30,7 +30,7 @@ import { evaluate } from 'promptfoo';
 
 const evalRecord = await evaluate({
   prompts: ['Answer briefly: {{question}}'],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [{ vars: { question: 'What is 2 + 2?' } }],
   writeLatestResults: true,
 });
@@ -87,7 +87,7 @@ Provider functions let you call any model or service directly from code:
 ```ts
 import { evaluate, loadApiProvider } from 'promptfoo';
 
-const openai = await loadApiProvider('openai:gpt-5-mini');
+const openai = await loadApiProvider('openai:chat:gpt-5.5');
 
 const evalRecord = await evaluate({
   prompts: ['Summarize: {{body}}'],
@@ -115,7 +115,7 @@ import { evaluate } from 'promptfoo';
 
 await evaluate({
   prompts: ['Say hello to {{name}}'],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [
     {
       vars: { name: 'Ada' },
@@ -165,7 +165,7 @@ import { evaluate } from 'promptfoo';
 
 await evaluate({
   prompts: ['What tools did you use to answer: {{question}}'],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [
     {
       vars: { question: 'What is 2 + 2?' },
@@ -217,7 +217,7 @@ output file with `outputPath` in the eval config:
 ```ts
 await evaluate({
   prompts: ['Your prompt here'],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.5'],
   tests: [{ vars: { input: 'test' } }],
   writeLatestResults: true,
   outputPath: 'results.json',

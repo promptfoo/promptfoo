@@ -565,6 +565,13 @@ export interface ClaudeCodeOptions {
   on_elicitation?: OnElicitation;
 
   /**
+   * Callback forwarded to Claude Agent SDK's `canUseTool` option.
+   * Available only in programmatic configs because functions cannot be
+   * represented in YAML.
+   */
+  can_use_tool?: CanUseTool;
+
+  /**
    * Enable beta features. Currently supports:
    * - 'context-1m-2025-08-07' - Enable 1M token context window (Sonnet 4/4.5 only)
    *
@@ -1104,9 +1111,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Create canUseTool callback for ask_user_question convenience option
     // AskUserQuestion is handled via canUseTool per SDK documentation
-    let canUseTool: CanUseTool | undefined;
+    let canUseTool = config.can_use_tool;
     if (config.ask_user_question) {
-      canUseTool = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
+      canUseTool = createAskUserQuestionCanUseTool(
+        config.ask_user_question.behavior,
+        config.can_use_tool,
+      );
     }
 
     // Just the keys we'll use to compute the cache key first
@@ -1193,20 +1203,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env,
     };
 
-    // Cache handling using shared utilities
-    const cacheResult = await initializeAgenticCache(
-      {
-        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-        workingDir,
-        bustCache: context?.bustCache,
-        mcp: config.mcp?.servers?.length ? config.mcp : undefined,
-        cacheMcp: config.cache_mcp,
-      },
-      {
-        prompt,
-        cacheKeyQueryOptions,
-      },
-    );
+    // Cache handling using shared utilities. A user-supplied can_use_tool
+    // callback can change tool inputs/decisions in ways that aren't representable
+    // in the cache key, so we skip caching entirely when one is provided to avoid
+    // serving or poisoning entries across different callback implementations.
+    const userProvidedCanUseTool = Boolean(config.can_use_tool);
+    if (userProvidedCanUseTool) {
+      logger.debug(
+        '[ClaudeCodeSDKProvider] Bypassing cache: user-supplied can_use_tool callback present',
+      );
+    }
+    const cacheResult = userProvidedCanUseTool
+      ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+      : await initializeAgenticCache(
+          {
+            cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+            workingDir,
+            bustCache: context?.bustCache,
+            mcp: config.mcp?.servers?.length ? config.mcp : undefined,
+            cacheMcp: config.cache_mcp,
+          },
+          {
+            prompt,
+            cacheKeyQueryOptions,
+          },
+        );
 
     // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');

@@ -71,7 +71,7 @@ the test suite itself; see
 ## Common snippets
 
 ```ts
-const provider = await loadApiProvider('openai:gpt-5-mini');
+const provider = await loadApiProvider('openai:chat:gpt-5.5');
 const response = await provider.callApi('Hello');
 ```
 

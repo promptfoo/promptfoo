@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { resolveConfigs } from '../../../util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../../../util/config/load';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -132,7 +132,12 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
           );
         }
 
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        const errorMessage =
+          error instanceof ConfigResolutionError
+            ? error.cliMessage
+            : error instanceof Error
+              ? error.message
+              : 'Unknown error occurred';
         return createToolResponse(
           'validate_promptfoo_config',
           false,
