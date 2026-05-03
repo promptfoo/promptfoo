@@ -625,7 +625,10 @@ ${exampleRequest}`;
 
             <p className="mb-2 mt-6 font-medium">Headers</p>
             {headers.map(({ key, value }, index) => (
-              <div key={index} className="mb-2 flex items-center gap-2">
+              <div
+                key={index}
+                className="mb-2 flex flex-col items-stretch gap-2 sm:flex-row sm:items-center"
+              >
                 <Input
                   value={key}
                   onChange={(e) => updateHeaderKey(index, e.target.value)}
@@ -638,7 +641,12 @@ ${exampleRequest}`;
                   placeholder="Value"
                   className="flex-1"
                 />
-                <Button variant="ghost" size="icon" onClick={() => removeHeader(index)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeHeader(index)}
+                  className="self-end sm:self-auto"
+                >
                   <Trash2 className="size-4" />
                 </Button>
               </div>

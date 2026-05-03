@@ -326,5 +326,11 @@ describe('HttpEndpointConfiguration - Header Management', () => {
 
     expect(nameFields[nameFields.length - 1]).toBeVisible();
     expect(valueFields[valueFields.length - 1]).toBeVisible();
+    expect(nameFields[nameFields.length - 1].parentElement).toHaveClass(
+      'flex-col',
+      'items-stretch',
+      'sm:flex-row',
+      'sm:items-center',
+    );
   });
 });
