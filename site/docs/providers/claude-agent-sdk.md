@@ -148,7 +148,7 @@ prompts:
 | `permission_mode`                    | string           | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `auto`                    | `default`                |
 | `allow_dangerously_skip_permissions` | boolean          | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
 | `thinking`                           | object           | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
-| `effort`                             | string           | Response effort level: `low`, `medium`, `high`, `max`                                                        | `high`                   |
+| `effort`                             | string           | Response effort level: `low`, `medium`, `high`, `xhigh` (Opus 4.7+), `max`                                   | `high`                   |
 | `agent`                              | string           | Named agent for the main thread (must be defined in `agents` or settings)                                    | None                     |
 | `session_id`                         | string           | Custom session UUID (cannot be used with `continue`/`resume` unless `fork_session` is set)                   | Auto-generated           |
 | `title`                              | string           | Custom title for a new session (skips auto-generation from the first message)                                | Auto-generated           |
@@ -256,6 +256,7 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `acceptEdits`       | Allow file modifications                                              |
 | `bypassPermissions` | No restrictions (requires `allow_dangerously_skip_permissions: true`) |
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
+| `auto`              | Use a model classifier to approve or deny permission prompts          |
 
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
@@ -336,7 +337,7 @@ providers:
       allow_all_tools: true
 ```
 
-The `tools` option specifies the base set of available built-in tools, while `allowedTools` and `disallowedTools` filter from that base.
+The `tools` option specifies the base set of available built-in tools, while `custom_allowed_tools`/`append_allowed_tools` and `disallowed_tools` filter from that base.
 
 ⚠️ **Security Note**: Some tools allow Claude Agent SDK to modify files, run system commands, search the web, and more. Think carefully about security implications before using these tools.
 
@@ -792,7 +793,7 @@ providers:
             allowManagedDomainsOnly: true
 ```
 
-## Tool Configuration
+## Per-Tool Configuration
 
 Customize built-in tool behavior with `tool_config`:
 

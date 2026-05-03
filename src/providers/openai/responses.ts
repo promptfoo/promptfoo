@@ -10,7 +10,8 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
+import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
+import { formatOpenAiError, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -146,9 +147,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       modelName: this.modelName,
       providerType: 'openai',
       functionCallbackHandler: this.functionCallbackHandler,
-      costCalculator: (modelName: string, usage: any, config?: any) =>
-        calculateOpenAICost(modelName, config, usage?.input_tokens, usage?.output_tokens, 0, 0) ??
-        0,
+      costCalculator: () => undefined,
     });
   }
 
@@ -174,6 +173,42 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // OpenAI's o1 and o3 models don't support temperature but some 3rd
     // party reasoning models do.
     return !this.isReasoningModel();
+  }
+
+  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
+    return this.modelName;
+  }
+
+  protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
+    return data.usage;
+  }
+
+  protected applyBilling(
+    result: ProviderResponse,
+    data: any,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): ProviderResponse {
+    const serviceTier =
+      (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
+    const billingModelName = this.getBillingModelName(config);
+    const responseCost = calculateOpenAIUsageCost(
+      billingModelName,
+      config,
+      this.getBillingUsage(data, config),
+      {
+        cachedResponse: cached,
+        serviceTier,
+      },
+    );
+    const observableToolCost = cached
+      ? 0
+      : calculateObservableOpenAIToolCost(data, billingModelName, config);
+
+    return {
+      ...result,
+      ...(responseCost === undefined ? {} : { cost: responseCost + observableToolCost }),
+    };
   }
 
   private isAzureOpenAiEndpoint(value: string | undefined): boolean {
@@ -374,7 +409,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body,
       config: {
         ...config,
-        tools: loadedTools, // Include loaded tools for downstream validation
+        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation
         response_format: responseFormat,
       },
     };
@@ -545,12 +580,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Use shared processor for consistent behavior with Azure
     const result = await this.processor.processResponseOutput(data, config, cached);
+    const billedResult = this.applyBilling(result, data, config, cached);
 
     // Merge HTTP metadata with any existing metadata from the processor
     return {
-      ...result,
+      ...billedResult,
       metadata: {
-        ...result.metadata,
+        ...billedResult.metadata,
         http: {
           status,
           statusText,

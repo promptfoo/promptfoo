@@ -76,6 +76,22 @@ describe('XAI Image Provider', () => {
       expect(provider.id()).toBe('xai:image:grok-2-image');
     });
 
+    it('supports the current Grok Imagine image model', () => {
+      const provider = createXAIImageProvider('xai:image:grok-imagine-image');
+      expect(provider).toBeInstanceOf(XAIImageProvider);
+      expect(provider.id()).toBe('xai:image:grok-imagine-image');
+    });
+
+    it('supports current Grok Imagine image aliases and pro model', () => {
+      // Both verified against xAI /v1/image-generation-models.
+      expect(createXAIImageProvider('xai:image:grok-imagine-image-2026-03-02').id()).toBe(
+        'xai:image:grok-imagine-image-2026-03-02',
+      );
+      expect(createXAIImageProvider('xai:image:grok-imagine-image-pro').id()).toBe(
+        'xai:image:grok-imagine-image-pro',
+      );
+    });
+
     it('should create provider with correct defaults', () => {
       const provider = new XAIImageProvider('grok-2-image');
       expect(provider.config).toEqual({});
@@ -85,6 +101,23 @@ describe('XAI Image Provider', () => {
     it('should use correct API URL', () => {
       const provider = new XAIImageProvider('grok-2-image');
       expect(provider.getApiUrlDefault()).toBe('https://api.x.ai/v1');
+    });
+
+    it('uses a regional API URL when configured', () => {
+      const provider = new XAIImageProvider('grok-imagine-image', {
+        config: { region: 'eu-west-1' },
+      });
+      // The OpenAI base reads `apiBaseUrl` directly, so the regional URL must be
+      // baked in at construction time — not just exposed via getApiUrlDefault().
+      expect(provider.getApiUrl()).toBe('https://eu-west-1.api.x.ai/v1');
+      expect(provider.getApiUrlDefault()).toBe('https://eu-west-1.api.x.ai/v1');
+    });
+
+    it('user-provided apiBaseUrl wins over region', () => {
+      const provider = new XAIImageProvider('grok-imagine-image', {
+        config: { region: 'eu-west-1', apiBaseUrl: 'https://my-proxy.example.com/v1' },
+      });
+      expect(provider.getApiUrl()).toBe('https://my-proxy.example.com/v1');
     });
 
     it('uses correct model mapping', () => {
@@ -98,6 +131,99 @@ describe('XAI Image Provider', () => {
   });
 
   describe('Basic functionality', () => {
+    it('uses Grok Imagine generation options and reported cost when present', async () => {
+      vi.mocked(callOpenAiImageApi).mockResolvedValueOnce({
+        ...mockSuccessResponse,
+        data: {
+          ...mockSuccessResponse.data,
+          usage: { cost_in_usd_ticks: 200000000 },
+        },
+      });
+
+      const provider = new XAIImageProvider('grok-imagine-image', {
+        config: {
+          apiKey: mockApiKey,
+          aspect_ratio: '16:9',
+          resolution: '2k',
+        },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/generations',
+        {
+          model: 'grok-imagine-image',
+          prompt: 'Generate a cat',
+          n: 1,
+          response_format: 'url',
+          aspect_ratio: '16:9',
+          resolution: '2k',
+        },
+        {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${mockApiKey}`,
+        },
+        getRequestTimeoutMs(),
+      );
+      expect(result.cost).toBe(0.02);
+    });
+
+    it('uses the pro image model without falling back to the legacy model name', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-pro', {
+        config: { apiKey: mockApiKey },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/generations',
+        {
+          model: 'grok-imagine-image-pro',
+          prompt: 'Generate a cat',
+          n: 1,
+          response_format: 'url',
+        },
+        {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${mockApiKey}`,
+        },
+        getRequestTimeoutMs(),
+      );
+      expect(result.cost).toBe(0.07);
+    });
+
+    it('uses the edits endpoint when image inputs are provided', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image', {
+        config: {
+          apiKey: mockApiKey,
+          image: { url: 'https://example.com/source.png' },
+          mask: { url: 'https://example.com/mask.png' },
+          quality: 'high',
+        },
+      });
+
+      await provider.callApi('Render this as a pencil sketch');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/edits',
+        {
+          model: 'grok-imagine-image',
+          prompt: 'Render this as a pencil sketch',
+          n: 1,
+          response_format: 'url',
+          quality: 'high',
+          image: { url: 'https://example.com/source.png' },
+          mask: { url: 'https://example.com/mask.png' },
+        },
+        {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${mockApiKey}`,
+        },
+        getRequestTimeoutMs(),
+      );
+    });
+
     it('should generate an image successfully', async () => {
       const provider = new XAIImageProvider('grok-2-image', {
         config: { apiKey: mockApiKey },

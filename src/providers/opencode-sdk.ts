@@ -1327,7 +1327,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return {
       output,
       tokenUsage: buildOpenCodeTokenUsage(tokens),
-      cost: assistantMessage?.cost ?? 0,
+      ...(assistantMessage?.cost === undefined ? {} : { cost: assistantMessage.cost }),
       raw: JSON.stringify(response),
       sessionId,
     };

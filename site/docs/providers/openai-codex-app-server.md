@@ -50,6 +50,8 @@ Use this provider when the thing being tested depends on app-server-only behavio
 | Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                              |
 | WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                |
 
+When `service_tier: fast` is used, Promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
+
 ## Setup
 
 Install the Codex CLI and sign in:
