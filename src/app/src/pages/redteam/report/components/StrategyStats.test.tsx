@@ -155,6 +155,22 @@ describe('StrategyStats', () => {
       expect(totalAttemptsValue).toBeInTheDocument();
     });
 
+    it('keeps the strategy cards within the mobile content width', () => {
+      const { container } = render(
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+          plugins={[]}
+        />,
+      );
+
+      expect(container.querySelector('.grid')).toHaveClass(
+        'grid-cols-1',
+        'sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]',
+      );
+    });
+
     it('should display the correct total attempts, flagged attempts, and attack success rate for the selected strategy in the drawer', async () => {
       render(
         <StrategyStats
