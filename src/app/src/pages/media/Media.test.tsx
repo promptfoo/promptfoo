@@ -269,6 +269,8 @@ describe('Media page URL state machine', () => {
     await waitFor(() => {
       expect(screen.getByText(/not found/i)).toBeInTheDocument();
     });
+
+    expect(screen.getByText(/not found/i).parentElement).toHaveClass('flex-col', 'sm:flex-row');
   });
 
   it('closing modal removes hash from URL', async () => {

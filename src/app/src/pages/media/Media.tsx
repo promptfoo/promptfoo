@@ -593,8 +593,8 @@ export default function Media() {
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="flex items-center justify-between">
-                <span>{error}</span>
+              <AlertDescription className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0">{error}</span>
                 <Button variant="outline" size="sm" onClick={refresh}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Retry
@@ -617,9 +617,9 @@ export default function Media() {
           {deepLinkError && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="flex items-center justify-between">
-                <span>{deepLinkError}</span>
-                <div className="flex items-center gap-2">
+              <AlertDescription className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0">{deepLinkError}</span>
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                   {/* Retry button for transient errors (not "not found") */}
                   {!deepLinkError.includes('not found') && (
                     <Button
