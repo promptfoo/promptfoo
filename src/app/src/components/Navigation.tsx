@@ -65,17 +65,19 @@ interface MenuItem {
 
 interface NavDropdownProps {
   label: string;
+  compactLabel?: string;
   items: MenuItem[];
   isActiveCheck: (pathname: string) => boolean;
 }
 
-function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
+function NavDropdown({ label, compactLabel, items, isActiveCheck }: NavDropdownProps) {
   const location = useLocation();
   const isActive = isActiveCheck(location.pathname);
 
   return (
     <NavigationMenuItem>
       <NavigationMenuTrigger
+        aria-label={label}
         className={cn(
           'h-8 bg-transparent px-3 text-sm font-medium',
           'data-[state=open]:bg-accent',
@@ -85,7 +87,14 @@ function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
             : 'text-foreground hover:bg-accent focus-visible:bg-accent',
         )}
       >
-        {label}
+        {compactLabel ? (
+          <>
+            <span className="hidden min-[360px]:inline">{label}</span>
+            <span className="min-[360px]:hidden">{compactLabel}</span>
+          </>
+        ) : (
+          label
+        )}
       </NavigationMenuTrigger>
       <NavigationMenuContent>
         <ul className="w-[300px] p-1.5">
@@ -183,6 +192,7 @@ export default function Navigation() {
                 />
                 <NavDropdown
                   label="View Results"
+                  compactLabel="Results"
                   items={resultsMenuItems}
                   isActiveCheck={(pathname) =>
                     [EVAL_ROUTES.ROOT, EVAL_ROUTES.LIST, REDTEAM_ROUTES.REPORTS, ROUTES.MEDIA].some(

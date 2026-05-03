@@ -7,7 +7,7 @@ export default function Logo() {
   return (
     <Link
       to="/"
-      className="inline-flex shrink-0 items-center px-2 py-1 no-underline perspective-[2000px]"
+      className="hidden shrink-0 items-center px-2 py-1 no-underline perspective-[2000px] min-[360px]:inline-flex"
     >
       <img
         src={logoPanda}
