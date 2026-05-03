@@ -308,6 +308,10 @@ export async function promptForEmailUnverified(): Promise<{ emailNeedsValidation
   return { emailNeedsValidation };
 }
 
+/**
+ * Checks account email status and throws `EmailValidationError` for recoverable
+ * validation failures that callers should handle at their process boundary.
+ */
 export async function checkEmailStatusAndMaybeExit(options?: {
   validate?: boolean;
 }): Promise<EmailOkStatus | BadEmailResult> {
