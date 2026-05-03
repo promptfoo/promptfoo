@@ -743,7 +743,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'ai21') {
       setProvider(
         {
-          id: 'ai21:jamba-1.5-large',
+          id: 'ai21:jamba-large',
           config: {},
           label: currentLabel,
         },
