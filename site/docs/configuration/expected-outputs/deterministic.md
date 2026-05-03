@@ -1,5 +1,6 @@
 ---
 sidebar_position: 6
+sidebar_label: Deterministic metrics
 title: Deterministic Metrics for LLM Output Validation
 description: Learn how to validate LLM outputs using deterministic logical tests including exact matching, regex patterns, JSON/XML validation, and text similarity metrics
 keywords:
@@ -38,7 +39,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
-| [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
+| [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [f-score](#f-score)                                             | F-score is above a threshold                                       |
@@ -458,13 +459,15 @@ Note: The `is-xml` assertion requires the entire output to be valid XML. For che
 
 ### Contains-XML
 
-The `contains-xml` is identical to `is-xml`, except it checks if the LLM output contains valid XML content, even if it's not the entire output. For example, the following is valid.
+The `contains-xml` assertion checks if the LLM output contains valid XML content, even if it's not the entire output. It uses the same `value.requiredElements` format as `is-xml`; required element paths are checked from the extracted XML fragment's root.
 
 ```xml
 Sure, here is your xml:
 <root><child>Content</child></root>
 let me know if you have any other questions!
 ```
+
+For example, `contains-xml` with `root.child` passes for `Text <root><child>Content</child></root>`. If the XML fragment is wrapped, use the wrapper in the required path, such as `wrapper.root.child` for `<wrapper><root><child>Content</child></root></wrapper>`.
 
 ### Is-SQL
 
@@ -682,6 +685,8 @@ The `trajectory:tool-used` assertion checks traced tool steps rather than the mo
 Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
 :::
 
+Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
+
 Example:
 
 ```yaml
@@ -739,7 +744,7 @@ tests:
 
 In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
 
-Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, and `input`. String values are parsed as JSON when possible.
+Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 
 ### trajectory:tool-sequence {#trajectorytool-sequence}
 
@@ -769,6 +774,8 @@ tests:
 ### trajectory:step-count {#trajectorystep-count}
 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
+
+Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd`, `command`, or `commands`.
 
 Example:
 
@@ -1114,6 +1121,11 @@ assert:
   # With custom threshold
   - type: rouge-n
     threshold: 0.6
+    value: hello world
+
+  # Ensure Rouge-N score is below a threshold
+  - type: not-rouge-n
+    threshold: 0.75
     value: hello world
 ```
 

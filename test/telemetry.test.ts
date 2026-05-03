@@ -10,8 +10,10 @@ import {
   vi,
 } from 'vitest';
 import * as envars from '../src/envars';
-import { Telemetry } from '../src/telemetry';
+import { getUserAuthInfo } from '../src/globalConfig/accounts';
+import { TELEMETRY_EVENTS, Telemetry, TelemetryEventSchema } from '../src/telemetry';
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
+import { mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
@@ -50,10 +52,13 @@ vi.mock('../src/envars', async () => {
     ...actual,
     getEnvBool: vi.fn().mockImplementation((key) => {
       if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
-        return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';
       }
       if (key === 'IS_TESTING') {
-        return process.env.IS_TESTING === 'true' || process.env.IS_TESTING === '1';
+        return (
+          (process.env as NodeJS.ProcessEnv).IS_TESTING === 'true' ||
+          (process.env as NodeJS.ProcessEnv).IS_TESTING === '1'
+        );
       }
       return false;
     }),
@@ -81,6 +86,11 @@ vi.mock('../src/logger', () => ({
 }));
 
 vi.mock('../src/globalConfig/accounts', () => ({
+  getUserAuthInfo: vi.fn().mockReturnValue({
+    email: 'test@example.com',
+    isLoggedIntoCloud: false,
+    authMethod: 'none',
+  }),
   isLoggedIntoCloud: vi.fn().mockReturnValue(false),
   getAuthMethod: vi.fn().mockReturnValue('none'),
   getUserEmail: vi.fn().mockReturnValue('test@example.com'),
@@ -97,9 +107,9 @@ describe('Telemetry', () => {
   let sendEventSpy: MockInstance;
 
   beforeEach(() => {
-    originalEnv = process.env;
-    process.env = { ...originalEnv };
-    process.env.PROMPTFOO_POSTHOG_KEY = 'test-key';
+    originalEnv = { ...process.env };
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-key' });
 
     // Get the mocked fetchWithProxy function
     fetchWithProxySpy = fetchWithProxy as MockedFunction<typeof fetchWithProxy>;
@@ -112,24 +122,44 @@ describe('Telemetry', () => {
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.useRealTimers();
 
     // Reset isCI mock to default value to prevent test pollution
     vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(getUserAuthInfo).mockReturnValue({
+      email: 'test@example.com',
+      isLoggedIntoCloud: false,
+      authMethod: 'none',
+    });
   });
 
   it('should not track events with PostHog when telemetry is disabled', () => {
-    process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
     const _telemetry = new Telemetry();
     _telemetry.record('eval_ran', { foo: 'bar' });
     expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
   });
 
+  it('re-exports telemetry DTO helpers for deep import compatibility', () => {
+    expect(TELEMETRY_EVENTS).toContain('webui_api');
+
+    expect(
+      TelemetryEventSchema.parse({
+        event: 'webui_api',
+        properties: { route: '/api/results', ok: true, count: 1, tags: ['api'] },
+      }),
+    ).toEqual({
+      event: 'webui_api',
+      packageVersion: '1.0.0',
+      properties: { route: '/api/results', ok: true, count: 1, tags: ['api'] },
+    });
+  });
+
   it('should include version in telemetry events', () => {
-    process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
     const _telemetry = new Telemetry();
     _telemetry.record('eval_ran', { foo: 'bar' });
 
@@ -162,8 +192,8 @@ describe('Telemetry', () => {
   it('should include version and CI status in telemetry events', async () => {
     vi.useRealTimers(); // Temporarily use real timers for this test
 
-    process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-    delete process.env.IS_TESTING; // Clear IS_TESTING to allow fetch calls
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+    mockProcessEnv({ IS_TESTING: undefined }); // Clear IS_TESTING to allow fetch calls
 
     const isCIMock = vi.mocked(envars.isCI);
     const originalMockValue = isCIMock.getMockImplementation();
@@ -173,10 +203,11 @@ describe('Telemetry', () => {
     const _telemetry = new Telemetry();
     _telemetry.record('feature_used', { test: 'value' });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.waitFor(() => {
+      expect(fetchWithProxySpy.mock.calls.length).toBeGreaterThan(0);
+    });
 
     const fetchCalls = fetchWithProxySpy.mock.calls;
-    expect(fetchCalls.length).toBeGreaterThan(0);
 
     let foundExpectedProperties = false;
 
@@ -211,7 +242,7 @@ describe('Telemetry', () => {
     } else {
       isCIMock.mockReturnValue(false);
     }
-    process.env.IS_TESTING = 'true'; // Reset IS_TESTING
+    mockProcessEnv({ IS_TESTING: 'true' }); // Reset IS_TESTING
     vi.useFakeTimers(); // Restore fake timers
   });
 
@@ -254,7 +285,7 @@ describe('Telemetry', () => {
   });
 
   it('should not send user events when telemetry is disabled', async () => {
-    process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+    mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
 
     vi.resetModules();
 
@@ -283,9 +314,9 @@ describe('Telemetry', () => {
 
   describe('PostHog client initialization', () => {
     it('should initialize PostHog client when telemetry is enabled and POSTHOG_KEY is present', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       const mockPostHog = vi.fn().mockImplementation(() => ({
         identify: vi.fn(),
@@ -318,9 +349,9 @@ describe('Telemetry', () => {
     });
 
     it('should handle PostHog initialization errors gracefully', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       const mockPostHog = vi.fn().mockImplementation(() => {
         throw new Error('PostHog initialization failed');
@@ -392,10 +423,13 @@ describe('Telemetry', () => {
           ...actual,
           getEnvBool: vi.fn().mockImplementation((key: string) => {
             if (key === 'PROMPTFOO_DISABLE_TELEMETRY') {
-              return process.env.PROMPTFOO_DISABLE_TELEMETRY === '1';
+              return (process.env as NodeJS.ProcessEnv).PROMPTFOO_DISABLE_TELEMETRY === '1';
             }
             if (key === 'IS_TESTING') {
-              return process.env.IS_TESTING === 'true' || process.env.IS_TESTING === '1';
+              return (
+                (process.env as NodeJS.ProcessEnv).IS_TESTING === 'true' ||
+                (process.env as NodeJS.ProcessEnv).IS_TESTING === '1'
+              );
             }
             return false;
           }),
@@ -421,6 +455,11 @@ describe('Telemetry', () => {
       }));
 
       vi.doMock('../src/globalConfig/accounts', () => ({
+        getUserAuthInfo: vi.fn().mockReturnValue({
+          email: 'test@example.com',
+          isLoggedIntoCloud: false,
+          authMethod: 'none',
+        }),
         isLoggedIntoCloud: vi.fn().mockReturnValue(false),
         getAuthMethod: vi.fn().mockReturnValue('none'),
         getUserEmail: vi.fn().mockReturnValue('test@example.com'),
@@ -444,9 +483,9 @@ describe('Telemetry', () => {
     });
 
     it('should call PostHog identify when telemetry is enabled', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
@@ -466,9 +505,9 @@ describe('Telemetry', () => {
     });
 
     it('should handle PostHog identify errors gracefully', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       mockPostHogInstance.identify.mockImplementation(() => {
         throw new Error('Identify failed');
@@ -484,9 +523,9 @@ describe('Telemetry', () => {
     });
 
     it('should call PostHog capture when sending events', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
@@ -500,15 +539,74 @@ describe('Telemetry', () => {
           test: 'value',
           packageVersion: '1.0.0',
           isRunningInCi: false,
+          $set: {
+            email: 'test@example.com',
+            isLoggedIntoCloud: false,
+            authMethod: 'none',
+            isRunningInCi: false,
+          },
         },
       });
       expect(mockPostHogInstance.flush).toHaveBeenCalledWith();
     });
 
+    it('should refresh mirrored person properties when sending events', async () => {
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
+
+      const accounts = await import('../src/globalConfig/accounts');
+      const getUserAuthInfoMock = vi.mocked(accounts.getUserAuthInfo);
+      getUserAuthInfoMock.mockReturnValue({
+        email: 'old@example.com',
+        isLoggedIntoCloud: false,
+        authMethod: 'email',
+      });
+
+      const telemetryModule = await import('../src/telemetry');
+      const _telemetry = new telemetryModule.Telemetry();
+
+      getUserAuthInfoMock.mockClear();
+      getUserAuthInfoMock.mockReturnValue({
+        email: 'new@example.com',
+        isLoggedIntoCloud: true,
+        authMethod: 'api-key',
+      });
+
+      _telemetry.record('eval_ran', { test: 'value' });
+
+      expect(getUserAuthInfoMock).toHaveBeenCalledTimes(1);
+      expect(mockPostHogInstance.capture).toHaveBeenCalledWith({
+        distinctId: 'test-user-id',
+        event: 'eval_ran',
+        properties: {
+          test: 'value',
+          packageVersion: '1.0.0',
+          isRunningInCi: false,
+          $set: {
+            email: 'new@example.com',
+            isLoggedIntoCloud: true,
+            authMethod: 'api-key',
+            isRunningInCi: false,
+          },
+        },
+      });
+
+      const { fetchWithProxy: mockedFetchWithProxy } = await import('../src/util/fetch/index');
+      const reportingCall = vi
+        .mocked(mockedFetchWithProxy)
+        .mock.calls.find(([url]) => url === 'https://r.promptfoo.app/');
+      expect(reportingCall).toBeDefined();
+      expect(JSON.parse((reportingCall?.[1]?.body as string) ?? '{}')).toMatchObject({
+        event: 'eval_ran',
+        email: 'new@example.com',
+      });
+    });
+
     it('should handle PostHog capture errors gracefully', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       mockPostHogInstance.capture.mockImplementation(() => {
         throw new Error('Capture failed');
@@ -524,9 +622,9 @@ describe('Telemetry', () => {
     });
 
     it('should handle PostHog flush errors silently', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       mockPostHogInstance.flush.mockRejectedValue(new Error('Flush failed'));
 
@@ -537,9 +635,9 @@ describe('Telemetry', () => {
     });
 
     it('should call PostHog shutdown when telemetry shutdown is called', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       mockPostHogInstance.shutdown = vi.fn().mockResolvedValue(undefined);
 
@@ -552,9 +650,9 @@ describe('Telemetry', () => {
     });
 
     it('should handle PostHog shutdown errors gracefully', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '0';
-      delete process.env.IS_TESTING;
-      process.env.PROMPTFOO_POSTHOG_KEY = 'test-posthog-key';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
+      mockProcessEnv({ IS_TESTING: undefined });
+      mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       mockPostHogInstance.shutdown = vi.fn().mockRejectedValue(new Error('Shutdown failed'));
 
@@ -568,7 +666,7 @@ describe('Telemetry', () => {
     });
 
     it('should handle shutdown when PostHog client is not initialized', async () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
 
       const telemetryModule = await import('../src/telemetry');
       const _telemetry = new telemetryModule.Telemetry();
@@ -579,7 +677,7 @@ describe('Telemetry', () => {
 
   describe('telemetry disabled recording', () => {
     it('should record telemetry disabled event only once', () => {
-      process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
       const _telemetry = new Telemetry();
 
       _telemetry.record('eval_ran', { foo: 'bar' });

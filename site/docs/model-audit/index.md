@@ -132,7 +132,7 @@ promptfoo scan-model model.pkl model2.h5 models_directory
 promptfoo scan-model model.pkl --format json --output results.json
 
 # Export results to SARIF for security tool integration
-promptfoo scan-model model.pkl --format sarif --output results.sarif
+promptfoo scan-model model.pkl --no-write --format sarif --output results.sarif
 
 # Add custom blacklist patterns
 promptfoo scan-model model.pkl --blacklist "unsafe_model" --blacklist "malicious_net"
@@ -148,6 +148,10 @@ promptfoo scan-model model.pkl --sbom sbom.json
 
 # Enable strict mode for security-critical scans
 promptfoo scan-model model.pkl --strict
+
+# List scanner IDs and run only selected scanners
+promptfoo scan-model --list-scanners
+promptfoo scan-model models/ --scanners pickle,tf_savedmodel
 
 # Preview scan without actually processing
 promptfoo scan-model model.pkl --dry-run
@@ -175,6 +179,9 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 | `--sbom`            | Generate CycloneDX Software Bill of Materials with license info |
 | `--strict`          | Fail on warnings; enable stricter validation                    |
 | `--dry-run`         | Preview scan without processing files                           |
+| `--scanners`        | Only run selected scanners                                      |
+| `--exclude-scanner` | Exclude scanners from the default scanner set                   |
+| `--list-scanners`   | Print available scanner IDs and class names                     |
 | `--quiet`           | Suppress non-critical output                                    |
 | `--progress`        | Force-enable progress reporting                                 |
 | `--no-cache`        | Disable caching of downloaded files                             |

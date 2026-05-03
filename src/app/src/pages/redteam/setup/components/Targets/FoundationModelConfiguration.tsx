@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { DEFAULT_OPENAI_TARGET_ID, OPENAI_TARGET_PLACEHOLDER } from '../constants';
 import { SetupSection } from '../SetupSection';
 
 import type { ProviderOptions } from '../../types';
@@ -34,8 +35,8 @@ const FoundationModelConfiguration = ({
     const providerConfigs = {
       openai: {
         name: 'OpenAI',
-        defaultModel: 'openai:gpt-5.4',
-        placeholder: 'openai:gpt-5.4, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
+        defaultModel: DEFAULT_OPENAI_TARGET_ID,
+        placeholder: OPENAI_TARGET_PLACEHOLDER,
         docUrl: 'https://www.promptfoo.dev/docs/providers/openai',
         envVar: 'OPENAI_API_KEY',
       },
@@ -70,8 +71,8 @@ const FoundationModelConfiguration = ({
       },
       cohere: {
         name: 'Cohere',
-        defaultModel: 'cohere:command-r-plus',
-        placeholder: 'cohere:command-r-plus, cohere:command-r',
+        defaultModel: 'cohere:command-a-03-2025',
+        placeholder: 'cohere:command-a-03-2025, cohere:command-r-plus-08-2024',
         docUrl: 'https://www.promptfoo.dev/docs/providers/cohere',
         envVar: 'COHERE_API_KEY',
       },
@@ -98,8 +99,8 @@ const FoundationModelConfiguration = ({
       },
       openrouter: {
         name: 'OpenRouter',
-        defaultModel: 'openrouter:openai/gpt-4o',
-        placeholder: 'openrouter:openai/gpt-4o, openrouter:anthropic/claude-3.5-sonnet',
+        defaultModel: 'openrouter:openai/gpt-5.4',
+        placeholder: 'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-4.7',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openrouter',
         envVar: 'OPENROUTER_API_KEY',
       },

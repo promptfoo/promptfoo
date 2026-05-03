@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../../src/cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { AzureAssistantProvider } from '../../../src/providers/azure/assistant';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { sleep } from '../../../src/util/time';
 
 vi.mock('../../../src/cache');
@@ -11,6 +13,7 @@ vi.mock('../../../src/logger', () => ({
     debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -145,6 +148,175 @@ describe('Azure Assistant Provider', () => {
 
       expect(result).toEqual({ output: expectedOutput });
       expect(testProvider.callApi).toHaveBeenCalledWith('test prompt');
+    });
+
+    it('should hash prompt and assistant config in cache keys', async () => {
+      const prompt = 'PFQA_AZURE_ASSISTANT_PROMPT_SENTINEL';
+      const instructions = 'PFQA_AZURE_ASSISTANT_CONFIG_SECRET_SENTINEL';
+      const cacheGet = vi.fn().mockResolvedValue({ output: 'Cached assistant output' });
+      const cacheSet = vi.fn();
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: cacheGet,
+        set: cacheSet,
+      } as any);
+      provider.assistantConfig.instructions = instructions;
+
+      const result = await provider.callApi(prompt);
+
+      expect(result).toEqual({ output: 'Cached assistant output', cached: true });
+      expect((provider as any).makeRequest).not.toHaveBeenCalled();
+      expect(cacheSet).not.toHaveBeenCalled();
+
+      const cacheKey = cacheGet.mock.calls[0]?.[0] as string;
+      expect(cacheKey).toMatch(/^azure_assistant:test-deployment:[a-f0-9]{64}$/);
+      expect(cacheKey).not.toContain(prompt);
+      expect(cacheKey).not.toContain(instructions);
+      expect(JSON.stringify(vi.mocked(logger.debug).mock.calls)).not.toContain(prompt);
+    });
+
+    it('should include Azure endpoint and auth in opaque cache keys', async () => {
+      const cacheGet = vi.fn().mockResolvedValue({ output: 'Cached assistant output' });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: cacheGet,
+        set: vi.fn(),
+      } as any);
+      vi.mocked((provider as any).getApiBaseUrl)
+        .mockReturnValueOnce('https://tenant-a.azure.com')
+        .mockReturnValueOnce('https://tenant-b.azure.com');
+
+      (provider as any).authHeaders = { 'api-key': 'azure-secret-a' };
+      await provider.callApi('Shared assistant prompt');
+      (provider as any).authHeaders = { 'api-key': 'azure-secret-b' };
+      await provider.callApi('Shared assistant prompt');
+
+      const [cacheKeyA, cacheKeyB] = cacheGet.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).toMatch(/^azure_assistant:test-deployment:[a-f0-9]{64}$/);
+      expect(cacheKeyB).toMatch(/^azure_assistant:test-deployment:[a-f0-9]{64}$/);
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      expect((provider as any).makeRequest).not.toHaveBeenCalled();
+      for (const cacheKey of [cacheKeyA, cacheKeyB]) {
+        expect(cacheKey).not.toContain('Shared assistant prompt');
+        expect(cacheKey).not.toContain('azure-secret-a');
+        expect(cacheKey).not.toContain('azure-secret-b');
+        expect(cacheKey).not.toContain('tenant-a.azure.com');
+        expect(cacheKey).not.toContain('tenant-b.azure.com');
+      }
+    });
+
+    it('should use a deterministic auth cache identity across module reloads', async () => {
+      async function getCacheKeyFromFreshModule() {
+        vi.resetModules();
+        const [{ AzureAssistantProvider: FreshAzureAssistantProvider }, freshCache] =
+          await Promise.all([
+            import('../../../src/providers/azure/assistant'),
+            import('../../../src/cache'),
+          ]);
+        const cacheGet = vi.fn().mockResolvedValue({ output: 'Cached assistant output' });
+        vi.mocked(freshCache.isCacheEnabled).mockReturnValue(true);
+        vi.mocked(freshCache.getCache).mockResolvedValue({
+          get: cacheGet,
+          set: vi.fn(),
+        } as any);
+
+        const freshProvider = new FreshAzureAssistantProvider('test-deployment', {
+          config: {
+            apiKey: 'azure-deterministic-secret',
+            apiHost: 'tenant.azure.com',
+          },
+        });
+        (freshProvider as any).authHeaders = {
+          'api-key': 'azure-deterministic-secret',
+        };
+        vi.spyOn(freshProvider as any, 'ensureInitialized').mockResolvedValue(undefined);
+        vi.spyOn(freshProvider as any, 'getApiBaseUrl').mockReturnValue('https://tenant.azure.com');
+
+        await freshProvider.callApi('Shared assistant prompt');
+        return cacheGet.mock.calls[0][0] as string;
+      }
+
+      const firstCacheKey = await getCacheKeyFromFreshModule();
+      const secondCacheKey = await getCacheKeyFromFreshModule();
+
+      expect(firstCacheKey).toBe(secondCacheKey);
+      expect(firstCacheKey).toMatch(/^azure_assistant:test-deployment:[a-f0-9]{64}$/);
+      expect(firstCacheKey).not.toContain('azure-deterministic-secret');
+      expect(firstCacheKey).not.toContain('Shared assistant prompt');
+      expect(firstCacheKey).not.toContain('tenant.azure.com');
+    });
+
+    it('should canonicalize nested assistant config order in cache keys', async () => {
+      const cacheGet = vi.fn().mockResolvedValue({ output: 'Cached assistant output' });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: cacheGet,
+        set: vi.fn(),
+      } as any);
+
+      provider.assistantConfig.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'canonical_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              answer: { type: 'string' },
+              confidence: { type: 'number' },
+            },
+            required: ['answer', 'confidence'],
+            additionalProperties: false,
+          },
+        },
+      };
+      await provider.callApi('Shared canonical assistant prompt');
+
+      provider.assistantConfig.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'canonical_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              confidence: { type: 'number' },
+              answer: { type: 'string' },
+            },
+            required: ['answer', 'confidence'],
+            additionalProperties: false,
+          },
+        },
+      };
+      await provider.callApi('Shared canonical assistant prompt');
+
+      expect(cacheGet.mock.calls[0][0]).toBe(cacheGet.mock.calls[1][0]);
+    });
+
+    it('should reject unserializable assistant cache key inputs', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: vi.fn(),
+        set: vi.fn(),
+      } as any);
+      provider.assistantConfig.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'unserializable_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              answer: { type: 'string', default: BigInt(1) },
+            },
+            additionalProperties: false,
+          },
+        },
+      } as any;
+
+      await expect(provider.callApi('prompt with unserializable config')).rejects.toThrow(
+        'Azure Assistant cache key input contains values that cannot be serialized',
+      );
     });
   });
 
@@ -1130,6 +1302,42 @@ describe('Azure Assistant Provider', () => {
       );
     });
 
+    it('should preserve explicit zero for maxRetries and timeoutMs', async () => {
+      const zeroRetryProvider = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          timeoutMs: 0,
+          retryOptions: { maxRetries: 0 },
+        },
+      });
+      (zeroRetryProvider as any).authHeaders = { 'api-key': 'test-key' };
+      (zeroRetryProvider as any).makeRequest = AzureAssistantProvider.prototype['makeRequest'];
+      vi.spyOn(zeroRetryProvider as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: { success: true },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await (zeroRetryProvider as any).makeRequest('https://test.url', {
+        method: 'POST',
+      });
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      // fetchWithCache(url, options, timeoutMs, 'json', shouldBustCache, retries)
+      const timeoutMs = callArgs[2];
+      const retries = callArgs[5];
+      expect(timeoutMs).toBe(0);
+      expect(retries).toBe(0);
+    });
+
     it('should handle JSON parsing errors', async () => {
       vi.mocked(fetchWithCache).mockRejectedValueOnce(
         new Error('Failed to parse response as JSON: Invalid JSON'),
@@ -1141,56 +1349,144 @@ describe('Azure Assistant Provider', () => {
     });
   });
 
-  describe('error detection methods', () => {
-    it('should identify content filter errors', () => {
-      expect((provider as any).isContentFilterError('content_filter triggered')).toBe(true);
-      expect((provider as any).isContentFilterError('content filter violation')).toBe(true);
-      expect((provider as any).isContentFilterError('Content filter blocked this')).toBe(true);
-      expect((provider as any).isContentFilterError('filtered due to policy')).toBe(true);
-      expect((provider as any).isContentFilterError('content filtering system')).toBe(true);
-      expect((provider as any).isContentFilterError('inappropriate content detected')).toBe(true);
-      expect((provider as any).isContentFilterError('safety guidelines violation')).toBe(true);
-      expect((provider as any).isContentFilterError('guardrail triggered')).toBe(true);
-      expect((provider as any).isContentFilterError('some other error')).toBe(false);
+  describe('structured HttpRateLimitError handling', () => {
+    it('formats a per-window rate limit error with retry-after detail', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        statusText: 'Too Many Requests',
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 12_000,
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.error).toContain('429');
+      expect(result.error).toContain('rate_limit_exceeded');
+      expect(result.error).toContain('retry after 12s');
+      expect(result.error).not.toContain('Retries will not help');
+      // Structured signal so the scheduler can fail-fast on the result path.
+      expect(result.metadata?.rateLimitKind).toBe('rate_limit');
     });
 
-    it('should identify rate limit errors', () => {
-      expect((provider as any).isRateLimitError('rate limit exceeded')).toBe(true);
-      expect((provider as any).isRateLimitError('Rate limit reached')).toBe(true);
-      expect((provider as any).isRateLimitError('HTTP 429 Too Many Requests')).toBe(true);
-      expect((provider as any).isRateLimitError('some other error')).toBe(false);
+    it('propagates kind=quota into result.metadata so the scheduler does not retry', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
+      const result = (provider as any).formatError(err);
+      expect(result.metadata?.rateLimitKind).toBe('quota');
     });
 
-    it('should identify service errors', () => {
-      expect((provider as any).isServiceError('Service unavailable')).toBe(true);
-      expect((provider as any).isServiceError('Bad gateway')).toBe(true);
-      expect((provider as any).isServiceError('Gateway timeout')).toBe(true);
-      expect((provider as any).isServiceError('Server is busy')).toBe(true);
-      expect((provider as any).isServiceError('Sorry, something went wrong')).toBe(true);
-      expect((provider as any).isServiceError('some other error')).toBe(false);
+    it('formats a hard quota error with a clear non-retryable hint', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        statusText: 'Too Many Requests',
+        code: 'insufficient_quota',
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+      expect(result.error).toContain('Retries will not help');
     });
 
-    it('should identify server errors', () => {
-      expect((provider as any).isServerError('500 Internal Server Error')).toBe(true);
-      expect((provider as any).isServerError('502 Bad Gateway')).toBe(true);
-      expect((provider as any).isServerError('503 Service Unavailable')).toBe(true);
-      expect((provider as any).isServerError('504 Gateway Timeout')).toBe(true);
-      expect((provider as any).isServerError('some other error')).toBe(false);
+    it('omits retry-after detail when no metadata is available', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).not.toContain('retry after');
+      expect(result.error).not.toContain('resets in');
     });
 
-    it('should determine if an error is retryable', () => {
-      // Direct code check
-      expect((provider as any).isRetryableError('rate_limit_exceeded')).toBe(true);
+    it('uses resetAt fallback when retryAfterMs is missing', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        resetAt: Date.now() + 30_000,
+      });
+      const result = (provider as any).formatError(err);
 
-      // Message checks
-      expect((provider as any).isRetryableError(undefined, 'rate limit exceeded')).toBe(true);
-      expect((provider as any).isRetryableError(undefined, 'Service unavailable')).toBe(true);
-      expect((provider as any).isRetryableError(undefined, '500 Internal Server Error')).toBe(true);
+      expect(result.error).toMatch(/resets in \d+s/);
+    });
 
-      // Not retryable
-      expect((provider as any).isRetryableError(undefined, 'Invalid request')).toBe(false);
-      expect((provider as any).isRetryableError('invalid_request')).toBe(false);
-      expect((provider as any).isRetryableError()).toBe(false);
+    it('surfaces structured rate-limit errors raised during run polling', async () => {
+      const provider2 = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            testFunction: vi.fn() as any,
+          },
+        },
+      });
+      (provider2 as any).authHeaders = { 'api-key': 'test-key' };
+
+      vi.spyOn(provider2 as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      vi.spyOn(provider2 as any, 'ensureInitialized').mockResolvedValue(undefined);
+      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+
+      const quota = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
+      vi.spyOn(provider2 as any, 'makeRequest').mockRejectedValue(quota);
+
+      const result = await (provider2 as any).pollRunWithToolCallHandling(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-1',
+        'run-1',
+      );
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+    });
+
+    it('surfaces rate-limit errors during run polling without "Retries will not help"', async () => {
+      // Symmetric to the quota test above: a per-window rate limit during
+      // polling must format as a regular rate-limit error, not the quota
+      // (non-retryable) message.
+      const provider2 = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            testFunction: vi.fn() as any,
+          },
+        },
+      });
+      (provider2 as any).authHeaders = { 'api-key': 'test-key' };
+      vi.spyOn(provider2 as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      vi.spyOn(provider2 as any, 'ensureInitialized').mockResolvedValue(undefined);
+      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 7000,
+      });
+      vi.spyOn(provider2 as any, 'makeRequest').mockRejectedValue(rateLimit);
+
+      const result = await (provider2 as any).pollRunWithToolCallHandling(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-1',
+        'run-1',
+      );
+
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.error).toContain('rate_limit_exceeded');
+      expect(result.error).toContain('retry after 7s');
+      expect(result.error).not.toContain('Retries will not help');
     });
   });
 

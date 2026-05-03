@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
+import { DEFAULT_OPENAI_TARGET_ID } from '../constants';
 import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
@@ -76,8 +77,8 @@ const allProviderOptions = [
   },
   {
     value: 'custom',
-    label: 'Custom Provider',
-    description: 'Other custom providers and implementations',
+    label: 'Custom Target',
+    description: 'Any other target via a custom provider',
     tag: 'app',
     last: true,
   },
@@ -168,7 +169,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.2, GPT-5.1, and GPT-5 models',
+    description: 'GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models',
     tag: 'providers',
     recommended: true,
   },
@@ -433,6 +434,10 @@ export default function ProviderTypeSelector({
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
 
+  useEffect(() => {
+    setSelectedProviderType(providerType);
+  }, [providerType]);
+
   // Tag filter options - 4 categories based on user intent
   type TagKey = 'app' | 'agents' | 'providers' | 'local';
   const tagFilters: Array<{ key: TagKey; label: string }> = [
@@ -540,7 +545,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openai') {
       setProvider(
         {
-          id: 'openai:gpt-5.2',
+          id: DEFAULT_OPENAI_TARGET_ID,
           config: {},
           label: currentLabel,
         },
@@ -594,7 +599,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'cohere') {
       setProvider(
         {
-          id: 'cohere:command-r-plus',
+          id: 'cohere:command-a-03-2025',
           config: {},
           label: currentLabel,
         },
@@ -621,7 +626,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openrouter') {
       setProvider(
         {
-          id: 'openrouter:openai/gpt-4o',
+          id: 'openrouter:openai/gpt-5.4',
           config: {},
           label: currentLabel,
         },
@@ -729,7 +734,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'xai') {
       setProvider(
         {
-          id: 'xai:grok-2-1212',
+          id: 'xai:grok-4.20-reasoning',
           config: {},
           label: currentLabel,
         },
@@ -738,7 +743,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'ai21') {
       setProvider(
         {
-          id: 'ai21:jamba-1.5-large',
+          id: 'ai21:jamba-large',
           config: {},
           label: currentLabel,
         },

@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "express": "^5.2.1",
-    "openai": "^6.33.0",
+    "openai": "^6.34.0",
     "dotenv": "^17.2.3",
     "cors": "^2.8.6"
   }

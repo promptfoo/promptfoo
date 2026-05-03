@@ -1,6 +1,6 @@
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyStats from './StrategyStats';
@@ -104,8 +104,9 @@ describe('StrategyStats', () => {
   });
 
   const openStrategyDrawer = async (strategyId: string) => {
+    const user = userEvent.setup();
     const button = screen.getByLabelText(`View details for ${strategyId} attack method`);
-    fireEvent.click(button);
+    await user.click(button);
     // Wait for the sheet/dialog to appear by looking for key content elements
     // The drawer shows strategy stats and a title
     await waitFor(() => {
@@ -233,6 +234,7 @@ describe('StrategyStats', () => {
     });
 
     it('should handle keyboard navigation with Enter or Space key', async () => {
+      const user = userEvent.setup();
       render(
         <StrategyStats
           strategyStats={strategyStats}
@@ -246,8 +248,7 @@ describe('StrategyStats', () => {
         'View details for prompt-injection attack method',
       );
       promptInjectionButton.focus();
-
-      fireEvent.keyDown(promptInjectionButton, { key: 'Enter', code: 'Enter' });
+      await user.keyboard('{Enter}');
 
       // Wait for the sheet/dialog to appear
       await waitFor(() => {
@@ -472,6 +473,7 @@ describe('StrategyStats', () => {
   });
 
   it('should handle a strategy with statistics but no examples in failuresByPlugin or passesByPlugin', async () => {
+    const user = userEvent.setup();
     const strategyStatsWithNoExamples = {
       'no-examples': { pass: 3, total: 7, failCount: 4 },
     };
@@ -486,7 +488,7 @@ describe('StrategyStats', () => {
     );
 
     const noExamplesButton = screen.getByLabelText('View details for no-examples attack method');
-    fireEvent.click(noExamplesButton);
+    await user.click(noExamplesButton);
 
     // Wait for the sheet/dialog to appear
     await waitFor(() => {

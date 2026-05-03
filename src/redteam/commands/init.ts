@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import checkbox, { Separator } from '@inquirer/checkbox';
@@ -30,6 +30,7 @@ import {
   type Strategy,
   subCategoryDescriptions,
 } from '../constants';
+import { ProbeLimitExceededError } from '../types';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
 
@@ -210,8 +211,8 @@ export async function redteamInit(directory: string | undefined) {
   recordOnboardingStep('start');
 
   const projectDir = directory || '.';
-  if (projectDir !== '.' && !fs.existsSync(projectDir)) {
-    fs.mkdirSync(projectDir, { recursive: true });
+  if (projectDir !== '.') {
+    await fs.mkdir(projectDir, { recursive: true });
   }
 
   const configPath = path.join(projectDir, 'promptfooconfig.yaml');
@@ -618,10 +619,10 @@ export async function redteamInit(directory: string | undefined) {
     providers,
     descriptions: subCategoryDescriptions,
   });
-  fs.writeFileSync(configPath, redteamConfig, 'utf8');
+  await fs.writeFile(configPath, redteamConfig, 'utf8');
 
   if (writeChatPy) {
-    fs.writeFileSync(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
+    await fs.writeFile(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
   }
 
   console.clear();
@@ -652,16 +653,25 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose generate', { value: readyToGenerate });
 
     if (readyToGenerate) {
-      await doGenerateRedteam({
-        purpose,
-        plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
-        cache: false,
-        write: false,
-        output: 'redteam.yaml',
-        defaultConfig: {},
-        defaultConfigPath: configPath,
-        numTests,
-      });
+      try {
+        await doGenerateRedteam({
+          purpose,
+          plugins: plugins.map((plugin) => (typeof plugin === 'string' ? { id: plugin } : plugin)),
+          cache: false,
+          write: false,
+          output: 'redteam.yaml',
+          defaultConfig: {},
+          defaultConfigPath: configPath,
+          numTests,
+        });
+      } catch (error) {
+        if (error instanceof ProbeLimitExceededError) {
+          // doGenerateRedteam already logged the user-facing quota message.
+          process.exitCode = 1;
+          return;
+        }
+        throw error;
+      }
     } else {
       logger.info(
         '\n' +

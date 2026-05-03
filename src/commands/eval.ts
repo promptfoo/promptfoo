@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import chalk from 'chalk';
@@ -11,7 +11,12 @@ import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
-import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  EmailValidationError,
+  getAuthor,
+  promptForEmailUnverified,
+} from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -27,7 +32,11 @@ import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
-import { resolveConfigs } from '../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
@@ -39,6 +48,7 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 import { isUuid } from '../util/uuid';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
@@ -153,7 +163,8 @@ export async function doEval(
     if (cmdObj.config !== undefined) {
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
-        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+        const configStats = await fs.stat(configPath).catch(() => undefined);
+        if (configStats?.isDirectory()) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
             await loadDefaultConfig(configPath);
           if (newConfigPath) {
@@ -301,24 +312,12 @@ export async function doEval(
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
-    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath);
     }
 
-    // Check if config has redteam section but no test cases
-    if (
-      config.redteam &&
-      (!testSuite.tests || testSuite.tests.length === 0) &&
-      (!testSuite.scenarios || testSuite.scenarios.length === 0)
-    ) {
-      logger.warn(
-        chalk.yellow(dedent`
-        Warning: Config file has a redteam section but no test cases.
-        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
-        `),
-      );
-    }
+    warnIfRedteamConfigHasNoTests(config, testSuite);
 
     // TODO(faizan): Crazy condition to see when we run the example redteam config.
     // Remove this once we have a better way to track this.
@@ -376,7 +375,7 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
-    if (cache === false || repeat > 1) {
+    if (cache === false) {
       logger.info('Cache is disabled.');
       disableCache();
     }
@@ -405,8 +404,31 @@ export async function doEval(
       cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
+    const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const explicitTestCountBeforeFiltering = testSuite.tests?.length;
+    const resumeRuntimeOptions = resumeEval?.runtimeOptions as EvaluateOptions | undefined;
+    const persistedFilterRange =
+      typeof resumeRuntimeOptions?.filterRange === 'string'
+        ? resumeRuntimeOptions.filterRange
+        : undefined;
+    const resumeConfigFilterRange = commandLineOptions?.filterRange ?? evaluateOptions.filterRange;
+    const resumeFilterRange = persistedFilterRange ?? resumeConfigFilterRange;
+    if (resumeEval && cmdObj.filterRange && cmdObj.filterRange !== resumeFilterRange) {
+      logger.warn(
+        `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with stored range ${resumeFilterRange ?? '(none)'} to preserve test indices.`,
+      );
+    }
+    const filterRange = resumeEval
+      ? resumeFilterRange
+      : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const shouldApplyRangeToImplicitDefaultTest =
+      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
+
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
+      if (shouldApplyRangeToImplicitDefaultTest) {
+        testSuite.tests = [{}];
+      }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
         failingOnly: cmdObj.filterFailingOnly,
@@ -414,9 +436,18 @@ export async function doEval(
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
+        range: hasScenarios ? undefined : filterRange,
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
+      if (
+        filterRange !== undefined &&
+        !hasScenarios &&
+        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
+        testSuite.tests.length === 0
+      ) {
+        testSuite.scenarios = [];
+      }
     }
 
     if (
@@ -473,6 +504,7 @@ export async function doEval(
             : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
+      filterRange,
       maxConcurrency,
       cache,
     };
@@ -532,11 +564,12 @@ export async function doEval(
     }
 
     // Create or load eval record
+    const author = getAuthor();
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
-        : new Eval(config, { runtimeOptions: options });
+        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
+        : new Eval(config, { author, runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
@@ -604,6 +637,7 @@ export async function doEval(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         eventSource: 'cli',
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
@@ -699,7 +733,10 @@ export async function doEval(
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
-      const outputTable = generateTable(table);
+      const outputTable = generateTable(
+        table,
+        cmdObj.tableCellMaxLength ?? commandLineOptions?.tableCellMaxLength,
+      );
 
       logger.info('\n' + outputTable.toString());
       if (table.body.length > 25) {
@@ -895,7 +932,19 @@ export async function doEval(
             logger.info(`File change detected: ${path}`);
             printBorder();
             clearConfigCache();
-            await runEvaluation();
+            try {
+              await runEvaluation();
+            } catch (error) {
+              if (error instanceof ConfigResolutionError) {
+                logConfigResolutionError(error);
+                return;
+              }
+              if (error instanceof EmailValidationError) {
+                // Account helpers already render these user-facing failures.
+                return;
+              }
+              throw error;
+            }
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>
@@ -1028,6 +1077,10 @@ export function evalCommand(
       'Only run tests whose description matches the regular expression pattern',
     )
     .option(
+      '--filter-range <start:end>',
+      'Only run tests whose zero-based index is in the range. End is exclusive (e.g. 0:10, 10:20, 10:, :10)',
+    )
+    .option(
       '--filter-prompts <pattern>',
       'Only run tests with prompts whose id or label matches the regex pattern',
     )
@@ -1063,11 +1116,7 @@ export function evalCommand(
     )
     .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
-    .option(
-      '--table-cell-max-length <number>',
-      'Truncate console table cells to this length',
-      '250',
-    )
+    .option('--table-cell-max-length <number>', 'Truncate console table cells to this length')
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option('--no-share', 'Do not share, this overrides the config file')
     .option(

@@ -2,12 +2,13 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import yaml from 'js-yaml';
-import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
+import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
   getDb: vi.fn(),
@@ -48,7 +49,7 @@ vi.mock('../../src/googleSheets', () => ({
 }));
 
 describe('writeOutput', () => {
-  let consoleLogSpy: MockInstance;
+  let consoleLogSpy: ReturnType<typeof mockConsole>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -58,8 +59,8 @@ describe('writeOutput', () => {
     vi.mocked(fsPromises.open).mockResolvedValue(
       mockFileHandle as unknown as fsPromises.FileHandle,
     );
-    consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    // @ts-ignore
+    consoleLogSpy = mockConsole('log');
+    // @ts-expect-error getDb is mocked with a partial test double.
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
@@ -80,7 +81,7 @@ describe('writeOutput', () => {
   });
 
   it('writeOutput with CSV output', async () => {
-    // @ts-ignore
+    // @ts-expect-error getDb is mocked with a partial test double.
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
@@ -175,6 +176,139 @@ describe('writeOutput', () => {
     expect(parsed.config.description).toBe('Test config');
   });
 
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
+  ])('omits nested response metadata from $extension output when metadata stripping is enabled', async ({
+    extension,
+    parse,
+  }) => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+    try {
+      const eval_ = new Eval({});
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'provider' },
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+        },
+        response: {
+          output: 'Test output',
+          metadata: {
+            transformedRequest: {
+              headers: {
+                Authorization: 'Bearer nested-secret',
+              },
+            },
+          },
+        },
+        vars: {},
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {},
+        promptId: 'prompt',
+        metadata: {
+          debug: 'top-level-secret',
+        },
+      });
+
+      await writeOutput(`output.${extension}`, eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = parse(written);
+      const result = parsed.results.results[0];
+      expect(result.metadata).toEqual({});
+      expect(result.response.metadata).toBeUndefined();
+      expect(written).not.toContain('nested-secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
+  ])('omits test-case metadata from $extension output when metadata stripping is enabled', async ({
+    extension,
+    parse,
+  }) => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_METADATA: 'true',
+      PROMPTFOO_STRIP_TEST_VARS: 'true',
+    });
+
+    try {
+      const eval_ = new Eval({});
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'provider' },
+        prompt: {
+          raw: 'Test prompt',
+          label: 'Test prompt',
+        },
+        response: {
+          output: 'Test output',
+        },
+        vars: {
+          customerEmail: 'secret@example.com',
+        },
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {
+          vars: {
+            customerEmail: 'secret@example.com',
+          },
+          metadata: {
+            goal: 'goal testcase-secret',
+            pluginConfig: {
+              policy: 'policy testcase-secret',
+            },
+            inputMaterialization: {
+              source: 'source testcase-secret',
+            },
+          },
+        },
+        promptId: 'prompt',
+        metadata: {
+          debug: 'top-level-secret',
+        },
+      });
+
+      await writeOutput(`output.${extension}`, eval_, null);
+
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = parse(written);
+      const result = parsed.results.results[0];
+      expect(result.metadata).toEqual({});
+      expect(result.testCase.metadata).toBeUndefined();
+      expect(result.testCase.vars).toBeUndefined();
+      expect(written).not.toContain('testcase-secret');
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('preserves deep non-secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
@@ -259,7 +393,7 @@ describe('writeOutput', () => {
 
   it('does not sanitize config for CSV output', async () => {
     const outputPath = 'output.csv';
-    // @ts-ignore
+    // @ts-expect-error getDb is mocked with a partial test double.
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({
@@ -287,7 +421,7 @@ describe('writeOutput', () => {
 
   it('does not sanitize config for JSONL output', async () => {
     const outputPath = 'output.jsonl';
-    // @ts-ignore
+    // @ts-expect-error getDb is mocked with a partial test double.
     vi.mocked(getDb).mockReturnValue({
       select: vi.fn().mockReturnValue({
         from: vi.fn().mockReturnValue({

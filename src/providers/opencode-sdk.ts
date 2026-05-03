@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -105,12 +106,49 @@ export interface OpenCodePermissionConfig {
   bash?: OpenCodePermissionValue;
   /** File editing permission */
   edit?: OpenCodePermissionValue;
+  /** File read permission */
+  read?: OpenCodePermissionValue;
+  /** File glob permission */
+  glob?: OpenCodePermissionValue;
+  /** File grep permission */
+  grep?: OpenCodePermissionValue;
+  /** File list permission */
+  list?: OpenCodePermissionValue;
+  /** Subtask execution permission */
+  task?: OpenCodePermissionValue;
+  /** LSP code intelligence permission */
+  lsp?: OpenCodePermissionValue;
+  /** SKILL.md loading permission */
+  skill?: OpenCodePermissionValue;
   /** Web fetching permission */
   webfetch?: OpenCodePermissionValue;
+  /** Web search permission */
+  websearch?: OpenCodePermissionValue;
+  /** Codebase search permission */
+  codesearch?: OpenCodePermissionValue;
+  /** Todo list write permission */
+  todowrite?: OpenCodePermissionValue;
+  /** Interactive question permission */
+  question?: OpenCodePermissionValue;
   /** Prevents infinite agent loops (added in v1.1.1) */
   doom_loop?: OpenCodePermissionValue;
   /** Access to directories outside the working directory (added in v1.1.1) */
   external_directory?: OpenCodePermissionValue;
+  /** Forward-compatible escape hatch for tools added upstream */
+  [key: string]: OpenCodePermissionValue | undefined;
+}
+
+/**
+ * Single permission rule passed to OpenCode v2 `session.create`.
+ *
+ * The v2 SDK types permission as `PermissionRuleset = Array<PermissionRule>`,
+ * so promptfoo converts the user-facing `OpenCodePermissionConfig` object
+ * shape into this rule-array shape before calling the server.
+ */
+export interface OpenCodePermissionRule {
+  permission: string;
+  pattern: string;
+  action: 'ask' | 'allow' | 'deny';
 }
 
 /**
@@ -417,10 +455,20 @@ interface OpenCodeSessionContext {
   ephemeralSession?: OpenCodeSessionHandle;
 }
 
+type OpenCodeTokenCache =
+  | number
+  | {
+      read?: number;
+      write?: number;
+    };
+
 interface OpenCodeAssistantMessage {
   tokens?: {
+    total?: number;
     input?: number;
     output?: number;
+    reasoning?: number;
+    cache?: OpenCodeTokenCache;
   };
   cost?: number;
   structured?: unknown;
@@ -516,11 +564,91 @@ function unwrapOpenCodeResult<T>(result: OpenCodeSdkResult<T> | undefined): T | 
   return result as T;
 }
 
+function getOpenCodeCacheDetails(cache: OpenCodeTokenCache | undefined): {
+  read: number;
+  write: number;
+} {
+  if (typeof cache === 'number') {
+    return { read: cache, write: 0 };
+  }
+  if (!cache || typeof cache !== 'object') {
+    return { read: 0, write: 0 };
+  }
+  return {
+    read: cache.read ?? 0,
+    write: cache.write ?? 0,
+  };
+}
+
+function buildOpenCodeTokenUsage(
+  tokens: OpenCodeAssistantMessage['tokens'],
+): ProviderResponse['tokenUsage'] {
+  if (!tokens) {
+    return undefined;
+  }
+
+  const prompt = tokens.input ?? 0;
+  const completion = tokens.output ?? 0;
+  const cache = getOpenCodeCacheDetails(tokens.cache);
+  const completionDetails: NonNullable<ProviderResponse['tokenUsage']>['completionDetails'] = {};
+
+  if (typeof tokens.reasoning === 'number') {
+    completionDetails.reasoning = tokens.reasoning;
+  }
+  if (tokens.cache !== undefined) {
+    completionDetails.cacheReadInputTokens = cache.read;
+    completionDetails.cacheCreationInputTokens = cache.write;
+  }
+
+  return {
+    prompt,
+    completion,
+    total: tokens.total ?? prompt + completion,
+    ...(tokens.cache === undefined ? {} : { cached: cache.read }),
+    ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
+  };
+}
+
 function getSessionPath(sessionId: string): OpenCodeSessionPath {
   return {
     id: sessionId,
     sessionID: sessionId,
   };
+}
+
+/**
+ * Convert the user-facing object-shaped permission config into the
+ * rule-array shape required by the v2 `session.create.permission` API.
+ *
+ * - `{ bash: 'allow' }` → `[{ permission: 'bash', pattern: '*', action: 'allow' }]`
+ * - `{ bash: { 'git *': 'allow', '*': 'ask' } }` → two rules with the
+ *   corresponding glob pattern preserved per entry.
+ *
+ * Returns `undefined` when the config has no usable entries so callers can
+ * omit the field entirely.
+ */
+export function convertPermissionConfigToRuleset(
+  config: OpenCodePermissionConfig | undefined,
+): OpenCodePermissionRule[] | undefined {
+  if (!config) {
+    return undefined;
+  }
+  const rules: OpenCodePermissionRule[] = [];
+  for (const [tool, value] of Object.entries(config)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value === 'string') {
+      rules.push({ permission: tool, pattern: '*', action: value });
+      continue;
+    }
+    if (value && typeof value === 'object') {
+      for (const [pattern, action] of Object.entries(value)) {
+        rules.push({ permission: tool, pattern, action });
+      }
+    }
+  }
+  return rules.length > 0 ? rules : undefined;
 }
 
 function tryParseJson(value: string): string | undefined {
@@ -1119,12 +1247,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
       throw new Error('OpenCode SDK module is not loaded');
     }
 
-    const createBody: { title?: string; permission?: OpenCodePermissionConfig } = {
+    const createBody: { title?: string; permission?: OpenCodePermissionRule[] } = {
       title: `promptfoo-${Date.now()}`,
     };
-    // v2 accepts permission rules when the session is created, not on each prompt.
+    // v2 typed contract expects `PermissionRuleset = Array<PermissionRule>`
+    // at `session.create`; convert the user-facing object shape into rules.
     if (config.permission && this.opencodeModule.apiVersion === 'v2') {
-      createBody.permission = config.permission;
+      const ruleset = convertPermissionConfigToRuleset(config.permission);
+      if (ruleset) {
+        createBody.permission = ruleset;
+      }
     }
 
     if (this.opencodeModule.apiVersion === 'v2') {
@@ -1194,14 +1326,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     return {
       output,
-      tokenUsage: tokens
-        ? {
-            prompt: tokens.input ?? 0,
-            completion: tokens.output ?? 0,
-            total: (tokens.input ?? 0) + (tokens.output ?? 0),
-          }
-        : undefined,
-      cost: assistantMessage?.cost ?? 0,
+      tokenUsage: buildOpenCodeTokenUsage(tokens),
+      ...(assistantMessage?.cost === undefined ? {} : { cost: assistantMessage.cost }),
       raw: JSON.stringify(response),
       sessionId,
     };
@@ -1326,7 +1452,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       // Clean up temp directory
       if (isTempDir && workingDir) {
-        fs.rmSync(workingDir, { recursive: true, force: true });
+        await fsPromises.rm(workingDir, { recursive: true, force: true });
       }
     }
   }

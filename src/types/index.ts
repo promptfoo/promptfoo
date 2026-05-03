@@ -4,13 +4,14 @@ import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
+import { parseFilterRange } from '../util/filterRange';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 
 export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema } from '../validators/shared';
+import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
 
 import type { BlobRef } from '../blobs/types';
 import type {
@@ -27,6 +28,7 @@ import type {
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
+  ProvidersConfig,
 } from './providers';
 import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 
@@ -51,6 +53,13 @@ export interface RateLimitRegistryRef {
   dispose: () => void;
 }
 
+/**
+ * Minimal interface for deferred provider-call queues used by serial grading orchestration.
+ */
+export interface ProviderCallQueueRef {
+  enqueue: <T>(providerId: string, call: () => Promise<T>) => Promise<T>;
+}
+
 export * from '../redteam/types';
 export * from './agent';
 export * from './prompts';
@@ -59,6 +68,23 @@ export * from './shared';
 export * from './tracing';
 
 export type { EnvOverrides };
+
+const FilterRangeSchema = z
+  .string()
+  .superRefine((value, ctx) => {
+    try {
+      parseFilterRange(value);
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          error instanceof Error
+            ? error.message
+            : '--filter-range must be specified in start:end format using zero-based indices',
+      });
+    }
+  })
+  .optional();
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -96,6 +122,7 @@ export const CommandLineOptionsSchema = z.object({
   filterPattern: z.string().optional(),
   filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
@@ -155,9 +182,9 @@ export const OutputConfigSchema = z.object({
   /**
    * @deprecated in > 0.38.0. Use `transform` instead.
    */
-  postprocess: z.string().optional(),
-  transform: z.string().optional(),
-  transformVars: z.string().optional(),
+  postprocess: StringOrFunctionSchema.optional(),
+  transform: StringOrFunctionSchema.optional(),
+  transformVars: StringOrFunctionSchema.optional(),
 
   // The name of the variable to store the output of this test case
   storeOutputAs: z.string().optional(),
@@ -209,6 +236,17 @@ export interface RunEvalOptions {
    * When provided, provider calls are wrapped with rate limiting and retry logic.
    */
   rateLimitRegistry?: RateLimitRegistryRef;
+
+  /**
+   * Defers assertion grading so the evaluator can group model-graded provider
+   * calls across rows. Intended for serial evaluation orchestration.
+   */
+  deferGrading?: boolean;
+
+  /**
+   * Queue used while deferred grading is active to group grader provider calls.
+   */
+  providerCallQueue?: ProviderCallQueueRef;
 }
 
 export const EvaluateOptionsSchema = z.object({
@@ -254,8 +292,15 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  /**
+   * Zero-based test index range in start:end format (end exclusive).
+   * Persisted on the eval record so resume runs reproduce the original slice.
+   */
+  filterRange: FilterRangeSchema,
 });
-export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
+  abortSignal?: AbortSignal;
+};
 
 const PromptMetricsSchema = z.object({
   score: z.number(),
@@ -491,10 +536,18 @@ export interface GradingResult {
     // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
     context?: string | string[];
     contextUnits?: string[];
+    // Raw textual responses returned by one or more LLM grader phases
+    graderOutputs?: Record<string, string>;
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // Set by LLM-grader matchers when a transport/parse failure prevents a real
+    // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
+    // must not flip such results to a pass — a grader error is not evidence
+    // that the criterion was or was not met. `true`-literal so the field is
+    // only meaningful when present; never set `false` explicitly.
+    graderError?: true;
     [key: string]: any;
   };
 }
@@ -658,10 +711,10 @@ export const AssertionSchema = z.object({
   metric: z.string().optional(),
 
   // Process the output before running the assertion
-  transform: z.string().optional(),
+  transform: StringOrFunctionSchema.optional(),
 
   // Extract context from the output using a transform
-  contextTransform: z.string().optional(),
+  contextTransform: StringOrFunctionSchema.optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -826,6 +879,8 @@ export const TestCaseSchema = z.object({
       disableVarExpansion: z.boolean().optional(),
       // If true, do not include an implicit `_conversation` variable in the prompt.
       disableConversationVar: z.boolean().optional(),
+      // If true, skip defaultTest assertions for this test case while still inheriting other defaults.
+      disableDefaultAsserts: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
     })
@@ -1260,8 +1315,16 @@ export interface EvalWithMetadata {
 // node.js package interface
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
+  providers: ProvidersConfig;
   writeLatestResults?: boolean;
-} & Omit<TestSuiteConfig, 'prompts'>;
+  /**
+   * Author to attribute the evaluation to.
+   * When the user is logged into cloud with a stored email, that identity
+   * takes precedence and this option is ignored. Otherwise resolution is:
+   * this option > stored user email > PROMPTFOO_AUTHOR env var > null.
+   */
+  author?: string;
+} & Omit<TestSuiteConfig, 'prompts' | 'providers'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {
   evaluateOptions: EvaluateOptions;

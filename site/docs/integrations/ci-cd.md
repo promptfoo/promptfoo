@@ -41,7 +41,7 @@ npx promptfoo@latest redteam run
 
 ## Prerequisites
 
-- Node.js 20+ installed in your CI environment
+- Node.js 20.20+ or 22.22+ installed in your CI environment
 - LLM provider API keys (stored as secure environment variables)
 - A promptfoo configuration file (`promptfooconfig.yaml`)
 - (Optional) Docker for containerized environments
@@ -270,6 +270,7 @@ pipeline {
 ### Other Platforms
 
 - [Azure Pipelines](/docs/integrations/azure-pipelines)
+- [AWS CodeCommit](/docs/integrations/aws-codecommit)
 - [CircleCI](/docs/integrations/circle-ci)
 - [Bitbucket Pipelines](/docs/integrations/bitbucket-pipelines)
 - [Travis CI](/docs/integrations/travis-ci)

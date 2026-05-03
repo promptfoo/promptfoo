@@ -1,9 +1,17 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
-import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import {
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../../../src/redteam/remoteGeneration';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -54,6 +62,7 @@ vi.mock('../../../../src/redteam/graders', () => ({
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
     shouldGenerateRemote: vi.fn(),
   };
 });
@@ -92,8 +101,8 @@ vi.mock('../../../../src/redteam/providers/traceFormatting', () => ({
 }));
 
 describe('HydraProvider', () => {
-  let mockAgentProvider: Mocked<ApiProvider>;
-  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockAgentProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
   let mockGrader: any;
 
   beforeAll(async () => {
@@ -107,19 +116,14 @@ describe('HydraProvider', () => {
     mockGetGraderById.mockReset();
 
     // Mock agent provider (cloud provider)
-    mockAgentProvider = {
-      id: vi.fn().mockReturnValue('mock-agent'),
-      callApi: vi.fn(),
-      delay: 0,
-    } as Mocked<ApiProvider>;
+    mockAgentProvider = createMockProvider({ id: 'mock-agent', delay: 0 });
+    mockAgentProvider.callApi.mockReset();
 
     // Mock target provider
-    mockTargetProvider = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Target response',
-      }),
-    } as Mocked<ApiProvider>;
+    mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({ output: 'Target response' }),
+    });
 
     // Mock grader
     mockGrader = {
@@ -142,6 +146,8 @@ describe('HydraProvider', () => {
     vi.mocked(shouldGenerateRemote).mockImplementation(function () {
       return true;
     });
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
     mockIsBasicRefusal.mockReturnValue(false);
@@ -195,15 +201,29 @@ describe('HydraProvider', () => {
       expect(provider['scanId']).toBe('test-scan-id');
     });
 
-    it('should throw error when remote generation is not available', () => {
+    it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       expect(() => {
         new HydraProvider({ injectVar: 'input' });
       }).toThrow(
-        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To fix, enable remote generation (for example by unsetting OPENAI_API_KEY), set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+      );
+    });
+
+    it('should throw the explicit-disabled error when a disable flag is set', () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      expect(() => {
+        new HydraProvider({ injectVar: 'input' });
+      }).toThrow(
+        /jailbreak:hydra strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
     });
 
@@ -1177,6 +1197,40 @@ describe('HydraProvider', () => {
         assertion: { type: 'harmful:test', value: testRubric },
       });
     });
+
+    it('passes target provider raw response into the grader', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        providerResponse?: { raw?: unknown };
+      };
+      expect(gradingContext.providerResponse?.raw).toContain('finalResponse');
+    });
   });
 
   describe('callApi() - scan learning', () => {
@@ -1406,6 +1460,229 @@ describe('HydraProvider', () => {
       });
       // First request should not have lastGraderResult
       expect(request.lastGraderResult).toBeUndefined();
+    });
+
+    it('should send plain input descriptions to the hydra agent prompt in multi-input mode', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          prompt: 'Summarize the uploaded planning document.',
+          document: 'doc payload',
+          question: 'What changed?',
+        }),
+        materializationHandled: true,
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+          question: {
+            description: 'Benign analyst question',
+            type: 'text',
+          },
+        },
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: {
+            goal: 'test goal',
+            pluginId: 'harmful:test',
+            purpose: 'Test purpose',
+          },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const agentCall = mockAgentProvider.callApi.mock.calls[0];
+      const request = JSON.parse(agentCall[0] as string);
+
+      expect(request.inputs).toEqual({
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        question: {
+          description: 'Benign analyst question',
+          type: 'text',
+        },
+      });
+    });
+
+    it('should use remote materialized vars when the hydra prompt is plain text', async () => {
+      const docxDataUri =
+        'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Summarize the uploaded planning document for the analyst.',
+        materializationHandled: true,
+        materializedVars: {
+          document: docxDataUri,
+          question: 'What changed?',
+        },
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+          question: {
+            description: 'Benign analyst question',
+            type: 'text',
+          },
+        },
+        maxTurns: 1,
+        stateful: true,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: {
+          input: 'test goal',
+          document: 'stale document',
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: {
+            goal: 'test goal',
+            pluginId: 'harmful:test',
+            purpose: 'Test purpose',
+          },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const renderCalls = (evaluatorHelpers.renderPrompt as Mock).mock.calls;
+      expect(renderCalls[0][1]).toMatchObject({
+        document: docxDataUri,
+        question: 'What changed?',
+      });
+    });
+
+    it('should preserve the existing DOCX var when remote materialization omits it', async () => {
+      const docxDataUri =
+        'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          document: 'Quarterly Sales Report',
+          question: 'Can you summarize the main points from this document?',
+        }),
+        materializationHandled: true,
+        materializedVars: {
+          question: 'What changed?',
+        },
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+          question: {
+            description: 'Benign analyst question',
+            type: 'text',
+          },
+        },
+        maxTurns: 1,
+        stateful: true,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: {
+          input: 'test goal',
+          document: docxDataUri,
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: {
+            goal: 'test goal',
+            pluginId: 'harmful:test',
+            purpose: 'Test purpose',
+          },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const renderCalls = (evaluatorHelpers.renderPrompt as Mock).mock.calls;
+      expect(renderCalls[0][1]).toMatchObject({
+        document: docxDataUri,
+        question: 'What changed?',
+      });
+    });
+
+    it('should fail closed when the hydra agent never produces a target probe', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        error: 'Invalid schema for inputs.document',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+          },
+        },
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: {
+            goal: 'test goal',
+            pluginId: 'harmful:test',
+            purpose: 'Test purpose',
+          },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.error).toBe('Invalid schema for inputs.document');
+      expect(result.metadata.hydraRoundsCompleted).toBe(0);
+      expect(result.tokenUsage?.numRequests).toBe(0);
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
     });
   });
 

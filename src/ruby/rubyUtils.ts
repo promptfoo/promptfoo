@@ -1,5 +1,5 @@
 import { execFile } from 'child_process';
-import fs from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
@@ -297,7 +297,7 @@ export async function runRuby<T = unknown>(
   const wrapperPath = path.join(getWrapperDir('ruby'), 'wrapper.rb');
 
   try {
-    fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
+    await fs.writeFile(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');
     logger.debug(`Running Ruby wrapper with args: ${safeJsonStringify(args)}`);
 
     const { stdout, stderr } = await execFileAsync(rubyPath, [
@@ -316,7 +316,7 @@ export async function runRuby<T = unknown>(
       logger.error(stderr.trim());
     }
 
-    const output = fs.readFileSync(outputPath, 'utf-8');
+    const output = await fs.readFile(outputPath, 'utf-8');
     logger.debug(`Ruby script ${absPath} returned: ${output}`);
 
     let result: { type: 'final_result'; data: T } | undefined;
@@ -349,12 +349,14 @@ export async function runRuby<T = unknown>(
       }`,
     );
   } finally {
-    [tempJsonPath, outputPath].forEach((file) => {
-      try {
-        fs.unlinkSync(file);
-      } catch (error) {
-        logger.error(`Error removing ${file}: ${error}`);
-      }
-    });
+    await Promise.all(
+      [tempJsonPath, outputPath].map(async (file) => {
+        try {
+          await fs.unlink(file);
+        } catch (error) {
+          logger.error(`Error removing ${file}: ${error}`);
+        }
+      }),
+    );
   }
 }

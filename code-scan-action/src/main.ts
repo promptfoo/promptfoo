@@ -29,6 +29,20 @@ interface ActionInputs {
   guidanceText: string;
   guidanceFile: string;
   githubToken: string;
+  enableForkPrs: boolean;
+}
+
+interface PullRequestForkPayload {
+  head?: {
+    repo?: {
+      full_name?: string | null;
+    } | null;
+  } | null;
+  base?: {
+    repo?: {
+      full_name?: string | null;
+    } | null;
+  } | null;
 }
 
 function formatError(error: unknown): string {
@@ -43,6 +57,7 @@ function getActionInputs(): ActionInputs {
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
+    enableForkPrs: core.getBooleanInput('enable-fork-prs'),
   };
 }
 
@@ -90,13 +105,41 @@ function isSetupPR(files: FileChange[]): boolean {
   );
 }
 
+function getCurrentRepositoryFullName(): string {
+  const repository = github.context.payload.repository as { full_name?: string } | undefined;
+  return repository?.full_name || `${github.context.repo.owner}/${github.context.repo.repo}`;
+}
+
+function isPullRequestFromFork(): boolean {
+  const pullRequest = github.context.payload.pull_request as PullRequestForkPayload | undefined;
+  if (!pullRequest) {
+    return false;
+  }
+
+  const headRepoFullName = pullRequest?.head?.repo?.full_name;
+  const baseRepoFullName = pullRequest?.base?.repo?.full_name || getCurrentRepositoryFullName();
+
+  if (!headRepoFullName || !baseRepoFullName) {
+    core.warning(
+      'Unable to determine PR source repository from GitHub event payload; treating it as a fork PR',
+    );
+    return true;
+  }
+
+  return headRepoFullName !== baseRepoFullName;
+}
+
+function shouldSkipForkPullRequest(enableForkPrs: boolean): boolean {
+  return !enableForkPrs && isPullRequestFromFork();
+}
+
 async function authenticateWithOidc(): Promise<void> {
   try {
     const oidcToken = await core.getIDToken('promptfoo');
     core.info('🔐 Got OIDC token for server authentication');
 
     // Set as environment variable for CLI to use
-    process.env.GITHUB_OIDC_TOKEN = oidcToken;
+    Object.assign(process.env, { GITHUB_OIDC_TOKEN: oidcToken });
   } catch (error) {
     // OIDC tokens are not available for fork PRs (GitHub security restriction)
     // For fork PRs, the server will use PR-based authentication instead
@@ -211,8 +254,10 @@ function parseScanOutput(scanOutput: string): ScanResponse {
 }
 
 async function runPromptfooScan(cliArgs: string[]): Promise<ScanResponse | undefined> {
+  const scanEnv = createScanEnv();
+
   core.info('📦 Installing promptfoo...');
-  await exec.exec('npm', ['install', '-g', 'promptfoo']);
+  await exec.exec('npm', ['install', '-g', 'promptfoo'], { env: scanEnv });
   core.info('✅ Promptfoo installed successfully');
 
   core.info('🚀 Running promptfoo code-scans run...');
@@ -221,7 +266,7 @@ async function runPromptfooScan(cliArgs: string[]): Promise<ScanResponse | undef
   let scanError = '';
 
   const exitCode = await exec.exec('promptfoo', cliArgs, {
-    env: createScanEnv(),
+    env: scanEnv,
     listeners: {
       stdout: (data: Buffer) => {
         scanOutput += data.toString();
@@ -413,6 +458,15 @@ function cleanupConfig(configPath: string, finalConfigPath: string): void {
 
 async function runCodeScan(): Promise<void> {
   const inputs = getActionInputs();
+
+  if (shouldSkipForkPullRequest(inputs.enableForkPrs)) {
+    core.info('🔀 Fork PR detected and enable-fork-prs is false; skipping Promptfoo Code Scan');
+    core.info(
+      'A maintainer can trigger a scan by commenting @promptfoo-scanner, or enable fork PR scans with enable-fork-prs: true',
+    );
+    return;
+  }
+
   const guidance = loadGuidance(inputs);
 
   core.info('🔍 Starting Promptfoo Code Scan...');

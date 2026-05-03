@@ -278,6 +278,8 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
+- `google:gemini-3.1-pro-preview-customtools` - Gemini 3.1 Pro preview variant for custom tools with the same pricing as Gemini 3.1 Pro
+- `google:gemini-3.1-flash-lite-preview` - Gemini 3.1 Flash-Lite preview optimized for high-volume, low-latency tasks ($0.25/1M text/image/video input, $1.50/1M output)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
@@ -285,10 +287,8 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 - `google:gemini-2.5-flash-lite` - Cost-efficient Gemini 2.5 model optimized for high-volume, latency-sensitive tasks
 - `google:gemini-2.5-flash-preview-09-2025` - Gemini 2.5 Flash preview with quality improvements
 - `google:gemini-2.5-flash-lite-preview-09-2025` - Gemini 2.5 Flash Lite preview with cost and latency optimizations
-- `google:gemini-flash-latest` - Alias for `google:gemini-2.5-flash-preview-09-2025`
-- `google:gemini-flash-lite-latest` - Alias for `google:gemini-2.5-flash-lite-preview-09-2025`
-- `google:gemini-2.5-pro-preview-06-05` - Gemini 2.5 Pro preview (June 2025 release)
-- `google:gemini-2.5-pro-preview-05-06` - Gemini 2.5 Pro preview (May 2025 release)
+- `google:gemini-flash-latest` - Alias for the latest Gemini Flash release (currently `gemini-2.5-flash-preview-09-2025`)
+- `google:gemini-flash-lite-latest` - Alias for the latest Gemini Flash-Lite release (currently `gemini-2.5-flash-lite-preview-09-2025`)
 - `google:gemini-2.0-pro` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-exp` - Experimental multimodal model with next generation features
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
@@ -297,8 +297,17 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ### Embedding Models
 
-- `google:embedding:text-embedding-004` - Google text embedding model
-- `google:embedding:embedding-001` - Google embedding model
+Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
+
+- `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+
+Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
+
+- `taskType` - one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`
+- `outputDimensionality` - truncates the returned vector (useful for storage cost)
+- `title` - document title, only applied with `taskType: RETRIEVAL_DOCUMENT`
+
+If you need Vertex authentication or additional embedding models, see the [Vertex provider](/docs/providers/vertex#embedding-models) instead.
 
 ### Image Generation Models
 
@@ -811,7 +820,7 @@ defaultTest:
           temperature: 0.7
       # Override embedding provider for similarity comparisons
       embedding:
-        id: google:embedding:text-embedding-004
+        id: google:embedding:gemini-embedding-001
 ```
 
 2. For individual assertions:
@@ -822,7 +831,7 @@ assert:
     value: Expected response
     threshold: 0.8
     provider:
-      id: google:embedding:text-embedding-004
+      id: google:embedding:gemini-embedding-001
 ```
 
 3. For specific tests:
@@ -836,7 +845,7 @@ tests:
         text:
           id: google:gemini-2.0-flash
         embedding:
-          id: google:embedding:text-embedding-004
+          id: google:embedding:gemini-embedding-001
     assert:
       - type: similar
         value: The answer is 4
@@ -931,7 +940,7 @@ You can combine Search grounding with thinking capabilities for better reasoning
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-pro-preview-06-05
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         thinkingConfig:
@@ -988,7 +997,7 @@ To enable code execution:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash-preview-05-20
+  - id: google:gemini-2.5-flash
     config:
       tools:
         - codeExecution: {}

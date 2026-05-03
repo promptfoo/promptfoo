@@ -11,6 +11,8 @@ import {
 import { evaluate } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
+  getAuthor,
   promptForEmailUnverified,
 } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
@@ -19,12 +21,13 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import { generateTable } from '../../src/table';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
-import { resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
@@ -65,7 +68,31 @@ vi.mock('path', async () => {
     ...actualPath,
   };
 });
-vi.mock('../../src/util/config/load');
+const chokidarMocks = vi.hoisted(() => {
+  const handlers = new Map<string, (...args: any[]) => unknown>();
+  const watcher = {
+    on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+      handlers.set(event, handler);
+      return watcher;
+    }),
+  };
+
+  return {
+    handlers,
+    watcher,
+    watch: vi.fn(() => watcher),
+  };
+});
+
+vi.mock('chokidar', () => ({
+  default: {
+    watch: chokidarMocks.watch,
+  },
+}));
+vi.mock('../../src/util/config/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/config/load')>()),
+  resolveConfigs: vi.fn(),
+}));
 vi.mock('../../src/util/tokenUsage');
 vi.mock('../../src/database/index', async (importOriginal) => {
   return {
@@ -100,9 +127,18 @@ describe('evalCommand', () => {
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    chokidarMocks.handlers.clear();
+    chokidarMocks.watcher.on
+      .mockReset()
+      .mockImplementation((event: string, handler: (...args: any[]) => unknown) => {
+        chokidarMocks.handlers.set(event, handler);
+        return chokidarMocks.watcher;
+      });
+    chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
+    vi.mocked(generateTable).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -111,6 +147,7 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
+    vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
@@ -135,6 +172,30 @@ describe('evalCommand', () => {
     expect(helpText).toContain(
       'Path to configuration file or cloud config UUID. Automatically loads promptfooconfig.yaml',
     );
+  });
+
+  it('should apply resolved author when --no-write is used', async () => {
+    const cmdObj = { table: false, write: false };
+    const config = {} as UnifiedConfig;
+    let capturedEvalRecord: Eval | undefined;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(getAuthor).mockReturnValue('ci-author@example.com');
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+      capturedEvalRecord = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
   });
 
   it('should load cloud eval config when config is a single UUID', async () => {
@@ -187,6 +248,76 @@ describe('evalCommand', () => {
       '--watch is not supported when using a cloud config UUID with -c. Use a local config file path for watch mode.',
     );
     expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should keep watching after config resolution fails on a file change', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({
+        config,
+        testSuite,
+        basePath: path.resolve('/'),
+      })
+      .mockRejectedValueOnce(new ConfigResolutionError('You must provide at least 1 prompt'));
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith('You must provide at least 1 prompt');
+      expect(resolveConfigs).toHaveBeenCalledTimes(2);
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
+  });
+
+  it('should keep watching after email validation fails on a file change', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+      redteam: { plugins: ['harmful'] as any },
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+      tests: [{ vars: { prompt: 'test' } }],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+    await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+    const onChange = chokidarMocks.handlers.get('change');
+    expect(onChange).toBeDefined();
+
+    vi.mocked(checkEmailStatusAndMaybeExit).mockRejectedValueOnce(
+      new EmailValidationError('email_verification_required', 'Please verify your email'),
+    );
+
+    await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+    expect(resolveConfigs).toHaveBeenCalledTimes(2);
   });
 
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
@@ -443,6 +574,39 @@ describe('evalCommand', () => {
       expect.anything(),
       expect.objectContaining({ maxConcurrency: 5 }),
     );
+  });
+
+  it('should pass tableCellMaxLength to the table renderer', async () => {
+    const config = {
+      commandLineOptions: {
+        tableCellMaxLength: 37,
+      },
+    } as UnifiedConfig;
+
+    vi.spyOn(Eval.prototype, 'getTable').mockResolvedValue({
+      head: { prompts: [], vars: [] },
+      body: [],
+    } as any);
+    vi.mocked(generateTable).mockReturnValue({ toString: () => 'rendered table' } as any);
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: config.commandLineOptions,
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval({ table: true, write: false }, config, undefined, {});
+
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 37);
+
+    vi.mocked(generateTable).mockClear();
+    await doEval({ table: true, tableCellMaxLength: 42, write: false }, config, undefined, {});
+
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 42);
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {
