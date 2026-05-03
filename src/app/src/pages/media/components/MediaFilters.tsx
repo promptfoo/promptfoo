@@ -12,7 +12,6 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Spinner } from '@app/components/ui/spinner';
-import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
 import {
   AlertCircle,
@@ -95,21 +94,34 @@ export function MediaFilters({
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div className="flex flex-wrap items-center gap-4">
-        {/* Type Filter Tabs */}
-        <Tabs value={typeFilter} onValueChange={(v) => onTypeFilterChange(v as MediaTypeFilter)}>
-          <TabsList className="h-9">
-            {typeOptions.map((option) => (
-              <TabsTrigger
+        {/* Type Filter Segmented Control */}
+        <div
+          role="group"
+          aria-label="Filter by media type"
+          className="inline-flex h-9 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground"
+        >
+          {typeOptions.map((option) => {
+            const isActive = typeFilter === option.value;
+
+            return (
+              <button
                 key={option.value}
-                value={option.value}
-                className="gap-1.5 text-xs sm:text-sm"
+                type="button"
+                aria-label={option.label}
+                aria-pressed={isActive}
+                onClick={() => onTypeFilterChange(option.value)}
+                className={cn(
+                  'inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-sm px-3 py-1.5 text-xs font-medium transition-all sm:text-sm',
+                  'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  isActive && 'bg-background text-foreground shadow-sm',
+                )}
               >
                 <option.icon className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">{option.label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+              </button>
+            );
+          })}
+        </div>
 
         <Badge variant="secondary" className="font-mono text-xs">
           {total} {total === 1 ? 'item' : 'items'}
