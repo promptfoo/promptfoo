@@ -166,9 +166,9 @@ export default function Navigation() {
   return (
     <>
       <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
-        <div className="flex h-14 items-center justify-between px-4">
+        <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
           {/* Left section: Logo and Navigation */}
-          <div className="flex items-center gap-6">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-6">
             <Logo />
             <NavigationMenu>
               <NavigationMenuList className="gap-1">
@@ -201,7 +201,7 @@ export default function Navigation() {
           </div>
 
           {/* Right section: Actions */}
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button

@@ -197,7 +197,7 @@ const EvaluateTestSuiteCreator = () => {
         {/* Header */}
         <PageHeader>
           <div className="container max-w-7xl mx-auto px-4 py-10">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight">Create Evaluation</h1>
                 <p className="text-muted-foreground">
@@ -205,7 +205,7 @@ const EvaluateTestSuiteCreator = () => {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {!hasCustomConfig && <ConfigureEnvButton />}
                 <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="size-4 mr-2" />
@@ -237,10 +237,10 @@ const EvaluateTestSuiteCreator = () => {
         {/* Main Content */}
         <TabsContent value="ui">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <div className="flex gap-8">
+            <div className="flex flex-col gap-8 lg:flex-row">
               {/* Left Sidebar - Step Navigation */}
-              <div className="w-64 shrink-0">
-                <div className="sticky top-8 space-y-2">
+              <div className="w-full lg:w-64 lg:shrink-0">
+                <div className="space-y-2 lg:sticky lg:top-8">
                   <h3 className="text-sm font-semibold text-muted-foreground mb-4 px-3">
                     SETUP STEPS
                   </h3>
