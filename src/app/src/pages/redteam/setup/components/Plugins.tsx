@@ -417,7 +417,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       <div className="mb-6 w-full">
         <TestCaseGenerationProvider redTeamConfig={config}>
           <Tabs value={activeTab} onValueChange={handleTabChange}>
-            <TabsList className="max-w-full justify-start overflow-x-auto">
+            <TabsList className="!h-auto w-full max-w-full flex-wrap justify-start gap-1 overflow-visible sm:!h-10 sm:w-auto sm:flex-nowrap sm:gap-0">
               <TabsTrigger value="plugins">Plugins ({selectedPlugins.size})</TabsTrigger>
               <TabsTrigger value="intents">Custom Intents ({customIntentsCount})</TabsTrigger>
               <TabsTrigger value="policies">Custom Policies ({customPoliciesCount})</TabsTrigger>
