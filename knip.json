@@ -23,6 +23,7 @@
       "ignoreFiles": [
         "src/providers/audio/**/*.{js,ts,tsx}",
         "src/redteam/audio/**/*.{js,ts,tsx}",
+        "src/redteam/strategies/multilingual.ts",
         "src/util/agent/targetLinkFs.ts"
       ],
       "ignoreDependencies": ["@actions/*", "@octokit/rest", "@opencode-ai/sdk", "@types/pdf-parse"],
