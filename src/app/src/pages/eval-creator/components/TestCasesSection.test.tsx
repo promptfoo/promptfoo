@@ -57,6 +57,16 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Add Example')).toBeInTheDocument();
   });
 
+  it('stacks the test case header controls on narrow screens', () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Test Cases').parentElement).toHaveClass('flex-col', 'sm:flex-row');
+  });
+
   it('renders existing test cases', () => {
     const testCases = [
       {
