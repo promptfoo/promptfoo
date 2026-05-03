@@ -7,6 +7,9 @@ authors: [michael]
 tags: [ai-security, red-teaming, best-practices, owasp, compliance-framework]
 ---
 
+import styles from './styles.module.css';
+import { Code2, Gauge, Settings2 } from 'lucide-react';
+
 AI application security focuses on protecting Large Language Models (LLMs) and AI agents from threats that exploit their unique behaviors and components. Unlike traditional software, AI applications can generate unpredictable outputs, leak sensitive information, be tricked into ignoring their safety instructions, or invoke external tools in ways their designers never intended. Securing these systems demands strategies that go beyond those developed for deterministic web applications or APIs.
 
 In this article, we examine the differences between AI application security and traditional application security. We review key threats and provide best practices for defending AI systems. We also discuss how frameworks and standards—such as OWASP, NIST, the EU AI Act, and MITRE ATLAS—guide AI security. Finally, we walk through an example using an open-source tool to run red-team adversarial attacks against a RAG-based chatbot to uncover its vulnerabilities.
@@ -83,6 +86,37 @@ The [OWASP Top 10 for LLM Applications (2025)](https://genai.owasp.org/llm-top-1
 | LLM10            | Unbounded consumption            | Resource exhaustion attacks (a form of denial of service), where an adversary sends complex or high-volume queries to drive up costs, degrade performance, or crash the application                                                                                                                                                                      |
 
 There are various actions you can take to mitigate the effects of the above attacks, as explained in [this blog by Promptfoo](/blog/owasp-top-10-llms-tldr/).
+
+<div className={styles.promptfooCard}>
+  <div className={styles.cardHeader}>
+    <div className={styles.logoSection}>
+      <img src="/img/logo-panda.svg" alt="Promptfoo" className={styles.pandaLogo} />
+      <span className={styles.brandName}>promptfoo</span>
+    </div>
+    <div className={styles.cardTagline}>
+      <strong>Automated testing that finds &amp; fixes AI risk in development</strong>
+    </div>
+    <a href="/" className={styles.learnMoreBtn}>
+      LEARN MORE
+    </a>
+  </div>
+  <div className={styles.featureList}>
+    <div className={styles.featureItem}>
+      <Code2 className={styles.featureIcon} strokeWidth={1.5} />
+      <span>
+        Available in open-source and <em>enterprise editions</em>
+      </span>
+    </div>
+    <div className={styles.featureItem}>
+      <Gauge className={styles.featureIcon} strokeWidth={1.5} />
+      <span>Deployed in the AI development lifecycle of &gt;125 of the Fortune 500</span>
+    </div>
+    <div className={styles.featureItem}>
+      <Settings2 className={styles.featureIcon} strokeWidth={1.5} />
+      <span>Consumes models, code, traces &amp; configs and recommends remediations</span>
+    </div>
+  </div>
+</div>
 
 ### Jailbreaking
 
@@ -164,6 +198,13 @@ With the surge in AI application development, several frameworks have emerged to
 - **EU AI Act:** Proposed by the European Commission, the [EU AI Act](https://artificialintelligenceact.eu/) classifies AI systems by risk level. It mandates practices like transparency, safety testing, and human oversight for high-risk use cases.
 - **MITRE ATLAS:** Maintained by [MITRE](https://atlas.mitre.org/), this threat knowledge base catalogs real-world adversary tactics used to attack AI systems. It supports threat modeling and helps security teams simulate how attackers might target model behavior or logic.
 
+<div className={styles.ctaBanner}>
+  <p className={styles.ctaText}>Get started with the open source edition</p>
+  <a href="/docs/getting-started/" className={styles.ctaBtn}>
+    GET STARTED
+  </a>
+</div>
+
 ## How Promptfoo helps secure AI applications
 
 Promptfoo is an open-source testing tool purpose-built for evaluating the security and reliability of LLM applications. Used by more than 300,000 developers and over 125 [Fortune 500 companies](https://www.insightpartners.com/ideas/promptfoo-scale-up-ai/), Promptfoo helps teams catch vulnerabilities through automated red teaming, regression testing, and standards-aligned reporting. Promptfoo also offers specialized plugins for regulated industries such as financial services, healthcare, insurance, and pharmacy, enabling domain-specific vulnerability testing.
@@ -234,6 +275,13 @@ Select the red-team strategies that determine how attacks are generated and exec
 
 ![Selecting red-team strategies](/img/blog/ai-application-security/step5-strategies.png)
 
+<div className={styles.ctaBanner}>
+  <p className={styles.ctaText}>Learn the state-of-the-art in AI red teaming</p>
+  <a href="/blog/ai-red-teaming-for-first-timers/" className={styles.ctaBtn}>
+    READ THE GUIDE
+  </a>
+</div>
+
 **Step 6: Review and run**
 
 Finally, review your red-teaming configurations and run the application. You have two options:
@@ -266,6 +314,13 @@ You can also view action items to improve your application's security.
 ![Action items to improve application security](/img/blog/ai-application-security/step7-action-items.png)
 
 You can see how Promptfoo not only identifies various vulnerabilities but also suggests remediation details on how to secure your AI application.
+
+<div className={styles.ctaBanner}>
+  <p className={styles.ctaText}>Read our founders' vision of AI risk management</p>
+  <a href="/blog/series-a-announcement/" className={styles.ctaBtn}>
+    READ THE POST
+  </a>
+</div>
 
 ## Final thoughts
 
