@@ -992,6 +992,9 @@ describe('DataTable', () => {
       expect(actionGroup).toBeInTheDocument();
       expect(actionGroup).toHaveClass('flex', 'shrink-0', 'items-center');
       expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
+
+      const sortButton = headerContent?.querySelector('button');
+      expect(sortButton).toHaveAttribute('aria-label', `Sort ${headerText} ascending`);
     };
 
     assertHeaderLayout('Identifier');

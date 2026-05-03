@@ -213,6 +213,8 @@ export default function ModelAuditSetupPage() {
                       <button
                         type="button"
                         onClick={() => checkInstallation()}
+                        aria-label="Check installation again"
+                        title="Check installation again"
                         className="p-1 hover:bg-muted rounded"
                       >
                         <RefreshIcon className="size-4 text-muted-foreground" />
