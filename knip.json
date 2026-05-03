@@ -32,7 +32,7 @@
       }
     },
     "src/app": {
-      "entry": ["src/tests/browser-mode/browserApis.browser.ts"],
+      "entry": ["index.html", "src/tests/browser-mode/browserApis.browser.ts"],
       "project": ["src/**/*.{js,ts,tsx}"],
       "ignoreFiles": ["src/polyfills/scroll-timeline.d.ts"],
       "ignoreDependencies": ["@promptfoo/*", "@kurkle/color", "tailwindcss"],
@@ -42,7 +42,12 @@
       }
     },
     "site": {
-      "entry": ["src/**/*.{js,ts,tsx}", "blog/**/*.{js,ts,tsx}", "docs/**/*.{md,mdx}"],
+      "entry": [
+        "*.config.{js,ts}",
+        "src/**/*.{js,ts,tsx}",
+        "blog/**/*.{js,ts,tsx}",
+        "docs/**/*.{md,mdx}"
+      ],
       "project": ["**/*.{js,ts,tsx}"],
       "ignoreFiles": ["docs/_shared/**/*.{js,ts,tsx}", "static/js/scripts.js"],
       "ignoreDependencies": [
