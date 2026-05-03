@@ -63,7 +63,7 @@ const PromptDialog = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="min-w-0 space-y-6 py-4">
           {/* Prompt content section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
