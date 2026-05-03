@@ -688,6 +688,9 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Configure ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
                               className={cn(
                                 'size-8',
                                 hasConfigError ? 'text-destructive' : 'text-muted-foreground',
@@ -712,6 +715,9 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`View documentation for ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
                               className="size-8"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -809,6 +815,9 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Configure ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
                               className="size-6 text-destructive hover:text-destructive"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -820,6 +829,9 @@ export default function PluginsTab({
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Remove ${
+                                displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                              }`}
                               className="size-6"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -856,6 +868,9 @@ export default function PluginsTab({
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label={`Remove ${
+                              displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                            }`}
                             className="ml-2 size-6"
                             onClick={() => handlePluginToggle(plugin)}
                           >

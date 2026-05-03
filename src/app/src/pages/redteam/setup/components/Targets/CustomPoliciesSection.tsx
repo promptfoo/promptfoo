@@ -640,6 +640,7 @@ export const CustomPoliciesSection = () => {
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label={`Edit policy ${row.index + 1}`}
                   className="size-8"
                   onClick={() => handleEditPolicy(row.original)}
                 >

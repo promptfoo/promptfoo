@@ -803,6 +803,33 @@ describe('PluginsTab', () => {
           screen.getByTestId('selected-plugin-needs-config-indirect-prompt-injection'),
         ).toBeInTheDocument();
       });
+
+      test('labels plugin action buttons in the list and selected sidebar', async () => {
+        const testPlugins = ['indirect-prompt-injection', 'aegis'];
+
+        act(() => {
+          useRedTeamConfig.setState({
+            ...initialStoreState,
+            config: {
+              ...initialStoreState.config,
+              plugins: testPlugins,
+            },
+          });
+        });
+
+        renderComponent();
+
+        expect(
+          screen.getAllByRole('button', { name: 'Configure Indirect Prompt Injection' }),
+        ).toHaveLength(2);
+        expect(
+          screen.getByRole('button', { name: 'View documentation for Aegis Dataset' }),
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole('button', { name: 'Remove Indirect Prompt Injection' }),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove Aegis Dataset' })).toBeInTheDocument();
+      });
     });
   });
 
