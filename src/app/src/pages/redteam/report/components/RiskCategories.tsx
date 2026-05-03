@@ -160,7 +160,7 @@ const RiskCategoryRow = ({
         <button
           type="button"
           className={cn(
-            'flex w-full items-center gap-4 p-4 text-left transition-colors cursor-pointer',
+            'flex w-full items-center gap-2 p-4 text-left transition-colors cursor-pointer sm:gap-4',
             'hover:bg-muted/50',
             isExpanded && 'bg-muted/30',
           )}
@@ -173,7 +173,9 @@ const RiskCategoryRow = ({
           {/* Category Name & Description */}
           <div className="min-w-0 flex-1">
             <span className="font-semibold">{category.name}</span>
-            <p className="truncate text-sm text-muted-foreground">{category.description}</p>
+            <p className="hidden truncate text-sm text-muted-foreground sm:block">
+              {category.description}
+            </p>
           </div>
 
           {/* Progress Bar */}
@@ -190,7 +192,7 @@ const RiskCategoryRow = ({
           </div>
 
           {/* Stats - fixed width to align with plugin rows */}
-          <div className="w-20 shrink-0 text-right">
+          <div className="w-16 shrink-0 text-right sm:w-20">
             <span
               className={cn('text-sm font-semibold', getPassRateStyles(category.passRate).text)}
             >
@@ -211,7 +213,7 @@ const RiskCategoryRow = ({
           </div>
 
           {/* Spacer for chevron alignment */}
-          <div className="w-4 shrink-0 print:hidden" />
+          <div className="hidden w-4 shrink-0 print:hidden sm:block" />
         </button>
       </CollapsibleTrigger>
 
