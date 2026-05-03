@@ -124,6 +124,13 @@ describe('MediaModal', () => {
 
       expect(screen.getByText('Preview not available')).toBeInTheDocument();
     });
+
+    it('keeps the compact footer download button named', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
+    });
   });
 
   describe('details panel', () => {

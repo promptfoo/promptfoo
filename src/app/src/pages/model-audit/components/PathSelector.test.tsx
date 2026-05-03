@@ -263,4 +263,17 @@ describe('PathSelector', () => {
     const clearButton = screen.getByText('Clear All');
     expect(clearButton).toBeInTheDocument();
   });
+
+  it('keeps compact source tabs named when labels are visually hidden', () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Local Files' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Cloud' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'GitHub' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Registry' })).toBeInTheDocument();
+  });
 });

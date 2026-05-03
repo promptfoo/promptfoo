@@ -229,13 +229,24 @@ export default function PathSelector({
     <div className="space-y-6">
       <Tabs defaultValue="local" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="local" className="flex items-center gap-2">
+          <TabsTrigger
+            value="local"
+            aria-label="Local Files"
+            title="Local Files"
+            className="flex items-center gap-2"
+          >
             <ComputerIcon className="size-4" />
             <span className="hidden sm:inline">Local Files</span>
           </TabsTrigger>
           <Tooltip>
             <TooltipTrigger asChild>
-              <TabsTrigger value="cloud" disabled className="flex items-center gap-2 opacity-60">
+              <TabsTrigger
+                value="cloud"
+                aria-label="Cloud"
+                title="Cloud"
+                disabled
+                className="flex items-center gap-2 opacity-60"
+              >
                 <div className="relative">
                   <CloudIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
@@ -247,7 +258,13 @@ export default function PathSelector({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <TabsTrigger value="github" disabled className="flex items-center gap-2 opacity-60">
+              <TabsTrigger
+                value="github"
+                aria-label="GitHub"
+                title="GitHub"
+                disabled
+                className="flex items-center gap-2 opacity-60"
+              >
                 <div className="relative">
                   <GitHubIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
@@ -259,7 +276,13 @@ export default function PathSelector({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <TabsTrigger value="registry" disabled className="flex items-center gap-2 opacity-60">
+              <TabsTrigger
+                value="registry"
+                aria-label="Registry"
+                title="Registry"
+                disabled
+                className="flex items-center gap-2 opacity-60"
+              >
                 <div className="relative">
                   <StorageIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />

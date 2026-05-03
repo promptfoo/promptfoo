@@ -850,6 +850,8 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                   onClick={handleDownload}
                   variant="outline"
                   size="sm"
+                  aria-label="Download"
+                  title="Download"
                   className="h-8 gap-1.5"
                 >
                   <Download className="h-3.5 w-3.5" />
