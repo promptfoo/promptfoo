@@ -173,7 +173,7 @@ const RiskCategoryDrawer = ({
       <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
         <SheetContent
           side="right"
-          className="w-[500px] overflow-y-auto sm:max-w-[500px]"
+          className="w-full overflow-y-auto sm:w-[500px] sm:max-w-[500px]"
           aria-describedby={undefined}
         >
           <SheetTitle className="sr-only">{displayName}</SheetTitle>
@@ -289,7 +289,7 @@ const RiskCategoryDrawer = ({
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <SheetContent
         side="right"
-        className="w-[750px] overflow-y-auto sm:max-w-[750px]"
+        className="w-full overflow-y-auto sm:w-[750px] sm:max-w-[750px]"
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">{displayName}</SheetTitle>
