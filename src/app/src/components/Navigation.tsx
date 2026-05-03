@@ -89,8 +89,8 @@ function NavDropdown({ label, compactLabel, items, isActiveCheck }: NavDropdownP
       >
         {compactLabel ? (
           <>
-            <span className="hidden min-[360px]:inline">{label}</span>
-            <span className="min-[360px]:hidden">{compactLabel}</span>
+            <span className="hidden min-[390px]:inline">{label}</span>
+            <span className="min-[390px]:hidden">{compactLabel}</span>
           </>
         ) : (
           label

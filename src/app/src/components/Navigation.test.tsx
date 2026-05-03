@@ -97,7 +97,7 @@ describe('Navigation', () => {
     renderNavigation();
 
     expect(screen.getByRole('button', { name: 'View Results' })).toBeInTheDocument();
-    expect(screen.getByText('Results')).toHaveClass('min-[360px]:hidden');
+    expect(screen.getByText('Results')).toHaveClass('min-[390px]:hidden');
   });
 
   it('hides the logo below the extra-narrow breakpoint', () => {
