@@ -78,9 +78,9 @@ describe('Mistral', () => {
     });
 
     it('should support current Mistral model families', () => {
-      const magistralSmallProvider = new MistralChatCompletionProvider('magistral-small-2509');
-      expect(magistralSmallProvider.modelName).toBe('magistral-small-2509');
-      expect(magistralSmallProvider.config).toEqual({});
+      const smallProvider = new MistralChatCompletionProvider('magistral-small-2509');
+      expect(smallProvider.modelName).toBe('magistral-small-2509');
+      expect(smallProvider.config).toEqual({});
 
       const magistralMediumProvider = new MistralChatCompletionProvider('magistral-medium-latest', {
         config: { temperature: 0.7, max_tokens: 40960 },
@@ -349,7 +349,7 @@ describe('Mistral', () => {
 
       const result = await latestProvider.callApi('Test latest alias pricing');
 
-      // mistral-large-latest currently tracks Mistral Large 3 pricing: $0.5/M in, $1.5/M out
+      // mistral-large-latest currently tracks mistral-large-2512 pricing: $0.5/M in, $1.5/M out
       expect(result.cost).toBeCloseTo(0.0011, 6);
     });
 

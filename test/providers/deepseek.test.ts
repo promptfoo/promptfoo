@@ -60,7 +60,7 @@ describe('calculateDeepSeekCost', () => {
     expect(cost).toBeCloseTo(4.0);
   });
 
-  it('should handle unknown model names', () => {
+  it('should return undefined when an unknown model has no pricing', () => {
     const cost = calculateDeepSeekCost('unknown-model', {}, 1000000, 1000000);
     expect(cost).toBeUndefined();
   });
