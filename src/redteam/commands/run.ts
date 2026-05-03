@@ -6,6 +6,7 @@ import { CLOUD_PROVIDER_PREFIX } from '../../constants';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { getConfigFromCloud } from '../../util/cloud';
+import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/load';
 import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
 import { poisonCommand } from './poison';
@@ -109,6 +110,8 @@ export function redteamRunCommand(program: Command) {
           error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
+        } else if (error instanceof ConfigResolutionError) {
+          logConfigResolutionError(error);
         } else {
           logger.error(
             `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${

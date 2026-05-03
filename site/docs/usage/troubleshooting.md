@@ -442,8 +442,8 @@ providers:
 
 On Windows, promptfoo tries to detect Python in this order:
 
-1. `PROMPTFOO_PYTHON` environment variable (if set)
-2. Provider-specific `pythonExecutable` config (if set)
+1. Provider-specific `pythonExecutable` config (if set)
+2. `PROMPTFOO_PYTHON` environment variable (if set)
 3. **Windows smart detection**: Uses `where python` command and filters out Microsoft Store stubs
 4. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
 5. Common fallback commands: `python`, `python3`, `py -3`, `py`

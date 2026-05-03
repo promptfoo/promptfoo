@@ -102,7 +102,7 @@ const createMockPromptResponse = (
             ...(tokens.cache === undefined ? {} : { cache: tokens.cache }),
           }
         : undefined,
-      cost: cost ?? 0,
+      ...(cost === undefined ? {} : { cost }),
       structured,
       time: { created: Date.now() },
     },
@@ -309,6 +309,22 @@ describe('OpenCodeSDKProvider', () => {
             parts: [{ type: 'text', text: 'Test prompt' }],
           }),
         );
+      });
+
+      it('should leave cost undefined when OpenCode does not report one', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'No cost response' }], {
+            input: 5,
+            output: 10,
+          }),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.cost).toBeUndefined();
       });
 
       it('should preserve reasoning and cache token details', async () => {

@@ -14,6 +14,10 @@ promptfoo is available as a node package [on npm](https://www.npmjs.com/package/
 npm install promptfoo
 ```
 
+For deeper programmatic usage, see the [Node API reference](/docs/usage/node-api-reference),
+[examples](/docs/usage/node-api-examples), and
+[quick reference](/docs/usage/node-api-quick-reference).
+
 ## Usage
 
 Use `promptfoo` as a library in your project by importing the `evaluate` function and other utilities:

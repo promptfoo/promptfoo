@@ -1291,6 +1291,15 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
 
+      // xAI does not expose a public embeddings API. Fail fast with a clear message
+      // rather than silently routing `xai:embedding:*` to a different sub-type.
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        throw new Error(
+          `xAI does not currently expose a public embeddings API; "${providerPath}" cannot be resolved. ` +
+            `Use openai:embedding:* or another embedding provider instead.`,
+        );
+      }
+
       // Handle xai:image:<model> format
       if (modelType === 'image') {
         return createXAIImageProvider(providerPath, {

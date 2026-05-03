@@ -527,7 +527,7 @@ GPT-5.5 is the latest GPT-5 family model for high-capability reasoning, professi
 - **Reasoning effort**: `gpt-5.5` supports `none`, `low`, `medium`, `high`, and `xhigh`. In Chat Completions, set `reasoning_effort`; in Responses API, set `reasoning.effort`.
 - **Endpoint support**: `gpt-5.5` supports Chat Completions and Responses API. `gpt-5.5-pro` is Responses API only and supports Batch API.
 - **Cached input**: `gpt-5.5` cached input tokens are $0.50 per 1M. `gpt-5.5-pro` has no cached-input discount.
-- **Cost estimates**: Promptfoo includes standard API pricing for GPT-5.5. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from `service_tier`.
+- **Cost estimates**: Promptfoo uses returned usage metadata for GPT-5.5 pricing and infers Batch, Flex, or Priority rates when the API response or configured `service_tier` identifies that tier.
 - **Long-running requests**: `gpt-5.5-pro` automatically receives the same 10-minute timeout as other GPT-5 pro models.
 
 #### Usage Examples
@@ -977,18 +977,18 @@ Videos are stored in promptfoo's media storage (`~/.promptfoo/media/`) and serve
 
 ## Web Search Support
 
-The OpenAI Responses API supports web search capabilities through the `web_search_preview` tool, which enables the `search-rubric` assertion type. This allows models to search the web for current information and verify facts.
+The OpenAI Responses API supports both the standard `web_search` tool and the `web_search_preview` tool family. The preview tool enables the `search-rubric` assertion type and remains required for deep research models. These tools let models search the web for current information and verify facts.
 
 ### Enabling Web Search
 
-To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add the `web_search_preview` tool to your configuration:
+To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add either the standard `web_search` tool or the preview `web_search_preview` tool to your configuration:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:responses:gpt-5.1
     config:
       tools:
-        - type: web_search_preview
+        - type: web_search
 ```
 
 ### Using Web Search Assertions
@@ -1027,6 +1027,7 @@ tests:
 Web search calls in the Responses API are billed separately from normal tokens:
 
 - The web search tool costs **$10 per 1,000 calls** for the standard tool and **$10-25 per 1,000 calls** for preview variants, plus any search content tokens where applicable
+- Only `web_search_call.action.type: search` incurs a search fee; `open_page` and `find_in_page` are observable actions but are not charged as separate searches
 - Each search-rubric assertion may perform one or more searches
 - Caching is enabled by default; use `--no-cache` to force fresh searches during development
 - See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
