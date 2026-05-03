@@ -113,6 +113,21 @@ describe('DataTable', () => {
     expect(screen.getByText('Test Item 2')).toBeInTheDocument();
   });
 
+  it('keeps filter value controls usable on narrow filter popovers', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [{ id: '1', name: 'Test Item 1' }];
+
+    render(<DataTable columns={columns} data={data} showToolbar />);
+
+    await user.click(screen.getByText('Filters'));
+
+    const filterRow = screen.getByTestId('data-table-filter-row');
+    const valueInput = screen.getByPlaceholderText('Value...');
+
+    expect(filterRow).toHaveClass('flex-wrap');
+    expect(valueInput).toHaveClass('min-w-[150px]');
+  });
+
   it('should render table with data when data is provided', () => {
     const data: TestRow[] = [
       { id: '1', name: 'Test Item 1' },
