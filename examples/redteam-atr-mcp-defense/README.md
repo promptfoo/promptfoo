@@ -36,6 +36,8 @@ This example scans final assistant outputs only. It does not inspect raw MCP too
 
 ## What ATR Catches
 
+When those patterns surface in final outputs, ATR can flag examples such as:
+
 - Prompt injection patterns (hidden instructions, system prompt overrides)
 - Tool poisoning (malicious tool descriptions, hidden capabilities)
 - Credential exfiltration (API keys, private keys, database URLs in outputs)
