@@ -36,9 +36,6 @@ promptfoo eval --output results.json
 # Create CSV for spreadsheet analysis
 promptfoo eval --output results.csv
 
-# Generate Promptfoo XML for full-fidelity XML integrations
-promptfoo eval --output results.xml
-
 # Generate JUnit XML for CI test-report integrations
 promptfoo eval --output results.junit.xml
 ```
@@ -167,34 +164,6 @@ for await (const line of rl) {
 `?.` and `?? []` together cover the `gradingResult: null` case shown above and rows
 where a single top-level assertion produced no nested `componentResults`.
 
-### Promptfoo XML Format
-
-Structured data for enterprise integrations:
-
-```bash
-promptfoo eval --output results.xml
-```
-
-**Structure:**
-
-```xml
-<promptfoo>
-  <evalId>abc-123-def</evalId>
-  <results>
-    <version>3</version>
-    <timestamp>2024-01-15T10:30:00Z</timestamp>
-    <prompts>...</prompts>
-    <providers>...</providers>
-    <outputs>...</outputs>
-    <stats>...</stats>
-  </results>
-  <config>...</config>
-  <shareableUrl>...</shareableUrl>
-</promptfoo>
-```
-
-**Use when:** Integrating with enterprise systems, XML-based workflows, or when XML is a requirement.
-
 ### JUnit XML Format
 
 Compact CI test-report output:
@@ -229,6 +198,34 @@ JUnit XML intentionally stays compact:
 A JUnit report viewer can render the same file into a compact pass/fail report:
 
 ![Rendered JUnit XML report showing one suite, two failures, and two passing tests](/img/docs/configuration/junit-xml-report.png)
+
+### Promptfoo XML Full Export
+
+Full eval data for XML-only consumers:
+
+```bash
+promptfoo eval --output results.xml
+```
+
+**Structure:**
+
+```xml
+<promptfoo>
+  <evalId>abc-123-def</evalId>
+  <results>
+    <version>3</version>
+    <timestamp>2024-01-15T10:30:00Z</timestamp>
+    <prompts>...</prompts>
+    <providers>...</providers>
+    <outputs>...</outputs>
+    <stats>...</stats>
+  </results>
+  <config>...</config>
+  <shareableUrl>...</shareableUrl>
+</promptfoo>
+```
+
+**Use when:** A downstream system specifically requires the full Promptfoo export in XML. This is not a JUnit-compatible CI report format; use JUnit XML for CI dashboards and test-report viewers.
 
 ## Configuration Options
 
