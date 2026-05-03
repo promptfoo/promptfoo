@@ -228,7 +228,7 @@ export default function PathSelector({
   return (
     <div className="space-y-6">
       <Tabs defaultValue="local" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid !h-auto w-full grid-cols-2 gap-1 sm:!h-10 sm:grid-cols-4 sm:gap-0">
           <TabsTrigger
             value="local"
             aria-label="Local Files"
@@ -236,7 +236,7 @@ export default function PathSelector({
             className="flex items-center gap-2"
           >
             <ComputerIcon className="size-4" />
-            <span className="hidden sm:inline">Local Files</span>
+            <span>Local Files</span>
           </TabsTrigger>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -251,7 +251,7 @@ export default function PathSelector({
                   <CloudIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
-                <span className="hidden sm:inline">Cloud</span>
+                <span>Cloud</span>
               </TabsTrigger>
             </TooltipTrigger>
             <TooltipContent>Cloud storage is available in Enterprise</TooltipContent>
@@ -269,7 +269,7 @@ export default function PathSelector({
                   <GitHubIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
-                <span className="hidden sm:inline">GitHub</span>
+                <span>GitHub</span>
               </TabsTrigger>
             </TooltipTrigger>
             <TooltipContent>GitHub integration is available in Enterprise</TooltipContent>
@@ -287,7 +287,7 @@ export default function PathSelector({
                   <StorageIcon className="size-4" />
                   <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
-                <span className="hidden sm:inline">Registry</span>
+                <span>Registry</span>
               </TabsTrigger>
             </TooltipTrigger>
             <TooltipContent>Model registries are available in Enterprise</TooltipContent>
