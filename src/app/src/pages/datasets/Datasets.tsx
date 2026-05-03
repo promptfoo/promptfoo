@@ -132,7 +132,8 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
           return (
             <Link
               to={EVAL_ROUTES.DETAIL(value)}
-              className="text-primary hover:underline font-mono text-sm"
+              title={value}
+              className="block truncate font-mono text-sm text-primary hover:underline"
             >
               {value}
             </Link>
