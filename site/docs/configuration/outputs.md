@@ -226,6 +226,10 @@ JUnit XML intentionally stays compact:
 - `failure` for failed assertions and `error` for provider/runtime errors so CI can distinguish incorrect behavior from execution problems
 - concise failure details only; use JSON, HTML, or Promptfoo XML when you need prompts, variables, raw model outputs, or full config
 
+A JUnit report viewer can render the same file into a compact pass/fail report:
+
+![Rendered JUnit XML report showing one suite, two failures, and two passing tests](/img/docs/configuration/junit-xml-report.png)
+
 ## Configuration Options
 
 ### Setting Output Path in Config
