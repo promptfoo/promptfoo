@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import TraceTimeline from './TraceTimeline';
 import type { TraceData } from '@promptfoo/types';
@@ -178,6 +178,15 @@ describe('TraceTimeline', () => {
     // Verify the span renders correctly
     expect(screen.getByText('Span with Attributes')).toBeInTheDocument();
     expect(screen.getByText('Total Duration: 100ms')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button')[0]);
+
+    expect(screen.getByText('Span Details').parentElement).toHaveClass('sm:ml-10');
+    expect(screen.getByText('Span ID').parentElement?.parentElement).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-2',
+    );
+    expect(screen.getByText('http.method').parentElement).toHaveClass('flex-col', 'sm:flex-row');
   });
 
   it('should apply error color styling to spans with error status code', () => {
