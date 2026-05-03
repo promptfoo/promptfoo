@@ -1390,7 +1390,7 @@ function ResultsTableHeader({
     <div
       data-testid="results-table-header"
       className={cn(
-        'relative',
+        'relative -mx-4 overflow-hidden px-4',
         stickyHeader && 'results-table-sticky',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
