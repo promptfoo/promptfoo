@@ -124,7 +124,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--no-write`                         | Do not write results to promptfoo directory                                                              |
 | `--resume [evalId]`                  | Resume a paused/incomplete eval. If `evalId` is omitted, resumes latest                                  |
 | `--retry-errors`                     | Retry all ERROR results from the latest eval                                                             |
-| `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml)                                     |
+| `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml, junit.xml)                          |
 | `-p, --prompts <paths...>`           | Paths to prompt files (.txt)                                                                             |
 | `--prompt-prefix <path>`             | Prefix prepended to every prompt                                                                         |
 | `--prompt-suffix <path>`             | Suffix appended to every prompt                                                                          |

@@ -1,6 +1,7 @@
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
+import { XMLParser } from 'fast-xml-parser';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
@@ -389,6 +390,140 @@ describe('writeOutput', () => {
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes compact JUnit XML grouped by provider and prompt', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 1250,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Hello {{name}}', label: 'Hello prompt' },
+      response: { output: 'Hello Alice' },
+      vars: { name: 'Alice' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { description: 'passing test' },
+      promptId: 'prompt-1',
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0.5,
+      namedScores: {},
+      latencyMs: 2500,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Hello {{name}}', label: 'Hello prompt' },
+      response: { output: 'SECRET MODEL OUTPUT' },
+      vars: { name: 'Bob' },
+      promptIdx: 0,
+      testIdx: 1,
+      testCase: { description: 'failing test' },
+      gradingResult: {
+        pass: false,
+        score: 0.5,
+        reason: 'Expected output to contain Bob',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Assertion passed',
+            assertion: { type: 'contains', value: 'Hello' },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Expected output to contain Bob',
+            assertion: { type: 'contains', value: 'Bob' },
+          },
+        ],
+      },
+      promptId: 'prompt-1',
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 500,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Hello {{name}}', label: 'Hello prompt' },
+      response: { output: '' },
+      error: 'provider request failed',
+      vars: { name: 'Carol' },
+      promptIdx: 0,
+      testIdx: 2,
+      testCase: {},
+      promptId: 'prompt-1',
+    });
+
+    await writeOutput('promptfoo.junit.xml', eval_, null);
+
+    const xml = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(xml).toMatch(/^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+    expect(parsed.testsuites).toMatchObject({
+      '@_errors': '1',
+      '@_failures': '1',
+      '@_name': 'promptfoo',
+      '@_skipped': '0',
+      '@_tests': '3',
+      '@_time': '4.25',
+    });
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_errors': '1',
+      '@_failures': '1',
+      '@_name': '[echo] Hello prompt',
+      '@_skipped': '0',
+      '@_tests': '3',
+      '@_time': '4.25',
+    });
+    expect(parsed.testsuites.testsuite.testcase).toEqual([
+      expect.objectContaining({
+        '@_classname': '[echo] Hello prompt',
+        '@_name': 'test 1: passing test',
+        '@_time': '1.25',
+      }),
+      expect.objectContaining({
+        '@_classname': '[echo] Hello prompt',
+        '@_name': 'test 2: failing test',
+        '@_time': '2.5',
+        failure: expect.objectContaining({
+          '#text':
+            'Score: 0.5\nReason: Expected output to contain Bob\nFailed assertions:\n- contains: Expected output to contain Bob',
+          '@_message': 'Expected output to contain Bob',
+          '@_type': 'assertion',
+        }),
+      }),
+      expect.objectContaining({
+        '@_classname': '[echo] Hello prompt',
+        '@_name': 'test 3',
+        '@_time': '0.5',
+        error: expect.objectContaining({
+          '#text': 'Reason: provider request failed\nError: provider request failed',
+          '@_message': 'provider request failed',
+          '@_type': 'error',
+        }),
+      }),
+    ]);
+    expect(xml).not.toContain('SECRET MODEL OUTPUT');
+    expect(xml).not.toContain('Alice');
+    expect(xml).not.toContain('Carol');
+  });
+
+  it('keeps Promptfoo XML separate from JUnit XML', async () => {
+    const eval_ = new Eval({});
+
+    await writeOutput('output.xml', eval_, null);
+    await writeOutput('output.junit.xml', eval_, null);
+
+    const promptfooXml = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const junitXml = vi.mocked(fsPromises.writeFile).mock.calls[1][1] as string;
+    expect(promptfooXml).toContain('<promptfoo>');
+    expect(junitXml).toContain('<testsuites');
   });
 
   it('does not sanitize config for CSV output', async () => {

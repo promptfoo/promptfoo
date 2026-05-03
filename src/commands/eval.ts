@@ -26,7 +26,7 @@ import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
-import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
+import { CommandLineOptionsSchema, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
@@ -35,6 +35,7 @@ import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
+import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from '../util/outputFormats';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
@@ -1178,12 +1179,10 @@ export function evalCommand(
       }
 
       for (const maybeFilePath of validatedOpts.output ?? []) {
-        const { data: extension } = OutputFileExtension.safeParse(
-          maybeFilePath.split('.').pop()?.toLowerCase(),
-        );
+        const extension = getOutputFileFormat(maybeFilePath);
         invariant(
           extension,
-          `Unsupported output file format: ${maybeFilePath}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+          `Unsupported output file format: ${maybeFilePath}. Please use one of: ${SUPPORTED_OUTPUT_FILE_FORMATS.join(', ')}.`,
         );
       }
       await doEval(
