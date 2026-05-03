@@ -277,7 +277,8 @@ export default function PathSelector({
             <Alert variant="info">
               <AlertContent>
                 <AlertDescription>
-                  <strong>Current directory:</strong> {currentWorkingDir}
+                  <strong>Current directory:</strong>
+                  <span className="block break-all">{currentWorkingDir}</span>
                   <span className="block text-xs text-muted-foreground mt-1">
                     Relative paths will be resolved from this directory
                   </span>

@@ -93,7 +93,7 @@ export default function ConfigurationTab({
         />
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-semibold tracking-tight">Select Models</h2>
         <Button variant="outline" onClick={onShowOptions}>
           <SettingsIcon className="size-4 mr-2" />
