@@ -140,7 +140,7 @@ describe('Media page URL state machine', () => {
 
     expect(
       screen.getByRole('heading', { name: 'Media Library' }).parentElement?.parentElement,
-    ).toHaveClass('flex-col', 'min-[360px]:flex-row');
+    ).toHaveClass('flex-col', 'min-[390px]:flex-row');
   });
 
   it('clicking a card adds hash to URL', async () => {
