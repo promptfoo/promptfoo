@@ -457,7 +457,7 @@ export default function Media() {
     <PageContainer>
       <PageHeader>
         <div className="container max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col gap-4 min-[360px]:flex-row min-[360px]:items-start min-[360px]:justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Media Library</h1>
               <p className="text-sm text-muted-foreground mt-1">

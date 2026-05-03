@@ -130,6 +130,19 @@ describe('Media page URL state machine', () => {
     });
   });
 
+  it('stacks the page header before the narrow layout has enough room', async () => {
+    mockApiResponses();
+    renderMedia();
+
+    await waitFor(() => {
+      expect(screen.getByText('First item')).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByRole('heading', { name: 'Media Library' }).parentElement?.parentElement,
+    ).toHaveClass('flex-col', 'min-[360px]:flex-row');
+  });
+
   it('clicking a card adds hash to URL', async () => {
     const user = userEvent.setup();
     mockApiResponses();
@@ -294,9 +307,9 @@ describe('Media page URL state machine', () => {
       expect(screen.getByText('First item')).toBeInTheDocument();
     });
 
-    // Click the Videos tab
-    const videosTab = screen.getByRole('tab', { name: /Videos/i });
-    await user.click(videosTab);
+    // Click the Videos filter
+    const videosFilter = screen.getByRole('button', { name: /Videos/i });
+    await user.click(videosFilter);
 
     await waitFor(() => {
       const location = screen.getByTestId('location');
