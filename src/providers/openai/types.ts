@@ -105,7 +105,7 @@ export interface OpenAiMCPTool {
 
 // Responses API specific tool types
 export interface OpenAiWebSearchTool {
-  type: 'web_search_preview';
+  type: 'web_search' | 'web_search_preview';
   search_context_size?: 'small' | 'medium' | 'large';
   user_location?: string;
 }
@@ -159,7 +159,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   passthrough?: object;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
-  service_tier?: ('auto' | 'default' | 'premium') | null;
+  service_tier?: ('auto' | 'default' | 'flex' | 'priority' | 'premium') | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
