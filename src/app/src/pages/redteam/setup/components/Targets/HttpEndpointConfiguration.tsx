@@ -596,12 +596,12 @@ ${exampleRequest}`;
               <Label htmlFor="url">
                 URL <span className="text-destructive">*</span>
               </Label>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Select
                   value={selectedTarget.config.method}
                   onValueChange={(value) => updateCustomTarget('method', value)}
                 >
-                  <SelectTrigger id="method" className="w-24 shrink-0">
+                  <SelectTrigger id="method" className="w-full sm:w-24 sm:shrink-0">
                     <SelectValue placeholder="Method" />
                   </SelectTrigger>
                   <SelectContent>
@@ -616,7 +616,7 @@ ${exampleRequest}`;
                   id="url"
                   value={selectedTarget.config.url}
                   onChange={(e) => updateCustomTarget('url', e.target.value)}
-                  className={cn('flex-1', urlError && 'border-destructive')}
+                  className={cn('min-w-0 flex-1', urlError && 'border-destructive')}
                   placeholder="https://example.com/api/chat"
                 />
               </div>

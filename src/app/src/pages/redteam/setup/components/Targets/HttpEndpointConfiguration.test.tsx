@@ -99,6 +99,26 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     );
   });
 
+  it('stacks the method and URL controls on narrow screens', () => {
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const urlInput = screen.getByPlaceholderText('https://example.com/api/chat');
+    const controlsRow = urlInput.parentElement;
+    const methodTrigger = screen.getByRole('combobox');
+
+    expect(controlsRow).toHaveClass('flex-col', 'sm:flex-row');
+    expect(methodTrigger).toHaveClass('w-full', 'sm:w-24', 'sm:shrink-0');
+    expect(urlInput).toHaveClass('min-w-0', 'flex-1');
+  });
+
   it('should maintain header Name and Value field layout constraints when bodyError state changes', () => {
     const { rerender } = renderWithProviders(
       <HttpEndpointConfiguration
