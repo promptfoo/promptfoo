@@ -70,7 +70,9 @@ export default function Prompts({
         accessorKey: 'label',
         header: 'Label',
         accessorFn: (row) => row.prompt.label || row.prompt.display || row.prompt.raw,
-        cell: ({ getValue }) => <span className="text-sm">{getValue<string>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
+        ),
         size: 200,
       },
       {
