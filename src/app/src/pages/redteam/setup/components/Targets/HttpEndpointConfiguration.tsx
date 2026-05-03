@@ -644,6 +644,7 @@ ${exampleRequest}`;
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label={`Remove header ${index + 1}`}
                   onClick={() => removeHeader(index)}
                   className="self-end sm:self-auto"
                 >
@@ -884,6 +885,7 @@ ${exampleRequest}`;
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label="Copy generated configuration"
                     onClick={handleCopy}
                     title={copied ? 'Copied!' : 'Copy to clipboard'}
                   >

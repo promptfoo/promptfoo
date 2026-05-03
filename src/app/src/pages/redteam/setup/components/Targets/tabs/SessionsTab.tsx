@@ -175,6 +175,7 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
                 type="button"
                 variant="ghost"
                 size="icon"
+                aria-label={`Remove header ${index + 1}`}
                 onClick={() => removeHeader(index)}
                 className="self-end shrink-0 sm:self-auto"
               >

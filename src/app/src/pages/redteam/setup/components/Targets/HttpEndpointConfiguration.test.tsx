@@ -332,5 +332,6 @@ describe('HttpEndpointConfiguration - Header Management', () => {
       'sm:flex-row',
       'sm:items-center',
     );
+    expect(screen.getByRole('button', { name: 'Remove header 1' })).toBeInTheDocument();
   });
 });

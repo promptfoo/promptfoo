@@ -242,6 +242,7 @@ export default function PluginConfigDialog({
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label={`Remove ${arrayKeyToLabel(arrayKey)} ${index + 1}`}
                     onClick={() => removeArrayItem(arrayKey, index)}
                   >
                     <Minus className="size-4" />

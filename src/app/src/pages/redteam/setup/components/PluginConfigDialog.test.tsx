@@ -165,6 +165,21 @@ describe('PluginConfigDialog - OSS', () => {
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
     });
 
+    it('labels removable array items', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="bola"
+          config={{ targetSystems: ['system1', 'system2'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Remove Target System 1' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove Target System 2' })).toBeInTheDocument();
+    });
+
     it('shows gradingGuidance alongside BFLA config', () => {
       render(
         <PluginConfigDialog

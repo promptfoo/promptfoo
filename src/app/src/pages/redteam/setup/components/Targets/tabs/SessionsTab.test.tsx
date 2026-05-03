@@ -214,10 +214,7 @@ describe('SessionsTab', () => {
           />,
         );
 
-        const removeButtons = screen.getAllByRole('button', { name: '' }).filter((btn) => {
-          const svg = btn.querySelector('svg');
-          return svg?.classList.contains('lucide-trash-2');
-        });
+        const removeButtons = screen.getAllByRole('button', { name: /remove header/i });
 
         const initialCount = removeButtons.length;
 
@@ -248,10 +245,7 @@ describe('SessionsTab', () => {
           />,
         );
 
-        const removeButtons = screen.getAllByRole('button', { name: '' }).filter((btn) => {
-          const svg = btn.querySelector('svg');
-          return svg?.classList.contains('lucide-trash-2');
-        });
+        const removeButtons = screen.getAllByRole('button', { name: /remove header/i });
 
         await user.click(removeButtons[0]);
 
