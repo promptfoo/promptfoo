@@ -40,6 +40,7 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
+import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
 import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
 import { VERSION } from './version';
@@ -151,6 +152,9 @@ if (isMain) {
     await main();
   } catch (error) {
     mainError = error;
+    if (error instanceof ConfigResolutionError) {
+      logConfigResolutionError(error);
+    }
     nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
     if (nativeAddonVersionMismatchMessage) {
       logger.debug('better-sqlite3 ABI mismatch (original error follows)', {
@@ -169,9 +173,12 @@ if (isMain) {
       );
     }
   }
-  // Re-throw the original error after cleanup is complete
+  // Re-throw unexpected errors after cleanup is complete. Config resolution
+  // errors are expected user input failures that have already been rendered here.
   if (mainError) {
-    if (nativeAddonVersionMismatchMessage) {
+    if (mainError instanceof ConfigResolutionError) {
+      // User-facing message has already been rendered.
+    } else if (nativeAddonVersionMismatchMessage) {
       console.error(nativeAddonVersionMismatchMessage);
       // exit code preserved by process.exitCode = 1 above
     } else {

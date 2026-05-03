@@ -26,7 +26,7 @@ import {
   checkCloudPermissions,
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
-import { resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
@@ -67,7 +67,31 @@ vi.mock('path', async () => {
     ...actualPath,
   };
 });
-vi.mock('../../src/util/config/load');
+const chokidarMocks = vi.hoisted(() => {
+  const handlers = new Map<string, (...args: any[]) => unknown>();
+  const watcher = {
+    on: vi.fn((event: string, handler: (...args: any[]) => unknown) => {
+      handlers.set(event, handler);
+      return watcher;
+    }),
+  };
+
+  return {
+    handlers,
+    watcher,
+    watch: vi.fn(() => watcher),
+  };
+});
+
+vi.mock('chokidar', () => ({
+  default: {
+    watch: chokidarMocks.watch,
+  },
+}));
+vi.mock('../../src/util/config/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/config/load')>()),
+  resolveConfigs: vi.fn(),
+}));
 vi.mock('../../src/util/tokenUsage');
 vi.mock('../../src/database/index', async (importOriginal) => {
   return {
@@ -102,6 +126,14 @@ describe('evalCommand', () => {
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    chokidarMocks.handlers.clear();
+    chokidarMocks.watcher.on
+      .mockReset()
+      .mockImplementation((event: string, handler: (...args: any[]) => unknown) => {
+        chokidarMocks.handlers.set(event, handler);
+        return chokidarMocks.watcher;
+      });
+    chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
@@ -215,6 +247,43 @@ describe('evalCommand', () => {
       '--watch is not supported when using a cloud config UUID with -c. Use a local config file path for watch mode.',
     );
     expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should keep watching after config resolution fails on a file change', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+    } as TestSuite;
+
+    vi.mocked(resolveConfigs)
+      .mockResolvedValueOnce({
+        config,
+        testSuite,
+        basePath: path.resolve('/'),
+      })
+      .mockRejectedValueOnce(new ConfigResolutionError('You must provide at least 1 prompt'));
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
+
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith('You must provide at least 1 prompt');
+      expect(resolveConfigs).toHaveBeenCalledTimes(2);
+    } finally {
+      loggerErrorSpy.mockRestore();
+    }
   });
 
   it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {

@@ -84,6 +84,7 @@ vi.mock('../src/util/file');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
+    'ConfigResolutionError',
     'assertions',
     'buildInputPromptDescription',
     'cache',

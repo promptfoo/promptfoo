@@ -3,7 +3,7 @@ import * as path from 'path';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
@@ -12,8 +12,10 @@ import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
 import { type UnifiedConfig } from '../../../src/types/index';
 import {
+  ConfigResolutionError,
   combineConfigs,
   dereferenceConfig,
+  logConfigResolutionError,
   maybeReadConfig,
   readConfig,
   resolveCliProvidersWithConfig,
@@ -1382,15 +1384,10 @@ describe('dereferenceConfig', () => {
 });
 
 describe('resolveConfigs', () => {
-  let mockExit: MockInstance;
-
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
-    mockExit = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
-      throw new Error(`Process exited with code ${code}`);
-    });
 
     // Reset path.parse to use actual implementation (other tests may have mocked it)
     const actualPath = await vi.importActual<typeof import('path')>('path');
@@ -1399,7 +1396,6 @@ describe('resolveConfigs', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    mockExit.mockRestore();
   });
 
   it('should set cliState.basePath', async () => {
@@ -1493,27 +1489,20 @@ describe('resolveConfigs', () => {
     expect(testSuite.scenarios).toEqual(scenarios);
   });
 
-  it('should warn and exit when no config file, no prompts, no providers, and not in CI', async () => {
-    vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
-      throw new Error(`Process exited with code ${code}`);
-    });
+  it('should throw without logging when no config file, no prompts, no providers, and not in CI', async () => {
     vi.mocked(isCI).mockReturnValue(false);
     vi.mocked(isRunningUnderNpx).mockReturnValue(true);
 
     const cmdObj = {};
     const defaultConfig = {};
 
-    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Process exited with code 1',
-    );
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toMatchObject({
+      message: 'No promptfooconfig found',
+      cliMessage: expect.stringContaining('No promptfooconfig found'),
+      logLevel: 'warn',
+    });
 
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Searched in'));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('promptfooconfig.{yaml'));
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('npx promptfoo@latest eval -c'),
-    );
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('npx promptfoo@latest init'));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('should throw an error if no providers are provided', async () => {
@@ -1526,13 +1515,53 @@ describe('resolveConfigs', () => {
     vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
     vi.mocked(globSync).mockReturnValueOnce(['config.json']);
 
-    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrow(
-      'Process exited with code 1',
+    await expect(resolveConfigs(cmdObj, defaultConfig)).rejects.toThrowError(
+      new ConfigResolutionError(
+        'You must specify at least 1 provider (for example, openai:gpt-4.1)',
+      ),
     );
 
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('You must specify at least 1 provider (for example, openai:gpt-4.1)'),
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('should throw an error if assertions are provided without model outputs', async () => {
+    await expect(resolveConfigs({ assertions: 'assertions.yaml' }, {})).rejects.toThrowError(
+      new ConfigResolutionError('You must provide --model-outputs when using --assertions'),
     );
+
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('should throw an error if no prompts are provided', async () => {
+    const defaultConfig = {
+      providers: ['openai:gpt-4.1'],
+    };
+
+    await expect(resolveConfigs({}, defaultConfig)).rejects.toThrowError(
+      new ConfigResolutionError('You must provide at least 1 prompt'),
+    );
+
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('should throw an error if configured prompts resolve to an empty set', async () => {
+    const cmdObj = { config: ['config.json'] };
+    const promptfooConfig = {
+      prompts: ['Act as a travel guide for {{location}}'],
+      providers: ['openai:gpt-4.1'],
+    };
+
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify(promptfooConfig));
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+    vi.mocked(readPrompts).mockResolvedValueOnce([]);
+
+    await expect(resolveConfigs(cmdObj, {})).rejects.toThrowError(
+      new ConfigResolutionError(
+        'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.',
+      ),
+    );
+
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('should allow dataset generation configs to omit providers', async () => {
@@ -1798,6 +1827,23 @@ describe('resolveConfigs', () => {
         config: ollamaConfig,
       });
     });
+  });
+});
+
+describe('ConfigResolutionError', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should fall back to error logging for invalid runtime log levels', () => {
+    const error = new ConfigResolutionError('invalid log level', {
+      logLevel: 'debug' as any,
+    });
+
+    logConfigResolutionError(error);
+
+    expect(error.logLevel).toBe('error');
+    expect(logger.error).toHaveBeenCalledWith('invalid log level');
   });
 });
 
