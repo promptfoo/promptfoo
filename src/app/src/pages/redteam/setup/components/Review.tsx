@@ -618,6 +618,7 @@ export default function Review({
                     {count > 1 ? `${label} (${count})` : label}
                     <button
                       type="button"
+                      aria-label={`Remove plugin ${label}`}
                       onClick={() => {
                         const newPlugins = config.plugins.filter((plugin) => {
                           const pluginLabel = getPluginSummary(plugin).label;
@@ -662,6 +663,7 @@ export default function Review({
                     {count > 1 ? `${label} (${count})` : label}
                     <button
                       type="button"
+                      aria-label={`Remove strategy ${label}`}
                       onClick={() => {
                         const strategyId =
                           Object.entries(strategyDisplayNames).find(
@@ -749,6 +751,11 @@ export default function Review({
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Remove policy ${
+                            isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : makeDefaultPolicyName(index)
+                          }`}
                           className="size-6 shrink-0"
                           onClick={() => {
                             const policyToMatch =
@@ -794,6 +801,7 @@ export default function Review({
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Remove intent ${intent}`}
                         className="absolute right-1 top-1 size-6"
                         onClick={() => {
                           const intentPlugin = config.plugins.find(
