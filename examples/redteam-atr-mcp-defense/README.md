@@ -39,10 +39,10 @@ This example scans final assistant outputs only. It does not inspect raw MCP too
 When those patterns surface in final outputs, ATR can flag examples such as:
 
 - Prompt injection patterns (hidden instructions, system prompt overrides)
-- Tool poisoning (malicious tool descriptions, hidden capabilities)
 - Credential exfiltration (API keys, private keys, database URLs in outputs)
 - Privilege escalation (unauthorized admin operations, shell commands)
-- Supply chain attacks (skill impersonation, rug pulls, name squatting)
+
+ATR also has broader rule categories for surfaces such as tool poisoning and skill compromise. This example does not inspect those raw artifacts directly; it only sees them if their text reaches the final model output.
 
 Full rule list: [ATR rule categories](https://github.com/Agent-Threat-Rule/agent-threat-rules#what-atr-detects)
 
