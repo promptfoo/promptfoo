@@ -8,9 +8,12 @@
 
 > **AssertionValueFunction** = (`output`, `context`) => `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>
 
-Defined in: [types/index.ts:797](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L797)
+Defined in: [types/index.ts:831](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L831)
 
 Function form accepted by JavaScript assertions.
+
+Return `true`/`false`, a numeric score, or a full `GradingResult` when you
+need to provide a custom score or reason.
 
 ## Parameters
 
@@ -25,3 +28,13 @@ Function form accepted by JavaScript assertions.
 ## Returns
 
 `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>
+
+## Example
+
+```ts
+const containsName: AssertionValueFunction = (output) => ({
+  pass: output.includes('Ada'),
+  score: output.includes('Ada') ? 1 : 0,
+  reason: output.includes('Ada') ? 'Name present' : 'Name missing',
+});
+```

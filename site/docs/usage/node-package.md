@@ -17,6 +17,16 @@ If you only need a declarative eval config, start with the
 control, import from the root `promptfoo` package. The root package entrypoint is
 the supported public boundary; do not import deep files from `dist/` or `src/`.
 
+## Choose the right surface
+
+| If you want to...                                   | Start with                                                |
+| --------------------------------------------------- | --------------------------------------------------------- |
+| Run evals inside an application or script           | `evaluate()`                                              |
+| Compare several providers from code                 | `evaluate()` or `loadApiProviders()`                      |
+| Plug promptfoo grading into an existing test runner | `assertions.*`                                            |
+| Build custom prompts, providers, or transforms      | `PromptFunction`, `ProviderFunction`, `TransformFunction` |
+| Reuse advanced package services                     | `cache.*`, then beta `guardrails.*` or `redteam.*`        |
+
 ## Install
 
 ```sh
@@ -41,6 +51,17 @@ console.log(evalRecord.results);
 `evaluate()` accepts the same core concepts as a YAML config, with additional
 support for function-valued prompts, providers, assertions, and transforms. It
 returns the completed eval record, including result rows and any persisted state.
+
+For TypeScript projects, import the contract types alongside the runtime APIs:
+
+```ts
+import {
+  evaluate,
+  type EvaluateOptions,
+  type EvaluateTestSuite,
+  type ProviderFunction,
+} from 'promptfoo';
+```
 
 ## Runtime options
 
@@ -105,6 +126,11 @@ const evalRecord = await evaluate({
 See the [provider function type](/docs/configuration/reference#providerfunction)
 and the [custom provider guide](/docs/providers/custom-api) for the full provider
 shape.
+
+Use [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)
+when you need promptfoo to normalize a mixed list of provider ids, provider
+objects, inline functions, or `file://` provider config references before you
+call them or pass them into another workflow.
 
 ## Assertions
 

@@ -6,7 +6,7 @@
 
 # Type Alias: ProviderFunction
 
-> **ProviderFunction** = [`ApiProvider`](../interfaces/ApiProvider.md)\[`"callApi"`\]
+> **ProviderFunction** = [`CallApiFunction`](../interfaces/CallApiFunction.md)
 
 Defined in: [types/providers.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L17)
 

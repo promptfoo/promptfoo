@@ -8,7 +8,7 @@
 
 > **FetchWithCacheResult**\<`T`\> = `object`
 
-Defined in: [cache.ts:241](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L241)
+Defined in: [cache.ts:249](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L249)
 
 Metadata returned by `fetchWithCache()`.
 
@@ -24,7 +24,7 @@ Metadata returned by `fetchWithCache()`.
 
 > **cached**: `boolean`
 
-Defined in: [cache.ts:243](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L243)
+Defined in: [cache.ts:251](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L251)
 
 ---
 
@@ -32,7 +32,7 @@ Defined in: [cache.ts:243](https://github.com/promptfoo/promptfoo/blob/main/src/
 
 > **data**: `T`
 
-Defined in: [cache.ts:242](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L242)
+Defined in: [cache.ts:250](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L250)
 
 ---
 
@@ -40,7 +40,7 @@ Defined in: [cache.ts:242](https://github.com/promptfoo/promptfoo/blob/main/src/
 
 > `optional` **deleteFromCache?**: () => `Promise`\<`void`\>
 
-Defined in: [cache.ts:248](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L248)
+Defined in: [cache.ts:256](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L256)
 
 #### Returns
 
@@ -52,7 +52,7 @@ Defined in: [cache.ts:248](https://github.com/promptfoo/promptfoo/blob/main/src/
 
 > `optional` **headers?**: `Record`\<`string`, `string`\>
 
-Defined in: [cache.ts:246](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L246)
+Defined in: [cache.ts:254](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L254)
 
 ---
 
@@ -60,7 +60,7 @@ Defined in: [cache.ts:246](https://github.com/promptfoo/promptfoo/blob/main/src/
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [cache.ts:247](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L247)
+Defined in: [cache.ts:255](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L255)
 
 ---
 
@@ -68,7 +68,7 @@ Defined in: [cache.ts:247](https://github.com/promptfoo/promptfoo/blob/main/src/
 
 > **status**: `number`
 
-Defined in: [cache.ts:244](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L244)
+Defined in: [cache.ts:252](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L252)
 
 ---
 
@@ -76,4 +76,4 @@ Defined in: [cache.ts:244](https://github.com/promptfoo/promptfoo/blob/main/src/
 
 > **statusText**: `string`
 
-Defined in: [cache.ts:245](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L245)
+Defined in: [cache.ts:253](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L253)

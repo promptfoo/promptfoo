@@ -6,7 +6,7 @@
 
 # Interface: GradingResult
 
-Defined in: [types/index.ts:541](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L541)
+Defined in: [types/index.ts:556](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L556)
 
 Result returned by assertions and matcher helpers.
 
@@ -16,7 +16,9 @@ Result returned by assertions and matcher helpers.
 
 > `optional` **assertion?**: `object`
 
-Defined in: [types/index.ts:565](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L565)
+Defined in: [types/index.ts:579](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L579)
+
+Assertion that produced this result, when retained by the caller.
 
 #### config?
 
@@ -64,7 +66,9 @@ Defined in: [types/index.ts:565](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **comment?**: `string`
 
-Defined in: [types/index.ts:568](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L568)
+Defined in: [types/index.ts:582](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L582)
+
+Optional user-authored comment attached to the result.
 
 ---
 
@@ -72,7 +76,9 @@ Defined in: [types/index.ts:568](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **componentResults?**: `GradingResult`[]
 
-Defined in: [types/index.ts:561](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L561)
+Defined in: [types/index.ts:576](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L576)
+
+Component results for compound assertions such as assertion sets.
 
 ---
 
@@ -80,7 +86,9 @@ Defined in: [types/index.ts:561](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/index.ts:574](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L574)
+Defined in: [types/index.ts:588](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L588)
+
+Additional assertion-specific metadata.
 
 #### Index Signature
 
@@ -124,7 +132,9 @@ Defined in: [types/index.ts:574](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **namedScores?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:552](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L552)
+Defined in: [types/index.ts:567](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L567)
+
+Map of named metric values emitted by the assertion.
 
 ---
 
@@ -132,7 +142,9 @@ Defined in: [types/index.ts:552](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:555](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L555)
+Defined in: [types/index.ts:570](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L570)
+
+Total weight contributing to each named score.
 
 ---
 
@@ -140,7 +152,9 @@ Defined in: [types/index.ts:555](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **pass**: `boolean`
 
-Defined in: [types/index.ts:543](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L543)
+Defined in: [types/index.ts:558](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L558)
+
+Whether the test passed or failed.
 
 ---
 
@@ -148,7 +162,9 @@ Defined in: [types/index.ts:543](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **reason**: `string`
 
-Defined in: [types/index.ts:549](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L549)
+Defined in: [types/index.ts:564](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L564)
+
+Plain-text explanation suitable for logs and reports.
 
 ---
 
@@ -156,7 +172,9 @@ Defined in: [types/index.ts:549](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **score**: `number`
 
-Defined in: [types/index.ts:546](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L546)
+Defined in: [types/index.ts:561](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L561)
+
+Test score, typically between 0 and 1.
 
 ---
 
@@ -164,7 +182,9 @@ Defined in: [types/index.ts:546](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **suggestions?**: `ResultSuggestion`[]
 
-Defined in: [types/index.ts:571](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L571)
+Defined in: [types/index.ts:585](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L585)
+
+Follow-up suggestions produced by some graders.
 
 ---
 
@@ -172,7 +192,9 @@ Defined in: [types/index.ts:571](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **tokensUsed?**: `object`
 
-Defined in: [types/index.ts:558](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L558)
+Defined in: [types/index.ts:573](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L573)
+
+Token usage attributed to the assertion or grader.
 
 #### assertions?
 

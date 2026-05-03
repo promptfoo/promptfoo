@@ -8,7 +8,7 @@
 
 > **loadApiProvider**(`providerPath`, `context?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)\>
 
-Defined in: [providers/index.ts:97](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L97)
+Defined in: [providers/index.ts:103](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L103)
 
 Load one provider by id or config-file reference.
 
@@ -36,3 +36,10 @@ options.
 `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)\>
 
 A resolved provider instance.
+
+## Example
+
+```ts
+const provider = await loadApiProvider('openai:chat:gpt-5.5');
+const response = await provider.callApi('Hello');
+```

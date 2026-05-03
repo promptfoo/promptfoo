@@ -23,6 +23,20 @@ import {
 } from 'promptfoo';
 ```
 
+Common TypeScript imports:
+
+```ts
+import type {
+  AssertionValueFunction,
+  CallApiFunction,
+  EvaluateOptions,
+  EvaluateTestSuite,
+  ProviderResponse,
+  ProvidersConfig,
+  TransformFunction,
+} from 'promptfoo';
+```
+
 ## Most-used calls
 
 | Task                        | API                                                                                                              |
@@ -36,6 +50,18 @@ import {
 | Isolate cached work         | [`cache.withCacheNamespace()`](/docs/api/node/reference/promptfoo/namespaces/cache/functions/withCacheNamespace) |
 | Render a table              | [`generateTable()`](/docs/api/node/reference/functions/generateTable)                                            |
 | Narrow a transform value    | [`isTransformFunction()`](/docs/api/node/reference/functions/isTransformFunction)                                |
+
+## Core types
+
+| Type                                                                                     | Meaning                                      |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------- |
+| [`EvaluateTestSuite`](/docs/api/node/reference/type-aliases/EvaluateTestSuite)           | First argument to `evaluate()`               |
+| [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions)                 | Runtime-only second argument to `evaluate()` |
+| [`ProvidersConfig`](/docs/api/node/reference/type-aliases/ProvidersConfig)               | Accepted provider input forms                |
+| [`CallApiFunction`](/docs/api/node/reference/interfaces/CallApiFunction)                 | Inline provider callback signature           |
+| [`ProviderResponse`](/docs/api/node/reference/interfaces/ProviderResponse)               | Provider return shape                        |
+| [`AssertionValueFunction`](/docs/api/node/reference/type-aliases/AssertionValueFunction) | Inline assertion callback signature          |
+| [`TransformFunction`](/docs/api/node/reference/type-aliases/TransformFunction)           | Inline transform callback signature          |
 
 ## Runtime options
 

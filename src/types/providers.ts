@@ -14,7 +14,7 @@ export type ProviderLabel = string;
  *
  * @public
  */
-export type ProviderFunction = ApiProvider['callApi'];
+export type ProviderFunction = CallApiFunction;
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 export type ProviderConfig =
   | ProviderId
@@ -82,13 +82,21 @@ export interface ModerationFlag {
  * @public
  */
 export interface ProviderOptions {
+  /** Provider id to instantiate, such as `openai:chat:gpt-5.5`. */
   id?: ProviderId;
+  /** Human-readable label used in reports and provider maps. */
   label?: ProviderLabel;
+  /** Provider-specific configuration passed to the provider factory. */
   config?: any;
+  /** Restrict this provider to named prompts. */
   prompts?: string[];
+  /** Transform provider output before assertions run. */
   transform?: string | TransformFunction;
+  /** Delay in milliseconds before provider calls. */
   delay?: number;
+  /** Environment overrides available while loading and calling the provider. */
   env?: EnvOverrides;
+  /** Declared named inputs accepted by the provider. */
   inputs?: Inputs;
 }
 
@@ -98,12 +106,19 @@ export interface ProviderOptions {
  * @public
  */
 export interface CallApiContextParams {
+  /** Nunjucks filters available while rendering related prompt content. */
   filters?: NunjucksFilterMap;
+  /** Accessor for the active cache instance. */
   getCache?: any;
+  /** Logger configured for the current eval. */
   logger?: winston.Logger;
+  /** Original provider when this call is being graded or wrapped. */
   originalProvider?: ApiProvider;
+  /** Prompt object for the current provider call. */
   prompt: Prompt;
+  /** Rendered variables for the current test case. */
   vars: Record<string, VarValue>;
+  /** Whether the caller requested debug behavior. */
   debug?: boolean;
   // This was added so we have access to the grader inside the provider.
   // Vars and prompts should be access using the arguments above.
@@ -130,7 +145,13 @@ export interface CallApiContextParams {
   repeatIndex?: number;
 }
 
+/**
+ * Per-request options passed to custom providers.
+ *
+ * @public
+ */
 export interface CallApiOptionsParams {
+  /** Whether the caller requested token log probabilities when supported. */
   includeLogProbs?: boolean;
   /**
    * Signal that can be used to abort the request
@@ -144,16 +165,27 @@ export interface CallApiOptionsParams {
  * @public
  */
 export interface ApiProvider {
+  /** Stable id used in result tables, cache keys, and provider lookups. */
   id: () => string;
+  /** Execute one provider request. */
   callApi: CallApiFunction;
+  /** Optional classification-specific entrypoint for compatible providers. */
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
+  /** Optional embedding-specific entrypoint for compatible providers. */
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  /** Provider-specific configuration retained for later calls and serialization. */
   config?: any;
+  /** Delay in milliseconds before provider calls. */
   delay?: number;
+  /** Optional stable session id for conversational providers. */
   getSessionId?: () => string;
+  /** Named provider inputs used by multi-input targets. */
   inputs?: Inputs;
+  /** Human-readable label shown in reports. */
   label?: ProviderLabel;
+  /** Transform provider output before assertions run. */
   transform?: string | TransformFunction;
+  /** Custom JSON serialization hook for persisted eval records. */
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker
@@ -192,8 +224,11 @@ export interface GuardrailResponse {
  * @public
  */
 export interface ProviderResponse {
+  /** Whether the response came from cache. */
   cached?: boolean;
+  /** Estimated request cost when the provider can report it. */
   cost?: number;
+  /** Error message when the provider call failed without throwing. */
   error?: string;
   /**
    * Indicates that a remote Promptfoo server already materialized multi-input vars
@@ -213,8 +248,11 @@ export interface ProviderResponse {
    * Optional format hint for `output` (e.g. `'json'` when `output` is a JSON string).
    */
   format?: string;
+  /** Token-level log probabilities when exposed by the provider. */
   logProbs?: number[];
+  /** End-to-end provider latency in milliseconds. */
   latencyMs?: number;
+  /** Additional provider-specific metadata preserved on the result row. */
   metadata?: {
     redteamFinalPrompt?: string;
     http?: {
@@ -235,7 +273,9 @@ export interface ProviderResponse {
    * Can be a simple string or an array of chat messages.
    */
   prompt?: string | ChatMessage[];
+  /** Raw provider payload retained for advanced consumers. */
   raw?: string | any;
+  /** Main provider output consumed by assertions and result rendering. */
   output?: string | any;
   /**
    * Input materialization metadata returned by a remote Promptfoo server.
@@ -246,7 +286,9 @@ export interface ProviderResponse {
    * it operates on provider-normalized output, independent of test transforms.
    */
   providerTransformedOutput?: string | any;
+  /** Provider-reported token usage. */
   tokenUsage?: TokenUsage;
+  /** Whether the provider identified the output as a refusal. */
   isRefusal?: boolean;
   /**
    * Indicates the target intentionally ended the active conversation/session.
@@ -322,14 +364,32 @@ export interface ProviderClassificationResponse {
 
 export type FilePath = string;
 
-export type CallApiFunction = {
+/**
+ * Function signature used by custom providers.
+ *
+ * Return a `ProviderResponse` with at least `output` or `error`. The optional
+ * `context` argument exposes the rendered prompt, variables, logger, and eval
+ * metadata for the current call. Use `options.abortSignal` for request-scoped
+ * cancellation when your provider supports it.
+ *
+ * @example
+ * ```ts
+ * const echoProvider: CallApiFunction = async (prompt, context) => ({
+ *   output: `Echo: ${prompt}`,
+ *   metadata: { user: context?.vars.user },
+ * });
+ * ```
+ *
+ * @public
+ */
+export interface CallApiFunction {
   (
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse>;
   label?: string;
-};
+}
 
 export function isApiProvider(provider: any): provider is ApiProvider {
   return (

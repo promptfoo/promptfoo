@@ -30,6 +30,9 @@ keeps reference material aligned with the code.
 - [x] Record which remaining pages should stay generated, gain prose, or move to
       hand-written docs.
 - [x] Re-run docs QA and PR-style review after the follow-up pass.
+- [x] Add a reader-persona pass for Node developers, ML engineers, and Promptfoo
+      power users, then improve the guides and generated contracts where those
+      readers would still need source-diving.
 
 ## Working Notes
 

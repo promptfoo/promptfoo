@@ -28,6 +28,16 @@ The most commonly used public surfaces are:
 - [`guardrails`](./reference/variables/guardrails)
 - [`redteam`](./reference/variables/redteam)
 
+## Start here
+
+| Need                        | Start with                                                  |
+| --------------------------- | ----------------------------------------------------------- |
+| A first successful eval     | [Using the Node.js API](/docs/usage/node-package)           |
+| A map of concepts and types | [Node.js API guide](/docs/usage/node-api-reference)         |
+| Copyable patterns           | [Node.js API examples](/docs/usage/node-api-examples)       |
+| Exact signatures            | [Reference overview](./reference/)                          |
+| Custom provider contracts   | [`CallApiFunction`](./reference/interfaces/CallApiFunction) |
+
 ## Browse the generated reference
 
 - [Reference overview](./reference/)

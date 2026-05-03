@@ -24,6 +24,11 @@ promptfoo supports multiple JavaScript module formats. Complete working examples
 ## Provider Interface
 
 At minimum, a custom provider must implement an `id` method and a `callApi` method.
+For the exact TypeScript contracts, see
+[`ApiProvider`](/docs/api/node/reference/interfaces/ApiProvider),
+[`CallApiFunction`](/docs/api/node/reference/interfaces/CallApiFunction),
+[`ProviderResponse`](/docs/api/node/reference/interfaces/ProviderResponse), and
+[`CallApiContextParams`](/docs/api/node/reference/interfaces/CallApiContextParams).
 
 ```javascript title="echoProvider.mjs"
 // Save as echoProvider.mjs for ES6 syntax, or echoProvider.js for CommonJS

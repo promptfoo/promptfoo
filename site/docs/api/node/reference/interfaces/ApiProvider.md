@@ -6,7 +6,7 @@
 
 # Interface: ApiProvider
 
-Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L146)
+Defined in: [types/providers.ts:167](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L167)
 
 Provider object shape accepted by the Node.js API.
 
@@ -14,9 +14,11 @@ Provider object shape accepted by the Node.js API.
 
 ### callApi
 
-> **callApi**: `CallApiFunction`
+> **callApi**: [`CallApiFunction`](CallApiFunction.md)
 
-Defined in: [types/providers.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L148)
+Defined in: [types/providers.ts:171](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L171)
+
+Execute one provider request.
 
 ---
 
@@ -24,7 +26,9 @@ Defined in: [types/providers.ts:148](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **callClassificationApi?**: (`prompt`) => `Promise`\<`ProviderClassificationResponse`\>
 
-Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L149)
+Defined in: [types/providers.ts:173](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L173)
+
+Optional classification-specific entrypoint for compatible providers.
 
 #### Parameters
 
@@ -42,7 +46,9 @@ Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **callEmbeddingApi?**: (`input`) => `Promise`\<`ProviderEmbeddingResponse`\>
 
-Defined in: [types/providers.ts:150](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L150)
+Defined in: [types/providers.ts:175](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L175)
+
+Optional embedding-specific entrypoint for compatible providers.
 
 #### Parameters
 
@@ -60,7 +66,7 @@ Defined in: [types/providers.ts:150](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
-Defined in: [types/providers.ts:163](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L163)
+Defined in: [types/providers.ts:195](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L195)
 
 Provider-wide cleanup hook for releasing long-lived resources such as worker
 processes, browser sessions, or pooled connections at eval shutdown.
@@ -76,7 +82,9 @@ Request-scoped cancellation should be implemented with `abortSignal`.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:151](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L151)
+Defined in: [types/providers.ts:177](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L177)
+
+Provider-specific configuration retained for later calls and serialization.
 
 ---
 
@@ -84,7 +92,9 @@ Defined in: [types/providers.ts:151](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:152](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L152)
+Defined in: [types/providers.ts:179](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L179)
+
+Delay in milliseconds before provider calls.
 
 ---
 
@@ -92,7 +102,9 @@ Defined in: [types/providers.ts:152](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **getSessionId?**: () => `string`
 
-Defined in: [types/providers.ts:153](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L153)
+Defined in: [types/providers.ts:181](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L181)
+
+Optional stable session id for conversational providers.
 
 #### Returns
 
@@ -104,7 +116,9 @@ Defined in: [types/providers.ts:153](https://github.com/promptfoo/promptfoo/blob
 
 > **id**: () => `string`
 
-Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
+Defined in: [types/providers.ts:169](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L169)
+
+Stable id used in result tables, cache keys, and provider lookups.
 
 #### Returns
 
@@ -116,7 +130,9 @@ Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:154](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L154)
+Defined in: [types/providers.ts:183](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L183)
+
+Named provider inputs used by multi-input targets.
 
 ---
 
@@ -124,7 +140,9 @@ Defined in: [types/providers.ts:154](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L155)
+Defined in: [types/providers.ts:185](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L185)
+
+Human-readable label shown in reports.
 
 ---
 
@@ -132,7 +150,9 @@ Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **toJSON?**: () => `any`
 
-Defined in: [types/providers.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L157)
+Defined in: [types/providers.ts:189](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L189)
+
+Custom JSON serialization hook for persisted eval records.
 
 #### Returns
 
@@ -144,4 +164,6 @@ Defined in: [types/providers.ts:157](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:156](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L156)
+Defined in: [types/providers.ts:187](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L187)
+
+Transform provider output before assertions run.

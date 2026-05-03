@@ -8,7 +8,7 @@
 
 > **EvaluateTestSuite** = `object` & `Omit`\<`TestSuiteConfig`, `"prompts"` \| `"providers"`\>
 
-Defined in: [types/index.ts:1380](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1380)
+Defined in: [types/index.ts:1414](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1414)
 
 Test-suite shape accepted by the Node.js `evaluate()` API.
 

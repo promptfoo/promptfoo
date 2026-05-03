@@ -9,6 +9,12 @@ import { ellipsize } from './util/text';
  *
  * Usually pass the table from a completed eval record returned by `evaluate()`.
  *
+ * @example
+ * ```ts
+ * const evalRecord = await evaluate(testSuite);
+ * console.log(generateTable(evalRecord.table));
+ * ```
+ *
  * @public
  */
 export function generateTable(

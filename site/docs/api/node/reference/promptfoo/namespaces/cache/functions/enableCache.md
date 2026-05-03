@@ -8,7 +8,7 @@
 
 > **enableCache**(): `void`
 
-Defined in: [cache.ts:616](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L616)
+Defined in: [cache.ts:634](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L634)
 
 Enable the shared promptfoo cache.
 

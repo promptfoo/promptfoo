@@ -200,6 +200,14 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
 /**
  * Run an async operation inside an isolated cache namespace.
  *
+ * Namespaces are useful when two related runs should not reuse each other's
+ * cached responses, such as baseline and candidate comparisons.
+ *
+ * @example
+ * ```ts
+ * const baseline = await withCacheNamespace('baseline', () => evaluate(testSuite));
+ * ```
+ *
  * @public
  */
 export function withCacheNamespace<T>(namespace: string | undefined, fn: () => Promise<T>) {
@@ -529,6 +537,16 @@ async function prepareFetchResponse(
 
 /**
  * Fetch a URL through promptfoo's retrying cache wrapper.
+ *
+ * Use this in custom providers when you want the same retry and response-cache
+ * behavior as built-in HTTP-backed providers.
+ *
+ * @example
+ * ```ts
+ * const { data, cached } = await fetchWithCache<{ ok: boolean }>(
+ *   'https://example.com/status',
+ * );
+ * ```
  *
  * @public
  */

@@ -90,6 +90,12 @@ function describeInvalidProvider(provider: unknown): string {
  * options.
  * @returns A resolved provider instance.
  *
+ * @example
+ * ```ts
+ * const provider = await loadApiProvider('openai:chat:gpt-5.5');
+ * const response = await provider.callApi('Hello');
+ * ```
+ *
  * @public
  */
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
@@ -381,6 +387,24 @@ async function loadProvidersFromFile(
 
 /**
  * Load one or more providers from provider config input.
+ *
+ * Accepts the same provider forms supported by `evaluate()`: provider ids,
+ * provider functions, provider objects, `file://` config references, or arrays
+ * that mix those forms. The returned array preserves the input order after any
+ * file-backed provider lists are expanded.
+ *
+ * @param providerPaths - Provider config input to normalize into provider instances.
+ * @param options - Optional base path and environment overrides used while
+ * loading providers.
+ * @returns Resolved provider instances ready for direct calls or reuse in an eval.
+ *
+ * @example
+ * ```ts
+ * const providers = await loadApiProviders([
+ *   'openai:chat:gpt-5.5',
+ *   async (prompt) => ({ output: `Echo: ${prompt}` }),
+ * ]);
+ * ```
  *
  * @public
  */

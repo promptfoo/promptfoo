@@ -428,6 +428,11 @@ export interface EvaluateResult {
   tokenUsage?: Required<TokenUsage>;
 }
 
+/**
+ * One provider output cell in an eval table.
+ *
+ * @public
+ */
 export interface EvaluateTableOutput {
   cost: number;
   failureReason: ResultFailureReason;
@@ -473,6 +478,11 @@ export interface EvaluateTableOutput {
   images?: ImageOutput[];
 }
 
+/**
+ * One row in an eval table.
+ *
+ * @public
+ */
 export interface EvaluateTableRow {
   description?: string;
   outputs: EvaluateTableOutput[];
@@ -481,6 +491,11 @@ export interface EvaluateTableRow {
   testIdx: number;
 }
 
+/**
+ * Table-shaped eval output used by `generateTable()` and the web UI.
+ *
+ * @public
+ */
 export interface EvaluateTable {
   head: {
     prompts: CompletedPrompt[];
@@ -539,38 +554,37 @@ export interface ResultSuggestion {
  * @public
  */
 export interface GradingResult {
-  // Whether the test passed or failed
+  /** Whether the test passed or failed. */
   pass: boolean;
 
-  // Test score, typically between 0 and 1
+  /** Test score, typically between 0 and 1. */
   score: number;
 
-  // Plain text reason for the result
+  /** Plain-text explanation suitable for logs and reports. */
   reason: string;
 
-  // Map of labeled metrics to values
+  /** Map of named metric values emitted by the assertion. */
   namedScores?: Record<string, number>;
 
-  // Total weight contributing to each named score
+  /** Total weight contributing to each named score. */
   namedScoreWeights?: Record<string, number>;
 
-  // Record of tokens usage for this assertion
+  /** Token usage attributed to the assertion or grader. */
   tokensUsed?: TokenUsage;
 
-  // List of results for each component of the assertion
+  /** Component results for compound assertions such as assertion sets. */
   componentResults?: GradingResult[];
 
-  // The assertion that was evaluated
-  // TODO(Will): Can we move to this being required?
+  /** Assertion that produced this result, when retained by the caller. */
   assertion?: Assertion;
 
-  // User comment
+  /** Optional user-authored comment attached to the result. */
   comment?: string;
 
-  // Actions for the user to take
+  /** Follow-up suggestions produced by some graders. */
   suggestions?: ResultSuggestion[];
 
-  // Additional info
+  /** Additional assertion-specific metadata. */
   metadata?: {
     pluginId?: string;
     strategyId?: string;
@@ -779,18 +793,38 @@ export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
  * @public
  */
 export interface AssertionValueFunctionContext {
+  /** Rendered prompt for the current result, when available. */
   prompt: string | undefined;
+  /** Rendered variables for the current test case. */
   vars: Record<string, VarValue>;
+  /** Test case currently being graded. */
   test: AtomicTestCase;
+  /** Provider log probabilities, when available. */
   logProbs: number[] | undefined;
+  /** Assertion-specific config copied from `assert[].config`. */
   config?: Record<string, any>;
+  /** Provider used for the current result, when available. */
   provider: ApiProvider | undefined;
+  /** Full provider response for the current result. */
   providerResponse: ProviderResponse | undefined;
+  /** Trace data for trace-aware assertions when tracing is enabled. */
   trace?: TraceData;
 }
 
 /**
  * Function form accepted by JavaScript assertions.
+ *
+ * Return `true`/`false`, a numeric score, or a full `GradingResult` when you
+ * need to provide a custom score or reason.
+ *
+ * @example
+ * ```ts
+ * const containsName: AssertionValueFunction = (output) => ({
+ *   pass: output.includes('Ada'),
+ *   score: output.includes('Ada') ? 1 : 0,
+ *   reason: output.includes('Ada') ? 'Name present' : 'Name missing',
+ * });
+ * ```
  *
  * @public
  */

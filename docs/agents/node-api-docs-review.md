@@ -45,3 +45,14 @@ Use these tasks when manually reviewing the docs:
 
 If a reviewer hesitates on one of these tasks, that is a docs bug even if the
 generated Markdown is technically valid.
+
+## Reader Personas
+
+| Reader               | What they need first                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| Node.js developer    | Install, imports, async contract, cancellation, and the custom provider callback      |
+| ML engineer          | Multi-provider comparison, result inspection, assertions, progress, and cache control |
+| Promptfoo power user | YAML-to-Node mapping, stable vs beta boundaries, lower-level helpers, and deep links  |
+
+Review each page against all three readers. A page can be accurate and still fail
+if it only serves the reader who already knows promptfoo internals.

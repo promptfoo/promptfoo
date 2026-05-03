@@ -29,6 +29,46 @@ const evalRecord = await evaluate({
 console.log(evalRecord.results);
 ```
 
+## Compare several providers
+
+```ts
+import { evaluate } from 'promptfoo';
+
+const evalRecord = await evaluate({
+  prompts: ['Summarize: {{article}}'],
+  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'],
+  tests: [
+    {
+      vars: { article: 'Long article text...' },
+      assert: [{ type: 'llm-rubric', value: 'Accurate and concise' }],
+    },
+  ],
+});
+
+const summary = await evalRecord.toEvaluateSummary();
+console.log(summary.stats);
+```
+
+## Build providers before an eval
+
+```ts
+import { loadApiProviders } from 'promptfoo';
+
+const providers = await loadApiProviders([
+  'openai:chat:gpt-5.5',
+  {
+    'anthropic:messages:claude-opus-4-7': {
+      label: 'candidate',
+    },
+  },
+]);
+
+for (const provider of providers) {
+  const response = await provider.callApi('Return one sentence.');
+  console.log(provider.id(), response.output);
+}
+```
+
 ## Use an inline provider
 
 ```ts
@@ -42,6 +82,23 @@ await evaluate({
     }),
   ],
   tests: [{ vars: { body: 'hello world' } }],
+});
+```
+
+## Generate prompts from code
+
+```ts
+import { evaluate, type PromptFunction } from 'promptfoo';
+
+const prompt: PromptFunction = async ({ vars }) => ({
+  prompt: `Explain ${vars.topic} to a beginner.`,
+  config: { temperature: 0.2 },
+});
+
+await evaluate({
+  prompts: [prompt],
+  providers: ['openai:chat:gpt-5.5'],
+  tests: [{ vars: { topic: 'gradient descent' } }],
 });
 ```
 
@@ -83,6 +140,25 @@ const result = await assertions.runAssertion({
 });
 
 console.log(result.pass);
+```
+
+## Run a batch of assertions
+
+```ts
+import { assertions } from 'promptfoo';
+
+const result = await assertions.runAssertions({
+  test: {
+    vars: {},
+    assert: [
+      { type: 'contains', value: 'Ada' },
+      { type: 'word-count', threshold: 2 },
+    ],
+  },
+  providerResponse: { output: 'Hello Ada' },
+});
+
+console.log(result.pass, result.score);
 ```
 
 ## Track progress

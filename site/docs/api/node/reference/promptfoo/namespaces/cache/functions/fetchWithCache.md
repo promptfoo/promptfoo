@@ -8,9 +8,12 @@
 
 > **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bust?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
 
-Defined in: [cache.ts:535](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L535)
+Defined in: [cache.ts:553](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L553)
 
 Fetch a URL through promptfoo's retrying cache wrapper.
+
+Use this in custom providers when you want the same retry and response-cache
+behavior as built-in HTTP-backed providers.
 
 ## Type Parameters
 
@@ -47,3 +50,9 @@ Fetch a URL through promptfoo's retrying cache wrapper.
 ## Returns
 
 `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
+
+## Example
+
+```ts
+const { data, cached } = await fetchWithCache<{ ok: boolean }>('https://example.com/status');
+```

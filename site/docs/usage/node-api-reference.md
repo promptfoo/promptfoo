@@ -14,6 +14,17 @@ generated reference for exact signatures.
 The root `promptfoo` package entrypoint is the supported public boundary. Do not
 import deep files from `dist/` or `src/`.
 
+## Start by goal
+
+| Goal                                       | Best first stop                                                              |
+| ------------------------------------------ | ---------------------------------------------------------------------------- |
+| Run or embed an eval                       | [`evaluate()`](/docs/api/node/reference/functions/evaluate)                  |
+| Build custom model integrations            | [`ProviderFunction`](/docs/api/node/reference/type-aliases/ProviderFunction) |
+| Compare or pre-load several providers      | [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)  |
+| Reuse grading in Jest, Vitest, or Mocha    | [`assertions`](/docs/api/node/reference/variables/assertions)                |
+| Work with inline callbacks from TypeScript | [`PromptFunction`](/docs/api/node/reference/interfaces/PromptFunction)       |
+| Tune execution rather than config          | [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions)     |
+
 ## API map
 
 | API                                                                               | Stability | Use it for                                          |
@@ -31,6 +42,18 @@ import deep files from `dist/` or `src/`.
 The package still exports additional compatibility helpers and schema types, but
 the generated reference intentionally focuses on the Node APIs we recommend
 calling directly.
+
+## Core types
+
+| Type                                                                                     | What it tells you                                   |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [`EvaluateTestSuite`](/docs/api/node/reference/type-aliases/EvaluateTestSuite)           | Config shape accepted by `evaluate()`               |
+| [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions)                 | Runtime-only controls passed as the second argument |
+| [`ProvidersConfig`](/docs/api/node/reference/type-aliases/ProvidersConfig)               | Accepted provider input forms                       |
+| [`CallApiFunction`](/docs/api/node/reference/interfaces/CallApiFunction)                 | Callback signature behind inline custom providers   |
+| [`ProviderResponse`](/docs/api/node/reference/interfaces/ProviderResponse)               | Output shape returned by providers                  |
+| [`AssertionValueFunction`](/docs/api/node/reference/type-aliases/AssertionValueFunction) | Inline JavaScript assertion callback                |
+| [`TransformFunction`](/docs/api/node/reference/type-aliases/TransformFunction)           | Inline transform callback                           |
 
 ## How the pieces fit
 
@@ -58,7 +81,8 @@ const evalRecord = await evaluate(
 Use [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)
 when you need to construct a provider once and pass it into another API. Use the
 [`ProviderFunction`](/docs/api/node/reference/type-aliases/ProviderFunction)
-and [`ProviderResponse`](/docs/api/node/reference/interfaces/ProviderResponse)
+[`CallApiFunction`](/docs/api/node/reference/interfaces/CallApiFunction), and
+[`ProviderResponse`](/docs/api/node/reference/interfaces/ProviderResponse)
 reference pages when implementing your own provider. Use
 [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)
 when you need promptfoo to normalize provider config input into provider

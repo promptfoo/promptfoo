@@ -7,7 +7,15 @@ declare interface ApiProvider {
   label?: string;
 }
 
-export type PromptContent = string | any;
+/**
+ * Prompt payload accepted from function-valued prompts.
+ *
+ * Strings are used directly. Objects and arrays are JSON-stringified before the
+ * provider receives them.
+ *
+ * @public
+ */
+export type PromptContent = string | object;
 
 export interface PromptConfig {
   prefix?: string;
@@ -37,18 +45,31 @@ export interface PromptFunctionContext {
  * - A PromptFunctionResult object with prompt and optional config
  */
 export interface PromptFunctionResult {
+  /** Prompt content to send to the provider. */
   prompt: PromptContent;
+  /** Provider config overrides to merge for this rendered prompt. */
   config?: Record<string, any>;
 }
 
 /**
  * Function form accepted anywhere the Node.js API accepts a prompt.
  *
+ * Use prompt functions when the prompt must be assembled from runtime vars or
+ * when each prompt needs provider-specific config.
+ *
+ * @example
+ * ```ts
+ * const prompt: PromptFunction = async ({ vars }) => ({
+ *   prompt: `Summarize ${vars.topic}`,
+ *   config: { temperature: 0.2 },
+ * });
+ * ```
+ *
  * @public
  */
 export interface PromptFunction {
   (context: {
-    vars: Record<string, string | any>;
+    vars: Record<string, VarValue>;
     provider?: ApiProvider;
   }): Promise<PromptContent | PromptFunctionResult>;
 }
