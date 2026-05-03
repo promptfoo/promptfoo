@@ -227,6 +227,10 @@ describe('ModelAuditSetupPage', () => {
     renderComponent();
 
     expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+    expect(screen.getByText('Something went wrong').parentElement).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+    );
   });
 
   it('should show results tab when scan results are available', () => {

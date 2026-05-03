@@ -140,8 +140,8 @@ export default function ConfigurationTab({
         {error && (
           <Alert variant="destructive" className="mt-4">
             <AlertContent>
-              <AlertDescription className="flex items-center justify-between">
-                <span>{error}</span>
+              <AlertDescription className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0">{error}</span>
                 <Button type="button" variant="destructive" onClick={onClearError}>
                   Dismiss
                 </Button>
