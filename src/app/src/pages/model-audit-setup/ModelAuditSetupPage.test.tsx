@@ -162,6 +162,16 @@ describe('ModelAuditSetupPage', () => {
     expect(screen.getByTestId('config-tab')).toBeInTheDocument();
   });
 
+  it('stacks the header status below the title group on narrow screens', () => {
+    renderComponent();
+
+    expect(screen.getByTestId('model-audit-header')).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+      'sm:justify-between',
+    );
+  });
+
   it('should check installation on mount', async () => {
     renderComponent();
 
