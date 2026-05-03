@@ -342,10 +342,6 @@ export async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOp
     prompts: await processPrompts(testSuiteConfig.prompts),
   };
 
-  if (options.cache === false) {
-    cache.disableCache();
-  }
-
   const parsedProviderPromptMap = readProviderPromptMap(
     testSuiteConfig,
     constructedTestSuite.prompts,
@@ -359,17 +355,19 @@ export async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOp
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
     : new Eval(unifiedConfig, { author });
 
-  const ret = await doEvaluate(
-    {
-      ...constructedTestSuite,
-      providerPromptMap: parsedProviderPromptMap,
-    },
-    evalRecord,
-    {
-      eventSource: 'library',
-      isRedteam: Boolean(testSuiteConfig.redteam),
-      ...options,
-    },
+  const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
+    doEvaluate(
+      {
+        ...constructedTestSuite,
+        providerPromptMap: parsedProviderPromptMap,
+      },
+      evalRecord,
+      {
+        eventSource: 'library',
+        isRedteam: Boolean(testSuiteConfig.redteam),
+        ...options,
+      },
+    ),
   );
 
   await maybeShareResult(
