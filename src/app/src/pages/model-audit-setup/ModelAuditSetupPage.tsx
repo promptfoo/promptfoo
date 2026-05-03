@@ -175,7 +175,7 @@ export default function ModelAuditSetupPage() {
                   href="https://www.promptfoo.dev/docs/model-audit/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-primary underline underline-offset-2 hover:no-underline"
                 >
                   Learn more
                 </a>
@@ -208,8 +208,10 @@ export default function ModelAuditSetupPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <ErrorIcon className="size-4 text-destructive" />
-                      <span className="text-sm font-medium text-destructive">Not Installed</span>
+                      <ErrorIcon className="size-4 text-red-700 dark:text-red-400" />
+                      <span className="text-sm font-medium text-red-700 dark:text-red-400">
+                        Not Installed
+                      </span>
                       <button
                         type="button"
                         onClick={() => checkInstallation()}

@@ -128,7 +128,7 @@ export default function ModelAuditResultLatestPage() {
                   href="https://www.promptfoo.dev/docs/model-audit/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary hover:underline"
+                  className="text-primary underline underline-offset-2 hover:no-underline"
                 >
                   Learn more
                 </a>
