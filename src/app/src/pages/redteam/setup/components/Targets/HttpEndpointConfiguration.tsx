@@ -529,7 +529,7 @@ ${exampleRequest}`;
 
   return (
     <div className="min-w-0">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Switch
             id="use-raw-request"

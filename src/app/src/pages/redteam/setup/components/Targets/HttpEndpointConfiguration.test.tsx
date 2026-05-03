@@ -82,6 +82,23 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(firstValueField).toBeVisible();
   });
 
+  it('stacks the raw-request toggle above import controls on narrow screens', () => {
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    expect(screen.getByText('Use Raw HTTP Request').parentElement?.parentElement).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+    );
+  });
+
   it('should maintain header Name and Value field layout constraints when bodyError state changes', () => {
     const { rerender } = renderWithProviders(
       <HttpEndpointConfiguration
