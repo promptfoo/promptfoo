@@ -41,6 +41,7 @@ import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
+import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
 import { VERSION } from './version';
 
 async function main() {
@@ -53,7 +54,7 @@ async function main() {
   }
 
   await checkForUpdates();
-  await runDbMigrations();
+  await runDbMigrations({ suppressNativeAddonLogging: true });
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
@@ -145,10 +146,17 @@ try {
 
 if (isMain) {
   let mainError: unknown;
+  let nativeAddonVersionMismatchMessage: string | undefined;
   try {
     await main();
   } catch (error) {
     mainError = error;
+    nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
+    if (nativeAddonVersionMismatchMessage) {
+      logger.debug('better-sqlite3 ABI mismatch (original error follows)', {
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      });
+    }
     // Set exit code immediately so watchdog timeouts preserve the error state
     process.exitCode = 1;
   } finally {
@@ -163,6 +171,11 @@ if (isMain) {
   }
   // Re-throw the original error after cleanup is complete
   if (mainError) {
-    throw mainError;
+    if (nativeAddonVersionMismatchMessage) {
+      console.error(nativeAddonVersionMismatchMessage);
+      // exit code preserved by process.exitCode = 1 above
+    } else {
+      throw mainError;
+    }
   }
 }

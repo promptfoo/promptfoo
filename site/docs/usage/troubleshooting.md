@@ -141,7 +141,7 @@ prompts:
 
 ## Node.js version mismatch error
 
-When running `npx promptfoo@latest`, you might encounter this error:
+You might encounter this error after switching Node.js versions:
 
 ```text
 Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
@@ -151,17 +151,53 @@ NODE_MODULE_VERSION 127. Please try re-compiling or re-installing
 the module (for instance, using `npm rebuild` or `npm install`).
 ```
 
-This happens because promptfoo uses native code modules (like better-sqlite3) that need to be compiled specifically for your Node.js version.
+This happens because promptfoo uses native code modules such as `better-sqlite3`,
+which must be compiled for the active Node.js version.
 
 ### Solution: Remove npx cache and reinstall
 
-To fix this issue, run this single command:
+Use the repair path that matches how you run promptfoo.
+
+**Project checkout**
+
+If you are running promptfoo from a local checkout, switch to the Node.js version
+you intend to use, then rebuild the native dependency:
+
+```bash
+npm rebuild better-sqlite3
+```
+
+If the project includes an `.nvmrc`, run `nvm use` first so the active Node.js version
+matches the project before rebuilding.
+
+**Global npm install**
+
+If you installed promptfoo globally with npm, reinstall it under the active Node.js
+version:
+
+```bash
+npm install -g promptfoo@latest
+```
+
+**npx**
+
+If the error happens with `npx promptfoo@latest`, remove the cached npx install and
+run the command again. With newer npm versions, remove only the matching cache entry:
+
+```bash
+npm cache npx ls
+npm cache npx rm <key>
+npx -y promptfoo@latest
+```
+
+Use the key shown next to `promptfoo@latest` in `npm cache npx ls`. If your npm
+version does not support `npm cache npx`, remove the older npx cache directory instead:
 
 ```bash
 rm -rf ~/.npm/_npx && npx -y promptfoo@latest
 ```
 
-This removes any cached npm packages in the npx cache directory and forces a fresh download and installation of promptfoo, ensuring the native modules are compiled correctly for your current Node.js version.
+This forces a fresh install for the current Node.js version.
 
 ## Native build failures
 

@@ -77,8 +77,8 @@ const allProviderOptions = [
   },
   {
     value: 'custom',
-    label: 'Custom Provider',
-    description: 'Other custom providers and implementations',
+    label: 'Custom Target',
+    description: 'Any other target via a custom provider',
     tag: 'app',
     last: true,
   },
@@ -734,7 +734,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'xai') {
       setProvider(
         {
-          id: 'xai:grok-2-1212',
+          id: 'xai:grok-4.20-reasoning',
           config: {},
           label: currentLabel,
         },

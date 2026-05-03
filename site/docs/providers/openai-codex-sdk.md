@@ -245,7 +245,7 @@ Supported models include:
 - **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
 
-If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise fall back to the provider's generic `codex` label with `response.cost: 0`.
+If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
 GPT-5.5 model IDs are recognized for routing, usage tracking, and standard API cost estimates. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex runtime settings.
 
@@ -340,6 +340,10 @@ tests:
 ```
 
 The output should be valid JSON matching your schema, but it is still returned as a string in `response.output`.
+
+:::tip
+This is the OpenAI Codex SDK's analogue of the Claude Agent SDK's [`output_format`](/docs/providers/claude-agent-sdk#structured-output). The two have slightly different shapes (a bare schema here, `{type: 'json_schema', schema: {...}}` on Claude) and Claude additionally hands the JS assertion a parsed object while Codex keeps `output` as a string — wrap with `JSON.parse(output)` in JS assertions on this side. The [Test Agent Skills guide](/docs/guides/test-agent-skills) shows both side by side.
+:::
 
 ### Zod Schemas
 
@@ -848,7 +852,7 @@ This works because all three test cases render from the same prompt template (`{
 - The provider returns a final response after the Codex turn completes. `enable_streaming` is for event aggregation and tracing, not live partial output in assertions.
 - `output_schema` does not change the response type exposed to promptfoo assertions. `response.output` remains a string.
 - `temperature`, `top_p`, `max_tokens`, `stop`, and `logprobs` are not exposed as first-class provider config fields.
-- Cost is estimated only for known model names in the provider's pricing table. If you omit `config.model` or use an unknown model, `response.cost` is `0`.
+- Cost is estimated only for known model names. If you omit `config.model` or use an unknown model, `response.cost` is undefined.
 - `persist_threads`, `thread_id`, and `thread_pool_size` are ignored when `deep_tracing: true`.
 - `approval_policy: on-request` and similar interactive policies are usually a poor fit for unattended eval runs. Prefer `never` for deterministic CI unless you intentionally want approval-gated tool behavior.
 - `skillCalls` and `attemptedSkillCalls` are heuristic and based on command text, not model-internal skill routing events.

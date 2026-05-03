@@ -238,6 +238,8 @@ def call_api(prompt, options, context):
     return result
 ```
 
+For workflows that make multiple model calls, set `tokenUsage.numRequests` yourself. Fresh Python-provider results that omit it are recorded as one request.
+
 ### Types
 
 The types passed into the Python script function and the `ProviderResponse` return type are defined as follows:
@@ -256,6 +258,7 @@ class TokenUsage:
     total: int
     prompt: int
     completion: int
+    numRequests: int
 
 class ProviderResponse:
     output: Optional[Union[str, Dict[str, Any]]]

@@ -4,7 +4,7 @@ export interface ProcessorConfig {
   modelName: string;
   providerType: 'openai' | 'azure' | 'xai';
   functionCallbackHandler: FunctionCallbackHandler;
-  costCalculator: (modelName: string, usage: any, config?: any) => number;
+  costCalculator: (modelName: string, usage: any, config?: any) => number | undefined;
 }
 
 export interface ProcessorContext {

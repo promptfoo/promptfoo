@@ -291,6 +291,13 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 10 / 1e6,
     },
   })),
+  ...['gpt-5-codex-mini'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.5 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
   ...['gpt-5-pro', 'gpt-5-pro-2025-10-06'].map((model) => ({
     id: model,
     cost: {
@@ -313,7 +320,7 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
       output: 0.4 / 1e6,
     },
   })),
-  ...['gpt-5.1-mini'].map((model) => ({
+  ...['gpt-5.1-mini', 'gpt-5.1-codex-mini'].map((model) => ({
     id: model,
     cost: {
       input: 0.25 / 1e6,
@@ -338,8 +345,8 @@ export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
   ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((model) => ({
     id: model,
     cost: {
-      input: 15 / 1e6,
-      output: 120 / 1e6,
+      input: 21 / 1e6,
+      output: 168 / 1e6,
     },
   })),
   // GPT-5.3 models
@@ -446,6 +453,11 @@ export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
     cost: {
       input: 30 / 1e6,
       output: 180 / 1e6,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1e6,
+        output: 270 / 1e6,
+      },
     },
   })),
 ];
@@ -692,6 +704,10 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       // Cached responses don't count as a new request
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
     } else {
+      const cachedInputTokens =
+        data.usage.prompt_tokens_details?.cached_tokens ??
+        data.usage.input_tokens_details?.cached_tokens ??
+        0;
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
@@ -703,9 +719,16 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
                 reasoning: data.usage.completion_tokens_details.reasoning_tokens,
                 acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
                 rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+                ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
               },
             }
-          : {}),
+          : cachedInputTokens > 0
+            ? {
+                completionDetails: {
+                  cacheReadInputTokens: cachedInputTokens,
+                },
+              }
+            : {}),
       };
     }
   }

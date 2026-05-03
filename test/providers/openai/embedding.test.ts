@@ -52,6 +52,7 @@ describe('OpenAI Provider', () => {
         completion: 0,
         numRequests: 1,
       });
+      expect(result.cost).toBeCloseTo((10 * 0.13) / 1e6, 12);
     });
 
     it('should handle API errors', async () => {
