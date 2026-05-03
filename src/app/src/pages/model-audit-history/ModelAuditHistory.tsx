@@ -238,6 +238,7 @@ export default function ModelAuditHistory() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={`Delete ${row.original.name || 'scan'}`}
                 className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={(e) => {
                   e.stopPropagation();
