@@ -2,10 +2,10 @@ import logging
 import os
 from typing import Any, Dict, List, Tuple
 
-from langchain.prompts import ChatPromptTemplate
-from langchain.schema import AIMessage, HumanMessage
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 # Constants
