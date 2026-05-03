@@ -93,8 +93,8 @@ export function MediaFilters({
   const selectedEvalLabel = selectedEval?.description ?? selectedEvalDescriptionRef.current;
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-4">
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-wrap items-center gap-4">
         {/* Type Filter Tabs */}
         <Tabs value={typeFilter} onValueChange={(v) => onTypeFilterChange(v as MediaTypeFilter)}>
           <TabsList className="h-9">
@@ -116,7 +116,7 @@ export function MediaFilters({
         </Badge>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Sort Dropdown */}
         <Select
           value={currentSortValue}

@@ -192,7 +192,7 @@ export default function Navigation() {
                 />
               </NavigationMenuList>
             </NavigationMenu>
-            <nav className="hidden items-center gap-1 md:flex">
+            <nav className="hidden items-center gap-1 lg:flex">
               <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
               <NavLink href={ROUTES.PROMPTS} label="Prompts" />
               <NavLink href={ROUTES.DATASETS} label="Datasets" />
