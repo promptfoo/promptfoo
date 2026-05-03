@@ -8,6 +8,7 @@ import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
+import { createJunitXml } from '../../src/util/junit';
 import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
 import { mockConsole, mockProcessEnv } from './utils';
 
@@ -524,6 +525,93 @@ describe('writeOutput', () => {
     const junitXml = vi.mocked(fsPromises.writeFile).mock.calls[1][1] as string;
     expect(promptfooXml).toContain('<promptfoo>');
     expect(junitXml).toContain('<testsuites');
+  });
+
+  it('serializes legacy eval results into JUnit XML', async () => {
+    const legacyResult: EvaluateResult = {
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 0,
+      provider: { label: 'legacy provider' },
+      prompt: { raw: 'Legacy raw prompt', label: '' },
+      response: { output: '' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'legacy-prompt',
+    };
+    const eval_ = {
+      createdAt: 'not-a-date',
+      fetchResultsBatched: vi.fn(),
+      getResults: vi.fn().mockResolvedValue([legacyResult]),
+      persisted: false,
+      results: [],
+      useOldResults: () => true,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(eval_.getResults).toHaveBeenCalledTimes(1);
+    expect(eval_.fetchResultsBatched).not.toHaveBeenCalled();
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_name': '[legacy provider] Legacy raw prompt',
+    });
+    expect(parsed.testsuites.testsuite).not.toHaveProperty('@_timestamp');
+    expect(parsed.testsuites.testsuite.testcase.failure).toMatchObject({
+      '#text': 'Score: 0\nReason: Assertion failed',
+      '@_message': 'Assertion failed',
+    });
+  });
+
+  it('serializes persisted batched eval results into JUnit XML', async () => {
+    const persistedResult: EvaluateResult = {
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: Number.NaN,
+      provider: { id: '', label: '' },
+      prompt: { raw: '', label: '' },
+      response: { output: '' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'grader unavailable',
+      },
+      promptId: 'persisted-prompt',
+    };
+    const eval_ = {
+      createdAt: '2026-05-03T15:00:00.000Z',
+      async *fetchResultsBatched() {
+        yield [persistedResult];
+      },
+      getResults: vi.fn(),
+      persisted: true,
+      results: [],
+      useOldResults: () => false,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(eval_.getResults).not.toHaveBeenCalled();
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_name': '[unknown provider] unnamed prompt',
+      '@_time': '0',
+      '@_timestamp': '2026-05-03T15:00:00.000Z',
+    });
+    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
+      '#text': 'Reason: grader unavailable',
+      '@_message': 'grader unavailable',
+    });
   });
 
   it('does not sanitize config for CSV output', async () => {
