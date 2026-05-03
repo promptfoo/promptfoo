@@ -40,7 +40,7 @@ Now we're ready to go.
 npx promptfoo@latest eval
 ```
 
-Promptfoo is a Node.js CLI, but the `file://retrieve.py` provider runs inside Python. Keep the virtual environment active when running the eval, or set `PROMPTFOO_PYTHON=/path/to/venv/bin/python` so Promptfoo can import the packages from `requirements.txt`.
+Promptfoo is a Node.js CLI, but the `file://retrieve.py` provider runs inside Python. Keep the virtual environment active when running the eval, or set `PROMPTFOO_PYTHON=./venv/bin/python` so Promptfoo can import the packages from `requirements.txt`.
 
 Afterwards, you can view the results by running `npx promptfoo@latest view`
 

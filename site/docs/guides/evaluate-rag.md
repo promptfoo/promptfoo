@@ -81,7 +81,7 @@ providers:
       pythonExecutable: ./.venv/bin/python
 ```
 
-You can also set `PROMPTFOO_PYTHON=/path/to/python` globally. See the [Python provider docs](/docs/providers/python#environment-configuration) for more options.
+You can also set `PROMPTFOO_PYTHON=/path/to/python` as a global default when the provider does not specify `pythonExecutable`. See the [Python provider docs](/docs/providers/python#environment-configuration) for more options.
 
 ### Configuration
 
