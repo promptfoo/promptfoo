@@ -726,6 +726,7 @@ describe('DataTable', () => {
         return dialog as HTMLElement;
       });
       expect(toolbarDialog).toBeDefined();
+      expect(toolbarDialog).toHaveClass('w-[min(520px,calc(100vw-1rem))]');
       expect(await within(toolbarDialog).findByText('Status')).toBeInTheDocument();
       expect(await within(toolbarDialog).findByText(/beta/i)).toBeInTheDocument();
     });

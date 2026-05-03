@@ -936,7 +936,7 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[520px] p-3"
+        className="w-[min(520px,calc(100vw-1rem))] p-3"
         align="start"
         onInteractOutside={(e) => {
           // Prevent popover from closing when interacting with portaled Select/Popover content.
