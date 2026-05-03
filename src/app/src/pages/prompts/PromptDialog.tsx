@@ -55,7 +55,7 @@ const PromptDialog = ({
     <Dialog open={openDialog} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center">
+          <DialogTitle className="flex min-w-0 flex-col items-start gap-2 text-left sm:flex-row sm:items-center">
             <span className="min-w-0 break-words">
               {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
             </span>

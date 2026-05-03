@@ -210,7 +210,7 @@ describe('PromptDialog', () => {
 
     expect(
       screen.getByRole('heading', { name: new RegExp(mockSelectedPrompt.prompt.label) }),
-    ).toHaveClass('flex-col', 'items-start', 'sm:flex-row', 'sm:items-center');
+    ).toHaveClass('flex-col', 'items-start', 'text-left', 'sm:flex-row', 'sm:items-center');
   });
 
   it('should copy the prompt text to clipboard and show the Snackbar when the copy button is clicked', async () => {
