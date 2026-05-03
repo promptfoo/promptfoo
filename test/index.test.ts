@@ -84,10 +84,11 @@ vi.mock('../src/util/file');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
+    'ConfigResolutionError',
+    'EmailValidationError',
     'assertions',
     'buildInputPromptDescription',
     'cache',
-    'ClaudeCodeSDKProvider',
     'evaluate',
     'generateTable',
     'getInputDescription',

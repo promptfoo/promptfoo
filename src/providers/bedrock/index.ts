@@ -624,6 +624,138 @@ export function addConfigParam(
   }
 }
 
+const BEDROCK_MISTRAL_CHAT_MODEL = {
+  params: async (
+    config: BedrockMistralGenerationOptions,
+    prompt: string,
+    stop?: string[],
+    _modelName?: string,
+  ) => {
+    const params: any = {
+      messages: parseChatPrompt(prompt, [{ role: 'user', content: prompt }]),
+    };
+    addConfigParam(params, 'max_tokens', config?.max_tokens, getEnvInt('MISTRAL_MAX_TOKENS'), 1024);
+    addConfigParam(
+      params,
+      'temperature',
+      config?.temperature,
+      getEnvFloat('MISTRAL_TEMPERATURE'),
+      0,
+    );
+    addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
+    if (stop && stop.length > 0) {
+      addConfigParam(params, 'stop', stop);
+    }
+    return params;
+  },
+  output: (_config: BedrockOptions, responseJson: any) => {
+    if (responseJson?.choices && Array.isArray(responseJson.choices)) {
+      return responseJson.choices[0]?.message?.content;
+    }
+    return undefined;
+  },
+  tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
+    if (
+      responseJson?.prompt_tokens !== undefined &&
+      responseJson?.completion_tokens !== undefined
+    ) {
+      const promptTokens = coerceStrToNum(responseJson.prompt_tokens);
+      const completionTokens = coerceStrToNum(responseJson.completion_tokens);
+
+      return {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: (promptTokens ?? 0) + (completionTokens ?? 0),
+        numRequests: 1,
+      };
+    }
+
+    if (
+      responseJson?.usage?.prompt_tokens !== undefined &&
+      responseJson?.usage?.completion_tokens !== undefined
+    ) {
+      const promptTokens = coerceStrToNum(responseJson.usage.prompt_tokens);
+      const completionTokens = coerceStrToNum(responseJson.usage.completion_tokens);
+      const totalTokens =
+        coerceStrToNum(responseJson.usage.total_tokens) ??
+        (promptTokens !== undefined && completionTokens !== undefined
+          ? promptTokens + completionTokens
+          : undefined);
+
+      return {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: totalTokens,
+        numRequests: 1,
+      };
+    }
+
+    return {
+      prompt: undefined,
+      completion: undefined,
+      total: undefined,
+      numRequests: 1,
+    };
+  },
+} satisfies IBedrockModel;
+
+const BEDROCK_DEEPSEEK_CHAT_MODEL = {
+  params: async (
+    config: BedrockDeepseekGenerationOptions,
+    prompt: string,
+    stop?: string[],
+    _modelName?: string,
+  ) => {
+    const params: any = {
+      messages: parseChatPrompt(prompt, [{ role: 'user', content: prompt }]),
+    };
+
+    addConfigParam(
+      params,
+      'max_tokens',
+      config?.max_tokens,
+      getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+      undefined,
+    );
+    addConfigParam(
+      params,
+      'temperature',
+      config?.temperature,
+      getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+      0,
+    );
+    addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('AWS_BEDROCK_TOP_P'), 1.0);
+    if (stop && stop.length > 0) {
+      addConfigParam(params, 'stop', stop);
+    }
+
+    return params;
+  },
+  output: (_config: BedrockOptions, responseJson: any) => {
+    if (responseJson.error) {
+      throw new Error(`DeepSeek API error: ${responseJson.error}`);
+    }
+    return responseJson.choices?.[0]?.message?.content;
+  },
+  tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
+    if (responseJson?.usage) {
+      return {
+        prompt: coerceStrToNum(responseJson.usage.prompt_tokens),
+        completion: coerceStrToNum(responseJson.usage.completion_tokens),
+        total: coerceStrToNum(responseJson.usage.total_tokens),
+        numRequests: 1,
+      };
+    }
+
+    return {
+      prompt: undefined,
+      completion: undefined,
+      total: undefined,
+      numRequests: 1,
+    };
+  },
+} satisfies IBedrockModel;
+
 export const LlamaVersion = {
   V2: 2,
   V3: 3,
@@ -1885,87 +2017,9 @@ ${prompt}
       };
     },
   },
-  MISTRAL_LARGE_2407: {
-    params: async (
-      config: BedrockMistralGenerationOptions,
-      prompt: string,
-      stop: string[],
-      _modelName?: string,
-    ) => {
-      const params: any = { prompt, stop };
-      addConfigParam(
-        params,
-        'max_tokens',
-        config?.max_tokens,
-        getEnvInt('MISTRAL_MAX_TOKENS'),
-        1024,
-      );
-      addConfigParam(
-        params,
-        'temperature',
-        config?.temperature,
-        getEnvFloat('MISTRAL_TEMPERATURE'),
-        0,
-      );
-      addConfigParam(params, 'top_p', config?.top_p, getEnvFloat('MISTRAL_TOP_P'), 1);
-      // Note: mistral.mistral-large-2407-v1:0 doesn't support top_k parameter
-
-      return params;
-    },
-    output: (_config: BedrockOptions, responseJson: any) => {
-      if (responseJson?.choices && Array.isArray(responseJson.choices)) {
-        return responseJson.choices[0]?.message?.content;
-      }
-      return undefined;
-    },
-    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
-      // Chat completion format (used by mistral-large-2407-v1:0)
-      if (
-        responseJson?.prompt_tokens !== undefined &&
-        responseJson?.completion_tokens !== undefined
-      ) {
-        const promptTokens = coerceStrToNum(responseJson.prompt_tokens);
-        const completionTokens = coerceStrToNum(responseJson.completion_tokens);
-
-        return {
-          prompt: promptTokens,
-          completion: completionTokens,
-          total: (promptTokens ?? 0) + (completionTokens ?? 0),
-          numRequests: 1,
-        };
-      }
-
-      // Handle usage object format
-      if (
-        responseJson?.usage?.prompt_tokens !== undefined &&
-        responseJson?.usage?.completion_tokens !== undefined
-      ) {
-        const promptTokens = coerceStrToNum(responseJson.usage.prompt_tokens);
-        const completionTokens = coerceStrToNum(responseJson.usage.completion_tokens);
-
-        const totalTokens =
-          coerceStrToNum(responseJson.usage.total_tokens) ??
-          (promptTokens !== undefined && completionTokens !== undefined
-            ? promptTokens + completionTokens
-            : undefined);
-
-        return {
-          prompt: promptTokens,
-          completion: completionTokens,
-          total: totalTokens,
-          numRequests: 1,
-        };
-      }
-
-      // Return undefined values when token counts aren't provided by the API
-      return {
-        prompt: undefined,
-        completion: undefined,
-        total: undefined,
-        numRequests: 1,
-      };
-    },
-  },
+  MISTRAL_CHAT: BEDROCK_MISTRAL_CHAT_MODEL,
+  MISTRAL_LARGE_2407: BEDROCK_MISTRAL_CHAT_MODEL,
+  DEEPSEEK_CHAT: BEDROCK_DEEPSEEK_CHAT_MODEL,
   OPENAI: {
     params: async (
       config: BedrockOpenAIGenerationOptions,
@@ -2207,21 +2261,33 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'cohere.command-r-v1:0': BEDROCK_MODEL.COHERE_COMMAND_R,
   'cohere.command-text-v14': BEDROCK_MODEL.COHERE_COMMAND,
   'deepseek.r1-v1:0': BEDROCK_MODEL.DEEPSEEK,
+  'deepseek.v3-v1:0': BEDROCK_MODEL.DEEPSEEK_CHAT,
+  'deepseek.v3.2': BEDROCK_MODEL.DEEPSEEK_CHAT,
   'meta.llama2-13b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama2-70b-chat-v1': BEDROCK_MODEL.LLAMA2,
   'meta.llama3-1-405b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-1-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_1,
   'meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
+  'meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
   'meta.llama3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama3-8b-instruct-v1:0': BEDROCK_MODEL.LLAMA3,
   'meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'mistral.mistral-7b-instruct-v0:2': BEDROCK_MODEL.MISTRAL,
+  'mistral.devstral-2-123b': BEDROCK_MODEL.MISTRAL_CHAT,
+  'mistral.magistral-small-2509': BEDROCK_MODEL.MISTRAL_CHAT,
+  'mistral.ministral-3-14b-instruct': BEDROCK_MODEL.MISTRAL_CHAT,
+  'mistral.ministral-3-8b-instruct': BEDROCK_MODEL.MISTRAL_CHAT,
+  'mistral.ministral-3-3b-instruct': BEDROCK_MODEL.MISTRAL_CHAT,
   'mistral.mistral-large-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mistral-large-2407-v1:0': BEDROCK_MODEL.MISTRAL_LARGE_2407,
+  'mistral.mistral-large-3-675b-instruct': BEDROCK_MODEL.MISTRAL_CHAT,
   'mistral.mistral-small-2402-v1:0': BEDROCK_MODEL.MISTRAL,
   'mistral.mixtral-8x7b-instruct-v0:1': BEDROCK_MODEL.MISTRAL,
+  'mistral.pixtral-large-2502-v1:0': BEDROCK_MODEL.MISTRAL_CHAT,
+  'mistral.voxtral-mini-3b-2507': BEDROCK_MODEL.MISTRAL_CHAT,
+  'mistral.voxtral-small-24b-2507': BEDROCK_MODEL.MISTRAL_CHAT,
 
   // APAC Models
   'apac.amazon.nova-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
@@ -2262,6 +2328,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.meta.llama3-2-3b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_2,
   'eu.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'eu.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'eu.mistral.pixtral-large-2502-v1:0': BEDROCK_MODEL.MISTRAL_CHAT,
 
   // Gov Cloud Models
   'us-gov.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2300,14 +2367,20 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.meta.llama3-3-70b-instruct-v1:0': BEDROCK_MODEL.LLAMA3_3,
   'us.meta.llama4-scout-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
   'us.meta.llama4-maverick-17b-instruct-v1:0': BEDROCK_MODEL.LLAMA4,
+  'us.mistral.pixtral-large-2502-v1:0': BEDROCK_MODEL.MISTRAL_CHAT,
 
   // OpenAI Models via Bedrock
   'openai.gpt-oss-120b-1:0': BEDROCK_MODEL.OPENAI,
   'openai.gpt-oss-20b-1:0': BEDROCK_MODEL.OPENAI,
+  'openai.gpt-oss-safeguard-120b': BEDROCK_MODEL.OPENAI,
+  'openai.gpt-oss-safeguard-20b': BEDROCK_MODEL.OPENAI,
 
   // Qwen Models via Bedrock
+  'qwen.qwen3-coder-next': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-coder-480b-a35b-v1:0': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-coder-30b-a3b-v1:0': BEDROCK_MODEL.QWEN,
+  'qwen.qwen3-next-80b-a3b': BEDROCK_MODEL.QWEN,
+  'qwen.qwen3-vl-235b-a22b': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-235b-a22b-2507-v1:0': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-32b-v1:0': BEDROCK_MODEL.QWEN,
 

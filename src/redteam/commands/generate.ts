@@ -11,6 +11,7 @@ import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   getUserEmail,
   promptForEmailUnverified,
@@ -29,7 +30,11 @@ import {
   isCloudProvider,
   resolveTeamId,
 } from '../../util/cloud';
-import { resolveConfigs } from '../../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
@@ -1021,7 +1026,13 @@ export function redteamGenerateCommand(
           error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
-        } else if (!(error instanceof ProbeLimitExceededError)) {
+        } else if (error instanceof ConfigResolutionError) {
+          logConfigResolutionError(error);
+        } else if (
+          !(error instanceof EmailValidationError) &&
+          !(error instanceof ProbeLimitExceededError)
+        ) {
+          // These expected failures are already logged by their helpers.
           // Log the stack trace, which already includes the error message
           logger.error(
             error instanceof Error && error.stack

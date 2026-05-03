@@ -9,7 +9,6 @@ import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
-import { ClaudeCodeSDKProvider } from './providers/claude-agent-sdk';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers/index';
 import { doGenerateRedteam } from './redteam/commands/generate';
 import { extractEntities } from './redteam/extraction/entities';
@@ -38,11 +37,13 @@ import type {
 } from './types/index';
 import type { ApiProvider } from './types/providers';
 
+export { EmailValidationError } from './globalConfig/accounts';
 export { generateTable } from './table';
 export * from './types/index';
 // Transform types and runtime guard for users passing inline transform functions
 // via the Node.js package.
 export { isTransformFunction } from './types/transform';
+export { ConfigResolutionError } from './util/config/load';
 
 // Extension hook context types for users writing custom extensions
 export type {
@@ -52,7 +53,6 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
-export type { ClaudeCodeOptions } from './providers/claude-agent-sdk';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
 /**
@@ -452,16 +452,7 @@ const redteam = {
   run: doRedteamRun,
 };
 
-export {
-  assertions,
-  ClaudeCodeSDKProvider,
-  cache,
-  evaluate,
-  guardrails,
-  loadApiProvider,
-  loadApiProviders,
-  redteam,
-};
+export { assertions, cache, evaluate, guardrails, loadApiProvider, loadApiProviders, redteam };
 
 export default {
   assertions,

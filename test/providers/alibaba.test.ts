@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
+import logger from '../../src/logger';
 import {
   AlibabaChatCompletionProvider,
   AlibabaEmbeddingProvider,
@@ -76,6 +77,17 @@ describe('Alibaba Cloud Provider', () => {
       );
     });
 
+    it.each([
+      'qwen3.6-plus',
+      'qwen3.5-flash',
+      'qwen3-coder-next',
+      'deepseek-v3.2',
+    ])('should recognize refreshed model id %s', (modelName) => {
+      new AlibabaChatCompletionProvider(modelName, {});
+
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
     it('should throw error when no model specified', () => {
       expect(() => new AlibabaChatCompletionProvider('')).toThrow('Alibaba modelName is required');
     });
@@ -84,6 +96,9 @@ describe('Alibaba Cloud Provider', () => {
       // Unknown models now only warn, they don't throw errors
       const provider = new AlibabaChatCompletionProvider('unknown-model', {});
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unknown Alibaba Cloud model: unknown-model.'),
+      );
     });
 
     it('should pass through environment variables', () => {
@@ -148,6 +163,9 @@ describe('Alibaba Cloud Provider', () => {
       // Unknown models now only warn, they don't throw errors
       const provider = new AlibabaEmbeddingProvider('unknown-model', {});
       expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unknown Alibaba Cloud model: unknown-model.'),
+      );
     });
 
     it('should pass through environment variables', () => {
