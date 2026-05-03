@@ -67,7 +67,12 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-5">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Intent file format help"
+            className="size-5"
+          >
             <Info className="size-4" />
           </Button>
         </TooltipTrigger>

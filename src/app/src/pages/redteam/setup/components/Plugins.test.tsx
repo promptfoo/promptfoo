@@ -700,6 +700,7 @@ describe('Plugins', () => {
         // Custom Prompts section should be visible
         expect(screen.getByTestId('custom-intent-section')).toBeInTheDocument();
         expect(screen.getByText(/Custom Intents \(/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Intent file format help' })).toBeInTheDocument();
       });
     });
 

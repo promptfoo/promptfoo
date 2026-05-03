@@ -174,6 +174,16 @@ describe('TestCaseGenerateButton', () => {
   });
 
   describe('Button interactions', () => {
+    it('uses the tooltip title as the accessible name', () => {
+      renderWithTooltipProvider(
+        <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Generate SQL Injection test" />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'Generate SQL Injection test' }),
+      ).toBeInTheDocument();
+    });
+
     it('should call onClick handler when button is clicked', async () => {
       const user = userEvent.setup();
       renderWithTooltipProvider(<TestCaseGenerateButton onClick={mockOnClick} />);

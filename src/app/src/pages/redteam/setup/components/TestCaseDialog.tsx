@@ -275,6 +275,9 @@ export const TestCaseGenerateButton: React.FC<{
   const hideTooltip = () => setShouldRenderTooltip(false);
 
   const iconSize = size === 'small' ? 'h-4 w-4' : 'h-5 w-5';
+  const buttonLabel =
+    tooltipTitle ||
+    (isRemoteDisabled ? 'Requires Promptfoo Cloud connection' : 'Generate a test case');
 
   return (
     <Tooltip open={shouldRenderTooltip} onOpenChange={setShouldRenderTooltip}>
@@ -282,6 +285,7 @@ export const TestCaseGenerateButton: React.FC<{
         <Button
           variant="ghost"
           size="icon"
+          aria-label={buttonLabel}
           onClick={(e) => {
             e.stopPropagation();
             hideTooltip();
