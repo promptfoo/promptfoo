@@ -55,8 +55,10 @@ const PromptDialog = ({
     <Dialog open={openDialog} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
+          <DialogTitle className="flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center">
+            <span className="min-w-0 break-words">
+              {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
+            </span>
             <Badge variant="outline" className="font-mono text-xs">
               {selectedPrompt.id.slice(0, 6)}
             </Badge>

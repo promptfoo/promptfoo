@@ -196,6 +196,23 @@ describe('PromptDialog', () => {
     expect(row).toHaveTextContent('-');
   });
 
+  it('stacks long titles above the prompt id badge on narrow screens', () => {
+    render(
+      <MemoryRouter>
+        <PromptDialog
+          openDialog={true}
+          handleClose={vi.fn()}
+          selectedPrompt={mockSelectedPrompt}
+          showDatasetColumn={true}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole('heading', { name: new RegExp(mockSelectedPrompt.prompt.label) }),
+    ).toHaveClass('flex-col', 'items-start', 'sm:flex-row', 'sm:items-center');
+  });
+
   it('should copy the prompt text to clipboard and show the Snackbar when the copy button is clicked', async () => {
     const handleClose = vi.fn();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
