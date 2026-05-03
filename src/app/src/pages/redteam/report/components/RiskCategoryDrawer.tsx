@@ -352,7 +352,7 @@ const RiskCategoryDrawer = ({
             }
             className="mt-4"
           >
-            <TabsList className="w-full">
+            <TabsList className="w-full justify-start overflow-x-auto">
               <TabsTrigger value="flagged" className="flex-1">
                 Failed Tests ({failures.length})
               </TabsTrigger>

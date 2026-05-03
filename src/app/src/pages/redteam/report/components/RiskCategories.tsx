@@ -317,7 +317,7 @@ const RiskCategories = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Risk Categories</h2>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span className={cn('font-medium', getPassRateStyles(overallPassRate).text)}>

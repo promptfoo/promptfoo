@@ -85,6 +85,21 @@ describe('RiskCategories', () => {
     expect(description).toHaveClass('hidden', 'sm:block');
   });
 
+  it('stacks the heading summary on narrow screens', () => {
+    const mockProps = createMockProps({
+      categoryStats: {
+        'sql-injection': { pass: 8, total: 10 },
+      },
+    });
+
+    renderWithProviders(<RiskCategories {...mockProps} />);
+
+    expect(screen.getByText('Risk Categories').parentElement).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+    );
+  });
+
   it('should display correct pass rate for categories', () => {
     const mockProps = createMockProps({
       categoryStats: {

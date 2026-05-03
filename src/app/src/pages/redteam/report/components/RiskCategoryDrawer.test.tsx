@@ -156,6 +156,12 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(drawer).not.toHaveClass('w-[750px]');
   });
 
+  it('keeps long tab labels anchored from the left on narrow screens', () => {
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    expect(screen.getByRole('tablist')).toHaveClass('justify-start', 'overflow-x-auto');
+  });
+
   it('displays malformed JSON prompts without crashing', () => {
     const malformedJsonPrompt = '{"key": "value"';
     const propsWithMalformedJson = {
