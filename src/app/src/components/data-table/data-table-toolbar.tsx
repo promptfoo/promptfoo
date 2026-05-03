@@ -62,12 +62,12 @@ export function DataTableToolbar<TData>({
 
       {showGlobalFilter && (
         <div className="relative max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
             placeholder="Search..."
             value={globalFilter ?? ''}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-8 rounded-lg bg-white dark:bg-gray-900"
+            className="pl-8 rounded-lg"
           />
         </div>
       )}
