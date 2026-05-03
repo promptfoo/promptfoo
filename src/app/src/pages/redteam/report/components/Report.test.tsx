@@ -697,6 +697,24 @@ describe('App component target selector rendering', () => {
     const dropdown = screen.queryByRole('combobox');
     expect(dropdown).toBeNull();
   });
+
+  it('keeps report header actions in normal flow on narrow screens', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByTestId('report-header-card')).toHaveClass('sm:pr-48');
+    expect(screen.getByTestId('report-header-actions')).toHaveClass(
+      'mb-4',
+      'justify-end',
+      'sm:absolute',
+      'sm:mb-0',
+    );
+  });
 });
 
 describe('App component categoryStats calculation with moderation', () => {
