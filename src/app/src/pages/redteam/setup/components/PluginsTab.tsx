@@ -434,7 +434,10 @@ export default function PluginsTab({
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex w-full items-start gap-6" data-testid="plugins-tab-container">
+      <div
+        className="flex w-full flex-col gap-6 lg:flex-row lg:items-start"
+        data-testid="plugins-tab-container"
+      >
         {/* Main content */}
         <div className="min-w-0 flex-1">
           {/* Presets section - collapsible */}
@@ -760,7 +763,7 @@ export default function PluginsTab({
 
         {/* Selected Plugins Sidebar */}
         <div
-          className="sticky top-[72px] w-80 max-h-[60vh] overflow-y-auto"
+          className="w-full max-h-[60vh] overflow-y-auto lg:sticky lg:top-[72px] lg:w-80"
           data-testid="selected-plugins-sidebar"
         >
           <div className="rounded-lg border border-border bg-background p-4">

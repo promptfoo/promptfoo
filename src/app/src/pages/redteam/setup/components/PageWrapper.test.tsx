@@ -27,6 +27,20 @@ describe('PageWrapper', () => {
       const descriptionElement = screen.getByText(testDescription);
       expect(descriptionElement).toBeInTheDocument();
     });
+
+    it('reserves more description height on narrow screens before collapsing on desktop', () => {
+      render(
+        <PageWrapper title="My Test Page" description="A longer page description">
+          <div>Child Content</div>
+        </PageWrapper>,
+      );
+
+      expect(screen.getByText('A longer page description')).toHaveClass(
+        'overflow-hidden',
+        'max-h-[320px]',
+        'md:max-h-[100px]',
+      );
+    });
   });
 
   describe('Content Area', () => {

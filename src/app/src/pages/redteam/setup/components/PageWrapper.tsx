@@ -115,8 +115,8 @@ export default function PageWrapper({
         {description && (
           <div
             className={cn(
-              'text-base text-muted-foreground transition-all duration-200 ease-in-out',
-              isMinimized ? 'max-h-0 overflow-hidden opacity-0' : 'max-h-[100px] opacity-100',
+              'overflow-hidden text-base text-muted-foreground transition-all duration-200 ease-in-out',
+              isMinimized ? 'max-h-0 opacity-0' : 'max-h-[320px] opacity-100 md:max-h-[100px]',
             )}
           >
             {description}

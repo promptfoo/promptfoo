@@ -1706,6 +1706,17 @@ describe('PluginsTab', () => {
     });
 
     describe('Selected Plugins', () => {
+      test('selected plugins summary stacks below the list on narrow screens', () => {
+        renderComponent();
+
+        expect(screen.getByTestId('plugins-tab-container')).toHaveClass('flex-col', 'lg:flex-row');
+        expect(screen.getByTestId('selected-plugins-sidebar')).toHaveClass(
+          'w-full',
+          'lg:sticky',
+          'lg:w-80',
+        );
+      });
+
       test('"Clear All" button clears all selected plugins', async () => {
         const user = userEvent.setup();
 

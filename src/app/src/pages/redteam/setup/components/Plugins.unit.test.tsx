@@ -162,6 +162,16 @@ describe('Plugins - State Management Unit Tests', () => {
       expect(pluginsTab.textContent).toContain('Plugins (3)');
     });
 
+    it('keeps the tab strip scrollable on narrow screens', () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('tablist')).toHaveClass(
+        'max-w-full',
+        'justify-start',
+        'overflow-x-auto',
+      );
+    });
+
     it('should derive set with object plugins from config', () => {
       mockUseRedTeamConfig.mockReturnValue({
         config: {
