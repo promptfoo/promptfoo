@@ -20,6 +20,7 @@ type JunitProjectedResult = Pick<
   | 'latencyMs'
   | 'prompt'
   | 'promptId'
+  | 'promptIdx'
   | 'provider'
   | 'score'
   | 'success'
@@ -31,8 +32,8 @@ type JunitSuite = {
   displayName: string;
   errors: number;
   failures: number;
-  results: JunitProjectedResult[];
   skipped: number;
+  testcases: { testIdx: number; testcase: Record<string, unknown> }[];
   tests: number;
   timeMs: number;
 };
@@ -44,9 +45,13 @@ function truncateText(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength - 3)}...`;
 }
 
-function normalizeInlineText(value: string | undefined, fallback: string): string {
+function normalizeInlineText(
+  value: string | undefined,
+  fallback: string,
+  maxLength = MAX_JUNIT_NAME_LENGTH,
+): string {
   const normalized = value?.replace(/\s+/g, ' ').trim();
-  return truncateText(normalized || fallback, MAX_JUNIT_NAME_LENGTH);
+  return truncateText(normalized || fallback, maxLength);
 }
 
 function formatDurationSeconds(durationMs: number | undefined): string {
@@ -71,7 +76,8 @@ function getPromptName(result: JunitProjectedResult): string {
 }
 
 function getSuiteKey(result: JunitProjectedResult): string {
-  return `${result.provider.id || result.provider.label || 'unknown provider'}\u0000${result.promptId}`;
+  const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
+  return `${result.provider.id || result.provider.label || 'unknown provider'}\u0000${promptKey}`;
 }
 
 function getSuiteDisplayName(result: JunitProjectedResult): string {
@@ -96,12 +102,12 @@ function getAssertionLabel(gradingResult: GradingResult): string {
 
 function getFailureMessage(result: JunitProjectedResult): string {
   const message = result.gradingResult?.reason || result.error || 'Assertion failed';
-  return truncateText(normalizeInlineText(message, 'Assertion failed'), MAX_JUNIT_MESSAGE_LENGTH);
+  return normalizeInlineText(message, 'Assertion failed', MAX_JUNIT_MESSAGE_LENGTH);
 }
 
 function getErrorMessage(result: JunitProjectedResult): string {
   const message = result.error || result.gradingResult?.reason || 'Evaluation error';
-  return truncateText(normalizeInlineText(message, 'Evaluation error'), MAX_JUNIT_MESSAGE_LENGTH);
+  return normalizeInlineText(message, 'Evaluation error', MAX_JUNIT_MESSAGE_LENGTH);
 }
 
 function getFailureDetails(result: JunitProjectedResult): string {
@@ -139,6 +145,7 @@ function projectEvalResult(result: EvalResult | EvaluateResult): JunitProjectedR
       latencyMs: projected.latencyMs,
       prompt: projected.prompt,
       promptId: projected.promptId,
+      promptIdx: projected.promptIdx,
       provider: projected.provider,
       score: projected.score,
       success: projected.success,
@@ -155,6 +162,7 @@ function projectEvalResult(result: EvalResult | EvaluateResult): JunitProjectedR
     latencyMs: result.latencyMs,
     prompt: result.prompt,
     promptId: result.promptId,
+    promptIdx: result.promptIdx,
     provider: result.provider,
     score: result.score,
     success: result.success,
@@ -163,39 +171,50 @@ function projectEvalResult(result: EvalResult | EvaluateResult): JunitProjectedR
   };
 }
 
-async function getJunitProjectedResults(evalRecord: Eval): Promise<JunitProjectedResult[]> {
+async function* iterateJunitProjectedResults(
+  evalRecord: Eval,
+): AsyncGenerator<JunitProjectedResult> {
   if (evalRecord.useOldResults()) {
     const results = await evalRecord.getResults();
-    return results.map((result) => projectEvalResult(result));
+    for (const result of results) {
+      yield projectEvalResult(result);
+    }
+    return;
   }
 
   if (!evalRecord.persisted) {
-    return evalRecord.results.map((result) => projectEvalResult(result));
+    for (const result of evalRecord.results) {
+      yield projectEvalResult(result);
+    }
+    return;
   }
 
-  const projectedResults: JunitProjectedResult[] = [];
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
-    projectedResults.push(...batchResults.map((result) => projectEvalResult(result)));
+    for (const result of batchResults) {
+      yield projectEvalResult(result);
+    }
   }
-  return projectedResults;
 }
 
-function buildJunitSuites(results: JunitProjectedResult[]): JunitSuite[] {
+async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   const suites = new Map<string, JunitSuite>();
 
-  for (const result of results) {
+  for await (const result of iterateJunitProjectedResults(evalRecord)) {
     const key = getSuiteKey(result);
     const suite = suites.get(key) ?? {
       displayName: getSuiteDisplayName(result),
       errors: 0,
       failures: 0,
-      results: [],
       skipped: 0,
+      testcases: [],
       tests: 0,
       timeMs: 0,
     };
 
-    suite.results.push(result);
+    suite.testcases.push({
+      testcase: buildJunitTestCase(result),
+      testIdx: result.testIdx,
+    });
     suite.tests += 1;
     suite.timeMs += result.latencyMs;
     if (!result.success) {
@@ -238,8 +257,7 @@ function buildJunitTestCase(result: JunitProjectedResult) {
 }
 
 export async function createJunitXml(evalRecord: Eval): Promise<string> {
-  const results = await getJunitProjectedResults(evalRecord);
-  const suites = buildJunitSuites(results);
+  const suites = await buildJunitSuites(evalRecord);
   const tests = suites.reduce((sum, suite) => sum + suite.tests, 0);
   const failures = suites.reduce((sum, suite) => sum + suite.failures, 0);
   const errors = suites.reduce((sum, suite) => sum + suite.errors, 0);
@@ -273,9 +291,9 @@ export async function createJunitXml(evalRecord: Eval): Promise<string> {
         '@_tests': suite.tests,
         '@_time': formatDurationSeconds(suite.timeMs),
         ...(timestamp ? { '@_timestamp': timestamp } : {}),
-        testcase: suite.results
+        testcase: suite.testcases
           .sort((a, b) => a.testIdx - b.testIdx)
-          .map((result) => buildJunitTestCase(result)),
+          .map(({ testcase }) => testcase),
       })),
     },
   });

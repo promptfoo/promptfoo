@@ -212,6 +212,7 @@ evaluate:
         -c promptfooconfig.yaml \
         --share \
         -o output.json \
+        -o report.html \
         -o output.junit.xml
   variables:
     OPENAI_API_KEY: ${OPENAI_API_KEY}

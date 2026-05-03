@@ -567,6 +567,42 @@ describe('writeOutput', () => {
     });
   });
 
+  it('keeps legacy prompts without ids in separate suites', async () => {
+    const makeLegacyResult = (promptIdx: number, raw: string): EvaluateResult => ({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 0,
+      provider: { id: 'echo' },
+      prompt: { raw, label: '' },
+      response: { output: '' },
+      vars: {},
+      promptIdx,
+      testIdx: 0,
+      testCase: {},
+      promptId: '',
+    });
+    const eval_ = {
+      createdAt: '2026-05-03T15:00:00.000Z',
+      fetchResultsBatched: vi.fn(),
+      getResults: vi
+        .fn()
+        .mockResolvedValue([makeLegacyResult(0, 'Prompt A'), makeLegacyResult(1, 'Prompt B')]),
+      persisted: false,
+      results: [],
+      useOldResults: () => true,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite).toEqual([
+      expect.objectContaining({ '@_name': '[echo] Prompt A' }),
+      expect.objectContaining({ '@_name': '[echo] Prompt B' }),
+    ]);
+  });
+
   it('serializes persisted batched eval results into JUnit XML', async () => {
     const persistedResult: EvaluateResult = {
       success: false,
@@ -612,6 +648,36 @@ describe('writeOutput', () => {
       '#text': 'Reason: grader unavailable',
       '@_message': 'grader unavailable',
     });
+  });
+
+  it('preserves longer JUnit failure messages up to the message limit', async () => {
+    const longReason = 'x'.repeat(600);
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 0,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: '' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: longReason,
+      },
+      promptId: 'long-message',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.failure['@_message']).toHaveLength(600);
   });
 
   it('does not sanitize config for CSV output', async () => {
