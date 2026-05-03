@@ -125,7 +125,8 @@ export default function History({
         cell: ({ getValue }) => (
           <Link
             to={EVAL_ROUTES.DETAIL(getValue<string>() || '')}
-            className="text-primary hover:underline font-mono text-sm"
+            title={getValue<string>()}
+            className="block truncate font-mono text-sm text-primary hover:underline"
           >
             {getValue<string>()}
           </Link>
