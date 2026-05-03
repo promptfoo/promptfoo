@@ -37,6 +37,8 @@ tests:
     assert:
       - type: llm-rubric
         value: 'describes iPhone net sales in 2023 compared with 2022'
+      - type: contains
+        value: 'iPhone 14 Pro'
   - vars:
       question: Can any trends be identified in Apple's Services segment revenue over the reported periods?
     assert:
@@ -47,6 +49,8 @@ tests:
     assert:
       - type: llm-rubric
         value: 'includes specific commentary on foreign exchange'
+      - type: contains
+        value: 'Q3 2023'
   - vars:
       question: Are there any notable changes in Apple's liquidity position or cash flows as reported in these 10-Qs?
     assert:

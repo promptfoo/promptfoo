@@ -44,4 +44,4 @@ Promptfoo is a Node.js CLI, but the `file://retrieve.py` provider runs inside Py
 
 Afterwards, you can view the results by running `npx promptfoo@latest view`
 
-See `promptfooconfig.with-asserts.yaml` for a more complete example that compares the performance of two RAG configurations.
+See `promptfooconfig.with-asserts.yaml` for a more complete example that compares the performance of two RAG configurations. The smaller retrieval configuration is intentionally expected to miss a couple of details so the comparison view demonstrates failures as well as passes.
