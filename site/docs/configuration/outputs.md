@@ -176,9 +176,9 @@ promptfoo eval --output results.junit.xml
 
 ```xml
 <testsuites tests="2" failures="1" errors="0" time="0.840">
-  <testsuite name="[openai:gpt-4.1] Support answer" tests="2" failures="1" errors="0" time="0.840">
-    <testcase name="test 1: greets the customer" classname="[openai:gpt-4.1] Support answer" time="0.420" />
-    <testcase name="test 2: refuses refunds outside policy" classname="[openai:gpt-4.1] Support answer" time="0.420">
+  <testsuite name="[openai:gpt-4.1] prompt 1" tests="2" failures="1" errors="0" time="0.840">
+    <testcase name="test 1: greets the customer" classname="[openai:gpt-4.1] prompt 1" time="0.420" />
+    <testcase name="test 2: refuses refunds outside policy" classname="[openai:gpt-4.1] prompt 1" time="0.420">
       <failure message="Expected output to contain refund policy">Score: 0
 Reason: Expected output to contain refund policy</failure>
     </testcase>

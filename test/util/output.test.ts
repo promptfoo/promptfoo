@@ -477,19 +477,19 @@ describe('writeOutput', () => {
     expect(parsed.testsuites.testsuite).toMatchObject({
       '@_errors': '1',
       '@_failures': '1',
-      '@_name': '[echo] Hello prompt',
+      '@_name': '[echo] prompt 1',
       '@_skipped': '0',
       '@_tests': '3',
       '@_time': '4.25',
     });
     expect(parsed.testsuites.testsuite.testcase).toEqual([
       expect.objectContaining({
-        '@_classname': '[echo] Hello prompt',
+        '@_classname': '[echo] prompt 1',
         '@_name': 'test 1: passing test',
         '@_time': '1.25',
       }),
       expect.objectContaining({
-        '@_classname': '[echo] Hello prompt',
+        '@_classname': '[echo] prompt 1',
         '@_name': 'test 2: failing test',
         '@_time': '2.5',
         failure: expect.objectContaining({
@@ -500,7 +500,7 @@ describe('writeOutput', () => {
         }),
       }),
       expect.objectContaining({
-        '@_classname': '[echo] Hello prompt',
+        '@_classname': '[echo] prompt 1',
         '@_name': 'test 3',
         '@_time': '0.5',
         error: expect.objectContaining({
@@ -558,7 +558,7 @@ describe('writeOutput', () => {
     expect(eval_.getResults).toHaveBeenCalledTimes(1);
     expect(eval_.fetchResultsBatched).not.toHaveBeenCalled();
     expect(parsed.testsuites.testsuite).toMatchObject({
-      '@_name': '[legacy provider] Legacy raw prompt',
+      '@_name': '[legacy provider] prompt 1',
     });
     expect(parsed.testsuites.testsuite).not.toHaveProperty('@_timestamp');
     expect(parsed.testsuites.testsuite.testcase.failure).toMatchObject({
@@ -598,9 +598,37 @@ describe('writeOutput', () => {
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
     expect(parsed.testsuites.testsuite).toEqual([
-      expect.objectContaining({ '@_name': '[echo] Prompt A' }),
-      expect.objectContaining({ '@_name': '[echo] Prompt B' }),
+      expect.objectContaining({ '@_name': '[echo] prompt 1' }),
+      expect.objectContaining({ '@_name': '[echo] prompt 2' }),
     ]);
+  });
+
+  it('does not use prompt text or labels as JUnit suite names', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 0,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Sensitive system prompt', label: 'Sensitive label' },
+      response: { output: '' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'sensitive-prompt',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_name': '[echo] prompt 1',
+    });
+    expect(xml).not.toContain('Sensitive system prompt');
+    expect(xml).not.toContain('Sensitive label');
   });
 
   it('serializes persisted batched eval results into JUnit XML', async () => {
@@ -640,7 +668,7 @@ describe('writeOutput', () => {
 
     expect(eval_.getResults).not.toHaveBeenCalled();
     expect(parsed.testsuites.testsuite).toMatchObject({
-      '@_name': '[unknown provider] unnamed prompt',
+      '@_name': '[unknown provider] prompt 1',
       '@_time': '0',
       '@_timestamp': '2026-05-03T15:00:00.000Z',
     });

@@ -72,7 +72,7 @@ function getProviderName(result: JunitProjectedResult): string {
 }
 
 function getPromptName(result: JunitProjectedResult): string {
-  return normalizeInlineText(result.prompt.label || result.prompt.raw, 'unnamed prompt');
+  return `prompt ${result.promptIdx + 1}`;
 }
 
 function getSuiteKey(result: JunitProjectedResult): string {
