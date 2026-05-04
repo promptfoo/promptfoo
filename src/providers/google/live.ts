@@ -30,7 +30,11 @@ import type {
 import type { CompletionOptions, FunctionCall } from './types';
 import type { GeminiFormat } from './util';
 
-const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
+const formatContentMessage = (
+  contents: GeminiFormat,
+  contentIndex: number,
+  useRealtimeTextInput = false,
+) => {
   if (contents[contentIndex].role != 'user') {
     throw new Error('Can only take user role inputs.');
   }
@@ -38,6 +42,14 @@ const formatContentMessage = (contents: GeminiFormat, contentIndex: number) => {
     throw new Error('Unexpected number of parts in user input.');
   }
   const userMessage = contents[contentIndex].parts[0].text;
+
+  if (useRealtimeTextInput) {
+    return {
+      realtime_input: {
+        text: userMessage,
+      },
+    };
+  }
 
   const contentMessage = {
     client_content: {
@@ -247,6 +259,7 @@ export class GoogleLiveProvider implements ApiProvider {
 
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
+      const usesRealtimeTextInput = this.modelName.startsWith('gemini-3.1-flash-live');
       let isResolved = false;
 
       const safeResolve = (response: ProviderResponse) => {
@@ -292,7 +305,6 @@ export class GoogleLiveProvider implements ApiProvider {
 
       // Extract transcription config for use in message handler
       const hasOutputTranscription = !!config.generationConfig?.outputAudioTranscription;
-      const hasInputTranscription = !!config.generationConfig?.inputAudioTranscription;
 
       // Set a standard 30-second timeout for the WebSocket connection (like OpenAI)
       const timeout = setTimeout(() => {
@@ -487,92 +499,105 @@ export class GoogleLiveProvider implements ApiProvider {
           );
 
           if (response.setupComplete) {
-            const contentMessage = formatContentMessage(contents, contentIndex);
+            const contentMessage = formatContentMessage(
+              contents,
+              contentIndex,
+              usesRealtimeTextInput,
+            );
             contentIndex += 1;
             logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
             ws.send(JSON.stringify(contentMessage));
-          } else if (
-            response.serverContent?.outputTranscription?.text &&
-            !response.serverContent?.modelTurn
-          ) {
-            // Handle transcription-only messages (when transcription comes separately)
-            response_audio_transcript += response.serverContent.outputTranscription.text;
-            clearTimeout(timeout);
-          } else if (response.serverContent?.modelTurn?.parts) {
-            for (const part of response.serverContent.modelTurn.parts) {
-              if (part.text) {
-                response_text_total += part.text;
-                clearTimeout(timeout);
-              }
-              if (part.inlineData?.mimeType?.includes('audio')) {
-                hasAudioContent = true;
-                response_audio_total += part.inlineData.data;
-                clearTimeout(timeout);
-                if (isAudioExpected) {
-                  hasAudioStreamEnded = false;
+          } else if (response.serverContent) {
+            const { serverContent } = response;
+
+            if (serverContent.modelTurn?.parts) {
+              for (const part of serverContent.modelTurn.parts) {
+                if (part.text) {
+                  response_text_total += part.text;
+                  clearTimeout(timeout);
+                }
+                if (part.inlineData?.mimeType?.includes('audio')) {
+                  hasAudioContent = true;
+                  response_audio_total += part.inlineData.data;
+                  clearTimeout(timeout);
+                  if (isAudioExpected) {
+                    hasAudioStreamEnded = false;
+                  }
                 }
               }
+              if (serverContent.outputTranscription?.text) {
+                response_audio_transcript += serverContent.outputTranscription.text;
+                if (isAudioExpected) {
+                  hasAudioContent = true;
+                }
+                clearTimeout(timeout);
+              }
+            } else if (serverContent.outputTranscription?.text) {
+              // Handle transcription-only messages when transcription arrives separately.
+              response_audio_transcript += serverContent.outputTranscription.text;
+              clearTimeout(timeout);
             }
-            if (response.serverContent.outputTranscription?.text) {
-              // Append transcription text (it comes in chunks)
-              response_audio_transcript += response.serverContent.outputTranscription.text;
-              // Mark that we've received audio content when transcription arrives
-              if (isAudioExpected) {
-                hasAudioContent = true;
+
+            if (serverContent.generationComplete) {
+              logger.debug(
+                `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
+              );
+              if (isTextExpected && !hasTextStreamEnded) {
+                hasTextStreamEnded = true;
+              }
+              if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
+                hasAudioStreamEnded = true;
+              }
+              if (usesRealtimeTextInput && contentIndex < contents.length) {
+                const contentMessage = formatContentMessage(
+                  contents,
+                  contentIndex,
+                  usesRealtimeTextInput,
+                );
+                contentIndex += 1;
+                logger.debug(
+                  `WebSocket sent after generation complete: ${JSON.stringify(contentMessage)}`,
+                );
+                ws.send(JSON.stringify(contentMessage));
+                hasTextStreamEnded = !isTextExpected;
+                hasAudioStreamEnded = !isAudioExpected;
+                return;
               }
             }
-          } else if (response.serverContent?.generationComplete) {
-            logger.debug(
-              `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
-            );
-            if (isTextExpected && !hasTextStreamEnded) {
-              hasTextStreamEnded = true;
+
+            if (serverContent.turnComplete && contentIndex < contents.length) {
+              const contentMessage = formatContentMessage(
+                contents,
+                contentIndex,
+                usesRealtimeTextInput,
+              );
+              contentIndex += 1;
+              logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
+              ws.send(JSON.stringify(contentMessage));
+              return;
             }
-            // When audio with transcription is expected, generation complete signals end of audio too
-            if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
-              hasAudioStreamEnded = true;
+
+            if (serverContent.turnComplete && contentIndex >= contents.length) {
+              logger.debug(
+                `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
+              );
+              if (isTextExpected && !hasTextStreamEnded) {
+                hasTextStreamEnded = true;
+              }
+              if (isAudioExpected && !hasAudioStreamEnded) {
+                hasAudioStreamEnded = true;
+              }
             }
-            if (hasTextStreamEnded && hasAudioStreamEnded) {
+
+            if (hasTextStreamEnded && hasAudioStreamEnded && contentIndex >= contents.length) {
               try {
                 await finalizeResponse();
               } catch (err) {
                 logger.error(`Error in finalizeResponse: ${err}`);
                 safeResolve({ error: `Error finalizing response: ${err}` });
               }
-              return;
             }
-          } else if (response.serverContent?.turnComplete && contentIndex >= contents.length) {
-            logger.debug(
-              `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
-            );
-            if (isTextExpected && !hasTextStreamEnded) {
-              hasTextStreamEnded = true;
-            }
-            if (isAudioExpected && !hasAudioStreamEnded) {
-              // When transcription is enabled, we should complete immediately on turnComplete
-              // as the audio and transcription are sent together
-              if (hasOutputTranscription || hasInputTranscription) {
-                hasAudioStreamEnded = true;
-              } else if (hasAudioContent) {
-                hasAudioStreamEnded = true;
-              } else {
-                hasAudioStreamEnded = true;
-              }
-            }
-            if (hasTextStreamEnded && hasAudioStreamEnded) {
-              try {
-                await finalizeResponse();
-              } catch (err) {
-                logger.error(`Error in finalizeResponse: ${err}`);
-                safeResolve({ error: `Error finalizing response: ${err}` });
-              }
-              return;
-            }
-          } else if (response.serverContent?.turnComplete && contentIndex < contents.length) {
-            const contentMessage = formatContentMessage(contents, contentIndex);
-            contentIndex += 1;
-            logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
-            ws.send(JSON.stringify(contentMessage));
+            return;
           } else if (response.toolCall?.functionCalls) {
             if (toolsDisabled) {
               // Reply with an error tool_response so the model can complete its turn
@@ -650,6 +675,10 @@ export class GoogleLiveProvider implements ApiProvider {
                 }
               }
             }
+          } else if (response.sessionResumptionUpdate) {
+            logger.debug(
+              `Session resumption update received: ${JSON.stringify(response.sessionResumptionUpdate)}`,
+            );
           } else if (response.realtimeInput?.mediaChunks) {
             for (const chunk of response.realtimeInput.mediaChunks) {
               if (chunk.mimeType?.includes('audio')) {

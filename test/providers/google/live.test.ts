@@ -154,6 +154,180 @@ describe('GoogleLiveProvider', () => {
     expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
   });
 
+  it('should send client_content for older Live models', async () => {
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'test');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('test prompt');
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[1]).toEqual({
+      client_content: {
+        turns: [
+          {
+            role: 'user',
+            parts: [{ text: 'test prompt' }],
+          },
+        ],
+        turn_complete: true,
+      },
+    });
+  });
+
+  it('should send realtime_input for Gemini 3.1 Live prompts', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateTextMessage(mockWs, 'test');
+        simulateCompletionMessage(mockWs);
+      });
+      return mockWs;
+    });
+
+    await provider.callApi('test prompt');
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[1]).toEqual({
+      realtime_input: {
+        text: 'test prompt',
+      },
+    });
+  });
+
+  it('should process Gemini 3.1 multi-field server content before finalizing', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['audio'],
+          outputAudioTranscription: {},
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: {
+            modelTurn: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'audio/pcm',
+                    data: Buffer.from('audio').toString('base64'),
+                  },
+                },
+              ],
+            },
+            outputTranscription: { text: 'Rivers carry salt.' },
+            turnComplete: true,
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+
+    expect(response.output).toMatchObject({
+      text: 'Rivers carry salt.',
+      toolCall: { functionCalls: [] },
+    });
+    expect(response.audio).toMatchObject({
+      format: 'wav',
+      transcript: 'Rivers carry salt.',
+    });
+  });
+
+  it('should advance Gemini 3.1 multi-turn prompts after generationComplete', async () => {
+    provider = new GoogleLiveProvider('gemini-3.1-flash-live-preview', {
+      config: {
+        generationConfig: {
+          response_modalities: ['audio'],
+          outputAudioTranscription: {},
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        simulateMessage(mockWs, {
+          serverContent: {
+            modelTurn: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'audio/pcm',
+                    data: Buffer.from('audio').toString('base64'),
+                  },
+                },
+              ],
+            },
+            outputTranscription: { text: 'First answer.' },
+            generationComplete: true,
+          },
+        });
+        simulateMessage(mockWs, {
+          serverContent: {
+            modelTurn: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'audio/pcm',
+                    data: Buffer.from('audio').toString('base64'),
+                  },
+                },
+              ],
+            },
+            outputTranscription: { text: ' Second answer.' },
+            generationComplete: true,
+          },
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi(
+      JSON.stringify([
+        { role: 'user', content: 'first prompt' },
+        { role: 'user', content: 'second prompt' },
+      ]),
+    );
+
+    const sentMessages = mockWs.send.mock.calls.map(([message]) => JSON.parse(message as string));
+    expect(sentMessages[1]).toEqual({ realtime_input: { text: 'first prompt' } });
+    expect(sentMessages[2]).toEqual({ realtime_input: { text: 'second prompt' } });
+    expect(response.output).toMatchObject({
+      text: 'First answer. Second answer.',
+      toolCall: { functionCalls: [] },
+    });
+  });
+
   it('should send message and handle basic response', async () => {
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
