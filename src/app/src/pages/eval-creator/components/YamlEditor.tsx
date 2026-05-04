@@ -131,7 +131,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     <div className="space-y-4 min-w-0">
       {/* Action bar */}
       {!readOnly && (
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={handleSave} disabled={!hasUnsavedChanges}>
               <SaveIcon className="size-4 mr-2" />
