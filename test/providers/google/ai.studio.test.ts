@@ -1168,6 +1168,32 @@ describe('AIStudioChatProvider', () => {
       expect(body.tools).toBeUndefined();
     });
 
+    it('should skip tool loading when tools are disabled', async () => {
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: 'file://tools.json' as any,
+        },
+      });
+      const getAllToolsSpy = vi.spyOn(provider as any, 'getAllTools');
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('test prompt');
+
+      expect(getAllToolsSpy).not.toHaveBeenCalled();
+    });
+
     it('should load tools from external file and render variables', async () => {
       const mockRenderString = vi.fn((str, _vars) => {
         if (str.startsWith('file://')) {

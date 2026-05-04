@@ -27,6 +27,7 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
+  mergeGoogleCompletionOptions,
   mergeParts,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
@@ -47,6 +48,7 @@ import type {
   ClaudeRequest,
   ClaudeResponse,
   ClaudeThinkingConfig,
+  CompletionOptions,
   GoogleProviderConfig,
 } from './types';
 import type {
@@ -440,10 +442,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
@@ -453,9 +455,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
-    // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context);
     const { toolConfig, toolsDisabled } = resolveGoogleToolControl(config);
+    // Get all tools (MCP + config tools) using base class method
+    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,

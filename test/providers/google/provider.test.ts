@@ -892,6 +892,76 @@ describe('GoogleProvider', () => {
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       expect(body.tools).toBeUndefined();
     });
+
+    it('should skip tool loading when tools are disabled', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: 'file://tools.json' as any,
+        },
+      });
+      const getAllToolsSpy = vi.spyOn(provider as any, 'getAllTools');
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(getAllToolsSpy).not.toHaveBeenCalled();
+    });
+
+    it('should honor prompt-level tool_config disable controls over provider tool_choice', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'auto',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'test_function',
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('test prompt', {
+        prompt: {
+          config: {
+            tool_config: {
+              function_calling_config: {
+                mode: 'none',
+              },
+            },
+          },
+        },
+      } as any);
+
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toBeUndefined();
+    });
   });
 
   describe('error handling', () => {

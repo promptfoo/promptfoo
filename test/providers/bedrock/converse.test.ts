@@ -734,7 +734,7 @@ Third line`;
       const { ConverseCommand } = (await import(
         '@aws-sdk/client-bedrock-runtime'
       )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
           toolConfig: expect.objectContaining({
             tools: expect.arrayContaining([
@@ -777,7 +777,7 @@ Third line`;
       const { ConverseCommand } = (await import(
         '@aws-sdk/client-bedrock-runtime'
       )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
           toolConfig: expect.objectContaining({
             tools: expect.arrayContaining([
@@ -809,7 +809,7 @@ Third line`;
       const { ConverseCommand } = (await import(
         '@aws-sdk/client-bedrock-runtime'
       )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
           toolConfig: expect.objectContaining({
             toolChoice: { tool: { name: 'test_tool' } },
@@ -838,7 +838,7 @@ Third line`;
       const { ConverseCommand } = (await import(
         '@aws-sdk/client-bedrock-runtime'
       )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
         expect.objectContaining({
           inferenceConfig: {
             maxTokens: 2048,
@@ -1642,7 +1642,7 @@ Third line`;
       const { ConverseCommand } = (await import(
         '@aws-sdk/client-bedrock-runtime'
       )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
         expect.not.objectContaining({
           toolConfig: expect.anything(),
         }),
@@ -1666,7 +1666,7 @@ Third line`;
       const { ConverseCommand } = (await import(
         '@aws-sdk/client-bedrock-runtime'
       )) as unknown as MockBedrockModule;
-      expect(ConverseCommand).toHaveBeenCalledWith(
+      expect(ConverseCommand).toHaveBeenLastCalledWith(
         expect.not.objectContaining({
           toolConfig: expect.anything(),
         }),

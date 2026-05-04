@@ -96,6 +96,38 @@ export function resolveGoogleToolControl(config: CompletionOptions): {
   };
 }
 
+export function mergeGoogleCompletionOptions(
+  baseConfig: CompletionOptions,
+  promptConfig?: Partial<CompletionOptions>,
+): CompletionOptions {
+  const mergedConfig = {
+    ...baseConfig,
+    ...promptConfig,
+  };
+
+  const promptHasToolChoice = promptConfig?.tool_choice !== undefined;
+  const promptHasToolConfig = promptConfig?.toolConfig !== undefined;
+  const promptHasSnakeToolConfig = promptConfig?.tool_config !== undefined;
+
+  if (promptHasToolChoice || promptHasToolConfig || promptHasSnakeToolConfig) {
+    delete mergedConfig.tool_choice;
+    delete mergedConfig.toolConfig;
+    delete mergedConfig.tool_config;
+
+    if (promptHasToolChoice) {
+      mergedConfig.tool_choice = promptConfig!.tool_choice;
+    }
+    if (promptHasToolConfig) {
+      mergedConfig.toolConfig = promptConfig!.toolConfig;
+    }
+    if (promptHasSnakeToolConfig) {
+      mergedConfig.tool_config = promptConfig!.tool_config;
+    }
+  }
+
+  return mergedConfig;
+}
+
 /**
  * Calculates the cost for a Google API call.
  *

@@ -13,6 +13,7 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
   resolveGoogleToolControl,
 } from './util';
@@ -265,10 +266,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
@@ -380,10 +381,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
@@ -392,9 +393,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
-    // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context);
     const { toolConfig, toolsDisabled } = resolveGoogleToolControl(config);
+    // Get all tools (MCP + config tools) using base class method
+    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
 
     const body: Record<string, any> = {
       contents,

@@ -20,6 +20,7 @@ import {
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
@@ -2878,6 +2879,60 @@ describe('resolveGoogleToolControl', () => {
     ).toEqual({
       toolConfig: { functionCallingConfig: { mode: 'NONE' } },
       toolsDisabled: true,
+    });
+  });
+});
+
+describe('mergeGoogleCompletionOptions', () => {
+  it('should replace older tool-policy shapes when a prompt-level override is provided', () => {
+    expect(
+      mergeGoogleCompletionOptions(
+        {
+          tool_choice: 'auto',
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'AUTO',
+            },
+          },
+        },
+        {
+          tool_config: {
+            function_calling_config: {
+              mode: 'none',
+            },
+          },
+        },
+      ),
+    ).toEqual({
+      tool_config: {
+        function_calling_config: {
+          mode: 'none',
+        },
+      },
+    });
+  });
+
+  it('should preserve base tool policy when the prompt leaves it undefined', () => {
+    expect(
+      mergeGoogleCompletionOptions(
+        {
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'AUTO',
+            },
+          },
+        },
+        {
+          tool_choice: undefined,
+        },
+      ),
+    ).toEqual({
+      toolConfig: {
+        functionCallingConfig: {
+          mode: 'AUTO',
+        },
+      },
+      tool_choice: undefined,
     });
   });
 });

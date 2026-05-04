@@ -461,6 +461,42 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(requestBody.tools).toBeUndefined();
   });
 
+  it('should skip tool loading when tools are disabled', async () => {
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tool_choice: 'none',
+        tools: 'file://tools.json' as any,
+      },
+    });
+    const getAllToolsSpy = vi.spyOn(provider as any, 'getAllTools');
+
+    const mockRequest = vi.fn().mockResolvedValue({
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            totalTokenCount: 10,
+            promptTokenCount: 5,
+            candidatesTokenCount: 5,
+          },
+        },
+      ],
+    });
+
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds as any);
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callGeminiApi('test prompt');
+
+    expect(getAllToolsSpy).not.toHaveBeenCalled();
+  });
+
   it('should load tools from external file and render variables', async () => {
     const mockExternalTools = [
       {

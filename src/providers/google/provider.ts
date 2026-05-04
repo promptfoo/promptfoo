@@ -29,6 +29,7 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
   resolveGoogleToolControl,
 } from './util';
@@ -284,10 +285,10 @@ export class GoogleProvider extends GoogleGenericProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
@@ -296,9 +297,9 @@ export class GoogleProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
-    // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context);
     const { toolConfig, toolsDisabled } = resolveGoogleToolControl(config);
+    // Get all tools (MCP + config tools) using base class method
+    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
 
     const body: Record<string, any> = {
       contents,

@@ -10,6 +10,7 @@ import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
 const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
+const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn((input) => input));
 
 // Mock setTimeout globally to speed up tests
 const originalSetTimeout = global.setTimeout;
@@ -70,6 +71,12 @@ vi.mock('../../../src/providers/google/util', async (importOriginal) => {
     getGoogleAccessToken: vi.fn().mockResolvedValue(undefined),
   };
 });
+vi.mock('../../../src/util/index', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadToolsFromExternalFile: mockMaybeLoadToolsFromExternalFile,
+  };
+});
 
 const mockImportModule = vi.mocked(importModule);
 
@@ -109,6 +116,7 @@ describe('GoogleLiveProvider', () => {
   beforeEach(async () => {
     // Reset fetchWithProxy mock to prevent test pollution from async callbacks
     mockFetchWithProxy.mockReset();
+    mockMaybeLoadToolsFromExternalFile.mockReset().mockImplementation((input) => input);
 
     mockWs = {
       on: vi.fn(),
@@ -545,6 +553,7 @@ describe('GoogleLiveProvider', () => {
     const setupMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
     expect(setupMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
     expect(setupMessage.setup.tools).toBeUndefined();
+    expect(mockMaybeLoadToolsFromExternalFile).not.toHaveBeenCalled();
     expect(mockAddNumbers).not.toHaveBeenCalled();
   });
 
