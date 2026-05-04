@@ -715,6 +715,20 @@ describe('App component target selector rendering', () => {
       'sm:mb-0',
     );
   });
+
+  it('allows embedded reports to shrink within narrow result views', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    const { container } = renderWithProviders(<App embedded />);
+
+    await screen.findByTestId('overview-total');
+
+    expect(container.querySelector('.mx-auto.max-w-7xl')).toHaveClass('w-full', 'min-w-0');
+  });
 });
 
 describe('App component categoryStats calculation with moderation', () => {
