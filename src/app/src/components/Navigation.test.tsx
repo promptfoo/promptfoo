@@ -93,6 +93,22 @@ describe('Navigation', () => {
     expect(screen.getByText('History')).toBeInTheDocument();
   });
 
+  it('keeps a compact results label available for very narrow screens', () => {
+    renderNavigation();
+
+    expect(screen.getByRole('button', { name: 'View Results' })).toBeInTheDocument();
+    expect(screen.getByText('Results')).toHaveClass('min-[390px]:hidden');
+  });
+
+  it('hides the logo below the extra-narrow breakpoint', () => {
+    renderNavigation();
+
+    expect(screen.getByRole('link', { name: /Promptfoo Logo/ })).toHaveClass(
+      'hidden',
+      'min-[360px]:inline-flex',
+    );
+  });
+
   it('should have the correct z-index class', () => {
     renderNavigation();
     const header = screen.getByRole('banner');
@@ -165,7 +181,7 @@ describe('Navigation', () => {
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('bg-primary/10');
-    expect(modelAuditLink).toHaveClass('text-primary');
+    expect(modelAuditLink).toHaveClass('text-foreground');
   });
 
   it('activates the Model Audit NavLink on /model-audit/:id path', () => {
@@ -173,7 +189,7 @@ describe('Navigation', () => {
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('bg-primary/10');
-    expect(modelAuditLink).toHaveClass('text-primary');
+    expect(modelAuditLink).toHaveClass('text-foreground');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
@@ -308,7 +324,7 @@ describe('Navigation', () => {
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-primary');
+      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
     });
 
     it('activates Model Audit NavLink on /model-audit/:id path', () => {
@@ -320,7 +336,7 @@ describe('Navigation', () => {
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-primary');
+      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
     });
 
     it('does not activate Model Audit NavLink on /model-audit/setup path', () => {

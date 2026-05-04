@@ -45,18 +45,30 @@ type DataTableHeaderActionsProps<TData, TValue> = {
 };
 
 type DataTableHeaderSortButtonProps = {
+  columnLabel: string;
   onToggleSorting?: (event: unknown) => void;
   sortDirection: false | 'asc' | 'desc';
 };
 
 function renderDataTableHeaderSortButton({
+  columnLabel,
   onToggleSorting,
   sortDirection,
 }: DataTableHeaderSortButtonProps) {
+  const nextSortDirection =
+    sortDirection === 'asc'
+      ? 'descending'
+      : sortDirection === 'desc'
+        ? 'clear sorting'
+        : 'ascending';
+  const sortLabel = `Sort ${columnLabel} ${nextSortDirection}`;
+
   return (
     <Button
       variant="ghost"
       size="sm"
+      aria-label={sortLabel}
+      title={sortLabel}
       className={cn(
         'h-6 w-6 p-0',
         sortDirection ? 'text-blue-700 dark:text-blue-100' : 'text-zinc-400 dark:text-zinc-500',
@@ -92,12 +104,16 @@ function renderDataTableHeaderActions<TData, TValue>({
     <span
       className={cn(
         'flex shrink-0 items-center gap-0.5',
-        'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
+        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto',
         (sortDirection || isFiltered) && 'opacity-100 pointer-events-auto',
       )}
     >
       {canSort &&
         renderDataTableHeaderSortButton({
+          columnLabel:
+            typeof header.column.columnDef.header === 'string'
+              ? header.column.columnDef.header
+              : header.column.id,
           onToggleSorting: header.column.getToggleSortingHandler(),
           sortDirection,
         })}

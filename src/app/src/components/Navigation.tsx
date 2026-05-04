@@ -48,7 +48,7 @@ function NavLink({ href, label }: NavLinkProps) {
         'inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
-          ? 'bg-primary/10 text-primary hover:bg-primary/15 focus-visible:bg-primary/15'
+          ? 'bg-primary/10 text-foreground hover:bg-primary/15 focus-visible:bg-primary/15'
           : 'text-foreground hover:bg-accent focus-visible:bg-accent',
       )}
     >
@@ -65,27 +65,36 @@ interface MenuItem {
 
 interface NavDropdownProps {
   label: string;
+  compactLabel?: string;
   items: MenuItem[];
   isActiveCheck: (pathname: string) => boolean;
 }
 
-function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
+function NavDropdown({ label, compactLabel, items, isActiveCheck }: NavDropdownProps) {
   const location = useLocation();
   const isActive = isActiveCheck(location.pathname);
 
   return (
     <NavigationMenuItem>
       <NavigationMenuTrigger
+        aria-label={label}
         className={cn(
           'h-8 bg-transparent px-3 text-sm font-medium',
           'data-[state=open]:bg-accent',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           isActive
-            ? 'bg-primary/10 text-primary hover:bg-primary/15 focus-visible:bg-primary/15'
+            ? 'bg-primary/10 text-foreground hover:bg-primary/15 focus-visible:bg-primary/15'
             : 'text-foreground hover:bg-accent focus-visible:bg-accent',
         )}
       >
-        {label}
+        {compactLabel ? (
+          <>
+            <span className="hidden min-[390px]:inline">{label}</span>
+            <span className="min-[390px]:hidden">{compactLabel}</span>
+          </>
+        ) : (
+          label
+        )}
       </NavigationMenuTrigger>
       <NavigationMenuContent>
         <ul className="w-[300px] p-1.5">
@@ -166,9 +175,9 @@ export default function Navigation() {
   return (
     <>
       <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
-        <div className="flex h-14 items-center justify-between px-4">
+        <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
           {/* Left section: Logo and Navigation */}
-          <div className="flex items-center gap-6">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-6">
             <Logo />
             <NavigationMenu>
               <NavigationMenuList className="gap-1">
@@ -183,6 +192,7 @@ export default function Navigation() {
                 />
                 <NavDropdown
                   label="View Results"
+                  compactLabel="Results"
                   items={resultsMenuItems}
                   isActiveCheck={(pathname) =>
                     [EVAL_ROUTES.ROOT, EVAL_ROUTES.LIST, REDTEAM_ROUTES.REPORTS, ROUTES.MEDIA].some(
@@ -192,7 +202,7 @@ export default function Navigation() {
                 />
               </NavigationMenuList>
             </NavigationMenu>
-            <nav className="hidden items-center gap-1 md:flex">
+            <nav className="hidden items-center gap-1 lg:flex">
               <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
               <NavLink href={ROUTES.PROMPTS} label="Prompts" />
               <NavLink href={ROUTES.DATASETS} label="Datasets" />
@@ -201,7 +211,7 @@ export default function Navigation() {
           </div>
 
           {/* Right section: Actions */}
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
