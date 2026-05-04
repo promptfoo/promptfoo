@@ -100,9 +100,9 @@ const PromptsSection = () => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Prompts</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
               <label className="cursor-pointer" aria-label="Upload prompt from file">
@@ -151,15 +151,15 @@ const PromptsSection = () => {
                 key={index}
                 onClick={() => handleEditPrompt(index)}
                 className={cn(
-                  'flex items-center justify-between p-4 cursor-pointer',
+                  'flex cursor-pointer flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between',
                   'hover:bg-muted/50 transition-colors',
                 )}
               >
-                <p className="text-sm flex-1 mr-4">
+                <p className="text-sm flex-1 sm:mr-4">
                   <span className="text-muted-foreground font-medium">Prompt #{index + 1}: </span>
                   {highlightVars(prompt)}
                 </p>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button

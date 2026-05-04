@@ -96,7 +96,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
               <Card
                 key={`${provider.id}-${index}`}
                 className={cn(
-                  'p-4 flex items-center justify-between hover:bg-muted/30 transition-colors',
+                  'flex flex-col gap-3 p-4 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between',
                   'bg-white dark:bg-zinc-900',
                 )}
               >
@@ -114,7 +114,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 ml-4">
+                <div className="flex items-center gap-2 self-end sm:ml-4 sm:self-auto">
                   <Button
                     variant="ghost"
                     size="sm"

@@ -13,12 +13,12 @@ interface StepSectionProps {
 }
 
 export function StepSection({
-  stepNumber: _stepNumber,
+  stepNumber,
   title,
   description,
-  isComplete: _isComplete,
-  isRequired: _isRequired = false,
-  count: _count,
+  isComplete,
+  isRequired = false,
+  count,
   guidance,
   children,
   defaultOpen: _defaultOpen = false,
@@ -26,7 +26,18 @@ export function StepSection({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>Step {stepNumber}</span>
+          <span aria-hidden="true">/</span>
+          <span>{isRequired ? 'Required' : 'Optional'}</span>
+          {isComplete && (
+            <>
+              <span aria-hidden="true">/</span>
+              <span>{count === undefined ? 'Configured' : `${count} configured`}</span>
+            </>
+          )}
+        </div>
         <h2 className="text-2xl font-bold mb-2">{title}</h2>
         <p className="text-muted-foreground">{description}</p>
       </div>

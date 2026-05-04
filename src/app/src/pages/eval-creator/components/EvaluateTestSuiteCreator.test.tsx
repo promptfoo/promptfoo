@@ -225,6 +225,42 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(uploadButton).toBeInTheDocument();
   });
 
+  it('should summarize incomplete setup progress and recommend the next required step', () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByText('0 of 3 required steps complete')).toBeInTheDocument();
+    expect(screen.getByText('Next up: Choose Providers.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue to Providers' })).toBeInTheDocument();
+  });
+
+  it('should advance the progress summary as required setup is completed', () => {
+    useStore.getState().updateConfig({
+      providers: [{ id: 'openai:gpt-4.1' }],
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
+    expect(screen.getByText('Next up: Write Prompts.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue to Prompts' })).toBeInTheDocument();
+  });
+
+  it('should show a ready state and jump to run options once required setup is complete', async () => {
+    useStore.getState().updateConfig({
+      providers: [{ id: 'openai:gpt-4.1' }],
+      prompts: ['Hello {{name}}'],
+      tests: [{ vars: { name: 'Ada' } }],
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByText('Ready to run')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review run options' }));
+
+    expect(screen.getByTestId('mock-run-options-section')).toBeInTheDocument();
+  });
+
   it('should successfully upload and parse a valid YAML file', async () => {
     const user = userEvent.setup();
     render(<EvaluateTestSuiteCreator />);

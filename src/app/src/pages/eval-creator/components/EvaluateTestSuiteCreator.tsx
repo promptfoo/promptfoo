@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { PageContainer, PageHeader } from '@app/components/layout';
 import { Button } from '@app/components/ui/button';
+import { Card, CardContent } from '@app/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,17 @@ import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
 import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
 
+type SetupStepId = 1 | 2 | 3 | 4;
+
+interface SetupStep {
+  id: SetupStepId;
+  label: string;
+  title: string;
+  isComplete: boolean;
+  count?: number;
+  required: boolean;
+}
+
 function ErrorFallback({
   error,
   resetErrorBoundary,
@@ -53,7 +65,7 @@ const EvaluateTestSuiteCreator = () => {
   const { showToast } = useToast();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [hasCustomConfig, setHasCustomConfig] = useState(false);
-  const [activeStep, setActiveStep] = useState(1);
+  const [activeStep, setActiveStep] = useState<SetupStepId>(1);
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -152,6 +164,45 @@ const EvaluateTestSuiteCreator = () => {
   const isReadyToRun =
     normalizedProviders.length > 0 && normalizedPrompts.length > 0 && testCount > 0;
 
+  const setupSteps: SetupStep[] = [
+    {
+      id: 1,
+      label: 'Providers',
+      title: 'Choose Providers',
+      isComplete: normalizedProviders.length > 0,
+      count: normalizedProviders.length,
+      required: true,
+    },
+    {
+      id: 2,
+      label: 'Prompts',
+      title: 'Write Prompts',
+      isComplete: normalizedPrompts.length > 0,
+      count: normalizedPrompts.length,
+      required: true,
+    },
+    {
+      id: 3,
+      label: 'Test Cases',
+      title: 'Add Test Cases',
+      isComplete: testCount > 0,
+      count: testCount,
+      required: true,
+    },
+    {
+      id: 4,
+      label: 'Run Options',
+      title: 'Run Options',
+      isComplete: Boolean(config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency),
+      required: false,
+    },
+  ];
+
+  const requiredSteps = setupSteps.filter((step) => step.required);
+  const completedRequiredStepCount = requiredSteps.filter((step) => step.isComplete).length;
+  const nextRecommendedStep =
+    requiredSteps.find((step) => !step.isComplete) ?? setupSteps[setupSteps.length - 1];
+
   const handleReset = () => {
     reset();
     setResetKey((k) => k + 1);
@@ -197,7 +248,7 @@ const EvaluateTestSuiteCreator = () => {
         {/* Header */}
         <PageHeader>
           <div className="container max-w-7xl mx-auto px-4 py-10">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight">Create Evaluation</h1>
                 <p className="text-muted-foreground">
@@ -205,7 +256,7 @@ const EvaluateTestSuiteCreator = () => {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {!hasCustomConfig && <ConfigureEnvButton />}
                 <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="size-4 mr-2" />
@@ -237,159 +288,125 @@ const EvaluateTestSuiteCreator = () => {
         {/* Main Content */}
         <TabsContent value="ui">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <div className="flex gap-8">
+            <Card className="mb-6 bg-background shadow-sm">
+              <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-muted-foreground">Evaluation setup</p>
+                  <h2 className="text-xl font-semibold">
+                    {isReadyToRun
+                      ? 'Ready to run'
+                      : `${completedRequiredStepCount} of ${requiredSteps.length} required steps complete`}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {isReadyToRun
+                      ? 'Providers, prompts, and test cases are configured. Review run options or start the evaluation.'
+                      : `Next up: ${nextRecommendedStep.title}.`}
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex flex-wrap gap-2">
+                    {requiredSteps.map((step) => (
+                      <div
+                        key={step.id}
+                        className={cn(
+                          'rounded-md border px-3 py-2 text-sm',
+                          step.isComplete
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
+                            : 'border-border bg-muted/30 text-muted-foreground',
+                        )}
+                      >
+                        <span className="font-medium">{step.label}</span>
+                        <span className="ml-2 text-xs">
+                          {step.isComplete ? `${step.count} ready` : 'Missing'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant={isReadyToRun ? 'default' : 'outline'}
+                    onClick={() => setActiveStep(nextRecommendedStep.id)}
+                    className="shrink-0"
+                  >
+                    {isReadyToRun
+                      ? 'Review run options'
+                      : `Continue to ${nextRecommendedStep.label}`}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] xl:gap-8">
               {/* Left Sidebar - Step Navigation */}
-              <div className="w-64 shrink-0">
-                <div className="sticky top-8 space-y-2">
-                  <h3 className="text-sm font-semibold text-muted-foreground mb-4 px-3">
+              <div>
+                <div className="space-y-2 lg:sticky lg:top-8">
+                  <h3 className="mb-4 px-3 text-sm font-semibold text-muted-foreground">
                     SETUP STEPS
                   </h3>
 
-                  {/* Step 1 */}
-                  <button
-                    onClick={() => setActiveStep(1)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
-                      'hover:bg-muted/50',
-                      activeStep === 1 && 'ring-2 ring-primary',
-                      normalizedProviders.length > 0
-                        ? 'bg-emerald-50 dark:bg-emerald-950/30'
-                        : 'bg-background',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
-                          normalizedProviders.length > 0
-                            ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
-                            : 'bg-background border-border',
-                        )}
-                      >
-                        {normalizedProviders.length > 0 ? (
-                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground">1</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">Choose Providers</div>
-                        {normalizedProviders.length > 0 && (
-                          <div className="text-xs text-muted-foreground">
-                            {normalizedProviders.length} configured
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
+                  <div className="grid grid-cols-2 gap-2 lg:block lg:space-y-2">
+                    {setupSteps.map((step) => {
+                      const isOptionalComplete = !step.required && step.isComplete;
 
-                  {/* Step 2 */}
-                  <button
-                    onClick={() => setActiveStep(2)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
-                      'hover:bg-muted/50',
-                      activeStep === 2 && 'ring-2 ring-primary',
-                      normalizedPrompts.length > 0
-                        ? 'bg-emerald-50 dark:bg-emerald-950/30'
-                        : 'bg-background',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
-                          normalizedPrompts.length > 0
-                            ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
-                            : 'bg-background border-border',
-                        )}
-                      >
-                        {normalizedPrompts.length > 0 ? (
-                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground">2</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">Write Prompts</div>
-                        {normalizedPrompts.length > 0 && (
-                          <div className="text-xs text-muted-foreground">
-                            {normalizedPrompts.length} configured
+                      return (
+                        <button
+                          key={step.id}
+                          type="button"
+                          onClick={() => setActiveStep(step.id)}
+                          className={cn(
+                            'w-full cursor-pointer rounded-lg border p-3 text-left transition-all',
+                            'hover:bg-muted/50',
+                            activeStep === step.id && 'border-primary ring-2 ring-primary',
+                            step.required && step.isComplete
+                              ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30'
+                              : isOptionalComplete
+                                ? 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30'
+                                : 'border-transparent bg-background',
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={cn(
+                                'flex size-8 shrink-0 items-center justify-center rounded-full border-2',
+                                step.required && step.isComplete
+                                  ? 'border-emerald-600 bg-emerald-100 dark:border-emerald-400 dark:bg-emerald-950/30'
+                                  : isOptionalComplete
+                                    ? 'border-blue-600 bg-blue-100 dark:border-blue-400 dark:bg-blue-950/30'
+                                    : 'border-border bg-background',
+                              )}
+                            >
+                              {step.isComplete ? (
+                                <Check
+                                  className={cn(
+                                    'size-4',
+                                    step.required
+                                      ? 'text-emerald-600 dark:text-emerald-400'
+                                      : 'text-blue-600 dark:text-blue-400',
+                                  )}
+                                />
+                              ) : (
+                                <span className="text-sm font-bold text-muted-foreground">
+                                  {step.id}
+                                </span>
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium">{step.title}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {step.required
+                                  ? step.isComplete
+                                    ? `${step.count} configured`
+                                    : 'Required'
+                                  : 'Optional'}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Step 3 */}
-                  <button
-                    onClick={() => setActiveStep(3)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
-                      'hover:bg-muted/50',
-                      activeStep === 3 && 'ring-2 ring-primary',
-                      testCount > 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-background',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
-                          testCount > 0
-                            ? 'bg-emerald-100 border-emerald-600 dark:bg-emerald-950/30 dark:border-emerald-400'
-                            : 'bg-background border-border',
-                        )}
-                      >
-                        {testCount > 0 ? (
-                          <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground">3</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">Add Test Cases</div>
-                        {testCount > 0 && (
-                          <div className="text-xs text-muted-foreground">
-                            {testCount} configured
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Step 4 */}
-                  <button
-                    onClick={() => setActiveStep(4)}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg transition-all cursor-pointer',
-                      'hover:bg-muted/50',
-                      activeStep === 4 && 'ring-2 ring-primary',
-                      config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
-                        ? 'bg-blue-50 dark:bg-blue-950/30'
-                        : 'bg-background',
-                    )}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
-                          config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
-                            ? 'bg-blue-100 border-blue-600 dark:bg-blue-950/30 dark:border-blue-400'
-                            : 'bg-background border-border',
-                        )}
-                      >
-                        {config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency ? (
-                          <Check className="size-4 text-blue-600 dark:text-blue-400" />
-                        ) : (
-                          <span className="text-sm font-bold text-muted-foreground">4</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">Run Options</div>
-                        <div className="text-xs text-muted-foreground">Optional</div>
-                      </div>
-                    </div>
-                  </button>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
