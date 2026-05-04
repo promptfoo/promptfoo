@@ -67,6 +67,18 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Test Cases').parentElement).toHaveClass('flex-col', 'sm:flex-row');
   });
 
+  it('keeps wide test case columns horizontally accessible', () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    const table = screen.getByRole('table');
+    expect(table).toHaveClass('min-w-[520px]');
+    expect(table.parentElement).toHaveClass('overflow-x-auto');
+  });
+
   it('renders existing test cases', () => {
     const testCases = [
       {

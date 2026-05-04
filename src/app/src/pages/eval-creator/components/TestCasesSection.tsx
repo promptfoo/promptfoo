@@ -277,8 +277,8 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
       </div>
 
       {/* Test Cases Table */}
-      <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-[520px] w-full">
           <thead className="bg-muted/50">
             <tr className="border-b border-border">
               <th className="px-4 py-3 text-left text-sm font-semibold">Description</th>
