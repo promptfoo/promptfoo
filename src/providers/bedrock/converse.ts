@@ -95,8 +95,8 @@ export interface BedrockConverseOptions extends BedrockOptions {
 
   // Tool configuration
   tools?: BedrockConverseToolConfig[];
-  tool_choice?: OpenAIToolChoice;
-  toolChoice?: OpenAIToolChoice | 'any' | { tool: { name: string } };
+  toolChoice?: 'auto' | 'any' | { tool: { name: string } };
+  tool_choice?: OpenAIToolChoice | 'any' | { tool: { name: string } };
 
   // Function tool callbacks for executing tools locally
   // Keys are function names, values are file:// references or inline function strings
@@ -324,16 +324,8 @@ function convertToolChoiceToConverseFormat(toolChoice: unknown): ToolChoice | un
   return { auto: {} };
 }
 
-function getEffectiveToolChoice(
-  promptConfig: Partial<BedrockConverseOptions> | undefined,
-  providerConfig: BedrockConverseOptions,
-): BedrockConverseOptions['toolChoice'] | BedrockConverseOptions['tool_choice'] | undefined {
-  return (
-    promptConfig?.tool_choice ??
-    promptConfig?.toolChoice ??
-    providerConfig.tool_choice ??
-    providerConfig.toolChoice
-  );
+function isDisabledToolChoice(toolChoice: unknown): boolean {
+  return toolChoice === 'none';
 }
 
 /**
@@ -855,8 +847,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     vars?: Record<string, VarValue>,
     promptConfig?: Partial<BedrockConverseOptions>,
   ): Promise<ToolConfiguration | undefined> {
-    const configToolChoice = getEffectiveToolChoice(promptConfig, this.config);
-    if (configToolChoice === 'none') {
+    const configToolChoice = this.getEffectiveToolChoice(promptConfig);
+    if (isDisabledToolChoice(configToolChoice)) {
       return undefined;
     }
 
@@ -881,6 +873,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       tools: converseTools,
       ...(toolChoice ? { toolChoice } : {}),
     };
+  }
+
+  private getEffectiveToolChoice(promptConfig?: Partial<BedrockConverseOptions>): unknown {
+    return (
+      promptConfig?.tool_choice ??
+      promptConfig?.toolChoice ??
+      this.config.tool_choice ??
+      this.config.toolChoice
+    );
   }
 
   /**
@@ -1008,6 +1009,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
+    const toolsDisabled = isDisabledToolChoice(
+      this.getEffectiveToolChoice(
+        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+      ),
+    );
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1045,7 +1051,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, Boolean(toolConfig));
+        const result = await this.parseResponse(parsed, toolsDisabled);
         return { ...result, cached: true };
       }
     }
@@ -1095,7 +1101,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, Boolean(toolConfig));
+    return await this.parseResponse(response, toolsDisabled);
   }
 
   /**
@@ -1103,7 +1109,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    */
   private async parseResponse(
     response: ConverseCommandOutput,
-    allowFunctionToolCallbacks: boolean,
+    toolsDisabled = false,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
@@ -1187,7 +1193,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     // Handle function tool callbacks if configured
-    if (allowFunctionToolCallbacks && this.config.functionToolCallbacks) {
+    if (!toolsDisabled && this.config.functionToolCallbacks) {
       const toolUseBlocks = content.filter(
         (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
           'toolUse' in block && block.toolUse !== undefined,

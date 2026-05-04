@@ -10,7 +10,8 @@ import {
   loadCredentials,
   normalizeSafetySettings,
   normalizeTools,
-  resolveGoogleToolControl,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
 
@@ -235,7 +236,6 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   private buildRequestBody(contents: any): Record<string, any> {
-    const { toolConfig, toolsDisabled } = resolveGoogleToolControl(this.config);
     const body: Record<string, any> = {
       contents,
       generationConfig: {
@@ -265,13 +265,21 @@ export class GeminiImageProvider implements ApiProvider {
       body.safetySettings = normalizeSafetySettings(this.config.safetySettings);
     }
 
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(this.config);
+
     // Add tool configuration if provided (e.g. Google Search grounding)
     if (toolConfig) {
       body.toolConfig = toolConfig;
     }
 
-    if (!toolsDisabled && Array.isArray(this.config.tools) && this.config.tools.length > 0) {
-      body.tools = normalizeTools(this.config.tools);
+    if (Array.isArray(this.config.tools) && this.config.tools.length > 0) {
+      const normalizedTools = normalizeTools(this.config.tools);
+      const requestTools = toolsDisabled
+        ? removeGoogleFunctionDeclarations(normalizedTools)
+        : normalizedTools;
+      if (requestTools.length > 0) {
+        body.tools = requestTools;
+      }
     }
 
     return body;

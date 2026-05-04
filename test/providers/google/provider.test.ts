@@ -858,26 +858,46 @@ describe('GoogleProvider', () => {
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'ANY' } });
     });
 
-    it('should normalize tool_choice none and omit tools from the request body', async () => {
+    it.each([
+      [{ tool_choice: 'none' }],
+      [{ toolConfig: { functionCallingConfig: { mode: 'none' } } }],
+      [{ tool_config: { function_calling_config: { mode: 'none' } } }],
+    ])('should enforce documented no-tools controls: %j', async (toolDisableConfig) => {
+      const callback = vi.fn(async () => 'callback result');
       const provider = new GoogleProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
-          tool_choice: 'none',
           tools: [
             {
               functionDeclarations: [
                 {
                   name: 'test_function',
+                  description: 'Test function',
+                  parameters: { type: 'OBJECT', properties: {} },
                 },
               ],
             },
           ],
-        },
+          functionToolCallbacks: { test_function: callback },
+          ...toolDisableConfig,
+        } as any,
       });
 
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      functionCall: { name: 'test_function', args: {} },
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
           usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
         },
         cached: false,
@@ -885,74 +905,57 @@ describe('GoogleProvider', () => {
         statusText: 'OK',
       });
 
-      await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt');
 
-      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls[0][1] as any;
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
       const body = JSON.parse(calledOptions.body);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       expect(body.tools).toBeUndefined();
+      expect(callback).not.toHaveBeenCalled();
+      expect(result.output).toBe(
+        JSON.stringify({ functionCall: { name: 'test_function', args: {} } }),
+      );
     });
 
-    it('should skip tool loading when tools are disabled', async () => {
+    it('should fall back to tool_choice when explicit toolConfig is invalid', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
-          tool_choice: 'none',
-          tools: 'file://tools.json' as any,
+          toolConfig: { functionCallingConfig: { mode: 'invalid' as any } },
+          tool_choice: 'required',
         },
-      });
-      const getAllToolsSpy = vi.spyOn(provider as any, 'getAllTools');
-
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
       });
 
       await provider.callApi('test prompt');
 
-      expect(getAllToolsSpy).not.toHaveBeenCalled();
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'ANY' } });
     });
 
-    it('should honor prompt-level tool_config disable controls over provider tool_choice', async () => {
+    it('should honor prompt-level snake_case no-tools overrides over provider toolConfig', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
-          tool_choice: 'auto',
           tools: [
             {
               functionDeclarations: [
                 {
                   name: 'test_function',
+                  description: 'Test function',
+                  parameters: { type: 'OBJECT', properties: {} },
                 },
               ],
             },
           ],
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
         },
-      });
-
-      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-        data: {
-          candidates: [{ content: { parts: [{ text: 'response' }] } }],
-          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
       });
 
       await provider.callApi('test prompt', {
         prompt: {
           config: {
-            tool_config: {
-              function_calling_config: {
-                mode: 'none',
-              },
-            },
+            tool_config: { function_calling_config: { mode: 'none' } },
           },
         },
       } as any);
@@ -961,6 +964,102 @@ describe('GoogleProvider', () => {
       const body = JSON.parse(calledOptions.body);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
       expect(body.tools).toBeUndefined();
+    });
+
+    it('should preserve non-function Google tools when function calling is disabled', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ googleSearch: {} }],
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: [{ googleSearch: {} }, 'file://tools.js:getTools'] as any,
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        [{ googleSearch: {} }],
+        undefined,
+      );
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should preserve non-function tools loaded from data files when disabled', async () => {
+      mockMaybeLoadToolsFromExternalFile.mockResolvedValueOnce([
+        {
+          functionDeclarations: [
+            {
+              name: 'get_weather',
+              description: 'Get weather information',
+              parameters: { type: 'OBJECT' as const, properties: {} },
+            },
+          ],
+        },
+        { googleSearch: {} },
+      ]);
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: 'file://tools.json' as any,
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        'file://tools.json',
+        undefined,
+      );
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should preserve supported explicit Google toolConfig fields', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'VALIDATED',
+              streamFunctionCallArguments: true,
+            },
+          },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({
+        functionCallingConfig: {
+          mode: 'VALIDATED',
+          streamFunctionCallArguments: true,
+        },
+      });
     });
   });
 

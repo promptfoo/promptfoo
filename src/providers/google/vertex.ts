@@ -31,7 +31,8 @@ import {
   mergeParts,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
-  resolveGoogleToolControl,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
 
@@ -455,9 +456,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
-    const { toolConfig, toolsDisabled } = resolveGoogleToolControl(config);
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
+    const allTools = await this.getAllTools(context, {
+      skipExecutableToolFiles: toolsDisabled,
+    });
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -475,7 +479,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
         : {}),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(!toolsDisabled && allTools.length > 0 ? { tools: allTools } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
       // Model Armor integration: inject template configuration for prompt/response screening
       // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration

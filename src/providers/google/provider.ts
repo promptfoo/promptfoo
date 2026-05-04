@@ -31,7 +31,8 @@ import {
   loadCredentials,
   mergeGoogleCompletionOptions,
   normalizeSafetySettings,
-  resolveGoogleToolControl,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
 } from './util';
 
 import type {
@@ -297,9 +298,12 @@ export class GoogleProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
-    const { toolConfig, toolsDisabled } = resolveGoogleToolControl(config);
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
+    const allTools = await this.getAllTools(context, {
+      skipExecutableToolFiles: toolsDisabled,
+    });
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
 
     const body: Record<string, any> = {
       contents,
@@ -313,7 +317,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(!toolsDisabled && allTools.length > 0 ? { tools: allTools } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
       ...(systemInstruction
         ? this.isVertexMode
@@ -425,7 +429,7 @@ export class GoogleProvider extends GoogleGenericProvider {
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, toolsDisabled, context);
+    return this.parseGeminiResponse(data, cached, config, context);
   }
 
   /**
@@ -435,10 +439,11 @@ export class GoogleProvider extends GoogleGenericProvider {
     data: GeminiApiResponse,
     cached: boolean,
     config: CompletionOptions,
-    toolsDisabled: boolean,
     _context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     try {
+      const { toolsDisabled } = resolveGoogleToolConfig(config);
+
       // Normalize response: non-streaming returns single object, streaming returns array
       const normalizedData = Array.isArray(data) ? data : [data];
 

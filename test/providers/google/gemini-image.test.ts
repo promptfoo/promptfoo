@@ -952,15 +952,19 @@ describe('GeminiImageProvider', () => {
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
 
-    it('should normalize tool_choice none and omit tools from the request body', async () => {
+    it('should preserve googleSearch when function calling is disabled', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
         config: {
-          tool_choice: 'none',
           tools: [
             {
               googleSearch: {},
             },
           ],
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'NONE',
+            },
+          },
         },
       });
 
@@ -985,7 +989,7 @@ describe('GeminiImageProvider', () => {
       const callArgs = mockFetchWithCache.mock.calls[0];
       const body = JSON.parse(callArgs[1]!.body as string);
       expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
-      expect(body.tools).toBeUndefined();
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
 
     it('should normalize google_search tool format to googleSearch', async () => {

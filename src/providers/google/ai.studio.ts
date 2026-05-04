@@ -15,7 +15,8 @@ import {
   getCandidate,
   mergeGoogleCompletionOptions,
   normalizeSafetySettings,
-  resolveGoogleToolControl,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -393,9 +394,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
-    const { toolConfig, toolsDisabled } = resolveGoogleToolControl(config);
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = toolsDisabled ? [] : await this.getAllTools(context);
+    const allTools = await this.getAllTools(context, {
+      skipExecutableToolFiles: toolsDisabled,
+    });
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
 
     const body: Record<string, any> = {
       contents,
@@ -413,7 +417,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
-      ...(!toolsDisabled && allTools.length > 0 ? { tools: allTools } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 

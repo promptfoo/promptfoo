@@ -10,6 +10,7 @@ This example uses the official `openai-agents` Python SDK with:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -23,6 +24,12 @@ from agents import (
     ModelSettings,
     RunContextWrapper,
     Runner,
+    ShellCallOutcome,
+    ShellCommandOutput,
+    ShellCommandRequest,
+    ShellResult,
+    ShellTool,
+    ShellToolLocalSkill,
     SQLiteSession,
     function_tool,
     handoff,
@@ -37,6 +44,8 @@ from promptfoo_tracing import configure_promptfoo_tracing
 
 DEFAULT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-5.4-mini")
 SESSION_DB_PATH = Path(__file__).with_name(".promptfoo-openai-agents.sqlite3")
+EXAMPLE_DIR = Path(__file__).resolve().parent
+DISCOUNT_REVIEW_SKILL_DIR = EXAMPLE_DIR / "skills" / "discount-review"
 
 RESERVATIONS: dict[str, dict[str, str]] = {
     "ABC123": {
@@ -127,6 +136,55 @@ class AirlineContext:
                 self.pending_third_party_booking_change
             ),
         }
+
+
+class SkillShellExecutor:
+    """Execute local shell commands for the skill workflow."""
+
+    def __init__(self, cwd: Path) -> None:
+        self.cwd = cwd
+
+    async def __call__(self, request: ShellCommandRequest) -> ShellResult:
+        outputs: list[ShellCommandOutput] = []
+        for command in request.data.action.commands:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                cwd=self.cwd,
+                env=os.environ.copy(),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            timed_out = False
+            try:
+                timeout = (request.data.action.timeout_ms or 0) / 1000 or None
+                stdout_bytes, stderr_bytes = await asyncio.wait_for(
+                    proc.communicate(),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                stdout_bytes, stderr_bytes = await proc.communicate()
+                timed_out = True
+
+            outputs.append(
+                ShellCommandOutput(
+                    command=command,
+                    stdout=stdout_bytes.decode("utf-8", errors="ignore"),
+                    stderr=stderr_bytes.decode("utf-8", errors="ignore"),
+                    outcome=ShellCallOutcome(
+                        type="timeout" if timed_out else "exit",
+                        exit_code=getattr(proc, "returncode", None),
+                    ),
+                )
+            )
+
+            if timed_out:
+                break
+
+        return ShellResult(
+            output=outputs,
+            provider_data={"working_directory": str(self.cwd)},
+        )
 
 
 def _topic_for_question(question: str) -> str:
@@ -629,6 +687,44 @@ def _build_sandbox_agent(model: str) -> SandboxAgent:
     )
 
 
+def _build_discount_review_skill() -> ShellToolLocalSkill:
+    return {
+        "name": "discount-review",
+        "description": (
+            "Inspect the discount policy fixture with the bundled checklist and "
+            "helper script."
+        ),
+        "path": str(DISCOUNT_REVIEW_SKILL_DIR),
+    }
+
+
+def _build_skill_agent(model: str) -> Agent[Any]:
+    return Agent(
+        name="Local Skill Analyst",
+        model=model,
+        instructions=(
+            "Use the discount-review skill for discount-policy review tasks. "
+            "Read only the mounted skill's SKILL.md before using it; do not "
+            "enumerate the skill directory. Follow the helper workflow exactly, "
+            "and return a concise maintainer report."
+        ),
+        tools=[
+            ShellTool(
+                environment={
+                    "type": "local",
+                    "skills": [_build_discount_review_skill()],
+                },
+                executor=SkillShellExecutor(cwd=EXAMPLE_DIR),
+            )
+        ],
+        model_settings=ModelSettings(
+            include_usage=True,
+            temperature=0,
+            tool_choice="required",
+        ),
+    )
+
+
 def _build_context(vars_dict: dict[str, Any]) -> AirlineContext:
     return AirlineContext(
         passenger_name=vars_dict.get("passenger_name"),
@@ -933,6 +1029,73 @@ def call_sandbox_api(
             "tokenUsage": _extract_token_usage(result.raw_responses),
             "metadata": {
                 "workflow": "sandbox",
+                "agent": result.last_agent.name,
+            },
+        }
+    except Exception as exc:
+        traceback.print_exc()
+        return {
+            "error": f"{type(exc).__name__}: {exc}",
+            "output": f"Error: {exc}",
+        }
+
+
+def call_skill_api(
+    prompt: str, options: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    """Run a local-shell skill workflow through the OpenAI Agents SDK."""
+
+    try:
+        options.setdefault("config", {})
+        config = options["config"]
+        vars_dict = context.get("vars", {})
+        session_id = _session_id(context, vars_dict)
+        tracing_context = configure_promptfoo_tracing(
+            context=context,
+            otlp_endpoint=config.get("otlp_endpoint", "http://localhost:4318"),
+        )
+
+        agent = _build_skill_agent(str(config.get("model") or DEFAULT_MODEL))
+        run_config = RunConfig(
+            workflow_name="Promptfoo OpenAI Agents Python Skill Example",
+            group_id=session_id,
+            trace_metadata={
+                "conversation_id": session_id,
+                "workflow.kind": "skill",
+                "skill.name": "discount-review",
+            },
+        )
+
+        with trace(
+            **_trace_kwargs(
+                workflow_name="Promptfoo OpenAI Agents Python Skill Example",
+                session_id=session_id,
+                step_count=1,
+                tracing_context=tracing_context,
+            )
+        ):
+            result = Runner.run_sync(
+                agent,
+                prompt,
+                max_turns=int(config.get("max_turns", 10)),
+                run_config=run_config,
+            )
+
+        final_output = _serialize(result.final_output)
+        transcript = _format_transcript(1, prompt, result)
+        transcript.append(f"Final output: {final_output}")
+        transcript.append(f"Final agent: {result.last_agent.name}")
+        transcript.append("Workflow: skill")
+        output = (
+            final_output
+            if config.get("return_transcript") is False
+            else "\n".join(transcript)
+        )
+        return {
+            "output": output,
+            "tokenUsage": _extract_token_usage(result.raw_responses),
+            "metadata": {
+                "workflow": "skill",
                 "agent": result.last_agent.name,
             },
         }
