@@ -4,6 +4,7 @@ import { Button } from '@app/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SIDEBAR_WIDTH } from '../constants';
 
 interface PageWrapperProps {
   title: string;
@@ -133,7 +134,8 @@ export default function PageWrapper({
       {(onBack || onNext) && (
         <div
           data-testid="page-navigation"
-          className="fixed bottom-0 left-0 right-0 z-[15] flex items-center justify-between border-t border-border bg-card/95 px-6 py-4 backdrop-blur-sm md:left-[240px]"
+          style={{ '--sidebar-width': `${SIDEBAR_WIDTH}px` } as React.CSSProperties}
+          className="fixed bottom-0 left-0 right-0 z-[15] flex items-center justify-between border-t border-border bg-card/95 px-6 py-4 backdrop-blur-sm md:left-[var(--sidebar-width)]"
         >
           <div>
             {onBack && (

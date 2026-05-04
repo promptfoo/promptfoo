@@ -128,8 +128,9 @@ describe('PageWrapper', () => {
       expect(screen.getByTestId('page-navigation')).toHaveClass(
         'left-0',
         'right-0',
-        'md:left-[240px]',
+        'md:left-[var(--sidebar-width)]',
       );
+      expect(screen.getByTestId('page-navigation')).toHaveStyle('--sidebar-width: 240px');
     });
   });
 

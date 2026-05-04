@@ -10,6 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
@@ -571,6 +577,69 @@ export default function RedTeamSetupPage() {
 
           {/* Tab content */}
           <div className="relative flex min-w-0 grow flex-col transition-[margin] duration-200">
+            <div
+              data-testid="redteam-setup-mobile-actions"
+              className="border-b border-border bg-card p-4 md:hidden"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="mb-1 truncate text-base font-medium text-foreground">
+                    {configName ? `Config: ${configName}` : 'New Configuration'}
+                  </p>
+                  {hasUnsavedChanges ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500">
+                        <span>●</span> Unsaved changes
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
+                        onClick={handleSaveConfig}
+                        disabled={!configName}
+                      >
+                        Save now
+                      </Button>
+                    </div>
+                  ) : (
+                    configDate && (
+                      <p className="text-sm text-muted-foreground">
+                        {formatDataGridDate(configDate)}
+                      </p>
+                    )
+                  )}
+                </div>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="shrink-0">
+                      <Settings className="mr-2 size-4" />
+                      Config
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setSaveDialogOpen(true)}>
+                      <Save className="mr-2 size-4" />
+                      Save Config
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        loadConfigs();
+                        setLoadDialogOpen(true);
+                      }}
+                    >
+                      <FolderOpen className="mr-2 size-4" />
+                      Load Config
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setResetDialogOpen(true)}>
+                      <RotateCcw className="mr-2 size-4" />
+                      Reset Config
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
             {value === 0 && (
               <ErrorBoundary name="Target Type Selection Page">
                 <TargetTypeSelection onNext={handleNext} />
