@@ -1,5 +1,6 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
@@ -576,6 +577,27 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledWith(
           expect.objectContaining({
             directory: '/custom/dir',
+          }),
+        );
+      });
+
+      it('should resolve relative working_dir from cliState.basePath', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { working_dir: './workspace' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const resolvedWorkingDir = path.resolve('/test/basePath', 'workspace');
+        expect(statSyncSpy).toHaveBeenCalledWith(resolvedWorkingDir);
+        expect(mockSessionCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            directory: resolvedWorkingDir,
+          }),
+        );
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            directory: resolvedWorkingDir,
           }),
         );
       });

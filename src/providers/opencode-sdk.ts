@@ -14,6 +14,7 @@ import {
   generateCacheKey,
   getCachedResponse,
   initializeAgenticCache,
+  resolveAgenticWorkingDir,
 } from './agentic-utils';
 
 import type { EnvOverrides } from '../types/env';
@@ -1091,9 +1092,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.warnOnIgnoredBaseUrlConfig(config);
 
     if (config.working_dir) {
-      const workingDir = path.isAbsolute(config.working_dir)
-        ? config.working_dir
-        : path.resolve(process.cwd(), config.working_dir);
+      const workingDir =
+        resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
 
       let stats: fs.Stats;
       try {
