@@ -147,21 +147,6 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(screen.getByText('80%')).toBeInTheDocument(); // pass rate
   });
 
-  it('keeps the populated drawer full width on mobile while preserving the desktop width', () => {
-    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
-
-    const drawer = screen.getByRole('dialog');
-
-    expect(drawer).toHaveClass('w-full', 'sm:w-[750px]', 'sm:max-w-[750px]');
-    expect(drawer).not.toHaveClass('w-[750px]');
-  });
-
-  it('stacks drawer tabs on narrow screens', () => {
-    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
-
-    expect(screen.getByRole('tablist')).toHaveClass('grid-cols-1', 'sm:grid-cols-3', 'sm:!h-10');
-  });
-
   it('displays malformed JSON prompts without crashing', () => {
     const malformedJsonPrompt = '{"key": "value"';
     const propsWithMalformedJson = {
@@ -244,28 +229,5 @@ describe('RiskCategoryDrawer Component Invalid Category', () => {
     );
 
     consoleErrorSpy.mockRestore();
-  });
-});
-
-describe('RiskCategoryDrawer Component Empty State', () => {
-  it('keeps the empty drawer full width on mobile while preserving the desktop width', () => {
-    renderWithProviders(
-      <RiskCategoryDrawer
-        open
-        onClose={vi.fn()}
-        category="bola"
-        failures={[]}
-        passes={[]}
-        evalId="test-eval-123"
-        numPassed={0}
-        numFailed={0}
-        strategyStats={{}}
-      />,
-    );
-
-    const drawer = screen.getByRole('dialog');
-
-    expect(drawer).toHaveClass('w-full', 'sm:w-[500px]', 'sm:max-w-[500px]');
-    expect(drawer).not.toHaveClass('w-[500px]');
   });
 });

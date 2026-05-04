@@ -471,7 +471,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
           {item.kind.charAt(0).toUpperCase() + item.kind.slice(1)} preview —{' '}
           {item.context.evalDescription || item.hash.slice(0, 8)}
         </DialogTitle>
-        <div className="flex h-full min-w-0 w-full flex-col md:flex-row">
+        <div className="flex flex-col md:flex-row h-full">
           {/* Media Preview */}
           <div className="relative flex-1 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black min-w-0 min-h-[40vh] md:min-h-0 overflow-hidden">
             {/* Close button - visible on dark background */}
@@ -850,8 +850,6 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                   onClick={handleDownload}
                   variant="outline"
                   size="sm"
-                  aria-label="Download"
-                  title="Download"
                   className="h-8 gap-1.5"
                 >
                   <Download className="h-3.5 w-3.5" />

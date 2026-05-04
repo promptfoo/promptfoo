@@ -163,28 +163,23 @@ export default function ModelAuditSetupPage() {
       {/* Page Header */}
       <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
         <div className="container max-w-6xl mx-auto px-4 py-10">
-          <div
-            data-testid="model-audit-header"
-            className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
-          >
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="shrink-0 size-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <SettingsIcon className="size-7 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-2xl font-bold tracking-tight">Model Audit Setup</h1>
-                <p className="text-sm text-muted-foreground mt-1.5">
-                  Configure and run a security scan on ML models.{' '}
-                  <a
-                    href="https://www.promptfoo.dev/docs/model-audit/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2 hover:no-underline"
-                  >
-                    Learn more
-                  </a>
-                </p>
-              </div>
+          <div className="flex items-start gap-4">
+            <div className="shrink-0 size-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <SettingsIcon className="size-7 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold tracking-tight">Model Audit Setup</h1>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                Configure and run a security scan on ML models.{' '}
+                <a
+                  href="https://www.promptfoo.dev/docs/model-audit/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Learn more
+                </a>
+              </p>
             </div>
 
             {/* Installation Status */}
@@ -213,15 +208,11 @@ export default function ModelAuditSetupPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <ErrorIcon className="size-4 text-red-700 dark:text-red-400" />
-                      <span className="text-sm font-medium text-red-700 dark:text-red-400">
-                        Not Installed
-                      </span>
+                      <ErrorIcon className="size-4 text-destructive" />
+                      <span className="text-sm font-medium text-destructive">Not Installed</span>
                       <button
                         type="button"
                         onClick={() => checkInstallation()}
-                        aria-label="Check installation again"
-                        title="Check installation again"
                         className="p-1 hover:bg-muted rounded"
                       >
                         <RefreshIcon className="size-4 text-muted-foreground" />
@@ -245,8 +236,8 @@ export default function ModelAuditSetupPage() {
             {error && (
               <Alert variant="destructive" className="mb-6">
                 <AlertContent>
-                  <AlertDescription className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <span className="min-w-0">{error}</span>
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{error}</span>
                     <button
                       type="button"
                       onClick={() => setError(null)}

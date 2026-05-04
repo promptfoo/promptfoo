@@ -37,7 +37,6 @@ describe('ConfigurationTab', () => {
     );
 
     expect(screen.getByText(initialError)).toBeInTheDocument();
-    expect(screen.getByText(initialError).parentElement).toHaveClass('flex-col', 'sm:flex-row');
 
     await act(() => {
       rerender(

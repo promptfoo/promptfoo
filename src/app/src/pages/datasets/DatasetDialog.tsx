@@ -67,7 +67,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
           </DialogTitle>
         </DialogHeader>
 
-        <div className="min-w-0 space-y-6 py-4">
+        <div className="space-y-6 py-4">
           {/* Test Cases YAML section */}
           <div className="space-y-2">
             <h4 className="text-sm font-semibold">Test Cases</h4>
@@ -115,7 +115,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
               </div>
 
               <div className="rounded-lg border border-border overflow-x-auto">
-                <table className="min-w-[720px] w-full text-sm">
+                <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr className="border-b border-border">
                       <th className="px-3 py-2 text-left font-semibold w-[15%]">Prompt ID</th>

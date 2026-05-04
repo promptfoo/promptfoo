@@ -423,7 +423,6 @@ export default function VerticalSuiteCard({
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    aria-label={`Configure ${displayNameOverrides[plugin] || plugin}`}
                                     className={cn(
                                       'size-8',
                                       requiresConfig && !isPluginConfigured(plugin)
@@ -488,9 +487,6 @@ export default function VerticalSuiteCard({
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    aria-label={`View documentation for ${
-                                      displayNameOverrides[plugin] || plugin
-                                    }`}
                                     className="size-8 text-muted-foreground"
                                     onClick={(e) => {
                                       e.stopPropagation();

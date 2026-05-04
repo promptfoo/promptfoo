@@ -4,6 +4,7 @@ import { Button } from '@app/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SIDEBAR_WIDTH } from '../constants';
 
 interface PageWrapperProps {
   title: string;
@@ -87,7 +88,7 @@ export default function PageWrapper({
   }, []);
 
   const nextButton = (
-    <Button onClick={onNext} disabled={nextDisabled} className="px-6 py-2 md:mr-[72px]">
+    <Button onClick={onNext} disabled={nextDisabled} className="mr-[72px] px-6 py-2">
       {nextLabel}
       <ChevronRight className="ml-1 size-4" />
     </Button>
@@ -115,8 +116,8 @@ export default function PageWrapper({
         {description && (
           <div
             className={cn(
-              'overflow-hidden text-base text-muted-foreground transition-all duration-200 ease-in-out',
-              isMinimized ? 'max-h-0 opacity-0' : 'max-h-[320px] opacity-100 md:max-h-[100px]',
+              'text-base text-muted-foreground transition-all duration-200 ease-in-out',
+              isMinimized ? 'max-h-0 overflow-hidden opacity-0' : 'max-h-[100px] opacity-100',
             )}
           >
             {description}
@@ -132,8 +133,8 @@ export default function PageWrapper({
       {/* Navigation */}
       {(onBack || onNext) && (
         <div
-          data-testid="page-navigation"
-          className="fixed bottom-0 left-0 right-0 z-[15] flex items-center justify-between border-t border-border bg-card/95 px-6 py-4 backdrop-blur-sm md:left-[240px]"
+          className="fixed bottom-0 z-[15] flex items-center justify-between border-t border-border bg-card/95 px-6 py-4 backdrop-blur-sm"
+          style={{ left: SIDEBAR_WIDTH, right: 0 }}
         >
           <div>
             {onBack && (

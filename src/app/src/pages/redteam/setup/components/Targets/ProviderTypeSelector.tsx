@@ -1108,7 +1108,7 @@ export default function ProviderTypeSelector({
   return (
     <div className="space-y-4">
       {/* Filter bar - chips on left, search on right */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex items-center justify-between gap-4">
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -1142,7 +1142,7 @@ export default function ProviderTypeSelector({
         </div>
 
         {/* Search */}
-        <div className="relative w-full sm:w-64 sm:shrink-0">
+        <div className="relative w-64 shrink-0">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search providers..."

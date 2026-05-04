@@ -53,19 +53,17 @@ const PromptDialog = ({
 
   return (
     <Dialog open={openDialog} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex min-w-0 flex-col items-start gap-2 text-left sm:flex-row sm:items-center">
-            <span className="min-w-0 break-words">
-              {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
-            </span>
+          <DialogTitle className="flex items-center gap-2">
+            {selectedPrompt.prompt.label || selectedPrompt.prompt.display || 'Prompt Details'}
             <Badge variant="outline" className="font-mono text-xs">
               {selectedPrompt.id.slice(0, 6)}
             </Badge>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto py-4">
+        <div className="space-y-6 py-4">
           {/* Prompt content section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -90,7 +88,7 @@ const PromptDialog = ({
               </div>
 
               <div className="rounded-lg border border-border overflow-x-auto">
-                <table className="min-w-[720px] w-full text-sm">
+                <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr className="border-b border-border">
                       <th className="px-3 py-2 text-left font-semibold">Eval ID</th>
@@ -162,7 +160,7 @@ const PromptDialog = ({
           )}
         </div>
 
-        <DialogFooter className="shrink-0">
+        <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
             Close
           </Button>

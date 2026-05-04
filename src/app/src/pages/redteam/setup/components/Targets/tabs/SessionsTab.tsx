@@ -155,10 +155,7 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
         </p>
         <div className="space-y-2">
           {headers.map((header, index) => (
-            <div
-              key={index}
-              className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center"
-            >
+            <div key={index} className="flex items-center gap-2">
               <Input
                 value={header.key}
                 onChange={(e) => updateHeader(index, 'key', e.target.value)}
@@ -175,9 +172,8 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
                 type="button"
                 variant="ghost"
                 size="icon"
-                aria-label={`Remove header ${index + 1}`}
                 onClick={() => removeHeader(index)}
-                className="self-end shrink-0 sm:self-auto"
+                className="shrink-0"
               >
                 <Trash2 className="size-4 text-muted-foreground" />
               </Button>

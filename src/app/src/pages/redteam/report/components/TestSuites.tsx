@@ -492,10 +492,7 @@ const TestSuites = ({
 
   return (
     <div ref={vulnerabilitiesDataGridRef}>
-      <div
-        data-testid="vulnerabilities-header"
-        className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between"
-      >
+      <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold">Vulnerabilities and Mitigations</h2>
         <Button onClick={exportToCSV} className="print:hidden">
           <Download className="mr-2 size-4" />

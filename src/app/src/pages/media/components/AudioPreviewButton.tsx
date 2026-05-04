@@ -156,16 +156,10 @@ export function AudioPreviewButton({
       {/* Play/Pause button overlay */}
       <button
         onClick={togglePlay}
-        onMouseEnter={() => setIsHovering(true)}
-        onMouseLeave={() => setIsHovering(false)}
         className={cn(
-          'absolute inset-0 z-10 flex items-center justify-center',
+          'absolute inset-0 flex items-center justify-center',
           'transition-opacity duration-200',
-          'group-hover:pointer-events-auto group-hover:opacity-100',
-          'focus-visible:pointer-events-auto focus-visible:opacity-100',
-          isHovering || isPlaying
-            ? 'pointer-events-auto opacity-100'
-            : 'pointer-events-none opacity-0',
+          isHovering || isPlaying ? 'opacity-100' : 'opacity-0',
         )}
         aria-label={isPlaying ? 'Pause audio preview' : 'Play audio preview'}
       >

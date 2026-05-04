@@ -268,14 +268,7 @@ describe('YamlEditor', () => {
       await user.paste('description: Modified content');
 
       // Unsaved changes indicator should appear
-      const unsavedChanges = screen.getByText(/Unsaved changes/);
-
-      expect(unsavedChanges).toBeInTheDocument();
-      expect(unsavedChanges.parentElement).toHaveClass(
-        'flex-col',
-        'sm:flex-row',
-        'sm:items-center',
-      );
+      expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
     });
 
     it('should disable both Save and Discard buttons after successful save', async () => {

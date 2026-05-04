@@ -18,12 +18,10 @@ import {
 } from '@app/components/ui/dialog';
 import {
   AddIcon,
-  AlertTriangleIcon,
   CheckCircleIcon,
   DeleteIcon,
   ErrorIcon,
   HistoryIcon,
-  SearchIcon,
 } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -238,7 +236,6 @@ export default function ModelAuditHistory() {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={`Delete ${row.original.name || 'scan'}`}
                 className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -289,17 +286,13 @@ export default function ModelAuditHistory() {
         <Card className="overflow-hidden bg-white dark:bg-zinc-900">
           {historyError ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-                <AlertTriangleIcon className="size-6" />
-              </div>
+              <div className="text-4xl mb-4">⚠️</div>
               <h3 className="text-lg font-semibold text-destructive mb-1">Error loading history</h3>
               <p className="text-sm text-muted-foreground">{historyError}</p>
             </div>
           ) : totalCount === 0 && historicalScans.length === 0 && !isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
-              <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <SearchIcon className="size-6" />
-              </div>
+              <div className="text-4xl">🔍</div>
               <h3 className="text-lg font-semibold">No scan history found</h3>
               <p className="text-sm text-muted-foreground">
                 Run your first model security scan to see results here

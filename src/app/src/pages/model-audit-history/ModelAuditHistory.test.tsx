@@ -143,20 +143,6 @@ describe('ModelAuditHistory', () => {
     expect(screen.getByText('Scan 2')).toBeInTheDocument();
   });
 
-  it('labels icon-only scan actions', () => {
-    const mockScans = [createMockScan('1', 'Scan 1')];
-
-    mockUseHistoryStore.mockReturnValue({
-      ...getDefaultHistoryState(),
-      historicalScans: mockScans,
-      totalCount: 1,
-    } as any);
-
-    renderComponent();
-
-    expect(screen.getByRole('button', { name: 'Delete Scan 1' })).toBeInTheDocument();
-  });
-
   it('should not render stale scans when the API reports zero total scans', () => {
     const staleScans = [createMockScan('stale', 'Stale Scan')];
 

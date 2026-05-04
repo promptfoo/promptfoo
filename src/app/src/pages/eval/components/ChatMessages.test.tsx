@@ -155,7 +155,6 @@ describe('ChatMessages', () => {
 
     const audioElement = screen.getByTestId('audio');
     expect(audioElement).toBeInTheDocument();
-    expect(audioElement).toHaveClass('w-full', 'max-w-[500px]');
   });
 
   it('should render contentType image as image element', () => {
@@ -171,8 +170,6 @@ describe('ChatMessages', () => {
 
     const imageElement = screen.getByTestId('image');
     expect(imageElement).toBeInTheDocument();
-    expect(imageElement).toHaveClass('w-full', 'min-h-[180px]', 'sm:min-h-[300px]');
-    expect(imageElement).not.toHaveClass('min-w-[500px]');
   });
 
   it('should render contentType video as video element', () => {
@@ -188,7 +185,5 @@ describe('ChatMessages', () => {
 
     const videoElement = screen.getByTestId('video');
     expect(videoElement).toBeInTheDocument();
-    expect(videoElement).toHaveClass('max-w-full');
-    expect(videoElement.parentElement).toHaveClass('w-full', 'max-w-[500px]');
   });
 });

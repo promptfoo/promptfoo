@@ -147,7 +147,6 @@ describe('SuggestionsDialog', () => {
     // Copy button uses Lucide Copy icon with class lucide-copy
     const copyIcon = document.querySelector('.lucide-copy');
     expect(copyIcon).toBeInTheDocument();
-    expect(copyIcon?.closest('div')).toHaveClass('[@media(hover:none)]:opacity-100');
 
     // Click the copy button
     const copyButton = copyIcon?.closest('button') as HTMLButtonElement;

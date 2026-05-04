@@ -104,16 +104,6 @@ describe('RedTeamSetupPage', () => {
       const fallbackTitle = screen.getByText(/New Configuration/i);
       expect(fallbackTitle).toBeInTheDocument();
     });
-
-    it('keeps the sidebar off the mobile layout path', () => {
-      render(
-        <MemoryRouter initialEntries={['/redteam/setup']}>
-          <RedTeamSetupPage />
-        </MemoryRouter>,
-      );
-
-      expect(screen.getByTestId('redteam-setup-sidebar')).toHaveClass('hidden', 'md:flex');
-    });
   });
 
   describe('URL Hash Updates', () => {

@@ -100,9 +100,9 @@ const PromptsSection = () => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Prompts</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
               <label className="cursor-pointer" aria-label="Upload prompt from file">
@@ -169,7 +169,6 @@ const PromptsSection = () => {
                           e.stopPropagation();
                           handleEditPrompt(index);
                         }}
-                        aria-label={`Edit prompt ${index + 1}`}
                       >
                         <EditIcon className="size-4" />
                       </Button>

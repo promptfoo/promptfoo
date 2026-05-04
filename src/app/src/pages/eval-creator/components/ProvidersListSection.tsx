@@ -96,13 +96,13 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
               <Card
                 key={`${provider.id}-${index}`}
                 className={cn(
-                  'flex flex-col items-stretch gap-3 p-4 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between',
+                  'p-4 flex items-center justify-between hover:bg-muted/30 transition-colors',
                   'bg-white dark:bg-zinc-900',
                 )}
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="flex-1 min-w-0">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 mb-1">
                       <p className="font-medium truncate">{label}</p>
                       <Badge variant="secondary" className="text-xs">
                         {type}
@@ -114,13 +114,12 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-end sm:ml-4 sm:self-auto">
+                <div className="flex items-center gap-2 ml-4">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setEditingIndex(index)}
                     className="size-8 p-0"
-                    aria-label={`Edit provider ${label}`}
                   >
                     <Settings className="size-4" />
                   </Button>
@@ -129,7 +128,6 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                     size="sm"
                     onClick={() => handleRemoveProvider(index)}
                     className="size-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                    aria-label={`Remove provider ${label}`}
                   >
                     <Trash2 className="size-4" />
                   </Button>

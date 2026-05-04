@@ -145,7 +145,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     >
       <div className="flex flex-col gap-6">
         {/* Quick Start */}
-        <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-muted px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-muted px-4 py-3">
           <p className="text-sm text-foreground">
             New to red teaming? Load an example to explore the setup.
           </p>

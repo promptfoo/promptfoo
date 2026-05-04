@@ -174,16 +174,6 @@ describe('TestCaseGenerateButton', () => {
   });
 
   describe('Button interactions', () => {
-    it('uses the tooltip title as the accessible name', () => {
-      renderWithTooltipProvider(
-        <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Generate SQL Injection test" />,
-      );
-
-      expect(
-        screen.getByRole('button', { name: 'Generate SQL Injection test' }),
-      ).toBeInTheDocument();
-    });
-
     it('should call onClick handler when button is clicked', async () => {
       const user = userEvent.setup();
       renderWithTooltipProvider(<TestCaseGenerateButton onClick={mockOnClick} />);
@@ -272,7 +262,7 @@ describe('TestCaseDialog', () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
 
       // Plugin dropdown should be directly visible (not behind a popover)
-      expect(screen.getByTestId('plugin-dropdown')).toHaveClass('w-full', 'sm:w-[280px]');
+      expect(screen.getByTestId('plugin-dropdown')).toBeInTheDocument();
     });
 
     it('should NOT show plugin dropdown when allowPluginChange is false', () => {

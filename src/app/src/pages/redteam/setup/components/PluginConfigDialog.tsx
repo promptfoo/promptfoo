@@ -242,7 +242,6 @@ export default function PluginConfigDialog({
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label={`Remove ${arrayKeyToLabel(arrayKey)} ${index + 1}`}
                     onClick={() => removeArrayItem(arrayKey, index)}
                   >
                     <Minus className="size-4" />
@@ -349,12 +348,12 @@ export default function PluginConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-xl">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{getDialogTitle()}</DialogTitle>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto py-4">{renderConfigInputs()}</div>
-        <DialogFooter className="shrink-0">
+        <div className="py-4">{renderConfigInputs()}</div>
+        <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             {isReadOnlyPlugin ? 'Close' : 'Cancel'}
           </Button>

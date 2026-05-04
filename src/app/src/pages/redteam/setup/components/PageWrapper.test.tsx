@@ -27,20 +27,6 @@ describe('PageWrapper', () => {
       const descriptionElement = screen.getByText(testDescription);
       expect(descriptionElement).toBeInTheDocument();
     });
-
-    it('reserves more description height on narrow screens before collapsing on desktop', () => {
-      render(
-        <PageWrapper title="My Test Page" description="A longer page description">
-          <div>Child Content</div>
-        </PageWrapper>,
-      );
-
-      expect(screen.getByText('A longer page description')).toHaveClass(
-        'overflow-hidden',
-        'max-h-[320px]',
-        'md:max-h-[100px]',
-      );
-    });
   });
 
   describe('Content Area', () => {
@@ -116,20 +102,6 @@ describe('PageWrapper', () => {
 
       const nextButton = screen.queryByRole('button', { name: 'Next' });
       expect(nextButton).toBeNull();
-    });
-
-    it('keeps footer navigation full-width on mobile and offset on desktop', () => {
-      render(
-        <PageWrapper title="Test Page" onNext={() => {}}>
-          <div>Child Content</div>
-        </PageWrapper>,
-      );
-
-      expect(screen.getByTestId('page-navigation')).toHaveClass(
-        'left-0',
-        'right-0',
-        'md:left-[240px]',
-      );
     });
   });
 

@@ -61,7 +61,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
 
         return (
           <div>
-            <audio controls className="w-full max-w-[500px]" data-testid="audio">
+            <audio controls style={{ width: '500px' }} data-testid="audio">
               <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
               Your browser does not support the audio element.
             </audio>
@@ -78,20 +78,15 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
           <div
             role="img"
             data-testid="image"
-            className="min-h-[180px] w-full bg-contain bg-left bg-no-repeat sm:min-h-[300px]"
+            className="w-full min-w-[500px] min-h-[300px] bg-contain bg-no-repeat bg-left"
             style={{ backgroundImage: `url(${imageSrc})` }}
           />
         );
       }
       case 'video': {
         return (
-          <div className="flex w-full max-w-[500px] justify-center">
-            <video
-              controls
-              className="max-w-full"
-              style={{ maxHeight: '200px' }}
-              data-testid="video"
-            >
+          <div className="w-[500px] flex justify-center">
+            <video controls style={{ maxHeight: '200px' }} data-testid="video">
               <source
                 src={
                   loadedMessage?.content.startsWith('data:')

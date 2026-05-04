@@ -178,8 +178,7 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
             <Link
               to={EVAL_ROUTES.DETAIL(evalId)}
               onClick={(e) => e.stopPropagation()}
-              title={evalId}
-              className="block truncate font-mono text-sm text-primary hover:underline"
+              className="font-mono text-sm text-primary hover:underline"
             >
               {evalId}
             </Link>

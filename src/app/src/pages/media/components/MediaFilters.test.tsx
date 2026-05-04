@@ -19,30 +19,30 @@ const defaultProps = {
 };
 
 describe('MediaFilters', () => {
-  describe('type filter controls', () => {
-    it('renders all type filter controls', () => {
+  describe('type filter tabs', () => {
+    it('renders all type filter tabs', () => {
       render(<MediaFilters {...defaultProps} />);
 
-      expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Images' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Videos' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Other' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /All/i })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Images/i })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Videos/i })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Audio/i })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: /Other/i })).toBeInTheDocument();
     });
 
     it('shows the current type filter as selected', () => {
       render(<MediaFilters {...defaultProps} typeFilter="image" />);
 
-      const imagesButton = screen.getByRole('button', { name: 'Images' });
-      expect(imagesButton).toHaveAttribute('aria-pressed', 'true');
+      const imagesTab = screen.getByRole('tab', { name: /Images/i });
+      expect(imagesTab).toHaveAttribute('data-state', 'active');
     });
 
-    it('calls onTypeFilterChange when a control is clicked', async () => {
+    it('calls onTypeFilterChange when a tab is clicked', async () => {
       const user = userEvent.setup();
       const onTypeFilterChange = vi.fn();
       render(<MediaFilters {...defaultProps} onTypeFilterChange={onTypeFilterChange} />);
 
-      await user.click(screen.getByRole('button', { name: 'Videos' }));
+      await user.click(screen.getByRole('tab', { name: /Videos/i }));
 
       expect(onTypeFilterChange).toHaveBeenCalledWith('video');
     });

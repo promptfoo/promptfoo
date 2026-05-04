@@ -12,7 +12,7 @@ interface EstimationsDisplayProps {
  */
 export default function EstimationsDisplay({ config }: EstimationsDisplayProps) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row">
+    <div className="flex gap-4">
       <EstimatedDurationDisplay config={config} />
       <EstimatedProbesDisplay config={config} />
     </div>

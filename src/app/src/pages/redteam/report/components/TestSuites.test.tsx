@@ -378,17 +378,6 @@ describe('TestSuites Component CSV Export', () => {
     expect(exportButton).toBeInTheDocument();
     expect(exportButton.closest('button')).toBeInTheDocument();
   });
-
-  it('stacks the header controls on narrow screens', () => {
-    renderWithProviders(<TestSuites {...defaultProps} />);
-
-    expect(screen.getByTestId('vulnerabilities-header')).toHaveClass(
-      'flex-col',
-      'items-start',
-      'sm:flex-row',
-      'sm:justify-between',
-    );
-  });
 });
 
 describe('TestSuites Component - Zero Attack Success Rate', () => {

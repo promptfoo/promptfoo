@@ -196,48 +196,6 @@ describe('PromptDialog', () => {
     expect(row).toHaveTextContent('-');
   });
 
-  it('stacks long titles above the prompt id badge on narrow screens', () => {
-    render(
-      <MemoryRouter>
-        <PromptDialog
-          openDialog={true}
-          handleClose={vi.fn()}
-          selectedPrompt={mockSelectedPrompt}
-          showDatasetColumn={true}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(
-      screen.getByRole('heading', { name: new RegExp(mockSelectedPrompt.prompt.label) }),
-    ).toHaveClass('flex-col', 'items-start', 'text-left', 'sm:flex-row', 'sm:items-center');
-  });
-
-  it('keeps actions visible while long prompt content scrolls independently', () => {
-    render(
-      <MemoryRouter>
-        <PromptDialog
-          openDialog={true}
-          handleClose={vi.fn()}
-          selectedPrompt={mockSelectedPromptThreeEvals}
-          showDatasetColumn={true}
-        />
-      </MemoryRouter>,
-    );
-
-    const dialog = screen.getByRole('dialog');
-    const scrollBody = screen.getByText('Prompt').closest('div')?.parentElement?.parentElement;
-    const historyTable = screen.getByRole('table');
-    const footer = screen
-      .getAllByRole('button', { name: 'Close' })
-      .find((button) => button.textContent === 'Close')?.parentElement;
-
-    expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
-    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
-    expect(historyTable).toHaveClass('min-w-[720px]');
-    expect(footer).toHaveClass('shrink-0');
-  });
-
   it('should copy the prompt text to clipboard and show the Snackbar when the copy button is clicked', async () => {
     const handleClose = vi.fn();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);

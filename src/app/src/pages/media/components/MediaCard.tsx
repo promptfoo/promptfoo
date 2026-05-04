@@ -124,7 +124,7 @@ export function MediaCard({
       <button
         data-media-card
         type="button"
-        className="absolute inset-0 z-[1] cursor-pointer rounded-xl bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="absolute inset-0 z-0 cursor-pointer rounded-xl bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         onClick={handlePrimaryAction}
         onFocus={onFocus}
         tabIndex={tabIndex}
