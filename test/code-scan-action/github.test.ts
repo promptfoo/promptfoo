@@ -2,11 +2,10 @@
  * GitHub API Client Tests
  */
 
+import * as github from '@actions/github';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import * as github from '../../code-scan-action/node_modules/@actions/github/lib/github.js';
 import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
-
-import type { Octokit } from '../../code-scan-action/node_modules/@octokit/rest/dist-types/index.js';
+import type { Octokit } from '@octokit/rest';
 
 const mocks = vi.hoisted(() => {
   // Mock diff that includes src/auth.ts with lines 40-100 in scope
