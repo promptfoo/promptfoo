@@ -77,10 +77,6 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
-export interface EvalInvocationOptions {
-  isCliInvocation?: boolean;
-}
-
 export class EvalRunError extends Error {
   readonly exitCode: number;
 
@@ -93,11 +89,11 @@ export class EvalRunError extends Error {
 
 function failEvalRun(
   message: string,
-  invocationOptions: EvalInvocationOptions,
+  isCliInvocation: boolean,
   logForCli: () => void,
   exitCode = 1,
 ): Eval {
-  if (invocationOptions.isCliInvocation) {
+  if (isCliInvocation) {
     logForCli();
     process.exitCode = exitCode;
     return new Eval({}, { persisted: false });
@@ -126,10 +122,10 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: EvaluateOptions,
-  invocationOptions: EvalInvocationOptions = {},
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
+  const isCliInvocation = evaluateOptions.eventSource === 'cli';
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
@@ -218,7 +214,7 @@ export async function doEval(
     if (resumeRaw && retryErrors) {
       const message =
         'Cannot use --resume and --retry-errors together. Please use one or the other.';
-      return failEvalRun(message, invocationOptions, () => logger.error(chalk.red(message)));
+      return failEvalRun(message, isCliInvocation, () => logger.error(chalk.red(message)));
     }
 
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
@@ -230,12 +226,12 @@ export async function doEval(
       if (cmdObj.write === false) {
         const message =
           'Cannot use --resume with --no-write. Resume functionality requires database persistence.';
-        return failEvalRun(message, invocationOptions, () => logger.error(chalk.red(message)));
+        return failEvalRun(message, isCliInvocation, () => logger.error(chalk.red(message)));
       }
       resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
       if (!resumeEval) {
         const message = `Could not find evaluation to resume: ${resumeId}`;
-        return failEvalRun(message, invocationOptions, () => logger.error(message));
+        return failEvalRun(message, isCliInvocation, () => logger.error(message));
       }
       logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       // Use the saved config as our base to ensure identical test ordering
@@ -263,7 +259,7 @@ export async function doEval(
       if (cmdObj.write === false) {
         const message =
           'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.';
-        return failEvalRun(message, invocationOptions, () => logger.error(chalk.red(message)));
+        return failEvalRun(message, isCliInvocation, () => logger.error(chalk.red(message)));
       }
 
       logger.info('🔄 Retrying ERROR results from latest evaluation...');
@@ -272,7 +268,7 @@ export async function doEval(
       const latestEval = await Eval.latest();
       if (!latestEval) {
         const message = 'No previous evaluation found to retry errors from';
-        return failEvalRun(message, invocationOptions, () => logger.error(message));
+        return failEvalRun(message, isCliInvocation, () => logger.error(message));
       }
 
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
@@ -499,7 +495,7 @@ export async function doEval(
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
         .map(([envVar, providerIds]) => `${envVar} (${providerIds.join(', ')})`)
         .join('; ')}`;
-      return failEvalRun(missingKeysMessage, invocationOptions, () => {
+      return failEvalRun(missingKeysMessage, isCliInvocation, () => {
         for (const [envVar, providerIds] of missingApiKeys) {
           logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
         }
@@ -625,7 +621,7 @@ export async function doEval(
     };
 
     // Pause/resume SIGINT behavior is CLI policy. Reusable callers should own cancellation.
-    if (invocationOptions.isCliInvocation && cmdObj.write !== false) {
+    if (isCliInvocation && cmdObj.write !== false) {
       sigintHandler = () => {
         // Atomic check-and-set to handle rapid successive SIGINTs safely
         const wasPaused = paused;
@@ -667,7 +663,7 @@ export async function doEval(
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        eventSource: invocationOptions.isCliInvocation ? 'cli' : options.eventSource,
+        eventSource: options.eventSource,
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
       });
@@ -906,7 +902,7 @@ export async function doEval(
           const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
             ',',
           )}}.`;
-          return failEvalRun(message, invocationOptions, () => logger.error(message));
+          return failEvalRun(message, isCliInvocation, () => logger.error(message));
         }
         const basePath = path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)
@@ -984,7 +980,7 @@ export async function doEval(
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
       if (
-        invocationOptions.isCliInvocation &&
+        isCliInvocation &&
         passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)
       ) {
         if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
@@ -1237,8 +1233,7 @@ export function evalCommand(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,
         defaultConfigPath,
-        evaluateOptions,
-        { isCliInvocation: true },
+        { ...evaluateOptions, eventSource: 'cli' },
       );
     });
 

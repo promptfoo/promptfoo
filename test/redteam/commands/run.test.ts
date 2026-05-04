@@ -97,8 +97,8 @@ describe('redteamRunCommand', () => {
         config: undefined,
         loadedFromCloud: true,
         target: targetUUID,
+        eventSource: 'cli',
       }),
-      { isCliInvocation: true },
     );
   });
 
@@ -224,8 +224,8 @@ describe('redteamRunCommand', () => {
         config: undefined,
         loadedFromCloud: true,
         target: targetUUID,
+        eventSource: 'cli',
       }),
-      { isCliInvocation: true },
     );
   });
 
@@ -267,8 +267,8 @@ describe('redteamRunCommand', () => {
           liveRedteamConfig: expect.objectContaining({
             description: customDescription,
           }),
+          eventSource: 'cli',
         }),
-        { isCliInvocation: true },
       );
     });
 
@@ -307,8 +307,8 @@ describe('redteamRunCommand', () => {
           liveRedteamConfig: expect.objectContaining({
             description: originalDescription,
           }),
+          eventSource: 'cli',
         }),
-        { isCliInvocation: true },
       );
     });
 

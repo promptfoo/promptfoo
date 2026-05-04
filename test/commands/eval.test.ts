@@ -383,8 +383,7 @@ describe('evalCommand', () => {
         { resume: true, retryErrors: true } as Parameters<typeof doEval>[0],
         defaultConfig,
         defaultConfigPath,
-        {},
-        { isCliInvocation: true },
+        { eventSource: 'cli' },
       );
 
       expect(result.persisted).toBe(false);
@@ -424,13 +423,7 @@ describe('evalCommand', () => {
     const mockEvalRecord = new Eval(defaultConfig);
     vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
 
-    await doEval(
-      {},
-      defaultConfig,
-      defaultConfigPath,
-      { eventSource: 'mcp' },
-      { isCliInvocation: true },
-    );
+    await doEval({}, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
 
     expect(evaluate).toHaveBeenCalledWith(
       expect.anything(),

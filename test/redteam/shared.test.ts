@@ -354,7 +354,7 @@ describe('doRedteamRun', () => {
 
   describe('verbose toggle integration', () => {
     it('should initialize verbose toggle when logCallback is not provided', async () => {
-      await doRedteamRun({}, { isCliInvocation: true });
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(initVerboseToggle).toHaveBeenCalled();
     });
@@ -366,7 +366,7 @@ describe('doRedteamRun', () => {
     });
 
     it('should provide Ctrl+C delegation for CLI invocations', async () => {
-      await doRedteamRun({}, { isCliInvocation: true });
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(initVerboseToggle).toHaveBeenCalledWith({
         onInterrupt: expect.any(Function),
@@ -387,7 +387,7 @@ describe('doRedteamRun', () => {
       const mockCleanup = vi.fn();
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
 
-      await doRedteamRun({}, { isCliInvocation: true });
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(mockCleanup).toHaveBeenCalled();
     });
@@ -397,7 +397,7 @@ describe('doRedteamRun', () => {
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
       vi.mocked(doGenerateRedteam).mockResolvedValue(null);
 
-      await doRedteamRun({}, { isCliInvocation: true });
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(mockCleanup).toHaveBeenCalled();
     });
@@ -406,13 +406,13 @@ describe('doRedteamRun', () => {
       vi.mocked(initVerboseToggle).mockReturnValue(null);
 
       // Should not throw
-      await expect(doRedteamRun({}, { isCliInvocation: true })).resolves.not.toThrow();
+      await expect(doRedteamRun({ eventSource: 'cli' })).resolves.not.toThrow();
     });
 
     it('should not call cleanup when initVerboseToggle returns null', async () => {
       vi.mocked(initVerboseToggle).mockReturnValue(null);
 
-      await doRedteamRun({}, { isCliInvocation: true });
+      await doRedteamRun({ eventSource: 'cli' });
 
       // Just verifying no errors - cleanup should be handled gracefully
       expect(initVerboseToggle).toHaveBeenCalled();
@@ -423,7 +423,7 @@ describe('doRedteamRun', () => {
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
       vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
 
-      await expect(doRedteamRun({}, { isCliInvocation: true })).rejects.toThrow('eval failed');
+      await expect(doRedteamRun({ eventSource: 'cli' })).rejects.toThrow('eval failed');
 
       expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(null);
       expect(mockCleanup).toHaveBeenCalled();
@@ -476,7 +476,7 @@ describe('doRedteamRun', () => {
       vi.mocked(doGenerateRedteam).mockRejectedValue(error);
 
       try {
-        await doRedteamRun({ strict: true }, { isCliInvocation: true });
+        await doRedteamRun({ strict: true, eventSource: 'cli' });
       } catch {
         // Expected to throw
       }

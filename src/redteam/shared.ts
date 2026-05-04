@@ -16,14 +16,12 @@ import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
-import type { EvalInvocationOptions } from '../commands/eval';
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
-export async function doRedteamRun(
-  options: RedteamRunOptions,
-  invocationOptions: EvalInvocationOptions = {},
-): Promise<Eval | undefined> {
+export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+  const isCliInvocation = options.eventSource === 'cli';
+
   if (options.verbose) {
     setLogLevel('debug');
   }
@@ -34,7 +32,7 @@ export async function doRedteamRun(
   // Enable live verbose toggle (press 'v' to toggle debug logs)
   // Only works in interactive TTY mode, not in CI or web UI
   const verboseToggleCleanup =
-    options.logCallback || !invocationOptions.isCliInvocation
+    options.logCallback || !isCliInvocation
       ? null
       : initVerboseToggle({
           onInterrupt: () => process.kill(process.pid, 'SIGINT'),
@@ -147,8 +145,8 @@ export async function doRedteamRun(
         showProgressBar: options.progressBar,
         abortSignal: options.abortSignal,
         progressCallback: options.progressCallback,
+        eventSource: options.eventSource,
       },
-      invocationOptions,
     );
 
     // Set generation duration on the eval and save

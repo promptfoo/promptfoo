@@ -332,6 +332,7 @@ export interface RedteamRunOptions {
   abortSignal?: AbortSignal;
 
   loadedFromCloud?: boolean;
+  eventSource?: string;
 }
 
 export interface SavedRedteamConfig {
