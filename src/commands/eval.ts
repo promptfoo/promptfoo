@@ -13,6 +13,7 @@ import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   promptForEmailUnverified,
 } from '../globalConfig/accounts';
@@ -31,7 +32,11 @@ import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
-import { resolveConfigs } from '../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
@@ -927,7 +932,19 @@ export async function doEval(
             logger.info(`File change detected: ${path}`);
             printBorder();
             clearConfigCache();
-            await runEvaluation();
+            try {
+              await runEvaluation();
+            } catch (error) {
+              if (error instanceof ConfigResolutionError) {
+                logConfigResolutionError(error);
+                return;
+              }
+              if (error instanceof EmailValidationError) {
+                // Account helpers already render these user-facing failures.
+                return;
+              }
+              throw error;
+            }
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>

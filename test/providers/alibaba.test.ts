@@ -96,6 +96,9 @@ describe('Alibaba Cloud Provider', () => {
       // Unknown models now only warn, they don't throw errors
       const provider = new AlibabaChatCompletionProvider('unknown-model', {});
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unknown Alibaba Cloud model: unknown-model.'),
+      );
     });
 
     it('should pass through environment variables', () => {
@@ -160,6 +163,9 @@ describe('Alibaba Cloud Provider', () => {
       // Unknown models now only warn, they don't throw errors
       const provider = new AlibabaEmbeddingProvider('unknown-model', {});
       expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unknown Alibaba Cloud model: unknown-model.'),
+      );
     });
 
     it('should pass through environment variables', () => {

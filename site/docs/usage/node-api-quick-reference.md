@@ -340,7 +340,7 @@ for (const p of providers) {
 # Caching
 PROMPTFOO_CACHE_ENABLED=true
 PROMPTFOO_CACHE_PATH=~/.promptfoo/cache
-PROMPTFOO_CACHE_TTL=604800          # Seconds (default: 14 days)
+PROMPTFOO_CACHE_TTL=1209600         # Seconds (default: 14 days)
 PROMPTFOO_CACHE_TYPE=disk           # or 'memory'
 
 # Logging

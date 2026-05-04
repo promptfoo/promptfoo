@@ -1854,6 +1854,59 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('passes through programmatic can_use_tool callbacks', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async (_toolName, input) => ({
+            behavior: 'allow' as const,
+            updatedInput: input,
+          }));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              canUseTool,
+            }),
+          });
+        });
+
+        it('wraps programmatic can_use_tool callbacks for AskUserQuestion automation', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const canUseTool = vi.fn(async (_toolName, input) => ({
+            behavior: 'allow' as const,
+            updatedInput: input,
+          }));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: { behavior: 'first_option' },
+              can_use_tool: canUseTool,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const callArgs = mockQuery.mock.calls[0][0];
+          await callArgs.options.canUseTool(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: new AbortController().signal, toolUseID: 'test-id' },
+          );
+
+          expect(canUseTool).toHaveBeenCalledWith(
+            'Read',
+            { file_path: '/tmp/test.txt' },
+            { signal: expect.any(AbortSignal), toolUseID: 'test-id' },
+          );
+        });
+
         it('with includePartialMessages configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
@@ -3219,6 +3272,29 @@ describe('ClaudeCodeSDKProvider', () => {
 
         // Re-enable cache for other tests
         enableCache();
+      });
+
+      it('should bypass cache when can_use_tool callback is provided', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+
+        await clearCache();
+
+        const canUseTool = vi.fn(async (_toolName: string, input: Record<string, unknown>) => ({
+          behavior: 'allow' as const,
+          updatedInput: input,
+        }));
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { can_use_tool: canUseTool },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
+
+        // Two real SDK calls — cache must be skipped because the user-supplied
+        // callback can change tool decisions in ways the cache key can't model.
+        expect(mockQuery).toHaveBeenCalledTimes(2);
       });
 
       it('should handle cache errors gracefully', async () => {

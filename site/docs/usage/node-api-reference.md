@@ -535,8 +535,8 @@ Set cache location and TTL via environment variables:
 # Cache directory (default: ~/.promptfoo/cache)
 export PROMPTFOO_CACHE_PATH=/path/to/cache
 
-# Cache TTL in seconds (default: 604800 = 7 days)
-export PROMPTFOO_CACHE_TTL=604800
+# Cache TTL in seconds (default: 1209600 = 14 days)
+export PROMPTFOO_CACHE_TTL=1209600
 
 # Disable cache via env
 export PROMPTFOO_CACHE_ENABLED=false
