@@ -1,5 +1,14 @@
+import { render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getProviderTypeFromId } from './AddProviderDialog';
+import AddProviderDialog, { getProviderTypeFromId } from './AddProviderDialog';
+
+vi.mock('@app/pages/redteam/setup/components/Targets/ProviderTypeSelector', () => ({
+  default: () => <div>provider type selector</div>,
+}));
+
+vi.mock('@app/pages/redteam/setup/components/Targets/ProviderConfigEditor', () => ({
+  default: () => <div>provider config editor</div>,
+}));
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -75,5 +84,19 @@ describe('getProviderTypeFromId', () => {
 
   it('returns custom for unrecognized provider ids', () => {
     expect(getProviderTypeFromId('unknown-provider')).toBe('custom');
+  });
+});
+
+describe('AddProviderDialog layout', () => {
+  it('keeps the dialog footer visible while the body scrolls', () => {
+    render(<AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} />);
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen.getByText('provider type selector').parentElement?.parentElement;
+    const footer = screen.getByRole('button', { name: 'Cancel' }).parentElement;
+
+    expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
   });
 });
