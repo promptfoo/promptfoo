@@ -828,78 +828,24 @@ ${exampleRequest}`;
       </div>
 
       <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Generate HTTP Configuration</DialogTitle>
           </DialogHeader>
-          <p className="mb-2 text-sm text-muted-foreground">
-            Paste an example HTTP request and optionally a response. Promptfoo will automatically
-            generate the configuration for you.
-          </p>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <div>
-              <p className="mb-2 text-lg font-semibold">
-                Example Request (paste your HTTP request here)
-              </p>
-              <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
-                <Editor
-                  value={request}
-                  onValueChange={(val) => setRequest(val)}
-                  highlight={(code) => code}
-                  padding={10}
-                  style={{
-                    fontFamily: '"Fira code", "Fira Mono", monospace',
-                    fontSize: 14,
-                    minHeight: '100%',
-                  }}
-                />
-              </div>
-            </div>
-            <div>
-              <p className="mb-2 text-lg font-semibold">
-                Example Response (optional, improves accuracy)
-              </p>
-              <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
-                <Editor
-                  value={response}
-                  onValueChange={(val) => setResponse(val)}
-                  highlight={(code) => code}
-                  padding={10}
-                  style={{
-                    fontFamily: '"Fira code", "Fira Mono", monospace',
-                    fontSize: 14,
-                    minHeight: '100%',
-                  }}
-                />
-              </div>
-            </div>
-            {error && (
-              <div className="col-span-2">
-                <p className="text-destructive">Error: {error}</p>
-              </div>
-            )}
-            {generatedConfig && (
-              <div className="col-span-2">
-                <div className="mb-2 mt-4 flex items-center">
-                  <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Copy generated configuration"
-                    onClick={handleCopy}
-                    title={copied ? 'Copied!' : 'Copy to clipboard'}
-                  >
-                    {copied ? (
-                      <Check className="size-4 text-emerald-600" />
-                    ) : (
-                      <Copy className="size-4" />
-                    )}
-                  </Button>
-                </div>
-                <div className="h-80 overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
+          <div className="min-h-0 flex-1 overflow-y-auto py-4">
+            <p className="mb-2 text-sm text-muted-foreground">
+              Paste an example HTTP request and optionally a response. Promptfoo will automatically
+              generate the configuration for you.
+            </p>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div>
+                <p className="mb-2 text-lg font-semibold">
+                  Example Request (paste your HTTP request here)
+                </p>
+                <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                   <Editor
-                    value={yaml.dump(generatedConfig.config)}
-                    onValueChange={() => {}} // Read-only
+                    value={request}
+                    onValueChange={(val) => setRequest(val)}
                     highlight={(code) => code}
                     padding={10}
                     style={{
@@ -907,13 +853,69 @@ ${exampleRequest}`;
                       fontSize: 14,
                       minHeight: '100%',
                     }}
-                    readOnly
                   />
                 </div>
               </div>
-            )}
+              <div>
+                <p className="mb-2 text-lg font-semibold">
+                  Example Response (optional, improves accuracy)
+                </p>
+                <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
+                  <Editor
+                    value={response}
+                    onValueChange={(val) => setResponse(val)}
+                    highlight={(code) => code}
+                    padding={10}
+                    style={{
+                      fontFamily: '"Fira code", "Fira Mono", monospace',
+                      fontSize: 14,
+                      minHeight: '100%',
+                    }}
+                  />
+                </div>
+              </div>
+              {error && (
+                <div className="col-span-2">
+                  <p className="text-destructive">Error: {error}</p>
+                </div>
+              )}
+              {generatedConfig && (
+                <div className="col-span-2">
+                  <div className="mb-2 mt-4 flex items-center">
+                    <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Copy generated configuration"
+                      onClick={handleCopy}
+                      title={copied ? 'Copied!' : 'Copy to clipboard'}
+                    >
+                      {copied ? (
+                        <Check className="size-4 text-emerald-600" />
+                      ) : (
+                        <Copy className="size-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <div className="h-80 overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
+                    <Editor
+                      value={yaml.dump(generatedConfig.config)}
+                      onValueChange={() => {}} // Read-only
+                      highlight={(code) => code}
+                      padding={10}
+                      style={{
+                        fontFamily: '"Fira code", "Fira Mono", monospace',
+                        fontSize: 14,
+                        minHeight: '100%',
+                      }}
+                      readOnly
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-          <DialogFooter className="mt-4 gap-2">
+          <DialogFooter className="mt-4 shrink-0 gap-2">
             <Button variant="outline" onClick={() => setConfigDialogOpen(false)}>
               Cancel
             </Button>
