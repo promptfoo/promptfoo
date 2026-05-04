@@ -61,7 +61,10 @@ function renderDataTableHeaderSortButton({
       : sortDirection === 'desc'
         ? 'clear sorting'
         : 'ascending';
-  const sortLabel = `Sort ${columnLabel} ${nextSortDirection}`;
+  const sortLabel =
+    nextSortDirection === 'clear sorting'
+      ? `Clear sorting for ${columnLabel}`
+      : `Sort ${columnLabel} ${nextSortDirection}`;
 
   return (
     <Button

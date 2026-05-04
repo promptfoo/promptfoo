@@ -181,7 +181,7 @@ describe('TraceTimeline', () => {
     expect(screen.getByText('Span with Attributes')).toBeInTheDocument();
     expect(screen.getByText('Total Duration: 100ms')).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole('button')[0]);
+    await user.click(screen.getByRole('button', { name: 'Expand Span with Attributes' }));
 
     expect(screen.getByText('Span Details').parentElement).toHaveClass('sm:ml-10');
     expect(screen.getByText('Span ID').parentElement?.parentElement).toHaveClass(

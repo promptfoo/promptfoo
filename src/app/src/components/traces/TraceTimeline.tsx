@@ -185,6 +185,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
                 <button
                   type="button"
                   onClick={() => toggleSpan(span.spanId)}
+                  aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${span.name}`}
                   className={cn(
                     'mr-1 p-1 rounded hover:bg-muted transition-colors',
                     !hasAttributes && 'invisible',

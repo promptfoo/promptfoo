@@ -1025,6 +1025,18 @@ describe('DataTable', () => {
     assertHeaderLayout('Right Aligned Header', true);
   });
 
+  it('uses a clear label when the next sort action removes sorting', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [{ id: '1', name: 'Long header row' }];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    await user.click(screen.getByRole('button', { name: 'Sort ID ascending' }));
+    await user.click(screen.getByRole('button', { name: 'Sort ID descending' }));
+
+    expect(screen.getByRole('button', { name: 'Clear sorting for ID' })).toBeInTheDocument();
+  });
+
   describe('cell content wrapper', () => {
     it('should wrap data cell content in a div with overflow-hidden but not select cells', () => {
       const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
