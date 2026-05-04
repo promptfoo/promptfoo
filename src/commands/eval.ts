@@ -87,6 +87,32 @@ export class EvalRunError extends Error {
   }
 }
 
+function resolveSuggestionOptions(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+  evaluateOptions: EvaluateOptions,
+): Pick<EvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
+  const suggestPrompts = (cmdObj as EvalCommandOptions).suggestPrompts;
+  const generateSuggestions =
+    suggestPrompts !== undefined ||
+    (cmdObj.generateSuggestions ??
+      commandLineOptions?.generateSuggestions ??
+      evaluateOptions.generateSuggestions);
+
+  if (!generateSuggestions) {
+    return {};
+  }
+
+  return {
+    generateSuggestions: true,
+    suggestionsCount:
+      suggestPrompts ??
+      commandLineOptions?.suggestionsCount ??
+      evaluateOptions.suggestionsCount ??
+      1,
+  };
+}
+
 function failEvalRun(
   message: string,
   isCliInvocation: boolean,
@@ -554,15 +580,8 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    const suggestPrompts = (cmdObj as EvalCommandOptions).suggestPrompts;
-    if (
-      !resumeEval &&
-      (suggestPrompts !== undefined ||
-        (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions))
-    ) {
-      options.generateSuggestions = true;
-      options.suggestionsCount =
-        suggestPrompts ?? commandLineOptions?.suggestionsCount ?? options.suggestionsCount ?? 1;
+    if (!resumeEval) {
+      Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
