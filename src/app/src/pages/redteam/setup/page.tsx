@@ -459,10 +459,11 @@ export default function RedTeamSetupPage() {
       {/* Root container */}
       <div className="fixed flex w-full bg-white dark:bg-zinc-900">
         {/* Content wrapper */}
-        <div className="flex grow transition-[margin] duration-200">
+        <div className="flex min-w-0 grow flex-col transition-[margin] duration-200 md:flex-row">
           {/* Outer sidebar container */}
           <div
-            className="flex h-full flex-col border-r border-border"
+            data-testid="redteam-setup-sidebar"
+            className="hidden h-full flex-col border-r border-border md:flex"
             style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
           >
             {/* Inner sidebar (sticky) */}
@@ -569,7 +570,7 @@ export default function RedTeamSetupPage() {
           </div>
 
           {/* Tab content */}
-          <div className="relative flex grow flex-col transition-[margin] duration-200">
+          <div className="relative flex min-w-0 grow flex-col transition-[margin] duration-200">
             {value === 0 && (
               <ErrorBoundary name="Target Type Selection Page">
                 <TargetTypeSelection onNext={handleNext} />
