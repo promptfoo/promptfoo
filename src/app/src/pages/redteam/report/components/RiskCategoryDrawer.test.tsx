@@ -76,7 +76,6 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     evalId: 'test-eval-123',
     numPassed: 8,
     numFailed: 2,
-    strategyStats: {},
   };
 
   beforeEach(() => {
@@ -232,7 +231,6 @@ describe('RiskCategoryDrawer Component Invalid Category', () => {
       evalId: 'test-eval-123',
       numPassed: 0,
       numFailed: 0,
-      strategyStats: {},
     };
 
     const { container } = renderWithProviders(<RiskCategoryDrawer {...props} />);
@@ -259,7 +257,6 @@ describe('RiskCategoryDrawer Component Empty State', () => {
         evalId="test-eval-123"
         numPassed={0}
         numFailed={0}
-        strategyStats={{}}
       />,
     );
 
