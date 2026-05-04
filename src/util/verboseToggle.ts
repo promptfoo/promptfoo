@@ -6,7 +6,7 @@ let isVerboseToggleEnabled = false;
 let cleanupFn: (() => void) | null = null;
 
 export interface VerboseToggleOptions {
-  onInterrupt?: () => void;
+  onInterrupt: () => void;
 }
 
 /**
@@ -31,7 +31,7 @@ function showToggleStatus(isVerbose: boolean): void {
  *
  * @returns cleanup function to disable the toggle, or null if not enabled
  */
-export function initVerboseToggle(options: VerboseToggleOptions = {}): (() => void) | null {
+export function initVerboseToggle(options: VerboseToggleOptions): (() => void) | null {
   // Don't enable in CI or non-interactive environments
   if (isCI() || !process.stdin.isTTY || !process.stdout.isTTY) {
     return null;
@@ -55,11 +55,7 @@ export function initVerboseToggle(options: VerboseToggleOptions = {}): (() => vo
       // terminal first, then let the caller decide how interruption should work.
       if (key === '\u0003') {
         disableVerboseToggle();
-        if (options.onInterrupt) {
-          options.onInterrupt();
-        } else {
-          process.kill(process.pid, 'SIGINT');
-        }
+        options.onInterrupt();
         return;
       }
 
