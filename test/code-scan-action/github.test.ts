@@ -2,10 +2,11 @@
  * GitHub API Client Tests
  */
 
-import * as github from '@actions/github';
-import { Octokit } from '@octokit/rest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as github from '../../code-scan-action/node_modules/@actions/github/lib/github.js';
 import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
+
+import type { Octokit } from '../../code-scan-action/node_modules/@octokit/rest/dist-types/index.js';
 
 const mocks = vi.hoisted(() => {
   // Mock diff that includes src/auth.ts with lines 40-100 in scope
@@ -148,7 +149,7 @@ describe('GitHub API Client', () => {
 
     it('should post review comments with Octokit', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
+      mocks.Octokit.mockImplementation(function () {
         return {
           pulls: {
             createReview: mockCreateReview,
@@ -187,7 +188,7 @@ describe('GitHub API Client', () => {
 
     it('should handle single line comments when startLine equals line', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
+      mocks.Octokit.mockImplementation(function () {
         return {
           pulls: {
             createReview: mockCreateReview,
@@ -227,7 +228,7 @@ describe('GitHub API Client', () => {
 
     it('should handle line range comments when startLine differs from line', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
+      mocks.Octokit.mockImplementation(function () {
         return {
           pulls: {
             createReview: mockCreateReview,
@@ -267,7 +268,7 @@ describe('GitHub API Client', () => {
 
     it('should handle mixed single line and range comments', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
+      mocks.Octokit.mockImplementation(function () {
         return {
           pulls: {
             createReview: mockCreateReview,
@@ -335,7 +336,7 @@ describe('GitHub API Client', () => {
 
     it('should filter out comments without files', async () => {
       const mockCreateReview = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
+      mocks.Octokit.mockImplementation(function () {
         return {
           pulls: {
             createReview: mockCreateReview,
@@ -378,7 +379,7 @@ describe('GitHub API Client', () => {
     it('should post summary comment on error', async () => {
       const mockCreateReview = vi.fn().mockRejectedValue(new Error('API error'));
       const mockCreateComment = vi.fn().mockResolvedValue({});
-      vi.mocked(Octokit).mockImplementation(function () {
+      mocks.Octokit.mockImplementation(function () {
         return {
           pulls: {
             createReview: mockCreateReview,
