@@ -465,7 +465,7 @@ export default function Media() {
               </p>
             </div>
             {items.length > 0 && (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {/* Download Progress */}
                 {isDownloading && (
                   <div className="flex items-center gap-3 bg-muted/50 rounded-lg px-3 py-2">

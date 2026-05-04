@@ -23,18 +23,18 @@ describe('MediaFilters', () => {
     it('renders all type filter controls', () => {
       render(<MediaFilters {...defaultProps} />);
 
-      expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Images' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Videos' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Audio' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Other' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'All' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Images' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Videos' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Audio' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Other' })).toBeInTheDocument();
     });
 
     it('shows the current type filter as selected', () => {
       render(<MediaFilters {...defaultProps} typeFilter="image" />);
 
-      const imagesButton = screen.getByRole('button', { name: 'Images' });
-      expect(imagesButton).toHaveAttribute('aria-pressed', 'true');
+      const imagesTab = screen.getByRole('tab', { name: 'Images' });
+      expect(imagesTab).toHaveAttribute('aria-selected', 'true');
     });
 
     it('calls onTypeFilterChange when a control is clicked', async () => {
@@ -42,7 +42,7 @@ describe('MediaFilters', () => {
       const onTypeFilterChange = vi.fn();
       render(<MediaFilters {...defaultProps} onTypeFilterChange={onTypeFilterChange} />);
 
-      await user.click(screen.getByRole('button', { name: 'Videos' }));
+      await user.click(screen.getByRole('tab', { name: 'Videos' }));
 
       expect(onTypeFilterChange).toHaveBeenCalledWith('video');
     });

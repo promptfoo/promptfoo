@@ -158,6 +158,24 @@ describe('Media page URL state machine', () => {
     expect(screen.getByText('0 of 2 selected').parentElement).toHaveClass('flex-wrap');
   });
 
+  it('allows the header actions to wrap while a bulk download is running', async () => {
+    const user = userEvent.setup();
+    mockApiResponses();
+    renderMedia();
+
+    await waitFor(() => {
+      expect(screen.getByText('First item')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByRole('button', { name: /^Download$/ })[0]);
+    await user.click(screen.getByRole('menuitem', { name: /Select Items/i }));
+    await user.click(screen.getByRole('button', { name: 'Select All' }));
+    await user.click(screen.getByRole('button', { name: 'Download (2)' }));
+
+    const cancelDownloadButton = await screen.findByRole('button', { name: 'Cancel download' });
+    expect(cancelDownloadButton.parentElement?.parentElement).toHaveClass('flex-wrap');
+  });
+
   it('clicking a card adds hash to URL', async () => {
     const user = userEvent.setup();
     mockApiResponses();
@@ -325,7 +343,7 @@ describe('Media page URL state machine', () => {
     });
 
     // Click the Videos filter
-    const videosFilter = screen.getByRole('button', { name: /Videos/i });
+    const videosFilter = screen.getByRole('tab', { name: /Videos/i });
     await user.click(videosFilter);
 
     await waitFor(() => {

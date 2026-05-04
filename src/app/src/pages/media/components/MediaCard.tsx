@@ -213,7 +213,7 @@ export function MediaCard({
 
         {/* Pass/Fail indicator */}
         {item.context.pass !== undefined && (
-          <div className="absolute top-2 left-2">
+          <div className="absolute top-2 left-2 z-10">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
