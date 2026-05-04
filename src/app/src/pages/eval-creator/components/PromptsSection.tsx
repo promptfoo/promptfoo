@@ -181,6 +181,7 @@ const PromptsSection = () => {
                           e.stopPropagation();
                           handleEditPrompt(index);
                         }}
+                        aria-label={`Edit prompt ${index + 1}`}
                       >
                         <EditIcon className="size-4" />
                       </Button>
@@ -246,9 +247,9 @@ const PromptsSection = () => {
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeletePrompt()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Prompt</DialogTitle>
+            <DialogTitle>Delete prompt?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this prompt? This action cannot be undone.
+              This removes the prompt from this evaluation. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

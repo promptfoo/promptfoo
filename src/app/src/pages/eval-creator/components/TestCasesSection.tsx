@@ -360,6 +360,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                                 setEditingTestCaseIndex(index);
                                 setTestCaseDialogOpen(true);
                               }}
+                              aria-label={`Edit test case ${index + 1}`}
                             >
                               <EditIcon className="size-4" />
                             </Button>
@@ -373,7 +374,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                               variant="ghost"
                               size="icon"
                               onClick={(event) => handleDuplicateTestCase(event, index)}
-                              aria-label="Duplicate test case"
+                              aria-label={`Duplicate test case ${index + 1}`}
                             >
                               <ContentCopyIcon className="size-4" />
                             </Button>
@@ -387,7 +388,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                               variant="ghost"
                               size="icon"
                               onClick={(event) => handleRemoveTestCase(event, index)}
-                              aria-label="Delete test case"
+                              aria-label={`Delete test case ${index + 1}`}
                             >
                               <DeleteIcon className="size-4" />
                             </Button>
@@ -420,9 +421,9 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Test Case</DialogTitle>
+            <DialogTitle>Delete test case?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this test case? This action cannot be undone.
+              This removes the test case from this evaluation. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

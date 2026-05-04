@@ -86,7 +86,7 @@ describe('EvaluateTestSuiteCreator', () => {
     render(<EvaluateTestSuiteCreator />);
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
-    const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
+    const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
     expect(dialog).toBeInTheDocument();
   });
 
@@ -96,13 +96,13 @@ describe('EvaluateTestSuiteCreator', () => {
     const resetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(resetButton);
 
-    const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
+    const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
     const cancelButton = within(dialog).getByRole('button', { name: 'Cancel' });
     await userEvent.click(cancelButton);
 
     // Wait for the dialog to be removed from the DOM
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Confirm Reset' })).toBeNull();
+      expect(screen.queryByRole('dialog', { name: 'Reset evaluation setup?' })).toBeNull();
     });
   });
 
@@ -114,13 +114,13 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(mainResetButton);
 
     // Wait for dialog to appear and find the "Reset" button within the dialog
-    const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
+    const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
     const dialogResetButton = within(dialog).getByRole('button', { name: 'Reset' });
     await userEvent.click(dialogResetButton);
 
     // Assert: Check if the dialog is no longer open
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Confirm Reset' })).toBeNull();
+      expect(screen.queryByRole('dialog', { name: 'Reset evaluation setup?' })).toBeNull();
     });
   });
 
@@ -143,7 +143,7 @@ describe('EvaluateTestSuiteCreator', () => {
     const mainResetButton = screen.getByRole('button', { name: 'Reset' });
     await userEvent.click(mainResetButton);
 
-    const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
+    const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
     const dialogResetButton = within(dialog).getByRole('button', { name: 'Reset' });
     await userEvent.click(dialogResetButton);
 
@@ -175,7 +175,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(mainResetButton);
 
     // Wait for dialog to appear and find the "Reset" button within the dialog
-    const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
+    const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
     const dialogResetButton = within(dialog).getByRole('button', { name: 'Reset' });
     await userEvent.click(dialogResetButton);
 
@@ -208,7 +208,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(mainResetButton);
 
     // Wait for dialog to appear and find the "Reset" button within the dialog
-    const dialog = await screen.findByRole('dialog', { name: 'Confirm Reset' });
+    const dialog = await screen.findByRole('dialog', { name: 'Reset evaluation setup?' });
     const dialogResetButton = within(dialog).getByRole('button', { name: 'Reset' });
     await userEvent.click(dialogResetButton);
 
@@ -247,6 +247,17 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
     expect(screen.getByText('Next up: Write Prompts.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue to Prompts' })).toBeInTheDocument();
+  });
+
+  it('should count shorthand string providers from YAML as configured providers', () => {
+    useStore.getState().updateConfig({
+      providers: ['openai:gpt-4.1'],
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Providers: 1 ready' })).toBeInTheDocument();
   });
 
   it('should let users jump between required steps from the progress summary', async () => {

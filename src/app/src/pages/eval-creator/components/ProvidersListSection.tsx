@@ -116,6 +116,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                     size="sm"
                     onClick={() => setEditingIndex(index)}
                     className="size-8 p-0"
+                    aria-label={`Edit ${label}`}
                   >
                     <Settings className="size-4" />
                   </Button>
@@ -124,6 +125,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
                     size="sm"
                     onClick={() => handleRemoveProvider(index)}
                     className="size-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    aria-label={`Delete ${label}`}
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -134,9 +136,9 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
         </div>
       ) : (
         <Card className="p-8 text-center bg-muted/30 border-dashed">
-          <p className="text-sm text-muted-foreground mb-4">No providers configured yet</p>
+          <p className="text-sm text-muted-foreground mb-4">No providers configured yet.</p>
           <p className="text-xs text-muted-foreground">
-            Add AI models, HTTP endpoints, Python scripts, or other providers to evaluate
+            Add AI models, HTTP endpoints, Python scripts, or other providers to evaluate.
           </p>
         </Card>
       )}

@@ -1,6 +1,11 @@
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
-import { mockCallApiRoutes, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
+import {
+  getCallApiMock,
+  mockCallApiRoutes,
+  rejectCallApi,
+  resetCallApiMock,
+} from '@app/tests/apiMocks';
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -134,5 +139,32 @@ describe('RunTestSuiteButton', () => {
     });
 
     expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
+  });
+
+  it('should stop polling when unmounted', async () => {
+    const mockJobId = '123';
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: mockJobId } }]);
+
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    const { unmount } = renderWithProvider(<RunTestSuiteButton />);
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    unmount();
+
+    await act(async () => {
+      await timers.advanceByAsync(1500);
+    });
+
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
   });
 });

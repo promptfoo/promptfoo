@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -31,6 +31,24 @@ const RunTestSuiteButton = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearPollInterval = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  };
+
+  useEffect(
+    () => () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    },
+    [],
+  );
 
   const isDisabled =
     isRunning ||
@@ -82,26 +100,27 @@ const RunTestSuiteButton = () => {
 
       const job: CreateJobResponse = await response.json();
 
+      clearPollInterval();
       const intervalId = setInterval(async () => {
         try {
           const progressResponse = await callApi(`/eval/job/${job.id}/`);
 
           if (!progressResponse.ok) {
-            clearInterval(intervalId);
+            clearPollInterval();
             throw new Error(`HTTP error! status: ${progressResponse.status}`);
           }
 
           const progressData: GetJobResponse = await progressResponse.json();
 
           if (progressData.status === 'complete') {
-            clearInterval(intervalId);
+            clearPollInterval();
             setIsRunning(false);
             signalEvalCompleted();
             if (progressData.evalId) {
               navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
             }
           } else if (progressData.status === 'error') {
-            clearInterval(intervalId);
+            clearPollInterval();
             setIsRunning(false);
             throw new Error(progressData.logs?.join('\n') || 'Job failed');
           } else {
@@ -112,10 +131,11 @@ const RunTestSuiteButton = () => {
             setProgressPercent(percent);
           }
         } catch (error) {
-          clearInterval(intervalId);
+          clearPollInterval();
           handleRunError(error);
         }
       }, 1000);
+      pollIntervalRef.current = intervalId;
     } catch (error) {
       handleRunError(error);
     }

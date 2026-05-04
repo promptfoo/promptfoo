@@ -40,6 +40,31 @@ interface SetupStep {
   required: boolean;
 }
 
+function normalizeProviders(providers: UnifiedConfig['providers']): ProviderOptions[] {
+  const providerList = Array.isArray(providers) ? providers : providers ? [providers] : [];
+
+  return providerList.flatMap((provider) => {
+    if (typeof provider === 'string') {
+      return [{ id: provider }];
+    }
+
+    if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
+      return [];
+    }
+
+    if ('id' in provider) {
+      return [provider as ProviderOptions];
+    }
+
+    return Object.entries(provider as Record<string, ProviderOptions>).flatMap(
+      ([id, providerOptions]) =>
+        providerOptions && typeof providerOptions === 'object' && !Array.isArray(providerOptions)
+          ? [{ ...providerOptions, id: providerOptions.id ?? id }]
+          : [],
+    );
+  });
+}
+
 function extractVarsFromPrompts(prompts: string[]): string[] {
   const varRegex = /{{\s*(\w+)\s*}}/g;
   const varsSet = new Set<string>();
@@ -86,19 +111,7 @@ const EvaluateTestSuiteCreator = () => {
   const { config, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
 
-  // Ensure providers is always an array of ProviderOptions
-  const normalizedProviders: ProviderOptions[] = React.useMemo(() => {
-    if (!providers) {
-      return [];
-    }
-    if (Array.isArray(providers)) {
-      // Filter out any non-object providers (strings, functions)
-      return providers.filter(
-        (p): p is ProviderOptions => typeof p === 'object' && p !== null && !Array.isArray(p),
-      );
-    }
-    return [];
-  }, [providers]);
+  const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
 
   useEffect(() => {
     useStore.persist.rehydrate();
@@ -353,7 +366,7 @@ const EvaluateTestSuiteCreator = () => {
                     SETUP STEPS
                   </h3>
 
-                  <div className="grid grid-cols-2 gap-2 lg:block lg:space-y-2">
+                  <div className="grid gap-2 sm:grid-cols-2 lg:block lg:space-y-2">
                     {setupSteps.map((step) => {
                       const isOptionalComplete = !step.required && step.isComplete;
 
@@ -364,7 +377,7 @@ const EvaluateTestSuiteCreator = () => {
                           onClick={() => setActiveStep(step.id)}
                           aria-current={activeStep === step.id ? 'step' : undefined}
                           className={cn(
-                            'w-full cursor-pointer rounded-lg border p-3 text-left transition-all',
+                            'w-full cursor-pointer rounded-lg border p-3 text-left transition-colors',
                             'hover:bg-muted/50',
                             activeStep === step.id && 'border-primary ring-2 ring-primary',
                             step.required && step.isComplete
@@ -687,9 +700,10 @@ const EvaluateTestSuiteCreator = () => {
       <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Reset</DialogTitle>
+            <DialogTitle>Reset evaluation setup?</DialogTitle>
             <DialogDescription>
-              Are you sure you want to reset all the fields? This action cannot be undone.
+              This clears providers, prompts, test cases, and run options. This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

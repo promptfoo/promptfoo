@@ -575,7 +575,7 @@ describe('TestCasesSection', () => {
       );
 
       // Find the duplicate button by aria-label
-      const duplicateButton = screen.getByRole('button', { name: 'Duplicate test case' });
+      const duplicateButton = screen.getByRole('button', { name: 'Duplicate test case 1' });
       await user.click(duplicateButton);
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -605,7 +605,7 @@ describe('TestCasesSection', () => {
       );
 
       // Find the delete button by aria-label
-      const deleteButton = screen.getByRole('button', { name: 'Delete test case' });
+      const deleteButton = screen.getByRole('button', { name: 'Delete test case 1' });
       await act(async () => {
         const user = userEvent.setup();
         await user.click(deleteButton);
