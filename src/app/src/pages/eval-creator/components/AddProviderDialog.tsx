@@ -120,7 +120,7 @@ export default function AddProviderDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto py-4">
+          <div key={step} className="min-h-0 flex-1 overflow-y-auto py-4">
             {step === 'select' ? (
               <div className="w-full">
                 <ProviderTypeSelector
