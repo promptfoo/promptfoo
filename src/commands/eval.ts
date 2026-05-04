@@ -1112,7 +1112,11 @@ export function evalCommand(
     // Output configuration
     .option(
       '-o, --output <paths...>',
-      'Path to output file (csv, txt, json, yaml, yml, html), default is no output file',
+      'Path to output file (csv, txt, json, yaml, yml, html, xml), default is no output file',
+    )
+    .option(
+      '--output-type <type>',
+      'Output file format type (csv, html, json, jsonl, txt, xml, yaml, yml). When specified, overrides the file extension',
     )
     .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
@@ -1192,6 +1196,22 @@ export function evalCommand(
 
       if (validatedOpts.remote) {
         cliState.remote = true;
+      }
+
+      // Handle --output-type flag: convert to file extensions
+      if (validatedOpts.outputType) {
+        const extension = `.${validatedOpts.outputType}`;
+        if (validatedOpts.output && validatedOpts.output.length > 0) {
+          // Replace extensions of output paths with the specified type
+          validatedOpts.output = validatedOpts.output.map((outputPath) => {
+            // Remove existing extension and add the new one
+            const basePath = outputPath.replace(/\.[^/.]+$/, '');
+            return `${basePath}${extension}`;
+          });
+        } else {
+          // If no output paths specified, create a default one
+          validatedOpts.output = [`results${extension}`];
+        }
       }
 
       for (const maybeFilePath of validatedOpts.output ?? []) {

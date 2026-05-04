@@ -1,6 +1,7 @@
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
+import { XMLParser } from 'fast-xml-parser';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
@@ -383,12 +384,58 @@ describe('writeOutput', () => {
     expect(parsed.config.defaultTest.options.temperature).toBe(0.1);
   });
 
-  it('writeOutput with XML output', async () => {
+  it('writeOutput with JUnit XML output', async () => {
     const outputPath = 'output.xml';
-    const eval_ = new Eval({});
+    const eval_ = new Eval({ description: 'JUnit export' });
+
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 120,
+      provider: { id: 'provider-a', label: 'Provider A' },
+      prompt: { raw: 'Prompt one', label: 'Prompt one' },
+      response: { output: 'ok' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt-1',
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 45,
+      provider: { id: 'provider-b', label: 'Provider B' },
+      prompt: { raw: 'Prompt two', label: 'Prompt two' },
+      response: { output: 'nope' },
+      error: null,
+      gradingResult: { pass: false, score: 0, reason: 'Assertion failed' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 1,
+      testCase: {},
+      promptId: 'prompt-2',
+    });
+
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' }).parse(
+      written,
+    ) as Record<string, any>;
+
+    expect(parsed.testsuites.testsuite['@_name']).toBe('JUnit export');
+    expect(parsed.testsuites.testsuite['@_tests']).toBe('2');
+    expect(parsed.testsuites.testsuite['@_failures']).toBe('1');
+    expect(parsed.testsuites.testsuite['@_errors']).toBe('0');
+    expect(parsed.testsuites.testsuite.testcase).toHaveLength(2);
+    expect(parsed.testsuites.testsuite.testcase[0]['@_name']).toBe('Prompt one');
+    expect(parsed.testsuites.testsuite.testcase[1].failure).toBeDefined();
   });
 
   it('does not sanitize config for CSV output', async () => {

@@ -104,6 +104,7 @@ export const CommandLineOptionsSchema = z.object({
   config: z.array(z.string()).optional(),
   assertions: z.string().optional(),
   modelOutputs: z.string().optional(),
+  outputType: z.enum(['csv', 'html', 'json', 'jsonl', 'txt', 'xml', 'yaml', 'yml']).optional(),
   verbose: z.boolean().optional(),
   grader: z.string().optional(),
   tableCellMaxLength: z.coerce.number().int().positive().optional(),
