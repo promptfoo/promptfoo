@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
-import { cn } from '@app/lib/utils';
 import { Plus, Settings, Trash2 } from 'lucide-react';
 import AddProviderDialog from './AddProviderDialog';
 import type { ProviderOptions } from '@promptfoo/types';
@@ -95,10 +94,7 @@ export function ProvidersListSection({ providers, onChange }: ProvidersListSecti
             return (
               <Card
                 key={`${provider.id}-${index}`}
-                className={cn(
-                  'flex flex-col gap-3 p-4 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between',
-                  'bg-white dark:bg-zinc-900',
-                )}
+                className="flex flex-col gap-3 p-4 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className="flex-1 min-w-0">

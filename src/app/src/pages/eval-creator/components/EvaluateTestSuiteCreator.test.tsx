@@ -231,6 +231,10 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByText('0 of 3 required steps complete')).toBeInTheDocument();
     expect(screen.getByText('Next up: Choose Providers.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue to Providers' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Choose Providers Required/i })).toHaveAttribute(
+      'aria-current',
+      'step',
+    );
   });
 
   it('should advance the progress summary as required setup is completed', () => {
@@ -243,6 +247,14 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
     expect(screen.getByText('Next up: Write Prompts.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue to Prompts' })).toBeInTheDocument();
+  });
+
+  it('should let users jump between required steps from the progress summary', async () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Prompts: Missing' }));
+
+    expect(screen.getByTestId('mock-prompts-section')).toBeInTheDocument();
   });
 
   it('should show a ready state and jump to run options once required setup is complete', async () => {

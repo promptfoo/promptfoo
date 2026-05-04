@@ -11,6 +11,7 @@ import {
 } from '@app/components/ui/dialog';
 import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import PromptDialog from './PromptDialog';
@@ -22,6 +23,7 @@ const PromptsSection = () => {
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
 
   const { config, updateConfig } = useStore();
+  const { showToast } = useToast();
   const prompts = (config.prompts || []) as string[];
   const setPrompts = (p: string[]) => updateConfig({ prompts: p });
   const newPromptInputRef = useRef<HTMLInputElement>(null);
@@ -46,9 +48,19 @@ const PromptsSection = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const text = e.target?.result?.toString();
-        if (text) {
-          setPrompts([...prompts, text]);
+        if (!text || text.trim() === '') {
+          showToast('The file appears to be empty. Please select a file with content.', 'error');
+          event.target.value = '';
+          return;
         }
+
+        setPrompts([...prompts, text]);
+        showToast('Prompt imported successfully', 'success');
+        event.target.value = '';
+      };
+      reader.onerror = () => {
+        showToast('Failed to read file', 'error');
+        event.target.value = '';
       };
       reader.readAsText(file);
     }

@@ -40,6 +40,20 @@ interface SetupStep {
   required: boolean;
 }
 
+function extractVarsFromPrompts(prompts: string[]): string[] {
+  const varRegex = /{{\s*(\w+)\s*}}/g;
+  const varsSet = new Set<string>();
+
+  prompts.forEach((prompt) => {
+    let match;
+    while ((match = varRegex.exec(prompt)) !== null) {
+      varsSet.add(match[1]);
+    }
+  });
+
+  return Array.from(varsSet);
+}
+
 function ErrorFallback({
   error,
   resetErrorBoundary,
@@ -121,20 +135,6 @@ const EvaluateTestSuiteCreator = () => {
     };
   }, []);
 
-  const extractVarsFromPrompts = (prompts: string[]): string[] => {
-    const varRegex = /{{\s*(\w+)\s*}}/g;
-    const varsSet = new Set<string>();
-
-    prompts.forEach((prompt) => {
-      let match;
-      while ((match = varRegex.exec(prompt)) !== null) {
-        varsSet.add(match[1]);
-      }
-    });
-
-    return Array.from(varsSet);
-  };
-
   // Normalize prompts to string array
   const normalizedPrompts = React.useMemo(() => {
     if (!prompts || !Array.isArray(prompts)) {
@@ -154,7 +154,10 @@ const EvaluateTestSuiteCreator = () => {
       .filter((p): p is string => p !== ''); // Filter out empty strings
   }, [prompts]);
 
-  const varsList = extractVarsFromPrompts(normalizedPrompts);
+  const varsList = React.useMemo(
+    () => extractVarsFromPrompts(normalizedPrompts),
+    [normalizedPrompts],
+  );
 
   // Get test count safely
   const testCount = React.useMemo(() => {
@@ -288,7 +291,7 @@ const EvaluateTestSuiteCreator = () => {
         {/* Main Content */}
         <TabsContent value="ui">
           <div className="container max-w-7xl mx-auto px-4 py-8">
-            <Card className="mb-6 bg-background shadow-sm">
+            <Card className="mb-6 shadow-sm">
               <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Evaluation setup</p>
@@ -307,20 +310,24 @@ const EvaluateTestSuiteCreator = () => {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="flex flex-wrap gap-2">
                     {requiredSteps.map((step) => (
-                      <div
+                      <button
                         key={step.id}
+                        type="button"
+                        onClick={() => setActiveStep(step.id)}
+                        aria-label={`${step.label}: ${step.isComplete ? `${step.count} ready` : 'Missing'}`}
                         className={cn(
-                          'rounded-md border px-3 py-2 text-sm',
+                          'rounded-md border px-3 py-2 text-left text-sm transition-colors',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                           step.isComplete
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
-                            : 'border-border bg-muted/30 text-muted-foreground',
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50'
+                            : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/60',
                         )}
                       >
                         <span className="font-medium">{step.label}</span>
                         <span className="ml-2 text-xs">
                           {step.isComplete ? `${step.count} ready` : 'Missing'}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
 
@@ -340,7 +347,7 @@ const EvaluateTestSuiteCreator = () => {
 
             <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] xl:gap-8">
               {/* Left Sidebar - Step Navigation */}
-              <div>
+              <nav aria-label="Setup steps">
                 <div className="space-y-2 lg:sticky lg:top-8">
                   <h3 className="mb-4 px-3 text-sm font-semibold text-muted-foreground">
                     SETUP STEPS
@@ -355,6 +362,7 @@ const EvaluateTestSuiteCreator = () => {
                           key={step.id}
                           type="button"
                           onClick={() => setActiveStep(step.id)}
+                          aria-current={activeStep === step.id ? 'step' : undefined}
                           className={cn(
                             'w-full cursor-pointer rounded-lg border p-3 text-left transition-all',
                             'hover:bg-muted/50',
@@ -408,7 +416,7 @@ const EvaluateTestSuiteCreator = () => {
                     })}
                   </div>
                 </div>
-              </div>
+              </nav>
 
               {/* Right Content Area */}
               <div className="flex-1 min-w-0">

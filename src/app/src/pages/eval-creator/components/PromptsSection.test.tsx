@@ -7,6 +7,13 @@ import PromptsSection from './PromptsSection';
 
 vi.mock('@app/stores/evalConfig');
 
+const showToastMock = vi.fn();
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: showToastMock,
+  }),
+}));
+
 const mockedUseStore = vi.mocked(useStore);
 
 describe('PromptsSection', () => {
@@ -283,6 +290,35 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       prompts: [longLineText],
     });
+    expect(showToastMock).toHaveBeenCalledWith('Prompt imported successfully', 'success');
+    expect(fileInput.value).toBe('');
+  });
+
+  it('should reject empty uploaded prompt files and reset the file input', async () => {
+    const user = userEvent.setup();
+    createFileReaderMock('');
+    setupStore([]);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+
+    if (!fileInput) {
+      throw new Error('File input element not found');
+    }
+
+    await user.upload(fileInput, new File([''], 'empty.txt', { type: 'text/plain' }));
+
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalledWith(
+      'The file appears to be empty. Please select a file with content.',
+      'error',
+    );
+    expect(fileInput.value).toBe('');
   });
 
   it('should handle malformed template variables in prompts without errors', () => {

@@ -125,7 +125,7 @@ const RunTestSuiteButton = () => {
     <div className="space-y-2">
       <Button onClick={runTestSuite} disabled={isDisabled}>
         {isRunning ? (
-          <span className="flex items-center gap-2">
+          <span className="flex items-center gap-2" role="status" aria-live="polite">
             <Spinner className="size-4" />
             {progressPercent.toFixed(0)}% complete
           </span>

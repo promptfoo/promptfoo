@@ -1,5 +1,3 @@
-import { Card, CardContent } from '@app/components/ui/card';
-
 interface StepSectionProps {
   stepNumber: number;
   title: string;
@@ -46,9 +44,7 @@ export function StepSection({
       {guidance && <div>{guidance}</div>}
 
       {/* Content */}
-      <Card className="bg-white dark:bg-zinc-900 shadow-sm">
-        <CardContent className="p-6">{children}</CardContent>
-      </Card>
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }

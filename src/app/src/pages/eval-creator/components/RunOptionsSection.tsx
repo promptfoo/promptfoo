@@ -46,7 +46,7 @@ export function RunOptionsSection({
       <Card className="p-4 bg-muted/30 border-dashed">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="description">Evaluation name / description</Label>
+            <Label htmlFor="description">Evaluation name or description</Label>
             <Input
               id="description"
               placeholder="e.g., GPT-4 vs Claude comparison for customer support prompts"
@@ -54,7 +54,7 @@ export function RunOptionsSection({
               onChange={(e) => onChange({ description: e.target.value, delay, maxConcurrency })}
             />
             <p className="text-xs text-muted-foreground">
-              Optional description to help identify this evaluation later
+              Optional. Helps you find this evaluation later.
             </p>
           </div>
 
