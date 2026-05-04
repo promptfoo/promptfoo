@@ -40,7 +40,7 @@ vi.mock('../../src/models/eval', () => ({
 import { setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
 // Import after mocks are set up
-import { handleServerError, ServerStartupError, startServer } from '../../src/server/server';
+import { handleServerError, ServerError, startServer } from '../../src/server/server';
 
 describe('server', () => {
   describe('handleServerError', () => {
@@ -57,9 +57,10 @@ describe('server', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'Port 3000 is already in use. Do you have another Promptfoo instance running?',
       );
-      expect(startupError).toBeInstanceOf(ServerStartupError);
+      expect(startupError).toBeInstanceOf(ServerError);
       expect(startupError).toMatchObject({
         code: 'EADDRINUSE',
+        phase: 'startup',
         message: 'Port 3000 is already in use. Do you have another Promptfoo instance running?',
         port: 3000,
       });
@@ -72,9 +73,10 @@ describe('server', () => {
       const startupError = handleServerError(error, 3000);
 
       expect(logger.error).toHaveBeenCalledWith('Failed to start server: Some other error');
-      expect(startupError).toBeInstanceOf(ServerStartupError);
+      expect(startupError).toBeInstanceOf(ServerError);
       expect(startupError).toMatchObject({
         code: 'ENOENT',
+        phase: 'startup',
         message: 'Failed to start server: Some other error',
         port: 3000,
       });
@@ -178,8 +180,9 @@ describe('server', () => {
       });
 
       await expect(startServer(3000)).rejects.toMatchObject({
-        name: 'ServerStartupError',
+        name: 'ServerError',
         code: 'EADDRINUSE',
+        phase: 'startup',
         message: 'Port 3000 is already in use. Do you have another Promptfoo instance running?',
         port: 3000,
       });
@@ -204,7 +207,12 @@ describe('server', () => {
       );
       mockHttpServer.emit('error', runtimeError);
 
-      await expect(serverPromise).rejects.toBe(runtimeError);
+      await expect(serverPromise).rejects.toMatchObject({
+        name: 'ServerError',
+        phase: 'runtime',
+        message: 'Server error: Unexpected runtime failure',
+        port: 0,
+      });
       expect(mockWatcher.close).toHaveBeenCalled();
       expect(mockHttpServer.close).toHaveBeenCalled();
       expect(logger.error).toHaveBeenCalledWith('Server error: Unexpected runtime failure');

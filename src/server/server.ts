@@ -73,30 +73,41 @@ export function setJavaScriptMimeType(
   next();
 }
 
+export type ServerErrorPhase = 'startup' | 'runtime';
+
 /**
- * Handles server startup errors with proper logging and graceful shutdown.
+ * Server failures returned to reusable callers after the server path has already
+ * logged the user-facing message.
  */
-export class ServerStartupError extends Error {
+export class ServerError extends Error {
   readonly code?: string;
+  readonly phase: ServerErrorPhase;
   readonly port: number;
 
-  constructor(error: NodeJS.ErrnoException, port: number) {
+  constructor(error: NodeJS.ErrnoException, port: number, phase: ServerErrorPhase) {
     super(
-      error.code === 'EADDRINUSE'
-        ? `Port ${port} is already in use. Do you have another Promptfoo instance running?`
-        : `Failed to start server: ${error instanceof Error ? error.message : error}`,
+      phase === 'runtime'
+        ? `Server error: ${error instanceof Error ? error.message : error}`
+        : error.code === 'EADDRINUSE'
+          ? `Port ${port} is already in use. Do you have another Promptfoo instance running?`
+          : `Failed to start server: ${error instanceof Error ? error.message : error}`,
       { cause: error },
     );
-    this.name = 'ServerStartupError';
+    this.name = 'ServerError';
     this.code = error.code;
+    this.phase = phase;
     this.port = port;
   }
 }
 
-export function handleServerError(error: NodeJS.ErrnoException, port: number): ServerStartupError {
-  const startupError = new ServerStartupError(error, port);
-  logger.error(startupError.message);
-  return startupError;
+export function handleServerError(
+  error: NodeJS.ErrnoException,
+  port: number,
+  phase: ServerErrorPhase = 'startup',
+): ServerError {
+  const serverError = new ServerError(error, port, phase);
+  logger.error(serverError.message);
+  return serverError;
 }
 
 /**
@@ -464,10 +475,10 @@ export async function startServer(
     };
 
     const handleRuntimeError = (error: NodeJS.ErrnoException) => {
-      logger.error(`Server error: ${error instanceof Error ? error.message : error}`);
+      const runtimeError = handleServerError(error, port, 'runtime');
       removeShutdownHandlers();
       httpServer.removeListener('error', handleRuntimeError);
-      closeRunningServer(() => reject(error));
+      closeRunningServer(() => reject(runtimeError));
     };
 
     httpServer.once('error', handleStartupError);

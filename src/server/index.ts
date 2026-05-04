@@ -2,7 +2,7 @@ import { getDefaultPort } from '../constants';
 import logger from '../logger';
 import { formatNativeAddonVersionMismatchMessage } from '../util/nativeAddonErrors';
 import { BrowserBehavior, checkServerRunning } from '../util/server';
-import { ServerStartupError, startServer } from './server';
+import { ServerError, startServer } from './server';
 
 async function main() {
   const port = getDefaultPort();
@@ -19,7 +19,7 @@ main().catch((err) => {
   const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(err);
   if (nativeAddonVersionMismatchMessage) {
     console.error(nativeAddonVersionMismatchMessage);
-  } else if (!(err instanceof ServerStartupError)) {
+  } else if (!(err instanceof ServerError)) {
     logger.error(`Failed to start server: ${String(err)}`);
   }
   process.exitCode = 1;
