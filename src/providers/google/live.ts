@@ -18,7 +18,7 @@ import {
   normalizeTools,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
-  stripExternalToolFileReferences,
+  stripExecutableToolFileReferences,
 } from './util';
 
 import type {
@@ -227,11 +227,11 @@ export class GoogleLiveProvider implements ApiProvider {
       }
     }
 
-    // Load tools before creating WebSocket Promise. Disabled mode removes external
-    // file refs before loading so inline non-function tools stay available without
-    // executing Python/JS tool loaders.
+    // Load tools before creating WebSocket Promise. Disabled mode removes executable
+    // Python/JS tool refs before loading so non-function tools stay available without
+    // executing user code.
     const configTools = toolsDisabled
-      ? stripExternalToolFileReferences(config.tools, context?.vars)
+      ? stripExecutableToolFileReferences(config.tools, context?.vars)
       : config.tools;
     const fileTools = configTools
       ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)

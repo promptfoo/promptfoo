@@ -983,7 +983,7 @@ describe('GoogleProvider', () => {
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
 
-    it('should skip external tool files while preserving inline non-function tools when disabled', async () => {
+    it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
@@ -996,6 +996,39 @@ describe('GoogleProvider', () => {
 
       expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         [{ googleSearch: {} }],
+        undefined,
+      );
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should preserve non-function tools loaded from data files when disabled', async () => {
+      mockMaybeLoadToolsFromExternalFile.mockResolvedValueOnce([
+        {
+          functionDeclarations: [
+            {
+              name: 'get_weather',
+              description: 'Get weather information',
+              parameters: { type: 'OBJECT' as const, properties: {} },
+            },
+          ],
+        },
+        { googleSearch: {} },
+      ]);
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: 'file://tools.json' as any,
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        'file://tools.json',
         undefined,
       );
       const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;

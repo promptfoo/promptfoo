@@ -28,7 +28,7 @@ import {
   resolveGoogleToolConfig,
   resolveProjectId,
   sanitizeSchemaForGemini,
-  stripExternalToolFileReferences,
+  stripExecutableToolFileReferences,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
@@ -2910,15 +2910,23 @@ describe('util', () => {
     });
   });
 
-  describe('stripExternalToolFileReferences', () => {
-    it('removes external refs while preserving inline tools', () => {
+  describe('stripExecutableToolFileReferences', () => {
+    it('removes executable refs while preserving inline and data-file tools', () => {
       expect(
-        stripExternalToolFileReferences([
+        stripExecutableToolFileReferences([
           { googleSearch: {} },
           'file://tools.js:getTools',
+          'file://tools.py:get_tools',
+          'file://tools.json',
+          'file://tools.yaml',
           { codeExecution: {} },
         ]),
-      ).toEqual([{ googleSearch: {} }, { codeExecution: {} }]);
+      ).toEqual([
+        { googleSearch: {} },
+        'file://tools.json',
+        'file://tools.yaml',
+        { codeExecution: {} },
+      ]);
     });
   });
 

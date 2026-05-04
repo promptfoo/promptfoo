@@ -493,7 +493,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     mockCacheGet.mockReset();
   });
 
-  it('should skip external tool files while preserving inline non-function tools when disabled', async () => {
+  it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
     provider = new VertexChatProvider('gemini-pro', {
       config: {
         tool_choice: 'none',

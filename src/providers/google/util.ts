@@ -5,6 +5,8 @@ import { z } from 'zod';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { isJavascriptFile } from '../../util/fileExtensions';
+import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -186,24 +188,27 @@ export function removeGoogleFunctionDeclarations(tools: Tool[]): Tool[] {
   );
 }
 
-function stripExternalToolFileReferencesFromValue(tools: unknown): unknown {
+function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {
   if (typeof tools === 'string' && tools.startsWith('file://')) {
-    return undefined;
+    const { filePath } = parseFileUrl(tools);
+    if (filePath.endsWith('.py') || isJavascriptFile(filePath)) {
+      return undefined;
+    }
   }
   if (Array.isArray(tools)) {
     return tools.flatMap((tool) => {
-      const strippedTool = stripExternalToolFileReferencesFromValue(tool);
+      const strippedTool = stripExecutableToolFileReferencesFromValue(tool);
       return strippedTool === undefined ? [] : [strippedTool];
     });
   }
   return tools;
 }
 
-export function stripExternalToolFileReferences(
+export function stripExecutableToolFileReferences(
   tools: unknown,
   vars?: Record<string, VarValue>,
 ): unknown {
-  return stripExternalToolFileReferencesFromValue(renderVarsInObject(tools, vars));
+  return stripExecutableToolFileReferencesFromValue(renderVarsInObject(tools, vars));
 }
 
 /**
