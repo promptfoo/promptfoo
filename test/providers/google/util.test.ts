@@ -2714,8 +2714,8 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00155, 10);
     });
 
-    it('should calculate cost for gemini-flash-lite-latest using current 2.5 flash-lite alias pricing', () => {
-      // gemini-flash-lite-latest currently aliases gemini-2.5-flash-lite-preview-09-2025: input=0.1/1M, output=0.4/1M
+    it('should calculate cost for gemini-flash-lite-latest using flash-lite alias pricing', () => {
+      // gemini-flash-lite-latest tracks the current Flash-Lite tier: input=0.1/1M, output=0.4/1M
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.0003, 10);
     });
@@ -2728,6 +2728,11 @@ describe('util', () => {
         'gemini-2.5-pro-preview-05-06',
         'gemini-2.5-pro-preview-06-05',
         'gemini-2.5-flash-preview-05-20',
+        'gemini-2.5-flash-preview-09-2025',
+        'gemini-2.5-flash-lite-preview-09-2025',
+        'gemini-2.0-pro',
+        'gemini-2.0-flash-exp',
+        'gemini-2.0-flash-thinking-exp',
         'gemini-2.0-flash-lite-preview-02-05',
         'gemini-robotics-er-1.5-preview',
       ];
