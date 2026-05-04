@@ -17,6 +17,10 @@
     "baseUrl": "./"
   },
   "include": [
+    "*.ts",
+    "*.tsx",
+    "*.mts",
+    "*.cts",
     "src/",
     "test/",
     "scripts/",

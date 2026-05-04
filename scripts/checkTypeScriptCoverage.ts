@@ -1,10 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
 
-const repoRoot = path.resolve(import.meta.dirname, '..');
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDir, '..');
 const rootOwnedPrefixes = ['src/', 'test/', 'scripts/'];
 const externalProjectPrefixes = ['src/app/', 'test/code-scan-action/', 'test/site/'];
 
@@ -25,6 +27,10 @@ function hasPrefix(filePath: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => filePath.startsWith(prefix));
 }
 
+function isRootOwnedTypeScriptFile(filePath: string): boolean {
+  return !filePath.includes('/') || hasPrefix(filePath, rootOwnedPrefixes);
+}
+
 function getTrackedTypeScriptFiles(): string[] {
   return execFileSync('git', ['ls-files'], {
     cwd: repoRoot,
@@ -37,7 +43,7 @@ function getTrackedTypeScriptFiles(): string[] {
     .filter(
       (filePath) =>
         isTypeScriptFile(filePath) &&
-        hasPrefix(filePath, rootOwnedPrefixes) &&
+        isRootOwnedTypeScriptFile(filePath) &&
         !hasPrefix(filePath, externalProjectPrefixes),
     )
     .sort();
@@ -71,14 +77,14 @@ function getRootProjectFiles(): Set<string> {
   );
 }
 
-function main(): void {
+function main(): number {
   const projectFiles = getRootProjectFiles();
   const missingFiles = getTrackedTypeScriptFiles().filter(
     (filePath) => !projectFiles.has(filePath),
   );
 
   if (missingFiles.length === 0) {
-    return;
+    return 0;
   }
 
   console.error('Root tsconfig.json is not type-checking these tracked TypeScript files:');
@@ -88,7 +94,14 @@ function main(): void {
   console.error(
     'Add them to the root project, or add the owning subtree to externalProjectPrefixes with a separate typecheck.',
   );
-  process.exitCode = 1;
+  return 1;
 }
 
-main();
+try {
+  process.exitCode = main();
+} catch (error) {
+  console.error(
+    `Failed to verify root TypeScript coverage: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  process.exitCode = 1;
+}
