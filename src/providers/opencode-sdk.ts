@@ -1441,6 +1441,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
         workspace: config.workspace,
         format: config.format,
         variant: config.variant,
+        parent_session_id: config.parent_session_id,
       },
     );
 
