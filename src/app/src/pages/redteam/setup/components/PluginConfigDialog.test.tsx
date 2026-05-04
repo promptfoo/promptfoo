@@ -146,6 +146,27 @@ describe('PluginConfigDialog - OSS', () => {
   });
 
   describe('Plugin-Specific Config', () => {
+    it('keeps footer actions visible while long plugin content scrolls independently', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="ssrf"
+          config={{ targetUrls: [''] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const dialog = screen.getByRole('dialog');
+      const scrollBody = screen.getByText(/Server-Side Request Forgery/).parentElement
+        ?.parentElement;
+      const footer = screen.getByRole('button', { name: 'Save' }).parentElement;
+
+      expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+      expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+      expect(footer).toHaveClass('shrink-0');
+    });
+
     it('shows gradingGuidance alongside BOLA config', () => {
       render(
         <PluginConfigDialog

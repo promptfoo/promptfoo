@@ -349,12 +349,12 @@ export default function PluginConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{getDialogTitle()}</DialogTitle>
         </DialogHeader>
-        <div className="py-4">{renderConfigInputs()}</div>
-        <DialogFooter>
+        <div className="min-h-0 flex-1 overflow-y-auto py-4">{renderConfigInputs()}</div>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>
             {isReadOnlyPlugin ? 'Close' : 'Cancel'}
           </Button>
