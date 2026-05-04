@@ -218,6 +218,7 @@ const EvaluateTestSuiteCreator = () => {
   const completedRequiredStepCount = requiredSteps.filter((step) => step.isComplete).length;
   const nextRecommendedStep =
     requiredSteps.find((step) => !step.isComplete) ?? setupSteps[setupSteps.length - 1];
+  const shouldShowSummaryAction = activeStep !== nextRecommendedStep.id;
 
   const handleReset = () => {
     reset();
@@ -247,6 +248,11 @@ const EvaluateTestSuiteCreator = () => {
               'error',
             );
           }
+        } else {
+          showToast(
+            'The file appears to be empty. Please select a YAML file with content.',
+            'error',
+          );
         }
       };
       reader.onerror = () => {
@@ -344,16 +350,18 @@ const EvaluateTestSuiteCreator = () => {
                     ))}
                   </div>
 
-                  <Button
-                    type="button"
-                    variant={isReadyToRun ? 'default' : 'outline'}
-                    onClick={() => setActiveStep(nextRecommendedStep.id)}
-                    className="shrink-0"
-                  >
-                    {isReadyToRun
-                      ? 'Review run options'
-                      : `Continue to ${nextRecommendedStep.label}`}
-                  </Button>
+                  {shouldShowSummaryAction && (
+                    <Button
+                      type="button"
+                      variant={isReadyToRun ? 'default' : 'outline'}
+                      onClick={() => setActiveStep(nextRecommendedStep.id)}
+                      className="shrink-0"
+                    >
+                      {isReadyToRun
+                        ? 'Review run options'
+                        : `Continue to ${nextRecommendedStep.label}`}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

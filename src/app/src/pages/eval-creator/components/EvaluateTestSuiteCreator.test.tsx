@@ -230,7 +230,7 @@ describe('EvaluateTestSuiteCreator', () => {
 
     expect(screen.getByText('0 of 3 required steps complete')).toBeInTheDocument();
     expect(screen.getByText('Next up: Choose Providers.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Continue to Providers' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Continue to Providers' })).toBeNull();
     expect(screen.getByRole('button', { name: /Choose Providers Required/i })).toHaveAttribute(
       'aria-current',
       'step',
@@ -282,6 +282,7 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Review run options' }));
 
     expect(screen.getByTestId('mock-run-options-section')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review run options' })).toBeNull();
   });
 
   it('should successfully upload and parse a valid YAML file', async () => {
@@ -314,6 +315,23 @@ describe('EvaluateTestSuiteCreator', () => {
     await waitFor(() => {
       expect(showToastMock).toHaveBeenCalledWith(
         expect.stringContaining('Failed to parse YAML'),
+        'error',
+      );
+    });
+  });
+
+  it('should handle empty YAML files with an error toast', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File([''], 'empty.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        'The file appears to be empty. Please select a YAML file with content.',
         'error',
       );
     });
