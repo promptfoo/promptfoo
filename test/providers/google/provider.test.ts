@@ -983,6 +983,27 @@ describe('GoogleProvider', () => {
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
 
+    it('should skip external tool files while preserving inline non-function tools when disabled', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: [{ googleSearch: {} }, 'file://tools.js:getTools'] as any,
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        [{ googleSearch: {} }],
+        undefined,
+      );
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1] as any;
+      const body = JSON.parse(calledOptions.body);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
     it('should preserve supported explicit Google toolConfig fields', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: {

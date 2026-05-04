@@ -613,7 +613,7 @@ describe('GoogleLiveProvider', () => {
     expect(mockFetchWithProxy).not.toHaveBeenCalled();
   });
 
-  it('should not load arrays containing file:// references when tools are disabled', async () => {
+  it('should preserve inline non-function tools in arrays containing file:// references when disabled', async () => {
     const mockSpawn = vi.mocked((await import('child_process')).spawn);
     mockImportModule.mockReset();
 
@@ -646,7 +646,7 @@ describe('GoogleLiveProvider', () => {
 
     const sentMessage = JSON.parse(mockWs.send.mock.calls[0][0] as string);
     expect(sentMessage.setup.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
-    expect(sentMessage.setup.tools).toBeUndefined();
+    expect(sentMessage.setup.tools).toEqual([{ googleSearch: {} }]);
     expect(mockSpawn).not.toHaveBeenCalled();
     expect(mockImportModule).not.toHaveBeenCalled();
   });

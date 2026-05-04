@@ -458,7 +458,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context);
+    const allTools = await this.getAllTools(context, {
+      skipExternalToolFiles: toolsDisabled,
+    });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {

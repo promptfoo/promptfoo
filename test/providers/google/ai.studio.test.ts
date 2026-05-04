@@ -1295,6 +1295,47 @@ describe('AIStudioChatProvider', () => {
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
 
+    it('should skip external tool files while preserving inline non-function tools when disabled', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return {
+          renderString: vi.fn((str) => str),
+        } as any;
+      });
+
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tool_choice: 'none',
+          tools: [{ googleSearch: {} }, 'file://tools.js:getTools'] as any,
+        },
+      });
+
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementationOnce(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      await provider.callGemini('hi');
+
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        [{ googleSearch: {} }],
+        undefined,
+      );
+      const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
+      const body = JSON.parse(callArgs![1]!.body as string);
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
     it('honors prompt-level tool_choice override over base toolConfig', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {

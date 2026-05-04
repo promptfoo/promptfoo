@@ -186,6 +186,26 @@ export function removeGoogleFunctionDeclarations(tools: Tool[]): Tool[] {
   );
 }
 
+function stripExternalToolFileReferencesFromValue(tools: unknown): unknown {
+  if (typeof tools === 'string' && tools.startsWith('file://')) {
+    return undefined;
+  }
+  if (Array.isArray(tools)) {
+    return tools.flatMap((tool) => {
+      const strippedTool = stripExternalToolFileReferencesFromValue(tool);
+      return strippedTool === undefined ? [] : [strippedTool];
+    });
+  }
+  return tools;
+}
+
+export function stripExternalToolFileReferences(
+  tools: unknown,
+  vars?: Record<string, VarValue>,
+): unknown {
+  return stripExternalToolFileReferencesFromValue(renderVarsInObject(tools, vars));
+}
+
 /**
  * Calculates the cost for a Google API call.
  *

@@ -18,6 +18,7 @@ import {
   normalizeTools,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
+  stripExternalToolFileReferences,
 } from './util';
 
 import type {
@@ -226,14 +227,15 @@ export class GoogleLiveProvider implements ApiProvider {
       }
     }
 
-    // Load tools before creating WebSocket Promise.
-    // When tools are disabled, skip the loader entirely if config.tools contains any
-    // file:// reference — maybeLoadToolsFromExternalFile recursively executes Python/JS
-    // for those refs, which is exactly the side effect we want to avoid.
-    const fileTools =
-      config.tools && (!toolsDisabled || !containsExternalToolFile(config.tools))
-        ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
-        : [];
+    // Load tools before creating WebSocket Promise. Disabled mode removes external
+    // file refs before loading so inline non-function tools stay available without
+    // executing Python/JS tool loaders.
+    const configTools = toolsDisabled
+      ? stripExternalToolFileReferences(config.tools, context?.vars)
+      : config.tools;
+    const fileTools = configTools
+      ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
+      : [];
     const normalizedTools = Array.isArray(fileTools)
       ? normalizeTools(fileTools)
       : fileTools
@@ -839,18 +841,4 @@ export class GoogleLiveProvider implements ApiProvider {
       throw error; // Re-throw so caller can handle fallback behavior
     }
   }
-}
-
-function isExternalToolFile(tools: unknown): tools is string {
-  return typeof tools === 'string' && tools.startsWith('file://');
-}
-
-function containsExternalToolFile(tools: unknown): boolean {
-  if (isExternalToolFile(tools)) {
-    return true;
-  }
-  if (Array.isArray(tools)) {
-    return tools.some(containsExternalToolFile);
-  }
-  return false;
 }

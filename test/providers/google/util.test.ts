@@ -28,6 +28,7 @@ import {
   resolveGoogleToolConfig,
   resolveProjectId,
   sanitizeSchemaForGemini,
+  stripExternalToolFileReferences,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
@@ -2906,6 +2907,18 @@ describe('util', () => {
         { googleSearch: {} },
         { codeExecution: {} },
       ]);
+    });
+  });
+
+  describe('stripExternalToolFileReferences', () => {
+    it('removes external refs while preserving inline tools', () => {
+      expect(
+        stripExternalToolFileReferences([
+          { googleSearch: {} },
+          'file://tools.js:getTools',
+          { codeExecution: {} },
+        ]),
+      ).toEqual([{ googleSearch: {} }, { codeExecution: {} }]);
     });
   });
 
