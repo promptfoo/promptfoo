@@ -77,6 +77,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
         return (
           <div
             role="img"
+            aria-label={`${isUser ? 'User' : isAssistant ? 'Assistant' : 'System'} message image`}
             data-testid="image"
             className="min-h-[180px] w-full bg-contain bg-left bg-no-repeat sm:min-h-[300px]"
             style={{ backgroundImage: `url(${imageSrc})` }}

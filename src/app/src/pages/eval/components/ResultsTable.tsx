@@ -192,6 +192,7 @@ function TableHeader({
                 <Link
                   to={ROUTES.PROMPT_DETAIL(resourceId)}
                   target="_blank"
+                  rel="noopener noreferrer"
                   aria-label="View other evals and datasets for this prompt"
                   className="action"
                 >
