@@ -96,6 +96,13 @@ describe('MediaModal', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
+    it('keeps the modal layout shrinkable on narrow screens', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      expect(screen.getByRole('dialog').lastElementChild).toHaveClass('min-w-0', 'w-full');
+    });
+
     it('renders image preview for image kind', () => {
       const item = createMockItem({ kind: 'image' });
       renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
@@ -116,6 +123,13 @@ describe('MediaModal', () => {
       renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
 
       expect(screen.getByText('Preview not available')).toBeInTheDocument();
+    });
+
+    it('keeps the compact footer download button named', () => {
+      const item = createMockItem();
+      renderModal(<MediaModal item={item} items={[item]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+
+      expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
     });
   });
 
