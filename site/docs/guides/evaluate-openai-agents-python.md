@@ -109,12 +109,16 @@ Use `trajectory:goal-success` when you want a judge model to decide whether the 
 
 The example turns one eval row into a long-horizon task by passing a JSON-encoded list of user turns in `vars.steps_json`. The provider parses that JSON and executes the turns sequentially against a shared `SQLiteSession`, which lets the SDK preserve working memory across turns inside a single Promptfoo test case.
 
+The example also returns `tokenUsage.numRequests`, cached-input tokens, and reasoning-token detail from the SDK's raw model responses. That preserves the real multi-call footprint of handoffs and tool/model loops instead of collapsing every eval row to one request.
+
 That pattern is useful when you want to evaluate:
 
 - multi-step workflows that need memory
 - agent handoffs over time
 - task completion after several intermediate actions
 - regressions in tool usage across longer trajectories
+
+Promptfoo does not infer a dollar `cost` for this path automatically. A Python provider can mix models, hosted tools, and custom backends inside one agent graph, while the SDK's aggregate usage objects do not identify the priced model for each request. Return `cost` from your provider only when you can account for every billed model and hosted tool used by the run.
 
 ## Sandbox Agents
 

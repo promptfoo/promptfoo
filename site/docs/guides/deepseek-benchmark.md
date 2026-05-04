@@ -13,7 +13,7 @@ In this guide, we'll create a practical comparison that results in a detailed si
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 20.20+ or 22.22+
 - OpenRouter API access for DeepSeek and Llama (set `OPENROUTER_API_KEY`)
 - OpenAI API access for GPT-5 and o3-mini (set `OPENAI_API_KEY`)
 

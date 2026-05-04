@@ -163,6 +163,13 @@ describe('XAI Video Provider', () => {
       expect(provider.getApiUrl()).toBe('https://custom.api.example.com');
     });
 
+    it('uses a regional API URL when configured', () => {
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: { region: 'eu-west-1' },
+      });
+      expect(provider.getApiUrl()).toBe('https://eu-west-1.api.x.ai/v1');
+    });
+
     it('returns correct string representation', () => {
       const provider = new XAIVideoProvider('grok-imagine-video');
       expect(provider.toString()).toBe('[xAI Video Provider grok-imagine-video]');
@@ -203,8 +210,10 @@ describe('XAI Video Provider', () => {
       const pollResponse = {
         ok: true,
         json: vi.fn().mockResolvedValue({
+          status: 'done',
           video: { url: mockVideoUrl, duration: 3 },
           model: 'grok-imagine-video',
+          usage: { cost_in_usd_ticks: 123000000 },
         }),
       };
 
@@ -225,7 +234,7 @@ describe('XAI Video Provider', () => {
       expect(result.error).toBeUndefined();
       expect(result.output).toContain('Video:');
       expect(result.video?.model).toBe('grok-imagine-video');
-      expect(result.cost).toBeCloseTo(0.15, 2); // 3 seconds * $0.05
+      expect(result.cost).toBe(0.0123);
       expect(result.cached).toBe(false);
     });
 
@@ -463,6 +472,88 @@ describe('XAI Video Provider', () => {
     });
   });
 
+  describe('Reference-to-video generation', () => {
+    it('includes reference images in the request', async () => {
+      const referenceImages = [
+        { url: 'https://example.com/person.jpg' },
+        { url: 'https://example.com/shirt.jpg' },
+      ];
+      const createResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({ request_id: mockRequestId }),
+      };
+      const completedResponse = {
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          video: { url: mockVideoUrl, duration: 3 },
+          model: 'grok-imagine-video',
+        }),
+      };
+      const downloadResponse = {
+        ok: true,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1000)),
+      };
+
+      vi.mocked(fetch.fetchWithProxy)
+        .mockResolvedValueOnce(createResponse as any)
+        .mockResolvedValueOnce(completedResponse as any)
+        .mockResolvedValueOnce(downloadResponse as any);
+
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: { reference_images: referenceImages, duration: 10 },
+      });
+      const result = await provider.callApi(mockPrompt);
+
+      const createCall = vi.mocked(fetch.fetchWithProxy).mock.calls[0];
+      const body = JSON.parse(createCall[1]?.body as string);
+      expect(body.reference_images).toEqual(referenceImages);
+      expect(result.metadata?.hasReferenceImages).toBe(true);
+    });
+
+    it('rejects reference images combined with image-to-video', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: {
+          image: { url: 'https://example.com/frame.jpg' },
+          reference_images: [{ url: 'https://example.com/reference.jpg' }],
+        },
+      });
+
+      const result = await provider.callApi(mockPrompt);
+
+      expect(result.error).toContain('reference_images cannot be combined with image input');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('rejects more than seven reference images', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: {
+          reference_images: Array.from({ length: 8 }, (_, index) => ({
+            url: `https://example.com/reference-${index}.jpg`,
+          })),
+        },
+      });
+
+      const result = await provider.callApi(mockPrompt);
+
+      expect(result.error).toContain('Must be between 1 and 7');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('rejects reference image requests longer than ten seconds', async () => {
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: {
+          reference_images: [{ url: 'https://example.com/reference.jpg' }],
+          duration: 11,
+        },
+      });
+
+      const result = await provider.callApi(mockPrompt);
+
+      expect(result.error).toContain('for reference_images');
+      expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Video editing', () => {
     it('uses edit endpoint when video URL is provided', async () => {
       const sourceVideoUrl = 'https://example.com/source.mp4';
@@ -626,7 +717,33 @@ describe('XAI Video Provider', () => {
 
       expect(videoUtils.generateVideoCacheKey).toHaveBeenCalledWith(
         expect.objectContaining({
-          inputReference: imageUrl,
+          inputReference: `image:${imageUrl}`,
+        }),
+      );
+    });
+
+    it('uses distinct cache references for image and reference-image modes', async () => {
+      const sharedUrl = 'https://example.com/shared.jpg';
+
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
+
+      await new XAIVideoProvider('grok-imagine-video', {
+        config: { image: { url: sharedUrl } },
+      }).callApi(mockPrompt);
+      await new XAIVideoProvider('grok-imagine-video', {
+        config: { reference_images: [{ url: sharedUrl }] },
+      }).callApi(mockPrompt);
+
+      expect(videoUtils.generateVideoCacheKey).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          inputReference: `image:${sharedUrl}`,
+        }),
+      );
+      expect(videoUtils.generateVideoCacheKey).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          inputReference: `reference_images:${sharedUrl}`,
         }),
       );
     });

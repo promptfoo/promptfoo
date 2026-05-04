@@ -45,7 +45,8 @@ export default function ConfigurationTab({
   const installationUnknown = installationStatus?.installed === null;
   const installationError = installationStatus?.error ?? null;
 
-  const scanButtonDisabled = isScanning || paths.length === 0 || isCheckingInstallation;
+  const scanButtonDisabled =
+    isScanning || paths.length === 0 || isCheckingInstallation || isNotInstalled;
 
   const getScanButtonText = () => {
     if (isScanning) {
@@ -71,7 +72,7 @@ export default function ConfigurationTab({
       return 'Checking if ModelAudit is installed...';
     }
     if (isNotInstalled) {
-      return 'Click to see installation instructions';
+      return 'Install ModelAudit to start a scan';
     }
     if (installationUnknown) {
       return 'Installation status will be verified when you click';

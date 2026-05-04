@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { StringDecoder } from 'string_decoder';
 
 import { Router } from 'express';
 import { z } from 'zod';
@@ -11,7 +12,8 @@ import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import { ModelAuditSchemas } from '../../types/api/modelAudit';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
-import { sendError } from '../utils/errors';
+import { parseCompleteModelAuditResults } from '../../util/modelAuditResults';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 import type { ModelAuditScanResults } from '../../types/modelAudit';
@@ -40,6 +42,7 @@ function spawnModelAuditCapture(
   options: SpawnCaptureOptions = {},
 ): Promise<{
   code: number | null;
+  signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
 }> {
@@ -49,6 +52,8 @@ function spawnModelAuditCapture(
     });
     let stdout = '';
     let stderr = '';
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
 
     const onAbort = () => {
       if (!child.killed) {
@@ -63,20 +68,22 @@ function spawnModelAuditCapture(
     const cleanupAbort = () => options.signal?.removeEventListener('abort', onAbort);
 
     child.stdout?.on('data', (data) => {
-      stdout += data.toString();
+      stdout += stdoutDecoder.write(data);
     });
 
     child.stderr?.on('data', (data) => {
-      stderr += data.toString();
+      stderr += stderrDecoder.write(data);
     });
 
     child.on('error', (error) => {
       cleanupAbort();
       reject(error);
     });
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       cleanupAbort();
-      resolve({ code, stdout, stderr });
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
+      resolve({ code, signal: signal ?? null, stdout, stderr });
     });
   });
 }
@@ -113,7 +120,7 @@ modelAuditRouter.get('/scanners', async (req: Request, res: Response): Promise<v
       return;
     }
 
-    const { code, stdout, stderr } = await spawnModelAuditCapture(LIST_SCANNERS_ARGS, {
+    const { code, signal, stdout, stderr } = await spawnModelAuditCapture(LIST_SCANNERS_ARGS, {
       signal: abortController.signal,
     });
 
@@ -121,8 +128,8 @@ modelAuditRouter.get('/scanners', async (req: Request, res: Response): Promise<v
       return;
     }
 
-    if (code !== null && code !== 0) {
-      sendError(res, 500, 'Failed to list ModelAudit scanners', { code, stderr });
+    if (signal !== null || code === null || code !== 0) {
+      sendError(res, 500, 'Failed to list ModelAudit scanners', { code, signal, stderr });
       return;
     }
 
@@ -188,7 +195,7 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = ModelAuditSchemas.Scan.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    replyValidationError(res, bodyResult.error);
     return;
   }
 
@@ -196,7 +203,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     const { paths, options } = bodyResult.data;
 
     // Check if modelaudit is installed
-    const { installed } = await checkModelAuditInstalled();
+    const { installed, version: scannerVersion } = await checkModelAuditInstalled();
     if (!installed) {
       res.status(400).json({
         error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
@@ -242,31 +249,40 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Use the centralized CLI parser to build command arguments
-    const { args } = parseModelAuditArgs(resolvedPaths, {
+    const normalizedOptions = {
       ...options,
+      maxSize: options.maxSize ?? options.maxFileSize,
+    };
+
+    // Use the centralized CLI parser to build command arguments
+    const effectiveVerbose = normalizedOptions.verbose !== false;
+    const effectiveTimeout = normalizedOptions.timeout || 3600;
+    const { args } = parseModelAuditArgs(resolvedPaths, {
+      ...normalizedOptions,
       // Force JSON format for API responses (required for parsing)
       format: 'json',
       // Enable verbose mode by default for better debugging information
-      verbose: options.verbose !== false, // Allow explicit false to disable
+      verbose: effectiveVerbose, // Allow explicit false to disable
       // Set default timeout to 1 hour for large model scans
-      timeout: options.timeout || 3600,
+      timeout: effectiveTimeout,
       // Note: We handle persistence ourselves in this server route
     });
 
     logger.info(`Running model scan on: ${resolvedPaths.join(', ')}`);
 
     // Default to persisting results unless explicitly disabled
-    const persist = options.persist !== false;
+    const persist = normalizedOptions.persist !== false;
 
     // Track the scan
     telemetry.record('webui_api', {
       event: 'model_scan',
       pathCount: paths.length,
-      hasBlacklist: (options.blacklist?.length ?? 0) > 0,
-      hasScannerSelection: Boolean(options.scanners?.length || options.excludeScanner?.length),
-      timeout: options.timeout ?? 0,
-      verbose: options.verbose ?? false,
+      hasBlacklist: (normalizedOptions.blacklist?.length ?? 0) > 0,
+      hasScannerSelection: Boolean(
+        normalizedOptions.scanners?.length || normalizedOptions.excludeScanner?.length,
+      ),
+      timeout: effectiveTimeout,
+      verbose: effectiveVerbose,
       persist,
     });
 
@@ -274,6 +290,8 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     const modelAudit = spawn('modelaudit', args, { env: getModelAuditDelegationEnv() });
     let stdout = '';
     let stderr = '';
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
     let responded = false; // Prevent double-response
 
     // Helper to safely send response (prevents double-response if both error and close fire).
@@ -331,11 +349,11 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     });
 
     modelAudit.stdout.on('data', (data) => {
-      stdout += data.toString();
+      stdout += stdoutDecoder.write(data);
     });
 
     modelAudit.stderr.on('data', (data) => {
-      stderr += data.toString();
+      stderr += stderrDecoder.write(data);
     });
 
     modelAudit.on('error', (error) => {
@@ -364,13 +382,34 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       });
     });
 
-    modelAudit.on('close', async (code) => {
+    modelAudit.on('close', async (code, signal) => {
       // If client already disconnected, don't process results
       if (responded) {
         return;
       }
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
+      const closeSignal = signal ?? null;
+
+      if (closeSignal !== null || code === null) {
+        logger.error('Model scan process did not complete normally', {
+          code,
+          signal: closeSignal,
+          stderr: stderr || undefined,
+          command: 'modelaudit',
+          args,
+          paths: resolvedPaths,
+        });
+        safeRespond(500, {
+          error:
+            closeSignal === null
+              ? 'Model scan process exited without an exit code'
+              : `Model scan process terminated by signal ${closeSignal}`,
+        });
+        return;
+      }
       // ModelAudit returns exit code 1 when it finds issues, which is expected
-      if (code !== null && code !== 0 && code !== 1) {
+      if (code !== 0 && code !== 1) {
         logger.error(`Model scan process exited with code ${code}`);
 
         // Provide more detailed error information to the frontend
@@ -494,7 +533,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
 
         let scanResults: ModelAuditScanResults;
         try {
-          scanResults = JSON.parse(jsonOutput);
+          scanResults = parseCompleteModelAuditResults(JSON.parse(jsonOutput));
         } catch (parseError) {
           logger.error('Failed to parse model scan output', {
             parseError,
@@ -518,8 +557,8 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         if (persist) {
           try {
             const audit = await ModelAudit.create({
-              name: options.name || `API scan ${new Date().toISOString()}`,
-              author: options.author ?? undefined,
+              name: normalizedOptions.name || `API scan ${new Date().toISOString()}`,
+              author: normalizedOptions.author ?? undefined,
               modelPath: resolvedPaths.join(', '),
               results: {
                 ...scanResults,
@@ -529,24 +568,24 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 paths: resolvedPaths,
                 originalPaths: paths,
                 options: {
-                  blacklist: options.blacklist,
-                  timeout: options.timeout,
-                  maxSize: options.maxSize,
-                  maxFileSize: options.maxFileSize,
-                  maxTotalSize: options.maxTotalSize,
-                  verbose: options.verbose,
-                  format: options.format,
-                  strict: options.strict,
-                  dryRun: options.dryRun,
-                  cache: options.cache,
-                  quiet: options.quiet,
-                  progress: options.progress,
-                  sbom: options.sbom,
-                  output: options.output,
-                  scanners: options.scanners,
-                  excludeScanner: options.excludeScanner,
+                  blacklist: normalizedOptions.blacklist,
+                  timeout: normalizedOptions.timeout,
+                  maxSize: normalizedOptions.maxSize,
+                  verbose: normalizedOptions.verbose,
+                  format: normalizedOptions.format,
+                  strict: normalizedOptions.strict,
+                  dryRun: normalizedOptions.dryRun,
+                  cache: normalizedOptions.cache,
+                  quiet: normalizedOptions.quiet,
+                  progress: normalizedOptions.progress,
+                  sbom: normalizedOptions.sbom,
+                  output: normalizedOptions.output,
+                  scanners: normalizedOptions.scanners,
+                  excludeScanner: normalizedOptions.excludeScanner,
                 },
               },
+              scannerVersion: scannerVersion ?? undefined,
+              contentHash: scanResults.content_hash,
             });
             auditId = audit.id;
             logger.info(`Model scan results saved to database with ID: ${auditId}`);

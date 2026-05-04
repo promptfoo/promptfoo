@@ -187,28 +187,29 @@ When enabling write/edit/bash tools, consider how you will reset files after eac
 
 ## Supported Parameters
 
-| Parameter          | Type    | Description                                                             | Default                    |
-| ------------------ | ------- | ----------------------------------------------------------------------- | -------------------------- |
-| `apiKey`           | string  | Inject API key into a spawned OpenCode server for `provider_id`         | Environment variable       |
-| `baseUrl`          | string  | URL for an existing OpenCode server                                     | Auto-start server          |
-| `hostname`         | string  | Server hostname when starting a new server                              | `127.0.0.1`                |
-| `port`             | number  | Server port when starting a new server                                  | Auto-select                |
-| `timeout`          | number  | Server startup timeout in milliseconds                                  | `30000`                    |
-| `log_level`        | string  | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)     | Provider default           |
-| `working_dir`      | string  | Directory for file operations and read-only default tools               | Temporary directory        |
-| `workspace`        | string  | Workspace identifier for workspace-aware OpenCode requests              | None                       |
-| `provider_id`      | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)          | OpenCode default           |
-| `model`            | string  | Model to use for this request                                           | OpenCode default           |
-| `format`           | object  | Output format, including JSON Schema structured output                  | Text                       |
-| `variant`          | string  | Provider/model variant defined in OpenCode config                       | Default variant            |
-| `tools`            | object  | Tool configuration                                                      | Read-only with working_dir |
-| `permission`       | object  | Permission configuration for tools                                      | Ask for dangerous tools    |
-| `agent`            | string  | Built-in or preconfigured agent to use                                  | Default agent              |
-| `custom_agent`     | object  | Custom agent configuration when promptfoo starts the OpenCode server    | None                       |
-| `session_id`       | string  | Resume an existing session                                              | Create new session         |
-| `persist_sessions` | boolean | Reuse the same session for repeated calls with the same provider config | `false`                    |
-| `mcp`              | object  | MCP server configuration when promptfoo starts the OpenCode server      | None                       |
-| `cache_mcp`        | boolean | Enable caching when MCP is configured                                   | `false`                    |
+| Parameter           | Type    | Description                                                                | Default                    |
+| ------------------- | ------- | -------------------------------------------------------------------------- | -------------------------- |
+| `apiKey`            | string  | Inject API key into a spawned OpenCode server for `provider_id`            | Environment variable       |
+| `baseUrl`           | string  | URL for an existing OpenCode server                                        | Auto-start server          |
+| `hostname`          | string  | Server hostname when starting a new server                                 | `127.0.0.1`                |
+| `port`              | number  | Server port when starting a new server                                     | Auto-select                |
+| `timeout`           | number  | Server startup timeout in milliseconds                                     | `30000`                    |
+| `log_level`         | string  | OpenCode server log level (`debug`, `info`, `warn`, `error`, `off`)        | Provider default           |
+| `working_dir`       | string  | Directory for file operations and read-only default tools                  | Temporary directory        |
+| `workspace`         | string  | Workspace identifier for workspace-aware OpenCode requests                 | None                       |
+| `provider_id`       | string  | LLM provider (`anthropic`, `openai`, `google`, `ollama`, etc.)             | OpenCode default           |
+| `model`             | string  | Model to use for this request                                              | OpenCode default           |
+| `format`            | object  | Output format, including JSON Schema structured output                     | Text                       |
+| `variant`           | string  | Provider/model variant defined in OpenCode config                          | Default variant            |
+| `tools`             | object  | Tool configuration                                                         | Read-only with working_dir |
+| `permission`        | object  | Permission configuration for tools                                         | Ask for dangerous tools    |
+| `agent`             | string  | Built-in or preconfigured agent to use                                     | Default agent              |
+| `custom_agent`      | object  | Custom agent configuration when promptfoo starts the OpenCode server       | None                       |
+| `session_id`        | string  | Resume an existing session                                                 | Create new session         |
+| `parent_session_id` | string  | Fork from an existing session (v2 server only); inherits compacted history | None                       |
+| `persist_sessions`  | boolean | Reuse the same session for repeated calls with the same provider config    | `false`                    |
+| `mcp`               | object  | MCP server configuration when promptfoo starts the OpenCode server         | None                       |
+| `cache_mcp`         | boolean | Enable caching when MCP is configured                                      | `false`                    |
 
 ## Supported Providers
 
@@ -414,6 +415,19 @@ providers:
     config:
       session_id: previous-session-id
 ```
+
+### Forked Sessions
+
+Fork a new session off an existing one. The child inherits the parent's compacted history and starts as a fresh conversation. Requires the v2 OpenCode server (silently ignored on v1):
+
+```yaml
+providers:
+  - id: opencode:sdk
+    config:
+      parent_session_id: parent-session-id
+```
+
+`parent_session_id` is independent of `session_id`: use `session_id` to continue the same conversation, or `parent_session_id` to branch a new one. Setting both is supported, but `session_id` wins because resumed sessions are not re-forked on create.
 
 ## Custom Agents
 
