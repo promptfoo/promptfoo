@@ -119,7 +119,7 @@
       "express": "^4.22.1"
     },
     "@anthropic-ai/claude-agent-sdk": {
-      "@anthropic-ai/sdk": "^0.91.1"
+      "@anthropic-ai/sdk": "^0.92.0"
     },
     "@isaacs/brace-expansion": ">=5.0.1",
     "fast-xml-parser": "$fast-xml-parser",
@@ -254,7 +254,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "^0.92.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.1.0",
