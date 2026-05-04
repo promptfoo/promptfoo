@@ -1799,10 +1799,7 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
   }
 
   logger.info(`Generating prompt variations...`);
-  const { prompts: newPrompts, error } = await generatePrompts(
-    testSuite.prompts[0].raw,
-    options.suggestionsCount ?? 1,
-  );
+  const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0].raw, 1);
   if (error || !newPrompts) {
     throw new Error(`Failed to generate prompts: ${error}`);
   }

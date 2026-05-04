@@ -3096,11 +3096,6 @@
         "generateSuggestions": {
           "type": "boolean"
         },
-        "suggestionsCount": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
-        },
         "interactiveProviders": {
           "type": "boolean"
         },
@@ -3286,11 +3281,6 @@
         },
         "generateSuggestions": {
           "type": "boolean"
-        },
-        "suggestionsCount": {
-          "type": "integer",
-          "exclusiveMinimum": 0,
-          "maximum": 9007199254740991
         },
         "promptPrefix": {
           "type": "string"

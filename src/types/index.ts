@@ -128,7 +128,6 @@ export const CommandLineOptionsSchema = z.object({
   var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
-  suggestionsCount: z.coerce.number().int().positive().optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
@@ -255,7 +254,6 @@ export const EvaluateOptionsSchema = z.object({
   delay: z.number().optional(),
   eventSource: z.string().optional(),
   generateSuggestions: z.boolean().optional(),
-  suggestionsCount: z.number().int().positive().optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
    * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.

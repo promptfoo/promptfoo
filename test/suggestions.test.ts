@@ -50,35 +50,4 @@ describe('generatePrompts', () => {
       },
     });
   });
-
-  it('generates the requested number of prompt variants and accumulates token usage', async () => {
-    const provider = createMockProvider({
-      id: 'openai:codex-sdk',
-      response: {
-        output: 'Variant prompt',
-        tokenUsage: { completion: 1, prompt: 2, total: 3 },
-      },
-    });
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      embeddingProvider: provider,
-      gradingJsonProvider: provider,
-      gradingProvider: provider,
-      moderationProvider: provider,
-      suggestionsProvider: provider,
-      synthesizeProvider: provider,
-    } satisfies DefaultProviders);
-
-    const result = await generatePrompts('Original prompt', 2);
-
-    expect(provider.callApi).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({
-      prompts: ['Variant prompt', 'Variant prompt'],
-      tokensUsed: {
-        ...createEmptyTokenUsage(),
-        completion: 2,
-        prompt: 4,
-        total: 6,
-      },
-    });
-  });
 });
