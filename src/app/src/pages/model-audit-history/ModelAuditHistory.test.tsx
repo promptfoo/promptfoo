@@ -157,6 +157,22 @@ describe('ModelAuditHistory', () => {
     expect(screen.getByRole('button', { name: 'Delete Scan 1' })).toBeInTheDocument();
   });
 
+  it('distinguishes delete actions for unnamed scans', () => {
+    const mockScans = [createMockScan('unnamed-1', '')];
+
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: mockScans,
+      totalCount: 1,
+    } as any);
+
+    renderComponent();
+
+    expect(
+      screen.getByRole('button', { name: 'Delete Unnamed scan unnamed-1' }),
+    ).toBeInTheDocument();
+  });
+
   it('should not render stale scans when the API reports zero total scans', () => {
     const staleScans = [createMockScan('stale', 'Stale Scan')];
 

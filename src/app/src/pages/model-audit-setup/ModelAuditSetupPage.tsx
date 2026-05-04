@@ -213,15 +213,12 @@ export default function ModelAuditSetupPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <ErrorIcon className="size-4 text-red-700 dark:text-red-400" />
-                      <span className="text-sm font-medium text-red-700 dark:text-red-400">
-                        Not Installed
-                      </span>
+                      <ErrorIcon className="size-4 text-destructive" />
+                      <span className="text-sm font-medium text-destructive">Not Installed</span>
                       <button
                         type="button"
                         onClick={() => checkInstallation()}
                         aria-label="Check installation again"
-                        title="Check installation again"
                         className="p-1 hover:bg-muted rounded"
                       >
                         <RefreshIcon className="size-4 text-muted-foreground" />
