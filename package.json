@@ -84,7 +84,7 @@
     "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app",
     "test:coverage:ratchet": "node --import tsx ./scripts/checkCoverageRatchets.ts",
     "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
-    "tsc": "npm run check:typescript-coverage && tsc --noEmit",
+    "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium\" --ignore-dirs=\"dist,site,examples\"",
     "prepare": "husky || exit 0"

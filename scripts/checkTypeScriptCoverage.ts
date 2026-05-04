@@ -31,7 +31,7 @@ function isRootOwnedTypeScriptFile(filePath: string): boolean {
   return !filePath.includes('/') || hasPrefix(filePath, rootOwnedPrefixes);
 }
 
-function getTrackedTypeScriptFiles(): string[] {
+export function getTrackedTypeScriptFiles(): string[] {
   return execFileSync('git', ['ls-files'], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -49,7 +49,7 @@ function getTrackedTypeScriptFiles(): string[] {
     .sort();
 }
 
-function getRootProjectFiles(): Set<string> {
+export function getRootProjectFiles(): Set<string> {
   const configPath = ts.findConfigFile(repoRoot, ts.sys.fileExists, 'tsconfig.json');
   if (!configPath) {
     throw new Error('Could not find root tsconfig.json');
@@ -77,11 +77,13 @@ function getRootProjectFiles(): Set<string> {
   );
 }
 
-function main(): number {
+export function findMissingRootTypeScriptFiles(): string[] {
   const projectFiles = getRootProjectFiles();
-  const missingFiles = getTrackedTypeScriptFiles().filter(
-    (filePath) => !projectFiles.has(filePath),
-  );
+  return getTrackedTypeScriptFiles().filter((filePath) => !projectFiles.has(filePath));
+}
+
+export function runTypeScriptCoverageCheck(): number {
+  const missingFiles = findMissingRootTypeScriptFiles();
 
   if (missingFiles.length === 0) {
     return 0;
@@ -97,11 +99,13 @@ function main(): number {
   return 1;
 }
 
-try {
-  process.exitCode = main();
-} catch (error) {
-  console.error(
-    `Failed to verify root TypeScript coverage: ${error instanceof Error ? error.message : String(error)}`,
-  );
-  process.exitCode = 1;
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    process.exitCode = runTypeScriptCoverageCheck();
+  } catch (error) {
+    console.error(
+      `Failed to verify root TypeScript coverage: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exitCode = 1;
+  }
 }
