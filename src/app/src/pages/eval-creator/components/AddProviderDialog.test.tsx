@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AddProviderDialog, { getProviderTypeFromId } from './AddProviderDialog';
 
@@ -116,6 +117,7 @@ describe('AddProviderDialog layout', () => {
   });
 
   it('resets the scroll position when moving into provider configuration', async () => {
+    const user = userEvent.setup();
     render(
       <TooltipProvider>
         <AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} />
@@ -126,7 +128,7 @@ describe('AddProviderDialog layout', () => {
     expect(scrollBody).toBeDefined();
 
     scrollBody!.scrollTop = 240;
-    fireEvent.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
+    await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
 
     const configEditor = await screen.findByText('provider config editor');
     const nextScrollBody = configEditor.parentElement?.parentElement;

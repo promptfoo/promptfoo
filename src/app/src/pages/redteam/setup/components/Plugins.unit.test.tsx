@@ -162,13 +162,14 @@ describe('Plugins - State Management Unit Tests', () => {
       expect(pluginsTab.textContent).toContain('Plugins (3)');
     });
 
-    it('keeps the tab strip scrollable on narrow screens', () => {
+    it('lets the tab strip wrap on narrow screens', () => {
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       expect(screen.getByRole('tablist')).toHaveClass(
         'max-w-full',
         'justify-start',
-        'overflow-x-auto',
+        'flex-wrap',
+        'overflow-visible',
       );
     });
 

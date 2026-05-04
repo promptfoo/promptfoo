@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import TraceTimeline from './TraceTimeline';
 import type { TraceData } from '@promptfoo/types';
@@ -154,6 +155,7 @@ describe('TraceTimeline', () => {
   });
 
   it('should display span with attributes', async () => {
+    const user = userEvent.setup();
     const mockTrace: TraceData = {
       traceId: 'trace-with-attributes',
       evaluationId: 'test-evaluation-id',
@@ -179,7 +181,7 @@ describe('TraceTimeline', () => {
     expect(screen.getByText('Span with Attributes')).toBeInTheDocument();
     expect(screen.getByText('Total Duration: 100ms')).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button')[0]);
+    await user.click(screen.getAllByRole('button')[0]);
 
     expect(screen.getByText('Span Details').parentElement).toHaveClass('sm:ml-10');
     expect(screen.getByText('Span ID').parentElement?.parentElement).toHaveClass(
