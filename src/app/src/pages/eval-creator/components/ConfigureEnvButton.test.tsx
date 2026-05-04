@@ -141,4 +141,15 @@ describe('ConfigureEnvButton', () => {
     const updatedConfig = useStore.getState().config;
     expect(updatedConfig.env?.OPENAI_API_KEY).toBe(invalidApiKey);
   });
+
+  it('keeps dialog actions visible while provider settings scroll independently', async () => {
+    render(<ConfigureEnvButton />);
+    const dialog = await openProviderSettingsDialog();
+    const scrollBody = screen.getByText('OpenAI').closest('div')?.parentElement?.parentElement;
+    const footer = screen.getByRole('button', { name: 'Save' }).parentElement;
+
+    expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
+  });
 });
