@@ -1,3 +1,11 @@
+/**
+ * Cache helpers exposed through the Node.js package.
+ *
+ * Use this namespace when custom providers need shared cache access or when
+ * related evals need isolated cache namespaces.
+ *
+ * @module
+ */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import fs from 'fs';
 import path from 'path';
@@ -247,12 +255,19 @@ function getEffectiveCacheEnabled() {
  * @public
  */
 export type FetchWithCacheResult<T> = {
+  /** Parsed response payload. */
   data: T;
+  /** Whether the response was served from cache. */
   cached: boolean;
+  /** HTTP response status code. */
   status: number;
+  /** HTTP response status text. */
   statusText: string;
+  /** Response headers normalized to string values. */
   headers?: Record<string, string>;
+  /** End-to-end fetch latency in milliseconds. */
   latencyMs?: number;
+  /** Delete this response from cache when it was cache-backed. */
   deleteFromCache?: () => Promise<void>;
 };
 

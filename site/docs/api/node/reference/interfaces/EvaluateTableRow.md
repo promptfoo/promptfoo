@@ -2,63 +2,33 @@
 
 ---
 
-[promptfoo](../README.md) / AssertionValueFunctionContext
+[promptfoo](../README.md) / EvaluateTableRow
 
-# Interface: AssertionValueFunctionContext
+# Interface: EvaluateTableRow
 
-Defined in: [types/index.ts:808](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L808)
+Defined in: [types/index.ts:483](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L483)
 
-Runtime context passed to function-valued assertions.
+One row in an eval table.
 
 ## Properties
 
-### config?
+### description?
 
-> `optional` **config?**: `Record`\<`string`, `any`\>
+> `optional` **description?**: `string`
 
-Defined in: [types/index.ts:818](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L818)
+Defined in: [types/index.ts:485](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L485)
 
-Assertion-specific config copied from `assert[].config`.
-
----
-
-### logProbs
-
-> **logProbs**: `number`[] \| `undefined`
-
-Defined in: [types/index.ts:816](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L816)
-
-Provider log probabilities, when available.
+Optional human-readable description for the row's test case.
 
 ---
 
-### prompt
+### outputs
 
-> **prompt**: `string` \| `undefined`
+> **outputs**: [`EvaluateTableOutput`](EvaluateTableOutput.md)[]
 
-Defined in: [types/index.ts:810](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L810)
+Defined in: [types/index.ts:487](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L487)
 
-Rendered prompt for the current result, when available.
-
----
-
-### provider
-
-> **provider**: [`ApiProvider`](ApiProvider.md) \| `undefined`
-
-Defined in: [types/index.ts:820](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L820)
-
-Provider used for the current result, when available.
-
----
-
-### providerResponse
-
-> **providerResponse**: [`ProviderResponse`](ProviderResponse.md) \| `undefined`
-
-Defined in: [types/index.ts:822](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L822)
-
-Full provider response for the current result.
+Provider outputs rendered across this row.
 
 ---
 
@@ -66,9 +36,9 @@ Full provider response for the current result.
 
 > **test**: `object`
 
-Defined in: [types/index.ts:814](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L814)
+Defined in: [types/index.ts:491](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L491)
 
-Test case currently being graded.
+Test case represented by this row.
 
 #### assert?
 
@@ -552,20 +522,20 @@ in > 0.38.0. Use `transform` instead.
 
 ---
 
-### trace?
+### testIdx
 
-> `optional` **trace?**: `TraceData`
+> **testIdx**: `number`
 
-Defined in: [types/index.ts:824](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L824)
+Defined in: [types/index.ts:493](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L493)
 
-Trace data for trace-aware assertions when tracing is enabled.
+Zero-based index of the test case in the eval.
 
 ---
 
 ### vars
 
-> **vars**: `Record`\<`string`, `VarValue`\>
+> **vars**: `string`[]
 
-Defined in: [types/index.ts:812](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L812)
+Defined in: [types/index.ts:489](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L489)
 
-Rendered variables for the current test case.
+Rendered variable values shown in the table row.

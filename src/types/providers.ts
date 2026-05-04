@@ -120,17 +120,19 @@ export interface CallApiContextParams {
   vars: Record<string, VarValue>;
   /** Whether the caller requested debug behavior. */
   debug?: boolean;
-  // This was added so we have access to the grader inside the provider.
-  // Vars and prompts should be access using the arguments above.
+  /** Test case currently being executed, when available to the caller. */
   test?: AtomicTestCase;
+  /** Whether this call should bypass reusable response cache entries. */
   bustCache?: boolean;
 
-  // W3C Trace Context headers
-  traceparent?: string; // Format: version-trace-id-parent-id-trace-flags
-  tracestate?: string; // Optional vendor-specific trace state
+  /** W3C Trace Context `traceparent` header for downstream propagation. */
+  traceparent?: string;
+  /** W3C Trace Context `tracestate` header for downstream propagation. */
+  tracestate?: string;
 
-  // Evaluation metadata (for manual correlation if needed)
+  /** Eval identifier for manual correlation across provider calls. */
   evaluationId?: string;
+  /** Stable id for the current test case when one has been assigned. */
   testCaseId?: string;
   /**
    * Index of the test case within the current evaluation (row in results table).
@@ -142,6 +144,7 @@ export interface CallApiContextParams {
    * Used for correlating blob references and other per-result metadata.
    */
   promptIdx?: number;
+  /** Zero-based repeat index when the same test case is executed repeatedly. */
   repeatIndex?: number;
 }
 
@@ -153,9 +156,7 @@ export interface CallApiContextParams {
 export interface CallApiOptionsParams {
   /** Whether the caller requested token log probabilities when supported. */
   includeLogProbs?: boolean;
-  /**
-   * Signal that can be used to abort the request
-   */
+  /** Signal that can be used to abort the request. */
   abortSignal?: AbortSignal;
 }
 
@@ -216,6 +217,78 @@ export interface GuardrailResponse {
   flaggedOutput?: boolean;
   flagged?: boolean;
   reason?: string;
+}
+
+/**
+ * Audio attachment returned by providers that produce or transform sound.
+ *
+ * @public
+ */
+export interface AudioOutput {
+  /** Provider-defined audio identifier. */
+  id?: string;
+  /** Expiration time for provider-hosted audio, as a Unix timestamp. */
+  expiresAt?: number;
+  /** Base64-encoded audio payload when data is embedded inline. */
+  data?: string;
+  /** External blob reference when audio is stored outside the result row. */
+  blobRef?: BlobRef;
+  /** Transcript associated with the audio payload, when available. */
+  transcript?: string;
+  /** Container or codec name such as `wav` or `mp3`. */
+  format?: string;
+  /** Audio sample rate in hertz. */
+  sampleRate?: number;
+  /** Number of audio channels. */
+  channels?: number;
+  /** Audio duration in seconds. */
+  duration?: number;
+}
+
+/**
+ * Video attachment returned by providers that produce video.
+ *
+ * @public
+ */
+export interface VideoOutput {
+  /** Provider video id, such as a job or operation identifier. */
+  id?: string;
+  /** External blob reference for video data. */
+  blobRef?: BlobRef;
+  /** Storage reference used by providers that persist generated media. */
+  storageRef?: { key?: string };
+  /** URL or storage URI for the generated video. */
+  url?: string;
+  /** Container or codec name such as `mp4`. */
+  format?: string;
+  /** Provider-reported output dimensions, for example `1280x720`. */
+  size?: string;
+  /** Video duration in seconds. */
+  duration?: number;
+  /** URL or storage URI for a representative thumbnail. */
+  thumbnail?: string;
+  /** URL or storage URI for a provider-generated spritesheet. */
+  spritesheet?: string;
+  /** Model that produced the video. */
+  model?: string;
+  /** Aspect ratio such as `16:9`. */
+  aspectRatio?: string;
+  /** Resolution tier such as `720p` or `1080p`. */
+  resolution?: string;
+}
+
+/**
+ * Image attachment returned by providers that produce images.
+ *
+ * @public
+ */
+export interface ImageOutput {
+  /** Inline data URI or base64 payload. */
+  data?: string;
+  /** External blob reference when image data is stored outside the result row. */
+  blobRef?: BlobRef;
+  /** MIME type such as `image/png`. */
+  mimeType?: string;
 }
 
 /**
@@ -300,41 +373,18 @@ export interface ProviderResponse {
    * Example: `thread_closed`.
    */
   conversationEndReason?: string;
+  /** Stable conversation or thread id returned by session-aware providers. */
   sessionId?: string;
+  /** Structured guardrail metadata returned by providers that run moderation checks. */
   guardrails?: GuardrailResponse;
+  /** Provider-reported completion stop reason. */
   finishReason?: string;
-  audio?: {
-    id?: string;
-    expiresAt?: number;
-    data?: string; // base64 encoded audio data
-    blobRef?: BlobRef;
-    transcript?: string;
-    format?: string;
-    sampleRate?: number;
-    channels?: number;
-    duration?: number;
-  };
-  video?: {
-    id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
-    blobRef?: BlobRef; // Blob storage reference for video data (Veo)
-    storageRef?: { key?: string }; // Storage reference for video file (Sora)
-    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
-    format?: string; // 'mp4'
-    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
-    duration?: number; // Seconds
-    thumbnail?: string; // Storage ref URL for thumbnail (Sora)
-    spritesheet?: string; // Storage ref URL for spritesheet (Sora)
-    model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
-    aspectRatio?: string; // '16:9' or '9:16' (Veo)
-    resolution?: string; // '720p' or '1080p' (Veo)
-  };
+  /** Audio attachment returned by audio-capable providers. */
+  audio?: AudioOutput;
+  /** Video attachment returned by video-capable providers. */
+  video?: VideoOutput;
+  /** Image attachments returned by image-capable providers. */
   images?: ImageOutput[];
-}
-
-export interface ImageOutput {
-  data?: string; // data URI or base64
-  blobRef?: BlobRef;
-  mimeType?: string;
 }
 
 export interface ProviderEmbeddingResponse {
@@ -388,6 +438,7 @@ export interface CallApiFunction {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse>;
+  /** Human-readable label used when the provider function is shown in reports. */
   label?: string;
 }
 

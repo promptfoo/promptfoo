@@ -18,8 +18,11 @@ import { ellipsize } from './util/text';
  * @public
  */
 export function generateTable(
+  /** Table data returned on the completed eval record. */
   evaluateTable: EvaluateTable,
+  /** Maximum visible width for each rendered cell. */
   tableCellMaxLength = 250,
+  /** Maximum number of body rows to render. */
   maxRows = 25,
 ): string {
   const head = evaluateTable.head;

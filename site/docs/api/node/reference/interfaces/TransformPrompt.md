@@ -6,7 +6,7 @@
 
 # Interface: TransformPrompt
 
-Defined in: [types/transform.ts:15](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L15)
+Defined in: [types/transform.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L19)
 
 Conventional shape for `TransformContext.prompt`. Callers may pass additional fields.
 
@@ -16,7 +16,9 @@ Conventional shape for `TransformContext.prompt`. Callers may pass additional fi
 
 > `optional` **display?**: `string`
 
-Defined in: [types/transform.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L19)
+Defined in: [types/transform.ts:27](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L27)
+
+Display-friendly prompt text when it differs from `raw`.
 
 ---
 
@@ -24,7 +26,9 @@ Defined in: [types/transform.ts:19](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **id?**: `string`
 
-Defined in: [types/transform.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L17)
+Defined in: [types/transform.ts:23](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L23)
+
+Stable prompt identifier.
 
 ---
 
@@ -32,7 +36,9 @@ Defined in: [types/transform.ts:17](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **label?**: `string`
 
-Defined in: [types/transform.ts:16](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L16)
+Defined in: [types/transform.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L21)
+
+Human-readable prompt label.
 
 ---
 
@@ -40,4 +46,6 @@ Defined in: [types/transform.ts:16](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **raw?**: `string`
 
-Defined in: [types/transform.ts:18](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L18)
+Defined in: [types/transform.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L25)
+
+Raw prompt text before display transforms.

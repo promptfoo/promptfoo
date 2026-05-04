@@ -5,25 +5,49 @@ import logger from './logger';
 const API_BASE_URL = `${getShareApiBaseUrl()}/v1`;
 
 /**
+ * Personally identifiable information span reported by a guardrail endpoint.
+ *
+ * @beta
+ */
+export interface GuardPiiFinding {
+  /** Entity class reported by the guardrail service. */
+  entity_type: string;
+  /** Zero-based inclusive start offset within the inspected text. */
+  start: number;
+  /** Zero-based exclusive end offset within the inspected text. */
+  end: number;
+  /** Matched text reported by the guardrail service. */
+  pii: string;
+}
+
+/**
+ * One guardrail classification result for an inspected input.
+ *
+ * @beta
+ */
+export interface GuardResultEntry {
+  /** Boolean decision for each guardrail category. */
+  categories: Record<string, boolean>;
+  /** Numeric confidence score for each guardrail category. */
+  category_scores: Record<string, number>;
+  /** Whether any category flagged the inspected input. */
+  flagged: boolean;
+  /** Optional endpoint-specific payload such as PII spans. */
+  payload?: {
+    pii?: GuardPiiFinding[];
+  };
+}
+
+/**
  * Response returned by the `guard()`, `pii()`, and `harm()` guardrail helpers.
  *
  * @beta
  */
 export interface GuardResult {
+  /** Model used by the guardrail service. */
   model: string;
-  results: Array<{
-    categories: Record<string, boolean>;
-    category_scores: Record<string, number>;
-    flagged: boolean;
-    payload?: {
-      pii?: Array<{
-        entity_type: string;
-        start: number;
-        end: number;
-        pii: string;
-      }>;
-    };
-  }>;
+  /** Classification results returned for the inspected input. */
+  results: GuardResultEntry[];
 }
 
 /**
@@ -32,8 +56,26 @@ export interface GuardResult {
  * @beta
  */
 export interface AdaptiveRequest {
+  /** Prompt text to inspect and optionally rewrite. */
   prompt: string;
+  /** Policy identifiers that should guide the adaptive rewrite. */
   policies?: string[];
+}
+
+/**
+ * One rewrite applied by `guardrails.adaptive()`.
+ *
+ * @beta
+ */
+export interface AdaptiveModification {
+  /** Service-defined modification category. */
+  type: string;
+  /** Human-readable explanation for the rewrite. */
+  reason: string;
+  /** Original prompt fragment before rewriting. */
+  original: string;
+  /** Replacement prompt fragment after rewriting. */
+  modified: string;
 }
 
 /**
@@ -42,14 +84,12 @@ export interface AdaptiveRequest {
  * @beta
  */
 export interface AdaptiveResult {
+  /** Model used by the adaptive guardrail service. */
   model: string;
+  /** Prompt after all adaptive rewrites have been applied. */
   adaptedPrompt: string;
-  modifications: Array<{
-    type: string;
-    reason: string;
-    original: string;
-    modified: string;
-  }>;
+  /** Ordered list of rewrites applied to the prompt. */
+  modifications: AdaptiveModification[];
 }
 
 async function makeRequest(endpoint: string, input: string): Promise<GuardResult> {

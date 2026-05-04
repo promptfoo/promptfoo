@@ -2,73 +2,173 @@
 
 ---
 
-[promptfoo](../README.md) / AssertionValueFunctionContext
+[promptfoo](../README.md) / EvaluateTableOutput
 
-# Interface: AssertionValueFunctionContext
+# Interface: EvaluateTableOutput
 
-Defined in: [types/index.ts:808](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L808)
+Defined in: [types/index.ts:437](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L437)
 
-Runtime context passed to function-valued assertions.
+One provider output cell in an eval table.
 
 ## Properties
 
-### config?
+### audio?
 
-> `optional` **config?**: `Record`\<`string`, `any`\>
+> `optional` **audio?**: [`AudioOutput`](AudioOutput.md)
 
-Defined in: [types/index.ts:818](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L818)
+Defined in: [types/index.ts:471](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L471)
 
-Assertion-specific config copied from `assert[].config`.
+Audio attachment associated with this output, when present.
 
 ---
 
-### logProbs
+### cost
 
-> **logProbs**: `number`[] \| `undefined`
+> **cost**: `number`
 
-Defined in: [types/index.ts:816](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L816)
+Defined in: [types/index.ts:439](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L439)
 
-Provider log probabilities, when available.
+Estimated cost attributed to this provider result.
+
+---
+
+### error?
+
+> `optional` **error?**: `string` \| `null`
+
+Defined in: [types/index.ts:469](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L469)
+
+Error message when this output failed before normal grading.
+
+---
+
+### failureReason
+
+> **failureReason**: `ResultFailureReason`
+
+Defined in: [types/index.ts:441](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L441)
+
+Failure category used when rendering an error or failed assertion.
+
+---
+
+### gradingResult?
+
+> `optional` **gradingResult?**: [`GradingResult`](GradingResult.md) \| `null`
+
+Defined in: [types/index.ts:443](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L443)
+
+Assertion result for this provider output, when grading has run.
+
+---
+
+### id
+
+> **id**: `string`
+
+Defined in: [types/index.ts:445](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L445)
+
+Stable result id.
+
+---
+
+### images?
+
+> `optional` **images?**: [`ImageOutput`](ImageOutput.md)[]
+
+Defined in: [types/index.ts:475](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L475)
+
+Image attachments associated with this output, when present.
+
+---
+
+### latencyMs
+
+> **latencyMs**: `number`
+
+Defined in: [types/index.ts:447](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L447)
+
+Provider latency in milliseconds.
+
+---
+
+### metadata?
+
+> `optional` **metadata?**: `Record`\<`string`, `any`\>
+
+Defined in: [types/index.ts:449](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L449)
+
+Additional result metadata preserved for advanced consumers.
+
+---
+
+### namedScores
+
+> **namedScores**: `Record`\<`string`, `number`\>
+
+Defined in: [types/index.ts:451](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L451)
+
+Named metric scores emitted by assertions for this output.
+
+---
+
+### pass
+
+> **pass**: `boolean`
+
+Defined in: [types/index.ts:453](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L453)
+
+Whether this output passed all configured assertions.
 
 ---
 
 ### prompt
 
-> **prompt**: `string` \| `undefined`
+> **prompt**: `string`
 
-Defined in: [types/index.ts:810](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L810)
+Defined in: [types/index.ts:455](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L455)
 
-Rendered prompt for the current result, when available.
-
----
-
-### provider
-
-> **provider**: [`ApiProvider`](ApiProvider.md) \| `undefined`
-
-Defined in: [types/index.ts:820](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L820)
-
-Provider used for the current result, when available.
+Rendered prompt associated with this provider output.
 
 ---
 
-### providerResponse
+### provider?
 
-> **providerResponse**: [`ProviderResponse`](ProviderResponse.md) \| `undefined`
+> `optional` **provider?**: `string`
 
-Defined in: [types/index.ts:822](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L822)
+Defined in: [types/index.ts:457](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L457)
 
-Full provider response for the current result.
+Provider id or label shown for this output.
 
 ---
 
-### test
+### response?
 
-> **test**: `object`
+> `optional` **response?**: [`ProviderResponse`](ProviderResponse.md)
 
-Defined in: [types/index.ts:814](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L814)
+Defined in: [types/index.ts:459](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L459)
 
-Test case currently being graded.
+Raw provider response returned before table normalization.
+
+---
+
+### score
+
+> **score**: `number`
+
+Defined in: [types/index.ts:461](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L461)
+
+Aggregate score for this output.
+
+---
+
+### testCase
+
+> **testCase**: `object`
+
+Defined in: [types/index.ts:463](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L463)
+
+Test case associated with this output.
 
 #### assert?
 
@@ -552,20 +652,30 @@ in > 0.38.0. Use `transform` instead.
 
 ---
 
-### trace?
+### text
 
-> `optional` **trace?**: `TraceData`
+> **text**: `string`
 
-Defined in: [types/index.ts:824](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L824)
+Defined in: [types/index.ts:465](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L465)
 
-Trace data for trace-aware assertions when tracing is enabled.
+Rendered output text shown in table views.
 
 ---
 
-### vars
+### tokenUsage?
 
-> **vars**: `Record`\<`string`, `VarValue`\>
+> `optional` **tokenUsage?**: `Partial`\<\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}\>
 
-Defined in: [types/index.ts:812](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L812)
+Defined in: [types/index.ts:467](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L467)
 
-Rendered variables for the current test case.
+Token usage attributed to this output.
+
+---
+
+### video?
+
+> `optional` **video?**: [`VideoOutput`](VideoOutput.md)
+
+Defined in: [types/index.ts:473](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L473)
+
+Video attachment associated with this output, when present.

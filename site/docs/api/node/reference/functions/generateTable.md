@@ -20,13 +20,19 @@ Usually pass the table from a completed eval record returned by `evaluate()`.
 
 [`EvaluateTable`](../interfaces/EvaluateTable.md)
 
+Table data returned on the completed eval record.
+
 ### tableCellMaxLength?
 
 `number` = `250`
 
+Maximum visible width for each rendered cell.
+
 ### maxRows?
 
 `number` = `25`
+
+Maximum number of body rows to render.
 
 ## Returns
 

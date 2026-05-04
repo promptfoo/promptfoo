@@ -8,7 +8,7 @@
 
 > **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
 
-Defined in: [cache.ts:213](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L213)
+Defined in: [cache.ts:221](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L221)
 
 Run an async operation inside an isolated cache namespace.
 

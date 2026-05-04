@@ -22,7 +22,7 @@ import deep files from `dist/` or `src/`.
 | Build custom model integrations            | [`ProviderFunction`](/docs/api/node/reference/type-aliases/ProviderFunction) |
 | Compare or pre-load several providers      | [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)  |
 | Reuse grading in Jest, Vitest, or Mocha    | [`assertions`](/docs/api/node/reference/variables/assertions)                |
-| Work with inline callbacks from TypeScript | [`PromptFunction`](/docs/api/node/reference/interfaces/PromptFunction)       |
+| Work with inline callbacks from TypeScript | [`PromptFunction`](/docs/api/node/reference/type-aliases/PromptFunction)     |
 | Tune execution rather than config          | [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions)     |
 
 ## API map

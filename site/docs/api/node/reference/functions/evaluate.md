@@ -8,7 +8,7 @@
 
 > **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`\>
 
-Defined in: [index.ts:263](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L263)
+Defined in: [index.ts:271](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L271)
 
 Run an eval from a JavaScript or TypeScript program.
 

@@ -300,28 +300,52 @@ export interface SynthesizeOptions extends CommonOptions {
 
 export type RedteamAssertionTypes = `promptfoo:redteam:${string}`;
 
+/**
+ * Runtime options accepted by `redteam.run()`.
+ *
+ * @beta
+ */
 export interface RedteamRunOptions {
+  /** Stable eval id to reuse or attach to the run. */
   id?: string;
+  /** Path to the red team config file to execute. */
   config?: string;
+  /** Target selector passed through to the run. */
   target?: string;
+  /** Optional output path for generated artifacts. */
   output?: string;
+  /** Whether to reuse cached provider responses. */
   cache?: boolean;
+  /** Path to an environment file loaded before the run. */
   envPath?: string;
+  /** Maximum number of provider calls to execute concurrently. */
   maxConcurrency?: number;
+  /** Delay in milliseconds between provider calls. */
   delay?: number;
+  /** Whether to execute against a remote Promptfoo target. */
   remote?: boolean;
+  /** Whether to bypass prompts that normally ask for confirmation. */
   force?: boolean;
+  /** Prompt filter expression applied before execution. */
   filterPrompts?: string;
+  /** Provider filter expression applied before execution. */
   filterProviders?: string;
+  /** Target filter expression applied before execution. */
   filterTargets?: string;
+  /** Whether to emit verbose runtime logging. */
   verbose?: boolean;
+  /** Whether to render a progress bar. */
   progressBar?: boolean;
+  /** Human-readable description recorded with the run. */
   description?: string;
+  /** Whether to fail closed on invalid or partial runtime input. */
   strict?: boolean;
 
-  // Used by webui
+  /** Live config payload used by the web UI flow. */
   liveRedteamConfig?: any;
+  /** Optional callback for runtime log messages. */
   logCallback?: (message: string) => void;
+  /** Callback invoked as red team results complete. */
   progressCallback?: (
     completed: number,
     total: number,
@@ -329,8 +353,10 @@ export interface RedteamRunOptions {
     evalStep: any, // RunEvalOptions, but introduces circular dependency
     metrics: any, // PromptMetrics, but introduces circular dependency
   ) => void;
+  /** Signal used to cancel the run. */
   abortSignal?: AbortSignal;
 
+  /** Whether the config originated from Promptfoo Cloud. */
   loadedFromCloud?: boolean;
 }
 
@@ -434,8 +460,11 @@ export interface AudioGradingConfig {
 }
 
 /**
- * Options for generating red team tests via the public API
- * This is a cleaner subset of RedteamCliGenerateOptions for external use
+ * Options for generating red team tests via the public API.
+ *
+ * This is a cleaner subset of `RedteamCliGenerateOptions` for external use.
+ *
+ * @beta
  */
 export type RedteamGenerateOptions = Partial<RedteamCliGenerateOptions>;
 

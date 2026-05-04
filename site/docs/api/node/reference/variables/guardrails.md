@@ -8,7 +8,7 @@
 
 > `const` **guardrails**: `object`
 
-Defined in: [guardrails.ts:115](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L115)
+Defined in: [guardrails.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L155)
 
 **`Beta`**
 

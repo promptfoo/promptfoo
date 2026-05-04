@@ -6,6 +6,11 @@
 
 # cache
 
+Cache helpers exposed through the Node.js package.
+
+Use this namespace when custom providers need shared cache access or when
+related evals need isolated cache namespaces.
+
 ## Type Aliases
 
 - [FetchWithCacheResult](type-aliases/FetchWithCacheResult.md)

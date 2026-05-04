@@ -18,6 +18,8 @@ Runtime context passed to custom provider functions.
 
 Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L126)
 
+Whether this call should bypass reusable response cache entries.
+
 ---
 
 ### debug?
@@ -34,7 +36,9 @@ Whether the caller requested debug behavior.
 
 > `optional` **evaluationId?**: `string`
 
-Defined in: [types/providers.ts:133](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L133)
+Defined in: [types/providers.ts:134](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L134)
+
+Eval identifier for manual correlation across provider calls.
 
 ---
 
@@ -92,7 +96,7 @@ Prompt object for the current provider call.
 
 > `optional` **promptIdx?**: `number`
 
-Defined in: [types/providers.ts:144](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L144)
+Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L146)
 
 Index of the prompt within the current evaluation (column in results table).
 Used for correlating blob references and other per-result metadata.
@@ -103,7 +107,9 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **repeatIndex?**: `number`
 
-Defined in: [types/providers.ts:145](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L145)
+Defined in: [types/providers.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L148)
+
+Zero-based repeat index when the same test case is executed repeatedly.
 
 ---
 
@@ -111,7 +117,9 @@ Defined in: [types/providers.ts:145](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **test?**: `AtomicTestCase`
 
-Defined in: [types/providers.ts:125](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L125)
+Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L124)
+
+Test case currently being executed, when available to the caller.
 
 ---
 
@@ -119,7 +127,9 @@ Defined in: [types/providers.ts:125](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **testCaseId?**: `string`
 
-Defined in: [types/providers.ts:134](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L134)
+Defined in: [types/providers.ts:136](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L136)
+
+Stable id for the current test case when one has been assigned.
 
 ---
 
@@ -127,7 +137,7 @@ Defined in: [types/providers.ts:134](https://github.com/promptfoo/promptfoo/blob
 
 > `optional` **testIdx?**: `number`
 
-Defined in: [types/providers.ts:139](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L139)
+Defined in: [types/providers.ts:141](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L141)
 
 Index of the test case within the current evaluation (row in results table).
 Used for correlating blob references and other per-result metadata.
@@ -140,13 +150,17 @@ Used for correlating blob references and other per-result metadata.
 
 Defined in: [types/providers.ts:129](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L129)
 
+W3C Trace Context `traceparent` header for downstream propagation.
+
 ---
 
 ### tracestate?
 
 > `optional` **tracestate?**: `string`
 
-Defined in: [types/providers.ts:130](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L130)
+Defined in: [types/providers.ts:131](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L131)
+
+W3C Trace Context `tracestate` header for downstream propagation.
 
 ---
 

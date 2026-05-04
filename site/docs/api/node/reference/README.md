@@ -16,25 +16,35 @@ compatibility types and helpers than we want to present as first-class docs.
 
 ## Interfaces
 
+- [AdaptiveModification](interfaces/AdaptiveModification.md)
 - [AdaptiveRequest](interfaces/AdaptiveRequest.md)
 - [AdaptiveResult](interfaces/AdaptiveResult.md)
 - [ApiProvider](interfaces/ApiProvider.md)
 - [Assertion](interfaces/Assertion.md)
 - [AssertionValueFunctionContext](interfaces/AssertionValueFunctionContext.md)
+- [AudioOutput](interfaces/AudioOutput.md)
 - [CallApiContextParams](interfaces/CallApiContextParams.md)
 - [CallApiFunction](interfaces/CallApiFunction.md)
 - [CallApiOptionsParams](interfaces/CallApiOptionsParams.md)
 - [EvaluateOptions](interfaces/EvaluateOptions.md)
 - [EvaluateTable](interfaces/EvaluateTable.md)
+- [EvaluateTableHead](interfaces/EvaluateTableHead.md)
+- [EvaluateTableOutput](interfaces/EvaluateTableOutput.md)
+- [EvaluateTableRow](interfaces/EvaluateTableRow.md)
 - [GradingResult](interfaces/GradingResult.md)
+- [GuardPiiFinding](interfaces/GuardPiiFinding.md)
 - [GuardResult](interfaces/GuardResult.md)
+- [GuardResultEntry](interfaces/GuardResultEntry.md)
+- [ImageOutput](interfaces/ImageOutput.md)
 - [LoadApiProviderContext](interfaces/LoadApiProviderContext.md)
-- [PromptFunction](interfaces/PromptFunction.md)
 - [PromptFunctionResult](interfaces/PromptFunctionResult.md)
 - [ProviderOptions](interfaces/ProviderOptions.md)
 - [ProviderResponse](interfaces/ProviderResponse.md)
+- [RedteamApi](interfaces/RedteamApi.md)
+- [RedteamRunOptions](interfaces/RedteamRunOptions.md)
 - [TransformContext](interfaces/TransformContext.md)
 - [TransformPrompt](interfaces/TransformPrompt.md)
+- [VideoOutput](interfaces/VideoOutput.md)
 
 ## Type Aliases
 
@@ -42,8 +52,11 @@ compatibility types and helpers than we want to present as first-class docs.
 - [EnvOverrides](type-aliases/EnvOverrides.md)
 - [EvaluateTestSuite](type-aliases/EvaluateTestSuite.md)
 - [PromptContent](type-aliases/PromptContent.md)
+- [PromptFunction](type-aliases/PromptFunction.md)
 - [ProviderFunction](type-aliases/ProviderFunction.md)
 - [ProvidersConfig](type-aliases/ProvidersConfig.md)
+- [RedteamGenerateOptions](type-aliases/RedteamGenerateOptions.md)
+- [RedteamGenerateResult](type-aliases/RedteamGenerateResult.md)
 - [TransformFunction](type-aliases/TransformFunction.md)
 
 ## Variables

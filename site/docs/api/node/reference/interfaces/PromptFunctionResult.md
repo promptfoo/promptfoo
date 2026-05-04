@@ -6,7 +6,7 @@
 
 # Interface: PromptFunctionResult
 
-Defined in: [types/prompts.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L47)
+Defined in: [types/prompts.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L50)
 
 Result type for prompt functions.
 
@@ -22,7 +22,7 @@ Prompt functions can return:
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/prompts.ts:51](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L51)
+Defined in: [types/prompts.ts:54](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L54)
 
 Provider config overrides to merge for this rendered prompt.
 
@@ -32,6 +32,6 @@ Provider config overrides to merge for this rendered prompt.
 
 > **prompt**: [`PromptContent`](../type-aliases/PromptContent.md)
 
-Defined in: [types/prompts.ts:49](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L49)
+Defined in: [types/prompts.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L52)
 
 Prompt content to send to the provider.

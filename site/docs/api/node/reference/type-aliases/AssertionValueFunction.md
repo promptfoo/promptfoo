@@ -8,7 +8,7 @@
 
 > **AssertionValueFunction** = (`output`, `context`) => `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>
 
-Defined in: [types/index.ts:831](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L831)
+Defined in: [types/index.ts:844](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L844)
 
 Function form accepted by JavaScript assertions.
 

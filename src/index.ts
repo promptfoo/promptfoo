@@ -37,6 +37,7 @@ import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
+import type { RedteamGenerateOptions, RedteamRunOptions } from './redteam/types';
 import type {
   EvaluateOptions,
   EvaluateTestSuite,
@@ -63,7 +64,14 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
-export type { AdaptiveRequest, AdaptiveResult, GuardResult } from './guardrails';
+export type {
+  AdaptiveModification,
+  AdaptiveRequest,
+  AdaptiveResult,
+  GuardPiiFinding,
+  GuardResult,
+  GuardResultEntry,
+} from './guardrails';
 export type { EnvOverrides } from './types/env';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
@@ -417,6 +425,13 @@ async function evaluate(
 }
 
 /**
+ * Return type produced by `redteam.generate()`.
+ *
+ * @beta
+ */
+export type RedteamGenerateResult = Partial<UnifiedConfig> | null;
+
+/**
  * Advanced red team helpers exposed through the Node.js package.
  *
  * This surface is still evolving; prefer the CLI and documented red team config
@@ -424,7 +439,39 @@ async function evaluate(
  *
  * @beta
  */
-const redteam = {
+export interface RedteamApi {
+  /** Helpers for extracting target metadata before generation. */
+  Extractors: {
+    extractEntities: typeof extractEntities;
+    extractMcpToolsInfo: typeof extractMcpToolsInfo;
+    extractSystemPurpose: typeof extractSystemPurpose;
+  };
+  /** Registered red team graders. */
+  Graders: typeof GRADERS;
+  /** Built-in red team plugins. */
+  Plugins: typeof Plugins;
+  /** Built-in red team strategies. */
+  Strategies: typeof Strategies;
+  /** Base classes for advanced extension points. */
+  Base: {
+    Plugin: typeof RedteamPluginBase;
+    Grader: typeof RedteamGraderBase;
+  };
+  /** Generate a red team config programmatically. */
+  generate(options: RedteamGenerateOptions): Promise<RedteamGenerateResult>;
+  /** Run a red team eval programmatically. */
+  run(options: RedteamRunOptions): ReturnType<typeof doRedteamRun>;
+}
+
+/**
+ * Advanced red team helpers exposed through the Node.js package.
+ *
+ * This surface is still evolving; prefer the CLI and documented red team config
+ * flows unless you specifically need programmatic orchestration.
+ *
+ * @beta
+ */
+const redteam: RedteamApi = {
   Extractors: {
     extractEntities,
     extractMcpToolsInfo,

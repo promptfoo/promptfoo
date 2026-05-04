@@ -6,7 +6,7 @@
 
 # Interface: AdaptiveResult
 
-Defined in: [guardrails.ts:44](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L44)
+Defined in: [guardrails.ts:86](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L86)
 
 **`Beta`**
 
@@ -18,9 +18,11 @@ Response returned by `guardrails.adaptive()`.
 
 > **adaptedPrompt**: `string`
 
-Defined in: [guardrails.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L46)
+Defined in: [guardrails.ts:90](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L90)
 
 **`Beta`**
+
+Prompt after all adaptive rewrites have been applied.
 
 ---
 
@@ -28,32 +30,20 @@ Defined in: [guardrails.ts:46](https://github.com/promptfoo/promptfoo/blob/main/
 
 > **model**: `string`
 
-Defined in: [guardrails.ts:45](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L45)
+Defined in: [guardrails.ts:88](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L88)
 
 **`Beta`**
+
+Model used by the adaptive guardrail service.
 
 ---
 
 ### modifications
 
-> **modifications**: `object`[]
+> **modifications**: [`AdaptiveModification`](AdaptiveModification.md)[]
 
-Defined in: [guardrails.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L47)
+Defined in: [guardrails.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/guardrails.ts#L92)
 
 **`Beta`**
 
-#### modified
-
-> **modified**: `string`
-
-#### original
-
-> **original**: `string`
-
-#### reason
-
-> **reason**: `string`
-
-#### type
-
-> **type**: `string`
+Ordered list of rewrites applied to the prompt.

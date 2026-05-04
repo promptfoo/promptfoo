@@ -44,7 +44,7 @@ The most commonly used public surfaces are:
 - [Core functions](./reference/functions/evaluate)
 - [Provider interfaces](./reference/interfaces/ApiProvider)
 - [Assertion helpers](./reference/variables/assertions)
-- [Function callbacks](./reference/interfaces/PromptFunction)
+- [Function callbacks](./reference/type-aliases/PromptFunction)
 - [Transform helpers](./reference/type-aliases/TransformFunction)
 
 For a task-oriented introduction, start with

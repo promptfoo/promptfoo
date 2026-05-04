@@ -13,7 +13,6 @@ export { ProvidersSchema };
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
 
-import type { BlobRef } from '../blobs/types';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -24,11 +23,13 @@ import type { EnvOverrides } from '../types/env';
 import type { Prompt, PromptFunction } from './prompts';
 import type {
   ApiProvider,
+  AudioOutput,
   CallApiContextParams,
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
   ProvidersConfig,
+  VideoOutput,
 } from './providers';
 import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 
@@ -434,47 +435,43 @@ export interface EvaluateResult {
  * @public
  */
 export interface EvaluateTableOutput {
+  /** Estimated cost attributed to this provider result. */
   cost: number;
+  /** Failure category used when rendering an error or failed assertion. */
   failureReason: ResultFailureReason;
+  /** Assertion result for this provider output, when grading has run. */
   gradingResult?: GradingResult | null;
+  /** Stable result id. */
   id: string;
+  /** Provider latency in milliseconds. */
   latencyMs: number;
+  /** Additional result metadata preserved for advanced consumers. */
   metadata?: Record<string, any>;
+  /** Named metric scores emitted by assertions for this output. */
   namedScores: Record<string, number>;
+  /** Whether this output passed all configured assertions. */
   pass: boolean;
+  /** Rendered prompt associated with this provider output. */
   prompt: string;
+  /** Provider id or label shown for this output. */
   provider?: string;
+  /** Raw provider response returned before table normalization. */
   response?: ProviderResponse;
+  /** Aggregate score for this output. */
   score: number;
+  /** Test case associated with this output. */
   testCase: AtomicTestCase;
+  /** Rendered output text shown in table views. */
   text: string;
+  /** Token usage attributed to this output. */
   tokenUsage?: Partial<TokenUsage>;
+  /** Error message when this output failed before normal grading. */
   error?: string | null;
-  audio?: {
-    id?: string;
-    expiresAt?: number;
-    data?: string; // base64 encoded audio data
-    blobRef?: BlobRef;
-    transcript?: string;
-    format?: string;
-    sampleRate?: number;
-    channels?: number;
-    duration?: number;
-  };
-  video?: {
-    id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
-    blobRef?: BlobRef; // Blob storage reference for video data (Veo)
-    storageRef?: { key?: string }; // Storage reference for video file (Sora)
-    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
-    format?: string; // 'mp4'
-    size?: string; // '1280x720', '720x1280', '1792x1024', or '1024x1792'
-    duration?: number; // Seconds
-    thumbnail?: string; // Storage ref URL for thumbnail (Sora)
-    spritesheet?: string; // Storage ref URL for spritesheet (Sora)
-    model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
-    aspectRatio?: string; // '16:9' or '9:16' (Veo)
-    resolution?: string; // '720p' or '1080p' (Veo)
-  };
+  /** Audio attachment associated with this output, when present. */
+  audio?: AudioOutput;
+  /** Video attachment associated with this output, when present. */
+  video?: VideoOutput;
+  /** Image attachments associated with this output, when present. */
   images?: ImageOutput[];
 }
 
@@ -484,11 +481,28 @@ export interface EvaluateTableOutput {
  * @public
  */
 export interface EvaluateTableRow {
+  /** Optional human-readable description for the row's test case. */
   description?: string;
+  /** Provider outputs rendered across this row. */
   outputs: EvaluateTableOutput[];
+  /** Rendered variable values shown in the table row. */
   vars: string[];
+  /** Test case represented by this row. */
   test: AtomicTestCase;
+  /** Zero-based index of the test case in the eval. */
   testIdx: number;
+}
+
+/**
+ * Header metadata for an eval table.
+ *
+ * @public
+ */
+export interface EvaluateTableHead {
+  /** Completed prompts rendered as provider columns. */
+  prompts: CompletedPrompt[];
+  /** Variable names rendered before provider columns. */
+  vars: string[];
 }
 
 /**
@@ -497,10 +511,9 @@ export interface EvaluateTableRow {
  * @public
  */
 export interface EvaluateTable {
-  head: {
-    prompts: CompletedPrompt[];
-    vars: string[];
-  };
+  /** Prompt and variable headers rendered above the table body. */
+  head: EvaluateTableHead;
+  /** Ordered table rows, one per evaluated test case. */
   body: EvaluateTableRow[];
 }
 

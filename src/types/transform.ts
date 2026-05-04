@@ -4,18 +4,26 @@
  * their own keys at runtime.
  */
 export interface TransformContext {
+  /** Variables available at the transform call site. */
   vars?: Record<string, unknown>;
+  /** Prompt metadata associated with the transform call site. */
   prompt?: TransformPrompt | Record<string, unknown>;
+  /** Additional runtime metadata passed through the pipeline. */
   metadata?: Record<string, unknown>;
+  /** Result identifier associated with the transform invocation, when available. */
   uuid?: string;
   [key: string]: unknown;
 }
 
 /** Conventional shape for `TransformContext.prompt`. Callers may pass additional fields. */
 export interface TransformPrompt {
+  /** Human-readable prompt label. */
   label?: string;
+  /** Stable prompt identifier. */
   id?: string;
+  /** Raw prompt text before display transforms. */
   raw?: string;
+  /** Display-friendly prompt text when it differs from `raw`. */
   display?: string;
 }
 

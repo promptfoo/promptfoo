@@ -28,8 +28,11 @@ export interface PromptConfig {
  * @public
  */
 export interface PromptFunctionContext {
+  /** Rendered variables for the current test case. */
   vars: Record<string, VarValue>;
+  /** Prompt-local configuration accumulated before the function runs. */
   config: Record<string, any>;
+  /** Provider selected for the current prompt invocation. */
   provider: {
     id: string;
     label?: string;
@@ -67,12 +70,10 @@ export interface PromptFunctionResult {
  *
  * @public
  */
-export interface PromptFunction {
-  (context: {
-    vars: Record<string, VarValue>;
-    provider?: ApiProvider;
-  }): Promise<PromptContent | PromptFunctionResult>;
-}
+export type PromptFunction = (context: {
+  vars: Record<string, VarValue>;
+  provider?: ApiProvider;
+}) => Promise<PromptContent | PromptFunctionResult>;
 
 export interface Prompt {
   id?: string;

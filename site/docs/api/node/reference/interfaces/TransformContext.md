@@ -22,7 +22,9 @@ their own keys at runtime.
 
 > `optional` **metadata?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [types/transform.ts:9](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L9)
+Defined in: [types/transform.ts:12](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L12)
+
+Additional runtime metadata passed through the pipeline.
 
 ---
 
@@ -30,7 +32,9 @@ Defined in: [types/transform.ts:9](https://github.com/promptfoo/promptfoo/blob/m
 
 > `optional` **prompt?**: `Record`\<`string`, `unknown`\> \| [`TransformPrompt`](TransformPrompt.md)
 
-Defined in: [types/transform.ts:8](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L8)
+Defined in: [types/transform.ts:10](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L10)
+
+Prompt metadata associated with the transform call site.
 
 ---
 
@@ -38,7 +42,9 @@ Defined in: [types/transform.ts:8](https://github.com/promptfoo/promptfoo/blob/m
 
 > `optional` **uuid?**: `string`
 
-Defined in: [types/transform.ts:10](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L10)
+Defined in: [types/transform.ts:14](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L14)
+
+Result identifier associated with the transform invocation, when available.
 
 ---
 
@@ -46,4 +52,6 @@ Defined in: [types/transform.ts:10](https://github.com/promptfoo/promptfoo/blob/
 
 > `optional` **vars?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [types/transform.ts:7](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L7)
+Defined in: [types/transform.ts:8](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L8)
+
+Variables available at the transform call site.

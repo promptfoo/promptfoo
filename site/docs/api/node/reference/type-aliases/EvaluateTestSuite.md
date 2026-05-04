@@ -8,7 +8,7 @@
 
 > **EvaluateTestSuite** = `object` & `Omit`\<`TestSuiteConfig`, `"prompts"` \| `"providers"`\>
 
-Defined in: [types/index.ts:1414](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1414)
+Defined in: [types/index.ts:1427](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1427)
 
 Test-suite shape accepted by the Node.js `evaluate()` API.
 
@@ -28,7 +28,7 @@ this option > stored user email > PROMPTFOO_AUTHOR env var > null.
 
 ### prompts
 
-> **prompts**: (`string` \| `object` \| [`PromptFunction`](../interfaces/PromptFunction.md))[]
+> **prompts**: (`string` \| `object` \| [`PromptFunction`](PromptFunction.md))[]
 
 Prompt strings, prompt objects, or inline prompt functions to evaluate.
 
