@@ -143,6 +143,21 @@ describe('Media page URL state machine', () => {
     ).toHaveClass('flex-col', 'min-[390px]:flex-row');
   });
 
+  it('allows selection controls to wrap on narrow layouts', async () => {
+    const user = userEvent.setup();
+    mockApiResponses();
+    renderMedia();
+
+    await waitFor(() => {
+      expect(screen.getByText('First item')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getAllByRole('button', { name: /^Download$/ })[0]);
+    await user.click(screen.getByRole('menuitem', { name: /Select Items/i }));
+
+    expect(screen.getByText('0 of 2 selected').parentElement).toHaveClass('flex-wrap');
+  });
+
   it('clicking a card adds hash to URL', async () => {
     const user = userEvent.setup();
     mockApiResponses();
