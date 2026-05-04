@@ -8,7 +8,7 @@ import ts from 'typescript';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const rootOwnedPrefixes = ['src/', 'test/', 'scripts/'];
-const externalProjectPrefixes = ['src/app/'];
+const externalProjectPrefixes = ['src/app/', 'test/code-scan-action/'];
 
 function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');

@@ -24,7 +24,6 @@
     "src/",
     "test/",
     "scripts/",
-    "code-scan-action/src/",
     "site/src/utils/markdown.ts",
     "./package.json",
     "src/**/*.json",
@@ -36,6 +35,7 @@
     "dist",
     "node_modules",
     "src/app/**/*",
+    "test/code-scan-action/**/*",
     "test/fixtures/rubric-json-template/rubric.json"
   ]
 }
