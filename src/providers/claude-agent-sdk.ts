@@ -1375,13 +1375,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // The Claude Agent SDK interleaves a `result` message for each background
           // sub-agent (Task tool with run_in_background: true) into the parent
           // session's stream before the main agent's terminal `result` arrives.
-          // SDKResultMessage has no parent_tool_use_id, so position is the only
-          // signal we have: in current SDK behavior the main agent's result is
-          // the last `result` message in the stream. Stash the latest one and
-          // process it after the stream closes — otherwise we'd return the first
-          // sub-agent's summary and skip the main agent's actual final response.
-          // See https://github.com/promptfoo/promptfoo/issues/9054.
+          // As of @anthropic-ai/claude-agent-sdk 0.2.126, result messages carry
+          // `origin.kind`: the user-prompted main result is `human` and background
+          // sub-agent completions are `task-notification` followups. Prefer the
+          // last non-task-notification result, falling back to the last result
+          // overall for older SDK servers that don't emit `origin` (in which case
+          // the pre-0.2.126 position heuristic still applies — the main agent's
+          // result is the last one in the stream). Otherwise we'd return the
+          // first sub-agent's summary and skip the main agent's actual final
+          // response. See https://github.com/promptfoo/promptfoo/issues/9054.
           let lastResultMsg: SDKResultMessage | undefined;
+          let lastMainResultMsg: SDKResultMessage | undefined;
           let resultMsgCount = 0;
 
           for await (const msg of res) {
@@ -1422,6 +1426,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
               resultMsgCount++;
+              // SDK >= 0.2.126: prefer the user-prompted ("human") result and
+              // skip task-notification followups from background sub-agents.
+              // Treat absent origin (older SDKs) and any non-task-notification
+              // kind as a candidate for the main result; the position-based
+              // last-wins fallback below preserves prior behavior in that case.
+              if (msg.origin?.kind !== 'task-notification') {
+                lastMainResultMsg = msg;
+              }
             }
           }
 
@@ -1429,17 +1441,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // abort/hook-stop runs don't silently drop them.
           drainOrphans();
 
-          if (!lastResultMsg) {
+          // Prefer the origin-tagged main result; fall back to the last result
+          // overall when older SDK servers don't emit `origin` (or — defensively
+          // — when every result was a task-notification, which would indicate
+          // the main agent's result never arrived).
+          const finalMsg = lastMainResultMsg ?? lastResultMsg;
+
+          if (!finalMsg) {
             return { error: "Claude Agent SDK call didn't return a result" };
           }
 
-          const finalMsg = lastResultMsg;
-
-          // If we observed >1 result messages, the last one is a success, and
-          // it has no terminal_reason, the main agent's result may not actually
-          // be last (truncated stream after a sub-agent finished). Surface this
-          // so downstream evals don't silently grade a sub-agent summary as the
-          // model's answer.
+          // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
+          // definitive answer, so only warn when origin was unavailable for
+          // every result (lastMainResultMsg defaulted to the last result) AND
+          // we saw >1 results AND the chosen result is a non-terminal success.
           //
           // Gate on subtype === 'success' because non-success subtypes
           // ('error_during_execution', 'error_max_turns', etc.) are themselves
@@ -1447,7 +1462,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // run ending in error, not a truncation indicator. Warning on those
           // would be a false positive on every legitimate main-agent failure
           // that follows a background sub-agent.
+          const usedPositionHeuristic =
+            !lastMainResultMsg || lastMainResultMsg.origin === undefined;
           if (
+            usedPositionHeuristic &&
             resultMsgCount > 1 &&
             finalMsg.subtype === 'success' &&
             finalMsg.terminal_reason === undefined
