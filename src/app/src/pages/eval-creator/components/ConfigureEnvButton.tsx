@@ -97,7 +97,10 @@ const ConfigureEnvButton = () => {
             <DialogTitle>Provider Settings</DialogTitle>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto py-4">
+          <div
+            data-testid="configure-env-dialog-scroll-body"
+            className="min-h-0 flex-1 overflow-y-auto py-4"
+          >
             <div className="border border-border rounded-lg overflow-hidden">
               <EnvSection title="OpenAI" defaultOpen>
                 <EnvField
@@ -179,7 +182,7 @@ const ConfigureEnvButton = () => {
             </div>
           </div>
 
-          <DialogFooter className="shrink-0">
+          <DialogFooter data-testid="configure-env-dialog-footer" className="shrink-0">
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>

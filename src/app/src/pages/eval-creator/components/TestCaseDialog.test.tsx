@@ -68,8 +68,8 @@ describe('TestCaseForm', () => {
     renderComponent();
 
     const dialog = screen.getByRole('dialog');
-    const scrollBody = screen.getByText('Description').closest('div')?.parentElement?.parentElement;
-    const footer = screen.getByRole('button', { name: 'Add Test Case' }).parentElement;
+    const scrollBody = screen.getByTestId('test-case-dialog-scroll-body');
+    const footer = screen.getByTestId('test-case-dialog-footer');
 
     expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');

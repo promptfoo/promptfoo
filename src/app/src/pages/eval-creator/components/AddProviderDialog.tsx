@@ -120,7 +120,11 @@ export default function AddProviderDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div key={step} className="min-h-0 flex-1 overflow-y-auto py-4">
+          <div
+            key={step}
+            data-testid="add-provider-dialog-scroll-body"
+            className="min-h-0 flex-1 overflow-y-auto py-4"
+          >
             {step === 'select' ? (
               <div className="w-full">
                 <ProviderTypeSelector
@@ -147,7 +151,7 @@ export default function AddProviderDialog({
             )}
           </div>
 
-          <DialogFooter className="shrink-0">
+          <DialogFooter data-testid="add-provider-dialog-footer" className="shrink-0">
             <Button variant="outline" onClick={handleBack}>
               {step === 'configure' ? 'Back' : 'Cancel'}
             </Button>

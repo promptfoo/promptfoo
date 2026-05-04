@@ -65,7 +65,10 @@ const PromptDialog = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto py-4">
+        <div
+          data-testid="prompt-dialog-scroll-body"
+          className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto py-4"
+        >
           {/* Prompt content section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -162,7 +165,7 @@ const PromptDialog = ({
           )}
         </div>
 
-        <DialogFooter className="shrink-0">
+        <DialogFooter data-testid="prompt-dialog-footer" className="shrink-0">
           <Button variant="outline" onClick={handleClose}>
             Close
           </Button>

@@ -226,11 +226,9 @@ describe('PromptDialog', () => {
     );
 
     const dialog = screen.getByRole('dialog');
-    const scrollBody = screen.getByText('Prompt').closest('div')?.parentElement?.parentElement;
+    const scrollBody = screen.getByTestId('prompt-dialog-scroll-body');
     const historyTable = screen.getByRole('table');
-    const footer = screen
-      .getAllByRole('button', { name: 'Close' })
-      .find((button) => button.textContent === 'Close')?.parentElement;
+    const footer = screen.getByTestId('prompt-dialog-footer');
 
     expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');

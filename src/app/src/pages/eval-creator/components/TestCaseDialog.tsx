@@ -65,7 +65,10 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
           <DialogTitle>{initialValues ? 'Edit Test Case' : 'Add Test Case'}</DialogTitle>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto py-4">
+        <div
+          data-testid="test-case-dialog-scroll-body"
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto py-4"
+        >
           <div className="space-y-2">
             <div className="flex items-baseline gap-1.5">
               <Label htmlFor="test-case-description" className="text-lg font-semibold">
@@ -96,7 +99,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
           />
         </div>
 
-        <DialogFooter className="shrink-0 gap-2 sm:gap-0">
+        <DialogFooter data-testid="test-case-dialog-footer" className="shrink-0 gap-2 sm:gap-0">
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>

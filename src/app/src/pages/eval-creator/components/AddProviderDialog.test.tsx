@@ -108,8 +108,8 @@ describe('AddProviderDialog layout', () => {
     render(<AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} />);
 
     const dialog = screen.getByRole('dialog');
-    const scrollBody = screen.getByText('provider type selector').parentElement?.parentElement;
-    const footer = screen.getByRole('button', { name: 'Cancel' }).parentElement;
+    const scrollBody = screen.getByTestId('add-provider-dialog-scroll-body');
+    const footer = screen.getByTestId('add-provider-dialog-footer');
 
     expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
@@ -124,14 +124,14 @@ describe('AddProviderDialog layout', () => {
       </TooltipProvider>,
     );
 
-    const scrollBody = screen.getByText('provider type selector').parentElement?.parentElement;
+    const scrollBody = screen.getByTestId('add-provider-dialog-scroll-body');
     expect(scrollBody).toBeDefined();
 
     scrollBody!.scrollTop = 240;
     await user.click(screen.getByRole('button', { name: 'Choose OpenAI' }));
 
-    const configEditor = await screen.findByText('provider config editor');
-    const nextScrollBody = configEditor.parentElement?.parentElement;
+    await screen.findByText('provider config editor');
+    const nextScrollBody = screen.getByTestId('add-provider-dialog-scroll-body');
 
     expect(nextScrollBody).toBeDefined();
     expect(nextScrollBody).not.toBe(scrollBody);
