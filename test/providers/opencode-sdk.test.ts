@@ -886,6 +886,10 @@ describe('OpenCodeSDKProvider', () => {
         const resultFromParentA = await providerForParentA.callApi('Test prompt');
         expect(resultFromParentA.output).toBe('Response from parent A');
 
+        const cachedResultFromParentA = await providerForParentA.callApi('Test prompt');
+        expect(cachedResultFromParentA.output).toBe('Response from parent A');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
         mockSessionPrompt.mockResolvedValueOnce(
           createMockPromptResponse([{ type: 'text', text: 'Response from parent B' }]),
         );
