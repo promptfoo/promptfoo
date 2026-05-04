@@ -10,10 +10,9 @@ import { getConfigFromCloud } from '../../util/cloud';
 import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/load';
 import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
+import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 import type { Command } from 'commander';
-
-import type { RedteamRunOptions } from '../types';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
@@ -113,8 +112,11 @@ export function redteamRunCommand(program: Command) {
           });
         } else if (error instanceof ConfigResolutionError) {
           logConfigResolutionError(error);
-        } else if (!(error instanceof EmailValidationError)) {
-          // EmailValidationError is already logged by account helpers.
+        } else if (
+          !(error instanceof EmailValidationError) &&
+          !(error instanceof ProbeLimitExceededError)
+        ) {
+          // These expected failures are already logged by their helpers.
           logger.error(
             `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
               error instanceof Error ? error.stack : ''

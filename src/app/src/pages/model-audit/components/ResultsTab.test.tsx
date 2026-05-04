@@ -125,6 +125,28 @@ describe('ResultsTab', () => {
     });
   });
 
+  it('should not show a clean empty state when failed checks exist without issue rows', () => {
+    const mockScanResults: ScanResult = {
+      path: '/path/to/scan',
+      success: true,
+      issues: [],
+      scannedFiles: 15,
+      rawOutput: 'raw output',
+      checks: [{ name: 'Check 1', status: 'failed', message: 'Check failed' }],
+      total_checks: 10,
+      passed_checks: 8,
+      failed_checks: 2,
+    };
+
+    render(<ResultsTab scanResults={mockScanResults} onShowFilesDialog={vi.fn()} />);
+
+    expect(screen.getByText('No issue rows returned')).toBeInTheDocument();
+    expect(
+      screen.getByText('The scan reported findings or failed checks without issue details.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Your model passed all security checks.')).not.toBeInTheDocument();
+  });
+
   it('should call onShowFilesDialog when Files button is clicked', async () => {
     const mockScanResults: ScanResult = {
       path: '/path/to/scan',

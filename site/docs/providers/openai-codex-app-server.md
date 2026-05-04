@@ -50,6 +50,8 @@ Use this provider when the thing being tested depends on app-server-only behavio
 | Attaching to an existing Desktop app            | No         | Promptfoo owns a separate app-server child process.                                              |
 | WebSocket transport                             | No         | The provider uses stdio; app-server WebSocket mode remains experimental upstream.                |
 
+When `service_tier: fast` is used, Promptfoo still reports only the standard model-rate estimate from the returned token ledger. The app-server payload does not expose enough billing metadata to convert Codex fast-mode credit consumption into an exact spend figure.
+
 ## Setup
 
 Install the Codex CLI and sign in:
@@ -116,7 +118,7 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | ------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
 | `apiKey`                  | string        | OpenAI API key. Optional when Codex is already signed in.                                                                                                           | Environment variable |
 | `base_url`                | string        | Custom OpenAI-compatible base URL. Also passed as `OPENAI_BASE_URL` and `OPENAI_API_BASE_URL`.                                                                      | None                 |
-| `working_dir`             | string        | Directory Codex operates in.                                                                                                                                        | Current process dir  |
+| `working_dir`             | string        | Directory Codex operates in. Relative values resolve from the directory containing the config file.                                                                 | Current process dir  |
 | `additional_directories`  | string[]      | Additional directories added to workspace-write sandbox roots.                                                                                                      | None                 |
 | `skip_git_repo_check`     | boolean       | Skip the default Git repository safety check.                                                                                                                       | `false`              |
 | `codex_path_override`     | string        | Path to a specific `codex` binary.                                                                                                                                  | `codex`              |

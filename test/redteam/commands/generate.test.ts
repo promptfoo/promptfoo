@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
 import {
@@ -20,7 +21,7 @@ import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { PartialGenerationError } from '../../../src/redteam/types';
+import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -3704,28 +3705,69 @@ describe('target ID extraction for retry strategy', () => {
         remaining: 0,
       });
 
-      const result = await doGenerateRedteam({
-        config: 'test-config.yaml',
-        output: 'output.yaml',
-        cache: true,
-        force: true,
-      });
+      await expect(
+        doGenerateRedteam({
+          config: 'test-config.yaml',
+          output: 'output.yaml',
+          cache: true,
+          force: true,
+        }),
+      ).rejects.toThrow(ProbeLimitExceededError);
 
-      expect(result).toBeNull();
-      expect(process.exitCode).toBe(1);
+      expect(process.exitCode).toBeUndefined();
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Monthly probe limit reached'),
       );
       expect(synthesize).not.toHaveBeenCalled();
 
-      // Reset
-      process.exitCode = 0;
       vi.mocked(checkRedteamProbeLimit).mockReturnValue({
         withinLimit: true,
         used: 0,
         limit: 100_000,
         remaining: 100_000,
       });
+    });
+
+    it.each([
+      { label: 'cache: false', cache: false, expectOverride: false, expectInfoLog: true },
+      { label: 'cache: true', cache: true, expectOverride: undefined, expectInfoLog: false },
+      {
+        label: 'cache: undefined',
+        cache: undefined,
+        expectOverride: undefined,
+        expectInfoLog: false,
+      },
+    ])('should respect $label without leaking globals', async ({
+      cache,
+      expectOverride,
+      expectInfoLog,
+    }) => {
+      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+        withinLimit: true,
+        used: 0,
+        limit: 100_000,
+        remaining: 100_000,
+      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      const withCacheEnabledSpy = vi.spyOn(cacheModule, 'withCacheEnabled');
+
+      await doGenerateRedteam({
+        purpose: 'test purpose',
+        output: 'output.yaml',
+        cache,
+        force: true,
+      });
+
+      expect(withCacheEnabledSpy).toHaveBeenCalledWith(expectOverride, expect.any(Function));
+      if (expectInfoLog) {
+        expect(logger.info).toHaveBeenCalledWith('Cache is disabled');
+      } else {
+        expect(logger.info).not.toHaveBeenCalledWith('Cache is disabled');
+      }
+
+      withCacheEnabledSpy.mockRestore();
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
     });
 
     it('should not block generation when within probe limit', async () => {

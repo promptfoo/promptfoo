@@ -2,11 +2,16 @@ import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
+import { calculateOpenAIUsageCost } from './billing';
 import { getTokenUsage } from './util';
 
 import type { ProviderEmbeddingResponse } from '../../types/index';
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  protected getBillingModelName(): string {
+    return this.modelName;
+  }
+
   async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
@@ -79,6 +84,9 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         embedding,
         latencyMs,
         tokenUsage: getTokenUsage(data, cached),
+        cost: calculateOpenAIUsageCost(this.getBillingModelName(), this.config, data.usage, {
+          cachedResponse: cached,
+        }),
       };
     } catch (err) {
       logger.error(`Response parsing error: ${String(err)}`);

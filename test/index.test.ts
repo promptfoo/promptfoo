@@ -102,8 +102,10 @@ describe('index.ts exports', () => {
     'isResultFailureReason',
     'isTransformFunction',
     'loadApiProvider',
+    'loadApiProviders',
     'normalizeInputDefinition',
     'normalizeInputs',
+    'ProbeLimitExceededError',
     'redteam',
   ];
 
@@ -200,6 +202,7 @@ describe('index.ts exports', () => {
       evaluate: index.evaluate,
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
+      loadApiProviders: index.loadApiProviders,
       redteam: index.redteam,
     });
   });
@@ -211,6 +214,7 @@ describe('index.ts exports', () => {
     expect(cache).toHaveProperty('disableCache');
     expect(cache).toHaveProperty('clearCache');
     expect(cache).toHaveProperty('isCacheEnabled');
+    expect(cache).toHaveProperty('withCacheEnabled');
   });
 });
 
@@ -220,6 +224,7 @@ describe('evaluate function', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -421,9 +426,11 @@ describe('evaluate function', () => {
     );
   });
 
-  it('should disable cache when specified', async () => {
+  it('should scope cache disabling to the eval when specified', async () => {
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
+
     await evaluate({ prompts: ['test'], providers: [] }, { cache: false });
-    expect(cache.disableCache).toHaveBeenCalledWith();
+    expect(cache.withCacheEnabled).toHaveBeenCalledWith(false, expect.any(Function));
   });
 
   it('should write results to database when writeLatestResults is true', async () => {
@@ -922,6 +929,7 @@ describe('evaluate with external defaultTest', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -1792,6 +1800,7 @@ describe('evaluate sharing functionality', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);

@@ -599,7 +599,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'cohere') {
       setProvider(
         {
-          id: 'cohere:command-r-plus',
+          id: 'cohere:command-a-03-2025',
           config: {},
           label: currentLabel,
         },
@@ -734,7 +734,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'xai') {
       setProvider(
         {
-          id: 'xai:grok-2-1212',
+          id: 'xai:grok-4.20-reasoning',
           config: {},
           label: currentLabel,
         },
@@ -743,7 +743,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'ai21') {
       setProvider(
         {
-          id: 'ai21:jamba-1.5-large',
+          id: 'ai21:jamba-large',
           config: {},
           label: currentLabel,
         },
