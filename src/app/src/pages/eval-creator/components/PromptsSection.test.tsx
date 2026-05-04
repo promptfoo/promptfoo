@@ -103,6 +103,18 @@ describe('PromptsSection', () => {
     expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
   });
 
+  it('stacks the prompt header controls on narrow screens', () => {
+    setupStore([]);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Prompts').parentElement).toHaveClass('flex-col', 'sm:flex-row');
+  });
+
   it("should add a new prompt to the list when the 'Add Prompt' button is clicked, the PromptDialog is filled, and the prompt is submitted", async () => {
     const user = userEvent.setup();
     setupStore([]);
@@ -197,6 +209,18 @@ describe('PromptsSection', () => {
     updateStoreAndRerender([initialPrompt, initialPrompt], rerender);
 
     expect(screen.getAllByText(/Translate the following sentence to French/)).toHaveLength(2);
+  });
+
+  it('labels the prompt edit action', () => {
+    setupStore(['Write a short story about a cat.']);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Edit prompt 1' })).toBeInTheDocument();
   });
 
   it('should remove a prompt from the list when the delete icon is clicked for a prompt row and the deletion is confirmed in the dialog', async () => {

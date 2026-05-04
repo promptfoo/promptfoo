@@ -221,9 +221,9 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Test Cases</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
               <label className="cursor-pointer" aria-label="Upload test cases from CSV or YAML">
@@ -277,8 +277,8 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
       </div>
 
       {/* Test Cases Table */}
-      <div className="rounded-lg border border-border overflow-hidden">
-        <table className="w-full">
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-[520px] w-full">
           <thead className="bg-muted/50">
             <tr className="border-b border-border">
               <th className="px-4 py-3 text-left text-sm font-semibold">Description</th>
@@ -360,6 +360,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                                 setEditingTestCaseIndex(index);
                                 setTestCaseDialogOpen(true);
                               }}
+                              aria-label="Edit test case"
                             >
                               <EditIcon className="size-4" />
                             </Button>

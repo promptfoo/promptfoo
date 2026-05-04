@@ -104,7 +104,7 @@ export default function AddProviderDialog({
         `}
       </style>
       <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>
               {initialProvider
@@ -120,7 +120,7 @@ export default function AddProviderDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-4 min-h-[400px]">
+          <div key={step} className="min-h-0 flex-1 overflow-y-auto py-4">
             {step === 'select' ? (
               <div className="w-full">
                 <ProviderTypeSelector
@@ -147,7 +147,7 @@ export default function AddProviderDialog({
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={handleBack}>
               {step === 'configure' ? 'Back' : 'Cancel'}
             </Button>
