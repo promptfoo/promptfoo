@@ -3091,7 +3091,8 @@
           "type": "number"
         },
         "eventSource": {
-          "type": "string"
+          "type": "string",
+          "enum": ["cli", "library", "web", "mcp", "default"]
         },
         "generateSuggestions": {
           "type": "boolean"

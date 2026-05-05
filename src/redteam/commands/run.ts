@@ -103,7 +103,7 @@ export function redteamRunCommand(program: Command) {
         if (opts.maxConcurrency !== undefined) {
           cliState.maxConcurrency = opts.maxConcurrency;
         }
-        await doRedteamRun(opts);
+        await doRedteamRun({ ...opts, eventSource: 'cli' });
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');

@@ -46,6 +46,7 @@ import {
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { isCliEventSource } from './types/eventSource';
 import {
   type Assertion,
   type AssertionOrSet,
@@ -108,6 +109,13 @@ import type {
   VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
+
+export class PromptSuggestionsRejectedError extends Error {
+  constructor(message = 'No prompts selected. Aborting.') {
+    super(message);
+    this.name = 'PromptSuggestionsRejectedError';
+  }
+}
 
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
@@ -1835,8 +1843,11 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
     return true;
   }
   logger.info(chalk.red('No prompts selected. Aborting.'));
-  process.exitCode = 1;
-  return false;
+  if (isCliEventSource(options)) {
+    process.exitCode = 1;
+    return false;
+  }
+  throw new PromptSuggestionsRejectedError();
 }
 
 function createDefaultPromptMetrics(): PromptMetrics {

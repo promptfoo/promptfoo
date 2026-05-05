@@ -37,8 +37,12 @@ import type {
 } from './types/index';
 import type { ApiProvider } from './types/providers';
 
+export { EvalRunError } from './commands/eval';
+export { PromptSuggestionsRejectedError } from './evaluator';
 export { EmailValidationError } from './globalConfig/accounts';
+export { ServerError, type ServerErrorPhase } from './server/errors';
 export { generateTable } from './table';
+// EVENT_SOURCES, EventSource, EventSourceSchema, isCliEventSource flow through ./types/index.
 export * from './types/index';
 // Transform types and runtime guard for users passing inline transform functions
 // via the Node.js package.
