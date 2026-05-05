@@ -1118,7 +1118,6 @@ EvaluateOptions is an object that includes options for how the evaluation should
 interface EvaluateOptions {
   cache?: boolean;
   delay?: number;
-  eventSource?: string;
   generateSuggestions?: boolean;
   suggestionsCount?: number;
   /** Deprecated: use maxConcurrency: 1 or -j 1 instead. */

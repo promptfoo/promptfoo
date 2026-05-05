@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { evaluateWithSource } from '../../evaluate';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
-import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
@@ -155,23 +155,24 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     logs: [],
   });
 
-  promptfoo
-    .evaluate(
-      Object.assign({}, testSuite as EvaluateTestSuite, {
-        writeLatestResults: true,
-        sharing: testSuite.sharing ?? shouldShareResults({}),
-      }),
-      Object.assign({}, evaluateOptions, {
-        eventSource: 'web',
-        progressCallback: (progress: number, total: number) => {
-          const job = evalJobs.get(id);
-          invariant(job, 'Job not found');
-          job.progress = progress;
-          job.total = total;
-          console.log(`[${id}] ${progress}/${total}`);
-        },
-      }),
-    )
+  evaluateWithSource(
+    {
+      ...(testSuite as EvaluateTestSuite),
+      writeLatestResults: true,
+      sharing: testSuite.sharing ?? shouldShareResults({}),
+    },
+    {
+      ...evaluateOptions,
+      eventSource: 'web',
+      progressCallback: (progress: number, total: number) => {
+        const job = evalJobs.get(id);
+        invariant(job, 'Job not found');
+        job.progress = progress;
+        job.total = total;
+        console.log(`[${id}] ${progress}/${total}`);
+      },
+    },
+  )
     .then(async (evalResult) => {
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
@@ -632,7 +633,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Run the prompt through the provider
-    const result = await promptfoo.evaluate(
+    const result = await evaluateWithSource(
       {
         prompts: [
           {
