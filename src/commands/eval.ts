@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate } from '../evaluator';
+import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -122,6 +122,10 @@ function handleRecoverableWatchError(error: unknown): boolean {
     return true;
   }
   if (error instanceof EvalRunError) {
+    logger.error(error.message);
+    return true;
+  }
+  if (error instanceof PromptSuggestionsRejectedError) {
     logger.error(error.message);
     return true;
   }

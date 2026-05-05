@@ -9,7 +9,7 @@ import {
   evalCommand,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
-import { evaluate } from '../../src/evaluator';
+import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -364,6 +364,45 @@ describe('evalCommand', () => {
       expect(process.exitCode).toBeUndefined();
     } finally {
       vi.mocked(checkProviderApiKeys).mockReturnValue(new Map());
+      loggerErrorSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('should keep watching after suggested prompts are rejected on a file change', async () => {
+    const config = {
+      prompts: [],
+      providers: [],
+    } as UnifiedConfig;
+    const testSuite = {
+      prompts: [],
+      providers: [],
+    } as TestSuite;
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite,
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate)
+      .mockImplementationOnce(async (_testSuite, evalRecord) => evalRecord as Eval)
+      .mockRejectedValueOnce(new PromptSuggestionsRejectedError());
+
+    try {
+      await doEval({ watch: true, write: false }, config, defaultConfigPath, {
+        eventSource: 'library',
+      });
+
+      const onChange = chokidarMocks.handlers.get('change');
+      expect(onChange).toBeDefined();
+
+      await expect(onChange?.(defaultConfigPath)).resolves.toBeUndefined();
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
+      expect(process.exitCode).toBeUndefined();
+    } finally {
       loggerErrorSpy.mockRestore();
       process.exitCode = previousExitCode;
     }
