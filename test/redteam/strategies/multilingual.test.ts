@@ -59,7 +59,7 @@ describe('Multilingual Strategy', () => {
       config: {},
       isAvailable: vi.fn().mockResolvedValue(true),
     } as any);
-    vi.mocked(redteamProviderManager.getMultilingualProvider).mockResolvedValue(null);
+    vi.mocked(redteamProviderManager.getMultilingualProvider).mockResolvedValue(undefined);
   });
 
   describe('getConcurrencyLimit', () => {
