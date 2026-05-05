@@ -4832,6 +4832,8 @@ describe('promptfoo-redteam-setup skill', () => {
     expect(skill).toContain('Write the target and purpose');
     expect(skill).toContain('Choose a small plugin set');
     expect(skill).toContain('Choose strategies conservatively');
+    expect(skill).toContain('Use `jailbreak:meta` for the default first setup/generation pass.');
+    expect(skill).toContain('Use `jailbreak:hydra` instead when the target is stateful');
     expect(skill).toContain('search route handlers, API clients, tests');
     expect(skill).toContain('object IDs imply `bola`');
     expect(skill).toContain("Promptfoo's default redteam generation");
@@ -4887,6 +4889,9 @@ describe('promptfoo-redteam-setup skill', () => {
 
     expect(reference).toContain('Single-input HTTP policy scan');
     expect(reference).toContain('Multi-input authorization scan');
+    expect(reference).toContain('Multi-input is not the same as multi-turn.');
+    expect(reference).toContain('jailbreak:meta');
+    expect(reference).toContain('jailbreak:hydra');
     expect(reference).toContain('provider: file://./redteam-generator.mjs');
     expect(reference).toContain('file://./redteam-generator.py');
     expect(reference).toContain('call_api(prompt, options, context)');
@@ -4952,6 +4957,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'id: policy',
         'frameworks:',
         'strategies:',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4963,6 +4969,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'trip_id:',
         'redteam-generator.mjs',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4976,6 +4983,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.mjs',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4988,6 +4996,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.mjs',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -5002,6 +5011,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.py',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
   ])('ships a validatable $dir redteam setup fixture', ({ dir, snippets }) => {
@@ -5225,6 +5235,7 @@ describe('promptfoo-redteam-setup skill', () => {
       { id: 'rbac', numTests: 1 },
       { id: 'bola', numTests: 1 },
     ]);
+    expect(generated.redteam.strategies).toEqual(['jailbreak:meta']);
     const [policyPlugin] = generated.redteam.plugins as unknown[];
     expectRecord(policyPlugin, 'Generated OpenAPI redteam policy plugin');
     expectRecord(policyPlugin.config, 'Generated OpenAPI redteam policy config');
