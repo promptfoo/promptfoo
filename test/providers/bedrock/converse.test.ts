@@ -1565,6 +1565,44 @@ Third line`;
   });
 
   describe('tool configuration - edge cases', () => {
+    it.each([
+      ['toolChoice', 'none'],
+      ['tool_choice', 'none'],
+    ] as const)('should omit toolConfig when %s disables tools', async (key, value) => {
+      mockSend.mockReset();
+      const callback = vi.fn(async () => 'callback result');
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          functionToolCallbacks: { test_tool: callback },
+          [key]: value,
+        } as any,
+      });
+
+      mockSend.mockResolvedValueOnce({
+        ...createMockConverseResponse(''),
+        output: {
+          message: {
+            role: 'assistant',
+            content: [{ toolUse: { name: 'test_tool', input: {} } }],
+          },
+        },
+      });
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          toolConfig: expect.anything(),
+        }),
+      );
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it('should handle toolChoice "any"', async () => {
       mockSend.mockReset();
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {

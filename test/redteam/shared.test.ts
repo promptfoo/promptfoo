@@ -5,6 +5,7 @@ import path from 'path';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
@@ -49,6 +50,7 @@ vi.mock('../../src/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+  clearLogCallbackIfOwned: vi.fn(),
   setLogCallback: vi.fn(),
   setLogLevel: vi.fn(),
 }));
@@ -399,6 +401,29 @@ describe('doRedteamRun', () => {
 
       // Just verifying no errors - cleanup should be handled gracefully
       expect(initVerboseToggle).toHaveBeenCalled();
+    });
+
+    it('should cleanup run state when evaluation throws', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      const { doEval } = await import('../../src/commands/eval');
+      vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
+
+      await expect(doRedteamRun({})).rejects.toThrow('eval failed');
+
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(null);
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should clear log callbacks when evaluation throws', async () => {
+      const mockLogCallback = vi.fn();
+      const { doEval } = await import('../../src/commands/eval');
+      vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
+
+      await expect(doRedteamRun({ logCallback: mockLogCallback })).rejects.toThrow('eval failed');
+
+      expect(setLogCallback).toHaveBeenNthCalledWith(1, mockLogCallback);
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(mockLogCallback);
     });
   });
 
