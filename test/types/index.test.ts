@@ -20,10 +20,11 @@ import {
   UnifiedConfigSchema,
   VarsSchema,
 } from '../../src/types/index';
+import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { TestSuite } from '../../src/types/index';
+import type { TestSuite, TestSuiteConfig } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -989,10 +990,11 @@ describe('TestSuiteConfigSchema', () => {
     it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
       const config = yaml.load(configContent) as Record<string, unknown>;
+      const dereferencedConfig = await dereferenceConfig(config as TestSuiteConfig);
       const extendedSchema = TestSuiteConfigSchema.extend({
-        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        ...(typeof config.redteam !== 'undefined' && {
+        targets: TestSuiteConfigSchema.shape.providers.optional(),
+        providers: TestSuiteConfigSchema.shape.providers.optional(),
+        ...(typeof dereferencedConfig.redteam !== 'undefined' && {
           prompts: z.optional(TestSuiteConfigSchema.shape.prompts),
         }),
       }).refine(
@@ -1006,7 +1008,7 @@ describe('TestSuiteConfigSchema', () => {
         },
       );
 
-      const result = extendedSchema.safeParse(config);
+      const result = extendedSchema.safeParse(dereferencedConfig);
       expect(
         result.success,
         `Validation failed for ${file}: ${result.success ? '' : result.error.message}`,
