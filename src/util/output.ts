@@ -10,8 +10,10 @@ import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { streamEvalCsv } from '../server/utils/evalTableUtils';
-import { type CsvRow, type OutputFile, OutputFileExtension, ResultFailureReason } from '../types';
+import { type CsvRow, type OutputFile, ResultFailureReason } from '../types';
 import invariant from './invariant';
+import { writeJunitXmlOutput } from './junit';
+import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
 import { sanitizeObject } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
@@ -49,88 +51,6 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as OutputFile['config'];
-}
-
-function sanitizeForXml(value: unknown): unknown {
-  if (value === null || value === undefined) {
-    return '';
-  }
-  if (typeof value === 'boolean' || typeof value === 'number') {
-    return String(value);
-  }
-  if (typeof value === 'string') {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map(sanitizeForXml);
-  }
-  if (typeof value === 'object') {
-    const sanitized: Record<string, unknown> = {};
-    for (const [key, childValue] of Object.entries(value)) {
-      sanitized[key] = sanitizeForXml(childValue);
-    }
-    return sanitized;
-  }
-  return String(value);
-}
-
-function createJUnitXml(evalRecord: Eval, summary: Awaited<ReturnType<Eval['toEvaluateSummary']>>) {
-  const testCases = summary.results.map((result) => {
-    const testCase: Record<string, unknown> = {
-      '@_name': result.prompt.label ?? result.prompt.raw ?? result.promptId,
-      '@_classname': result.provider.label ?? result.provider.id ?? 'promptfoo',
-      '@_time': (result.latencyMs / 1000).toFixed(3),
-    };
-
-    if (!result.success) {
-      const message = result.gradingResult?.reason ?? result.error ?? 'Test failed';
-      if (result.failureReason === ResultFailureReason.ERROR) {
-        testCase.error = {
-          '@_message': message,
-          '#text': result.error ?? result.gradingResult?.reason ?? 'Test error',
-        };
-      } else {
-        testCase.failure = {
-          '@_message': message,
-          '#text': result.gradingResult?.reason ?? result.error ?? 'Assertion failed',
-        };
-      }
-    }
-
-    return testCase;
-  });
-
-  const totalTimeMs = summary.results.reduce((total, result) => total + result.latencyMs, 0);
-  const failures = summary.results.filter(
-    (result) => !result.success && result.failureReason !== ResultFailureReason.ERROR,
-  ).length;
-  const errors = summary.results.filter(
-    (result) => !result.success && result.failureReason === ResultFailureReason.ERROR,
-  ).length;
-
-  const xmlBuilder = new XMLBuilder({
-    ignoreAttributes: false,
-    format: true,
-    indentBy: '  ',
-  });
-
-  return xmlBuilder.build(
-    sanitizeForXml({
-      testsuites: {
-        testsuite: {
-          '@_name': evalRecord.config.description ?? `promptfoo eval ${evalRecord.id}`,
-          '@_package': 'promptfoo',
-          '@_tests': summary.results.length,
-          '@_failures': failures,
-          '@_errors': errors,
-          '@_skipped': 0,
-          '@_time': (totalTimeMs / 1000).toFixed(3),
-          '@_timestamp': summary.timestamp,
-          testcase: testCases,
-        },
-      },
-    }),
-  );
 }
 
 export function createOutputMetadata(evalRecord: Eval) {
@@ -223,12 +143,10 @@ export async function writeOutput(
     return;
   }
 
-  const { data: outputExtension } = OutputFileExtension.safeParse(
-    path.extname(outputPath).slice(1).toLowerCase(),
-  );
+  const outputExtension = getOutputFileFormat(outputPath);
   invariant(
     outputExtension,
-    `Unsupported output file format ${outputExtension}. Please use one of: ${OutputFileExtension.options.join(', ')}.`,
+    `Unsupported output file format ${path.extname(outputPath).slice(1).toLowerCase()}. Please use one of: ${SUPPORTED_OUTPUT_FILE_FORMATS.join(', ')}.`,
   );
 
   // Ensure the directory exists (mkdir with recursive is idempotent)
@@ -237,7 +155,9 @@ export async function writeOutput(
 
   const metadata = createOutputMetadata(evalRecord);
 
-  if (outputExtension === 'csv') {
+  if (outputExtension === 'junit.xml') {
+    await writeJunitXmlOutput(outputPath, evalRecord);
+  } else if (outputExtension === 'csv') {
     // Use streamEvalCsv for memory-efficient CSV generation
     // This produces the same format as WebUI CSV exports
     const fileHandle = await fsPromises.open(outputPath, 'w');
@@ -297,7 +217,46 @@ export async function writeOutput(
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
-    const xmlData = createJUnitXml(evalRecord, summary);
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+
+    // Sanitize data for XML builder to prevent textValue.replace errors
+    const sanitizeForXml = (obj: any): any => {
+      if (obj === null || obj === undefined) {
+        return '';
+      }
+      if (typeof obj === 'boolean' || typeof obj === 'number') {
+        return String(obj);
+      }
+      if (typeof obj === 'string') {
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeForXml);
+      }
+      if (typeof obj === 'object') {
+        const sanitized: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+          sanitized[key] = sanitizeForXml(value);
+        }
+        return sanitized;
+      }
+      // For any other type, convert to string
+      return String(obj);
+    };
+
+    const xmlBuilder = new XMLBuilder({
+      ignoreAttributes: false,
+      format: true,
+      indentBy: '  ',
+    });
+    const xmlData = xmlBuilder.build({
+      promptfoo: {
+        evalId: evalRecord.id,
+        results: sanitizeForXml(summary),
+        config: sanitizeForXml(redactedConfig),
+        shareableUrl: shareableUrl || '',
+      },
+    });
     await fsPromises.writeFile(outputPath, xmlData);
   }
 }
