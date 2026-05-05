@@ -1,5 +1,5 @@
 import { parseDataUrl } from '../../util/dataUrl';
-import { calculateCost as calculateCostBase } from '../shared';
+import { calculateCost as calculateCostBase, getTokenCostRates } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
@@ -346,8 +346,10 @@ export function calculateAnthropicCost(
 
   if (hasTieredPricing) {
     const isLongContext = effectiveInputTokens > 200_000;
-    const baseInputRate = config.inputCost ?? config.cost ?? (isLongContext ? 6 / 1e6 : 3 / 1e6);
-    const outputRate = config.outputCost ?? config.cost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
+    const { inputCost: baseInputRate, outputCost: outputRate } = getTokenCostRates(config, {
+      input: isLongContext ? 6 / 1e6 : 3 / 1e6,
+      output: isLongContext ? 22.5 / 1e6 : 15 / 1e6,
+    });
 
     return (
       calculateCacheInputCost(baseInputRate, promptTokens, cacheRead, cacheCreation) +
@@ -359,8 +361,7 @@ export function calculateAnthropicCost(
   if (cacheRead || cacheCreation) {
     const modelInfo = ANTHROPIC_MODELS.find((m) => m.id === modelName);
     if (modelInfo) {
-      const inputCost = config.inputCost ?? config.cost ?? modelInfo.cost.input;
-      const outputCost = config.outputCost ?? config.cost ?? modelInfo.cost.output;
+      const { inputCost, outputCost } = getTokenCostRates(config, modelInfo.cost);
       return (
         calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
         completionTokens * outputCost

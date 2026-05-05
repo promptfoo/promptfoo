@@ -13,43 +13,6 @@ import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-
  */
 const PRICING_CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-/**
- * Valid AWS regions where Bedrock is available.
- * Used for fail-fast validation to avoid unnecessary API calls with invalid regions.
- * See: https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-regions.html
- */
-const VALID_BEDROCK_REGIONS = new Set([
-  // US regions
-  'us-east-1',
-  'us-east-2',
-  'us-west-1',
-  'us-west-2',
-  // EU regions
-  'eu-central-1',
-  'eu-west-1',
-  'eu-west-2',
-  'eu-west-3',
-  'eu-north-1',
-  // Asia Pacific regions
-  'ap-south-1',
-  'ap-southeast-1',
-  'ap-southeast-2',
-  'ap-northeast-1',
-  'ap-northeast-2',
-  'ap-northeast-3',
-  // South America
-  'sa-east-1',
-  // Canada
-  'ca-central-1',
-  // Middle East
-  'me-south-1',
-  'me-central-1',
-  // Africa
-  'af-south-1',
-  // GovCloud
-  'us-gov-west-1',
-]);
-
 export interface BedrockPricingData {
   models: Map<string, BedrockModelPricing>;
   region: string;
@@ -81,9 +44,17 @@ const pricingFetchPromises = new Map<string, Promise<BedrockPricingData | null>>
  * Handles model IDs with region prefixes (e.g., us.anthropic.claude-3-5-sonnet-20241022-v2:0)
  * by stripping the prefix before matching.
  */
+function getPricingModelId(modelId: string): string {
+  const inferenceProfileId = modelId.match(
+    /(?:inference-profile|application-inference-profile)\/([a-zA-Z0-9-:.]+)$/,
+  )?.[1];
+
+  return (inferenceProfileId ?? modelId).replace(/:\d+$/, '');
+}
+
 export function mapBedrockModelIdToApiName(modelId: string): string {
   // Extract base model name (remove version suffix like :0, :1, :2)
-  let baseId = modelId.split(':')[0];
+  let baseId = getPricingModelId(modelId);
 
   // Strip region prefix if present (us., eu., apac., us-gov., global., au., jp.)
   baseId = baseId.replace(/^(us|eu|apac|us-gov|global|au|jp)\./, '');
@@ -196,21 +167,13 @@ export async function getPricingData(
   region: string,
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
 ): Promise<BedrockPricingData | null> {
-  // Fail fast for invalid regions
-  if (!VALID_BEDROCK_REGIONS.has(region)) {
-    logger.warn('[Bedrock Pricing]: Invalid region, skipping pricing fetch', {
-      region,
-      validRegions: Array.from(VALID_BEDROCK_REGIONS),
-    });
-    return null;
-  }
-
-  const cache = await getCache();
   const cacheKey = `bedrock-pricing:${region}`;
+  let cache: Awaited<ReturnType<typeof getCache>> | undefined;
 
   // Check persistent cache first
   if (isCacheEnabled()) {
     try {
+      cache = await getCache();
       const cachedData = await cache.get(cacheKey);
       if (cachedData) {
         const parsed = JSON.parse(cachedData as string);
@@ -273,6 +236,7 @@ export async function getPricingData(
   // Cache the result if successful
   if (pricingData && isCacheEnabled()) {
     try {
+      cache ??= await getCache();
       const cacheData = JSON.stringify({
         models: Array.from(pricingData.models.entries()),
         region: pricingData.region,
@@ -302,11 +266,12 @@ async function sendPricingCommandWithTimeout(
   pricingClient: PricingClient,
   command: GetProductsCommand,
 ): Promise<GetProductsCommandOutput> {
+  const timeoutMs = 5_000;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutId = setTimeout(
-      () => reject(new Error('Pricing API request timed out after 10 seconds')),
-      10000,
+      () => reject(new Error(`Pricing API request timed out after ${timeoutMs / 1000} seconds`)),
+      timeoutMs,
     );
   });
 
@@ -374,6 +339,10 @@ function setModelPricingRate(
   const modelPricing = models.get(modelName)!;
   const rate = price / 1000;
   const normalizedInferenceType = inferenceType.toLowerCase();
+
+  if (normalizedInferenceType.includes('cache')) {
+    return;
+  }
 
   if (normalizedInferenceType.includes('input')) {
     modelPricing.input = rate;
@@ -563,9 +532,8 @@ const FALLBACK_PRICING: Record<string, BedrockModelPricing> = {
 function getFallbackPricing(modelId: string): BedrockModelPricing | undefined {
   // Normalize model ID: remove region prefix, version suffix
   // Must match the same prefixes as mapBedrockModelIdToApiName
-  const normalized = modelId
+  const normalized = getPricingModelId(modelId)
     .replace(/^(us|eu|apac|us-gov|global|au|jp)\./, '')
-    .replace(/:\d+$/, '')
     .toLowerCase();
 
   // Try exact match patterns

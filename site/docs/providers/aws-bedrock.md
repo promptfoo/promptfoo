@@ -1086,10 +1086,10 @@ Promptfoo automatically fetches current pricing from the AWS Pricing API and cac
 **Requirements:**
 
 - **IAM credentials** with `pricing:GetProducts` permission
-- Pricing API requires IAM authentication (AWS access key + secret key)
-- If using API key-only authentication for Bedrock, real-time pricing will be skipped and built-in fallback pricing will be used for known models
+- Pricing API requires IAM authentication
+- Promptfoo attempts explicit credentials or the AWS default credential chain for pricing lookups, even when Bedrock inference itself uses API-key authentication
 
-No configuration needed - pricing fetch and caching happens automatically when IAM credentials are available.
+No configuration is needed. When IAM pricing credentials are unavailable, Promptfoo falls back to built-in pricing for known models.
 
 ### Supported Models
 

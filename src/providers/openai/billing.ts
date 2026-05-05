@@ -1,3 +1,4 @@
+import { getTokenCostRates } from '../shared';
 import {
   OPENAI_CHAT_MODELS,
   OPENAI_COMPLETION_MODELS,
@@ -625,9 +626,15 @@ function calculateTextCost(
   cachedTextInputTokens: number,
   config: ProviderConfig,
 ): number {
-  const textInputCost = config.inputCost ?? config.cost ?? rates.input;
-  const cachedInputCost = config.inputCost ?? config.cost ?? rates.cachedInput ?? textInputCost;
-  const outputCost = config.outputCost ?? config.cost ?? rates.output ?? 0;
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
+  const numericCost = typeof config.cost === 'number' ? config.cost : undefined;
+  const { inputCost: textInputCost, outputCost } = getTokenCostRates(config, {
+    input: rates.input,
+    output: rates.output ?? 0,
+  });
+  const cachedInputCost =
+    config.inputCost ?? objectCost?.input ?? numericCost ?? rates.cachedInput ?? textInputCost;
   const uncachedTextInputTokens = Math.max(usage.textInputTokens - cachedTextInputTokens, 0);
 
   return (
@@ -688,6 +695,8 @@ export function calculateOpenAIUsageCost(
     return 0;
   }
 
+  const objectCost =
+    typeof config.cost === 'object' && config.cost !== null ? config.cost : undefined;
   const { hasOutputBreakdown } = getOpenAIUsageParts(rawUsage);
 
   if (
@@ -720,9 +729,9 @@ export function calculateOpenAIUsageCost(
     cachedInput.audioInputTokens,
     usage.audioOutputTokens,
     {
-      input: config.audioInputCost ?? config.audioCost,
-      cachedInput: config.audioInputCost ?? config.audioCost,
-      output: config.audioOutputCost ?? config.audioCost,
+      input: config.audioInputCost ?? config.audioCost ?? objectCost?.audioInput,
+      cachedInput: config.audioInputCost ?? config.audioCost ?? objectCost?.audioInput,
+      output: config.audioOutputCost ?? config.audioCost ?? objectCost?.audioOutput,
     },
   );
   const imageCost = calculateModalCost(

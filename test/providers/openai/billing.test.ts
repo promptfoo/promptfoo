@@ -90,6 +90,19 @@ describe('OpenAI billing helpers', () => {
     expect(cost).toBeCloseTo((600 * 0.25 + 400 * 0.025 + 100 * 2) / 1e6, 10);
   });
 
+  it('supports object-shaped text cost overrides', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'gpt-5-mini',
+        { cost: { input: 0.001, output: 0.003 } },
+        {
+          prompt_tokens: 1_000,
+          completion_tokens: 500,
+        },
+      ),
+    ).toBeCloseTo(2.5, 10);
+  });
+
   it('prices cached input for GPT-5.3 coding models', () => {
     expect(
       calculateOpenAIUsageCost(

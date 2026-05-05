@@ -2,6 +2,7 @@ import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
+import { getTokenCostRates } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
@@ -451,8 +452,7 @@ export function calculateXAICost(
     return undefined;
   }
 
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
+  const { inputCost, outputCost } = getTokenCostRates(config, model.cost);
 
   // xAI bills reasoning tokens at the same per-token rate as completion tokens.
   // The OpenAI base provider reports them separately in completion_tokens_details

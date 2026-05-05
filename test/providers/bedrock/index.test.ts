@@ -20,6 +20,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
+import { getPricingData } from '../../../src/providers/bedrock/pricingFetcher';
 import { mockProcessEnv } from '../../util/utils';
 
 import type {
@@ -99,6 +100,15 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     isCacheEnabled: vi.fn(),
   };
 });
+
+vi.mock('../../../src/providers/bedrock/pricingFetcher', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getPricingData: vi.fn(),
+  };
+});
+
+const mockGetPricingData = vi.mocked(getPricingData);
 
 class TestBedrockProvider extends AwsBedrockGenericProvider {
   modelName = 'test-model';
@@ -219,6 +229,24 @@ describe('AwsBedrockGenericProvider', () => {
     expect(BedrockRuntimeMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
     );
+  });
+
+  it('should attempt pricing with the default credential chain even when API-key auth is configured', async () => {
+    mockGetPricingData.mockResolvedValue(null);
+    const provider = new TestBedrockProvider({ apiKey: 'test-api-key', region: 'us-east-1' });
+
+    await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+
+    expect(mockGetPricingData).toHaveBeenCalledWith('us-east-1', undefined);
+  });
+
+  it('should fall back cleanly when pricing credentials fail to resolve', async () => {
+    const provider = new TestBedrockProvider({ profile: 'missing-profile', region: 'us-east-1' });
+    vi.spyOn(provider, 'getCredentials').mockRejectedValue(new Error('missing credentials'));
+
+    await expect(provider.getPricingDataForCost()).resolves.toBeNull();
+
+    expect(mockGetPricingData).not.toHaveBeenCalled();
   });
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {

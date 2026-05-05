@@ -93,6 +93,14 @@ describe('pricingFetcher', () => {
       expect(mapBedrockModelIdToApiName('amazon.nova-lite-v1:2')).toBe('Nova Lite');
     });
 
+    it('should parse system inference-profile ARNs before mapping the model ID', () => {
+      expect(
+        mapBedrockModelIdToApiName(
+          'arn:aws:bedrock:us-east-1::inference-profile/us.anthropic.claude-3-5-sonnet-20241022-v2:0',
+        ),
+      ).toBe('Claude 3.5 Sonnet v2');
+    });
+
     it('should return base ID for unknown models', () => {
       expect(mapBedrockModelIdToApiName('unknown.model-v1:0')).toBe('unknown.model-v1');
     });
@@ -305,10 +313,8 @@ describe('pricingFetcher', () => {
 
       expect(result).not.toBeNull();
       expect(result?.region).toBe('us-east-1');
-      expect(result?.models.get('Nova Micro')).toEqual({
-        input: 0.000000035,
-        output: 0.00000014,
-      });
+      expect(result?.models.get('Nova Micro')?.input).toBeCloseTo(0.000000035);
+      expect(result?.models.get('Nova Micro')?.output).toBeCloseTo(0.00000014);
 
       // Should not call the pricing API
       expect(MockPricingClient).not.toHaveBeenCalled();
@@ -443,6 +449,94 @@ describe('pricingFetcher', () => {
       expect(result?.models.has('Nova Micro')).toBe(false);
     });
 
+    it('should ignore cache-token rows when selecting base input pricing', async () => {
+      const testRegion = 'eu-central-1';
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      mockGetCache.mockResolvedValue(mockCache as any);
+      mockIsCacheEnabled.mockReturnValue(false);
+
+      const mockSend = vi.fn().mockResolvedValue({
+        PriceList: [
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
+                inferenceType: 'Input tokens',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.000035' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
+                inferenceType: 'Cache read input tokens',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.0000035' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
+                inferenceType: 'Output tokens',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.00014' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        ],
+        NextToken: undefined,
+      });
+
+      MockPricingClient.mockImplementation(function () {
+        return {
+          send: mockSend,
+        };
+      } as any);
+
+      const result = await getPricingData(testRegion);
+
+      expect(result?.models.get('Nova Micro')?.input).toBeCloseTo(0.000000035);
+      expect(result?.models.get('Nova Micro')?.output).toBeCloseTo(0.00000014);
+    });
+
     it('should return null when cache is disabled and API fails', async () => {
       // Use a unique region to avoid module-level cache interference
       const testRegion = 'ap-southeast-1';
@@ -467,6 +561,7 @@ describe('pricingFetcher', () => {
       const result = await getPricingData(testRegion);
 
       expect(result).toBeNull();
+      expect(mockGetCache).not.toHaveBeenCalled();
     });
 
     it('should handle concurrent requests to same region', async () => {

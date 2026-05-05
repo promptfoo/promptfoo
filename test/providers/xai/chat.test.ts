@@ -628,6 +628,16 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBe(2.5);
     });
 
+    it('uses object-shaped custom costs from config', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { cost: { input: 0.001, output: 0.003 } },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
+
     it('prefers separate custom costs over custom cost', () => {
       const cost = calculateXAICost(
         'grok-2-1212',

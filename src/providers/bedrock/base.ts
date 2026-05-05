@@ -167,17 +167,19 @@ export abstract class AwsBedrockGenericProvider {
       return this.pricingDataPromise;
     }
 
-    // Start fetching pricing data
-    // Only fetch if we have IAM credentials (not API key-only auth)
-    const apiKey = this.getApiKey();
-    if (apiKey && !this.config.accessKeyId) {
-      // API key-only auth - pricing API won't work without IAM credentials
-      logger.debug('[Bedrock]: Skipping pricing fetch - API key auth without IAM credentials');
+    // Pricing API can still use explicit credentials or the default AWS credential
+    // chain even when Bedrock requests themselves use bearer-token auth.
+    let credentials: AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined;
+    try {
+      credentials = await this.getCredentials();
+    } catch (err) {
+      logger.debug('[Bedrock]: Failed to resolve credentials for pricing fetch', {
+        error: String(err),
+      });
       this.pricingData = null;
       return null;
     }
 
-    const credentials = await this.getCredentials();
     this.pricingDataPromise = getPricingData(this.getRegion(), credentials)
       .then((data) => {
         this.pricingData = data;

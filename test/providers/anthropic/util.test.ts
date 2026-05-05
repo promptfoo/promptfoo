@@ -26,6 +26,16 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(4.5); // (0.003 * 100) + (0.015 * 200)
     });
 
+    it('should support object-shaped custom costs', () => {
+      const cost = calculateAnthropicCost(
+        'claude-3-5-sonnet-20241022',
+        { cost: { input: 0.01, output: 0.02 } },
+        100,
+        200,
+      );
+      expect(cost).toBe(5);
+    });
+
     it('should calculate cost for Claude 3.7 model', () => {
       const cost = calculateAnthropicCost('claude-3-7-sonnet-20250219', { cost: 0.02 }, 100, 200);
       expect(cost).toBe(6); // (0.004 * 100) + (0.02 * 200)
