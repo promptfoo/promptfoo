@@ -6,6 +6,7 @@ import path from 'path';
 import { getEnvString } from '../../envars';
 import { getDirectory, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
+import { providerRegistry } from '../providerRegistry';
 import { OpenAICodexSDKProvider } from './codex-sdk';
 
 import type { EnvOverrides } from '../../types/env';
@@ -57,8 +58,19 @@ type CodexDefaultProviderBundle = {
   webSearchProvider: OpenAICodexSDKProvider;
 };
 
+// Bundle lifecycle (FSM):
+//   active           → shutdownRequested = false (live in cache map)
+//   eviction-pending → shutdownRequested = true,  activeCalls > 0  (no timer)
+//   grace-pending    → shutdownRequested = true,  activeCalls = 0, shutdownTimer set
+//   shutting-down    → shutdownPromise   set
+//   resurrected      → after shutdown, a held reference re-enters via callApi:
+//                      shutdownRequested = false, shutdownPromise = undefined,
+//                      providers re-registered with providerRegistry.
+//   cancelled        → only set by tests via clearCodexDefaultProvidersForTesting;
+//                      blocks any further timer arming or shutdown.
 type ManagedCodexDefaultProviderBundle = CodexDefaultProviderBundle & {
   activeCalls: number;
+  cancelled: boolean;
   shutdownPromise?: Promise<void>;
   shutdownRequested: boolean;
   shutdownTimer?: ReturnType<typeof setTimeout>;
@@ -121,8 +133,14 @@ function canLoadCodexSdkPackage(): boolean {
 }
 
 export function hasCodexDefaultCredentials(env?: EnvOverrides): boolean {
-  const hasCodexApiKey = Boolean(getCodexEnvString(env, 'CODEX_API_KEY'));
-  return (hasCodexApiKey || hasCodexAuthFile(env)) && canLoadCodexSdkPackage();
+  // Mirrors OpenAICodexSDKProvider.getApiKey(): either CODEX_API_KEY or OPENAI_API_KEY
+  // can authenticate Codex calls. Keep these in sync with the cache key partitioning in
+  // getCodexDefaultProvidersCacheKey() so callers that gate on this helper are consistent
+  // with what actually reaches the provider.
+  const hasApiKey = Boolean(
+    getCodexEnvString(env, 'CODEX_API_KEY') || getCodexEnvString(env, 'OPENAI_API_KEY'),
+  );
+  return (hasApiKey || hasCodexAuthFile(env)) && canLoadCodexSdkPackage();
 }
 
 function getCodexDefaultProviderConfig(
@@ -189,21 +207,26 @@ function getUniqueCodexDefaultProviders(
 function shutdownCodexDefaultProviderBundle(
   providers: ManagedCodexDefaultProviderBundle,
 ): Promise<void> | undefined {
-  if (!providers.shutdownRequested || providers.activeCalls > 0) {
-    return providers.shutdownPromise;
-  }
-  if (providers.shutdownPromise) {
+  if (
+    providers.cancelled ||
+    !providers.shutdownRequested ||
+    providers.activeCalls > 0 ||
+    providers.shutdownPromise
+  ) {
     return providers.shutdownPromise;
   }
 
-  evictedCodexDefaultProviderBundles.delete(providers);
   providers.shutdownPromise = Promise.all(
     getUniqueCodexDefaultProviders(providers).map((provider) =>
       provider.shutdown().catch((error) => {
         logger.warn('[CodexDefaults] Error shutting down evicted provider', { error });
       }),
     ),
-  ).then(() => undefined);
+  )
+    .then(() => undefined)
+    .finally(() => {
+      evictedCodexDefaultProviderBundles.delete(providers);
+    });
 
   return providers.shutdownPromise;
 }
@@ -214,19 +237,22 @@ function clearCodexDefaultProviderShutdownTimer(
   if (providers.shutdownTimer) {
     clearTimeout(providers.shutdownTimer);
     providers.shutdownTimer = undefined;
-    evictedCodexDefaultProviderBundles.delete(providers);
   }
 }
 
 function scheduleCodexDefaultProviderBundleShutdown(
   providers: ManagedCodexDefaultProviderBundle,
 ): Promise<void> | undefined {
-  if (!providers.shutdownRequested || providers.activeCalls > 0 || providers.shutdownPromise) {
+  if (
+    providers.cancelled ||
+    !providers.shutdownRequested ||
+    providers.activeCalls > 0 ||
+    providers.shutdownPromise
+  ) {
     return providers.shutdownPromise;
   }
 
   if (!providers.shutdownTimer) {
-    evictedCodexDefaultProviderBundles.add(providers);
     providers.shutdownTimer = setTimeout(() => {
       providers.shutdownTimer = undefined;
       void shutdownCodexDefaultProviderBundle(providers);
@@ -239,28 +265,50 @@ function scheduleCodexDefaultProviderBundleShutdown(
 function requestCodexDefaultProviderBundleShutdown(
   providers: ManagedCodexDefaultProviderBundle,
 ): void {
+  if (providers.cancelled) {
+    return;
+  }
   providers.shutdownRequested = true;
+  // Track immediately so test cleanup and process-exit handlers can find the bundle even
+  // when activeCalls > 0 prevents a timer from being armed yet.
+  evictedCodexDefaultProviderBundles.add(providers);
   void scheduleCodexDefaultProviderBundleShutdown(providers);
 }
 
+function resurrectCodexDefaultProviderBundle(providers: ManagedCodexDefaultProviderBundle): void {
+  // shutdown() unregistered each provider from providerRegistry, so re-register before
+  // forwarding the call. Without this, the resurrected Codex CLI subprocesses created on
+  // the next callApi would never be torn down by providerRegistry.shutdownAll().
+  for (const provider of getUniqueCodexDefaultProviders(providers)) {
+    providerRegistry.register(provider);
+  }
+  providers.shutdownPromise = undefined;
+  providers.shutdownRequested = false;
+  evictedCodexDefaultProviderBundles.delete(providers);
+}
+
 function trackCodexDefaultProviderUsage(providers: ManagedCodexDefaultProviderBundle): void {
-  for (const provider of new Set([
-    providers.gradingJsonProvider,
-    providers.gradingProvider,
-    providers.llmRubricProvider,
-    providers.suggestionsProvider,
-    providers.synthesizeProvider,
-    providers.webSearchProvider,
-  ])) {
+  for (const provider of getUniqueCodexDefaultProviders(providers)) {
     const callApi = provider.callApi.bind(provider);
     provider.callApi = async (...args) => {
+      // If the bundle was shut down (or is mid-shutdown) but a holder still has a
+      // reference, wait for the in-flight teardown to settle and then resurrect the
+      // bundle so the call can proceed against re-registered providers.
+      if (providers.shutdownPromise) {
+        await providers.shutdownPromise;
+        if (!providers.cancelled) {
+          resurrectCodexDefaultProviderBundle(providers);
+        }
+      }
       clearCodexDefaultProviderShutdownTimer(providers);
       providers.activeCalls += 1;
       try {
         return await callApi(...args);
       } finally {
         providers.activeCalls -= 1;
-        void scheduleCodexDefaultProviderBundleShutdown(providers);
+        if (!providers.cancelled) {
+          void scheduleCodexDefaultProviderBundleShutdown(providers);
+        }
       }
     };
   }
@@ -325,6 +373,7 @@ export function getCodexDefaultProviders(env?: EnvOverrides): CodexDefaultProvid
 
   const providers: ManagedCodexDefaultProviderBundle = {
     activeCalls: 0,
+    cancelled: false,
     gradingJsonProvider,
     gradingProvider,
     llmRubricProvider: gradingJsonProvider,
@@ -338,10 +387,15 @@ export function getCodexDefaultProviders(env?: EnvOverrides): CodexDefaultProvid
 }
 
 export function clearCodexDefaultProvidersForTesting(): void {
-  for (const providers of [
+  // Mark every tracked bundle cancelled so any in-flight callApi finally blocks cannot
+  // re-arm a shutdown timer after cleanup. Use a Set to dedupe in case a bundle appears
+  // in both the live cache and the evicted set.
+  const trackedBundles = new Set<ManagedCodexDefaultProviderBundle>([
     ...codexDefaultProvidersByCacheKey.values(),
     ...evictedCodexDefaultProviderBundles,
-  ]) {
+  ]);
+  for (const providers of trackedBundles) {
+    providers.cancelled = true;
     clearCodexDefaultProviderShutdownTimer(providers);
   }
   codexDefaultProvidersByCacheKey.clear();

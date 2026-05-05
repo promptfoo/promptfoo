@@ -363,4 +363,107 @@ describe('Codex default providers', () => {
     expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
     expect(callApiSpy).toHaveBeenCalledTimes(2);
   });
+
+  it('returns true when only OPENAI_API_KEY is set, mirroring the provider api-key resolution', async () => {
+    mockProcessEnv({ CODEX_API_KEY: undefined, OPENAI_API_KEY: 'openai-only-key' });
+
+    const { hasCodexDefaultCredentials } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+
+    expect(hasCodexDefaultCredentials()).toBe(true);
+  });
+
+  it('resurrects providers that received a callApi after eviction shutdown completed', async () => {
+    vi.useFakeTimers();
+
+    const { OpenAICodexSDKProvider } = await import('../../../src/providers/openai/codex-sdk');
+    const { providerRegistry: registry } = await import('../../../src/providers/providerRegistry');
+    const { getCodexDefaultProviders } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+
+    const callApiSpy = vi
+      .spyOn(OpenAICodexSDKProvider.prototype, 'callApi')
+      .mockResolvedValue({ output: 'ok' });
+    const registerSpy = vi.spyOn(registry, 'register');
+
+    const firstProviders = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-key-0' });
+    const firstGradingShutdown = vi
+      .spyOn(firstProviders.gradingProvider as OpenAICodexSDKProvider, 'shutdown')
+      .mockResolvedValue(undefined);
+    const firstGradingJsonShutdown = vi
+      .spyOn(firstProviders.gradingJsonProvider as OpenAICodexSDKProvider, 'shutdown')
+      .mockResolvedValue(undefined);
+    const firstWebSearchShutdown = vi
+      .spyOn(firstProviders.webSearchProvider as OpenAICodexSDKProvider, 'shutdown')
+      .mockResolvedValue(undefined);
+
+    for (let index = 1; index <= 32; index++) {
+      getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
+    }
+
+    // Drain the grace timer so eviction shutdown actually fires (mocked) before we
+    // attempt to use the provider again.
+    await vi.runOnlyPendingTimersAsync();
+    expect(firstGradingShutdown).toHaveBeenCalledTimes(1);
+    expect(firstGradingJsonShutdown).toHaveBeenCalledTimes(1);
+    expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
+
+    registerSpy.mockClear();
+
+    // Holder still has firstProviders.gradingProvider — the wrapped callApi must wait
+    // for the in-flight shutdown to settle, re-register the providers, and forward the
+    // call rather than returning a zombie response.
+    await expect(firstProviders.gradingProvider.callApi('post-shutdown prompt')).resolves.toEqual({
+      output: 'ok',
+    });
+
+    expect(callApiSpy).toHaveBeenCalledWith('post-shutdown prompt');
+    // Re-registration covers the unique providers (grading, gradingJson, webSearch).
+    expect(registerSpy).toHaveBeenCalledTimes(3);
+    const reregistered = new Set<unknown>(registerSpy.mock.calls.map((call) => call[0]));
+    expect(reregistered.has(firstProviders.gradingProvider)).toBe(true);
+    expect(reregistered.has(firstProviders.gradingJsonProvider)).toBe(true);
+    expect(reregistered.has(firstProviders.webSearchProvider)).toBe(true);
+  });
+
+  it('does not re-arm an eviction timer after clearCodexDefaultProvidersForTesting', async () => {
+    vi.useFakeTimers();
+
+    const { OpenAICodexSDKProvider } = await import('../../../src/providers/openai/codex-sdk');
+    const { clearCodexDefaultProvidersForTesting, getCodexDefaultProviders } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+
+    const inFlightCall = createDeferred<any>();
+    vi.spyOn(OpenAICodexSDKProvider.prototype, 'callApi').mockImplementation(
+      () => inFlightCall.promise,
+    );
+
+    const firstProviders = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-key-0' });
+    const firstGradingShutdown = vi
+      .spyOn(firstProviders.gradingProvider as OpenAICodexSDKProvider, 'shutdown')
+      .mockResolvedValue(undefined);
+
+    // Start a call that will keep activeCalls > 0 across the eviction.
+    const inFlightPromise = firstProviders.gradingProvider.callApi('long prompt');
+
+    // Evict by overflowing the LRU.
+    for (let index = 1; index <= 32; index++) {
+      getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
+    }
+
+    // Cleanup before the in-flight call completes — this is the brittle window.
+    clearCodexDefaultProvidersForTesting();
+
+    // Resolve the in-flight call. The wrapper finally must NOT re-arm a shutdown timer.
+    inFlightCall.resolve({ output: 'late' });
+    await expect(inFlightPromise).resolves.toEqual({ output: 'late' });
+
+    // No pending timers — confirms the finally block honored the cancelled flag.
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.runOnlyPendingTimersAsync();
+    expect(firstGradingShutdown).not.toHaveBeenCalled();
+  });
 });
