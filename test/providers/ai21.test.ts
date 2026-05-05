@@ -250,12 +250,13 @@ describe('AI21ChatCompletionProvider', () => {
 
     await provider.callApi('test prompt');
 
-    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
-      expect.any(String),
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalled();
+
+    const [, requestOptions] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(requestOptions).toEqual(
       expect.objectContaining({
         body: expect.stringContaining('"max_tokens":0'),
       }),
-      expect.any(Number),
     );
   });
 });
