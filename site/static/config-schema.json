@@ -3091,10 +3091,16 @@
           "type": "number"
         },
         "eventSource": {
-          "type": "string"
+          "type": "string",
+          "enum": ["cli", "library", "web", "mcp", "default"]
         },
         "generateSuggestions": {
           "type": "boolean"
+        },
+        "suggestionsCount": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
         },
         "interactiveProviders": {
           "type": "boolean"
@@ -3281,6 +3287,11 @@
         },
         "generateSuggestions": {
           "type": "boolean"
+        },
+        "suggestionsCount": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
         },
         "promptPrefix": {
           "type": "string"

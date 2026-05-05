@@ -271,6 +271,25 @@ describe('ResponsesProcessor', () => {
       expect(result.error).toContain('Invalid response format: Missing output array');
     });
 
+    it('should omit cost when the calculator cannot price the response', async () => {
+      mockCostCalculator.mockReturnValueOnce(undefined);
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Unpriced response' }],
+          },
+        ],
+        usage: { input_tokens: 4, output_tokens: 2 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.output).toBe('Unpriced response');
+      expect(result).not.toHaveProperty('cost');
+    });
+
     it('should preserve annotations for deep research', async () => {
       const mockData = {
         id: 'resp_research789',

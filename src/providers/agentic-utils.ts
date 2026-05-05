@@ -13,6 +13,7 @@ import path from 'path';
 import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
+import { safeResolve } from '../util/pathUtils';
 
 import type { ProviderResponse } from '../types/index';
 
@@ -22,6 +23,25 @@ import type { ProviderResponse } from '../types/index';
  */
 const FINGERPRINT_TIMEOUT_MS = 2000;
 const STAT_BATCH_SIZE = 32;
+
+/**
+ * Resolve a coding-agent working directory relative to the config file directory.
+ *
+ * `cliState.basePath` tracks the loaded config file's directory. Coding-agent providers
+ * use `process.cwd()` only when no config base path is available, which keeps relative
+ * paths stable when the same config is run from different shells.
+ */
+export function resolveAgenticWorkingDir(
+  workingDir: string | undefined,
+  configBasePath?: string,
+): string | undefined {
+  if (!workingDir) {
+    return undefined;
+  }
+
+  const basePath = configBasePath ? path.resolve(configBasePath) : process.cwd();
+  return safeResolve(basePath, workingDir);
+}
 
 /**
  * Get a fingerprint for a working directory to use as a cache key.

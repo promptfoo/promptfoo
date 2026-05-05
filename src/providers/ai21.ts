@@ -14,14 +14,42 @@ import type {
 
 const AI21_CHAT_MODELS = [
   {
-    id: 'jamba-1.5-mini',
+    id: 'jamba-mini',
     cost: {
       input: 0.2 / 1000000,
       output: 0.4 / 1000000,
     },
   },
   {
-    id: 'jamba-1.5-large',
+    id: 'jamba-mini-2',
+    cost: {
+      input: 0.2 / 1000000,
+      output: 0.4 / 1000000,
+    },
+  },
+  {
+    id: 'jamba-mini-2-2026-01',
+    cost: {
+      input: 0.2 / 1000000,
+      output: 0.4 / 1000000,
+    },
+  },
+  {
+    id: 'jamba-large',
+    cost: {
+      input: 2 / 1000000,
+      output: 8 / 1000000,
+    },
+  },
+  {
+    id: 'jamba-large-1.7',
+    cost: {
+      input: 2 / 1000000,
+      output: 8 / 1000000,
+    },
+  },
+  {
+    id: 'jamba-large-1.7-2025-07',
     cost: {
       input: 2 / 1000000,
       output: 8 / 1000000,

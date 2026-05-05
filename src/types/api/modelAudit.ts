@@ -90,6 +90,16 @@ export const ScanRequestSchema = z.object({
       name: z.string().optional(),
       author: z.string().optional(),
     })
+    .superRefine((options, ctx) => {
+      if (options.maxTotalSize !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['maxTotalSize'],
+          message:
+            'options.maxTotalSize is no longer supported. Use options.maxSize for the scanner limit.',
+        });
+      }
+    })
     .optional()
     .default({}),
 });
@@ -152,6 +162,12 @@ const ModelAuditRecordSchema = z
     passedChecks: z.number().nullable().optional(),
     failedChecks: z.number().nullable().optional(),
     metadata: z.unknown().nullable().optional(),
+    modelId: z.string().nullable().optional(),
+    revisionSha: z.string().nullable().optional(),
+    contentHash: z.string().nullable().optional(),
+    modelSource: z.string().nullable().optional(),
+    sourceLastModified: z.number().nullable().optional(),
+    scannerVersion: z.string().nullable().optional(),
   })
   .passthrough();
 

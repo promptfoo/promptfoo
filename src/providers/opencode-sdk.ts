@@ -14,6 +14,7 @@ import {
   generateCacheKey,
   getCachedResponse,
   initializeAgenticCache,
+  resolveAgenticWorkingDir,
 } from './agentic-utils';
 
 import type { EnvOverrides } from '../types/env';
@@ -339,6 +340,17 @@ export interface OpenCodeSDKConfig {
   session_id?: string;
 
   /**
+   * Parent session ID for forked sessions (v2 only).
+   * When set, the new session is created as a child fork of the given parent,
+   * inheriting its compacted history. Ignored on the v1 SDK and when
+   * `session_id` is provided (resumed sessions never fork on create).
+   *
+   * Tied to the upstream fix in opencode 1.14.30 that keeps compacted history
+   * intact for forked sessions.
+   */
+  parent_session_id?: string;
+
+  /**
    * Keep sessions alive between calls
    */
   persist_sessions?: boolean;
@@ -369,7 +381,9 @@ export interface OpenCodeSDKConfig {
   log_level?: 'debug' | 'info' | 'warn' | 'error' | 'off';
 
   /**
-   * Enable streaming responses via SSE
+   * Reserved for future SSE-based streaming support.
+   * Currently a no-op for the OpenCode SDK provider; setting it logs a warning.
+   * Use the `openai:codex-sdk` provider if you need streaming today.
    * @default false
    */
   enable_streaming?: boolean;
@@ -399,6 +413,7 @@ interface OpenCodeClient {
       parameters: Record<string, unknown>,
     ) => Promise<OpenCodeSdkResult<OpenCodePromptResponse>>;
     delete: (parameters: Record<string, unknown>) => Promise<unknown>;
+    abort?: (parameters: Record<string, unknown>) => Promise<unknown>;
   };
 }
 
@@ -733,6 +748,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private server?: OpenCodeServer;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
+  private streamingWarningEmitted = false;
 
   constructor(
     options: {
@@ -870,19 +886,30 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return Object.keys(query).length > 0 ? query : undefined;
   }
 
-  private buildSessionKey(config: OpenCodeSDKConfig, workingDir: string | undefined): string {
-    return generateCacheKey('opencode:sdk:session', {
-      baseUrl: config.baseUrl,
-      workingDir: config.working_dir ? workingDir : undefined,
-      workspace: config.workspace,
+  // Shared by buildSessionKey and the response cache key so they cannot drift.
+  // Includes anything that changes which conversation history or model behavior
+  // the server applies for a prompt.
+  private historyAffectingInputs(config: OpenCodeSDKConfig): Record<string, unknown> {
+    return {
       provider_id: config.provider_id,
       model: config.model,
       tools: this.buildToolsConfig(config),
       permission: config.permission,
       agent: config.agent,
       custom_agent: config.custom_agent,
+      workspace: config.workspace,
       format: config.format,
       variant: config.variant,
+      session_id: config.session_id,
+      parent_session_id: config.parent_session_id,
+    };
+  }
+
+  private buildSessionKey(config: OpenCodeSDKConfig, workingDir: string | undefined): string {
+    return generateCacheKey('opencode:sdk:session', {
+      ...this.historyAffectingInputs(config),
+      baseUrl: config.baseUrl,
+      workingDir: config.working_dir ? workingDir : undefined,
       mcp: config.mcp,
     });
   }
@@ -1023,6 +1050,17 @@ export class OpenCodeSDKProvider implements ApiProvider {
     await this.client.session.delete(this.buildDeleteSessionParameters(session));
   }
 
+  private buildAbortSessionParameters(
+    sessionId: string,
+    sessionQuery: OpenCodeSessionQuery | undefined,
+  ): Record<string, unknown> {
+    // session.abort is v2-only. v1 has no equivalent endpoint.
+    return {
+      sessionID: sessionId,
+      ...sessionQuery,
+    };
+  }
+
   /**
    * Add a session to the cache with LRU eviction
    */
@@ -1064,9 +1102,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
     this.warnOnIgnoredBaseUrlConfig(config);
 
     if (config.working_dir) {
-      const workingDir = path.isAbsolute(config.working_dir)
-        ? config.working_dir
-        : path.resolve(process.cwd(), config.working_dir);
+      const workingDir =
+        resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
 
       let stats: fs.Stats;
       try {
@@ -1247,7 +1284,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
       throw new Error('OpenCode SDK module is not loaded');
     }
 
-    const createBody: { title?: string; permission?: OpenCodePermissionRule[] } = {
+    const createBody: {
+      title?: string;
+      permission?: OpenCodePermissionRule[];
+      parentID?: string;
+    } = {
       title: `promptfoo-${Date.now()}`,
     };
     // v2 typed contract expects `PermissionRuleset = Array<PermissionRule>`
@@ -1257,6 +1298,12 @@ export class OpenCodeSDKProvider implements ApiProvider {
       if (ruleset) {
         createBody.permission = ruleset;
       }
+    }
+
+    // parentID is only honored by the v2 session.create body. v1 has no fork
+    // primitive, so silently dropping it there keeps configs portable.
+    if (config.parent_session_id && this.opencodeModule.apiVersion === 'v2') {
+      createBody.parentID = config.parent_session_id;
     }
 
     if (this.opencodeModule.apiVersion === 'v2') {
@@ -1327,7 +1374,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     return {
       output,
       tokenUsage: buildOpenCodeTokenUsage(tokens),
-      cost: assistantMessage?.cost ?? 0,
+      ...(assistantMessage?.cost === undefined ? {} : { cost: assistantMessage.cost }),
       raw: JSON.stringify(response),
       sessionId,
     };
@@ -1377,6 +1424,13 @@ export class OpenCodeSDKProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const { config, isTempDir, workingDir } = this.prepareCall(context);
 
+    if (config.enable_streaming && !this.streamingWarningEmitted) {
+      this.streamingWarningEmitted = true;
+      logger.warn(
+        '[OpenCode SDK] enable_streaming is currently a no-op for this provider; the prompt will run to completion before returning.',
+      );
+    }
+
     const mcpConfig = config.mcp && Object.keys(config.mcp).length > 0 ? config.mcp : undefined;
     const cacheResult = await initializeAgenticCache(
       {
@@ -1389,15 +1443,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
       },
       {
         prompt,
-        provider_id: config.provider_id,
-        model: config.model,
-        tools: this.buildToolsConfig(config),
-        permission: config.permission,
-        agent: config.agent,
-        custom_agent: config.custom_agent,
-        workspace: config.workspace,
-        format: config.format,
-        variant: config.variant,
+        ...this.historyAffectingInputs(config),
       },
     );
 
@@ -1411,6 +1457,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
     }
 
     let ephemeralSession: OpenCodeSessionHandle | undefined;
+    let abortListener: (() => void) | undefined;
 
     try {
       await this.ensureClient(config);
@@ -1431,8 +1478,30 @@ export class OpenCodeSDKProvider implements ApiProvider {
         throw new Error('OpenCode SDK client is not initialized');
       }
 
+      // If the caller's abortSignal fires mid-prompt, ask the server to stop
+      // rather than letting it run to completion while we discard the result.
+      // session.abort is only on v2; v1 has no abort primitive, so we still
+      // honor cancellation locally via the response check below.
+      const abortSignal = callOptions?.abortSignal;
+      if (abortSignal && client.session.abort && this.opencodeModule?.apiVersion === 'v2') {
+        const abortParams = this.buildAbortSessionParameters(
+          session.sessionId,
+          session.sessionQuery,
+        );
+        abortListener = () => {
+          client.session.abort?.(abortParams).catch((err) => {
+            logger.debug(`[OpenCode SDK] Failed to abort session ${session.sessionId}: ${err}`);
+          });
+        };
+        abortSignal.addEventListener('abort', abortListener, { once: true });
+      }
+
       const response = await client.session.prompt(promptOptions);
       logger.debug(`OpenCode SDK response received`);
+
+      if (abortSignal?.aborted) {
+        return { error: 'OpenCode SDK call aborted' };
+      }
 
       const providerResponse = this.buildProviderResponse(config, response, session.sessionId);
 
@@ -1443,6 +1512,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
     } catch (error) {
       return this.handleCallError(error, callOptions);
     } finally {
+      if (abortListener && callOptions?.abortSignal) {
+        callOptions.abortSignal.removeEventListener('abort', abortListener);
+      }
       if (ephemeralSession) {
         try {
           await this.deleteSession(ephemeralSession);

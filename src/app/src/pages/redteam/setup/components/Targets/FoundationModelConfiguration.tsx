@@ -71,8 +71,8 @@ const FoundationModelConfiguration = ({
       },
       cohere: {
         name: 'Cohere',
-        defaultModel: 'cohere:command-r-plus',
-        placeholder: 'cohere:command-r-plus, cohere:command-r',
+        defaultModel: 'cohere:command-a-03-2025',
+        placeholder: 'cohere:command-a-03-2025, cohere:command-r-plus-08-2024',
         docUrl: 'https://www.promptfoo.dev/docs/providers/cohere',
         envVar: 'COHERE_API_KEY',
       },
