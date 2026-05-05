@@ -33,24 +33,52 @@ const MISTRAL_CHAT_MODELS = [
   ].map((id) => ({
     id,
     cost: {
-      input: 0.3 / 1000000,
-      output: 0.3 / 1000000,
+      input: 0.15 / 1000000,
+      output: 0.15 / 1000000,
     },
   })),
-  ...['mistral-small-2402', 'mistral-small-latest'].map((id) => ({
-    id,
+  {
+    id: 'mistral-small-2402',
     cost: {
       input: 1 / 1000000,
       output: 3 / 1000000,
     },
+  },
+  ...['mistral-small-2506', 'mistral-small-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 0.1 / 1000000,
+      output: 0.3 / 1000000,
+    },
   })),
-  ...['mistral-medium-2312', 'mistral-medium', 'mistral-medium-latest'].map((id) => ({
+  {
+    id: 'mistral-small-2603',
+    cost: {
+      input: 0.15 / 1000000,
+      output: 0.6 / 1000000,
+    },
+  },
+  ...['mistral-medium-2312', 'mistral-medium'].map((id) => ({
     id,
     cost: {
       input: 2.7 / 1000000,
       output: 8.1 / 1000000,
     },
   })),
+  ...['mistral-medium-2505', 'mistral-medium-2508', 'mistral-medium-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 0.4 / 1000000,
+      output: 2 / 1000000,
+    },
+  })),
+  {
+    id: 'mistral-medium-3.5',
+    cost: {
+      input: 1.5 / 1000000,
+      output: 7.5 / 1000000,
+    },
+  },
   {
     id: 'mistral-large-2402',
     cost: {
@@ -58,18 +86,32 @@ const MISTRAL_CHAT_MODELS = [
       output: 12 / 1000000,
     },
   },
-  ...['mistral-large-2407', 'mistral-large-latest'].map((id) => ({
+  ...['mistral-large-2407'].map((id) => ({
     id,
     cost: {
       input: 3 / 1000000,
       output: 9 / 1000000,
     },
   })),
-  ...['codestral-2405', 'codestral-latest'].map((id) => ({
+  ...['mistral-large-2512', 'mistral-large-latest'].map((id) => ({
     id,
+    cost: {
+      input: 0.5 / 1000000,
+      output: 1.5 / 1000000,
+    },
+  })),
+  {
+    id: 'codestral-2405',
     cost: {
       input: 1 / 1000000,
       output: 3 / 1000000,
+    },
+  },
+  ...['codestral-2508', 'codestral-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 0.3 / 1000000,
+      output: 0.9 / 1000000,
     },
   })),
   ...['codestral-mamba-2407', 'open-codestral-mamba', 'codestral-mamba-latest'].map((id) => ({
@@ -93,37 +135,59 @@ const MISTRAL_CHAT_MODELS = [
       output: 6 / 1000000,
     },
   })),
-  // New Magistral models - reasoning models announced June 2025
-  {
-    id: 'magistral-small-2506',
+  ...[
+    'magistral-small-2506',
+    'magistral-small-2507',
+    'magistral-small-2509',
+    'magistral-small-latest',
+  ].map((id) => ({
+    id,
     cost: {
       input: 0.5 / 1000000,
       output: 1.5 / 1000000,
     },
-  },
-  {
-    id: 'magistral-medium-2506',
+  })),
+  ...[
+    'magistral-medium-2506',
+    'magistral-medium-2507',
+    'magistral-medium-2509',
+    'magistral-medium-latest',
+  ].map((id) => ({
+    id,
     cost: {
       input: 2 / 1000000,
       output: 5 / 1000000,
     },
-  },
-  // Also support latest aliases
-  {
-    id: 'magistral-small-latest',
+  })),
+  ...['ministral-3b-2512', 'ministral-3b-latest'].map((id) => ({
+    id,
     cost: {
-      input: 0.5 / 1000000,
-      output: 1.5 / 1000000,
+      input: 0.1 / 1000000,
+      output: 0.1 / 1000000,
     },
-  },
-  {
-    id: 'magistral-medium-latest',
+  })),
+  ...['ministral-8b-2512', 'ministral-8b-latest'].map((id) => ({
+    id,
     cost: {
-      input: 2 / 1000000,
-      output: 5 / 1000000,
+      input: 0.15 / 1000000,
+      output: 0.15 / 1000000,
     },
-  },
-  // Multimodal model
+  })),
+  ...['ministral-14b-2512', 'ministral-14b-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 0.2 / 1000000,
+      output: 0.2 / 1000000,
+    },
+  })),
+  ...['devstral-2512', 'devstral-latest'].map((id) => ({
+    id,
+    cost: {
+      input: 0.4 / 1000000,
+      output: 2 / 1000000,
+    },
+  })),
+  // Legacy multimodal model
   {
     id: 'pixtral-12b',
     cost: {
@@ -159,9 +223,27 @@ interface MistralChatCompletionOptions {
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  stop?: string | string[];
+  n?: number;
   safe_prompt?: boolean;
   random_seed?: number;
-  response_format?: { type: 'json_object' };
+  response_format?:
+    | { type: 'text' }
+    | { type: 'json_object' }
+    | {
+        type: 'json_schema';
+        json_schema: {
+          name: string;
+          schema: Record<string, unknown>;
+        };
+      };
+  prompt_mode?: 'reasoning' | null;
+  reasoning_effort?: 'high' | 'none';
+  prediction?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  guardrails?: Array<Record<string, unknown>> | null;
   cost?: number;
   inputCost?: number;
   outputCost?: number;
@@ -233,8 +315,17 @@ function getMistralRequestMetadata(params: {
   temperature?: number;
   top_p?: number;
   max_tokens?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  stop?: string | string[];
+  n?: number;
   safe_prompt?: boolean;
   random_seed?: number | null;
+  prompt_mode?: 'reasoning' | null;
+  reasoning_effort?: 'high' | 'none';
+  prediction?: unknown;
+  metadata?: unknown;
+  guardrails?: unknown;
   parallel_tool_calls?: boolean;
   response_format?: unknown;
 }) {
@@ -244,13 +335,22 @@ function getMistralRequestMetadata(params: {
     temperature: params.temperature,
     top_p: params.top_p,
     max_tokens: params.max_tokens,
+    frequency_penalty: params.frequency_penalty,
+    presence_penalty: params.presence_penalty,
+    stopCount: Array.isArray(params.stop) ? params.stop.length : params.stop ? 1 : undefined,
+    n: params.n,
     safe_prompt: params.safe_prompt,
     random_seed: params.random_seed,
+    prompt_mode: params.prompt_mode,
+    reasoning_effort: params.reasoning_effort,
     toolCount: Array.isArray(params.tools) ? params.tools.length : undefined,
     hasTools: params.tools !== undefined,
     tool_choice: getSafeToolChoice(params.tool_choice),
     parallel_tool_calls: params.parallel_tool_calls,
     hasResponseFormat: params.response_format !== undefined,
+    hasPrediction: params.prediction !== undefined,
+    hasMetadata: params.metadata !== undefined,
+    guardrailCount: Array.isArray(params.guardrails) ? params.guardrails.length : undefined,
   };
 }
 
@@ -287,6 +387,42 @@ function getMistralErrorMetadata(error: any) {
   };
 }
 
+function buildMistralChatParams(
+  modelName: string,
+  messages: unknown,
+  config: MistralChatCompletionOptions,
+  loadedTools: unknown,
+) {
+  const hasTools = Array.isArray(loadedTools) ? loadedTools.length > 0 : loadedTools !== undefined;
+
+  return {
+    model: modelName,
+    messages,
+    temperature: config.temperature,
+    top_p: config.top_p ?? 1,
+    max_tokens: config.max_tokens ?? 1024,
+    ...(config.frequency_penalty === undefined
+      ? {}
+      : { frequency_penalty: config.frequency_penalty }),
+    ...(config.presence_penalty === undefined ? {} : { presence_penalty: config.presence_penalty }),
+    ...(config.stop === undefined ? {} : { stop: config.stop }),
+    ...(config.n === undefined ? {} : { n: config.n }),
+    ...(config.safe_prompt === undefined ? {} : { safe_prompt: config.safe_prompt }),
+    random_seed: config.random_seed ?? null,
+    ...('prompt_mode' in config ? { prompt_mode: config.prompt_mode } : {}),
+    ...(config.reasoning_effort === undefined ? {} : { reasoning_effort: config.reasoning_effort }),
+    ...('prediction' in config ? { prediction: config.prediction } : {}),
+    ...('metadata' in config ? { metadata: config.metadata } : {}),
+    ...('guardrails' in config ? { guardrails: config.guardrails } : {}),
+    ...(hasTools ? { tools: loadedTools } : {}),
+    ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+    ...('parallel_tool_calls' in config
+      ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
+      : {}),
+    ...(config.response_format ? { response_format: config.response_format } : {}),
+  };
+}
+
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
@@ -301,6 +437,30 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     }
   }
   return {};
+}
+
+type MistralNormalizedContent = string | object | null | undefined;
+
+function normalizeMistralContent(content: unknown): MistralNormalizedContent {
+  if (!Array.isArray(content)) {
+    return content as MistralNormalizedContent;
+  }
+
+  const onlyReasoningAndTextChunks = content.every(
+    (chunk) => chunk?.type === 'thinking' || chunk?.type === 'text',
+  );
+  if (!onlyReasoningAndTextChunks) {
+    return content;
+  }
+
+  const textChunks = content
+    .filter(
+      (chunk): chunk is { type: 'text'; text: string } =>
+        chunk?.type === 'text' && typeof chunk.text === 'string',
+    )
+    .map((chunk) => chunk.text);
+
+  return textChunks.length > 0 ? textChunks.join('') : content;
 }
 
 function calculateMistralCost(
@@ -446,25 +606,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
-    const hasTools = Array.isArray(loadedTools)
-      ? loadedTools.length > 0
-      : loadedTools !== undefined;
-
-    const params = {
-      model: this.modelName,
-      messages,
-      temperature: config?.temperature,
-      top_p: config?.top_p ?? 1,
-      max_tokens: config?.max_tokens ?? 1024,
-      safe_prompt: config?.safe_prompt ?? false,
-      random_seed: config?.random_seed ?? null,
-      ...(hasTools ? { tools: loadedTools } : {}),
-      ...(config?.tool_choice ? { tool_choice: config.tool_choice } : {}),
-      ...('parallel_tool_calls' in config
-        ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
-        : {}),
-      ...(config?.response_format ? { response_format: config.response_format } : {}),
-    };
+    const params = buildMistralChatParams(this.modelName, messages, config, loadedTools);
 
     const cacheKey = `mistral:chat:${this.modelName}:${this.getCacheIdentityHash(
       apiUrl,
@@ -534,13 +676,14 @@ export class MistralChatCompletionProvider implements ApiProvider {
     }
 
     const message = data.choices[0].message;
-    let output: string | object;
-    if (message.content && message.tool_calls?.length) {
-      output = message;
+    const normalizedContent = normalizeMistralContent(message.content);
+    let output: MistralNormalizedContent;
+    if (normalizedContent && message.tool_calls?.length) {
+      output = { ...message, content: normalizedContent };
     } else if (message.tool_calls?.length) {
       output = message.tool_calls;
     } else {
-      output = message.content;
+      output = normalizedContent;
     }
 
     const result: ProviderResponse = {
@@ -553,6 +696,11 @@ export class MistralChatCompletionProvider implements ApiProvider {
         data.usage?.prompt_tokens,
         data.usage?.completion_tokens,
       ),
+      ...(data.choices.length > 1 && {
+        metadata: {
+          choices: data.choices,
+        },
+      }),
     };
 
     if (isCacheEnabled()) {

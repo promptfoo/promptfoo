@@ -293,6 +293,7 @@ EOF
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking
+- Keep tracked root-owned TypeScript files under the root compiler project unless they belong to an explicitly separate project such as `src/app/` or `test/code-scan-action/`.
 - Follow consistent import order (Biome handles sorting)
 - Use consistent curly braces for all control statements
 - Prefer `const` over `let`; avoid `var`

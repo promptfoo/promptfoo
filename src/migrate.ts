@@ -36,6 +36,22 @@ function getCurrentDir(): string {
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getDb } from './database/index';
 import logger from './logger';
+import {
+  formatNativeAddonVersionMismatchMessage,
+  getNativeAddonVersionMismatchDetails,
+} from './util/nativeAddonErrors';
+
+/**
+ * Options for runDbMigrations.
+ */
+export type RunDbMigrationsOptions = {
+  /**
+   * When true, demotes the structured better-sqlite3 ABI mismatch log from error to debug.
+   * Use this from callers (e.g. the CLI) that will display their own human-readable banner so
+   * the user does not see the same information twice.
+   */
+  suppressNativeAddonLogging?: boolean;
+};
 
 /**
  * Run migrations on the database, skipping the ones already applied. Also creates the sqlite db if it doesn't exist.
@@ -44,7 +60,7 @@ import logger from './logger';
  * with setImmediate to avoid blocking the event loop during startup. This allows other async
  * operations to proceed while migrations run.
  */
-export async function runDbMigrations(): Promise<void> {
+export async function runDbMigrations(options: RunDbMigrationsOptions = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     // Run the synchronous migration in the next tick to avoid blocking
     setImmediate(() => {
@@ -74,7 +90,22 @@ export async function runDbMigrations(): Promise<void> {
         logger.debug('Database migrations completed');
         resolve();
       } catch (error) {
-        logger.error(`Database migration failed: ${error}`);
+        const nativeAddonVersionMismatchDetails = getNativeAddonVersionMismatchDetails(error);
+        if (nativeAddonVersionMismatchDetails) {
+          const logNativeAddonMismatch = options.suppressNativeAddonLogging
+            ? logger.debug
+            : logger.error;
+          logNativeAddonMismatch(
+            'SQLite dependency failed to load because better-sqlite3 was built for a different Node.js ABI.',
+            {
+              currentNodeVersion: process.version,
+              currentNodeAbi: nativeAddonVersionMismatchDetails.nodeAbi,
+              installedBetterSqlite3Abi: nativeAddonVersionMismatchDetails.addonAbi,
+            },
+          );
+        } else {
+          logger.error(`Database migration failed: ${error}`);
+        }
         reject(error);
       }
     });
@@ -111,9 +142,15 @@ if (shouldCheckDirectExecution) {
 
     if (isMigrateModuleMainExecution) {
       // Run migrations and exit with appropriate code
-      runDbMigrations()
+      runDbMigrations({ suppressNativeAddonLogging: true })
         .then(() => process.exit(0))
-        .catch(() => process.exit(1));
+        .catch((error) => {
+          const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
+          if (nativeAddonVersionMismatchMessage) {
+            console.error(nativeAddonVersionMismatchMessage);
+          }
+          process.exit(1);
+        });
     }
   } catch {
     // Expected in CJS environments (Jest) where import.meta syntax is invalid.

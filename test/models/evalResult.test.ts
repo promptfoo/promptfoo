@@ -13,6 +13,7 @@ import {
 import { createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
+import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -101,6 +102,29 @@ describe('EvalResult', () => {
         },
         metadata: {
           environment: 'staging',
+        },
+      });
+    });
+
+    it('should handle circular provider metadata', () => {
+      const metadata: Record<string, unknown> = {
+        owner: 'evals',
+      };
+      metadata.self = metadata;
+
+      const providerOptions: ProviderOptions = {
+        id: 'test-provider',
+        metadata,
+      };
+
+      const result = sanitizeProvider(providerOptions);
+
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: undefined,
+        metadata: {
+          owner: 'evals',
+          self: '[Circular]',
         },
       });
     });
@@ -866,6 +890,172 @@ describe('EvalResult', () => {
           },
         }),
       );
+    });
+
+    it('should preserve the original response object when response stripping is disabled', () => {
+      const response = {
+        output: 'provider output',
+        metadata: {
+          transformedRequest: {
+            headers: {
+              Authorization: 'Bearer nested-secret',
+            },
+          },
+        },
+      };
+
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response,
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().response).toBe(response);
+    });
+
+    it('should strip nested provider response metadata when metadata stripping is enabled', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+
+      try {
+        const result = new EvalResult({
+          id: 'test-id',
+          evalId: 'test-eval-id',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: mockTestCase,
+          prompt: mockPrompt,
+          success: true,
+          score: 1,
+          response: {
+            output: 'provider output',
+            latencyMs: 42,
+            metadata: {
+              transformedRequest: {
+                headers: {
+                  Authorization: 'Bearer nested-secret',
+                },
+              },
+            },
+          },
+          gradingResult: null,
+          provider: mockProvider,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
+
+        const evaluateResult = result.toEvaluateResult();
+
+        expect(evaluateResult.metadata).toEqual({});
+        expect(evaluateResult.response).toEqual({
+          output: 'provider output',
+          latencyMs: 42,
+        });
+        expect(JSON.stringify(evaluateResult)).not.toContain('nested-secret');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should strip nested test-case metadata when metadata stripping is enabled', () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_METADATA: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
+
+      try {
+        const result = new EvalResult({
+          id: 'test-id',
+          evalId: 'test-eval-id',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            ...mockTestCase,
+            vars: {
+              customerEmail: 'secret@example.com',
+            },
+            metadata: {
+              goal: 'goal testcase-secret',
+              pluginConfig: {
+                policy: 'policy testcase-secret',
+              },
+              inputMaterialization: {
+                source: 'source testcase-secret',
+              },
+            },
+          },
+          prompt: mockPrompt,
+          success: true,
+          score: 1,
+          response: {
+            output: 'provider output',
+          },
+          gradingResult: null,
+          provider: mockProvider,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
+
+        const evaluateResult = result.toEvaluateResult();
+
+        expect(evaluateResult.metadata).toEqual({});
+        expect(evaluateResult.testCase).not.toHaveProperty('metadata');
+        expect(evaluateResult.testCase.vars).toBeUndefined();
+        expect(JSON.stringify(evaluateResult)).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should strip provider metadata when metadata stripping is enabled', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+
+      try {
+        const result = new EvalResult({
+          id: 'test-id',
+          evalId: 'test-eval-id',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: mockTestCase,
+          prompt: mockPrompt,
+          success: true,
+          score: 1,
+          response: {
+            output: 'provider output',
+          },
+          gradingResult: null,
+          provider: {
+            ...mockProvider,
+            metadata: {
+              tenant: 'provider-secret',
+            },
+          },
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+        });
+
+        expect(result.toEvaluateResult().provider).toEqual({
+          id: 'test-provider',
+          label: 'Test Provider',
+        });
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
