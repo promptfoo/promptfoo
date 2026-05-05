@@ -12,6 +12,7 @@ import {
   CommandLineOptionsSchema,
   GradingConfigSchema,
   isGradingResult,
+  MAX_SUGGESTIONS_COUNT,
   OutputConfigSchema,
   TestCaseSchema,
   TestSuiteConfigSchema,
@@ -700,6 +701,37 @@ describe('CommandLineOptionsSchema', () => {
     expect(() => CommandLineOptionsSchema.parse({ ...baseOptions, filterRange: ':' })).toThrow(
       '--filter-range must be specified in start:end format using zero-based indices, got: :',
     );
+  });
+});
+
+describe('CommandLineOptionsSchema suggestionsCount', () => {
+  const baseOptions = { providers: ['p'], output: ['o'] };
+
+  it('coerces string CLI input', () => {
+    expect(CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: '5' })).toMatchObject(
+      { suggestionsCount: 5 },
+    );
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['above max', MAX_SUGGESTIONS_COUNT + 1],
+    ['non-integer', 1.5],
+    ['NaN string', 'abc'],
+  ])('rejects %s (%s)', (_label, value) => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: value }),
+    ).toThrow();
+  });
+
+  it('accepts the boundary values', () => {
+    expect(CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: 1 })).toMatchObject({
+      suggestionsCount: 1,
+    });
+    expect(
+      CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: MAX_SUGGESTIONS_COUNT }),
+    ).toMatchObject({ suggestionsCount: MAX_SUGGESTIONS_COUNT });
   });
 });
 

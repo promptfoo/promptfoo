@@ -1790,10 +1790,21 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
     return true;
   }
 
+  const requestedCount = options.suggestionsCount ?? 1;
   logger.info(`Generating prompt variations...`);
-  const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0].raw, 1);
+  const { prompts: newPrompts, error } = await generatePrompts(
+    testSuite.prompts[0].raw,
+    requestedCount,
+  );
   if (error || !newPrompts) {
     throw new Error(`Failed to generate prompts: ${error}`);
+  }
+  if (newPrompts.length < requestedCount) {
+    logger.warn(
+      chalk.yellow(
+        `Only ${newPrompts.length} of ${requestedCount} requested prompt variants were generated. See warnings above for details.`,
+      ),
+    );
   }
 
   logger.info(chalk.blue('Generated prompts:'));

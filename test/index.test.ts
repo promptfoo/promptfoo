@@ -86,6 +86,7 @@ describe('index.ts exports', () => {
   const expectedNamedExports = [
     'ConfigResolutionError',
     'EmailValidationError',
+    'MAX_SUGGESTIONS_COUNT',
     'assertions',
     'buildInputPromptDescription',
     'cache',
