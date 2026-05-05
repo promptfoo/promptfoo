@@ -66,9 +66,7 @@ class TracerProviderTests(unittest.TestCase):
         self.assertIs(first, second)
         # No additional processor stacked on the original provider.
         self.assertEqual(len(first._active_span_processor._span_processors), 1)
-        self.assertTrue(
-            any("ignoring request to switch" in m for m in captured.output)
-        )
+        self.assertTrue(any("ignoring request to switch" in m for m in captured.output))
 
 
 if __name__ == "__main__":
