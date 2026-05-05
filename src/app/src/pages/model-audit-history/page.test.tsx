@@ -5,6 +5,8 @@ import ModelAuditHistoryPage from './page';
 
 // Mock the stores used by ModelAuditHistory
 vi.mock('../model-audit/stores', () => ({
+  useModelAuditConfigStore: (selector: (state: { startNewScan: () => void }) => unknown) =>
+    selector({ startNewScan: vi.fn() }),
   useModelAuditHistoryStore: () => ({
     historicalScans: [],
     isLoadingHistory: false,

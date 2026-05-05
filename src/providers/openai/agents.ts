@@ -271,8 +271,8 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
    * Calculate cost from agent result
    */
   private calculateCost(_result: any): number | undefined {
-    // Cost calculation would depend on the model and usage
-    // For now, return undefined as we don't have pricing info
+    // The Agents SDK exposes aggregate usage, but a run can include handoffs to
+    // agents with different models. Without per-model usage, no exact total is available.
     return undefined;
   }
 

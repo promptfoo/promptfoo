@@ -41,7 +41,7 @@
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
-    "build": "concurrently -g --kill-others-on-fail \"tsc --noEmit\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
+    "build": "concurrently -g --kill-others-on-fail \"npm run tsc\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
     "postbuild": "tsx scripts/postbuild.ts",
     "citation:generate": "tsx scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
@@ -83,7 +83,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app",
     "test:coverage:ratchet": "node --import tsx ./scripts/checkCoverageRatchets.ts",
-    "tsc": "tsc",
+    "check:typescript-coverage": "tsx scripts/checkTypeScriptCoverage.ts",
+    "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium\" --ignore-dirs=\"dist,site,examples\"",
     "prepare": "husky || exit 0"
@@ -119,7 +120,7 @@
       "express": "^4.22.1"
     },
     "@anthropic-ai/claude-agent-sdk": {
-      "@anthropic-ai/sdk": "^0.91.1"
+      "@anthropic-ai/sdk": "^0.92.0"
     },
     "@isaacs/brace-expansion": ">=5.0.1",
     "fast-xml-parser": "$fast-xml-parser",
@@ -127,7 +128,7 @@
     "vite": "^8.0.5",
     "lodash-es": "^4.18.1",
     "langium": {
-      ".": "4.2.2",
+      ".": "4.2.3",
       "@chevrotain/regexp-to-ast": "11.2.0",
       "chevrotain": "11.2.0",
       "chevrotain-allstar": "0.4.1"
@@ -150,19 +151,19 @@
       "chevrotain": "11.2.0"
     },
     "webpack": "5.106.2",
-    "dompurify": "3.4.1",
+    "dompurify": "3.4.2",
     "monaco-editor": {
       ".": "0.55.1",
-      "dompurify": "3.4.1"
+      "dompurify": "3.4.2"
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.123",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.126",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
-    "@aws-sdk/client-bedrock-agent-runtime": "^3.1036.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.1036.0",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.1040.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1040.0",
     "@aws-sdk/client-s3": "^3.1003.0",
-    "@aws-sdk/client-sagemaker-runtime": "^3.1036.0",
+    "@aws-sdk/client-sagemaker-runtime": "^3.1040.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
@@ -197,7 +198,7 @@
     "ibm-cloud-sdk-core": "^5.4.11",
     "knip": "^6.0.0",
     "langfuse": "^3.38.20",
-    "langium": "4.2.2",
+    "langium": "4.2.3",
     "nock": "^14.0.11",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
@@ -216,11 +217,11 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.123",
-    "@aws-sdk/client-bedrock-agent-runtime": "^3.1036.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.1036.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.126",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.1040.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1040.0",
     "@aws-sdk/client-s3": "^3.1003.0",
-    "@aws-sdk/client-sagemaker-runtime": "^3.1036.0",
+    "@aws-sdk/client-sagemaker-runtime": "^3.1040.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@azure/ai-projects": "^2.1.0",
     "@azure/identity": "^4.13.0",
@@ -230,7 +231,7 @@
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.11",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.125.0",
+    "@openai/codex-sdk": "^0.128.0",
     "@playwright/browser-chromium": "^1.59.1",
     "@rollup/rollup-linux-x64-gnu": "^4.59.0",
     "@slack/web-api": "^7.15.0",
@@ -254,7 +255,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "^0.92.0",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.1.0",
@@ -265,10 +266,10 @@
     "@inquirer/select": "^5.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/agents": "^0.8.5",
-    "@opencode-ai/sdk": "^1.14.22",
+    "@opencode-ai/sdk": "^1.14.33",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.6.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.216.0",
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
@@ -315,7 +316,7 @@
     "mathjs": "^15.1.1",
     "minimatch": "^10.2.4",
     "nunjucks": "^3.2.4",
-    "openai": "^6.34.0",
+    "openai": "^6.35.0",
     "opener": "^1.5.2",
     "ora": "^9.3.0",
     "parse5": "^8.0.0",

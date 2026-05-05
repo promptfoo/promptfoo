@@ -695,6 +695,7 @@ describe('OpenAiAgentsProvider', () => {
       prompt: 0,
       completion: 0,
     });
+    expect(result.cost).toBeUndefined();
   });
 
   it('preserves an explicit maxTurns value of 0 in run options', async () => {
