@@ -8,7 +8,7 @@
 
 > **isCacheEnabled**(): `boolean`
 
-Defined in: [cache.ts:678](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L678)
+Defined in: [cache.ts:701](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L701)
 
 Return whether the shared promptfoo cache is enabled.
 

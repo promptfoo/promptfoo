@@ -6,7 +6,7 @@
 
 # Interface: ProviderOptions
 
-Defined in: [types/providers.ts:84](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L84)
+Defined in: [types/providers.ts:73](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L73)
 
 Declarative provider configuration accepted by provider-loading APIs.
 
@@ -16,9 +16,13 @@ Declarative provider configuration accepted by provider-loading APIs.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:90](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L90)
+Defined in: [types/providers.ts:86](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L86)
 
-Provider-specific configuration passed to the provider factory.
+Provider-specific configuration passed to the provider factory. Each
+built-in provider documents its own config shape; for custom providers
+this is whatever the provider implementation expects. Typed as `any`
+because the resolved shape is provider-specific and is narrowed inside
+the provider implementation.
 
 ---
 
@@ -26,7 +30,7 @@ Provider-specific configuration passed to the provider factory.
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:96](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L96)
+Defined in: [types/providers.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L92)
 
 Delay in milliseconds before provider calls.
 
@@ -36,7 +40,7 @@ Delay in milliseconds before provider calls.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/providers.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L98)
+Defined in: [types/providers.ts:94](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L94)
 
 Environment overrides available while loading and calling the provider.
 
@@ -46,7 +50,7 @@ Environment overrides available while loading and calling the provider.
 
 > `optional` **id?**: `string`
 
-Defined in: [types/providers.ts:86](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L86)
+Defined in: [types/providers.ts:75](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L75)
 
 Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
@@ -56,7 +60,7 @@ Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L100)
+Defined in: [types/providers.ts:96](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L96)
 
 Declared named inputs accepted by the provider.
 
@@ -66,7 +70,7 @@ Declared named inputs accepted by the provider.
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:88](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L88)
+Defined in: [types/providers.ts:77](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L77)
 
 Human-readable label used in reports and provider maps.
 
@@ -76,7 +80,7 @@ Human-readable label used in reports and provider maps.
 
 > `optional` **prompts?**: `string`[]
 
-Defined in: [types/providers.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L92)
+Defined in: [types/providers.ts:88](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L88)
 
 Restrict this provider to named prompts.
 
@@ -86,6 +90,6 @@ Restrict this provider to named prompts.
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:94](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L94)
+Defined in: [types/providers.ts:90](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L90)
 
 Transform provider output before assertions run.

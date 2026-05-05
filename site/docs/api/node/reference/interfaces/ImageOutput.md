@@ -6,7 +6,7 @@
 
 # Interface: ImageOutput
 
-Defined in: [types/providers.ts:285](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L285)
+Defined in: [types/providers.ts:296](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L296)
 
 Image attachment returned by providers that produce images.
 
@@ -16,7 +16,7 @@ Image attachment returned by providers that produce images.
 
 > `optional` **blobRef?**: `BlobRef`
 
-Defined in: [types/providers.ts:289](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L289)
+Defined in: [types/providers.ts:300](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L300)
 
 External blob reference when image data is stored outside the result row.
 
@@ -26,7 +26,7 @@ External blob reference when image data is stored outside the result row.
 
 > `optional` **data?**: `string`
 
-Defined in: [types/providers.ts:287](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L287)
+Defined in: [types/providers.ts:298](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L298)
 
 Inline data URI or base64 payload.
 
@@ -36,6 +36,6 @@ Inline data URI or base64 payload.
 
 > `optional` **mimeType?**: `string`
 
-Defined in: [types/providers.ts:291](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L291)
+Defined in: [types/providers.ts:302](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L302)
 
 MIME type such as `image/png`.

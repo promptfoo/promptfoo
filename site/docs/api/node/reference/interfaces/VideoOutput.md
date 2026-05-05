@@ -6,7 +6,7 @@
 
 # Interface: VideoOutput
 
-Defined in: [types/providers.ts:253](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L253)
+Defined in: [types/providers.ts:264](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L264)
 
 Video attachment returned by providers that produce video.
 
@@ -16,7 +16,7 @@ Video attachment returned by providers that produce video.
 
 > `optional` **aspectRatio?**: `string`
 
-Defined in: [types/providers.ts:275](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L275)
+Defined in: [types/providers.ts:286](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L286)
 
 Aspect ratio such as `16:9`.
 
@@ -26,7 +26,7 @@ Aspect ratio such as `16:9`.
 
 > `optional` **blobRef?**: `BlobRef`
 
-Defined in: [types/providers.ts:257](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L257)
+Defined in: [types/providers.ts:268](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L268)
 
 External blob reference for video data.
 
@@ -36,7 +36,7 @@ External blob reference for video data.
 
 > `optional` **duration?**: `number`
 
-Defined in: [types/providers.ts:267](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L267)
+Defined in: [types/providers.ts:278](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L278)
 
 Video duration in seconds.
 
@@ -46,7 +46,7 @@ Video duration in seconds.
 
 > `optional` **format?**: `string`
 
-Defined in: [types/providers.ts:263](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L263)
+Defined in: [types/providers.ts:274](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L274)
 
 Container or codec name such as `mp4`.
 
@@ -56,7 +56,7 @@ Container or codec name such as `mp4`.
 
 > `optional` **id?**: `string`
 
-Defined in: [types/providers.ts:255](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L255)
+Defined in: [types/providers.ts:266](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L266)
 
 Provider video id, such as a job or operation identifier.
 
@@ -66,7 +66,7 @@ Provider video id, such as a job or operation identifier.
 
 > `optional` **model?**: `string`
 
-Defined in: [types/providers.ts:273](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L273)
+Defined in: [types/providers.ts:284](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L284)
 
 Model that produced the video.
 
@@ -76,7 +76,7 @@ Model that produced the video.
 
 > `optional` **resolution?**: `string`
 
-Defined in: [types/providers.ts:277](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L277)
+Defined in: [types/providers.ts:288](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L288)
 
 Resolution tier such as `720p` or `1080p`.
 
@@ -86,7 +86,7 @@ Resolution tier such as `720p` or `1080p`.
 
 > `optional` **size?**: `string`
 
-Defined in: [types/providers.ts:265](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L265)
+Defined in: [types/providers.ts:276](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L276)
 
 Provider-reported output dimensions, for example `1280x720`.
 
@@ -96,7 +96,7 @@ Provider-reported output dimensions, for example `1280x720`.
 
 > `optional` **spritesheet?**: `string`
 
-Defined in: [types/providers.ts:271](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L271)
+Defined in: [types/providers.ts:282](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L282)
 
 URL or storage URI for a provider-generated spritesheet.
 
@@ -106,7 +106,7 @@ URL or storage URI for a provider-generated spritesheet.
 
 > `optional` **storageRef?**: `object`
 
-Defined in: [types/providers.ts:259](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L259)
+Defined in: [types/providers.ts:270](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L270)
 
 Storage reference used by providers that persist generated media.
 
@@ -120,7 +120,7 @@ Storage reference used by providers that persist generated media.
 
 > `optional` **thumbnail?**: `string`
 
-Defined in: [types/providers.ts:269](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L269)
+Defined in: [types/providers.ts:280](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L280)
 
 URL or storage URI for a representative thumbnail.
 
@@ -130,6 +130,6 @@ URL or storage URI for a representative thumbnail.
 
 > `optional` **url?**: `string`
 
-Defined in: [types/providers.ts:261](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L261)
+Defined in: [types/providers.ts:272](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L272)
 
 URL or storage URI for the generated video.

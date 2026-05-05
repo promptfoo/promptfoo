@@ -44,8 +44,8 @@ import type {
 | Run an eval                 | [`evaluate()`](/docs/api/node/reference/functions/evaluate)                                                      |
 | Build one provider          | [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)                                        |
 | Build one or many providers | [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)                                      |
-| Run one assertion           | [`assertions.runAssertion()`](/docs/api/node/reference/variables/assertions)                                     |
-| Run assertion sets          | [`assertions.runAssertions()`](/docs/api/node/reference/variables/assertions)                                    |
+| Run one assertion           | [`assertions.runAssertion()`](/docs/api/node/reference/variables/assertions#runassertion)                        |
+| Run assertion sets          | [`assertions.runAssertions()`](/docs/api/node/reference/variables/assertions#runassertions)                      |
 | Disable cache for one eval  | `evaluate(testSuite, { cache: false })`                                                                          |
 | Isolate cached work         | [`cache.withCacheNamespace()`](/docs/api/node/reference/promptfoo/namespaces/cache/functions/withCacheNamespace) |
 | Render a table              | [`generateTable()`](/docs/api/node/reference/functions/generateTable)                                            |
@@ -114,7 +114,7 @@ await cache.withCacheNamespace('candidate', () => evaluate(testSuite));
 ```
 
 ```ts
-const text = generateTable(evalRecord.table);
+const text = generateTable(await evalRecord.getTable());
 ```
 
 ## Where to go next

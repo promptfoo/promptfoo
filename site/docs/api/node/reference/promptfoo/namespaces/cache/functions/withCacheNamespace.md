@@ -8,7 +8,7 @@
 
 > **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
 
-Defined in: [cache.ts:221](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L221)
+Defined in: [cache.ts:228](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L228)
 
 Run an async operation inside an isolated cache namespace.
 
@@ -38,5 +38,8 @@ cached responses, such as baseline and candidate comparisons.
 ## Example
 
 ```ts
-const baseline = await withCacheNamespace('baseline', () => evaluate(testSuite));
+import { cache, evaluate } from 'promptfoo';
+
+const baseline = await cache.withCacheNamespace('baseline', () => evaluate(baselineSuite));
+const candidate = await cache.withCacheNamespace('candidate', () => evaluate(candidateSuite));
 ```

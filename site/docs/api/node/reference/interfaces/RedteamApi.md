@@ -6,7 +6,7 @@
 
 # Interface: RedteamApi
 
-Defined in: [index.ts:442](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L442)
+Defined in: [index.ts:451](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L451)
 
 **`Beta`**
 
@@ -21,7 +21,7 @@ flows unless you specifically need programmatic orchestration.
 
 > **Base**: `object`
 
-Defined in: [index.ts:456](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L456)
+Defined in: [index.ts:465](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L465)
 
 **`Beta`**
 
@@ -41,7 +41,7 @@ Base classes for advanced extension points.
 
 > **Extractors**: `object`
 
-Defined in: [index.ts:444](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L444)
+Defined in: [index.ts:453](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L453)
 
 **`Beta`**
 
@@ -105,7 +105,7 @@ Extract tools information from MCP providers and format for red team purpose
 
 > **Graders**: `Record`\<`` `promptfoo:redteam:${string}` ``, `RedteamGraderBase`\>
 
-Defined in: [index.ts:450](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L450)
+Defined in: [index.ts:459](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L459)
 
 **`Beta`**
 
@@ -117,7 +117,7 @@ Registered red team graders.
 
 > **Plugins**: `PluginFactory`[]
 
-Defined in: [index.ts:452](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L452)
+Defined in: [index.ts:461](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L461)
 
 **`Beta`**
 
@@ -129,7 +129,7 @@ Built-in red team plugins.
 
 > **Strategies**: `Strategy`[]
 
-Defined in: [index.ts:454](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L454)
+Defined in: [index.ts:463](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L463)
 
 **`Beta`**
 
@@ -141,7 +141,7 @@ Built-in red team strategies.
 
 > **generate**(`options`): `Promise`\<[`RedteamGenerateResult`](../type-aliases/RedteamGenerateResult.md)\>
 
-Defined in: [index.ts:461](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L461)
+Defined in: [index.ts:470](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L470)
 
 **`Beta`**
 
@@ -161,9 +161,9 @@ Generate a red team config programmatically.
 
 ### run()
 
-> **run**(`options`): `Promise`\<`Eval` \| `undefined`\>
+> **run**(`options`): `Promise`\<[`RedteamRunResult`](../type-aliases/RedteamRunResult.md)\>
 
-Defined in: [index.ts:463](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L463)
+Defined in: [index.ts:472](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L472)
 
 **`Beta`**
 
@@ -177,4 +177,4 @@ Run a red team eval programmatically.
 
 #### Returns
 
-`Promise`\<`Eval` \| `undefined`\>
+`Promise`\<[`RedteamRunResult`](../type-aliases/RedteamRunResult.md)\>

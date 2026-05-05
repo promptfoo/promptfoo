@@ -80,7 +80,7 @@ const evalRecord = await evaluate(
 
 Use [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)
 when you need to construct a provider once and pass it into another API. Use the
-[`ProviderFunction`](/docs/api/node/reference/type-aliases/ProviderFunction)
+[`ProviderFunction`](/docs/api/node/reference/type-aliases/ProviderFunction),
 [`CallApiFunction`](/docs/api/node/reference/interfaces/CallApiFunction), and
 [`ProviderResponse`](/docs/api/node/reference/interfaces/ProviderResponse)
 reference pages when implementing your own provider. Use
@@ -90,9 +90,10 @@ instances for you.
 
 For assertions, start with the task-oriented
 [assertions documentation](/docs/configuration/expected-outputs/). Drop to
-[`assertions.runAssertion()`](/docs/api/node/reference/variables/assertions)
-or `assertions.runAssertions()` when you already have a provider response and
-want to reuse promptfoo grading outside a full eval run.
+[`assertions.runAssertion()`](/docs/api/node/reference/variables/assertions#runassertion)
+or [`assertions.runAssertions()`](/docs/api/node/reference/variables/assertions#runassertions)
+when you already have a provider response and want to reuse promptfoo grading
+outside a full eval run.
 
 ## Stable and beta surfaces
 

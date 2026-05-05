@@ -18,7 +18,7 @@ Runtime options accepted by `redteam.run()`.
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: [redteam/types.ts:357](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L357)
+Defined in: [redteam/types.ts:364](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L364)
 
 **`Beta`**
 
@@ -150,11 +150,12 @@ Stable eval id to reuse or attach to the run.
 
 > `optional` **liveRedteamConfig?**: `any`
 
-Defined in: [redteam/types.ts:345](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L345)
+Defined in: [redteam/types.ts:349](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L349)
 
 **`Beta`**
 
-Live config payload used by the web UI flow.
+Live config payload used by the web UI flow. The payload is opaque to the
+Node.js API and is forwarded to the run unchanged.
 
 ---
 
@@ -162,7 +163,7 @@ Live config payload used by the web UI flow.
 
 > `optional` **loadedFromCloud?**: `boolean`
 
-Defined in: [redteam/types.ts:360](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L360)
+Defined in: [redteam/types.ts:367](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L367)
 
 **`Beta`**
 
@@ -174,7 +175,7 @@ Whether the config originated from Promptfoo Cloud.
 
 > `optional` **logCallback?**: (`message`) => `void`
 
-Defined in: [redteam/types.ts:347](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L347)
+Defined in: [redteam/types.ts:351](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L351)
 
 **`Beta`**
 
@@ -232,11 +233,12 @@ Whether to render a progress bar.
 
 > `optional` **progressCallback?**: (`completed`, `total`, `index`, `evalStep`, `metrics`) => `void`
 
-Defined in: [redteam/types.ts:349](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L349)
+Defined in: [redteam/types.ts:356](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L356)
 
 **`Beta`**
 
-Callback invoked as red team results complete.
+Callback invoked as red team results complete. `evalStep` and `metrics`
+mirror the [EvaluateOptions.progressCallback](EvaluateOptions.md#progresscallback) arguments.
 
 #### Parameters
 
@@ -254,11 +256,169 @@ Callback invoked as red team results complete.
 
 ##### evalStep
 
-`any`
+`RunEvalOptions`
 
 ##### metrics
 
-`any`
+###### assertFailCount
+
+`number` = `...`
+
+###### assertPassCount
+
+`number` = `...`
+
+###### cost
+
+`number` = `...`
+
+###### namedScores
+
+`Record`\<`string`, `number`\> = `...`
+
+###### namedScoresCount
+
+`Record`\<`string`, `number`\> = `...`
+
+###### namedScoreWeights?
+
+`Record`\<`string`, `number`\> = `...`
+
+###### redteam?
+
+\{ `pluginFailCount`: `Record`\<`string`, `number`\>; `pluginPassCount`: `Record`\<`string`, `number`\>; `strategyFailCount`: `Record`\<`string`, `number`\>; `strategyPassCount`: `Record`\<`string`, `number`\>; \} = `...`
+
+###### redteam.pluginFailCount
+
+`Record`\<`string`, `number`\> = `...`
+
+###### redteam.pluginPassCount
+
+`Record`\<`string`, `number`\> = `...`
+
+###### redteam.strategyFailCount
+
+`Record`\<`string`, `number`\> = `...`
+
+###### redteam.strategyPassCount
+
+`Record`\<`string`, `number`\> = `...`
+
+###### score
+
+`number` = `...`
+
+###### testErrorCount
+
+`number` = `...`
+
+###### testFailCount
+
+`number` = `...`
+
+###### testPassCount
+
+`number` = `...`
+
+###### tokenUsage
+
+\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \} = `BaseTokenUsageSchema`
+
+###### tokenUsage.assertions?
+
+\{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \} = `...`
+
+###### tokenUsage.assertions.cached?
+
+`number` = `...`
+
+###### tokenUsage.assertions.completion?
+
+`number` = `...`
+
+###### tokenUsage.assertions.completionDetails?
+
+\{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \} = `...`
+
+###### tokenUsage.assertions.completionDetails.acceptedPrediction?
+
+`number` = `...`
+
+###### tokenUsage.assertions.completionDetails.cacheCreationInputTokens?
+
+`number` = `...`
+
+###### tokenUsage.assertions.completionDetails.cacheReadInputTokens?
+
+`number` = `...`
+
+###### tokenUsage.assertions.completionDetails.reasoning?
+
+`number` = `...`
+
+###### tokenUsage.assertions.completionDetails.rejectedPrediction?
+
+`number` = `...`
+
+###### tokenUsage.assertions.numRequests?
+
+`number` = `...`
+
+###### tokenUsage.assertions.prompt?
+
+`number` = `...`
+
+###### tokenUsage.assertions.total?
+
+`number` = `...`
+
+###### tokenUsage.cached?
+
+`number` = `...`
+
+###### tokenUsage.completion?
+
+`number` = `...`
+
+###### tokenUsage.completionDetails?
+
+\{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \} = `...`
+
+###### tokenUsage.completionDetails.acceptedPrediction?
+
+`number` = `...`
+
+###### tokenUsage.completionDetails.cacheCreationInputTokens?
+
+`number` = `...`
+
+###### tokenUsage.completionDetails.cacheReadInputTokens?
+
+`number` = `...`
+
+###### tokenUsage.completionDetails.reasoning?
+
+`number` = `...`
+
+###### tokenUsage.completionDetails.rejectedPrediction?
+
+`number` = `...`
+
+###### tokenUsage.numRequests?
+
+`number` = `...`
+
+###### tokenUsage.prompt?
+
+`number` = `...`
+
+###### tokenUsage.total?
+
+`number` = `...`
+
+###### totalLatencyMs
+
+`number` = `...`
 
 #### Returns
 

@@ -8,7 +8,7 @@
 
 > **clearCache**(): `Promise`\<`boolean`\>
 
-Defined in: [cache.ts:667](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L667)
+Defined in: [cache.ts:690](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L690)
 
 Clear the shared promptfoo cache.
 

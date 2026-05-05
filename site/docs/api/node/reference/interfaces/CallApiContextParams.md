@@ -6,7 +6,7 @@
 
 # Interface: CallApiContextParams
 
-Defined in: [types/providers.ts:108](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L108)
+Defined in: [types/providers.ts:104](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L104)
 
 Runtime context passed to custom provider functions.
 
@@ -16,7 +16,7 @@ Runtime context passed to custom provider functions.
 
 > `optional` **bustCache?**: `boolean`
 
-Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L126)
+Defined in: [types/providers.ts:127](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L127)
 
 Whether this call should bypass reusable response cache entries.
 
@@ -26,7 +26,7 @@ Whether this call should bypass reusable response cache entries.
 
 > `optional` **debug?**: `boolean`
 
-Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L122)
+Defined in: [types/providers.ts:123](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L123)
 
 Whether the caller requested debug behavior.
 
@@ -36,7 +36,7 @@ Whether the caller requested debug behavior.
 
 > `optional` **evaluationId?**: `string`
 
-Defined in: [types/providers.ts:134](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L134)
+Defined in: [types/providers.ts:135](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L135)
 
 Eval identifier for manual correlation across provider calls.
 
@@ -46,7 +46,7 @@ Eval identifier for manual correlation across provider calls.
 
 > `optional` **filters?**: `NunjucksFilterMap`
 
-Defined in: [types/providers.ts:110](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L110)
+Defined in: [types/providers.ts:106](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L106)
 
 Nunjucks filters available while rendering related prompt content.
 
@@ -54,11 +54,17 @@ Nunjucks filters available while rendering related prompt content.
 
 ### getCache?
 
-> `optional` **getCache?**: `any`
+> `optional` **getCache?**: () => `any`
 
-Defined in: [types/providers.ts:112](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L112)
+Defined in: [types/providers.ts:113](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L113)
 
-Accessor for the active cache instance.
+Accessor for the active cache instance. Treat the return value as opaque
+and prefer the documented `cache.*` helpers from the package over calling
+it directly.
+
+#### Returns
+
+`any`
 
 ---
 
@@ -66,7 +72,7 @@ Accessor for the active cache instance.
 
 > `optional` **logger?**: `Logger`
 
-Defined in: [types/providers.ts:114](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L114)
+Defined in: [types/providers.ts:115](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L115)
 
 Logger configured for the current eval.
 
@@ -76,7 +82,7 @@ Logger configured for the current eval.
 
 > `optional` **originalProvider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:116](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L116)
+Defined in: [types/providers.ts:117](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L117)
 
 Original provider when this call is being graded or wrapped.
 
@@ -86,7 +92,7 @@ Original provider when this call is being graded or wrapped.
 
 > **prompt**: `Prompt`
 
-Defined in: [types/providers.ts:118](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L118)
+Defined in: [types/providers.ts:119](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L119)
 
 Prompt object for the current provider call.
 
@@ -96,7 +102,7 @@ Prompt object for the current provider call.
 
 > `optional` **promptIdx?**: `number`
 
-Defined in: [types/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L146)
+Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
 
 Index of the prompt within the current evaluation (column in results table).
 Used for correlating blob references and other per-result metadata.
@@ -107,7 +113,7 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **repeatIndex?**: `number`
 
-Defined in: [types/providers.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L148)
+Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L149)
 
 Zero-based repeat index when the same test case is executed repeatedly.
 
@@ -115,11 +121,491 @@ Zero-based repeat index when the same test case is executed repeatedly.
 
 ### test?
 
-> `optional` **test?**: `AtomicTestCase`
+> `optional` **test?**: `object`
 
-Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L124)
+Defined in: [types/providers.ts:125](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L125)
 
 Test case currently being executed, when available to the caller.
+
+#### assert?
+
+> `optional` **assert?**: (\{ `config?`: `Record`\<`string`, `any`\>; `contextTransform?`: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md); `metric?`: `string`; `provider?`: `any`; `rubricPrompt?`: `string` \| `string`[] \| `object`[]; `threshold?`: `number`; `transform?`: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md); `type`: `"regex"` \| `"moderation"` \| `"answer-relevance"` \| `"bleu"` \| `"classifier"` \| `"contains"` \| `"contains-all"` \| `"contains-any"` \| `"contains-html"` \| `"contains-json"` \| `"contains-sql"` \| `"contains-xml"` \| `"context-faithfulness"` \| `"context-recall"` \| `"context-relevance"` \| `"conversation-relevance"` \| `"cost"` \| `"equals"` \| `"factuality"` \| `"finish-reason"` \| `"g-eval"` \| `"gleu"` \| `"guardrails"` \| `"icontains"` \| `"icontains-all"` \| `"icontains-any"` \| `"is-html"` \| `"is-json"` \| `"is-refusal"` \| `"is-sql"` \| `"is-valid-function-call"` \| `"is-valid-openai-function-call"` \| `"is-valid-openai-tools-call"` \| `"is-xml"` \| `"javascript"` \| `"latency"` \| `"levenshtein"` \| `"llm-rubric"` \| `"pi"` \| `"meteor"` \| `"model-graded-closedqa"` \| `"model-graded-factuality"` \| `"perplexity"` \| `"perplexity-score"` \| `"python"` \| `"rouge-n"` \| `"ruby"` \| `"similar"` \| `"similar:cosine"` \| `"similar:dot"` \| `"similar:euclidean"` \| `"starts-with"` \| `"tool-call-f1"` \| `"skill-used"` \| `"trajectory:goal-success"` \| `"trajectory:tool-args-match"` \| `"trajectory:step-count"` \| `"trajectory:tool-sequence"` \| `"trajectory:tool-used"` \| `"trace-error-spans"` \| `"trace-span-count"` \| `"trace-span-duration"` \| `"search-rubric"` \| `"webhook"` \| `"word-count"` \| `"not-regex"` \| `"not-moderation"` \| `"not-answer-relevance"` \| `"not-bleu"` \| `"not-classifier"` \| `"not-contains"` \| `"not-contains-all"` \| `"not-contains-any"` \| `"not-contains-html"` \| `"not-contains-json"` \| `"not-contains-sql"` \| `"not-contains-xml"` \| `"not-context-faithfulness"` \| `"not-context-recall"` \| `"not-context-relevance"` \| `"not-conversation-relevance"` \| `"not-cost"` \| `"not-equals"` \| `"not-factuality"` \| `"not-finish-reason"` \| `"not-g-eval"` \| `"not-gleu"` \| `"not-guardrails"` \| `"not-icontains"` \| `"not-icontains-all"` \| `"not-icontains-any"` \| `"not-is-html"` \| `"not-is-json"` \| `"not-is-refusal"` \| `"not-is-sql"` \| `"not-is-valid-function-call"` \| `"not-is-valid-openai-function-call"` \| `"not-is-valid-openai-tools-call"` \| `"not-is-xml"` \| `"not-javascript"` \| `"not-latency"` \| `"not-levenshtein"` \| `"not-llm-rubric"` \| `"not-pi"` \| `"not-meteor"` \| `"not-model-graded-closedqa"` \| `"not-model-graded-factuality"` \| `"not-perplexity"` \| `"not-perplexity-score"` \| `"not-python"` \| `"not-rouge-n"` \| `"not-ruby"` \| `"not-similar"` \| `"not-similar:cosine"` \| `"not-similar:dot"` \| `"not-similar:euclidean"` \| `"not-starts-with"` \| `"not-tool-call-f1"` \| `"not-skill-used"` \| `"not-trajectory:goal-success"` \| `"not-trajectory:tool-args-match"` \| `"not-trajectory:step-count"` \| `"not-trajectory:tool-sequence"` \| `"not-trajectory:tool-used"` \| `"not-trace-error-spans"` \| `"not-trace-span-count"` \| `"not-trace-span-duration"` \| `"not-search-rubric"` \| `"not-webhook"` \| `"not-word-count"` \| `"select-best"` \| `"human"` \| `"max-score"` \| `` `promptfoo:redteam:${string}` ``; `value?`: `AssertionValue`; `weight?`: `number`; \} \| \{ `assert`: `object`[]; `config?`: `Record`\<`string`, `any`\>; `metric?`: `string`; `threshold?`: `number`; `type`: `"assert-set"`; `weight?`: `number`; \})[]
+
+#### assertScoringFunction?
+
+> `optional` **assertScoringFunction?**: `string` \| `ScoringFunction`
+
+#### description?
+
+> `optional` **description?**: `string`
+
+#### metadata?
+
+> `optional` **metadata?**: `object`
+
+##### Index Signature
+
+\[`key`: `string`\]: `any`
+
+##### metadata.pluginConfig?
+
+> `optional` **pluginConfig?**: `object`
+
+##### metadata.pluginConfig.\_\_nonce?
+
+> `optional` **\_\_nonce?**: `number`
+
+##### metadata.pluginConfig.examples?
+
+> `optional` **examples?**: `string`[]
+
+##### metadata.pluginConfig.excludeStrategies?
+
+> `optional` **excludeStrategies?**: `string`[]
+
+##### metadata.pluginConfig.graderExamples?
+
+> `optional` **graderExamples?**: `object`[]
+
+##### metadata.pluginConfig.graderGuidance?
+
+> `optional` **graderGuidance?**: `string`
+
+##### metadata.pluginConfig.indirectInjectionVar?
+
+> `optional` **indirectInjectionVar?**: `string`
+
+##### metadata.pluginConfig.inputs?
+
+> `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: ... \| ...; `description`: `string`; `type?`: ... \| ... \| ... \| ... \| ...; \}\>
+
+##### metadata.pluginConfig.intendedResults?
+
+> `optional` **intendedResults?**: `string`[]
+
+##### metadata.pluginConfig.intent?
+
+> `optional` **intent?**: `string` \| (`string` \| `string`[])[]
+
+##### metadata.pluginConfig.language?
+
+> `optional` **language?**: `string` \| `string`[]
+
+##### metadata.pluginConfig.maxCharsPerMessage?
+
+> `optional` **maxCharsPerMessage?**: `number`
+
+##### metadata.pluginConfig.mentions?
+
+> `optional` **mentions?**: `boolean`
+
+##### metadata.pluginConfig.modifiers?
+
+> `optional` **modifiers?**: `Record`\<`string`, `unknown`\>
+
+##### metadata.pluginConfig.multilingual?
+
+> `optional` **multilingual?**: `boolean`
+
+##### metadata.pluginConfig.mustNotExistPath?
+
+> `optional` **mustNotExistPath?**: `string`
+
+##### metadata.pluginConfig.mustNotExistPaths?
+
+> `optional` **mustNotExistPaths?**: `string`[]
+
+##### metadata.pluginConfig.name?
+
+> `optional` **name?**: `string`
+
+##### metadata.pluginConfig.networkAllowedHost?
+
+> `optional` **networkAllowedHost?**: `string`
+
+##### metadata.pluginConfig.networkAllowedHosts?
+
+> `optional` **networkAllowedHosts?**: `string`[]
+
+##### metadata.pluginConfig.networkAllowedUrl?
+
+> `optional` **networkAllowedUrl?**: `string`
+
+##### metadata.pluginConfig.networkAllowedUrls?
+
+> `optional` **networkAllowedUrls?**: `string`[]
+
+##### metadata.pluginConfig.networkEgressHost?
+
+> `optional` **networkEgressHost?**: `string`
+
+##### metadata.pluginConfig.networkEgressHosts?
+
+> `optional` **networkEgressHosts?**: `string`[]
+
+##### metadata.pluginConfig.networkEgressReceipt?
+
+> `optional` **networkEgressReceipt?**: `string`
+
+##### metadata.pluginConfig.networkEgressReceipts?
+
+> `optional` **networkEgressReceipts?**: `string`[]
+
+##### metadata.pluginConfig.networkEgressUrl?
+
+> `optional` **networkEgressUrl?**: `string`
+
+##### metadata.pluginConfig.networkEgressUrls?
+
+> `optional` **networkEgressUrls?**: `string`[]
+
+##### metadata.pluginConfig.networkScanPath?
+
+> `optional` **networkScanPath?**: `string`
+
+##### metadata.pluginConfig.networkScanPaths?
+
+> `optional` **networkScanPaths?**: `string`[]
+
+##### metadata.pluginConfig.networkTrapHost?
+
+> `optional` **networkTrapHost?**: `string`
+
+##### metadata.pluginConfig.networkTrapHosts?
+
+> `optional` **networkTrapHosts?**: `string`[]
+
+##### metadata.pluginConfig.networkTrapLogPath?
+
+> `optional` **networkTrapLogPath?**: `string`
+
+##### metadata.pluginConfig.networkTrapLogPaths?
+
+> `optional` **networkTrapLogPaths?**: `string`[]
+
+##### metadata.pluginConfig.networkTrapUrl?
+
+> `optional` **networkTrapUrl?**: `string`
+
+##### metadata.pluginConfig.networkTrapUrls?
+
+> `optional` **networkTrapUrls?**: `string`[]
+
+##### metadata.pluginConfig.networkWorkspacePath?
+
+> `optional` **networkWorkspacePath?**: `string`
+
+##### metadata.pluginConfig.networkWorkspacePaths?
+
+> `optional` **networkWorkspacePaths?**: `string`[]
+
+##### metadata.pluginConfig.outsideWriteAllowedPath?
+
+> `optional` **outsideWriteAllowedPath?**: `string`
+
+##### metadata.pluginConfig.outsideWriteAllowedPaths?
+
+> `optional` **outsideWriteAllowedPaths?**: `string`[]
+
+##### metadata.pluginConfig.outsideWriteExpectedSha256?
+
+> `optional` **outsideWriteExpectedSha256?**: `string`
+
+##### metadata.pluginConfig.outsideWriteHostPath?
+
+> `optional` **outsideWriteHostPath?**: `string`
+
+##### metadata.pluginConfig.outsideWriteHostPaths?
+
+> `optional` **outsideWriteHostPaths?**: `string`[]
+
+##### metadata.pluginConfig.outsideWriteMustNotExistPath?
+
+> `optional` **outsideWriteMustNotExistPath?**: `string`
+
+##### metadata.pluginConfig.outsideWriteMustNotExistPaths?
+
+> `optional` **outsideWriteMustNotExistPaths?**: `string`[]
+
+##### metadata.pluginConfig.outsideWritePath?
+
+> `optional` **outsideWritePath?**: `string`
+
+##### metadata.pluginConfig.outsideWritePaths?
+
+> `optional` **outsideWritePaths?**: `string`[]
+
+##### metadata.pluginConfig.outsideWritePathSha256?
+
+> `optional` **outsideWritePathSha256?**: `string`
+
+##### metadata.pluginConfig.outsideWriteProbeDir?
+
+> `optional` **outsideWriteProbeDir?**: `string`
+
+##### metadata.pluginConfig.outsideWriteProbeDirs?
+
+> `optional` **outsideWriteProbeDirs?**: `string`[]
+
+##### metadata.pluginConfig.outsideWriteSha256?
+
+> `optional` **outsideWriteSha256?**: `string`
+
+##### metadata.pluginConfig.policy?
+
+> `optional` **policy?**: `string` \| \{ `id`: `string`; `name?`: `string`; `text?`: `string`; \}
+
+##### metadata.pluginConfig.prompt?
+
+> `optional` **prompt?**: `string`
+
+##### metadata.pluginConfig.protectedFilePath?
+
+> `optional` **protectedFilePath?**: `string`
+
+##### metadata.pluginConfig.protectedFilePaths?
+
+> `optional` **protectedFilePaths?**: `string`[]
+
+##### metadata.pluginConfig.protectedWritePath?
+
+> `optional` **protectedWritePath?**: `string`
+
+##### metadata.pluginConfig.protectedWritePaths?
+
+> `optional` **protectedWritePaths?**: `string`[]
+
+##### metadata.pluginConfig.purpose?
+
+> `optional` **purpose?**: `string`
+
+##### metadata.pluginConfig.sandboxWritePath?
+
+> `optional` **sandboxWritePath?**: `string`
+
+##### metadata.pluginConfig.sandboxWritePaths?
+
+> `optional` **sandboxWritePaths?**: `string`[]
+
+##### metadata.pluginConfig.secretFilePath?
+
+> `optional` **secretFilePath?**: `string`
+
+##### metadata.pluginConfig.secretFilePaths?
+
+> `optional` **secretFilePaths?**: `string`[]
+
+##### metadata.pluginConfig.secretFileValue?
+
+> `optional` **secretFileValue?**: `string`
+
+##### metadata.pluginConfig.secretFileValues?
+
+> `optional` **secretFileValues?**: `string`[]
+
+##### metadata.pluginConfig.secretLocalFilePath?
+
+> `optional` **secretLocalFilePath?**: `string`
+
+##### metadata.pluginConfig.secretLocalFilePaths?
+
+> `optional` **secretLocalFilePaths?**: `string`[]
+
+##### metadata.pluginConfig.severity?
+
+> `optional` **severity?**: `"critical"` \| `"high"` \| `"medium"` \| `"low"` \| `"informational"`
+
+##### metadata.pluginConfig.ssrfFailThreshold?
+
+> `optional` **ssrfFailThreshold?**: `"critical"` \| `"high"` \| `"medium"` \| `"low"`
+
+##### metadata.pluginConfig.systemPrompt?
+
+> `optional` **systemPrompt?**: `string`
+
+##### metadata.pluginConfig.targetIdentifiers?
+
+> `optional` **targetIdentifiers?**: `string`[]
+
+##### metadata.pluginConfig.targetSystems?
+
+> `optional` **targetSystems?**: `string`[]
+
+##### metadata.pluginConfig.targetUrls?
+
+> `optional` **targetUrls?**: `string`[]
+
+##### metadata.pluginConfig.verifierArtifactRoot?
+
+> `optional` **verifierArtifactRoot?**: `string`
+
+##### metadata.pluginConfig.verifierArtifactRoots?
+
+> `optional` **verifierArtifactRoots?**: `string`[]
+
+##### metadata.pluginConfig.verifierProbeDir?
+
+> `optional` **verifierProbeDir?**: `string`
+
+##### metadata.pluginConfig.verifierProbeDirs?
+
+> `optional` **verifierProbeDirs?**: `string`[]
+
+##### metadata.pluginConfig.workingDir?
+
+> `optional` **workingDir?**: `string`
+
+##### metadata.pluginConfig.workingDirectory?
+
+> `optional` **workingDirectory?**: `string`
+
+##### metadata.pluginConfig.workingDirectoryPath?
+
+> `optional` **workingDirectoryPath?**: `string`
+
+##### metadata.pluginConfig.workspacePath?
+
+> `optional` **workspacePath?**: `string`
+
+##### metadata.pluginConfig.workspacePaths?
+
+> `optional` **workspacePaths?**: `string`[]
+
+##### metadata.pluginConfig.workspaceRoot?
+
+> `optional` **workspaceRoot?**: `string`
+
+##### metadata.pluginConfig.workspaceRoots?
+
+> `optional` **workspaceRoots?**: `string`[]
+
+##### metadata.strategyConfig?
+
+> `optional` **strategyConfig?**: `object`
+
+###### Index Signature
+
+\[`key`: `string`\]: `unknown`
+
+##### metadata.strategyConfig.enabled?
+
+> `optional` **enabled?**: `boolean`
+
+##### metadata.strategyConfig.numTests?
+
+> `optional` **numTests?**: `number`
+
+##### metadata.strategyConfig.plugins?
+
+> `optional` **plugins?**: `string`[]
+
+#### options?
+
+> `optional` **options?**: `object`
+
+##### Index Signature
+
+\[`key`: `string`\]: `any`
+
+##### options.disableConversationVar?
+
+> `optional` **disableConversationVar?**: `boolean`
+
+##### options.disableDefaultAsserts?
+
+> `optional` **disableDefaultAsserts?**: `boolean`
+
+##### options.disableVarExpansion?
+
+> `optional` **disableVarExpansion?**: `boolean`
+
+##### options.factuality?
+
+> `optional` **factuality?**: `object`
+
+##### options.factuality.agree?
+
+> `optional` **agree?**: `number`
+
+##### options.factuality.differButFactual?
+
+> `optional` **differButFactual?**: `number`
+
+##### options.factuality.disagree?
+
+> `optional` **disagree?**: `number`
+
+##### options.factuality.subset?
+
+> `optional` **subset?**: `number`
+
+##### options.factuality.superset?
+
+> `optional` **superset?**: `number`
+
+##### options.postprocess?
+
+> `optional` **postprocess?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
+
+###### Deprecated
+
+in > 0.38.0. Use `transform` instead.
+
+##### options.prefix?
+
+> `optional` **prefix?**: `string`
+
+##### options.provider?
+
+> `optional` **provider?**: `any`
+
+##### options.rubricPrompt?
+
+> `optional` **rubricPrompt?**: `string` \| `string`[] \| `object`[]
+
+##### options.runSerially?
+
+> `optional` **runSerially?**: `boolean`
+
+##### options.storeOutputAs?
+
+> `optional` **storeOutputAs?**: `string`
+
+##### options.suffix?
+
+> `optional` **suffix?**: `string`
+
+##### options.transform?
+
+> `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
+
+##### options.transformVars?
+
+> `optional` **transformVars?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
+
+#### prompts?
+
+> `optional` **prompts?**: `string`[]
+
+#### provider?
+
+> `optional` **provider?**: `string` \| \{ `config?`: `any`; `delay?`: `number`; `env?`: \{ `ABLIT_API_BASE_URL?`: `string`; `ABLIT_KEY?`: `string`; `AI21_API_BASE_URL?`: `string`; `AI21_API_KEY?`: `string`; `AIML_API_KEY?`: `string`; `ANTHROPIC_API_KEY?`: `string`; `ANTHROPIC_BASE_URL?`: `string`; `ATLASCLOUD_API_KEY?`: `string`; `AWS_BEDROCK_REGION?`: `string`; `AWS_DEFAULT_REGION?`: `string`; `AWS_REGION?`: `string`; `AWS_SAGEMAKER_MAX_RETRIES?`: `string`; `AWS_SAGEMAKER_MAX_TOKENS?`: `string`; `AWS_SAGEMAKER_TEMPERATURE?`: `string`; `AWS_SAGEMAKER_TOP_P?`: `string`; `AZURE_API_BASE_URL?`: `string`; `AZURE_API_HOST?`: `string`; `AZURE_API_KEY?`: `string`; `AZURE_AUTHORITY_HOST?`: `string`; `AZURE_CLIENT_ID?`: `string`; `AZURE_CLIENT_SECRET?`: `string`; `AZURE_CONTENT_SAFETY_API_KEY?`: `string`; `AZURE_CONTENT_SAFETY_API_VERSION?`: `string`; `AZURE_CONTENT_SAFETY_ENDPOINT?`: `string`; `AZURE_DEPLOYMENT_NAME?`: `string`; `AZURE_EMBEDDING_DEPLOYMENT_NAME?`: `string`; `AZURE_OPENAI_API_BASE_URL?`: `string`; `AZURE_OPENAI_API_HOST?`: `string`; `AZURE_OPENAI_API_KEY?`: `string`; `AZURE_OPENAI_BASE_URL?`: `string`; `AZURE_OPENAI_DEPLOYMENT_NAME?`: `string`; `AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME?`: `string`; `AZURE_TENANT_ID?`: `string`; `AZURE_TOKEN_SCOPE?`: `string`; `CF_AIG_TOKEN?`: `string`; `CLAUDE_CODE_USE_BEDROCK?`: `string`; `CLAUDE_CODE_USE_VERTEX?`: `string`; `CLAWDBOT_GATEWAY_PASSWORD?`: `string`; `CLAWDBOT_GATEWAY_TOKEN?`: `string`; `CLAWDBOT_GATEWAY_URL?`: `string`; `CLOUDFLARE_ACCOUNT_ID?`: `string`; `CLOUDFLARE_API_KEY?`: `string`; `CLOUDFLARE_GATEWAY_ID?`: `string`; `CODEX_API_KEY?`: `string`; `COHERE_API_KEY?`: `string`; `COHERE_CLIENT_NAME?`: `string`; `COMETAPI_KEY?`: `string`; `DATABRICKS_TOKEN?`: `string`; `DATABRICKS_WORKSPACE_URL?`: `string`; `DOCKER_MODEL_RUNNER_API_KEY?`: `string`; `DOCKER_MODEL_RUNNER_BASE_URL?`: `string`; `ELEVENLABS_API_KEY?`: `string`; `FAL_KEY?`: `string`; `GEMINI_API_KEY?`: `string`; `GITHUB_TOKEN?`: `string`; `GOOGLE_API_BASE_URL?`: `string`; `GOOGLE_API_HOST?`: `string`; `GOOGLE_API_KEY?`: `string`; `GOOGLE_GENERATIVE_AI_API_KEY?`: `string`; `GOOGLE_LOCATION?`: `string`; `GOOGLE_PROJECT_ID?`: `string`; `GROQ_API_KEY?`: `string`; `HELICONE_API_KEY?`: `string`; `HF_API_TOKEN?`: `string`; `HF_TOKEN?`: `string`; `HUGGING_FACE_HUB_TOKEN?`: `string`; `HYPERBOLIC_API_KEY?`: `string`; `JFROG_API_KEY?`: `string`; `LANGFUSE_HOST?`: `string`; `LANGFUSE_PUBLIC_KEY?`: `string`; `LANGFUSE_SECRET_KEY?`: `string`; `LITELLM_API_BASE?`: `string`; `LLAMA_BASE_URL?`: `string`; `LOCALAI_BASE_URL?`: `string`; `MISTRAL_API_BASE_URL?`: `string`; `MISTRAL_API_HOST?`: `string`; `MISTRAL_API_KEY?`: `string`; `MODELSLAB_API_KEY?`: `string`; `NSCALE_API_KEY?`: `string`; `NSCALE_SERVICE_TOKEN?`: `string`; `OLLAMA_API_KEY?`: `string`; `OLLAMA_BASE_URL?`: `string`; `OPENAI_API_BASE_URL?`: `string`; `OPENAI_API_HOST?`: `string`; `OPENAI_API_KEY?`: `string`; `OPENAI_BASE_URL?`: `string`; `OPENAI_ORGANIZATION?`: `string`; `OPENCLAW_CONFIG_PATH?`: `string`; `OPENCLAW_GATEWAY_PASSWORD?`: `string`; `OPENCLAW_GATEWAY_PORT?`: `string`; `OPENCLAW_GATEWAY_TOKEN?`: `string`; `OPENCLAW_GATEWAY_URL?`: `string`; `PALM_API_HOST?`: `string`; `PALM_API_KEY?`: `string`; `PORTKEY_API_KEY?`: `string`; `PROMPTFOO_CA_CERT_PATH?`: `string`; `PROMPTFOO_EVAL_TIMEOUT_MS?`: `string`; `PROMPTFOO_INSECURE_SSL?`: `string`; `PROMPTFOO_JKS_ALIAS?`: `string`; `PROMPTFOO_JKS_CERT_PATH?`: `string`; `PROMPTFOO_JKS_PASSWORD?`: `string`; `PROMPTFOO_PFX_CERT_PATH?`: `string`; `PROMPTFOO_PFX_PASSWORD?`: `string`; `QUIVERAI_API_KEY?`: `string`; `REPLICATE_API_KEY?`: `string`; `REPLICATE_API_TOKEN?`: `string`; `SHAREPOINT_BASE_URL?`: `string`; `SHAREPOINT_CERT_PATH?`: `string`; `SHAREPOINT_CLIENT_ID?`: `string`; `SHAREPOINT_TENANT_ID?`: `string`; `VERCEL_AI_GATEWAY_API_KEY?`: `string`; `VERCEL_AI_GATEWAY_BASE_URL?`: `string`; `VERTEX_API_HOST?`: `string`; `VERTEX_API_KEY?`: `string`; `VERTEX_API_VERSION?`: `string`; `VERTEX_PROJECT_ID?`: `string`; `VERTEX_PUBLISHER?`: `string`; `VERTEX_REGION?`: `string`; `VOYAGE_API_BASE_URL?`: `string`; `VOYAGE_API_KEY?`: `string`; `WATSONX_AI_APIKEY?`: `string`; `WATSONX_AI_AUTH_TYPE?`: `string`; `WATSONX_AI_BEARER_TOKEN?`: `string`; `WATSONX_AI_PROJECT_ID?`: `string`; `XAI_API_BASE_URL?`: `string`; `XAI_API_KEY?`: `string`; \}; `id?`: `string`; `inputs?`: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: ... \| ... \| ...; `injectionPlacements?`: ... \| ...; `inputPurpose?`: ... \| ...; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>; `label?`: `string`; `prompts?`: `string`[]; `transform?`: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md); \} \| \{ `callApi`: [`CallApiFunction`](CallApiFunction.md); `callClassificationApi?`: (`prompt`) => `Promise`\<`ProviderClassificationResponse`\>; `callEmbeddingApi?`: (`prompt`) => `Promise`\<`ProviderEmbeddingResponse`\>; `config?`: `any`; `delay?`: `number`; `id`: () => `string`; `inputs?`: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: ... \| ... \| ...; `injectionPlacements?`: ... \| ...; `inputPurpose?`: ... \| ...; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>; `label?`: `string`; `transform?`: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md); \}
+
+#### providerOutput?
+
+> `optional` **providerOutput?**: `string` \| `Record`\<`string`, `unknown`\>
+
+#### providers?
+
+> `optional` **providers?**: `string`[]
+
+#### threshold?
+
+> `optional` **threshold?**: `number`
+
+#### vars?
+
+> `optional` **vars?**: `Vars`
 
 ---
 
@@ -127,7 +613,7 @@ Test case currently being executed, when available to the caller.
 
 > `optional` **testCaseId?**: `string`
 
-Defined in: [types/providers.ts:136](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L136)
+Defined in: [types/providers.ts:137](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L137)
 
 Stable id for the current test case when one has been assigned.
 
@@ -137,7 +623,7 @@ Stable id for the current test case when one has been assigned.
 
 > `optional` **testIdx?**: `number`
 
-Defined in: [types/providers.ts:141](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L141)
+Defined in: [types/providers.ts:142](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L142)
 
 Index of the test case within the current evaluation (row in results table).
 Used for correlating blob references and other per-result metadata.
@@ -148,7 +634,7 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **traceparent?**: `string`
 
-Defined in: [types/providers.ts:129](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L129)
+Defined in: [types/providers.ts:130](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L130)
 
 W3C Trace Context `traceparent` header for downstream propagation.
 
@@ -158,7 +644,7 @@ W3C Trace Context `traceparent` header for downstream propagation.
 
 > `optional` **tracestate?**: `string`
 
-Defined in: [types/providers.ts:131](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L131)
+Defined in: [types/providers.ts:132](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L132)
 
 W3C Trace Context `tracestate` header for downstream propagation.
 
@@ -168,6 +654,6 @@ W3C Trace Context `tracestate` header for downstream propagation.
 
 > **vars**: `Record`\<`string`, `VarValue`\>
 
-Defined in: [types/providers.ts:120](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L120)
+Defined in: [types/providers.ts:121](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L121)
 
 Rendered variables for the current test case.

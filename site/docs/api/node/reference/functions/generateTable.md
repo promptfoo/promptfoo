@@ -8,7 +8,7 @@
 
 > **generateTable**(`evaluateTable`, `tableCellMaxLength?`, `maxRows?`): `string`
 
-Defined in: [table.ts:20](https://github.com/promptfoo/promptfoo/blob/main/src/table.ts#L20)
+Defined in: [table.ts:28](https://github.com/promptfoo/promptfoo/blob/main/src/table.ts#L28)
 
 Render eval table data as terminal-friendly text.
 
@@ -20,7 +20,8 @@ Usually pass the table from a completed eval record returned by `evaluate()`.
 
 [`EvaluateTable`](../interfaces/EvaluateTable.md)
 
-Table data returned on the completed eval record.
+Table data returned on the completed eval record. Pass
+the value resolved from `await evalRecord.getTable()`.
 
 ### tableCellMaxLength?
 
@@ -41,6 +42,9 @@ Maximum number of body rows to render.
 ## Example
 
 ```ts
+import { evaluate, generateTable } from 'promptfoo';
+
 const evalRecord = await evaluate(testSuite);
-console.log(generateTable(evalRecord.table));
+const table = await evalRecord.getTable();
+console.log(generateTable(table));
 ```

@@ -11,6 +11,19 @@ by the root `promptfoo` package entrypoint. That entrypoint is still the
 supported public boundary for programmatic use, but the reference intentionally
 focuses on APIs that are useful to call directly from application code.
 
+## Install
+
+```bash
+npm install promptfoo
+```
+
+Promptfoo requires Node.js `^20.20.0 || >=22.22.0`. The Node.js API ships with
+the same version of the `promptfoo` package used by the CLI.
+
+```ts
+import { evaluate } from 'promptfoo';
+```
+
 ## Stability
 
 | Stability | Meaning                                                                       |

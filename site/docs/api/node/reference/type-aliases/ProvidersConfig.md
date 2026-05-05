@@ -8,7 +8,7 @@
 
 > **ProvidersConfig** = `ProviderId` \| [`ProviderFunction`](ProviderFunction.md) \| [`ApiProvider`](../interfaces/ApiProvider.md) \| `ProviderConfig`[]
 
-Defined in: [types/providers.ts:33](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L33)
+Defined in: [types/providers.ts:34](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L34)
 
 Provider input accepted by `evaluate()` and `loadApiProviders()`.
 

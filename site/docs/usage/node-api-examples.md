@@ -152,7 +152,7 @@ const result = await assertions.runAssertions({
     vars: {},
     assert: [
       { type: 'contains', value: 'Ada' },
-      { type: 'word-count', threshold: 2 },
+      { type: 'word-count', value: 2 },
     ],
   },
   providerResponse: { output: 'Hello Ada' },
