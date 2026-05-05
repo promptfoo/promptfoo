@@ -2,7 +2,6 @@ import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from './env';
-import type { AtomicTestCase } from './index';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 import type { TransformFunction } from './transform';
@@ -52,6 +51,19 @@ export interface SkillCallEntry {
 }
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
+
+// Local interface to avoid circular dependency with src/types/index.ts.
+interface AtomicTestCase {
+  description?: string;
+  vars?: Record<string, VarValue>;
+  providerResponse?: ProviderResponse;
+  tokenUsage?: TokenUsage;
+  success?: boolean;
+  score?: number;
+  failureReason?: string;
+  metadata?: Record<string, any>;
+  options?: Record<string, any>;
+}
 
 export interface ProviderModerationResponse {
   cached?: boolean;

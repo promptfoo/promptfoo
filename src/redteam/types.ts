@@ -358,8 +358,8 @@ export interface RedteamRunOptions {
     completed: number,
     total: number,
     index: number | string,
-    evalStep: import('../types/index').RunEvalOptions,
-    metrics: import('../types/index').PromptMetrics,
+    evalStep: any, // RunEvalOptions, but importing it introduces a circular dependency.
+    metrics: any, // PromptMetrics, but importing it introduces a circular dependency.
   ) => void;
   /** Signal used to cancel the run. */
   abortSignal?: AbortSignal;
