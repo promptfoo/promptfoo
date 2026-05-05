@@ -109,10 +109,18 @@ function getCodexDefaultWorkingDir(): string {
 }
 
 function hasCodexAuthFile(env?: EnvOverrides): boolean {
+  const authPath = path.join(getCodexHome(env), CODEX_AUTH_FILENAME);
   try {
-    const stats = fs.statSync(path.join(getCodexHome(env), CODEX_AUTH_FILENAME));
+    const stats = fs.statSync(authPath);
     return stats.isFile() && stats.size > 0;
-  } catch {
+  } catch (err) {
+    // ENOENT/ENOTDIR are the expected "no Codex login yet" cases. Anything else
+    // (EACCES on a chmod'd ~/.codex, ELOOP, EIO) silently routes the user to the
+    // OpenAI fallback with no breadcrumb — surface it at debug.
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+      logger.debug('[CodexDefaults] Could not stat Codex auth file', { authPath, code, err });
+    }
     return false;
   }
 }
@@ -204,16 +212,21 @@ function getUniqueCodexDefaultProviders(
   );
 }
 
-function shutdownCodexDefaultProviderBundle(
-  providers: ManagedCodexDefaultProviderBundle,
-): Promise<void> | undefined {
-  if (
-    providers.cancelled ||
-    !providers.shutdownRequested ||
-    providers.activeCalls > 0 ||
-    providers.shutdownPromise
-  ) {
-    return providers.shutdownPromise;
+// True only when the bundle is eligible to advance toward shutdown: a shutdown was
+// requested, no calls are in flight, no shutdown is already in progress, and the bundle
+// has not been cancelled by test cleanup.
+function canActOnShutdown(providers: ManagedCodexDefaultProviderBundle): boolean {
+  return (
+    !providers.cancelled &&
+    providers.shutdownRequested &&
+    providers.activeCalls === 0 &&
+    !providers.shutdownPromise
+  );
+}
+
+function shutdownCodexDefaultProviderBundle(providers: ManagedCodexDefaultProviderBundle): void {
+  if (!canActOnShutdown(providers)) {
+    return;
   }
 
   providers.shutdownPromise = Promise.all(
@@ -227,8 +240,6 @@ function shutdownCodexDefaultProviderBundle(
     .finally(() => {
       evictedCodexDefaultProviderBundles.delete(providers);
     });
-
-  return providers.shutdownPromise;
 }
 
 function clearCodexDefaultProviderShutdownTimer(
@@ -242,24 +253,15 @@ function clearCodexDefaultProviderShutdownTimer(
 
 function scheduleCodexDefaultProviderBundleShutdown(
   providers: ManagedCodexDefaultProviderBundle,
-): Promise<void> | undefined {
-  if (
-    providers.cancelled ||
-    !providers.shutdownRequested ||
-    providers.activeCalls > 0 ||
-    providers.shutdownPromise
-  ) {
-    return providers.shutdownPromise;
+): void {
+  if (!canActOnShutdown(providers) || providers.shutdownTimer) {
+    return;
   }
 
-  if (!providers.shutdownTimer) {
-    providers.shutdownTimer = setTimeout(() => {
-      providers.shutdownTimer = undefined;
-      void shutdownCodexDefaultProviderBundle(providers);
-    }, CODEX_DEFAULT_PROVIDERS_CACHE_EVICTION_GRACE_MS);
-  }
-
-  return providers.shutdownPromise;
+  providers.shutdownTimer = setTimeout(() => {
+    providers.shutdownTimer = undefined;
+    shutdownCodexDefaultProviderBundle(providers);
+  }, CODEX_DEFAULT_PROVIDERS_CACHE_EVICTION_GRACE_MS);
 }
 
 function requestCodexDefaultProviderBundleShutdown(
@@ -269,10 +271,11 @@ function requestCodexDefaultProviderBundleShutdown(
     return;
   }
   providers.shutdownRequested = true;
-  // Track immediately so test cleanup and process-exit handlers can find the bundle even
-  // when activeCalls > 0 prevents a timer from being armed yet.
+  // Track in evictedCodexDefaultProviderBundles before scheduling so
+  // clearCodexDefaultProvidersForTesting finds the bundle even when activeCalls > 0
+  // defers the timer.
   evictedCodexDefaultProviderBundles.add(providers);
-  void scheduleCodexDefaultProviderBundleShutdown(providers);
+  scheduleCodexDefaultProviderBundleShutdown(providers);
 }
 
 async function resurrectCodexDefaultProviderBundle(
@@ -308,9 +311,9 @@ function trackCodexDefaultProviderUsage(providers: ManagedCodexDefaultProviderBu
         return await callApi(...args);
       } finally {
         providers.activeCalls -= 1;
-        if (!providers.cancelled) {
-          void scheduleCodexDefaultProviderBundleShutdown(providers);
-        }
+        // scheduleCodexDefaultProviderBundleShutdown short-circuits on cancelled and
+        // on !shutdownRequested, so we don't need to re-check those here.
+        scheduleCodexDefaultProviderBundleShutdown(providers);
       }
     };
   }

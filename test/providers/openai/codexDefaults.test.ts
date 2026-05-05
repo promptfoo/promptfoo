@@ -8,6 +8,32 @@ import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 import type { OpenAICodexSDKProvider } from '../../../src/providers/openai/codex-sdk';
 
+type CodexProviderBundle = {
+  gradingProvider: OpenAICodexSDKProvider;
+  gradingJsonProvider: OpenAICodexSDKProvider;
+  webSearchProvider: OpenAICodexSDKProvider;
+};
+
+// Each new bundle replaces the LRU's oldest entry once we add 32 keys, so the loop
+// below evicts whichever bundle was most recently used before the loop started.
+function fillCacheToOverflow(getProviders: (env: { CODEX_API_KEY: string }) => unknown): void {
+  for (let index = 1; index <= 32; index++) {
+    getProviders({ CODEX_API_KEY: `codex-key-${index}` });
+  }
+}
+
+function spyAndStubShutdowns(providers: CodexProviderBundle): {
+  grading: ReturnType<typeof vi.spyOn>;
+  gradingJson: ReturnType<typeof vi.spyOn>;
+  webSearch: ReturnType<typeof vi.spyOn>;
+} {
+  return {
+    grading: vi.spyOn(providers.gradingProvider, 'shutdown').mockResolvedValue(undefined),
+    gradingJson: vi.spyOn(providers.gradingJsonProvider, 'shutdown').mockResolvedValue(undefined),
+    webSearch: vi.spyOn(providers.webSearchProvider, 'shutdown').mockResolvedValue(undefined),
+  };
+}
+
 const mockGetDirectory = vi.hoisted(() => vi.fn(() => process.cwd()));
 const mockResolvePackageEntryPoint = vi.hoisted(() =>
   vi.fn<(packageName: string, baseDir: string) => string | null>(() => '/tmp/codex-sdk/index.js'),
@@ -251,9 +277,7 @@ describe('Codex default providers', () => {
       'shutdown',
     );
 
-    for (let index = 1; index <= 32; index++) {
-      getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
-    }
+    fillCacheToOverflow(getCodexDefaultProviders);
 
     expect(firstGradingShutdown).not.toHaveBeenCalled();
     expect(firstGradingJsonShutdown).not.toHaveBeenCalled();
@@ -282,39 +306,31 @@ describe('Codex default providers', () => {
       .spyOn(OpenAICodexSDKProvider.prototype, 'callApi')
       .mockImplementation(() => inFlightCall.promise);
 
-    const firstProviders = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-key-0' });
-    const firstGradingShutdown = vi
-      .spyOn(firstProviders.gradingProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
-    const firstGradingJsonShutdown = vi
-      .spyOn(firstProviders.gradingJsonProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
-    const firstWebSearchShutdown = vi
-      .spyOn(firstProviders.webSearchProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
+    const firstProviders = getCodexDefaultProviders({
+      CODEX_API_KEY: 'codex-key-0',
+    }) as unknown as CodexProviderBundle;
+    const shutdowns = spyAndStubShutdowns(firstProviders);
 
     const resultPromise = firstProviders.gradingProvider.callApi('test prompt');
 
-    for (let index = 1; index <= 32; index++) {
-      getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
-    }
+    fillCacheToOverflow(getCodexDefaultProviders);
 
-    expect(firstGradingShutdown).not.toHaveBeenCalled();
-    expect(firstGradingJsonShutdown).not.toHaveBeenCalled();
-    expect(firstWebSearchShutdown).not.toHaveBeenCalled();
+    expect(shutdowns.grading).not.toHaveBeenCalled();
+    expect(shutdowns.gradingJson).not.toHaveBeenCalled();
+    expect(shutdowns.webSearch).not.toHaveBeenCalled();
 
     inFlightCall.resolve({ output: 'ok' });
     await expect(resultPromise).resolves.toEqual({ output: 'ok' });
 
-    expect(firstGradingShutdown).not.toHaveBeenCalled();
-    expect(firstGradingJsonShutdown).not.toHaveBeenCalled();
-    expect(firstWebSearchShutdown).not.toHaveBeenCalled();
+    expect(shutdowns.grading).not.toHaveBeenCalled();
+    expect(shutdowns.gradingJson).not.toHaveBeenCalled();
+    expect(shutdowns.webSearch).not.toHaveBeenCalled();
 
     await vi.runOnlyPendingTimersAsync();
 
-    expect(firstGradingShutdown).toHaveBeenCalledTimes(1);
-    expect(firstGradingJsonShutdown).toHaveBeenCalledTimes(1);
-    expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
+    expect(shutdowns.grading).toHaveBeenCalledTimes(1);
+    expect(shutdowns.gradingJson).toHaveBeenCalledTimes(1);
+    expect(shutdowns.webSearch).toHaveBeenCalledTimes(1);
     expect(callApiSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -330,20 +346,12 @@ describe('Codex default providers', () => {
       .spyOn(OpenAICodexSDKProvider.prototype, 'callApi')
       .mockResolvedValue({ output: 'ok' });
 
-    const firstProviders = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-key-0' });
-    const firstGradingShutdown = vi
-      .spyOn(firstProviders.gradingProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
-    const firstGradingJsonShutdown = vi
-      .spyOn(firstProviders.gradingJsonProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
-    const firstWebSearchShutdown = vi
-      .spyOn(firstProviders.webSearchProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
+    const firstProviders = getCodexDefaultProviders({
+      CODEX_API_KEY: 'codex-key-0',
+    }) as unknown as CodexProviderBundle;
+    const shutdowns = spyAndStubShutdowns(firstProviders);
 
-    for (let index = 1; index <= 32; index++) {
-      getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
-    }
+    fillCacheToOverflow(getCodexDefaultProviders);
 
     await expect(firstProviders.gradingProvider.callApi('first prompt')).resolves.toEqual({
       output: 'ok',
@@ -352,15 +360,15 @@ describe('Codex default providers', () => {
       output: 'ok',
     });
 
-    expect(firstGradingShutdown).not.toHaveBeenCalled();
-    expect(firstGradingJsonShutdown).not.toHaveBeenCalled();
-    expect(firstWebSearchShutdown).not.toHaveBeenCalled();
+    expect(shutdowns.grading).not.toHaveBeenCalled();
+    expect(shutdowns.gradingJson).not.toHaveBeenCalled();
+    expect(shutdowns.webSearch).not.toHaveBeenCalled();
 
     await vi.runOnlyPendingTimersAsync();
 
-    expect(firstGradingShutdown).toHaveBeenCalledTimes(1);
-    expect(firstGradingJsonShutdown).toHaveBeenCalledTimes(1);
-    expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
+    expect(shutdowns.grading).toHaveBeenCalledTimes(1);
+    expect(shutdowns.gradingJson).toHaveBeenCalledTimes(1);
+    expect(shutdowns.webSearch).toHaveBeenCalledTimes(1);
     expect(callApiSpy).toHaveBeenCalledTimes(2);
   });
 
@@ -388,27 +396,19 @@ describe('Codex default providers', () => {
       .mockResolvedValue({ output: 'ok' });
     const registerSpy = vi.spyOn(registry, 'register');
 
-    const firstProviders = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-key-0' });
-    const firstGradingShutdown = vi
-      .spyOn(firstProviders.gradingProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
-    const firstGradingJsonShutdown = vi
-      .spyOn(firstProviders.gradingJsonProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
-    const firstWebSearchShutdown = vi
-      .spyOn(firstProviders.webSearchProvider as OpenAICodexSDKProvider, 'shutdown')
-      .mockResolvedValue(undefined);
+    const firstProviders = getCodexDefaultProviders({
+      CODEX_API_KEY: 'codex-key-0',
+    }) as unknown as CodexProviderBundle;
+    const shutdowns = spyAndStubShutdowns(firstProviders);
 
-    for (let index = 1; index <= 32; index++) {
-      getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
-    }
+    fillCacheToOverflow(getCodexDefaultProviders);
 
     // Drain the grace timer so eviction shutdown actually fires (mocked) before we
     // attempt to use the provider again.
     await vi.runOnlyPendingTimersAsync();
-    expect(firstGradingShutdown).toHaveBeenCalledTimes(1);
-    expect(firstGradingJsonShutdown).toHaveBeenCalledTimes(1);
-    expect(firstWebSearchShutdown).toHaveBeenCalledTimes(1);
+    expect(shutdowns.grading).toHaveBeenCalledTimes(1);
+    expect(shutdowns.gradingJson).toHaveBeenCalledTimes(1);
+    expect(shutdowns.webSearch).toHaveBeenCalledTimes(1);
 
     registerSpy.mockClear();
 
@@ -449,10 +449,7 @@ describe('Codex default providers', () => {
     // Start a call that will keep activeCalls > 0 across the eviction.
     const inFlightPromise = firstProviders.gradingProvider.callApi('long prompt');
 
-    // Evict by overflowing the LRU.
-    for (let index = 1; index <= 32; index++) {
-      getCodexDefaultProviders({ CODEX_API_KEY: `codex-key-${index}` });
-    }
+    fillCacheToOverflow(getCodexDefaultProviders);
 
     // Cleanup before the in-flight call completes — this is the brittle window.
     clearCodexDefaultProvidersForTesting();
@@ -461,7 +458,8 @@ describe('Codex default providers', () => {
     inFlightCall.resolve({ output: 'late' });
     await expect(inFlightPromise).resolves.toEqual({ output: 'late' });
 
-    // No pending timers — confirms the finally block honored the cancelled flag.
+    // No pending timers — confirms scheduleCodexDefaultProviderBundleShutdown's
+    // cancelled guard kept the finally block from re-arming a timer.
     expect(vi.getTimerCount()).toBe(0);
     await vi.runOnlyPendingTimersAsync();
     expect(firstGradingShutdown).not.toHaveBeenCalled();
