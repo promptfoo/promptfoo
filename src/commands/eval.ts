@@ -27,7 +27,12 @@ import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
-import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
+import {
+  CommandLineOptionsSchema,
+  MAX_SUGGESTIONS_COUNT,
+  OutputFileExtension,
+  TestSuiteSchema,
+} from '../types/index';
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
@@ -69,6 +74,8 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
+  // CLI alias preserved for the existing --suggest-prompts <n> flag; canonical key is suggestionsCount.
+  suggestPrompts: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
   resume: z.union([z.string(), z.boolean()]).optional(),
@@ -102,6 +109,40 @@ function failEvalRun(
   }
 
   throw new EvalRunError(message);
+}
+
+function resolveSuggestionOptions(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+  evaluateOptions: EvaluateOptions,
+): Pick<EvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
+  const { suggestPrompts } = cmdObj as EvalCommandOptions;
+
+  // --suggest-prompts is itself an enable signal — passing a count opts in even
+  // if some other source explicitly set generateSuggestions=false.
+  if (suggestPrompts !== undefined) {
+    return { generateSuggestions: true, suggestionsCount: suggestPrompts };
+  }
+
+  const explicitGenerate =
+    cmdObj.generateSuggestions ??
+    commandLineOptions?.generateSuggestions ??
+    evaluateOptions.generateSuggestions;
+
+  if (explicitGenerate !== true) {
+    // Return explicit false so Object.assign clears any truthy default already on options.
+    return explicitGenerate === false ? { generateSuggestions: false } : {};
+  }
+
+  // Read cmdObj.suggestionsCount too: doEval is exported and non-Commander
+  // callers may pass the canonical key directly instead of the suggestPrompts CLI alias.
+  const suggestionsCount =
+    cmdObj.suggestionsCount ??
+    commandLineOptions?.suggestionsCount ??
+    evaluateOptions.suggestionsCount;
+  return suggestionsCount === undefined
+    ? { generateSuggestions: true }
+    : { generateSuggestions: true, suggestionsCount };
 }
 
 export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
@@ -568,8 +609,8 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
-      options.generateSuggestions = true;
+    if (!resumeEval) {
+      Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
@@ -1034,6 +1075,7 @@ export function evalCommand(
   const evaluateOptions: EvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+    evaluateOptions.suggestionsCount = defaultConfig.evaluateOptions.suggestionsCount;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
     evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
   }
@@ -1173,7 +1215,7 @@ export function evalCommand(
     )
     .option(
       '--suggest-prompts <number>',
-      'Generate N new prompts and append them to the prompt list',
+      `Generate N new prompts (1-${MAX_SUGGESTIONS_COUNT}) and append them to the prompt list`,
     )
     .option('-w, --watch', 'Watch for changes in config and re-run')
     .option(

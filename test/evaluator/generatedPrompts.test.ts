@@ -93,4 +93,51 @@ describe('generated prompt selection', () => {
       process.exitCode = previousExitCode;
     }
   });
+
+  it('passes the requested suggestion count to the generator', async () => {
+    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
+
+    await evaluate(createTestSuite(), new Eval({}), {
+      eventSource: 'library',
+      generateSuggestions: true,
+      suggestionsCount: 3,
+    });
+
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 3);
+  });
+
+  it('defaults suggestionsCount to 1 when omitted', async () => {
+    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
+
+    await evaluate(createTestSuite(), new Eval({}), {
+      eventSource: 'library',
+      generateSuggestions: true,
+    });
+
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1);
+  });
+
+  it('clamps over-cap suggestionsCount to MAX_SUGGESTIONS_COUNT', async () => {
+    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
+
+    await evaluate(createTestSuite(), new Eval({}), {
+      eventSource: 'library',
+      generateSuggestions: true,
+      suggestionsCount: 1_000,
+    });
+
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 50);
+  });
+
+  it('coerces invalid suggestionsCount values to 1', async () => {
+    vi.mocked(promptYesNo).mockResolvedValueOnce(true);
+
+    await evaluate(createTestSuite(), new Eval({}), {
+      eventSource: 'library',
+      generateSuggestions: true,
+      suggestionsCount: 0,
+    });
+
+    expect(generatePrompts).toHaveBeenCalledWith('Original prompt', 1);
+  });
 });

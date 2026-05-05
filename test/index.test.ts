@@ -88,6 +88,7 @@ describe('index.ts exports', () => {
     'EmailValidationError',
     'EvalRunError',
     'EVENT_SOURCES',
+    'MAX_SUGGESTIONS_COUNT',
     'PromptSuggestionsRejectedError',
     'ServerError',
     'assertions',
