@@ -341,17 +341,24 @@ export interface RedteamRunOptions {
   /** Whether to fail closed on invalid or partial runtime input. */
   strict?: boolean;
 
-  /** Live config payload used by the web UI flow. */
+  /**
+   * Live config payload used by the web UI flow. The payload is opaque to the
+   * Node.js API and is forwarded to the run unchanged.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   liveRedteamConfig?: any;
   /** Optional callback for runtime log messages. */
   logCallback?: (message: string) => void;
-  /** Callback invoked as red team results complete. */
+  /**
+   * Callback invoked as red team results complete. `evalStep` and `metrics`
+   * mirror the {@link EvaluateOptions.progressCallback} arguments.
+   */
   progressCallback?: (
     completed: number,
     total: number,
     index: number | string,
-    evalStep: any, // RunEvalOptions, but introduces circular dependency
-    metrics: any, // PromptMetrics, but introduces circular dependency
+    evalStep: import('../types/index').RunEvalOptions,
+    metrics: import('../types/index').PromptMetrics,
   ) => void;
   /** Signal used to cancel the run. */
   abortSignal?: AbortSignal;

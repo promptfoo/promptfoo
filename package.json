@@ -47,7 +47,7 @@
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
     "db:studio": "npx drizzle-kit studio",
-    "docs:api": "typedoc --options typedoc.json && prettier --write 'site/docs/api/node/reference/**/*.md'",
+    "docs:api": "typedoc --options typedoc.json && tsx scripts/nodeApiReferencePostprocess.ts && prettier --write 'site/docs/api/node/reference/**/*.md'",
     "docs:api:check": "npm run docs:api && git diff --exit-code -- site/docs/api/node/reference",
     "openapi:generate": "tsx scripts/generateOpenApi.ts",
     "openapi:check": "tsx scripts/generateOpenApi.ts --check",

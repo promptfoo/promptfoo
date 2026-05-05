@@ -19,7 +19,7 @@ import type {
 
 /**
  * Python prompt function. Runs a specific function from the python file.
- * @param promptPath - Path to the Python file.
+ * @param filePath - Path to the Python file.
  * @param functionName - Function name to execute.
  * @param context - Context for the prompt.
  * @returns The prompts

@@ -56,6 +56,7 @@ export type {
   RedteamGenerateOptions,
   RedteamGenerateResult,
   RedteamRunOptions,
+  RedteamRunResult,
   TransformContext,
   TransformFunction,
   TransformPrompt,

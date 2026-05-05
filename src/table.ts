@@ -9,20 +9,25 @@ import { ellipsize } from './util/text';
  *
  * Usually pass the table from a completed eval record returned by `evaluate()`.
  *
+ * @param evaluateTable - Table data returned on the completed eval record. Pass
+ * the value resolved from `await evalRecord.getTable()`.
+ * @param tableCellMaxLength - Maximum visible width for each rendered cell.
+ * @param maxRows - Maximum number of body rows to render.
+ *
  * @example
  * ```ts
+ * import { evaluate, generateTable } from 'promptfoo';
+ *
  * const evalRecord = await evaluate(testSuite);
- * console.log(generateTable(evalRecord.table));
+ * const table = await evalRecord.getTable();
+ * console.log(generateTable(table));
  * ```
  *
  * @public
  */
 export function generateTable(
-  /** Table data returned on the completed eval record. */
   evaluateTable: EvaluateTable,
-  /** Maximum visible width for each rendered cell. */
   tableCellMaxLength = 250,
-  /** Maximum number of body rows to render. */
   maxRows = 25,
 ): string {
   const head = evaluateTable.head;

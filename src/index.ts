@@ -432,6 +432,15 @@ async function evaluate(
 export type RedteamGenerateResult = Partial<UnifiedConfig> | null;
 
 /**
+ * Resolved eval record returned by `redteam.run()`. `undefined` when the run
+ * was started but produced no eval (for example, when the operation was
+ * cancelled before any results were written).
+ *
+ * @beta
+ */
+export type RedteamRunResult = Eval | undefined;
+
+/**
  * Advanced red team helpers exposed through the Node.js package.
  *
  * This surface is still evolving; prefer the CLI and documented red team config
@@ -460,17 +469,10 @@ export interface RedteamApi {
   /** Generate a red team config programmatically. */
   generate(options: RedteamGenerateOptions): Promise<RedteamGenerateResult>;
   /** Run a red team eval programmatically. */
-  run(options: RedteamRunOptions): ReturnType<typeof doRedteamRun>;
+  run(options: RedteamRunOptions): Promise<RedteamRunResult>;
 }
 
-/**
- * Advanced red team helpers exposed through the Node.js package.
- *
- * This surface is still evolving; prefer the CLI and documented red team config
- * flows unless you specifically need programmatic orchestration.
- *
- * @beta
- */
+/** Implementation of {@link RedteamApi}. @beta */
 const redteam: RedteamApi = {
   Extractors: {
     extractEntities,

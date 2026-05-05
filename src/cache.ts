@@ -213,7 +213,14 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
  *
  * @example
  * ```ts
- * const baseline = await withCacheNamespace('baseline', () => evaluate(testSuite));
+ * import { cache, evaluate } from 'promptfoo';
+ *
+ * const baseline = await cache.withCacheNamespace('baseline', () =>
+ *   evaluate(baselineSuite),
+ * );
+ * const candidate = await cache.withCacheNamespace('candidate', () =>
+ *   evaluate(candidateSuite),
+ * );
  * ```
  *
  * @public
@@ -556,11 +563,27 @@ async function prepareFetchResponse(
  * Use this in custom providers when you want the same retry and response-cache
  * behavior as built-in HTTP-backed providers.
  *
+ * @param url - Target URL or `Request` to fetch.
+ * @param options - Fetch options (method, headers, body) passed through to the
+ * underlying request.
+ * @param timeout - Request timeout in milliseconds. Defaults to the value of the
+ * `REQUEST_TIMEOUT_MS` environment variable.
+ * @param format - `'json'` (default) parses the response body as JSON;
+ * `'text'` returns the raw response body unchanged.
+ * @param bust - Skip the cache and force a fresh request.
+ * @param maxRetries - Maximum retry attempts on transient errors. Defaults to
+ * the value of `PROMPTFOO_REQUEST_BACKOFF_MS` / built-in retry policy.
+ * @throws When `format` is `'json'` and the response body is not valid JSON.
+ *
  * @example
  * ```ts
- * const { data, cached } = await fetchWithCache<{ ok: boolean }>(
- *   'https://example.com/status',
+ * import { cache } from 'promptfoo';
+ *
+ * type Echo = { args: Record<string, string> };
+ * const { data, cached } = await cache.fetchWithCache<Echo>(
+ *   'https://httpbin.org/get?model=gpt-4o-mini',
  * );
+ * console.log(cached, data.args.model);
  * ```
  *
  * @public

@@ -2,6 +2,7 @@ import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from './env';
+import type { AtomicTestCase } from './index';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 import type { TransformFunction } from './transform';
@@ -52,18 +53,6 @@ export interface SkillCallEntry {
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
 
-// Local interface to avoid circular dependency with src/types/index.ts
-interface AtomicTestCase {
-  description?: string;
-  vars?: Record<string, VarValue>;
-  providerResponse?: ProviderResponse;
-  tokenUsage?: TokenUsage;
-  success?: boolean;
-  score?: number;
-  failureReason?: string;
-  metadata?: Record<string, any>;
-  options?: Record<string, any>;
-}
 export interface ProviderModerationResponse {
   cached?: boolean;
   error?: string;
@@ -86,7 +75,14 @@ export interface ProviderOptions {
   id?: ProviderId;
   /** Human-readable label used in reports and provider maps. */
   label?: ProviderLabel;
-  /** Provider-specific configuration passed to the provider factory. */
+  /**
+   * Provider-specific configuration passed to the provider factory. Each
+   * built-in provider documents its own config shape; for custom providers
+   * this is whatever the provider implementation expects. Typed as `any`
+   * because the resolved shape is provider-specific and is narrowed inside
+   * the provider implementation.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config?: any;
   /** Restrict this provider to named prompts. */
   prompts?: string[];
@@ -108,8 +104,13 @@ export interface ProviderOptions {
 export interface CallApiContextParams {
   /** Nunjucks filters available while rendering related prompt content. */
   filters?: NunjucksFilterMap;
-  /** Accessor for the active cache instance. */
-  getCache?: any;
+  /**
+   * Accessor for the active cache instance. Treat the return value as opaque
+   * and prefer the documented `cache.*` helpers from the package over calling
+   * it directly.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getCache?: () => any;
   /** Logger configured for the current eval. */
   logger?: winston.Logger;
   /** Original provider when this call is being graded or wrapped. */
@@ -174,7 +175,12 @@ export interface ApiProvider {
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   /** Optional embedding-specific entrypoint for compatible providers. */
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
-  /** Provider-specific configuration retained for later calls and serialization. */
+  /**
+   * Provider-specific configuration retained for later calls and serialization.
+   * The shape mirrors {@link ProviderOptions.config}; consult the documentation
+   * for the specific provider for the supported keys.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config?: any;
   /** Delay in milliseconds before provider calls. */
   delay?: number;
@@ -186,7 +192,12 @@ export interface ApiProvider {
   label?: ProviderLabel;
   /** Transform provider output before assertions run. */
   transform?: string | TransformFunction;
-  /** Custom JSON serialization hook for persisted eval records. */
+  /**
+   * Custom JSON serialization hook used when persisting the provider on an eval
+   * record. Implementations should return a value that is structurally
+   * serializable (no functions or circular references).
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker
@@ -325,7 +336,11 @@ export interface ProviderResponse {
   logProbs?: number[];
   /** End-to-end provider latency in milliseconds. */
   latencyMs?: number;
-  /** Additional provider-specific metadata preserved on the result row. */
+  /**
+   * Additional provider-specific metadata preserved on the result row. The
+   * named keys below are recognized by built-in features; providers can add
+   * arbitrary additional keys.
+   */
   metadata?: {
     redteamFinalPrompt?: string;
     http?: {
@@ -334,6 +349,7 @@ export interface ProviderResponse {
       headers?: Record<string, string>;
       requestHeaders?: Record<string, string>;
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [key: string]: any;
   };
   /**
@@ -347,8 +363,13 @@ export interface ProviderResponse {
    */
   prompt?: string | ChatMessage[];
   /** Raw provider payload retained for advanced consumers. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   raw?: string | any;
-  /** Main provider output consumed by assertions and result rendering. */
+  /**
+   * Main provider output consumed by assertions and result rendering. Most
+   * providers return a string; complex providers may return a JSON object.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   output?: string | any;
   /**
    * Input materialization metadata returned by a remote Promptfoo server.
@@ -358,6 +379,7 @@ export interface ProviderResponse {
    * Output after provider-level transform. Used by contextTransform to ensure
    * it operates on provider-normalized output, independent of test transforms.
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   providerTransformedOutput?: string | any;
   /** Provider-reported token usage. */
   tokenUsage?: TokenUsage;
