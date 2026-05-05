@@ -493,9 +493,8 @@ describe('writeOutput', () => {
         '@_name': 'test 2: failing test',
         '@_time': '2.5',
         failure: expect.objectContaining({
-          '#text':
-            'Score: 0.5\nReason: Expected output to contain Bob\nFailed assertions:\n- contains: Expected output to contain Bob',
-          '@_message': 'Expected output to contain Bob',
+          '#text': 'Score: 0.5\nReason: Assertion failed\nFailed assertions:\n- contains',
+          '@_message': 'Assertion failed',
           '@_type': 'assertion',
         }),
       }),
@@ -504,8 +503,8 @@ describe('writeOutput', () => {
         '@_name': 'test 3',
         '@_time': '0.5',
         error: expect.objectContaining({
-          '#text': 'Reason: provider request failed',
-          '@_message': 'provider request failed',
+          '#text': 'Reason: Evaluation error',
+          '@_message': 'Evaluation error',
           '@_type': 'error',
         }),
       }),
@@ -673,12 +672,12 @@ describe('writeOutput', () => {
       '@_timestamp': '2026-05-03T15:00:00.000Z',
     });
     expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
-      '#text': 'Reason: grader unavailable',
-      '@_message': 'grader unavailable',
+      '#text': 'Reason: Evaluation error',
+      '@_message': 'Evaluation error',
     });
   });
 
-  it('preserves longer JUnit failure messages up to the message limit', async () => {
+  it('keeps JUnit failure messages compact when raw assertion reasons are long', async () => {
     const longReason = 'x'.repeat(600);
     const eval_ = new Eval({});
     await eval_.addResult({
@@ -705,7 +704,8 @@ describe('writeOutput', () => {
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
-    expect(parsed.testsuites.testsuite.testcase.failure['@_message']).toHaveLength(600);
+    expect(parsed.testsuites.testsuite.testcase.failure['@_message']).toBe('Assertion failed');
+    expect(xml).not.toContain(longReason);
   });
 
   it('separates JUnit suites for providers that share an id but differ by label', async () => {
@@ -796,7 +796,7 @@ describe('writeOutput', () => {
     }
   });
 
-  it('omits the duplicate Error line from JUnit details when it matches the reason', async () => {
+  it('omits raw JUnit error text when it matches the inline reason', async () => {
     const eval_ = new Eval({});
     await eval_.addResult({
       success: false,
@@ -818,10 +818,14 @@ describe('writeOutput', () => {
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
-    expect(parsed.testsuites.testsuite.testcase.error['#text']).toBe('Reason: request failed: 500');
+    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
+      '#text': 'Reason: Evaluation error',
+      '@_message': 'Evaluation error',
+    });
+    expect(xml).not.toContain('request failed: 500');
   });
 
-  it('includes the raw error block when it has formatting beyond the inline reason', async () => {
+  it('omits multiline raw JUnit error payloads', async () => {
     const eval_ = new Eval({});
     await eval_.addResult({
       success: false,
@@ -843,9 +847,52 @@ describe('writeOutput', () => {
     const xml = await createJunitXml(eval_);
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
-    expect(parsed.testsuites.testsuite.testcase.error['#text']).toBe(
-      'Reason: API error: 401 {"code":"invalid_api_key"}\nError: API error: 401\n{"code":"invalid_api_key"}',
-    );
+    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
+      '#text': 'Reason: Evaluation error',
+      '@_message': 'Evaluation error',
+    });
+    expect(xml).not.toContain('invalid_api_key');
+  });
+
+  it('omits raw model outputs from JUnit assertion details', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: 'p', label: '' },
+      response: { output: 'TOP_SECRET_OUTPUT_42' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Expected output "TOP_SECRET_OUTPUT_42" to equal "safe"',
+        componentResults: [
+          {
+            pass: false,
+            score: 0,
+            reason: 'Expected output "TOP_SECRET_OUTPUT_42" to equal "safe"',
+            assertion: { type: 'equals', value: 'safe' },
+          },
+        ],
+      },
+      promptId: 'output-leak',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.failure).toMatchObject({
+      '#text': 'Score: 0\nReason: Assertion failed\nFailed assertions:\n- equals',
+      '@_message': 'Assertion failed',
+    });
+    expect(xml).not.toContain('TOP_SECRET_OUTPUT_42');
   });
 
   it('does not sanitize config for CSV output', async () => {
