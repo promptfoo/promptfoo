@@ -12,7 +12,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions } from '../../../types/index';
-import type { InternalEvaluateOptions as EvaluateOptions } from '../../../types/internal';
+import type { InternalEvaluateOptions } from '../../../types/internal';
 
 /**
  * Run an eval from a promptfoo config with optional test case filtering
@@ -410,7 +410,7 @@ export function registerRunEvaluationTool(server: McpServer) {
           };
 
           // Prepare evaluate options
-          const evaluateOptions: EvaluateOptions = {
+          const evaluateOptions: InternalEvaluateOptions = {
             maxConcurrency,
             eventSource: 'mcp',
             showProgressBar: false, // Disable for MCP usage

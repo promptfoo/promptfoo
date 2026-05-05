@@ -61,7 +61,7 @@ import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
 
 import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
-import type { InternalEvaluateOptions as EvaluateOptions } from '../types/internal';
+import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -130,8 +130,8 @@ function handleRecoverableWatchError(error: unknown): boolean {
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
-  evaluateOptions: EvaluateOptions,
-): Pick<EvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
+  evaluateOptions: InternalEvaluateOptions,
+): Pick<InternalEvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
   const { suggestPrompts } = cmdObj as EvalCommandOptions;
 
   // --suggest-prompts is itself an enable signal — passing a count opts in even
@@ -180,7 +180,7 @@ export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
-  evaluateOptions: EvaluateOptions,
+  evaluateOptions: InternalEvaluateOptions,
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
@@ -436,7 +436,7 @@ export async function doEval(
     if (resumeRaw) {
       const persisted = (resumeEval?.runtimeOptions ||
         config.evaluateOptions ||
-        {}) as EvaluateOptions;
+        {}) as InternalEvaluateOptions;
       repeat =
         Number.isSafeInteger(persisted.repeat || 0) && (persisted.repeat as number) > 0
           ? (persisted.repeat as number)
@@ -469,7 +469,7 @@ export async function doEval(
     // For resume mode, include persisted value as "explicit", with fallback to config when
     // runtimeOptions are missing (e.g., older evals that didn't persist runtimeOptions)
     const explicitMaxConcurrency = resumeRaw
-      ? ((resumeEval?.runtimeOptions as EvaluateOptions | undefined)?.maxConcurrency ??
+      ? ((resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined)?.maxConcurrency ??
         cmdObj.maxConcurrency ??
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency)
@@ -490,7 +490,7 @@ export async function doEval(
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
     const explicitTestCountBeforeFiltering = testSuite.tests?.length;
-    const resumeRuntimeOptions = resumeEval?.runtimeOptions as EvaluateOptions | undefined;
+    const resumeRuntimeOptions = resumeEval?.runtimeOptions as InternalEvaluateOptions | undefined;
     const persistedFilterRange =
       typeof resumeRuntimeOptions?.filterRange === 'string'
         ? resumeRuntimeOptions.filterRange
@@ -581,7 +581,7 @@ export async function doEval(
 
     await checkCloudPermissions(config as UnifiedConfig);
 
-    const options: EvaluateOptions = {
+    const options: InternalEvaluateOptions = {
       ...evaluateOptions,
       showProgressBar:
         getLogLevel() === 'debug'
@@ -1082,7 +1082,7 @@ export function evalCommand(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
 ) {
-  const evaluateOptions: EvaluateOptions = {};
+  const evaluateOptions: InternalEvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
     evaluateOptions.suggestionsCount = defaultConfig.evaluateOptions.suggestionsCount;
