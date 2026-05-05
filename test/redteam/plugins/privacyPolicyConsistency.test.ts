@@ -1,4 +1,5 @@
 import path from 'path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   PrivacyPolicyConsistencyGrader,
@@ -20,14 +21,9 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
 
   it('should initialize with required parameters', () => {
     const policyPath = path.join(policyFixtureDir, 'support-agent.md');
-    const plugin = new PrivacyPolicyConsistencyPlugin(
-      mockProvider,
-      mockPurpose,
-      mockInjectVar,
-      {
-        privacyPolicy: `file://${policyPath}`,
-      },
-    );
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicy: `file://${policyPath}`,
+    });
 
     expect(plugin.id).toBe('promptfoo:redteam:privacy-policy-consistency');
   });
@@ -41,15 +37,10 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
   });
 
   it('should include privacyPolicy in test metadata', async () => {
-    const plugin = new PrivacyPolicyConsistencyPlugin(
-      mockProvider,
-      mockPurpose,
-      mockInjectVar,
-      {
-        privacyPolicyContent: mockPrivacyPolicy,
-        privacyPolicyFileName: 'privacy-policy.md',
-      },
-    );
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicyContent: mockPrivacyPolicy,
+      privacyPolicyFileName: 'privacy-policy.md',
+    });
 
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output:
@@ -81,14 +72,9 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
 
   it('should load privacyPolicy from a file:// reference', async () => {
     const policyPath = path.join(policyFixtureDir, 'support-agent.md');
-    const plugin = new PrivacyPolicyConsistencyPlugin(
-      mockProvider,
-      mockPurpose,
-      mockInjectVar,
-      {
-        privacyPolicy: `file://${policyPath}`,
-      },
-    );
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicy: `file://${policyPath}`,
+    });
 
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output:
@@ -127,14 +113,9 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
     ];
 
     for (const policyCase of policyCases) {
-      const plugin = new PrivacyPolicyConsistencyPlugin(
-        mockProvider,
-        mockPurpose,
-        mockInjectVar,
-        {
-          privacyPolicy: `file://${path.join(policyFixtureDir, policyCase.filename)}`,
-        },
-      );
+      const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+        privacyPolicy: `file://${path.join(policyFixtureDir, policyCase.filename)}`,
+      });
 
       vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
         output: policyCase.generatedPrompt,
@@ -148,15 +129,10 @@ describe('PrivacyPolicyConsistencyPlugin', () => {
   });
 
   it('should not include the uploaded privacy policy in generation prompts', async () => {
-    const plugin = new PrivacyPolicyConsistencyPlugin(
-      mockProvider,
-      mockPurpose,
-      mockInjectVar,
-      {
-        privacyPolicyContent: mockPrivacyPolicy,
-        privacyPolicyFileName: 'privacy-policy.md',
-      },
-    );
+    const plugin = new PrivacyPolicyConsistencyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      privacyPolicyContent: mockPrivacyPolicy,
+      privacyPolicyFileName: 'privacy-policy.md',
+    });
 
     vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
       output:

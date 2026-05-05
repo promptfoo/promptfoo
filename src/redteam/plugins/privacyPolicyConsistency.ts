@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import invariant from '../../util/invariant';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import invariant from '../../util/invariant';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
