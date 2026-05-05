@@ -156,10 +156,11 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
   });
 
   evaluateWithSource(
-    Object.assign({}, testSuite as EvaluateTestSuite, {
+    {
+      ...(testSuite as EvaluateTestSuite),
       writeLatestResults: true,
       sharing: testSuite.sharing ?? shouldShareResults({}),
-    }),
+    },
     {
       ...evaluateOptions,
       eventSource: 'web',

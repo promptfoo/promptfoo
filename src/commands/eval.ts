@@ -116,11 +116,7 @@ function handleRecoverableWatchError(error: unknown): boolean {
     // Account helpers already render these user-facing failures.
     return true;
   }
-  if (error instanceof EvalRunError) {
-    logger.error(error.message);
-    return true;
-  }
-  if (error instanceof PromptSuggestionsRejectedError) {
+  if (error instanceof EvalRunError || error instanceof PromptSuggestionsRejectedError) {
     logger.error(error.message);
     return true;
   }

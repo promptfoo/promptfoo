@@ -204,24 +204,19 @@ function buildProviderMap(providers: ApiProvider[]): Record<string, ApiProvider>
   return providerMap;
 }
 
-async function resolveDefaultTestRef(
-  defaultTest: EvaluateTestSuite['defaultTest'],
-): Promise<EvaluateTestSuite['defaultTest']> {
-  if (typeof defaultTest === 'string' && defaultTest.startsWith('file://')) {
-    return maybeLoadFromExternalFile(defaultTest);
-  }
-  return defaultTest;
-}
-
 async function createRuntimeTestSuite(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   loadedProviders: ApiProvider[],
 ): Promise<TestSuite> {
+  const defaultTest =
+    typeof testSuiteConfig.defaultTest === 'string' &&
+    testSuiteConfig.defaultTest.startsWith('file://')
+      ? await maybeLoadFromExternalFile(testSuiteConfig.defaultTest)
+      : testSuiteConfig.defaultTest;
+
   return {
     ...testSuiteConfig,
-    defaultTest: (await resolveDefaultTestRef(
-      testSuiteConfig.defaultTest,
-    )) as TestSuite['defaultTest'],
+    defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests),
@@ -308,21 +303,6 @@ async function maybeShareEval(
   }
 }
 
-async function writeConfiguredOutputs(
-  outputPath: EvaluateTestSuite['outputPath'],
-  evalRecord: Eval,
-): Promise<void> {
-  if (!outputPath) {
-    return;
-  }
-
-  if (typeof outputPath === 'string') {
-    await writeOutput(outputPath, evalRecord, null);
-  } else if (Array.isArray(outputPath)) {
-    await writeMultipleOutputs(outputPath, evalRecord, null);
-  }
-}
-
 export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
@@ -368,7 +348,13 @@ export async function evaluateWithSource(
   );
 
   await maybeShareEval(testSuiteConfig, ret);
-  await writeConfiguredOutputs(testSuiteConfig.outputPath, evalRecord);
+  if (testSuiteConfig.outputPath) {
+    if (typeof testSuiteConfig.outputPath === 'string') {
+      await writeOutput(testSuiteConfig.outputPath, evalRecord, null);
+    } else if (Array.isArray(testSuiteConfig.outputPath)) {
+      await writeMultipleOutputs(testSuiteConfig.outputPath, evalRecord, null);
+    }
+  }
 
   return ret;
 }
