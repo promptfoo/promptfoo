@@ -85,7 +85,7 @@ describe('verboseToggle', () => {
       );
 
       initVerboseToggle({ onInterrupt });
-      expect(() => process.stdin.emit('data', '')).not.toThrow();
+      expect(() => process.stdin.emit('data', '\u0003')).not.toThrow();
 
       expect(onInterrupt).toHaveBeenCalledTimes(1);
       expect(exitSpy).toHaveBeenCalledWith(130);

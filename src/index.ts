@@ -42,7 +42,7 @@ export { PromptSuggestionsRejectedError } from './evaluator';
 export { EmailValidationError } from './globalConfig/accounts';
 export { ServerError, type ServerErrorPhase } from './server/errors';
 export { generateTable } from './table';
-export { isCliEventSource } from './types/eventSource';
+// EVENT_SOURCES, EventSource, EventSourceSchema, isCliEventSource flow through ./types/index.
 export * from './types/index';
 // Transform types and runtime guard for users passing inline transform functions
 // via the Node.js package.

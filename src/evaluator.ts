@@ -91,14 +91,6 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-
-export class PromptSuggestionsRejectedError extends Error {
-  constructor(message = 'No prompts selected. Aborting.') {
-    super(message);
-    this.name = 'PromptSuggestionsRejectedError';
-  }
-}
-
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -117,6 +109,13 @@ import type {
   VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
+
+export class PromptSuggestionsRejectedError extends Error {
+  constructor(message = 'No prompts selected. Aborting.') {
+    super(message);
+    this.name = 'PromptSuggestionsRejectedError';
+  }
+}
 
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;

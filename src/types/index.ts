@@ -12,6 +12,14 @@ export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
+import { EventSourceSchema } from './eventSource';
+
+export {
+  EVENT_SOURCES,
+  type EventSource,
+  EventSourceSchema,
+  isCliEventSource,
+} from './eventSource';
 
 import type { BlobRef } from '../blobs/types';
 import type {
@@ -251,10 +259,6 @@ export interface RunEvalOptions {
    */
   providerCallQueue?: ProviderCallQueueRef;
 }
-
-import { EventSourceSchema } from './eventSource';
-
-export { EVENT_SOURCES, type EventSource, EventSourceSchema } from './eventSource';
 
 export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
