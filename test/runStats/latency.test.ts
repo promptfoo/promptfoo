@@ -75,20 +75,19 @@ describe('computeLatencyStats', () => {
   });
 
   it('should compute percentiles correctly', () => {
-    // 20 values: 50, 100, 150, ..., 1000
-    const results: StatableResult[] = Array.from({ length: 20 }, (_, i) => ({
+    // 21 values: 50, 100, 150, ..., 1050
+    const results: StatableResult[] = Array.from({ length: 21 }, (_, i) => ({
       success: true,
       latencyMs: (i + 1) * 50,
     }));
     const stats = computeLatencyStats(results);
 
-    // p50: rank = 0.5 * 19 = 9.5 -> interpolate between index 9 (500) and 10 (550)
-    expect(stats.p50Ms).toBe(525);
-    // p95: rank = 0.95 * 19 = 18.05 -> interpolate between index 18 (950) and 19 (1000)
-    expect(stats.p95Ms).toBe(953); // 950 + 0.05*50 = 952.5 rounded
-    // p99: rank = 0.99 * 19 = 18.81 -> interpolate between index 18 (950) and 19 (1000)
-    // Due to floating point: 950 + 0.81*50 = 990.5 -> Math.round(990.5) = 990 (banker's rounding)
-    expect(stats.p99Ms).toBe(990);
+    // p50: rank = 0.5 * 20 = 10 -> exact index 10 (550)
+    expect(stats.p50Ms).toBe(550);
+    // p95: rank = 0.95 * 20 = 19 -> exact index 19 (1000)
+    expect(stats.p95Ms).toBe(1000);
+    // p99: rank = 0.99 * 20 = 19.8 -> interpolate between index 19 (1000) and 20 (1050)
+    expect(stats.p99Ms).toBe(1040);
   });
 
   it('should round results to integers', () => {
