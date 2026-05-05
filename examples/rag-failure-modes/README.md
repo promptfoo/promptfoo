@@ -22,8 +22,8 @@ Promptfoo already supports RAG evaluation through assertions such as `context-re
 From this directory:
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml
-promptfoo view
+npx promptfoo@latest eval -c promptfooconfig.yaml
+npx promptfoo@latest view
 ```
 
 Or from the repository root during local development:
@@ -41,18 +41,3 @@ Expected result:
 ```
 
 The two failures are intentional. They demonstrate Promptfoo catching bad RAG cases where the retrieved context is missing or irrelevant. In a real project, these failing cases should trigger retrieval or chunking fixes before deployment.
-
-## How to adapt this example
-
-1. Replace the sample questions with your own RAG test cases.
-2. Replace the static outputs with responses from your RAG pipeline.
-3. Add expected source IDs, page numbers, or document names to `vars`.
-4. Pick assertions based on the failure mode you want to catch.
-5. Run this in CI to detect regressions when retrieval, chunking, prompts, or source documents change.
-
-## Notes
-
-- `context-recall` and `context-relevance` are useful when evaluating retrieved context quality.
-- Deterministic checks such as `contains`, `contains-all`, and `not-contains` are useful for required answer strings, source IDs, or refusal phrases.
-- `llm-rubric` is useful when the failure mode requires judgment, such as overclaiming beyond context or failing to surface conflicting sources.
-- This example intentionally avoids adding new Promptfoo internals or new assertion semantics.
