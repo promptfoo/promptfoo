@@ -58,16 +58,20 @@ type CodexDefaultProviderBundle = {
   webSearchProvider: OpenAICodexSDKProvider;
 };
 
-// Bundle lifecycle (FSM):
+// Bundle lifecycle (FSM). State transitions live in
+// requestCodexDefaultProviderBundleShutdown / scheduleCodexDefaultProviderBundleShutdown
+// / shutdownCodexDefaultProviderBundle / resurrectCodexDefaultProviderBundle:
 //   active           → shutdownRequested = false (live in cache map)
-//   eviction-pending → shutdownRequested = true,  activeCalls > 0  (no timer)
-//   grace-pending    → shutdownRequested = true,  activeCalls = 0, shutdownTimer set
-//   shutting-down    → shutdownPromise   set
-//   resurrected      → after shutdown, a held reference re-enters via callApi:
-//                      shutdownRequested = false, shutdownPromise = undefined,
-//                      providers re-registered with providerRegistry.
-//   cancelled        → only set by tests via clearCodexDefaultProvidersForTesting;
-//                      blocks any further timer arming or shutdown.
+//   eviction-pending → shutdownRequested = true, activeCalls > 0; timer arming deferred
+//   grace-pending    → shutdownRequested = true, activeCalls = 0, shutdownTimer armed
+//   shutting-down    → shutdownPromise set
+//   resurrected      → after shutdown, a held reference re-enters via callApi: providers
+//                      are re-registered, shutdownPromise cleared, but shutdownRequested
+//                      stays true so the grace timer re-arms once activeCalls drops.
+//                      This keeps resurrected bundles bounded — they cycle between
+//                      grace-pending and shutting-down rather than escaping to "active".
+//   cancelled        → set by clearCodexDefaultProvidersForTesting; clears any armed
+//                      timer and blocks all further timer arming and shutdowns.
 type ManagedCodexDefaultProviderBundle = CodexDefaultProviderBundle & {
   activeCalls: number;
   cancelled: boolean;
@@ -185,15 +189,16 @@ function getSecretCacheFingerprint(value: string | undefined): string | undefine
 }
 
 function getCodexDefaultProvidersCacheKey(env?: EnvOverrides): string {
-  const codexApiKey = getCodexEnvString(env, 'CODEX_API_KEY');
-  const openAiApiKey = getCodexEnvString(env, 'OPENAI_API_KEY');
+  // Match OpenAICodexSDKProvider.getApiKey() resolution order: OPENAI_API_KEY first,
+  // then CODEX_API_KEY. Partitioning by the resolved key (rather than both raw slots)
+  // avoids wasteful cache misses when only the ignored fallback slot rotates.
+  const resolvedApiKey =
+    getCodexEnvString(env, 'OPENAI_API_KEY') || getCodexEnvString(env, 'CODEX_API_KEY');
 
   return JSON.stringify({
     CODEX_HOME: getCodexEnvString(env, 'CODEX_HOME'),
-    codexApiKeyFingerprint: getSecretCacheFingerprint(codexApiKey),
-    hasCodexApiKey: Boolean(codexApiKey),
-    hasOpenAiApiKey: Boolean(openAiApiKey),
-    openAiApiKeyFingerprint: getSecretCacheFingerprint(openAiApiKey),
+    hasResolvedApiKey: Boolean(resolvedApiKey),
+    resolvedApiKeyFingerprint: getSecretCacheFingerprint(resolvedApiKey),
   });
 }
 
@@ -262,6 +267,12 @@ function scheduleCodexDefaultProviderBundleShutdown(
     providers.shutdownTimer = undefined;
     shutdownCodexDefaultProviderBundle(providers);
   }, CODEX_DEFAULT_PROVIDERS_CACHE_EVICTION_GRACE_MS);
+  // Don't keep the Node event loop alive just to fire eviction cleanup. If the process
+  // exits before the grace period, providerRegistry's beforeExit handler will tear
+  // these bundles down. Without unref(), a CLI run that rotated 32+ credentials would
+  // hang for up to 60s waiting on a timer whose only purpose is to free resources we
+  // are about to free anyway.
+  providers.shutdownTimer.unref?.();
 }
 
 function requestCodexDefaultProviderBundleShutdown(
@@ -292,8 +303,12 @@ async function resurrectCodexDefaultProviderBundle(
     providerRegistry.register(provider);
   }
   providers.shutdownPromise = undefined;
-  providers.shutdownRequested = false;
-  evictedCodexDefaultProviderBundles.delete(providers);
+  // Keep shutdownRequested = true and stay in evictedCodexDefaultProviderBundles so the
+  // wrapper's finally re-arms the grace timer once activeCalls drops to zero. Without
+  // this, a held reference that survives eviction would live indefinitely outside both
+  // the LRU map and the eviction set, defeating the cache-size bound for long-running
+  // processes (server mode, multi-eval scripts).
+  evictedCodexDefaultProviderBundles.add(providers);
 }
 
 function trackCodexDefaultProviderUsage(providers: ManagedCodexDefaultProviderBundle): void {

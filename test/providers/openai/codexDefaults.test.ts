@@ -464,4 +464,60 @@ describe('Codex default providers', () => {
     await vi.runOnlyPendingTimersAsync();
     expect(firstGradingShutdown).not.toHaveBeenCalled();
   });
+
+  it('partitions cache by the resolved api key, not by every raw credential slot', async () => {
+    // OPENAI_API_KEY takes precedence in OpenAICodexSDKProvider.getApiKey(), so two
+    // env-overrides that differ only in the (ignored) CODEX_API_KEY fallback resolve
+    // to the same effective credential and must hit the same cached bundle.
+    const { getCodexDefaultProviders } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+
+    mockProcessEnv({ OPENAI_API_KEY: 'shared-openai-key' });
+
+    const first = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-A' });
+    const second = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-B' });
+    expect(second).toBe(first);
+
+    // Rotating the OPENAI key (the resolved credential) does invalidate the cache.
+    mockProcessEnv({ OPENAI_API_KEY: 'rotated-openai-key' });
+    const third = getCodexDefaultProviders({ CODEX_API_KEY: 'codex-A' });
+    expect(third).not.toBe(first);
+  });
+
+  it('keeps resurrected bundles bounded by re-entering eviction-pending after their next idle', async () => {
+    // Without this, a held reference that survives eviction would live indefinitely
+    // outside both the LRU map and the eviction set, defeating the cache-size bound for
+    // long-running processes.
+    vi.useFakeTimers();
+
+    const { OpenAICodexSDKProvider } = await import('../../../src/providers/openai/codex-sdk');
+    const { getCodexDefaultProviders } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+
+    vi.spyOn(OpenAICodexSDKProvider.prototype, 'callApi').mockResolvedValue({ output: 'ok' });
+
+    const firstProviders = getCodexDefaultProviders({
+      CODEX_API_KEY: 'codex-key-0',
+    }) as unknown as CodexProviderBundle;
+    const shutdowns = spyAndStubShutdowns(firstProviders);
+
+    fillCacheToOverflow(getCodexDefaultProviders);
+
+    // First eviction shutdown.
+    await vi.runOnlyPendingTimersAsync();
+    expect(shutdowns.grading).toHaveBeenCalledTimes(1);
+
+    // Resurrection via held reference.
+    await firstProviders.gradingProvider.callApi('post-shutdown prompt');
+
+    // After the call finishes, the wrapper's finally must have re-armed a shutdown
+    // timer; running it should fire shutdown a second time on the same bundle, proving
+    // the resurrected bundle did not escape the cleanup path.
+    await vi.runOnlyPendingTimersAsync();
+    expect(shutdowns.grading).toHaveBeenCalledTimes(2);
+    expect(shutdowns.gradingJson).toHaveBeenCalledTimes(2);
+    expect(shutdowns.webSearch).toHaveBeenCalledTimes(2);
+  });
 });
