@@ -5,7 +5,7 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - id: 'google:live:gemini-2.5-flash-native-audio-preview-12-2025'
+  - id: 'google:live:gemini-3.1-flash-live-preview'
     config:
       generationConfig:
         response_modalities: ['audio']

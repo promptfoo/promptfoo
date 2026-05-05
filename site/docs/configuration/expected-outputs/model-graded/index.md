@@ -223,7 +223,7 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts automatically select a grading model based on available API keys. The default is `gpt-5.4-2026-03-05` if `OPENAI_API_KEY` is set. See [llm-rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric#how-it-works) for the complete priority order.
+By default, model-graded asserts automatically select a grading model based on available API keys. The default is `gpt-5.5-2026-04-23` if `OPENAI_API_KEY` is set. See [llm-rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric#how-it-works) for the complete priority order.
 
 If you prefer a different model, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 

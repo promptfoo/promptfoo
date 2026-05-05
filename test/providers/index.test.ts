@@ -1698,6 +1698,23 @@ describe('loadApiProvider', () => {
     expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
   });
 
+  it('preserves xai nested config when loaded through the registry', async () => {
+    const provider = await loadApiProvider('xai:grok-2', {
+      options: {
+        config: {
+          region: 'eu-west-1',
+          search_parameters: { mode: 'auto' },
+        },
+      },
+    });
+
+    expect(provider.config.apiBaseUrl).toBe('https://eu-west-1.api.x.ai/v1');
+    expect((provider as any).originalConfig).toEqual({
+      region: 'eu-west-1',
+      search_parameters: { mode: 'auto' },
+    });
+  });
+
   it.each([
     ['dashscope:chat:qwen-max', 'qwen-max'],
     ['dashscope:vl:qwen-vl-max', 'qwen-vl-max'],

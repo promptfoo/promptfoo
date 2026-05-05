@@ -51,12 +51,7 @@ import {
   DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
 import { VoyageEmbeddingProvider } from './voyage';
-import {
-  DefaultGradingJsonProvider as XAIGradingJsonProvider,
-  DefaultGradingProvider as XAIGradingProvider,
-  DefaultSuggestionsProvider as XAISuggestionsProvider,
-  DefaultSynthesizeProvider as XAISynthesizeProvider,
-} from './xai/defaults';
+import { getXAIProviders } from './xai/defaults';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, DefaultProviders } from '../types/index';
@@ -321,13 +316,16 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   {
     name: 'xAI',
     check: (env) => hasCredential('XAI_API_KEY', env),
-    create: () =>
-      createCompletionProviderSet({
-        grading: XAIGradingProvider,
-        gradingJson: XAIGradingJsonProvider,
-        suggestions: XAISuggestionsProvider,
-        synthesize: XAISynthesizeProvider,
-      }),
+    create: (env) => {
+      const xai = getXAIProviders(env);
+      return createCompletionProviderSet({
+        grading: xai.gradingProvider,
+        gradingJson: xai.gradingJsonProvider,
+        suggestions: xai.suggestionsProvider,
+        synthesize: xai.synthesizeProvider,
+        webSearch: xai.webSearchProvider,
+      });
+    },
   },
   {
     name: 'DeepSeek',

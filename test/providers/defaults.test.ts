@@ -463,7 +463,8 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toBe('xai:grok-4-1-fast-reasoning');
+      expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
+      expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
     });
 
     it('should not use xAI providers when higher priority credentials exist', async () => {
@@ -472,7 +473,7 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).not.toBe('xai:grok-4-1-fast-reasoning');
+      expect(providers.gradingProvider.id()).not.toBe('xai:grok-4.3');
     });
   });
 
@@ -537,7 +538,7 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
 
     it('should use Anthropic when OpenAI is missing but all others are set', async () => {
@@ -570,7 +571,7 @@ describe('Provider override tests', () => {
     it('should fallback to OpenAI when no credentials are set', async () => {
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
       expect(providers.embeddingProvider.id()).toContain('text-embedding');
     });
 
@@ -580,7 +581,7 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
   });
 
@@ -658,7 +659,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders(envOverrides);
 
       // OpenAI should win because it's in overrides and has higher priority
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
 
     it('should work with env overrides when process.env is empty', async () => {
@@ -668,7 +669,7 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders(envOverrides);
 
-      expect(providers.gradingProvider.id()).toBe('xai:grok-4-1-fast-reasoning');
+      expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
     });
 
     it('should check both process.env and overrides for credential presence', async () => {
@@ -681,7 +682,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders(envOverrides);
 
       // xAI has higher priority than DeepSeek
-      expect(providers.gradingProvider.id()).toBe('xai:grok-4-1-fast-reasoning');
+      expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
     });
   });
 
@@ -712,7 +713,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       // Should fallback to OpenAI
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
 
     it('should NOT use Azure when only deployment name is set (no credentials)', async () => {
@@ -722,7 +723,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       // Should fallback to OpenAI
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
 
     it('should use Azure with client credentials (service principal)', async () => {
@@ -744,7 +745,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       // Should fallback to OpenAI
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
 
     it('should use embedding deployment name when specified', async () => {
@@ -777,7 +778,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       // OpenAI has priority 1, Azure has priority 3
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
 
     it('should prefer Anthropic over Azure when both are set', async () => {
@@ -804,7 +805,7 @@ describe('Provider override tests', () => {
       setDefaultCompletionProviders(undefined);
 
       providers = await getDefaultProviders();
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
     });
 
     it('should clear embedding override when set to undefined', async () => {
@@ -884,7 +885,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       // Completion should use xAI (higher priority)
-      expect(providers.gradingProvider.id()).toBe('xai:grok-4-1-fast-reasoning');
+      expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
 
       // Embedding should use Mistral (first available with embedding support)
       expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
@@ -974,7 +975,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       // OpenAI should win for both completion and embedding
-      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.5');
       expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
     });
 
@@ -987,7 +988,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders();
 
       // Completion should use xAI
-      expect(providers.gradingProvider.id()).toBe('xai:grok-4-1-fast-reasoning');
+      expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
 
       // Embedding should use Voyage
       expect(providers.embeddingProvider.id()).toBe('voyage:voyage-3.5');

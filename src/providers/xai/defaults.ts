@@ -1,17 +1,45 @@
-import { XAIProvider } from './chat';
+import { createXAIProvider } from './chat';
+import { XAIResponsesProvider } from './responses';
 
-// Default model for xAI grading - Grok 4.1 Fast offers excellent cost/performance
-// Supports 2M context window, fast inference, and reasoning capabilities
-export const DEFAULT_XAI_MODEL = 'grok-4-1-fast-reasoning';
+import type { EnvOverrides } from '../../types/env';
+import type { DefaultProviders } from '../../types/index';
 
-export const DefaultGradingProvider = new XAIProvider(DEFAULT_XAI_MODEL);
+const DEFAULT_XAI_MODEL = 'grok-4.3';
 
-export const DefaultGradingJsonProvider = new XAIProvider(DEFAULT_XAI_MODEL, {
-  config: {
-    response_format: { type: 'json_object' },
-  },
-});
+export function getXAIProviders(
+  env?: EnvOverrides,
+): Pick<
+  DefaultProviders,
+  | 'gradingJsonProvider'
+  | 'gradingProvider'
+  | 'suggestionsProvider'
+  | 'synthesizeProvider'
+  | 'webSearchProvider'
+> {
+  const gradingProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, { env });
 
-export const DefaultSuggestionsProvider = new XAIProvider(DEFAULT_XAI_MODEL);
+  // The outer `config` is `ProviderOptions.config`; the xAI chat provider then reads
+  // its model-specific options from the *nested* `config.config` (see XAIProvider's
+  // constructor in ./chat.ts), so the double nesting is intentional.
+  const gradingJsonProvider = createXAIProvider(`xai:${DEFAULT_XAI_MODEL}`, {
+    env,
+    config: {
+      config: {
+        response_format: { type: 'json_object' },
+      },
+    },
+  });
 
-export const DefaultSynthesizeProvider = new XAIProvider(DEFAULT_XAI_MODEL);
+  return {
+    gradingJsonProvider,
+    gradingProvider,
+    suggestionsProvider: gradingProvider,
+    synthesizeProvider: gradingProvider,
+    webSearchProvider: new XAIResponsesProvider(DEFAULT_XAI_MODEL, {
+      env,
+      config: {
+        tools: [{ type: 'web_search' }],
+      },
+    }),
+  };
+}
