@@ -13,12 +13,17 @@ import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../remoteGeneration';
+import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializedInputVariables,
+} from '../../remoteMaterialization';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -53,6 +58,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -112,9 +118,10 @@ interface HydraConfig {
   _perTurnLayers?: LayerConfig[];
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
+   * Keys are variable names, values are Inputs definitions: plain descriptions
+   * or structured typed configs with fields like description, type, and config.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
 }
 
 function scrubOutputForHistory(output: string): string {
@@ -181,7 +188,7 @@ export class HydraProvider implements ApiProvider {
       jsonOnly: true,
       preferSmallModel: false,
       // Pass inputs schema for multi-input mode
-      inputs: this.config.inputs as Record<string, string> | undefined,
+      inputs: this.config.inputs,
     });
 
     logger.debug('[Hydra] Provider initialized', {
@@ -284,6 +291,7 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
+    let agentFailureError: string | undefined;
 
     const redteamHistory: Array<{
       prompt: string;
@@ -383,6 +391,7 @@ export class HydraProvider implements ApiProvider {
           testRunId,
           error: agentResp.error,
         });
+        agentFailureError = agentResp.error;
         continue;
       }
 
@@ -399,6 +408,7 @@ export class HydraProvider implements ApiProvider {
 
       if (!nextMessage) {
         logger.info('[Hydra] Missing message from agent', { turn });
+        agentFailureError = 'Hydra agent did not return an attack message';
         continue;
       }
 
@@ -411,7 +421,47 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Extract input vars from the processed message for multi-input mode
+      if (this.config.inputs && shouldGenerateRemote()) {
+        assertRemoteMaterializationHandled(agentResp, 'Hydra multi-input generation');
+      }
       const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+      let materializedInputVars:
+        | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+        | undefined;
+      if (
+        this.config.inputs &&
+        shouldGenerateRemote() &&
+        !currentInputVars &&
+        !agentResp.materializedVars
+      ) {
+        logger.warn('[Hydra] Remote multi-input generation returned an invalid prompt format', {
+          turn,
+          messagePreview: processedMessage.slice(0, 200),
+        });
+        agentFailureError = 'Hydra remote multi-input generation returned an invalid prompt format';
+        continue;
+      }
+      if ((currentInputVars || agentResp.materializedVars) && this.config.inputs) {
+        if (shouldGenerateRemote()) {
+          materializedInputVars = buildRemoteMaterializedInputVariables(
+            agentResp,
+            currentInputVars ?? {},
+            this.config.inputs,
+          );
+        } else {
+          materializedInputVars = await materializeInputVariablesWithMetadata(
+            currentInputVars!,
+            this.config.inputs,
+            {
+              materializationIndex: turn,
+              pluginId: 'hydra',
+              provider: this.agentProvider,
+              purpose: test?.metadata?.purpose as string | undefined,
+            },
+          );
+        }
+      }
+      const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
       // Add message to conversation history (without <Prompt> tags)
       this.conversationHistory.push({
@@ -436,7 +486,7 @@ export class HydraProvider implements ApiProvider {
           [this.injectVar]: escapedMessage,
           ...(this.sessionId ? { sessionId: this.sessionId } : {}),
           // Add extracted input vars if available
-          ...(currentInputVars || {}),
+          ...(currentRenderInputVars || {}),
         };
 
         targetPrompt = await renderPrompt(
@@ -570,10 +620,21 @@ export class HydraProvider implements ApiProvider {
 
       // Get target response
       const iterationStart = Date.now();
+      const targetContext = context
+        ? {
+            ...context,
+            vars: {
+              ...vars,
+              ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+              ...(currentRenderInputVars || {}),
+              [this.injectVar]: finalTargetPrompt,
+            },
+          }
+        : context;
       let targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
-        context,
+        targetContext,
         options,
       );
       lastTargetResponse = targetResponse;
@@ -846,7 +907,7 @@ export class HydraProvider implements ApiProvider {
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
-        inputVars: currentInputVars,
+        inputVars: currentRenderInputVars,
       });
 
       // Check if vulnerability was achieved
@@ -907,14 +968,24 @@ export class HydraProvider implements ApiProvider {
       role: msg.role,
       content: msg.content,
     })) as Record<string, any>[];
+    const targetProbeCount = totalTokenUsage.numRequests ?? 0;
+    const hydraRoundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
+    const failClosedError =
+      targetProbeCount === 0
+        ? agentFailureError || 'Hydra did not execute any target probes'
+        : undefined;
 
     return {
       output: lastTargetResponse?.output || '',
-      ...(lastTargetResponse?.error ? { error: lastTargetResponse.error } : {}),
+      ...(failClosedError
+        ? { error: failClosedError }
+        : lastTargetResponse?.error
+          ? { error: lastTargetResponse.error }
+          : {}),
       metadata: {
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
-        hydraRoundsCompleted: this.conversationHistory.filter((m) => m.role === 'user').length,
+        hydraRoundsCompleted,
         hydraBacktrackCount: backtrackCount,
         hydraResult: vulnerabilityAchieved,
         stopReason,

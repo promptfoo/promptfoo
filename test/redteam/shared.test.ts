@@ -1,9 +1,11 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
@@ -48,6 +50,7 @@ vi.mock('../../src/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+  clearLogCallbackIfOwned: vi.fn(),
   setLogCallback: vi.fn(),
   setLogLevel: vi.fn(),
 }));
@@ -103,6 +106,7 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
   };
 });
 vi.mock('fs');
+vi.mock('fs/promises');
 vi.mock('js-yaml');
 vi.mock('os');
 
@@ -122,6 +126,9 @@ describe('doRedteamRun', () => {
     vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
+    vi.mocked(fsPromises.access).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.writeFile).mockResolvedValue();
     vi.mocked(os.tmpdir).mockImplementation(function () {
       return '/tmp';
     });
@@ -198,8 +205,10 @@ describe('doRedteamRun', () => {
       const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
       const expectedPath = path.join('', expectedFilename);
 
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(expectedPath, 'mocked-yaml-content');
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(expectedPath, 'mocked-yaml-content');
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -219,8 +228,10 @@ describe('doRedteamRun', () => {
       const expectedFilePrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining(expectedFilePrefix),
         'mocked-yaml-content',
       );
@@ -243,8 +254,10 @@ describe('doRedteamRun', () => {
       const expectedFilePrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining(expectedFilePrefix),
         'mocked-yaml-content',
       );
@@ -280,8 +293,12 @@ describe('doRedteamRun', () => {
       const secondExpectedPath = path.join('', `redteam-${secondTimestamp}.yaml`);
 
       // Verify different filenames were generated
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, firstExpectedPath, 'mocked-yaml-content');
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(
+      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
+        1,
+        firstExpectedPath,
+        'mocked-yaml-content',
+      );
+      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
         2,
         secondExpectedPath,
         'mocked-yaml-content',
@@ -384,6 +401,29 @@ describe('doRedteamRun', () => {
 
       // Just verifying no errors - cleanup should be handled gracefully
       expect(initVerboseToggle).toHaveBeenCalled();
+    });
+
+    it('should cleanup run state when evaluation throws', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      const { doEval } = await import('../../src/commands/eval');
+      vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
+
+      await expect(doRedteamRun({})).rejects.toThrow('eval failed');
+
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(null);
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should clear log callbacks when evaluation throws', async () => {
+      const mockLogCallback = vi.fn();
+      const { doEval } = await import('../../src/commands/eval');
+      vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
+
+      await expect(doRedteamRun({ logCallback: mockLogCallback })).rejects.toThrow('eval failed');
+
+      expect(setLogCallback).toHaveBeenNthCalledWith(1, mockLogCallback);
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(mockLogCallback);
     });
   });
 

@@ -113,6 +113,30 @@ describe('getTokenUsage', () => {
       },
     });
   });
+
+  it('should preserve provider-side cached input tokens', () => {
+    const data = {
+      usage: {
+        total_tokens: 100,
+        prompt_tokens: 40,
+        completion_tokens: 60,
+        prompt_tokens_details: {
+          cached_tokens: 32,
+        },
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+      completionDetails: {
+        cacheReadInputTokens: 32,
+      },
+    });
+  });
 });
 
 describe('calculateOpenAICost', () => {
@@ -251,6 +275,21 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 1.75 + 500 * 14) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for gpt-5.5', () => {
+    const cost = calculateOpenAICost('gpt-5.5', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 5 + 500 * 30) / 1e6, 6);
+  });
+
+  it('should calculate long-context cost correctly for gpt-5.5', () => {
+    const cost = calculateOpenAICost('gpt-5.5', {}, 300_000, 1_000);
+    expect(cost).toBeCloseTo((300_000 * 10 + 1_000 * 45) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5.5-2026-04-23', () => {
+    const cost = calculateOpenAICost('gpt-5.5-2026-04-23', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 5 + 500 * 30) / 1e6, 6);
+  });
+
   it('should calculate cost correctly for gpt-5.4', () => {
     const cost = calculateOpenAICost('gpt-5.4', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 15) / 1e6, 6);
@@ -293,7 +332,22 @@ describe('calculateOpenAICost', () => {
 
   it('should calculate cost correctly for gpt-5.2-pro', () => {
     const cost = calculateOpenAICost('gpt-5.2-pro', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 15 + 500 * 120) / 1e6, 6);
+    expect(cost).toBeCloseTo((1000 * 21 + 500 * 168) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5.5-pro', () => {
+    const cost = calculateOpenAICost('gpt-5.5-pro', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5.5-pro-2026-04-23', () => {
+    const cost = calculateOpenAICost('gpt-5.5-pro-2026-04-23', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
+  });
+
+  it('should calculate long-context cost correctly for gpt-5.5-pro', () => {
+    const cost = calculateOpenAICost('gpt-5.5-pro', {}, 300_000, 1_000);
+    expect(cost).toBeCloseTo((300_000 * 60 + 1_000 * 270) / 1e6, 6);
   });
 
   it('should calculate cost correctly for gpt-5.4-pro', () => {
@@ -311,13 +365,32 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
   });
 
-  it('should keep GPT-5.4 Pro out of Chat Completions routing', () => {
+  it('should recognize GPT-5.5 models with built-in pricing', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5')).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-2026-04-23')).toBe(true);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.5-pro')).toBe(true);
+    expect(
+      OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23'),
+    ).toBe(true);
+    expect(calculateOpenAICost('gpt-5.5', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 5 + 500 * 30) / 1e6,
+      6,
+    );
+    expect(calculateOpenAICost('gpt-5.5-pro', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 30 + 500 * 180) / 1e6,
+      6,
+    );
+  });
+
+  it('should keep GPT-5.4 and GPT-5.5 Pro out of Chat Completions routing', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(false);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05')).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(true);
     expect(
       OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05'),
     ).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro')).toBe(false);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23')).toBe(false);
   });
 
   it('should calculate cost correctly for gpt-5-nano', () => {

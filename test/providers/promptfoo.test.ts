@@ -222,6 +222,97 @@ describe('PromptfooChatCompletionProvider', () => {
     });
   });
 
+  it('should pass remote materialization context through to the remote task server', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({
+        result: 'test result',
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'history',
+      },
+      vars: {
+        __promptfooRemoteMaterialization: {
+          injectVar: 'prompt',
+          inputs: {
+            document: {
+              description: 'Uploaded planning document',
+              type: 'docx',
+            },
+          },
+          materializationIndex: 2,
+          pluginId: 'pii:direct',
+          purpose: 'Summarize the uploaded planning document',
+        },
+      },
+    });
+
+    const requestBody = JSON.parse((vi.mocked(fetchWithRetries).mock.calls[0][1] as any).body);
+    expect(requestBody.materializationContext).toEqual({
+      injectVar: 'prompt',
+      inputs: {
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+      },
+      materializationIndex: 2,
+      pluginId: 'pii:direct',
+      purpose: 'Summarize the uploaded planning document',
+    });
+  });
+
+  it('should return remote materialization fields from the task server', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({
+        result: 'test result',
+        materializationHandled: true,
+        materializedVars: {
+          document:
+            'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+        },
+        inputMaterialization: {
+          document: {
+            injectionPlacement: 'comment',
+            wrapperSummary: 'Internal planning memo with reviewer note.',
+          },
+        },
+        tokenUsage: { total: 100 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      output: 'test result',
+      materializationHandled: true,
+      materializedVars: {
+        document:
+          'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+      },
+      inputMaterialization: {
+        document: {
+          injectionPlacement: 'comment',
+          wrapperSummary: 'Internal planning memo with reviewer note.',
+        },
+      },
+      tokenUsage: { total: 100 },
+    });
+  });
+
   it('should handle missing result', async () => {
     const mockResponse = new Response(
       JSON.stringify({

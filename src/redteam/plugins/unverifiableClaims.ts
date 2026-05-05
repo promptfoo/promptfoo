@@ -76,7 +76,7 @@ export class UnverifiableClaimsPlugin extends RedteamPluginBase {
     ];
   }
 
-  protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
+  protected async promptsToTestCases(prompts: { __prompt: string }[]): Promise<TestCase[]> {
     // Filter out empty prompts that sometimes occur
     const validPrompts = prompts.filter((p) => p.__prompt && p.__prompt.trim().length > 0);
     return super.promptsToTestCases(validPrompts);
