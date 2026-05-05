@@ -961,6 +961,10 @@ describe('redteam package wrapper', () => {
     vi.mocked(doRedteamRun).mockResolvedValue(undefined);
   });
 
+  afterEach(() => {
+    vi.mocked(doRedteamRun).mockReset();
+  });
+
   it('should pin package callers to library semantics', async () => {
     await index.redteam.run({ eventSource: 'cli' } as never);
 
