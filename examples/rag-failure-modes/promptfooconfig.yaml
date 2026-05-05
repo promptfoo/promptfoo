@@ -1,0 +1,111 @@
+description: RAG failure mode eval examples
+
+prompts:
+  - |
+    You are answering using retrieved context.
+
+    Question: {{query}}
+
+    Retrieved context:
+    {{context}}
+
+    Answer with citations when possible.
+
+providers:
+  - id: echo
+
+tests:
+  - description: Missing retrieved context should be detected
+    vars:
+      query: What is the company's laptop replacement policy?
+      context: |
+        The travel policy covers airfare reimbursement and hotel booking rules.
+    assert:
+      - type: context-recall
+        value: 'The company replaces laptops every three years.'
+
+  - description: Irrelevant retrieved context should be flagged
+    vars:
+      query: What is the PTO carryover limit?
+      context: |
+        The equipment policy describes laptop replacement timelines and monitor reimbursement.
+    assert:
+      - type: context-relevance
+
+  - description: Answer should not ignore available context
+    vars:
+      query: What is the laptop replacement policy?
+      context: |
+        Source: equipment-policy.md#laptops
+        Employees are eligible for a laptop replacement every three years.
+    assert:
+      - type: contains
+        value: 'three years'
+      - type: contains
+        value: 'equipment-policy.md#laptops'
+
+  - description: Answer should not overclaim beyond context
+    vars:
+      query: Can employees get a standing desk reimbursed?
+      context: |
+        Source: equipment-policy.md#home-office
+        Employees may request reimbursement for ergonomic home-office equipment with manager approval.
+    assert:
+      - type: not-contains
+        value: 'guaranteed standing desk reimbursement'
+      - type: contains
+        value: 'manager approval'
+
+  - description: Fabricated citation should be caught
+    vars:
+      query: What is the laptop replacement policy?
+      context: |
+        Source: equipment-policy.md#laptops
+        Employees are eligible for a laptop replacement every three years.
+    assert:
+      - type: contains
+        value: 'equipment-policy.md#laptops'
+      - type: not-contains
+        value: 'benefits-policy.md#laptops'
+
+  - description: Source metadata should be preserved
+    vars:
+      query: What is the laptop replacement policy?
+      context: |
+        Source: equipment-policy.md#laptops
+        Page: 4
+        Employees are eligible for a laptop replacement every three years.
+    assert:
+      - type: contains
+        value: 'equipment-policy.md#laptops'
+      - type: contains
+        value: 'Page: 4'
+
+  - description: Conflicting context should be surfaced
+    vars:
+      query: How many PTO days can be carried over?
+      context: |
+        Source: pto-policy.md#carryover
+        Employees may carry over up to 5 PTO days.
+
+        Source: employee-handbook.md#pto
+        PTO days cannot be carried over into the next year.
+    assert:
+      - type: contains
+        value: 'pto-policy.md#carryover'
+      - type: contains
+        value: 'employee-handbook.md#pto'
+
+  - description: Model should not refuse when sufficient context exists
+    vars:
+      query: What is the laptop replacement policy?
+      context: |
+        Source: equipment-policy.md#laptops
+        Employees are eligible for a laptop replacement every three years.
+    assert:
+      - type: not-contains
+        value: "I don't know"
+      - type: not-contains
+        value: 'not enough information'
+      - type: contains
+        value: 'three years'
