@@ -8,6 +8,25 @@ import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
+const OPENAI_REASONING_MODEL_PREFIXES = ['o1', 'o3', 'o4'] as const;
+
+export function isOpenAiGpt5ModelName(modelName: string): boolean {
+  return modelName.startsWith('gpt-5') || modelName.includes('/gpt-5');
+}
+
+export function isOpenAiReasoningModelName(
+  modelName: string,
+  options: { includeCodexMini?: boolean } = {},
+): boolean {
+  return (
+    OPENAI_REASONING_MODEL_PREFIXES.some(
+      (prefix) => modelName.startsWith(prefix) || modelName.includes(`/${prefix}`),
+    ) ||
+    isOpenAiGpt5ModelName(modelName) ||
+    (options.includeCodexMini === true && modelName === 'codex-mini-latest')
+  );
+}
+
 const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
 
 type OpenAIModelCost = {

@@ -11,7 +11,12 @@ import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
-import { formatOpenAiError, getTokenUsage } from './util';
+import {
+  formatOpenAiError,
+  getTokenUsage,
+  isOpenAiGpt5ModelName,
+  isOpenAiReasoningModelName,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -153,31 +158,21 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   protected isGPT5Model(): boolean {
     // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+    return isOpenAiGpt5ModelName(this.modelName);
   }
 
-  protected isReasoningModel(): boolean {
-    // Honor explicit override (true/false)
-    if (this.config.isReasoningModel !== undefined) {
-      return this.config.isReasoningModel;
+  protected isReasoningModel(config: OpenAiCompletionOptions = this.config): boolean {
+    if (config.isReasoningModel !== undefined) {
+      return config.isReasoningModel;
     }
 
-    return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.modelName === 'codex-mini-latest' ||
-      this.isGPT5Model()
-    );
+    return isOpenAiReasoningModelName(this.modelName, { includeCodexMini: true });
   }
 
-  protected supportsTemperature(): boolean {
+  protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {
     // OpenAI's o1 and o3 models don't support temperature but some 3rd
     // party reasoning models do.
-    return !this.isReasoningModel();
+    return !this.isReasoningModel(config);
   }
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
@@ -243,7 +238,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
-      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig;
+      config.isReasoningModel ??
+      (this.isReasoningModel(config) || isAzureResponsesDeploymentWithReasoningConfig);
     const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
@@ -307,7 +303,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
-      this.supportsTemperature() && !hasAzureReasoningEffort
+      this.supportsTemperature(config) && !hasAzureReasoningEffort
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
@@ -407,12 +403,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     // The Responses API uses max_output_tokens; prevent passthrough from reintroducing max_tokens.
-    if ('max_tokens' in body) {
-      delete body.max_tokens;
-    }
-
-    // Sanitize body: strip max_tokens if it leaked via passthrough or YAML anchors.
-    // The responses API uses max_output_tokens, never max_tokens.
     if ('max_tokens' in body) {
       delete body.max_tokens;
     }

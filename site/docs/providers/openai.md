@@ -669,7 +669,7 @@ Both `o1` and `o3-mini` models have a 128,000 token context window, while `o3-pr
 
 #### Custom or third-party deployments
 
-If you're using a custom or third-party model deployment whose name doesn't match the standard naming patterns, you can force reasoning model behavior with the `isReasoningModel` flag:
+If you're using a custom or third-party model deployment whose name doesn't match the standard naming patterns, you can override reasoning-model detection with the `isReasoningModel` flag:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -680,6 +680,8 @@ providers:
         effort: 'medium' # Can be "low", "medium", or "high"
       max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
 ```
+
+Set `isReasoningModel: false` for OpenAI-compatible deployments whose names look like o-series or GPT-5 models but still accept standard `temperature` and token parameters.
 
 ## Images
 

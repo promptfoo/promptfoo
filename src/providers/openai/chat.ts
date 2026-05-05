@@ -29,7 +29,12 @@ import {
 } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import {
+  getTokenUsage,
+  isOpenAiGpt5ModelName,
+  isOpenAiReasoningModelName,
+  OPENAI_CHAT_MODELS,
+} from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -189,30 +194,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
   protected isGPT5Model(): boolean {
     // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+    return isOpenAiGpt5ModelName(this.modelName);
   }
 
-  protected isReasoningModel(): boolean {
-    // Honor explicit override (true/false)
-    if (this.config.isReasoningModel !== undefined) {
-      return this.config.isReasoningModel;
+  protected isReasoningModel(config: OpenAiCompletionOptions = this.config): boolean {
+    if (config.isReasoningModel !== undefined) {
+      return config.isReasoningModel;
     }
 
-    return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.isGPT5Model()
-    );
+    return isOpenAiReasoningModelName(this.modelName);
   }
 
-  protected supportsTemperature(): boolean {
+  protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {
     // OpenAI's o1 and o3 models don't support temperature but some 3rd
     // party reasoning models do.
-    return !this.isReasoningModel();
+    return !this.isReasoningModel(config);
   }
 
   protected getBillingModelName(_config: OpenAiCompletionOptions): string {
@@ -232,7 +228,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    const isReasoningModel = this.isReasoningModel();
+    const isReasoningModel = this.isReasoningModel(config);
     const isGPT5Model = this.isGPT5Model();
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
@@ -242,15 +238,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxTokens =
-      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
+    const maxTokens = isReasoningModel ? undefined : (config.max_tokens ?? maxTokensDefault);
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature()
+    const temperature = this.supportsTemperature(config)
       ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
@@ -350,10 +345,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.store = config.store;
     }
 
-    // Sanitize body for models that reject max_tokens (e.g. GPT-5, reasoning models).
+    // Sanitize body for reasoning models that reject max_tokens.
     // This catches max_tokens introduced via passthrough or YAML anchors that bypass
     // the normal maxTokens variable logic above.
-    if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
+    if (isReasoningModel && 'max_tokens' in body) {
       delete body.max_tokens;
     }
 
