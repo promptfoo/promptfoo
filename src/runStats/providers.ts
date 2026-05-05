@@ -27,21 +27,21 @@ export function computeProviderStats(
   maxProviders: number = 10,
 ): ProviderStats[] {
   // Accumulate stats per provider
-  const accumulators: Record<string, ProviderAccumulator> = {};
+  const accumulators = new Map<string, ProviderAccumulator>();
 
   for (const result of results) {
     const providerId = result.provider?.id || 'unknown';
 
-    if (!accumulators[providerId]) {
-      accumulators[providerId] = {
+    if (!accumulators.has(providerId)) {
+      accumulators.set(providerId, {
         requests: 0,
         successes: 0,
         failures: 0,
         totalLatencyMs: 0,
-      };
+      });
     }
 
-    const acc = accumulators[providerId];
+    const acc = accumulators.get(providerId)!;
     acc.requests++;
 
     if (result.success) {
@@ -56,7 +56,7 @@ export function computeProviderStats(
   // Convert to ProviderStats array with token usage
   const tracker = TokenUsageTracker.getInstance();
 
-  return Object.entries(accumulators)
+  return Array.from(accumulators.entries())
     .map(([provider, acc]): ProviderStats => {
       const usage = tracker.getProviderUsage(provider);
       const totalTokens = usage?.total || 0;

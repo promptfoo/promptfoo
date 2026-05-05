@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { categorizeError, computeErrorStats } from '../../src/runStats/errors';
+import { ResultFailureReason } from '../../src/types/index';
 
 import type { StatableResult } from '../../src/runStats/types';
 
@@ -131,8 +132,28 @@ describe('computeErrorStats', () => {
   it('should handle empty string error', () => {
     const results: StatableResult[] = [{ success: false, latencyMs: 100, error: '' }];
     const stats = computeErrorStats(results);
-    // Empty string is truthy for the filter, categorized as 'other'
+    // Empty string is falsy, so it is not counted as an error
     expect(stats.total).toBe(0); // empty string is falsy
+  });
+
+  it('should exclude assertion failures from operational error stats', () => {
+    const results: StatableResult[] = [
+      {
+        success: false,
+        latencyMs: 100,
+        error: 'Expected output to contain "hello"',
+        failureReason: ResultFailureReason.ASSERT,
+      },
+      {
+        success: false,
+        latencyMs: 200,
+        error: '500 Internal Server Error',
+        failureReason: ResultFailureReason.ERROR,
+      },
+    ];
+    const stats = computeErrorStats(results);
+    expect(stats.total).toBe(1);
+    expect(stats.types).toEqual(['server_error']);
   });
 
   it('should count all error categories correctly', () => {

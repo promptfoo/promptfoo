@@ -29,13 +29,14 @@ import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { type ListScansQuery, MODEL_AUDIT_SORT_FIELDS } from '../../../../types/api/modelAudit';
-import { useModelAuditHistoryStore } from '../model-audit/stores';
+import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import type { HistoricalScan } from '../model-audit/stores';
 
 export default function ModelAuditHistory() {
   const navigate = useNavigate();
+  const startNewScan = useModelAuditConfigStore((state) => state.startNewScan);
 
   const {
     historicalScans,
@@ -101,8 +102,9 @@ export default function ModelAuditHistory() {
   );
 
   const handleNewScan = useCallback(() => {
+    startNewScan();
     navigate(MODEL_AUDIT_ROUTES.SETUP);
-  }, [navigate]);
+  }, [navigate, startNewScan]);
 
   const handleDelete = useCallback(async () => {
     if (!scanToDelete) {

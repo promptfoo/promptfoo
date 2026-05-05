@@ -28,6 +28,20 @@ describe('computeProviderStats', () => {
     expect(stats).toEqual([]);
   });
 
+  it('should safely aggregate provider ids that overlap object prototype keys', () => {
+    const results: StatableResult[] = [
+      { success: true, latencyMs: 100, provider: { id: '__proto__' } },
+      { success: false, latencyMs: 200, provider: { id: 'constructor' } },
+    ];
+    const stats = computeProviderStats(results);
+    expect(stats).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ provider: '__proto__', requests: 1, successes: 1 }),
+        expect.objectContaining({ provider: 'constructor', requests: 1, failures: 1 }),
+      ]),
+    );
+  });
+
   it('should compute basic stats per provider', () => {
     const results: StatableResult[] = [
       { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },

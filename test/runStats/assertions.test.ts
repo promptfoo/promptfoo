@@ -119,6 +119,26 @@ describe('computeAssertionBreakdown', () => {
     const breakdown = computeAssertionBreakdown(results);
     expect(breakdown).toEqual([{ type: 'equals', pass: 2, fail: 1, total: 3, passRate: 2 / 3 }]);
   });
+
+  it('should safely aggregate assertion types that overlap object prototype keys', () => {
+    const results: StatableResult[] = [
+      {
+        success: false,
+        latencyMs: 100,
+        gradingResult: {
+          componentResults: [
+            { pass: false, score: 0, reason: '', assertion: { type: '__proto__' as any } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'constructor' as any } },
+          ],
+        },
+      },
+    ];
+    const breakdown = computeAssertionBreakdown(results);
+    expect(breakdown).toEqual([
+      { type: '__proto__', pass: 0, fail: 1, total: 1, passRate: 0 },
+      { type: 'constructor', pass: 1, fail: 0, total: 1, passRate: 1 },
+    ]);
+  });
 });
 
 describe('computeAssertionStats', () => {

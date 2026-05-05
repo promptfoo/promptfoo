@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-5.5 Responses API reasoning comparison
+prompts:
+  - |
+    Solve this planning problem and explain your reasoning clearly:
+    {{problem}}
+
+providers:
+  - id: openai:responses:gpt-5.5
+    label: gpt-5.5-low-reasoning
+    config:
+      max_output_tokens: 2048
+      reasoning:
+        effort: 'low'
+      verbosity: 'medium'
+
+  - id: openai:responses:gpt-5.5
+    label: gpt-5.5-high-reasoning
+    config:
+      max_output_tokens: 4096
+      reasoning:
+        effort: 'high'
+      verbosity: 'medium'
+
+  - id: openai:responses:gpt-5.5-pro
+    label: gpt-5.5-pro-xhigh-reasoning
+    config:
+      max_output_tokens: 8192
+      reasoning:
+        effort: 'xhigh'
+      verbosity: 'medium'
+
+tests:
+  - vars:
+      problem: 'A team has 6 engineers, 3 designers, and 2 product managers. Build a two-week launch plan that sequences discovery, implementation, QA, and release readiness without overloading any one function.'
+    assert:
+      - type: icontains
+        value: discovery
+      - type: icontains
+        value: QA
+
+  - vars:
+      problem: 'A support queue has 120 tickets, 30% are billing issues, and 15% require engineering investigation. Propose a triage plan that minimizes customer wait time while preserving escalation quality.'
+    assert:
+      - type: icontains-any
+        value:
+          - triage
+          - prioritize
+      - type: icontains
+        value: escalation

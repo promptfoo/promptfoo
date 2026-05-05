@@ -102,5 +102,4 @@ CCAs connect to several other attack vectors:
 - [**System Prompt Override**](/docs/red-team/plugins/system-prompt-override) – Another way to manipulate AI behavior fundamentals
 - [**Cross-Session Leak**](/docs/red-team/plugins/cross-session-leak) – Information leakage that can strengthen CCA attacks
 - [**Prompt Extraction**](/docs/red-team/plugins/prompt-extraction) – Reveals system vulnerabilities that CCAs can exploit
-
-For a deeper dive into LLM vulnerabilities, check our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [**Types of LLM vulnerabilities**](/docs/red-team/llm-vulnerability-types/) – Full vulnerability and plugin directory with category mapping

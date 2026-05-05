@@ -22,7 +22,7 @@ export function computeAssertionBreakdown(
   results: StatableResult[],
   maxTypes: number = 20,
 ): AssertionTypeStats[] {
-  const accumulators: Record<string, AssertionAccumulator> = {};
+  const accumulators = new Map<string, AssertionAccumulator>();
 
   for (const result of results) {
     const componentResults = result.gradingResult?.componentResults || [];
@@ -30,19 +30,18 @@ export function computeAssertionBreakdown(
     for (const cr of componentResults) {
       const type = cr.assertion?.type || 'unknown';
 
-      if (!accumulators[type]) {
-        accumulators[type] = { pass: 0, fail: 0 };
-      }
+      const accumulator = accumulators.get(type) ?? { pass: 0, fail: 0 };
+      accumulators.set(type, accumulator);
 
       if (cr.pass) {
-        accumulators[type].pass++;
+        accumulator.pass++;
       } else {
-        accumulators[type].fail++;
+        accumulator.fail++;
       }
     }
   }
 
-  return Object.entries(accumulators)
+  return Array.from(accumulators.entries())
     .map(([type, acc]): AssertionTypeStats => {
       const total = acc.pass + acc.fail;
       return {

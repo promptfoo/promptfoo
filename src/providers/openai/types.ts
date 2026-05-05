@@ -105,7 +105,7 @@ export interface OpenAiMCPTool {
 
 // Responses API specific tool types
 export interface OpenAiWebSearchTool {
-  type: 'web_search_preview';
+  type: 'web_search' | 'web_search_preview';
   search_context_size?: 'small' | 'medium' | 'large';
   user_location?: string;
 }
@@ -122,6 +122,8 @@ export type OpenAiResponsesTool =
   | OpenAiMCPTool
   | OpenAiWebSearchTool
   | OpenAiCodeInterpreterTool;
+
+export type OpenAiPromptCacheRetention = 'in_memory' | '24h' | null;
 
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
@@ -157,9 +159,11 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
-  reasoning_effort?: ReasoningEffort;
+  prompt_cache_key?: string;
+  prompt_cache_retention?: OpenAiPromptCacheRetention;
+  reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
-  service_tier?: ('auto' | 'default' | 'premium') | null;
+  service_tier?: ('auto' | 'default' | 'flex' | 'priority' | 'premium') | null;
   modalities?: string[];
   audio?: {
     bitrate?: string;
@@ -172,6 +176,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   instructions?: string;
   max_output_tokens?: number;
   max_tool_calls?: number;
+  include?: OpenAI.Responses.ResponseIncludable[] | null;
   metadata?: Record<string, string>;
   parallel_tool_calls?: boolean;
   previous_response_id?: string;

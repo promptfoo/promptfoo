@@ -9,8 +9,8 @@ import type { CacheStats, StatableResult } from './types';
  * @returns Cache stats including hits, misses, and hit rate
  */
 export function computeCacheStats(results: StatableResult[]): CacheStats {
-  const hits = results.filter((r) => r.response?.cached).length;
-  const misses = results.filter((r) => r.response && !r.response.cached).length;
+  const hits = results.filter((r) => r.response?.cached === true).length;
+  const misses = results.filter((r) => r.response?.cached === false).length;
   const total = hits + misses;
 
   return {

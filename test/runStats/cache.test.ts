@@ -62,10 +62,10 @@ describe('computeCacheStats', () => {
       { success: true, latencyMs: 200, response: { cached: true } },
     ];
     const stats = computeCacheStats(results);
-    // response exists but cached is undefined -> counted as miss
+    // response exists but cached is undefined -> excluded because cache state is unknown
     expect(stats.hits).toBe(1);
-    expect(stats.misses).toBe(1);
-    expect(stats.hitRate).toBe(0.5);
+    expect(stats.misses).toBe(0);
+    expect(stats.hitRate).toBe(1);
   });
 
   it('should return null hitRate when all results have errors', () => {

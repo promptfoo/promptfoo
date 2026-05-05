@@ -1,3 +1,5 @@
+import { ResultFailureReason } from '../types/index';
+
 import type { ErrorBreakdown, StatableResult } from './types';
 
 /**
@@ -83,6 +85,16 @@ export function categorizeError(errorMessage: string): ErrorCategory {
   return 'other';
 }
 
+export function isOperationalError(result: StatableResult): boolean {
+  if (!result.error) {
+    return false;
+  }
+  if (result.failureReason === undefined) {
+    return true;
+  }
+  return result.failureReason === ResultFailureReason.ERROR;
+}
+
 /**
  * Computes error statistics from evaluation results.
  *
@@ -106,9 +118,9 @@ export function computeErrorStats(results: StatableResult[]): {
   let total = 0;
 
   for (const result of results) {
-    if (result.error) {
+    if (isOperationalError(result)) {
       total++;
-      const category = categorizeError(result.error);
+      const category = categorizeError(result.error!);
       breakdown[category]++;
     }
   }

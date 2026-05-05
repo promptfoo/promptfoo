@@ -6,7 +6,7 @@
  * error breakdowns, and per-provider performance.
  */
 
-import type { GradingResult, ProviderResponse } from '../types/index';
+import type { GradingResult, ProviderResponse, ResultFailureReason } from '../types/index';
 
 /**
  * Minimal result interface for stats computation.
@@ -18,6 +18,7 @@ export interface StatableResult {
   success: boolean;
   latencyMs: number;
   error?: string | null;
+  failureReason?: ResultFailureReason;
   response?: Pick<ProviderResponse, 'cached'>;
   provider?: { id?: string };
   gradingResult?: Pick<GradingResult, 'componentResults'> | null;
