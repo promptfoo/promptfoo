@@ -188,8 +188,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+    // Handle both direct model names (gpt-5-mini), prefixed names
+    // (openai/gpt-5-mini), and the floating Instant alias.
+    return (
+      this.modelName === 'chat-latest' ||
+      this.modelName.endsWith('/chat-latest') ||
+      this.modelName.startsWith('gpt-5') ||
+      this.modelName.includes('/gpt-5')
+    );
   }
 
   protected isReasoningModel(): boolean {

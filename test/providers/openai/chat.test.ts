@@ -1611,6 +1611,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Direct model names
       const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
       const gpt55Provider = new OpenAiChatCompletionProvider('gpt-5.5');
+      const chatLatestProvider = new OpenAiChatCompletionProvider('chat-latest');
       const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
       const gpt54NanoProvider = new OpenAiChatCompletionProvider('gpt-5.4-nano');
       const gpt5MiniProvider = new OpenAiChatCompletionProvider('gpt-5-mini');
@@ -1619,6 +1620,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Prefixed model names (used by GitHub Models)
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
       const prefixedGpt55Provider = new OpenAiChatCompletionProvider('openai/gpt-5.5');
+      const prefixedChatLatestProvider = new OpenAiChatCompletionProvider('openai/chat-latest');
       const prefixedGpt54MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-mini');
       const prefixedGpt54NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano');
       const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
@@ -1630,12 +1632,14 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(gpt5Provider['isGPT5Model']()).toBe(true);
       expect(gpt55Provider['isGPT5Model']()).toBe(true);
+      expect(chatLatestProvider['isGPT5Model']()).toBe(true);
       expect(gpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(gpt54NanoProvider['isGPT5Model']()).toBe(true);
       expect(gpt5MiniProvider['isGPT5Model']()).toBe(true);
       expect(gpt5NanoProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt5Provider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt55Provider['isGPT5Model']()).toBe(true);
+      expect(prefixedChatLatestProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt54NanoProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt5MiniProvider['isGPT5Model']()).toBe(true);

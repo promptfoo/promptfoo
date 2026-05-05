@@ -122,6 +122,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
     { model: 'codex-mini-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
+    { model: 'chat-latest', reasoningEffort: 'medium', maxOutputTokens: 1000 },
   ] as const)('should configure $model model correctly with reasoning parameters', async ({
     model,
     reasoningEffort,

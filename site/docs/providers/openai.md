@@ -486,9 +486,28 @@ providers:
 - **`medium`**: Balanced reasoning for moderate complexity
 - **`high`**: Maximum reasoning for complex problem-solving
 
+### GPT-5.5 Instant
+
+OpenAI exposes the current ChatGPT Instant model as `chat-latest`. As of May 5, 2026, that alias points to GPT-5.5 Instant. Because `chat-latest` is a floating alias, use a dated or family-specific model when you need a stable eval baseline.
+
+#### Available Models
+
+| Model       | Description                          | Pricing                 |
+| ----------- | ------------------------------------ | ----------------------- |
+| chat-latest | Latest Instant model used in ChatGPT | See current OpenAI docs |
+
+#### Usage Example
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:chat-latest
+    config:
+      max_completion_tokens: 2048
+```
+
 ### GPT-5.3 Instant
 
-GPT-5.3 Instant is exposed as `gpt-5.3-chat-latest`. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
+GPT-5.3 Instant remains available as the older `gpt-5.3-chat-latest` alias. Promptfoo also supports GPT-5.3 coding variants for agentic/code workflows.
 
 #### Available Models
 
