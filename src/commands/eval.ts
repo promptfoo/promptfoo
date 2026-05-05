@@ -79,10 +79,12 @@ type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 export class EvalRunError extends Error {
   readonly exitCode: number;
 
-  constructor(message: string, exitCode = 1) {
+  constructor(message: string, exitCode: number = 1) {
     super(message);
     this.name = 'EvalRunError';
-    this.exitCode = exitCode;
+    // POSIX exit codes are 1-255 (0 means success). Coerce silly values to the
+    // default rather than letting `exitCode = 0` silently mask a real failure.
+    this.exitCode = Number.isInteger(exitCode) && exitCode >= 1 && exitCode <= 255 ? exitCode : 1;
   }
 }
 
@@ -358,11 +360,14 @@ export async function doEval(
       }
     }
 
-    // Ensure evaluateOptions from the config file are applied
+    // Ensure evaluateOptions from the config file are applied. Pin eventSource
+    // to the caller's value — a config file must not be able to flip a library
+    // run into CLI semantics (process.exitCode mutation, SIGINT handlers).
     if (config.evaluateOptions) {
       evaluateOptions = {
         ...evaluateOptions,
         ...config.evaluateOptions,
+        eventSource: evaluateOptions.eventSource,
       };
     }
 
@@ -904,8 +909,6 @@ export async function doEval(
           const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
             ',',
           )}}.`;
-          // CLI: keep the just-completed eval result so the run summary is accurate.
-          // Library: throw so callers can react to the watch-setup failure.
           return failEvalRun(message, isCliInvocation, {
             logForCli: () => logger.error(message),
             cliFallback: ret,

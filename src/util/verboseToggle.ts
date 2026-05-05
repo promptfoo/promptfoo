@@ -86,8 +86,8 @@ export function initVerboseToggle(options: VerboseToggleOptions): (() => void) |
 
     process.stdin.on('data', handleKeypress);
 
-    // Auto-cleanup on process exit. Stored so cleanupFn can deregister it and
-    // avoid accumulating one listener per init/teardown cycle.
+    // Stored so cleanupFn can deregister it; otherwise repeated init/teardown
+    // cycles accumulate one 'exit' listener per cycle.
     const exitHandler = () => {
       if (cleanupFn) {
         cleanupFn();

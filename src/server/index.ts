@@ -2,7 +2,8 @@ import { getDefaultPort } from '../constants';
 import logger from '../logger';
 import { formatNativeAddonVersionMismatchMessage } from '../util/nativeAddonErrors';
 import { BrowserBehavior, checkServerRunning } from '../util/server';
-import { ServerError, startServer } from './server';
+import { ServerError } from './errors';
+import { startServer } from './server';
 
 async function main() {
   const port = getDefaultPort();

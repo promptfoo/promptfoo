@@ -39,7 +39,7 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
-import { ServerError } from './server/server';
+import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
@@ -177,13 +177,15 @@ if (isMain) {
       );
     }
   }
-  // Re-throw unexpected errors after cleanup is complete. These expected
-  // failures already rendered their user-facing message before this boundary.
+  // ConfigResolutionError / EmailValidationError / ServerError / EvalRunError
+  // already rendered a user-facing message before reaching this boundary;
+  // everything else is unexpected and bubbles up.
   if (mainError) {
     if (
       mainError instanceof ConfigResolutionError ||
       mainError instanceof EmailValidationError ||
-      mainError instanceof ServerError
+      mainError instanceof ServerError ||
+      mainError instanceof EvalRunError
     ) {
       // User-facing message has already been rendered.
     } else if (nativeAddonVersionMismatchMessage) {

@@ -71,4 +71,26 @@ describe('generated prompt selection', () => {
       process.exitCode = previousExitCode;
     }
   });
+
+  it('does not throw or mutate process.exitCode when the user accepts a suggestion', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    vi.mocked(promptYesNo).mockResolvedValue(true);
+
+    try {
+      const testSuite = createTestSuite();
+      // Library mode would throw PromptSuggestionsRejectedError if a regression
+      // flipped the boolean — covers the accepted branch that the rejection
+      // tests above intentionally don't exercise.
+      await expect(
+        evaluate(testSuite, new Eval({}), {
+          eventSource: 'library',
+          generateSuggestions: true,
+        }),
+      ).resolves.toBeDefined();
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
 });

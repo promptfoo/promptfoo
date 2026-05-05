@@ -249,9 +249,9 @@ export interface RunEvalOptions {
   providerCallQueue?: ProviderCallQueueRef;
 }
 
-export { EVENT_SOURCES, type EventSource, EventSourceSchema } from './eventSource';
-
 import { EventSourceSchema } from './eventSource';
+
+export { EVENT_SOURCES, type EventSource, EventSourceSchema } from './eventSource';
 
 export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),

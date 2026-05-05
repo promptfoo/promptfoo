@@ -73,8 +73,6 @@ export function setJavaScriptMimeType(
   next();
 }
 
-export { ServerError, type ServerErrorPhase } from './errors';
-
 import { ServerError, type ServerErrorPhase } from './errors';
 
 export function handleServerError(
@@ -461,9 +459,18 @@ export async function startServer(
       httpServer.removeListener('error', handleRuntimeError);
       closeRunningServer((timedOut) => {
         if (timedOut) {
-          // A force-close means open handles were left dangling. Surface it through
-          // the exit code so CI / scripts can distinguish unclean shutdowns.
-          process.exitCode = process.exitCode ?? 1;
+          // A force-close means open handles were left dangling. Reject so the
+          // caller (CLI or library) decides exit-code policy — startServer is
+          // publicly importable, so silently poisoning process.exitCode would
+          // hurt library embedders.
+          reject(
+            new ServerError(
+              Object.assign(new Error('Shutdown timeout'), { code: 'ESHUTDOWN' }),
+              port,
+              'runtime',
+            ),
+          );
+          return;
         }
         resolve();
       });

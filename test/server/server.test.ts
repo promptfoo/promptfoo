@@ -40,7 +40,8 @@ vi.mock('../../src/models/eval', () => ({
 import { setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
 // Import after mocks are set up
-import { handleServerError, ServerError, startServer } from '../../src/server/server';
+import { ServerError } from '../../src/server/errors';
+import { handleServerError, startServer } from '../../src/server/server';
 
 describe('server', () => {
   describe('handleServerError', () => {
