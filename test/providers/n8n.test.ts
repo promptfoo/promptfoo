@@ -88,7 +88,7 @@ describe('N8nProvider', () => {
           body: JSON.stringify({ prompt: 'Hello' }),
         },
         expect.any(Number),
-        'json',
+        'text',
       );
 
       expect(result).toEqual({
@@ -107,6 +107,28 @@ describe('N8nProvider', () => {
       const result = await provider.callApi('Test');
 
       expect(result.output).toBe('Array response');
+    });
+
+    it('should extract nested session IDs and tool calls from n8n item arrays', async () => {
+      const mockResponse = createMockResponse([
+        {
+          json: {
+            output: 'Array response',
+            sessionId: 'session-from-json',
+            actions: [{ tool: 'order_lookup', input: { order_id: '12345' } }],
+          },
+        },
+      ]);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent');
+      const result = await provider.callApi('Test');
+
+      expect(result.output).toBe('Array response');
+      expect(result.sessionId).toBe('session-from-json');
+      expect(result.metadata?.toolCalls).toEqual([
+        { name: 'order_lookup', arguments: { order_id: '12345' } },
+      ]);
     });
 
     it('should handle n8n AI agent response format', async () => {
@@ -162,7 +184,7 @@ describe('N8nProvider', () => {
           }),
         }),
         expect.any(Number),
-        'json',
+        'text',
       );
     });
 
@@ -195,7 +217,7 @@ describe('N8nProvider', () => {
           },
         }),
         expect.any(Number),
-        'json',
+        'text',
       );
     });
 
@@ -216,7 +238,7 @@ describe('N8nProvider', () => {
           headers: { 'Content-Type': 'application/json' },
         },
         expect.any(Number),
-        'json',
+        'text',
       );
     });
 
@@ -236,7 +258,7 @@ describe('N8nProvider', () => {
           method: 'PUT',
         }),
         expect.any(Number),
-        'json',
+        'text',
       );
     });
 
@@ -334,7 +356,7 @@ describe('N8nProvider', () => {
           }),
         }),
         expect.any(Number),
-        'json',
+        'text',
       );
     });
 
@@ -357,7 +379,37 @@ describe('N8nProvider', () => {
           }),
         }),
         expect.any(Number),
-        'json',
+        'text',
+      );
+    });
+
+    it('should prefer explicit session IDs from context over stored sessions', async () => {
+      const mockResponse = createMockResponse({ output: 'Hello!' });
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: { sessionHeader: 'X-Session-ID' },
+      });
+
+      provider.setSessionId('stale-session');
+      await provider.callApi('Hello', {
+        vars: { sessionId: 'fresh-session' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Session-ID': 'fresh-session',
+          }),
+          body: JSON.stringify({
+            prompt: 'Hello',
+            sessionId: 'fresh-session',
+          }),
+        }),
+        expect.any(Number),
+        'text',
       );
     });
 
@@ -390,6 +442,12 @@ describe('N8nProvider', () => {
       const result = await provider.callApi('Hello');
 
       expect(result.output).toBe('Plain string response');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        expect.any(Object),
+        expect.any(Number),
+        'text',
+      );
     });
   });
 

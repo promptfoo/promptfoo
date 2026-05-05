@@ -48,6 +48,9 @@ npx promptfoo view
 - `headers`: Additional request headers
 - `body`: Custom request body template with Nunjucks support
 - `transformResponse`: JavaScript expression to extract output
+- `sessionHeader`: Request header name for the session ID
+- `sessionParser`: JavaScript expression to extract a session ID
+- `sessionField`: Request body field for the session ID
 
 ## Response Formats
 

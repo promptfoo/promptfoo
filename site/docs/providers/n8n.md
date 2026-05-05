@@ -54,6 +54,8 @@ providers:
 | `headers`           | object        | -           | Additional request headers with Nunjucks templating |
 | `body`              | object/string | `{prompt}`  | Request body template                               |
 | `transformResponse` | string        | -           | JavaScript expression to extract output             |
+| `sessionHeader`     | string        | -           | Request header name for the session ID              |
+| `sessionParser`     | string        | -           | JavaScript expression to extract a session ID       |
 | `sessionField`      | string        | `sessionId` | Body field name for session ID                      |
 
 ## Response Formats
@@ -100,7 +102,9 @@ providers:
       sessionField: conversationId
 ```
 
-The provider extracts session IDs from responses and includes them in subsequent requests.
+The provider extracts session IDs from responses and includes them in subsequent requests. When a
+call already supplies `sessionId`, that explicit value takes precedence over a previously extracted
+session.
 
 ## n8n Variable Conversion
 

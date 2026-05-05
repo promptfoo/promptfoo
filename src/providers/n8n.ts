@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { getNunjucksEngine } from '../util/templates';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type {
   ApiProvider,
@@ -164,9 +164,28 @@ function extractToolCalls(data: any): any[] | undefined {
     if (firstItem.json?.tool_calls) {
       return firstItem.json.tool_calls;
     }
+    if (firstItem.json !== undefined) {
+      return extractToolCalls(firstItem.json);
+    }
+  }
+
+  if (data.json !== undefined) {
+    return extractToolCalls(data.json);
   }
 
   return undefined;
+}
+
+function parseN8nResponseBody(data: unknown): any {
+  if (typeof data !== 'string') {
+    return data;
+  }
+
+  try {
+    return JSON.parse(data);
+  } catch {
+    return data;
+  }
 }
 
 /**
@@ -218,12 +237,19 @@ export class N8nProvider implements ApiProvider {
     return this.config.url || this.webhookUrl;
   }
 
+  private getRequestSessionId(context?: CallApiContextParams): string | undefined {
+    const vars = context?.vars || {};
+    return typeof vars.sessionId === 'string' && vars.sessionId
+      ? vars.sessionId
+      : this.currentSessionId;
+  }
+
   private getTemplateVars(prompt: string, context?: CallApiContextParams): Record<string, any> {
     const vars = context?.vars || {};
     return {
       prompt,
       ...vars,
-      sessionId: this.currentSessionId || vars.sessionId,
+      sessionId: this.getRequestSessionId(context),
     };
   }
 
@@ -231,7 +257,6 @@ export class N8nProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
   ): Record<string, any> | string {
-    const vars = context?.vars || {};
     const templateVars = this.getTemplateVars(prompt, context);
     const nunjucks = getNunjucksEngine();
 
@@ -241,10 +266,9 @@ export class N8nProvider implements ApiProvider {
 
       // Include session ID if available
       const sessionField = this.config.sessionField || 'sessionId';
-      if (this.currentSessionId) {
-        body[sessionField] = this.currentSessionId;
-      } else if (vars.sessionId) {
-        body[sessionField] = vars.sessionId;
+      const sessionId = this.getRequestSessionId(context);
+      if (sessionId) {
+        body[sessionField] = sessionId;
       }
 
       return body;
@@ -292,8 +316,9 @@ export class N8nProvider implements ApiProvider {
       headers[key] = nunjucks.renderString(value, templateVars);
     }
 
-    if (this.config.sessionHeader && this.currentSessionId) {
-      headers[this.config.sessionHeader] = this.currentSessionId;
+    const sessionId = this.getRequestSessionId(context);
+    if (this.config.sessionHeader && sessionId) {
+      headers[this.config.sessionHeader] = sessionId;
     }
 
     return headers;
@@ -335,6 +360,12 @@ export class N8nProvider implements ApiProvider {
       if (Array.isArray(data) && data[0]?.sessionId) {
         return data[0].sessionId;
       }
+      if (Array.isArray(data) && data[0]?.json !== undefined) {
+        return this.extractSessionId(data[0].json);
+      }
+      if (data?.json !== undefined) {
+        return this.extractSessionId(data.json);
+      }
       return undefined;
     }
 
@@ -351,7 +382,7 @@ export class N8nProvider implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const url = this.getUrl();
     const method = this.config.method || 'POST';
-    const timeout = this.config.timeout || REQUEST_TIMEOUT_MS;
+    const timeout = this.config.timeout || getRequestTimeoutMs();
 
     const body = this.buildRequestBody(prompt, context);
     const headers = this.buildHeaders(prompt, context);
@@ -370,15 +401,22 @@ export class N8nProvider implements ApiProvider {
     });
 
     let data: any;
+    let rawText = '';
     let cached = false;
     let latencyMs: number | undefined;
 
     try {
-      const response = await fetchWithCache(url, fetchOptions, timeout, 'json');
+      const response = await fetchWithCache<string>(url, fetchOptions, timeout, 'text');
 
-      data = response.data;
+      rawText =
+        typeof response.data === 'string' ? response.data : JSON.stringify(response.data ?? '');
+      data = parseN8nResponseBody(response.data);
       cached = response.cached;
       latencyMs = response.latencyMs;
+
+      if (data && typeof data === 'object' && 'error' in data) {
+        await response.deleteFromCache?.();
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       logger.error(`[n8n] Request failed: ${errorMessage}`);
@@ -394,7 +432,7 @@ export class N8nProvider implements ApiProvider {
     }
 
     // Parse the response
-    const output = this.parseResponse(data, JSON.stringify(data));
+    const output = this.parseResponse(data, rawText);
 
     // Extract tool calls if present
     const toolCalls = extractToolCalls(data);
