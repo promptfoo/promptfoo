@@ -2,7 +2,6 @@ import dedent from 'dedent';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
-
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:privacy-policy-consistency';
@@ -40,7 +39,10 @@ function assertNonEmptyPolicy(policy: unknown): asserts policy is string {
 }
 
 function resolvePrivacyPolicy(config: PluginConfig): string {
-  if (typeof config.privacyPolicyContent === 'string' && config.privacyPolicyContent.trim() !== '') {
+  if (
+    typeof config.privacyPolicyContent === 'string' &&
+    config.privacyPolicyContent.trim() !== ''
+  ) {
     return config.privacyPolicyContent;
   }
 

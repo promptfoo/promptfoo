@@ -128,7 +128,6 @@ import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
 import { VLSUGrader } from './plugins/vlsu';
 import { WordplayGrader } from './plugins/wordplay';
-
 import type { RedteamGraderBase } from './plugins/base';
 import type { RedteamAssertionTypes } from './types';
 

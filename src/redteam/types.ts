@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { type Inputs, InputsSchema } from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
-
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility

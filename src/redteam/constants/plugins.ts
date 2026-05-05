@@ -1,5 +1,4 @@
 import { CODING_AGENT_COLLECTIONS, CODING_AGENT_PLUGINS } from './codingAgents';
-
 import type { CodingAgentPlugin } from './codingAgents';
 
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;

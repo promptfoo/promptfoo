@@ -10,7 +10,6 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remot
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
-
 import type { ConversationMessage } from '../../redteam/types';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';

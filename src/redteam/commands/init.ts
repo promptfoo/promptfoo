@@ -1,6 +1,5 @@
 import fs from 'fs/promises';
 import * as path from 'path';
-
 import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
 import { ExitPromptError } from '@inquirer/core';
@@ -33,7 +32,6 @@ import {
 import { ProbeLimitExceededError } from '../types';
 import { doGenerateRedteam } from './generate';
 import type { Command } from 'commander';
-
 import type { ProviderOptions, RedteamPluginObject } from '../../types/index';
 
 const REDTEAM_CONFIG_TEMPLATE = `# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json

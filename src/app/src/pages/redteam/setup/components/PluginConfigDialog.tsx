@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -15,7 +14,6 @@ import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
-
 import type { LocalPluginConfig } from '../types';
 
 interface PluginConfigDialogProps {
@@ -206,9 +204,9 @@ export default function PluginConfigDialog({
         specificConfig = (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              The Privacy Policy Consistency plugin tries to get your app or agent to behave in
-              ways that deviate from your actual privacy policy. Provide a file:// reference so
-              grading can compare responses, claimed actions, and tool behavior against the policy.
+              The Privacy Policy Consistency plugin tries to get your app or agent to behave in ways
+              that deviate from your actual privacy policy. Provide a file:// reference so grading
+              can compare responses, claimed actions, and tool behavior against the policy.
             </p>
             <div className="space-y-2">
               <Label htmlFor="privacy-policy">Privacy Policy</Label>
@@ -217,9 +215,7 @@ export default function PluginConfigDialog({
                 className="min-h-[160px]"
                 placeholder="file://privacy-policy.md"
                 value={(localConfig.privacyPolicy as string) || ''}
-                onChange={(e) =>
-                  setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })
-                }
+                onChange={(e) => setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })}
               />
             </div>
           </div>
