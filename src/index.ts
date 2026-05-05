@@ -252,8 +252,9 @@ function createSerializableUnifiedConfig(
  * @param testSuite - Prompts, providers, tests, and other eval configuration.
  * @param options - Runtime-only evaluation options such as caching and
  * concurrency.
- * @returns The completed eval record, including result rows and persisted state
- * when `writeLatestResults` is enabled.
+ * @returns The completed eval record. Use helpers such as
+ * `toEvaluateSummary()` and `getTable()` to read results; persisted state is
+ * written when `writeLatestResults` is enabled.
  *
  * @example
  * ```ts
@@ -264,6 +265,9 @@ function createSerializableUnifiedConfig(
  *   providers: ['openai:chat:gpt-5.5'],
  *   tests: [{ vars: { question: 'What is 2 + 2?' } }],
  * });
+ *
+ * const summary = await evalRecord.toEvaluateSummary();
+ * console.log(summary.stats);
  * ```
  *
  * @public

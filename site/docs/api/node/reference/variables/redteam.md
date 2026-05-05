@@ -8,7 +8,7 @@
 
 > `const` **redteam**: [`RedteamApi`](../interfaces/RedteamApi.md)
 
-Defined in: [index.ts:476](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L476)
+Defined in: [index.ts:480](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L480)
 
 **`Beta`**
 

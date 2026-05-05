@@ -26,7 +26,8 @@ const evalRecord = await evaluate({
   ],
 });
 
-console.log(evalRecord.results);
+const summary = await evalRecord.toEvaluateSummary();
+console.log(summary.stats);
 ```
 
 ## Compare several providers
@@ -192,7 +193,12 @@ const candidate = await cache.withCacheNamespace('candidate', () =>
   evaluate({ ...testSuite, providers: ['openai:chat:gpt-5.5'] }),
 );
 
-console.log(baseline.results.length, candidate.results.length);
+const [baselineSummary, candidateSummary] = await Promise.all([
+  baseline.toEvaluateSummary(),
+  candidate.toEvaluateSummary(),
+]);
+
+console.log(baselineSummary.results.length, candidateSummary.results.length);
 ```
 
 ## Use beta APIs deliberately

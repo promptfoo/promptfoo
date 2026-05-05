@@ -45,12 +45,15 @@ const evalRecord = await evaluate({
   writeLatestResults: true,
 });
 
-console.log(evalRecord.results);
+const summary = await evalRecord.toEvaluateSummary();
+console.log(summary.stats);
 ```
 
 `evaluate()` accepts the same core concepts as a YAML config, with additional
 support for function-valued prompts, providers, assertions, and transforms. It
-returns the completed eval record, including result rows and any persisted state.
+returns the completed eval record; use helper methods such as
+`toEvaluateSummary()` and `getTable()` to read results. With
+`writeLatestResults: true`, promptfoo also persists the eval for the local web UI.
 
 For TypeScript projects, import the contract types alongside the runtime APIs:
 

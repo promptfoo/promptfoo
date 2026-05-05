@@ -8,7 +8,7 @@
 
 > **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`\>
 
-Defined in: [index.ts:271](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L271)
+Defined in: [index.ts:275](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L275)
 
 Run an eval from a JavaScript or TypeScript program.
 
@@ -35,8 +35,9 @@ concurrency.
 
 `Promise`\<`Eval`\>
 
-The completed eval record, including result rows and persisted state
-when `writeLatestResults` is enabled.
+The completed eval record. Use helpers such as
+`toEvaluateSummary()` and `getTable()` to read results; persisted state is
+written when `writeLatestResults` is enabled.
 
 ## Example
 
@@ -48,4 +49,7 @@ const evalRecord = await evaluate({
   providers: ['openai:chat:gpt-5.5'],
   tests: [{ vars: { question: 'What is 2 + 2?' } }],
 });
+
+const summary = await evalRecord.toEvaluateSummary();
+console.log(summary.stats);
 ```

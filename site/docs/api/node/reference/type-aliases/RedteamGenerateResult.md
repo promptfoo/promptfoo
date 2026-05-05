@@ -8,7 +8,7 @@
 
 > **RedteamGenerateResult** = `Partial`\<`UnifiedConfig`\> \| `null`
 
-Defined in: [index.ts:432](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L432)
+Defined in: [index.ts:436](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L436)
 
 **`Beta`**
 
