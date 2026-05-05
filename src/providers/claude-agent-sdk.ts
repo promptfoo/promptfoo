@@ -20,7 +20,12 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
-import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
+import {
+  cacheResponse,
+  getCachedResponse,
+  initializeAgenticCache,
+  resolveAgenticWorkingDir,
+} from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
@@ -565,6 +570,13 @@ export interface ClaudeCodeOptions {
   on_elicitation?: OnElicitation;
 
   /**
+   * Callback forwarded to Claude Agent SDK's `canUseTool` option.
+   * Available only in programmatic configs because functions cannot be
+   * represented in YAML.
+   */
+  can_use_tool?: CanUseTool;
+
+  /**
    * Enable beta features. Currently supports:
    * - 'context-1m-2025-08-07' - Enable 1M token context window (Sonnet 4/4.5 only)
    *
@@ -1097,16 +1109,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      workingDir = safeResolve(basePath, config.working_dir);
+      workingDir = resolveAgenticWorkingDir(config.working_dir, basePath);
     } else {
       isTempDir = true;
     }
 
     // Create canUseTool callback for ask_user_question convenience option
     // AskUserQuestion is handled via canUseTool per SDK documentation
-    let canUseTool: CanUseTool | undefined;
+    let canUseTool = config.can_use_tool;
     if (config.ask_user_question) {
-      canUseTool = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
+      canUseTool = createAskUserQuestionCanUseTool(
+        config.ask_user_question.behavior,
+        config.can_use_tool,
+      );
     }
 
     // Just the keys we'll use to compute the cache key first
@@ -1193,20 +1208,31 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env,
     };
 
-    // Cache handling using shared utilities
-    const cacheResult = await initializeAgenticCache(
-      {
-        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-        workingDir,
-        bustCache: context?.bustCache,
-        mcp: config.mcp?.servers?.length ? config.mcp : undefined,
-        cacheMcp: config.cache_mcp,
-      },
-      {
-        prompt,
-        cacheKeyQueryOptions,
-      },
-    );
+    // Cache handling using shared utilities. A user-supplied can_use_tool
+    // callback can change tool inputs/decisions in ways that aren't representable
+    // in the cache key, so we skip caching entirely when one is provided to avoid
+    // serving or poisoning entries across different callback implementations.
+    const userProvidedCanUseTool = Boolean(config.can_use_tool);
+    if (userProvidedCanUseTool) {
+      logger.debug(
+        '[ClaudeCodeSDKProvider] Bypassing cache: user-supplied can_use_tool callback present',
+      );
+    }
+    const cacheResult = userProvidedCanUseTool
+      ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+      : await initializeAgenticCache(
+          {
+            cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+            workingDir,
+            bustCache: context?.bustCache,
+            mcp: config.mcp?.servers?.length ? config.mcp : undefined,
+            cacheMcp: config.cache_mcp,
+          },
+          {
+            prompt,
+            cacheKeyQueryOptions,
+          },
+        );
 
     // Check cache for existing response
     const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
@@ -1354,13 +1380,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // The Claude Agent SDK interleaves a `result` message for each background
           // sub-agent (Task tool with run_in_background: true) into the parent
           // session's stream before the main agent's terminal `result` arrives.
-          // SDKResultMessage has no parent_tool_use_id, so position is the only
-          // signal we have: in current SDK behavior the main agent's result is
-          // the last `result` message in the stream. Stash the latest one and
-          // process it after the stream closes — otherwise we'd return the first
-          // sub-agent's summary and skip the main agent's actual final response.
-          // See https://github.com/promptfoo/promptfoo/issues/9054.
+          // As of @anthropic-ai/claude-agent-sdk 0.2.126, result messages carry
+          // `origin.kind`: the user-prompted main result is `human` and background
+          // sub-agent completions are `task-notification` followups. Prefer the
+          // last non-task-notification result, falling back to the last result
+          // overall for older SDK servers that don't emit `origin` (in which case
+          // the pre-0.2.126 position heuristic still applies — the main agent's
+          // result is the last one in the stream). Otherwise we'd return the
+          // first sub-agent's summary and skip the main agent's actual final
+          // response. See https://github.com/promptfoo/promptfoo/issues/9054.
           let lastResultMsg: SDKResultMessage | undefined;
+          let lastMainResultMsg: SDKResultMessage | undefined;
           let resultMsgCount = 0;
 
           for await (const msg of res) {
@@ -1401,6 +1431,14 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             } else if (msg.type === 'result') {
               lastResultMsg = msg;
               resultMsgCount++;
+              // SDK >= 0.2.126: prefer the user-prompted ("human") result and
+              // skip task-notification followups from background sub-agents.
+              // Treat absent origin (older SDKs) and any non-task-notification
+              // kind as a candidate for the main result; the position-based
+              // last-wins fallback below preserves prior behavior in that case.
+              if (msg.origin?.kind !== 'task-notification') {
+                lastMainResultMsg = msg;
+              }
             }
           }
 
@@ -1408,17 +1446,20 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // abort/hook-stop runs don't silently drop them.
           drainOrphans();
 
-          if (!lastResultMsg) {
+          // Prefer the origin-tagged main result; fall back to the last result
+          // overall when older SDK servers don't emit `origin` (or — defensively
+          // — when every result was a task-notification, which would indicate
+          // the main agent's result never arrived).
+          const finalMsg = lastMainResultMsg ?? lastResultMsg;
+
+          if (!finalMsg) {
             return { error: "Claude Agent SDK call didn't return a result" };
           }
 
-          const finalMsg = lastResultMsg;
-
-          // If we observed >1 result messages, the last one is a success, and
-          // it has no terminal_reason, the main agent's result may not actually
-          // be last (truncated stream after a sub-agent finished). Surface this
-          // so downstream evals don't silently grade a sub-agent summary as the
-          // model's answer.
+          // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
+          // definitive answer, so only warn when origin was unavailable for
+          // every result (lastMainResultMsg defaulted to the last result) AND
+          // we saw >1 results AND the chosen result is a non-terminal success.
           //
           // Gate on subtype === 'success' because non-success subtypes
           // ('error_during_execution', 'error_max_turns', etc.) are themselves
@@ -1426,7 +1467,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // run ending in error, not a truncation indicator. Warning on those
           // would be a false positive on every legitimate main-agent failure
           // that follows a background sub-agent.
+          const usedPositionHeuristic =
+            !lastMainResultMsg || lastMainResultMsg.origin === undefined;
           if (
+            usedPositionHeuristic &&
             resultMsgCount > 1 &&
             finalMsg.subtype === 'success' &&
             finalMsg.terminal_reason === undefined

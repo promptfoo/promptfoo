@@ -79,6 +79,11 @@ Example demonstrating image input capabilities with vision models.
 
 Example showing web search capabilities.
 
+### Prompt Caching (`promptfooconfig.prompt-cache.yaml`)
+
+Example combining `prompt_cache_key`, `prompt_cache_retention`, and included
+`web_search_call.results` payloads in a Responses request.
+
 ### Codex Models (`promptfooconfig.codex.yaml`)
 
 Example using Codex models for code generation tasks.
@@ -125,6 +130,9 @@ npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
 
 # GPT-5.5 example
 npx promptfoo eval -c promptfooconfig.gpt-5.5.yaml
+
+# Prompt caching example
+npx promptfoo eval -c promptfooconfig.prompt-cache.yaml
 
 ```
 

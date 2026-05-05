@@ -37,6 +37,7 @@ import type {
 } from './types/index';
 import type { ApiProvider } from './types/providers';
 
+export { EmailValidationError } from './globalConfig/accounts';
 export { generateTable } from './table';
 export * from './types/index';
 // Transform types and runtime guard for users passing inline transform functions
@@ -371,11 +372,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     }
   }
 
-  // Other settings
-  if (options.cache === false) {
-    cache.disableCache();
-  }
-
   const parsedProviderPromptMap = readProviderPromptMap(
     testSuiteConfig,
     constructedTestSuite.prompts,
@@ -394,17 +390,19 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     : new Eval(unifiedConfig, { author });
 
   // Run the eval!
-  const ret = await doEvaluate(
-    {
-      ...constructedTestSuite,
-      providerPromptMap: parsedProviderPromptMap,
-    },
-    evalRecord,
-    {
-      eventSource: 'library',
-      isRedteam: Boolean(testSuiteConfig.redteam),
-      ...options,
-    },
+  const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
+    doEvaluate(
+      {
+        ...constructedTestSuite,
+        providerPromptMap: parsedProviderPromptMap,
+      },
+      evalRecord,
+      {
+        eventSource: 'library',
+        isRedteam: Boolean(testSuiteConfig.redteam),
+        ...options,
+      },
+    ),
   );
 
   // Handle sharing if enabled

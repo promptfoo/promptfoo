@@ -25,7 +25,8 @@ Use `promptfoo` as a library in your project by importing the `evaluate` functio
 ```ts
 import promptfoo from 'promptfoo';
 
-const results = await promptfoo.evaluate(testSuite, options);
+const evalRecord = await promptfoo.evaluate(testSuite, options);
+const results = await evalRecord.toEvaluateSummary();
 ```
 
 The evaluate function takes the following parameters:
@@ -34,7 +35,7 @@ The evaluate function takes the following parameters:
 
 - `options`: misc options related to how the test harness runs, as an [`EvaluateOptions` object](/docs/configuration/reference#evaluateoptions).
 
-The results of the evaluation are returned as an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
+The evaluate function returns an `Eval` record. Call `toEvaluateSummary()` on that record to get an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
 
 ### Provider functions
 
@@ -133,7 +134,7 @@ This enables better IDE support, type checking, and debugging:
 ```ts
 import promptfoo from 'promptfoo';
 
-const results = await promptfoo.evaluate({
+const evalRecord = await promptfoo.evaluate({
   prompts: ['What tools did you use to answer: {{question}}'],
   providers: ['openai:gpt-5-mini'],
   tests: [
@@ -159,6 +160,7 @@ const results = await promptfoo.evaluate({
     },
   ],
 });
+const results = await evalRecord.toEvaluateSummary();
 ```
 
 Transform functions receive:
@@ -181,7 +183,7 @@ For more on transforms, see [Transforming Outputs](/docs/configuration/guide#tra
 ```js
 import promptfoo from 'promptfoo';
 
-const results = await promptfoo.evaluate(
+const evalRecord = await promptfoo.evaluate(
   {
     prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
     providers: ['openai:gpt-5-mini'],
@@ -203,6 +205,7 @@ const results = await promptfoo.evaluate(
     maxConcurrency: 2,
   },
 );
+const results = await evalRecord.toEvaluateSummary();
 
 console.log(results);
 ````
@@ -215,7 +218,7 @@ You can also supply functions as `prompts`, `providers`, or `asserts`:
 import promptfoo from 'promptfoo';
 
 (async () => {
-  const results = await promptfoo.evaluate({
+  const evalRecord = await promptfoo.evaluate({
     prompts: [
       'Rephrase this in French: {{body}}',
       (vars) => {
@@ -258,6 +261,7 @@ import promptfoo from 'promptfoo';
       },
     ],
   });
+  const results = await evalRecord.toEvaluateSummary();
   console.log('RESULTS:');
   console.log(results);
 })();
@@ -269,11 +273,19 @@ Here's the example output in JSON format:
 
 ```json
 {
+  "version": 3,
+  "timestamp": "2026-05-02T12:43:10.000Z",
+  "prompts": [
+    {
+      "raw": "Rephrase this in French: {{body}}",
+      "label": "Rephrase this in French: {{body}}"
+    }
+  ],
   "results": [
     {
       "prompt": {
         "raw": "Rephrase this in French: Hello world",
-        "display": "Rephrase this in French: {{body}}"
+        "label": "Rephrase this in French: {{body}}"
       },
       "vars": {
         "body": "Hello world"
@@ -285,45 +297,21 @@ Here's the example output in JSON format:
           "prompt": 16,
           "completion": 3
         }
-      }
-    },
-    {
-      "prompt": {
-        "raw": "Rephrase this in French: I&#39;m hungry",
-        "display": "Rephrase this in French: {{body}}"
       },
-      "vars": {
-        "body": "I'm hungry"
-      },
-      "response": {
-        "output": "J'ai faim.",
-        "tokenUsage": {
-          "total": 24,
-          "prompt": 19,
-          "completion": 5
-        }
-      }
+      "success": true,
+      "score": 1
     }
-    // ...
   ],
   "stats": {
-    "successes": 4,
+    "successes": 1,
     "failures": 0,
+    "errors": 0,
     "tokenUsage": {
-      "total": 120,
-      "prompt": 72,
-      "completion": 48
+      "total": 19,
+      "prompt": 16,
+      "completion": 3
     }
-  },
-  "table": [
-    ["Rephrase this in French: {{body}}", "Rephrase this like a pirate: {{body}}", "body"],
-    ["Bonjour le monde", "Ahoy thar, me hearties! Avast ye, world!", "Hello world"],
-    [
-      "J'ai faim.",
-      "Arrr, me belly be empty and me throat be parched! I be needin' some grub, matey!",
-      "I'm hungry"
-    ]
-  ]
+  }
 }
 ```
 
@@ -332,13 +320,14 @@ Here's the example output in JSON format:
 To get a shareable URL, set `sharing: true` along with `writeLatestResults: true`:
 
 ```js
-const results = await promptfoo.evaluate({
+const evalRecord = await promptfoo.evaluate({
   prompts: ['Your prompt here'],
   providers: ['openai:gpt-5-mini'],
   tests: [{ vars: { input: 'test' } }],
   writeLatestResults: true,
   sharing: true,
 });
+const results = await evalRecord.toEvaluateSummary();
 
 console.log(results.shareableUrl); // https://app.promptfoo.dev/eval/abc123
 ```
