@@ -130,8 +130,10 @@ export class GoogleAuthManager {
     // 3. GOOGLE_API_KEY (primary - SDK aligned)
     const googleKey = env?.GOOGLE_API_KEY || getEnvString('GOOGLE_API_KEY');
 
-    // 4. GEMINI_API_KEY (secondary - not in SDK, for backward compatibility)
-    const geminiKey = env?.GEMINI_API_KEY || getEnvString('GEMINI_API_KEY');
+    // 4. GEMINI_API_KEY (secondary, AI Studio only - not in SDK, for backward compatibility)
+    const geminiKey = isVertexMode
+      ? undefined
+      : env?.GEMINI_API_KEY || getEnvString('GEMINI_API_KEY');
 
     // 5. PALM_API_KEY (legacy, AI Studio only - deprecated)
     const palmKey = isVertexMode ? undefined : env?.PALM_API_KEY || getEnvString('PALM_API_KEY');
