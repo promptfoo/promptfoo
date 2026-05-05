@@ -2,13 +2,14 @@ import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 import { isBlobStorageEnabled } from '../../blobs/extractor';
-import { storeBlob } from '../../blobs/index';
+import { BLOB_MAX_SIZE, storeBlob } from '../../blobs/index';
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
+import { calculateOpenAIUsageCost } from './billing';
 import { formatOpenAiError } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -96,19 +97,16 @@ export const GPT_IMAGE2_COSTS: Record<string, number> = {
   high_1536x1024: 0.165,
 };
 
-// GPT Image 1.5 uses token-based pricing: $32/1M output image tokens
-// Estimated token counts: low ~2K, medium ~4K, high ~6K tokens per image
-// Larger images use proportionally more tokens
 export const GPT_IMAGE1_5_COSTS: Record<string, number> = {
-  low_1024x1024: 0.064,
-  low_1024x1536: 0.096,
-  low_1536x1024: 0.096,
-  medium_1024x1024: 0.128,
-  medium_1024x1536: 0.192,
-  medium_1536x1024: 0.192,
-  high_1024x1024: 0.192,
-  high_1024x1536: 0.288,
-  high_1536x1024: 0.288,
+  low_1024x1024: 0.009,
+  low_1024x1536: 0.013,
+  low_1536x1024: 0.013,
+  medium_1024x1024: 0.034,
+  medium_1024x1536: 0.05,
+  medium_1536x1024: 0.05,
+  high_1024x1024: 0.133,
+  high_1024x1536: 0.2,
+  high_1536x1024: 0.2,
 };
 
 type CommonImageOptions = {
@@ -695,6 +693,10 @@ async function getUnsafeExternalImageUrlReason(url: string): Promise<string | un
     return 'URL is invalid';
   }
 
+  if (parsedUrl.protocol !== 'https:') {
+    return `protocol ${parsedUrl.protocol} is not allowed`;
+  }
+
   const hostname = normalizeExternalImageHostname(parsedUrl.hostname);
   if (!hostname) {
     return 'URL is missing a hostname';
@@ -807,20 +809,84 @@ async function storeExternalImageUrlAsBlob(
       return null;
     }
 
-    const response = await fetchWithProxy(url, { redirect: 'error' });
-    if (!response.ok) {
-      logger.warn('[OpenAI Image] Failed to download external image URL', {
-        url,
-        status: response.status,
-        statusText: response.statusText,
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), getRequestTimeoutMs());
+    let buffer: Buffer;
+    let mimeType: string;
+    try {
+      const response = await fetchWithProxy(url, {
+        redirect: 'error',
+        signal: controller.signal,
       });
-      return null;
-    }
+      if (!response.ok) {
+        logger.warn('[OpenAI Image] Failed to download external image URL', {
+          url,
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return null;
+      }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const responseMimeType = response.headers.get('content-type')?.split(';', 1)[0];
-    const mimeType =
-      responseMimeType || inferMimeTypeFromUrl(url) || getMimeTypeForOutputFormat(outputFormat);
+      const contentLength = Number(response.headers.get('content-length') ?? 0);
+      if (Number.isFinite(contentLength) && contentLength > BLOB_MAX_SIZE) {
+        logger.warn('[OpenAI Image] External image exceeds blob size limit', {
+          url,
+          contentLength,
+          maxSizeBytes: BLOB_MAX_SIZE,
+        });
+        return null;
+      }
+
+      const chunks: Buffer[] = [];
+      let totalBytes = 0;
+      if (response.body) {
+        const reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          totalBytes += value.byteLength;
+          if (totalBytes > BLOB_MAX_SIZE) {
+            controller.abort();
+            logger.warn('[OpenAI Image] External image exceeded blob size limit during download', {
+              url,
+              sizeBytes: totalBytes,
+              maxSizeBytes: BLOB_MAX_SIZE,
+            });
+            return null;
+          }
+          chunks.push(Buffer.from(value));
+        }
+      } else {
+        const arrayBuffer = await response.arrayBuffer();
+        totalBytes = arrayBuffer.byteLength;
+        if (totalBytes > BLOB_MAX_SIZE) {
+          controller.abort();
+          logger.warn('[OpenAI Image] External image exceeded blob size limit after download', {
+            url,
+            sizeBytes: totalBytes,
+            maxSizeBytes: BLOB_MAX_SIZE,
+          });
+          return null;
+        }
+        chunks.push(Buffer.from(arrayBuffer));
+      }
+
+      const responseMimeType = response.headers.get('content-type')?.split(';', 1)[0]?.trim();
+      if (responseMimeType && !responseMimeType.startsWith('image/')) {
+        logger.warn('[OpenAI Image] External image response used a non-image content type', {
+          url,
+          mimeType: responseMimeType,
+        });
+        return null;
+      }
+      mimeType =
+        responseMimeType || inferMimeTypeFromUrl(url) || getMimeTypeForOutputFormat(outputFormat);
+      buffer = Buffer.concat(chunks, totalBytes);
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
     const { ref } = await storeBlob(buffer, mimeType, {
       evalId: blobContext?.evaluationId,
       testIdx: blobContext?.testIdx,
@@ -1076,6 +1142,7 @@ export async function processApiResponse(
   n: number = 1,
   outputFormat?: string,
   blobContext?: ImageBlobContext,
+  billingConfig: OpenAiImageOptions = {},
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
@@ -1098,7 +1165,10 @@ export async function processApiResponse(
       return formattedOutput;
     }
 
-    const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
+    const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
+      cachedResponse: cached,
+    });
+    const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
     const tokenUsage = getImageTokenUsage(data, cached);
 
     return {
@@ -1208,6 +1278,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config.n ?? 1,
       'output_format' in config ? config.output_format : undefined,
       context,
+      config,
     );
   }
 }

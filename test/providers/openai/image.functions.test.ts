@@ -1,8 +1,8 @@
 import { lookup } from 'node:dns/promises';
 
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
-import { storeBlob } from '../../../src/blobs/index';
+import { BLOB_MAX_SIZE, storeBlob } from '../../../src/blobs/index';
 import { fetchWithCache } from '../../../src/cache';
 import {
   buildSafeStructuredImageOutputs,
@@ -32,7 +32,8 @@ vi.mock('../../../src/cache', async (importOriginal) => {
 vi.mock('../../../src/blobs/extractor', () => ({
   isBlobStorageEnabled: vi.fn(),
 }));
-vi.mock('../../../src/blobs/index', () => ({
+vi.mock('../../../src/blobs/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/blobs/index')>()),
   storeBlob: vi.fn(),
 }));
 vi.mock('../../../src/util/fetch/index', () => ({
@@ -45,7 +46,7 @@ describe('OpenAI Image Provider Functions', () => {
   const blobUri = (index: number) => `promptfoo://blob/${index.toString(16).padStart(32, '0')}`;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     vi.mocked(isBlobStorageEnabled).mockReturnValue(true);
     vi.mocked(fetchWithProxy).mockResolvedValue({
@@ -69,6 +70,10 @@ describe('OpenAI Image Provider Functions', () => {
         deduplicated: false,
       };
     });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('validateSizeForModel', () => {
@@ -506,7 +511,7 @@ describe('OpenAI Image Provider Functions', () => {
           usage: data.usage,
         },
       });
-      expect(result).not.toHaveProperty('cost');
+      expect(result.cost).toBeCloseTo((10 * 5 + 20 * 30) / 1e6, 12);
     });
 
     it('should handle errors during output formatting', async () => {
@@ -583,6 +588,7 @@ describe('OpenAI Image Provider Functions', () => {
       ]);
       expect(fetchWithProxy).toHaveBeenCalledWith('https://example.com/image.jpg?size=large', {
         redirect: 'error',
+        signal: expect.any(AbortSignal),
       });
     });
 
@@ -606,6 +612,15 @@ describe('OpenAI Image Provider Functions', () => {
       expect(lookup).not.toHaveBeenCalled();
     });
 
+    it('should block plaintext HTTP URLs before fetching', async () => {
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'http://example.com/image.png' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('should block hostnames that resolve to private IPs before fetching', async () => {
       lookupMock.mockResolvedValue([{ address: '10.0.0.5', family: 4 }]);
 
@@ -626,6 +641,43 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result).toBeUndefined();
       expect(fetchWithProxy).not.toHaveBeenCalled();
       expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it('should reject non-image response MIME types before storing blobs', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'content-type': 'text/html' }),
+        arrayBuffer: async () => new ArrayBuffer(1024),
+      } as Response);
+
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://example.com/image.jpg' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(storeBlob).not.toHaveBeenCalled();
+    });
+
+    it('should reject images larger than the blob size limit before downloading them', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({
+          'content-type': 'image/png',
+          'content-length': String(BLOB_MAX_SIZE + 1),
+        }),
+        arrayBuffer: async () => new ArrayBuffer(1024),
+      } as Response);
+
+      const result = await buildSafeStructuredImageOutputs({
+        data: [{ url: 'https://example.com/image.jpg' }],
+      });
+
+      expect(result).toBeUndefined();
+      expect(storeBlob).not.toHaveBeenCalled();
     });
   });
 

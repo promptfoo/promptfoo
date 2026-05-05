@@ -21,7 +21,8 @@ vi.mock('../../src/logger', () => ({
 vi.mock('../../src/blobs/extractor', () => ({
   isBlobStorageEnabled: vi.fn(),
 }));
-vi.mock('../../src/blobs/index', () => ({
+vi.mock('../../src/blobs/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/blobs/index')>()),
   storeBlob: vi.fn(),
 }));
 vi.mock('../../src/util/fetch/index', () => ({
