@@ -2144,7 +2144,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
   describe('params', () => {
-    it('should include Mistral-specific parameters without top_k', async () => {
+    it('should use the chat-completion request format without top_k', async () => {
       const config = {
         max_tokens: 200,
         temperature: 0.7,
@@ -2157,7 +2157,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
-        prompt,
+        messages: [{ role: 'user', content: prompt }],
         stop,
         max_tokens: 200,
         temperature: 0.7,
@@ -2175,8 +2175,7 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
       const params = await modelHandler.params(config, prompt, stop);
 
       expect(params).toEqual({
-        prompt,
-        stop,
+        messages: [{ role: 'user', content: prompt }],
         max_tokens: 1024,
         temperature: 0,
         top_p: 1,
@@ -2267,6 +2266,29 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   });
 });
 
+describe('BEDROCK_MODEL MISTRAL_CHAT', () => {
+  const modelHandler = BEDROCK_MODEL.MISTRAL_CHAT;
+
+  it('should preserve structured chat prompts for newer Mistral models', async () => {
+    const prompt = JSON.stringify([
+      { role: 'system', content: 'You are helpful.' },
+      { role: 'user', content: 'Summarize this.' },
+    ]);
+
+    const params = await modelHandler.params({}, prompt, []);
+
+    expect(params).toEqual({
+      messages: [
+        { role: 'system', content: 'You are helpful.' },
+        { role: 'user', content: 'Summarize this.' },
+      ],
+      max_tokens: 1024,
+      temperature: 0,
+      top_p: 1,
+    });
+  });
+});
+
 describe('BEDROCK_MODEL DEEPSEEK', () => {
   const modelHandler = BEDROCK_MODEL.DEEPSEEK;
 
@@ -2341,6 +2363,27 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
       expect(result).toEqual({
         output: 'The answer is 42.',
         reasoning: [{ type: 'think', content: 'Let me think about this problem...' }],
+      });
+    });
+
+    it('should extract multiple thinking blocks from DeepSeek responses', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: '<think>First thought</think>\nIntermediate answer\n<think>Second thought</think>\nFinal answer',
+          },
+        ],
+      };
+      const config = { showThinking: true };
+
+      const result = modelHandler.output(config, mockResponse);
+
+      expect(result).toEqual({
+        output: 'Intermediate answer\n\nFinal answer',
+        reasoning: [
+          { type: 'think', content: 'First thought' },
+          { type: 'think', content: 'Second thought' },
+        ],
       });
     });
 
@@ -2444,6 +2487,73 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
         prompt: undefined,
         completion: undefined,
         total: undefined,
+        numRequests: 1,
+      });
+    });
+  });
+});
+
+describe('BEDROCK_MODEL DEEPSEEK_CHAT', () => {
+  const modelHandler = BEDROCK_MODEL.DEEPSEEK_CHAT;
+
+  describe('params', () => {
+    it('should use the chat-completion request format for V3 models', async () => {
+      const params = await modelHandler.params(
+        {
+          max_tokens: 1000,
+          temperature: 0.8,
+          top_p: 0.95,
+        },
+        'Solve this problem',
+        ['END'],
+      );
+
+      expect(params).toEqual({
+        messages: [{ role: 'user', content: 'Solve this problem' }],
+        max_tokens: 1000,
+        temperature: 0.8,
+        top_p: 0.95,
+        stop: ['END'],
+      });
+    });
+  });
+
+  describe('output', () => {
+    it('should extract output from chat completion format', async () => {
+      expect(
+        modelHandler.output(
+          {},
+          {
+            choices: [
+              {
+                message: {
+                  content: 'This is a V3 response.',
+                },
+              },
+            ],
+          },
+        ),
+      ).toBe('This is a V3 response.');
+    });
+  });
+
+  describe('tokenUsage', () => {
+    it('should extract token usage from usage objects', async () => {
+      expect(
+        modelHandler.tokenUsage!(
+          {
+            usage: {
+              prompt_tokens: 12,
+              completion_tokens: 18,
+              total_tokens: 30,
+            },
+          },
+          'prompt',
+        ),
+      ).toEqual({
+        prompt: 12,
+        completion: 18,
+        total: 30,
         numRequests: 1,
       });
     });
@@ -2812,6 +2922,7 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['meta.llama3-1-405b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_1);
+    expect(AWS_BEDROCK_MODELS['meta.llama3-3-70b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_3);
     expect(AWS_BEDROCK_MODELS['mistral.mistral-large-2407-v1:0']).toBe(
       BEDROCK_MODEL.MISTRAL_LARGE_2407,
     );
@@ -2847,12 +2958,34 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
 
   it('should map DeepSeek models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+    expect(AWS_BEDROCK_MODELS['deepseek.v3-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK_CHAT);
+    expect(AWS_BEDROCK_MODELS['deepseek.v3.2']).toBe(BEDROCK_MODEL.DEEPSEEK_CHAT);
     expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
+  });
+
+  it('should map newer Mistral models correctly', async () => {
+    [
+      'mistral.devstral-2-123b',
+      'mistral.magistral-small-2509',
+      'mistral.ministral-3-14b-instruct',
+      'mistral.ministral-3-8b-instruct',
+      'mistral.ministral-3-3b-instruct',
+      'mistral.mistral-large-3-675b-instruct',
+      'mistral.pixtral-large-2502-v1:0',
+      'mistral.voxtral-mini-3b-2507',
+      'mistral.voxtral-small-24b-2507',
+      'us.mistral.pixtral-large-2502-v1:0',
+      'eu.mistral.pixtral-large-2502-v1:0',
+    ].forEach((modelId) => {
+      expect(AWS_BEDROCK_MODELS[modelId]).toBe(BEDROCK_MODEL.MISTRAL_CHAT);
+    });
   });
 
   it('should map OpenAI models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-120b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
     expect(AWS_BEDROCK_MODELS['openai.gpt-oss-20b-1:0']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-120b']).toBe(BEDROCK_MODEL.OPENAI);
+    expect(AWS_BEDROCK_MODELS['openai.gpt-oss-safeguard-20b']).toBe(BEDROCK_MODEL.OPENAI);
   });
 
   it('should map APAC regional models correctly', async () => {
@@ -3163,6 +3296,49 @@ describe('AwsBedrockCompletionProvider', () => {
     );
   });
 
+  it('should pass merged config to model.output', async () => {
+    const responseBody = JSON.stringify({ completion: 'test response' });
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(new TextEncoder().encode(responseBody), {
+        transformToString: () => responseBody,
+      }),
+    });
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            showThinking: true,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    const context = {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          showThinking: false,
+        },
+      },
+      vars: {},
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].output,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1',
+        showThinking: false,
+      }),
+      expect.any(Object),
+    );
+  });
+
   it('should set cached flag when returning cached response', async () => {
     const mockCachedResponseData = { completion: 'cached response' };
 
@@ -3188,6 +3364,47 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockCache.get).toHaveBeenCalled();
     // Verify invokeModel was not called because cache was used
     expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it('should pass merged config to model.output for cached responses', async () => {
+    const mockCachedResponseData = { completion: 'cached response' };
+
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponseData));
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+            showThinking: true,
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    await provider.callApi('test prompt', {
+      prompt: {
+        raw: 'test prompt',
+        label: 'test',
+        config: {
+          showThinking: false,
+        },
+      },
+      vars: {},
+    });
+
+    expect(
+      AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'].output,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region: 'us-east-1',
+        showThinking: false,
+      }),
+      mockCachedResponseData,
+    );
   });
 });
 
@@ -3407,8 +3624,11 @@ describe('BEDROCK_MODEL.QWEN', () => {
 describe('Qwen model mapping', () => {
   it('should include all Qwen models in AWS_BEDROCK_MODELS', async () => {
     const qwenModels = [
+      'qwen.qwen3-coder-next',
       'qwen.qwen3-coder-480b-a35b-v1:0',
       'qwen.qwen3-coder-30b-a3b-v1:0',
+      'qwen.qwen3-next-80b-a3b',
+      'qwen.qwen3-vl-235b-a22b',
       'qwen.qwen3-235b-a22b-2507-v1:0',
       'qwen.qwen3-32b-v1:0',
     ];

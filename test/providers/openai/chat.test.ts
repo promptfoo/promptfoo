@@ -243,6 +243,7 @@ describe('OpenAI Provider', () => {
       expect(result2.output).toBe('Test output 2');
       // Cached responses don't count as new requests, so numRequests is not included
       expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.cost).toBe(0);
     });
 
     it('should handle disabled cache correctly', async () => {
@@ -645,6 +646,53 @@ describe('OpenAI Provider', () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather?' }]),
+      );
+
+      expect(result.output).toEqual({
+        content: 'I will call a tool.',
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"weather"}' },
+          },
+        ],
+      });
+      expect(JSON.stringify(result.output)).not.toContain('Private tool selection reasoning');
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Private tool selection reasoning.' },
+      ]);
+    });
+
+    it('should preserve raw tool-call message output when the provider uses reasoning', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'I will call a tool.',
+                reasoning: 'Private tool selection reasoning.',
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"query":"weather"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-oss-20b');
       const result = await provider.callApi(
         JSON.stringify([{ role: 'user', content: 'Weather?' }]),
       );
@@ -1970,6 +2018,20 @@ describe('OpenAI Provider', () => {
       const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const body = JSON.parse(call[1].body);
       expect(body.max_tokens).toBe(2000);
+    });
+
+    it('should forward prompt cache options', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          prompt_cache_key: 'shared-prefix',
+          prompt_cache_retention: 'in_memory',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.prompt_cache_key).toBe('shared-prefix');
+      expect(body.prompt_cache_retention).toBe('in_memory');
     });
 
     it('should not share config between provider instances', () => {

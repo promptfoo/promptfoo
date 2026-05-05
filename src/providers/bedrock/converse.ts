@@ -30,6 +30,7 @@ import { isClaudeOpus47Model } from '../anthropic/util';
 import {
   isOpenAIToolArray,
   isOpenAIToolChoice,
+  type OpenAIToolChoice,
   openaiToolChoiceToBedrock,
   openaiToolsToBedrock,
 } from '../shared';
@@ -100,6 +101,7 @@ export interface BedrockConverseOptions extends BedrockOptions {
   // Tool configuration
   tools?: BedrockConverseToolConfig[];
   toolChoice?: 'auto' | 'any' | { tool: { name: string } };
+  tool_choice?: OpenAIToolChoice | 'any' | { tool: { name: string } };
 
   // Function tool callbacks for executing tools locally
   // Keys are function names, values are file:// references or inline function strings
@@ -325,6 +327,10 @@ function convertToolChoiceToConverseFormat(toolChoice: unknown): ToolChoice | un
     return { tool: { name: toolChoice.tool.name } };
   }
   return { auto: {} };
+}
+
+function isDisabledToolChoice(toolChoice: unknown): boolean {
+  return toolChoice === 'none';
 }
 
 /**
@@ -873,6 +879,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     vars?: Record<string, VarValue>,
     promptConfig?: Partial<BedrockConverseOptions>,
   ): Promise<ToolConfiguration | undefined> {
+    const configToolChoice = this.getEffectiveToolChoice(promptConfig);
+    if (isDisabledToolChoice(configToolChoice)) {
+      return undefined;
+    }
+
     // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
     const configTools = promptConfig?.tools ?? this.config.tools;
     if (!configTools || configTools.length === 0) {
@@ -886,8 +897,6 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     }
 
     const converseTools = convertToolsToConverseFormat(tools);
-    // Merge toolChoice from prompt.config or fall back to this.config
-    const configToolChoice = promptConfig?.toolChoice ?? this.config.toolChoice;
     const toolChoice = configToolChoice
       ? convertToolChoiceToConverseFormat(configToolChoice)
       : undefined;
@@ -896,6 +905,15 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       tools: converseTools,
       ...(toolChoice ? { toolChoice } : {}),
     };
+  }
+
+  private getEffectiveToolChoice(promptConfig?: Partial<BedrockConverseOptions>): unknown {
+    return (
+      promptConfig?.tool_choice ??
+      promptConfig?.toolChoice ??
+      this.config.tool_choice ??
+      this.config.toolChoice
+    );
   }
 
   /**
@@ -1023,6 +1041,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       context?.vars,
       context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
     );
+    const toolsDisabled = isDisabledToolChoice(
+      this.getEffectiveToolChoice(
+        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+      ),
+    );
     const guardrailConfig = this.buildGuardrailConfig();
     const additionalModelRequestFields = this.buildAdditionalModelRequestFields();
     const performanceConfig = this.buildPerformanceConfig();
@@ -1060,7 +1083,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        const result = await this.parseResponse(parsed, context);
+        const result = await this.parseResponse(parsed, context, toolsDisabled);
         return { ...result, cached: true };
       }
     }
@@ -1110,7 +1133,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response, context);
+    return await this.parseResponse(response, context, toolsDisabled);
   }
 
   /**
@@ -1119,6 +1142,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   private async parseResponse(
     response: ConverseCommandOutput,
     context?: CallApiContextParams,
+    toolsDisabled = false,
   ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
@@ -1205,7 +1229,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     const reasoning = showThinking ? extractReasoningFromContentBlocks(content) : undefined;
 
     // Handle function tool callbacks if configured
-    if (this.config.functionToolCallbacks) {
+    if (!toolsDisabled && this.config.functionToolCallbacks) {
       const toolUseBlocks = content.filter(
         (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
           'toolUse' in block && block.toolUse !== undefined,

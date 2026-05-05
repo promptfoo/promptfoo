@@ -167,7 +167,7 @@ export interface GuardrailResponse {
  * - 'redacted_thinking': Anthropic Claude redacted thinking blocks
  * - 'reasoning': OpenAI o-series, DeepSeek R1, xAI Grok
  * - 'thought': Google Gemini thinking mode
- * - 'think': Meta Llama-Nemotron (extracted from <think> tags)
+ * - 'think': Bedrock DeepSeek, Qwen, and Meta Llama-Nemotron (extracted from <think> tags)
  */
 export type ReasoningContent =
   | {

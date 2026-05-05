@@ -1,26 +1,61 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["src/index.ts", "src/server/index.ts"],
-  "project": ["src/**/*.{js,ts,tsx}", "!src/app/**/*"],
-  "ignore": ["dist/**/*.{js,ts,tsx}", "examples/**/*.{js,ts,tsx,mjs}", "src/server/index.ts"],
   "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/**/*.{js,cjs,mjs,ts}",
+        "plugins/**/scripts/**/*.{js,cjs,mjs,ts}",
+        "src/redteam/plugins/policy/evals/**/*.{js,cjs,mjs,ts}",
+        "src/logger.browser.ts",
+        "src/util/createHash.browser.ts",
+        "test/__fixtures__/**/*.{js,cjs,mjs,ts}",
+        "test/fixtures/**/*.{js,cjs,mjs,ts}",
+        "test/smoke/fixtures/**/*.{js,cjs,mjs,ts}",
+        "test/**/*.bench.ts"
+      ],
+      "project": [
+        "src/**/*.{js,ts,tsx}",
+        "scripts/**/*.{js,cjs,mjs,ts}",
+        "plugins/**/*.{js,cjs,mjs,ts}",
+        "test/**/*.{js,ts,tsx,cjs,mjs}",
+        "!src/app/**/*"
+      ],
+      "ignoreFiles": [
+        "src/providers/audio/**/*.{js,ts,tsx}",
+        "src/redteam/audio/**/*.{js,ts,tsx}",
+        "src/redteam/strategies/multilingual.ts",
+        "src/util/agent/targetLinkFs.ts"
+      ],
+      "ignoreDependencies": ["@actions/*", "@octokit/rest", "@opencode-ai/sdk", "@types/pdf-parse"],
+      "paths": {
+        "@promptfoo/*": ["./src/*"]
+      }
+    },
     "src/app": {
-      "entry": ["src/index.tsx"],
+      "entry": ["index.html", "src/tests/browser-mode/browserApis.browser.ts"],
       "project": ["src/**/*.{js,ts,tsx}"],
-      "ignoreDependencies": ["@promptfoo/*", "@kurkle/color"],
+      "ignoreFiles": ["src/polyfills/scroll-timeline.d.ts"],
+      "ignoreDependencies": ["@promptfoo/*", "@kurkle/color", "tailwindcss"],
       "paths": {
         "@app/*": ["./src/*"],
         "@promptfoo/*": ["../../*"]
       }
     },
     "site": {
-      "entry": ["src/**/*.{js,ts,tsx}", "blog/**/*.{js,ts,tsx}", "docusaurus.config.ts"],
+      "entry": [
+        "*.config.{js,ts}",
+        "src/**/*.{js,ts,tsx}",
+        "blog/**/*.{js,ts,tsx}",
+        "docs/**/*.{md,mdx}"
+      ],
       "project": ["**/*.{js,ts,tsx}"],
+      "ignoreFiles": ["docs/_shared/**/*.{js,ts,tsx}", "static/js/scripts.js"],
       "ignoreDependencies": [
         "@docusaurus/types",
         "@docusaurus/theme-common",
         "@theme/*",
         "@mui/*",
+        "@generated/*",
         "@docusaurus/plugin-content-blog",
         "@swc/core",
         "@swc/jest",
@@ -28,11 +63,20 @@
         "framer-motion",
         "lucide-react"
       ]
+    },
+    "code-scan-action": {
+      "entry": ["src/main.ts"],
+      "project": ["src/**/*.{js,ts,tsx}"]
     }
   },
-  "ignoreBinaries": ["dist/src/main.js", "gh"],
-  "paths": {
-    "@promptfoo/*": ["./src/*"]
-  },
+  "ignoreBinaries": [
+    "act",
+    "check-dependency-version-consistency",
+    "dist/src/entrypoint.js",
+    "ffmpeg",
+    "gh",
+    "lockfile-lint",
+    "madge"
+  ],
   "ignoreExportsUsedInFile": true
 }

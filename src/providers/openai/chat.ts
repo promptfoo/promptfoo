@@ -30,7 +30,8 @@ import {
   transformTools,
 } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { calculateOpenAIUsageCost } from './billing';
+import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -211,6 +212,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
+  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
+    return this.modelName;
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -302,6 +307,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
       ...(this.modelName.includes('audio')
         ? {
@@ -625,14 +636,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       );
       let output: string | object = '';
 
-      if (message.reasoning) {
-        output = message.content || '';
-      } else if (message.content && (message.function_call || message.tool_calls)) {
+      if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
         } else {
           output = stripOpenAiCompatibleReasoningFields(message);
         }
+      } else if (message.reasoning) {
+        output = message.content || '';
       } else if (
         message.content === null ||
         message.content === undefined ||
@@ -755,14 +766,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             latencyMs,
             logProbs,
             ...(finishReason && { finishReason }),
-            cost: calculateOpenAICost(
-              this.modelName,
-              config,
-              data.usage?.prompt_tokens,
-              data.usage?.completion_tokens,
-              data.usage?.audio_prompt_tokens,
-              data.usage?.audio_completion_tokens,
-            ),
+            cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+              cachedResponse: cached,
+              serviceTier: data.service_tier ?? config.service_tier,
+            }),
             guardrails: { flagged: contentFiltered },
             metadata: {
               http: {
@@ -791,14 +798,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           latencyMs,
           logProbs,
           ...(finishReason && { finishReason }),
-          cost: calculateOpenAICost(
-            this.modelName,
-            config,
-            data.usage?.prompt_tokens,
-            data.usage?.completion_tokens,
-            data.usage?.audio_prompt_tokens,
-            data.usage?.audio_completion_tokens,
-          ),
+          cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+            cachedResponse: cached,
+            serviceTier: data.service_tier ?? config.service_tier,
+          }),
           guardrails: { flagged: contentFiltered },
           metadata: {
             http: {
@@ -818,14 +821,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         logProbs,
         ...(finishReason && { finishReason }),
-        cost: calculateOpenAICost(
-          this.modelName,
-          config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-          data.usage?.audio_prompt_tokens,
-          data.usage?.audio_completion_tokens,
-        ),
+        cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+          cachedResponse: cached,
+          serviceTier: data.service_tier ?? config.service_tier,
+        }),
         guardrails: { flagged: contentFiltered },
         metadata: {
           http: {

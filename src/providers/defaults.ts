@@ -37,6 +37,7 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
   DefaultWebSearchProvider as OpenAiWebSearchProvider,
 } from './openai/defaults';
+import { getXAIProviders } from './xai/defaults';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, DefaultProviders } from '../types/index';
@@ -62,6 +63,7 @@ interface DefaultProviderPreferences {
   useGoogleAiStudioDefaults: boolean;
   useGoogleVertexDefaults: boolean;
   useMistralDefaults: boolean;
+  useXAIDefaults: boolean;
 }
 
 async function getDefaultProviderPreferences(
@@ -90,6 +92,7 @@ async function getDefaultProviderPreferences(
     (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
     (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID);
   const hasMistralCredentials = Boolean(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY);
+  const hasXAICredentials = Boolean(getEnvString('XAI_API_KEY') || env?.XAI_API_KEY);
 
   const preferAzure = Boolean(
     !hasOpenAiCredentials &&
@@ -108,7 +111,10 @@ async function getDefaultProviderPreferences(
     : false;
   const useNonGoogleFallbackDefaults = shouldUseFallbackDefaults && !useGoogleVertexDefaults;
   const hasCodexCredentials =
-    useNonGoogleFallbackDefaults && !hasMistralCredentials && hasCodexDefaultCredentials(env);
+    useNonGoogleFallbackDefaults &&
+    !hasMistralCredentials &&
+    !hasXAICredentials &&
+    hasCodexDefaultCredentials(env);
 
   return {
     preferAnthropic,
@@ -117,12 +123,14 @@ async function getDefaultProviderPreferences(
     useGitHubDefaults:
       useNonGoogleFallbackDefaults &&
       !hasMistralCredentials &&
+      !hasXAICredentials &&
       !hasCodexCredentials &&
       hasGitHubCredentials,
     useGoogleAiStudioDefaults:
       !hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials,
     useGoogleVertexDefaults,
     useMistralDefaults: useNonGoogleFallbackDefaults && hasMistralCredentials,
+    useXAIDefaults: useNonGoogleFallbackDefaults && !hasMistralCredentials && hasXAICredentials,
   };
 }
 
@@ -147,6 +155,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
     useGoogleAiStudioDefaults,
     useGoogleVertexDefaults,
     useMistralDefaults,
+    useXAIDefaults,
   } = await getDefaultProviderPreferences(env);
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
@@ -223,6 +232,13 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
       suggestionsProvider: MistralSuggestionsProvider,
       synthesizeProvider: MistralSynthesizeProvider,
       // Mistral doesn't have web search
+    };
+  } else if (useXAIDefaults) {
+    logger.debug('Using xAI default providers');
+    providers = {
+      embeddingProvider: OpenAiEmbeddingProvider, // xAI doesn't expose an embeddings API
+      moderationProvider: OpenAiModerationProvider, // xAI doesn't expose a moderation API
+      ...getXAIProviders(env),
     };
   } else if (useCodexDefaults) {
     logger.debug('Using Codex SDK default providers from ChatGPT/Codex credentials');
