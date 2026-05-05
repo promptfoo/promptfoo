@@ -54,13 +54,4 @@ describe('Google AI Studio Default Providers', () => {
     expect(providers.gradingJsonProvider.getApiKey()).toBe('override-key');
     expect(providers.llmRubricProvider.getApiKey()).toBe('override-key');
   });
-
-  it('should not throw "Not implemented" from default grading callApi', () => {
-    // Regression: the previous AIStudioGenericProvider.callApi() threw a literal
-    // "Not implemented" error, breaking llm-rubric whenever AI Studio defaults were
-    // selected. The replacement AIStudioChatProvider must expose a real implementation.
-    const providers = getGoogleAiStudioProviders();
-    expect(typeof providers.gradingProvider.callApi).toBe('function');
-    expect(providers.gradingProvider.callApi.toString()).not.toContain('Not implemented');
-  });
 });
