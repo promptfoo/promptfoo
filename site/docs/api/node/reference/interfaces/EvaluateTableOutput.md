@@ -6,7 +6,7 @@
 
 # Interface: EvaluateTableOutput
 
-Defined in: [types/index.ts:437](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L437)
+Defined in: [types/index.ts:441](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L441)
 
 One provider output cell in an eval table.
 
@@ -16,7 +16,7 @@ One provider output cell in an eval table.
 
 > `optional` **audio?**: [`AudioOutput`](AudioOutput.md)
 
-Defined in: [types/index.ts:471](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L471)
+Defined in: [types/index.ts:475](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L475)
 
 Audio attachment associated with this output, when present.
 
@@ -26,7 +26,7 @@ Audio attachment associated with this output, when present.
 
 > **cost**: `number`
 
-Defined in: [types/index.ts:439](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L439)
+Defined in: [types/index.ts:443](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L443)
 
 Estimated cost attributed to this provider result.
 
@@ -36,7 +36,7 @@ Estimated cost attributed to this provider result.
 
 > `optional` **error?**: `string` \| `null`
 
-Defined in: [types/index.ts:469](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L469)
+Defined in: [types/index.ts:473](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L473)
 
 Error message when this output failed before normal grading.
 
@@ -46,7 +46,7 @@ Error message when this output failed before normal grading.
 
 > **failureReason**: `ResultFailureReason`
 
-Defined in: [types/index.ts:441](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L441)
+Defined in: [types/index.ts:445](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L445)
 
 Failure category used when rendering an error or failed assertion.
 
@@ -56,7 +56,7 @@ Failure category used when rendering an error or failed assertion.
 
 > `optional` **gradingResult?**: [`GradingResult`](GradingResult.md) \| `null`
 
-Defined in: [types/index.ts:443](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L443)
+Defined in: [types/index.ts:447](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L447)
 
 Assertion result for this provider output, when grading has run.
 
@@ -66,7 +66,7 @@ Assertion result for this provider output, when grading has run.
 
 > **id**: `string`
 
-Defined in: [types/index.ts:445](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L445)
+Defined in: [types/index.ts:449](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L449)
 
 Stable result id.
 
@@ -76,7 +76,7 @@ Stable result id.
 
 > `optional` **images?**: [`ImageOutput`](ImageOutput.md)[]
 
-Defined in: [types/index.ts:475](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L475)
+Defined in: [types/index.ts:479](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L479)
 
 Image attachments associated with this output, when present.
 
@@ -86,7 +86,7 @@ Image attachments associated with this output, when present.
 
 > **latencyMs**: `number`
 
-Defined in: [types/index.ts:447](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L447)
+Defined in: [types/index.ts:451](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L451)
 
 Provider latency in milliseconds.
 
@@ -96,7 +96,7 @@ Provider latency in milliseconds.
 
 > `optional` **metadata?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/index.ts:449](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L449)
+Defined in: [types/index.ts:453](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L453)
 
 Additional result metadata preserved for advanced consumers.
 
@@ -106,7 +106,7 @@ Additional result metadata preserved for advanced consumers.
 
 > **namedScores**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:451](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L451)
+Defined in: [types/index.ts:455](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L455)
 
 Named metric scores emitted by assertions for this output.
 
@@ -116,7 +116,7 @@ Named metric scores emitted by assertions for this output.
 
 > **pass**: `boolean`
 
-Defined in: [types/index.ts:453](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L453)
+Defined in: [types/index.ts:457](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L457)
 
 Whether this output passed all configured assertions.
 
@@ -126,7 +126,7 @@ Whether this output passed all configured assertions.
 
 > **prompt**: `string`
 
-Defined in: [types/index.ts:455](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L455)
+Defined in: [types/index.ts:459](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L459)
 
 Rendered prompt associated with this provider output.
 
@@ -136,7 +136,7 @@ Rendered prompt associated with this provider output.
 
 > `optional` **provider?**: `string`
 
-Defined in: [types/index.ts:457](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L457)
+Defined in: [types/index.ts:461](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L461)
 
 Provider id or label shown for this output.
 
@@ -146,7 +146,7 @@ Provider id or label shown for this output.
 
 > `optional` **response?**: [`ProviderResponse`](ProviderResponse.md)
 
-Defined in: [types/index.ts:459](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L459)
+Defined in: [types/index.ts:463](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L463)
 
 Raw provider response returned before table normalization.
 
@@ -156,7 +156,7 @@ Raw provider response returned before table normalization.
 
 > **score**: `number`
 
-Defined in: [types/index.ts:461](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L461)
+Defined in: [types/index.ts:465](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L465)
 
 Aggregate score for this output.
 
@@ -166,7 +166,7 @@ Aggregate score for this output.
 
 > **testCase**: `object`
 
-Defined in: [types/index.ts:463](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L463)
+Defined in: [types/index.ts:467](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L467)
 
 Test case associated with this output.
 
@@ -656,7 +656,7 @@ in > 0.38.0. Use `transform` instead.
 
 > **text**: `string`
 
-Defined in: [types/index.ts:465](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L465)
+Defined in: [types/index.ts:469](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L469)
 
 Rendered output text shown in table views.
 
@@ -666,7 +666,7 @@ Rendered output text shown in table views.
 
 > `optional` **tokenUsage?**: `Partial`\<\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}\>
 
-Defined in: [types/index.ts:467](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L467)
+Defined in: [types/index.ts:471](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L471)
 
 Token usage attributed to this output.
 
@@ -676,6 +676,6 @@ Token usage attributed to this output.
 
 > `optional` **video?**: [`VideoOutput`](VideoOutput.md)
 
-Defined in: [types/index.ts:473](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L473)
+Defined in: [types/index.ts:477](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L477)
 
 Video attachment associated with this output, when present.

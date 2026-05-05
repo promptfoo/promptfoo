@@ -3,6 +3,7 @@ import { type Inputs, InputsSchema } from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
+import type { EventSource } from '../types/eventSource';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
@@ -365,6 +366,7 @@ export interface RedteamRunOptions {
 
   /** Whether the config originated from Promptfoo Cloud. */
   loadedFromCloud?: boolean;
+  eventSource?: EventSource;
 }
 
 export interface SavedRedteamConfig {

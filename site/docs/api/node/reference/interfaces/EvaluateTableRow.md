@@ -6,7 +6,7 @@
 
 # Interface: EvaluateTableRow
 
-Defined in: [types/index.ts:483](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L483)
+Defined in: [types/index.ts:487](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L487)
 
 One row in an eval table.
 
@@ -16,7 +16,7 @@ One row in an eval table.
 
 > `optional` **description?**: `string`
 
-Defined in: [types/index.ts:485](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L485)
+Defined in: [types/index.ts:489](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L489)
 
 Optional human-readable description for the row's test case.
 
@@ -26,7 +26,7 @@ Optional human-readable description for the row's test case.
 
 > **outputs**: [`EvaluateTableOutput`](EvaluateTableOutput.md)[]
 
-Defined in: [types/index.ts:487](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L487)
+Defined in: [types/index.ts:491](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L491)
 
 Provider outputs rendered across this row.
 
@@ -36,7 +36,7 @@ Provider outputs rendered across this row.
 
 > **test**: `object`
 
-Defined in: [types/index.ts:491](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L491)
+Defined in: [types/index.ts:495](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L495)
 
 Test case represented by this row.
 
@@ -526,7 +526,7 @@ in > 0.38.0. Use `transform` instead.
 
 > **testIdx**: `number`
 
-Defined in: [types/index.ts:493](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L493)
+Defined in: [types/index.ts:497](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L497)
 
 Zero-based index of the test case in the eval.
 
@@ -536,6 +536,6 @@ Zero-based index of the test case in the eval.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:489](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L489)
+Defined in: [types/index.ts:493](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L493)
 
 Rendered variable values shown in the table row.

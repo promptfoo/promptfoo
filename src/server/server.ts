@@ -73,16 +73,16 @@ export function setJavaScriptMimeType(
   next();
 }
 
-/**
- * Handles server startup errors with proper logging and graceful shutdown.
- */
-export function handleServerError(error: NodeJS.ErrnoException, port: number): void {
-  if (error.code === 'EADDRINUSE') {
-    logger.error(`Port ${port} is already in use. Do you have another Promptfoo instance running?`);
-  } else {
-    logger.error(`Failed to start server: ${error instanceof Error ? error.message : error}`);
-  }
-  process.exit(1);
+import { ServerError, type ServerErrorPhase } from './errors';
+
+export function handleServerError(
+  error: NodeJS.ErrnoException,
+  port: number,
+  phase: ServerErrorPhase = 'startup',
+): ServerError {
+  const serverError = new ServerError(error, port, phase);
+  logger.error(serverError.message);
+  return serverError;
 }
 
 /**
@@ -396,37 +396,39 @@ export async function startServer(
 
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
-  return new Promise<void>((resolve) => {
-    httpServer
-      .listen(port, () => {
-        const url = `http://localhost:${port}`;
-        logger.info(`Server running at ${url} and monitoring for new evals.`);
-        openBrowser(browserBehavior, port).catch((error) => {
-          logger.error(
-            `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
-          );
-        });
-        // Don't resolve - server runs until shutdown signal
-      })
-      .on('error', (error: NodeJS.ErrnoException) => {
-        // handleServerError calls process.exit(1), so this error handler
-        // only provides logging before the process terminates
-        handleServerError(error, port);
-      });
+  return new Promise<void>((resolve, reject) => {
+    const removeShutdownHandlers = () => {
+      process.removeListener('SIGINT', shutdown);
+      process.removeListener('SIGTERM', shutdown);
+    };
 
-    // Register shutdown handlers to gracefully close the server
-    // Use once() to prevent handler accumulation if startServer is called multiple times
-    const shutdown = () => {
-      logger.info('Shutting down server...');
+    const safeCloseWatcher = () => {
+      try {
+        watcher.close();
+      } catch (err) {
+        // watcher.close() can throw on double-close or partially-failed FSWatchers.
+        // Surface it but never let it deadlock the lifecycle promise.
+        logger.warn(`Error closing file watcher: ${err instanceof Error ? err.message : err}`);
+      }
+    };
 
-      // Close the file watcher first to stop monitoring
-      watcher.close();
+    const closeRunningServer = (onClose: (timedOut: boolean) => void) => {
+      safeCloseWatcher();
 
       // Set a timeout in case connections don't close gracefully
       const SHUTDOWN_TIMEOUT_MS = 5000;
+      let settled = false;
+      const settle = (timedOut: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(forceCloseTimeout);
+        onClose(timedOut);
+      };
       const forceCloseTimeout = setTimeout(() => {
         logger.warn('Server close timeout - forcing shutdown');
-        resolve();
+        settle(true);
       }, SHUTDOWN_TIMEOUT_MS);
 
       // Close Socket.io connections (this also closes the underlying HTTP server)
@@ -434,22 +436,73 @@ export async function startServer(
         // Socket.io's close() already closes the HTTP server, so check if it's still listening
         // before attempting to close it again to avoid "Server is not running" errors
         if (!httpServer.listening) {
-          clearTimeout(forceCloseTimeout);
           logger.info('Server closed');
-          resolve();
+          settle(false);
           return;
         }
 
         httpServer.close((err) => {
-          clearTimeout(forceCloseTimeout);
           if (err) {
             logger.warn(`Error closing server: ${err.message}`);
           }
           logger.info('Server closed');
-          resolve();
+          settle(false);
         });
       });
     };
+
+    // Register shutdown handlers to gracefully close the server
+    // Use once() to prevent handler accumulation if startServer is called multiple times
+    const shutdown = () => {
+      logger.info('Shutting down server...');
+      removeShutdownHandlers();
+      httpServer.removeListener('error', handleRuntimeError);
+      closeRunningServer((timedOut) => {
+        if (timedOut) {
+          // A force-close means open handles were left dangling. Reject so the
+          // caller (CLI or library) decides exit-code policy — startServer is
+          // publicly importable, so silently poisoning process.exitCode would
+          // hurt library embedders.
+          reject(
+            new ServerError(
+              Object.assign(new Error('Shutdown timeout'), { code: 'ESHUTDOWN' }),
+              port,
+              'runtime',
+            ),
+          );
+          return;
+        }
+        resolve();
+      });
+    };
+
+    const handleStartupError = (error: NodeJS.ErrnoException) => {
+      safeCloseWatcher();
+      removeShutdownHandlers();
+      reject(handleServerError(error, port));
+    };
+
+    const handleRuntimeError = (error: NodeJS.ErrnoException) => {
+      const runtimeError = handleServerError(error, port, 'runtime');
+      removeShutdownHandlers();
+      httpServer.removeListener('error', handleRuntimeError);
+      closeRunningServer(() => reject(runtimeError));
+    };
+
+    httpServer.once('error', handleStartupError);
+    httpServer.listen(port, () => {
+      httpServer.removeListener('error', handleStartupError);
+      httpServer.on('error', handleRuntimeError);
+
+      const url = `http://localhost:${port}`;
+      logger.info(`Server running at ${url} and monitoring for new evals.`);
+      openBrowser(browserBehavior, port).catch((error) => {
+        logger.error(
+          `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+        );
+      });
+      // Don't resolve - server runs until shutdown signal
+    });
 
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);

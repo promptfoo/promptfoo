@@ -8,7 +8,7 @@
 
 > **RedteamRunResult** = `Eval` \| `undefined`
 
-Defined in: [index.ts:445](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L445)
+Defined in: [index.ts:118](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L118)
 
 **`Beta`**
 

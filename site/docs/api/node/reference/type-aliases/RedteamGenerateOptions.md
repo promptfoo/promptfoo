@@ -8,7 +8,7 @@
 
 > **RedteamGenerateOptions** = `Partial`\<`RedteamCliGenerateOptions`\>
 
-Defined in: [redteam/types.ts:476](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L476)
+Defined in: [redteam/types.ts:478](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L478)
 
 **`Beta`**
 

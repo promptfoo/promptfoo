@@ -13,6 +13,13 @@ export { ProvidersSchema };
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
 
+export {
+  EVENT_SOURCES,
+  type EventSource,
+  EventSourceSchema,
+  isCliEventSource,
+} from './eventSource';
+
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -87,6 +94,8 @@ const FilterRangeSchema = z
   })
   .optional();
 
+export const MAX_SUGGESTIONS_COUNT = 50;
+
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
   description: z.string().optional(),
@@ -129,6 +138,7 @@ export const CommandLineOptionsSchema = z.object({
   var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
@@ -259,14 +269,8 @@ export const EvaluateOptionsSchema = z.object({
    * Delay in milliseconds between provider calls.
    */
   delay: z.number().optional(),
-  /**
-   * Optional label recorded with the eval for telemetry and downstream reporting.
-   */
-  eventSource: z.string().optional(),
-  /**
-   * Whether to generate follow-up suggestions after the eval completes.
-   */
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
    * @remarks Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
