@@ -1,4 +1,4 @@
-# RAG Failure Mode Eval Examples
+# rag-failure-modes: RAG Failure Mode Eval Examples
 
 This example shows how to map common retrieval-augmented generation (RAG) failure modes to concrete Promptfoo eval scenarios.
 
