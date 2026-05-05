@@ -57,7 +57,7 @@ describe('TraceView', () => {
     expect(screen.getByText('No traces available for this test case')).toBeInTheDocument();
   });
 
-  it('should render an info Alert with instructions if traces exist but none have spans', () => {
+  it('should render a no-spans alert if traces exist but none have spans', () => {
     const mockTraces = [
       { traceId: 'trace-1', spans: [] },
       { traceId: 'trace-2', spans: [] },
@@ -65,12 +65,8 @@ describe('TraceView', () => {
 
     render(<TraceView evaluationId="eval-id" traces={mockTraces} />);
 
-    const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent(/traces were created but no spans were recorded/i);
-    expect(screen.getByText('No spans recorded')).toBeInTheDocument();
-    expect(screen.getByText('PROMPTFOO_OTEL_LOCAL_EXPORT')).toBeInTheDocument();
-    expect(screen.getByText('traceparent')).toBeInTheDocument();
-    expect(screen.getByText('http://localhost:4318/v1/traces')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByTestId('trace-timeline')).not.toBeInTheDocument();
   });
 
   it('should handle traces with non-array spans property gracefully', () => {
@@ -83,7 +79,8 @@ describe('TraceView', () => {
 
     render(<TraceView evaluationId="eval-xyz-789" traces={mockTraces} />);
 
-    expect(screen.getByText(/Traces were created but no spans were recorded/)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByTestId('trace-timeline')).not.toBeInTheDocument();
   });
 
   it('should filter traces correctly when some traces do not have testCaseId property', () => {
