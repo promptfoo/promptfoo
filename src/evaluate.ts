@@ -193,45 +193,48 @@ function createSerializableUnifiedConfig(
   return config;
 }
 
-export async function evaluateWithSource(
-  testSuite: EvaluateTestSuite,
-  options: InternalEvaluateOptions = {},
-) {
-  const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
-
-  if (testSuiteConfig.writeLatestResults) {
-    await runDbMigrations();
-  }
-
-  const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
-    env: testSuiteConfig.env,
-  });
+function buildProviderMap(providers: ApiProvider[]): Record<string, ApiProvider> {
   const providerMap: Record<string, ApiProvider> = {};
-  for (const p of loadedProviders) {
-    providerMap[p.id()] = p;
-    if (p.label) {
-      providerMap[p.label] = p;
+  for (const provider of providers) {
+    providerMap[provider.id()] = provider;
+    if (provider.label) {
+      providerMap[provider.label] = provider;
     }
   }
+  return providerMap;
+}
 
-  let resolvedDefaultTest = testSuiteConfig.defaultTest;
-  if (
-    typeof testSuiteConfig.defaultTest === 'string' &&
-    testSuiteConfig.defaultTest.startsWith('file://')
-  ) {
-    resolvedDefaultTest = await maybeLoadFromExternalFile(testSuiteConfig.defaultTest);
+async function resolveDefaultTestRef(
+  defaultTest: EvaluateTestSuite['defaultTest'],
+): Promise<EvaluateTestSuite['defaultTest']> {
+  if (typeof defaultTest === 'string' && defaultTest.startsWith('file://')) {
+    return maybeLoadFromExternalFile(defaultTest);
   }
+  return defaultTest;
+}
 
-  const constructedTestSuite: TestSuite = {
+async function createRuntimeTestSuite(
+  testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
+  loadedProviders: ApiProvider[],
+): Promise<TestSuite> {
+  return {
     ...testSuiteConfig,
-    defaultTest: resolvedDefaultTest as TestSuite['defaultTest'],
+    defaultTest: (await resolveDefaultTestRef(
+      testSuiteConfig.defaultTest,
+    )) as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests),
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
     prompts: await processPrompts(testSuiteConfig.prompts),
   };
+}
 
+async function resolveNestedProviders(
+  testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
+  constructedTestSuite: TestSuite,
+  providerMap: Record<string, ApiProvider>,
+): Promise<void> {
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
@@ -278,6 +281,60 @@ export async function evaluateWithSource(
       }
     }
   }
+}
+
+async function maybeShareEval(
+  testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
+  evalResult: Awaited<ReturnType<typeof doEvaluate>>,
+): Promise<void> {
+  if (!testSuiteConfig.writeLatestResults || !testSuiteConfig.sharing) {
+    return;
+  }
+
+  if (!isSharingEnabled(evalResult)) {
+    logger.debug('Sharing requested but not enabled (check cloud config or sharing settings)');
+    return;
+  }
+
+  try {
+    const shareableUrl = await createShareableUrl(evalResult, { silent: true });
+    if (shareableUrl) {
+      evalResult.shareableUrl = shareableUrl;
+      evalResult.shared = true;
+      logger.debug(`Eval shared successfully: ${shareableUrl}`);
+    }
+  } catch (error) {
+    logger.warn(`Failed to create shareable URL: ${error}`);
+  }
+}
+
+async function writeConfiguredOutputs(
+  outputPath: EvaluateTestSuite['outputPath'],
+  evalRecord: Eval,
+): Promise<void> {
+  if (typeof outputPath === 'string') {
+    await writeOutput(outputPath, evalRecord, null);
+  } else if (Array.isArray(outputPath)) {
+    await writeMultipleOutputs(outputPath, evalRecord, null);
+  }
+}
+
+export async function evaluateWithSource(
+  testSuite: EvaluateTestSuite,
+  options: InternalEvaluateOptions = {},
+) {
+  const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
+
+  if (testSuiteConfig.writeLatestResults) {
+    await runDbMigrations();
+  }
+
+  const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
+    env: testSuiteConfig.env,
+  });
+  const providerMap = buildProviderMap(loadedProviders);
+  const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
+  await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
   const parsedProviderPromptMap = readProviderPromptMap(
     testSuiteConfig,
@@ -306,30 +363,8 @@ export async function evaluateWithSource(
     ),
   );
 
-  if (testSuiteConfig.writeLatestResults && testSuiteConfig.sharing) {
-    if (isSharingEnabled(ret)) {
-      try {
-        const shareableUrl = await createShareableUrl(ret, { silent: true });
-        if (shareableUrl) {
-          ret.shareableUrl = shareableUrl;
-          ret.shared = true;
-          logger.debug(`Eval shared successfully: ${shareableUrl}`);
-        }
-      } catch (error) {
-        logger.warn(`Failed to create shareable URL: ${error}`);
-      }
-    } else {
-      logger.debug('Sharing requested but not enabled (check cloud config or sharing settings)');
-    }
-  }
-
-  if (testSuiteConfig.outputPath) {
-    if (typeof testSuiteConfig.outputPath === 'string') {
-      await writeOutput(testSuiteConfig.outputPath, evalRecord, null);
-    } else if (Array.isArray(testSuiteConfig.outputPath)) {
-      await writeMultipleOutputs(testSuiteConfig.outputPath, evalRecord, null);
-    }
-  }
+  await maybeShareEval(testSuiteConfig, ret);
+  await writeConfiguredOutputs(testSuiteConfig.outputPath, evalRecord);
 
   return ret;
 }
