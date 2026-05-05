@@ -1795,6 +1795,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests whether users can induce app or agent behavior that deviates from a provided privacy policy',
+    label: 'privacy',
+    link: '/docs/red-team/plugins/privacy-policy-consistency/',
+    name: 'Privacy Policy Consistency',
+    pluginId: 'privacy-policy-consistency',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to get the model to reveal its system prompt',
     label: 'technical',
     link: '/docs/red-team/plugins/prompt-extraction/',

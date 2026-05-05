@@ -31,7 +31,11 @@ interface PluginsProps {
   onBack: () => void;
 }
 
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
+const PLUGINS_REQUIRING_CONFIG = [
+  'indirect-prompt-injection',
+  'privacy-policy-consistency',
+  'prompt-extraction',
+];
 
 const TITLE_BY_TAB: Record<string, string> = {
   plugins: 'Plugins',

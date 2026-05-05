@@ -40,6 +40,11 @@ export function getPluginConfigurationError(plugin: PluginWithConfig): string | 
         return 'Prompt Extraction plugin requires systemPrompt configuration';
       }
       break;
+    case 'privacy-policy-consistency':
+      if (!config.privacyPolicy && !config.privacyPolicyContent) {
+        return 'Privacy Policy Consistency plugin requires a privacy policy file';
+      }
+      break;
     case 'bfla': {
       const targetIdentifiers = config.targetIdentifiers as unknown;
       if (

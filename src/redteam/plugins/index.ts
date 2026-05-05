@@ -59,6 +59,7 @@ import { PolicyPlugin } from './policy/index';
 import { isValidPolicyObject } from './policy/utils';
 import { PoliticsPlugin } from './politics';
 import { PromptExtractionPlugin } from './promptExtraction';
+import { PrivacyPolicyConsistencyPlugin } from './privacyPolicyConsistency';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
 import { SqlInjectionPlugin } from './sqlInjection';
@@ -508,6 +509,18 @@ const pluginFactories: PluginFactory[] = [
   ),
   createPluginFactory(PoliticsPlugin, 'politics'),
   createPluginFactory<{ systemPrompt?: string }>(PromptExtractionPlugin, 'prompt-extraction'),
+  createPluginFactory<{ privacyPolicy?: string; privacyPolicyContent?: string }>(
+    PrivacyPolicyConsistencyPlugin,
+    'privacy-policy-consistency',
+    (config: { privacyPolicy?: string; privacyPolicyContent?: string }) =>
+      invariant(
+        (typeof config.privacyPolicyContent === 'string' &&
+          config.privacyPolicyContent.trim() !== '') ||
+          (typeof config.privacyPolicy === 'string' &&
+            config.privacyPolicy.trim().startsWith('file://')),
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
+      ),
+  ),
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),
   createPluginFactory(SqlInjectionPlugin, 'sql-injection'),

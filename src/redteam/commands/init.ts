@@ -456,6 +456,24 @@ export async function redteamInit(directory: string | undefined) {
     } as RedteamPluginObject);
   }
 
+  if (plugins.includes('privacy-policy-consistency')) {
+    plugins = plugins.filter((p) => p !== 'privacy-policy-consistency');
+
+    recordOnboardingStep('collect privacy policy reference');
+    const privacyPolicy = await editor({
+      message:
+        'You selected the `privacy-policy-consistency` plugin. Enter a file:// reference to your privacy policy, or leave empty to skip.',
+    });
+    recordOnboardingStep('choose privacy policy', { value: privacyPolicy.length });
+
+    if (privacyPolicy.trim() !== '') {
+      plugins.push({
+        id: 'privacy-policy-consistency',
+        config: { privacyPolicy: privacyPolicy.trim() },
+      } as RedteamPluginObject);
+    }
+  }
+
   if (plugins.includes('indirect-prompt-injection')) {
     recordOnboardingStep('choose indirect prompt injection variable');
     logger.info(chalk.bold('Indirect Prompt Injection Configuration\n'));

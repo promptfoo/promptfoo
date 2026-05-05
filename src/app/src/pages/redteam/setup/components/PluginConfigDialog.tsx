@@ -202,6 +202,29 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'privacy-policy-consistency':
+        specificConfig = (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              The Privacy Policy Consistency plugin tries to get your app or agent to behave in
+              ways that deviate from your actual privacy policy. Provide a file:// reference so
+              grading can compare responses, claimed actions, and tool behavior against the policy.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="privacy-policy">Privacy Policy</Label>
+              <Textarea
+                id="privacy-policy"
+                className="min-h-[160px]"
+                placeholder="file://privacy-policy.md"
+                value={(localConfig.privacyPolicy as string) || ''}
+                onChange={(e) =>
+                  setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })
+                }
+              />
+            </div>
+          </div>
+        );
+        break;
       case 'bfla':
       case 'bola':
       case 'ssrf':

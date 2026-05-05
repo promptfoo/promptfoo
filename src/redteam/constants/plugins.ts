@@ -418,6 +418,7 @@ export const ADDITIONAL_PLUGINS = [
   'realestate:advertising-discrimination',
   'realestate:source-of-income',
   'pliny',
+  'privacy-policy-consistency',
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',

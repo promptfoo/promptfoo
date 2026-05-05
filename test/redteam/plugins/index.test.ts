@@ -89,6 +89,7 @@ describe('Plugins', () => {
         'politics',
         'policy',
         'prompt-extraction',
+        'privacy-policy-consistency',
         'rbac',
         'shell-injection',
         'sql-injection',
@@ -153,6 +154,15 @@ describe('Plugins', () => {
       const policyPlugin = Plugins.find((p) => p.key === 'policy');
       expect(() => policyPlugin?.validate?.({})).toThrow(
         'Invariant failed: One of the policy plugins is invalid. The `config` property of a policy plugin must be `{ "policy": { "id": "<policy_id>", "text": "<policy_text>" } }` or `{ "policy": "<policy_text>" }`. Received: {}',
+      );
+    });
+
+    it('should validate privacy policy consistency plugin config', async () => {
+      const privacyPolicyConsistencyPlugin = Plugins.find(
+        (p) => p.key === 'privacy-policy-consistency',
+      );
+      expect(() => privacyPolicyConsistencyPlugin?.validate?.({})).toThrow(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
       );
     });
 
