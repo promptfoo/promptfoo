@@ -17,20 +17,21 @@ import {
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Cpu } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AuthorChip } from './AuthorChip';
-import { DefaultProvidersDisplay } from './DefaultProvidersDisplay';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
+import type { DefaultProviderSelectionInfo } from '@promptfoo/types/providers';
 
 export type ActiveView = 'results' | 'report';
 
@@ -44,6 +45,95 @@ interface EvalHeaderProps {
   children?: React.ReactNode;
   /** Constrain header content width (e.g. "max-w-7xl mx-auto" for report view) */
   contentClassName?: string;
+}
+
+interface DefaultProvidersDisplayProps {
+  info: DefaultProviderSelectionInfo;
+}
+
+export function DefaultProvidersDisplay({ info }: DefaultProvidersDisplayProps) {
+  const { selectedProvider, reason, detectedCredentials, skippedProviders, providerSlots } = info;
+
+  const tooltipContent = (
+    <div className="space-y-3 max-w-xs">
+      <div>
+        <p className="text-sm font-medium">Why {selectedProvider}?</p>
+        <p className="text-xs text-muted-foreground">{reason}</p>
+      </div>
+
+      {detectedCredentials.length > 0 && (
+        <div>
+          <p className="text-xs font-medium mb-1">Detected credentials:</p>
+          <ul className="text-xs text-muted-foreground space-y-0.5">
+            {detectedCredentials.map((cred) => (
+              <li key={cred} className="flex items-center gap-1">
+                <span className="text-emerald-500">✓</span> {cred}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {skippedProviders.length > 0 && (
+        <div>
+          <p className="text-xs font-medium mb-1">Skipped providers:</p>
+          <ul className="text-xs text-muted-foreground space-y-0.5">
+            {skippedProviders.map((provider) => (
+              <li key={provider.name} className="flex items-start gap-1">
+                <span className="text-muted-foreground/50">✗</span>
+                <span>
+                  {provider.name}: {provider.reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {Object.entries(providerSlots).filter(([, slotInfo]) => slotInfo !== undefined).length >
+        0 && (
+        <div>
+          <p className="text-xs font-medium mb-1">Provider assignments:</p>
+          <ul className="text-xs text-muted-foreground space-y-0.5">
+            {Object.entries(providerSlots)
+              .filter(([, slotInfo]) => slotInfo !== undefined)
+              .map(([slot, slotInfo]) => (
+                <li key={slot}>
+                  <span className="capitalize">{slot}:</span>{' '}
+                  <span className="font-mono text-[10px]">{slotInfo?.id}</span>
+                  {slotInfo?.model && <span> ({slotInfo.model})</span>}
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="pt-2 border-t border-border/50">
+        <p className="text-xs text-muted-foreground">
+          Override: Set{' '}
+          <code className="text-[10px] bg-muted px-1 rounded">defaultTest.options.provider</code> in
+          config
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Chip
+          label="GRADING"
+          interactive={false}
+          trailingIcon={<Cpu className="size-3.5 text-muted-foreground" />}
+        >
+          {selectedProvider}
+        </Chip>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="start" className="p-3">
+        {tooltipContent}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 export default function EvalHeader({
