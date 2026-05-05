@@ -152,6 +152,24 @@ describe('Provider Registry', () => {
       expect(result.isRefusal).toBe(false);
     });
 
+    it('fails fast for xAI embedding aliases since xAI has no public embeddings API', async () => {
+      const factory = providerMap.find((f) => f.test('xai:embedding:v1'));
+      expect(factory).toBeDefined();
+
+      const embeddingAliases = [
+        'xai:embedding:v1',
+        'xai:embeddings:v1',
+        'xai:embedding',
+        'xai:embeddings',
+      ];
+
+      for (const alias of embeddingAliases) {
+        await expect(factory!.create(alias, {}, mockContext)).rejects.toThrow(
+          /xAI does not currently expose a public embeddings API/,
+        );
+      }
+    });
+
     it('should handle python provider correctly', async () => {
       const factory = providerMap.find((f) => f.test('python:script.py'));
       expect(factory).toBeDefined();
@@ -178,6 +196,20 @@ describe('Provider Registry', () => {
       await expect(
         factory!.create('huggingface:invalid:gpt2', mockProviderOptions, mockContext),
       ).rejects.toThrow('Invalid Huggingface provider path');
+    });
+
+    it('should handle atlascloud providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('atlascloud:deepseek-v3'));
+      expect(factory).toBeDefined();
+
+      const atlasOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const provider = await factory!.create('atlascloud:deepseek-v3', atlasOptions, mockContext);
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
     it('should handle http/websocket providers correctly', async () => {

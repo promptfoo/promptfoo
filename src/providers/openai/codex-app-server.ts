@@ -19,7 +19,9 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
+import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -342,21 +344,6 @@ const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
   'SSH_AUTH_SOCK',
   'GIT_SSH_COMMAND',
 ] as const;
-
-const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
-  'gpt-5.4': { input: 2.5, output: 15.0, cache_read: 0.25 },
-  'gpt-5.4-pro': { input: 30.0, output: 180.0, cache_read: 30.0 },
-  'gpt-5.3-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  'gpt-5.3-codex-spark': { input: 0.5, output: 4.0, cache_read: 0.05 },
-  'gpt-5.2': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  'gpt-5.2-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
-  'gpt-5.1-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
-  'gpt-5.1-codex-max': { input: 3.0, output: 12.0, cache_read: 0.3 },
-  'gpt-5.1-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
-  'gpt-5-codex': { input: 2.0, output: 8.0, cache_read: 0.2 },
-  'gpt-5-codex-mini': { input: 0.5, output: 2.0, cache_read: 0.05 },
-  'gpt-5': { input: 2.0, output: 8.0, cache_read: 0.2 },
-};
 
 const CodexCliEnvValueSchema = z.union([z.string(), z.number(), z.boolean()]).transform(String);
 
@@ -1352,7 +1339,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (!config.working_dir) {
       return process.cwd();
     }
-    return path.resolve(basePath, config.working_dir);
+    return resolveAgenticWorkingDir(config.working_dir, basePath) ?? process.cwd();
   }
 
   private resolveAdditionalDirectories(config: CodexAppServerConfig): string[] | undefined {
@@ -1532,6 +1519,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.initializingConnections.add(connection);
     try {
       await connection.initialize(config);
+      const apiKey = this.getApiKey(config);
+      if (apiKey) {
+        await connection.request(
+          'account/login/start',
+          {
+            type: 'apiKey',
+            apiKey,
+          },
+          { timeoutMs: this.getRequestTimeoutMs(config) },
+        );
+      }
       return connection;
     } catch (error) {
       await connection.close().catch((closeError) => {
@@ -2778,23 +2776,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private calculateResponseCost(
     tokenUsage: ProviderResponse['tokenUsage'],
     model: string | undefined,
-  ): number {
-    if (!tokenUsage || !model) {
-      return 0;
-    }
-
-    const pricing = CODEX_MODEL_PRICING[model];
-    if (!pricing) {
-      return 0;
-    }
-
-    const cachedTokens = tokenUsage.cached || 0;
-    const uncachedInputTokens = (tokenUsage.prompt || 0) - cachedTokens;
-    return (
-      uncachedInputTokens * (pricing.input / 1_000_000) +
-      cachedTokens * (pricing.cache_read / 1_000_000) +
-      (tokenUsage.completion || 0) * (pricing.output / 1_000_000)
-    );
+  ): number | undefined {
+    return calculateOpenAIUsageCostFromTokenUsage(model, tokenUsage);
   }
 
   private getItemCounts(items: any[]): Record<string, number> {

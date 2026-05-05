@@ -8,6 +8,16 @@ import { GolangProvider } from '../../src/providers/golangCompletion';
 const mockExecFile = vi.hoisted(() => vi.fn());
 const mockGetCache = vi.hoisted(() => vi.fn());
 const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
+const fsMocks = vi.hoisted(() => ({
+  readFileSync: vi.fn(),
+  mkdtempSync: vi.fn(),
+  existsSync: vi.fn(),
+  rmSync: vi.fn(),
+  readdirSync: vi.fn(),
+  copyFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+}));
 
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('child_process')>();
@@ -35,7 +45,37 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-vi.mock('fs');
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+vi.mock('fs/promises', () => {
+  // Wrap each sync mock so the corresponding fs/promises export returns a real
+  // Promise (or rejects), matching the actual API contract.
+  const access = vi.fn(async (filePath: any) => {
+    if (fsMocks.existsSync(filePath)) {
+      return undefined;
+    }
+    throw Object.assign(new Error(`ENOENT: no such file or directory, access '${filePath}'`), {
+      code: 'ENOENT',
+    });
+  });
+  const readFile = vi.fn(async (...args: any[]) => fsMocks.readFileSync(...args));
+  const readdir = vi.fn(async (...args: any[]) => fsMocks.readdirSync(...args));
+  const mkdtemp = vi.fn(async (...args: any[]) => fsMocks.mkdtempSync(...args));
+  const mkdir = vi.fn(async (...args: any[]) => fsMocks.mkdirSync(...args));
+  const copyFile = vi.fn(async (...args: any[]) => fsMocks.copyFileSync(...args));
+  const rm = vi.fn(async (...args: any[]) => fsMocks.rmSync(...args));
+  const promiseApi = { readFile, readdir, mkdtemp, mkdir, copyFile, rm, access };
+  return { default: promiseApi, ...promiseApi };
+});
 vi.mock('path');
 
 vi.mock('../../src/util', async () => {

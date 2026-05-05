@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/index', () => ({
@@ -33,7 +35,26 @@ const mockedEvaluate = vi.mocked(promptfoo.evaluate);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
 describe('Eval Routes - Sharing behavior', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
+
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -44,15 +65,13 @@ describe('Eval Routes - Sharing behavior', () => {
     } as any);
 
     mockedShouldShareResults.mockReturnValue(false);
-
-    app = createApp();
   });
 
   afterEach(() => {
     vi.resetAllMocks();
   });
 
-  const postJob = (body: Record<string, unknown>) => request(app).post('/api/eval/job').send(body);
+  const postJob = (body: Record<string, unknown>) => api.post('/api/eval/job').send(body);
 
   const minimalTestSuite = {
     prompts: ['test prompt'],
@@ -135,15 +154,13 @@ describe('Eval Routes - Sharing behavior', () => {
     mockedEvalCreate.mockRejectedValueOnce(new Error('db down'));
 
     const secret = 'sk-test-12345678901234567890';
-    const response = await request(app)
-      .post('/api/eval')
-      .send({
-        config: {
-          providers: [{ id: 'openai:gpt-4o', config: { apiKey: secret } }],
-        },
-        prompts: [{ raw: 'test prompt', label: 'test prompt' }],
-        results: [{ promptIdx: 0, testIdx: 0, success: true, score: 1 }],
-      });
+    const response = await api.post('/api/eval').send({
+      config: {
+        providers: [{ id: 'openai:gpt-4o', config: { apiKey: secret } }],
+      },
+      prompts: [{ raw: 'test prompt', label: 'test prompt' }],
+      results: [{ promptIdx: 0, testIdx: 0, success: true, score: 1 }],
+    });
 
     expect(response.status).toBe(500);
     expect(errorSpy).toHaveBeenCalledWith(

@@ -4,7 +4,7 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
@@ -13,7 +13,10 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -264,10 +267,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
@@ -293,7 +296,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         shouldBustCache(context),
       )) as unknown as { data: any; cached: boolean });
@@ -379,10 +382,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
@@ -391,8 +394,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context);
+    const allTools = await this.getAllTools(context, {
+      skipExecutableToolFiles: toolsDisabled,
+    });
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
 
     const body: Record<string, any> = {
       contents,
@@ -409,8 +416,8 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         ...config.generationConfig,
       },
       safetySettings: normalizeSafetySettings(config.safetySettings),
-      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(toolConfig ? { toolConfig } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
@@ -443,7 +450,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         shouldBustCache(context),
       )) as {
@@ -625,7 +632,7 @@ export class AIStudioEmbeddingProvider
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {

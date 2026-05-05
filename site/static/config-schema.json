@@ -62,10 +62,10 @@
           "$ref": "#/definitions/__schema41"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema43"
         },
         "targets": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema44"
         }
       },
       "required": ["prompts"],
@@ -186,6 +186,9 @@
           "type": "string"
         },
         "ANTHROPIC_BASE_URL": {
+          "type": "string"
+        },
+        "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
         "AWS_BEDROCK_REGION": {
@@ -1611,6 +1614,9 @@
                       "type": "string"
                     },
                     "ANTHROPIC_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
                     "AWS_BEDROCK_REGION": {
@@ -3096,6 +3102,11 @@
         "generateSuggestions": {
           "type": "boolean"
         },
+        "suggestionsCount": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
+        },
         "interactiveProviders": {
           "type": "boolean"
         },
@@ -3120,11 +3131,17 @@
         },
         "silent": {
           "type": "boolean"
+        },
+        "filterRange": {
+          "$ref": "#/definitions/__schema42"
         }
       },
       "additionalProperties": false
     },
     "__schema42": {
+      "type": "string"
+    },
+    "__schema43": {
       "type": "object",
       "properties": {
         "description": {
@@ -3249,6 +3266,13 @@
         "filterProviders": {
           "type": "string"
         },
+        "filterRange": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema42"
+            }
+          ]
+        },
         "filterSample": {
           "type": "integer",
           "exclusiveMinimum": 0,
@@ -3268,6 +3292,11 @@
         },
         "generateSuggestions": {
           "type": "boolean"
+        },
+        "suggestionsCount": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
         },
         "promptPrefix": {
           "type": "string"
@@ -3300,7 +3329,7 @@
       },
       "additionalProperties": false
     },
-    "__schema43": {
+    "__schema44": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
