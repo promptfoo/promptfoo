@@ -71,7 +71,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for Google provider with googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
         config: {
           tools: [{ googleSearch: {} }],
         },
@@ -81,7 +81,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for Google provider without googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
         config: {
           tools: [{ codeExecution: {} }],
         },
@@ -91,7 +91,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for Vertex provider with googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'vertex:gemini-3-pro-preview',
+        id: () => 'vertex:gemini-3.1-pro-preview',
         config: {
           tools: [{ googleSearch: {} }],
         },
@@ -422,7 +422,7 @@ describe('webSearchUtils', () => {
 
     it('should configure Google provider with googleSearch tool', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -433,7 +433,7 @@ describe('webSearchUtils', () => {
       await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'google:gemini-3-pro-preview',
+        'google:gemini-3.1-pro-preview',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
