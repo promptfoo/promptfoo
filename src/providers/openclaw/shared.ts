@@ -326,7 +326,7 @@ export function resolveAuthToken(
 }
 
 /**
- * Build the canonical OpenClaw model id for OpenAI-compatible endpoints.
+ * Normalize supported OpenClaw agent aliases to the optional agent id used by downstream routing.
  */
 export function normalizeOpenClawAgentId(agentId?: string): string | undefined {
   const trimmedAgentId = agentId?.trim() ?? '';
@@ -335,15 +335,15 @@ export function normalizeOpenClawAgentId(agentId?: string): string | undefined {
   }
   if (trimmedAgentId.startsWith('openclaw/')) {
     const targetAgentId = trimmedAgentId.slice('openclaw/'.length).trim();
-    return targetAgentId || undefined;
+    return targetAgentId && targetAgentId !== 'default' ? targetAgentId : undefined;
   }
   if (trimmedAgentId.startsWith('openclaw:')) {
     const targetAgentId = trimmedAgentId.slice('openclaw:'.length).trim();
-    return targetAgentId || undefined;
+    return targetAgentId && targetAgentId !== 'default' ? targetAgentId : undefined;
   }
   if (trimmedAgentId.startsWith('agent:')) {
     const targetAgentId = trimmedAgentId.slice('agent:'.length).trim();
-    return targetAgentId || undefined;
+    return targetAgentId && targetAgentId !== 'default' ? targetAgentId : undefined;
   }
   return trimmedAgentId;
 }
@@ -388,6 +388,15 @@ export function buildOpenClawContextHeaders(config?: OpenClawConfig): Record<str
   }
 
   return headers;
+}
+
+export function resolveOpenClawBillingModelName(config?: OpenClawConfig): string | undefined {
+  const backendModel = normalizeHeaderValue(config?.backend_model || config?.model_override);
+  if (!backendModel) {
+    return undefined;
+  }
+
+  return backendModel.startsWith('openai/') ? backendModel.slice('openai/'.length) : backendModel;
 }
 
 /**

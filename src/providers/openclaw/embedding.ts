@@ -5,6 +5,7 @@ import {
   DEFAULT_GATEWAY_HOST,
   DEFAULT_GATEWAY_PORT,
   normalizeOpenClawAgentId,
+  resolveOpenClawBillingModelName,
 } from './shared';
 
 import type { ProviderOptions, ProviderResponse } from '../../types/providers';
@@ -54,5 +55,9 @@ export class OpenClawEmbeddingProvider extends OpenAiEmbeddingProvider {
       error:
         'Cannot use an OpenClaw embedding provider as a text-generation provider. Use it with embedding-backed assertions such as `similar`, or call callEmbeddingApi() directly.',
     };
+  }
+
+  protected getBillingModelName(): string {
+    return resolveOpenClawBillingModelName(this.config) || this.modelName;
   }
 }

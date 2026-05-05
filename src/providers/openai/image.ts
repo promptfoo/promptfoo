@@ -3,6 +3,7 @@ import logger from '../../logger';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
+import { calculateOpenAIUsageCost } from './billing';
 import { formatOpenAiError } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -88,19 +89,16 @@ export const GPT_IMAGE2_COSTS: Record<string, number> = {
   high_1536x1024: 0.165,
 };
 
-// GPT Image 1.5 uses token-based pricing: $32/1M output image tokens
-// Estimated token counts: low ~2K, medium ~4K, high ~6K tokens per image
-// Larger images use proportionally more tokens
 export const GPT_IMAGE1_5_COSTS: Record<string, number> = {
-  low_1024x1024: 0.064,
-  low_1024x1536: 0.096,
-  low_1536x1024: 0.096,
-  medium_1024x1024: 0.128,
-  medium_1024x1536: 0.192,
-  medium_1536x1024: 0.192,
-  high_1024x1024: 0.192,
-  high_1024x1536: 0.288,
-  high_1536x1024: 0.288,
+  low_1024x1024: 0.009,
+  low_1024x1536: 0.013,
+  low_1536x1024: 0.013,
+  medium_1024x1024: 0.034,
+  medium_1024x1536: 0.05,
+  medium_1536x1024: 0.05,
+  high_1024x1024: 0.133,
+  high_1024x1536: 0.2,
+  high_1536x1024: 0.2,
 };
 
 type CommonImageOptions = {
@@ -750,6 +748,7 @@ export async function processApiResponse(
   quality?: string,
   n: number = 1,
   outputFormat?: string,
+  billingConfig: OpenAiImageOptions = {},
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
@@ -764,7 +763,10 @@ export async function processApiResponse(
       return formattedOutput;
     }
 
-    const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
+    const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
+      cachedResponse: cached,
+    });
+    const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
     const tokenUsage = getImageTokenUsage(data, cached);
     const images = buildStructuredImageOutputs(data, outputFormat);
 
@@ -874,6 +876,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       config.quality,
       config.n ?? 1,
       'output_format' in config ? config.output_format : undefined,
+      config,
     );
   }
 }
