@@ -44,7 +44,7 @@ describe('pricingFetcher', () => {
       () =>
         ({
           send: vi.fn(),
-        }) as InstanceType<typeof PricingClient>,
+        }) as unknown as InstanceType<typeof PricingClient>,
     );
   });
 
