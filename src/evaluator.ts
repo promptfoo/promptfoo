@@ -46,6 +46,7 @@ import {
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { isCliEventSource } from './types/eventSource';
 import {
   type Assertion,
   type AssertionOrSet,
@@ -56,6 +57,7 @@ import {
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
+  MAX_SUGGESTIONS_COUNT,
   type Prompt,
   type ProviderResponse,
   ResultFailureReason,
@@ -65,6 +67,8 @@ import {
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
+import { filterByRange } from './util/filterRange';
+import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
@@ -105,6 +109,13 @@ import type {
   VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
+
+export class PromptSuggestionsRejectedError extends Error {
+  constructor(message = 'No prompts selected. Aborting.') {
+    super(message);
+    this.name = 'PromptSuggestionsRejectedError';
+  }
+}
 
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
@@ -1788,10 +1799,29 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
     return true;
   }
 
+  // Library callers bypass CLI/config schema validation, so re-clamp here.
+  const rawCount = options.suggestionsCount ?? 1;
+  let requestedCount = Number.isInteger(rawCount) && rawCount >= 1 ? rawCount : 1;
+  if (requestedCount > MAX_SUGGESTIONS_COUNT) {
+    logger.warn(
+      `suggestionsCount=${rawCount} exceeds max of ${MAX_SUGGESTIONS_COUNT}; clamping to ${MAX_SUGGESTIONS_COUNT}.`,
+    );
+    requestedCount = MAX_SUGGESTIONS_COUNT;
+  }
   logger.info(`Generating prompt variations...`);
-  const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0].raw, 1);
+  const { prompts: newPrompts, error } = await generatePrompts(
+    testSuite.prompts[0].raw,
+    requestedCount,
+  );
   if (error || !newPrompts) {
     throw new Error(`Failed to generate prompts: ${error}`);
+  }
+  if (newPrompts.length < requestedCount) {
+    logger.warn(
+      chalk.yellow(
+        `Only ${newPrompts.length} of ${requestedCount} requested prompt variants were generated. See warnings above for details.`,
+      ),
+    );
   }
 
   logger.info(chalk.blue('Generated prompts:'));
@@ -1813,8 +1843,11 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
     return true;
   }
   logger.info(chalk.red('No prompts selected. Aborting.'));
-  process.exitCode = 1;
-  return false;
+  if (isCliEventSource(options)) {
+    process.exitCode = 1;
+    return false;
+  }
+  throw new PromptSuggestionsRejectedError();
 }
 
 function createDefaultPromptMetrics(): PromptMetrics {
@@ -4235,7 +4268,8 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
-    const tests = buildTestsFromSuite(testSuite);
+    let tests = buildTestsFromSuite(testSuite);
+    tests = filterByRange(tests, options.filterRange, warnEmptyFilterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);

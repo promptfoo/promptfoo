@@ -4,7 +4,7 @@ import { doValidate, doValidateTarget, validateCommand } from '../../src/command
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
-import { resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { resolveProviderFileProviderId } from '../../src/util/providerFileCache';
 import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
 import { createMockProvider, type MockApiProvider } from '../factories/provider';
@@ -12,7 +12,10 @@ import { createMockProvider, type MockApiProvider } from '../factories/provider'
 import type { UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/logger');
-vi.mock('../../src/util/config/load');
+vi.mock('../../src/util/config/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/config/load')>()),
+  resolveConfigs: vi.fn(),
+}));
 vi.mock('../../src/providers/index');
 vi.mock('../../src/validators/testProvider');
 vi.mock('../../src/util/cloud');
@@ -524,6 +527,25 @@ describe('Validate Command Provider Tests', () => {
       );
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to load configuration: Config not found'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should preserve config resolution warning level when loading config fails', async () => {
+      vi.mocked(resolveConfigs).mockRejectedValue(
+        new ConfigResolutionError('No promptfooconfig found', {
+          cliMessage: 'No promptfooconfig found in this directory.',
+          logLevel: 'warn',
+        }),
+      );
+
+      await doValidateTarget({ config: 'missing.yaml' }, defaultConfig);
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Failed to load configuration: No promptfooconfig found in this directory.',
+      );
+      expect(logger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load configuration'),
       );
       expect(process.exitCode).toBe(1);
     });

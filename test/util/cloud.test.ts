@@ -237,6 +237,66 @@ describe('cloud utils', () => {
       );
     });
 
+    it('should return validated provider file metadata when present', async () => {
+      const mockProvider = {
+        config: {
+          id: 'file://provider.py',
+          label: 'Test Provider',
+        },
+        providerFile: {
+          id: 'file-123',
+          filename: 'provider.py',
+          language: 'python',
+          contentType: 'text/x-python',
+          sizeBytes: 42,
+          checksumSha256: 'a'.repeat(64),
+          description: null,
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProvider),
+        ok: true,
+      } as Response);
+
+      await expect(getProviderFromCloud('test-provider')).resolves.toEqual({
+        provider: { ...mockProvider.config },
+        providerFile: mockProvider.providerFile,
+      });
+    });
+
+    it('should ignore invalid provider file metadata', async () => {
+      const mockProvider = {
+        config: {
+          id: 'file://provider.py',
+          label: 'Test Provider',
+        },
+        providerFile: {
+          id: 'file-123',
+          filename: 'provider.py',
+          language: 'python',
+          contentType: 'text/x-python',
+          sizeBytes: 42,
+          checksumSha256: 'abc123',
+          description: null,
+          createdAt: '2024-01-01T00:00:00Z',
+          updatedAt: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProvider),
+        ok: true,
+      } as Response);
+
+      await expect(getProviderFromCloud('test-provider')).resolves.toEqual({
+        provider: { ...mockProvider.config },
+        providerFile: null,
+      });
+    });
+
     it('should throw error when cloud config is not enabled', async () => {
       mockCloudConfig.isEnabled.mockReturnValue(false);
 

@@ -17,6 +17,11 @@ import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializedInputVariables,
+  isRemoteMaterializationUpgradeError,
+} from '../remoteMaterialization';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
@@ -413,14 +418,20 @@ export default class GoatProvider implements ApiProvider {
         }
 
         // Extract input vars from the attack message for multi-input mode
+        if (this.config.inputs) {
+          assertRemoteMaterializationHandled(data, 'GOAT multi-input generation');
+        }
         const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
-        const materializedInputVars =
-          currentInputVars && this.config.inputs
-            ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
-                materializationIndex: turn,
-                pluginId: 'goat',
-              })
-            : undefined;
+        let materializedInputVars:
+          | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+          | undefined;
+        if (currentInputVars && this.config.inputs) {
+          materializedInputVars = buildRemoteMaterializedInputVariables(
+            data,
+            currentInputVars,
+            this.config.inputs,
+          );
+        }
         const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
         // For multi-input mode, extract the 'prompt' field from JSON for the inject var
@@ -798,6 +809,9 @@ export default class GoatProvider implements ApiProvider {
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[GOAT] Operation aborted');
+          throw error;
+        }
+        if (isRemoteMaterializationUpgradeError(error)) {
           throw error;
         }
         logger.error(

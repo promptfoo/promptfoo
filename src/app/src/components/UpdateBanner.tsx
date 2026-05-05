@@ -10,6 +10,7 @@ export default function UpdateBanner() {
   const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copied, setCopied] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
+  const dismissLabel = "Don't remind me of this version";
 
   useEffect(() => {
     const element = bannerRef.current;
@@ -150,13 +151,13 @@ export default function UpdateBanner() {
         <button
           type="button"
           onClick={dismiss}
-          aria-label="Dismiss update notification"
-          title="Don't remind me for this version"
+          aria-label={dismissLabel}
+          title={dismissLabel}
           className={cn(
             'inline-flex size-6 items-center justify-center rounded-md',
             'text-current opacity-70 hover:opacity-100',
             'hover:bg-black/10 dark:hover:bg-white/10',
-            'transition-colors',
+            'cursor-pointer transition-colors',
           )}
         >
           <X className="size-4" />

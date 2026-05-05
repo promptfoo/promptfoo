@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import * as fs from 'fs';
 
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -17,6 +16,7 @@ import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
 import { resolveProviderFileProviderId } from '../../util/providerFileCache';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
@@ -380,7 +380,14 @@ export function discoverCommand(
       // If user provides a config, read the target from it:
       if (args.config) {
         // Validate that the config is a valid path:
-        if (!fs.existsSync(args.config)) {
+        let configExists: boolean;
+        try {
+          configExists = await pathExists(args.config);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`Unable to access config at ${args.config}: ${message}`);
+        }
+        if (!configExists) {
           throw new Error(`Config not found at ${args.config}`);
         }
 
