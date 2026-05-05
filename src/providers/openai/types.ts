@@ -48,6 +48,8 @@ export interface OpenAiSharedOptions {
   headers?: { [key: string]: string };
   /** defaults to 4; set to 0 to disable retries; negative values are clamped to 0. */
   maxRetries?: number;
+  /** Additional raw request fields supported by the target OpenAI endpoint. */
+  passthrough?: object;
 }
 
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
@@ -158,7 +160,6 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
       };
   stop?: string[];
   seed?: number;
-  passthrough?: object;
   prompt_cache_key?: string;
   prompt_cache_retention?: OpenAiPromptCacheRetention;
   reasoning_effort?: GPT5ReasoningEffort;

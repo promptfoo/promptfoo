@@ -30,6 +30,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     const body = {
       input: text,
       model: this.modelName,
+      ...(this.config.passthrough || {}),
     };
 
     let data: any;
