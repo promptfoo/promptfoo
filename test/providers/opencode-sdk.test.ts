@@ -873,6 +873,37 @@ describe('OpenCodeSDKProvider', () => {
         expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 
+      it('should produce different cache keys for different session_id values', async () => {
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from session A' }]),
+        );
+
+        const providerForSessionA = new OpenCodeSDKProvider({
+          config: { session_id: 'session-A' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromSessionA = await providerForSessionA.callApi('Test prompt');
+        expect(resultFromSessionA.output).toBe('Response from session A');
+
+        const cachedResultFromSessionA = await providerForSessionA.callApi('Test prompt');
+        expect(cachedResultFromSessionA.output).toBe('Response from session A');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from session B' }]),
+        );
+
+        const providerForSessionB = new OpenCodeSDKProvider({
+          config: { session_id: 'session-B' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromSessionB = await providerForSessionB.callApi('Test prompt');
+        expect(resultFromSessionB.output).toBe('Response from session B');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
       it('should produce different cache keys for different parent_session_id values', async () => {
         mockSessionPrompt.mockResolvedValueOnce(
           createMockPromptResponse([{ type: 'text', text: 'Response from parent A' }]),
