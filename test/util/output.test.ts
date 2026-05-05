@@ -504,7 +504,7 @@ describe('writeOutput', () => {
         '@_name': 'test 3',
         '@_time': '0.5',
         error: expect.objectContaining({
-          '#text': 'Reason: provider request failed\nError: provider request failed',
+          '#text': 'Reason: provider request failed',
           '@_message': 'provider request failed',
           '@_type': 'error',
         }),
@@ -706,6 +706,146 @@ describe('writeOutput', () => {
     const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
 
     expect(parsed.testsuites.testsuite.testcase.failure['@_message']).toHaveLength(600);
+  });
+
+  it('separates JUnit suites for providers that share an id but differ by label', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo', label: 'target-A' },
+      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
+      response: { output: '' },
+      vars: { name: 'Alice' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt-shared',
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 200,
+      provider: { id: 'echo', label: 'target-B' },
+      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
+      response: { output: '' },
+      vars: { name: 'Alice' },
+      promptIdx: 1,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: { pass: false, score: 0, reason: 'B failed' },
+      promptId: 'prompt-shared',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite).toEqual([
+      expect.objectContaining({ '@_name': '[target-A] prompt 1', '@_tests': '1' }),
+      expect.objectContaining({
+        '@_name': '[target-B] prompt 1',
+        '@_tests': '1',
+        '@_failures': '1',
+      }),
+    ]);
+  });
+
+  it('keeps JUnit testcase classnames consistent within a suite when promptIdx varies', async () => {
+    const baseResult = (promptIdx: number, testIdx: number, promptId: string): EvaluateResult => ({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: `prompt ${promptId}`, label: '' },
+      response: { output: '' },
+      vars: {},
+      promptIdx,
+      testIdx,
+      testCase: {},
+      promptId,
+    });
+    const eval_ = {
+      createdAt: '2026-05-03T15:00:00.000Z',
+      fetchResultsBatched: vi.fn(),
+      // Same promptId across non-contiguous promptIdx values would previously
+      // produce mixed classnames inside a single suite.
+      getResults: vi
+        .fn()
+        .mockResolvedValue([baseResult(0, 0, 'shared'), baseResult(2, 1, 'shared')]),
+      persisted: false,
+      results: [],
+      useOldResults: () => true,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_name': '[echo] prompt 1',
+      '@_tests': '2',
+    });
+    for (const testcase of parsed.testsuites.testsuite.testcase) {
+      expect(testcase['@_classname']).toBe('[echo] prompt 1');
+    }
+  });
+
+  it('omits the duplicate Error line from JUnit details when it matches the reason', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: 'p', label: '' },
+      response: { output: '' },
+      error: 'request failed: 500',
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'collapsed-error',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.error['#text']).toBe('Reason: request failed: 500');
+  });
+
+  it('includes the raw error block when it has formatting beyond the inline reason', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: 'p', label: '' },
+      response: { output: '' },
+      error: 'API error: 401\n{"code":"invalid_api_key"}',
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'multiline-error',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.error['#text']).toBe(
+      'Reason: API error: 401 {"code":"invalid_api_key"}\nError: API error: 401\n{"code":"invalid_api_key"}',
+    );
   });
 
   it('does not sanitize config for CSV output', async () => {

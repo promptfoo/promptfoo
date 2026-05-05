@@ -20,7 +20,6 @@ export {
   readFilters,
   readOutput,
 } from './file';
-export { createJunitXml } from './junit';
 // Output operations
 export { createOutputMetadata, writeMultipleOutputs, writeOutput } from './output';
 // Provider utilities
