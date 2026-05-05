@@ -10,6 +10,7 @@ import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './aliba
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { ANTHROPIC_MODELS } from './anthropic/util';
+import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
@@ -252,6 +253,19 @@ export const providerMap: ProviderFactory[] = [
         - anthropic:completion:<model name> - For Completion API
         - anthropic:<model name> - Shorthand for Messages API with a known model name`,
       );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('atlascloud:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createAtlasCloudProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -1292,6 +1306,15 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
+
+      // xAI does not expose a public embeddings API. Fail fast with a clear message
+      // rather than silently routing `xai:embedding:*` to a different sub-type.
+      if (modelType === 'embedding' || modelType === 'embeddings') {
+        throw new Error(
+          `xAI does not currently expose a public embeddings API; "${providerPath}" cannot be resolved. ` +
+            `Use openai:embedding:* or another embedding provider instead.`,
+        );
+      }
 
       // Handle xai:image:<model> format
       if (modelType === 'image') {

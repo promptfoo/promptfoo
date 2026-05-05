@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   getUserEmail,
   promptForEmailUnverified,
@@ -19,7 +21,7 @@ import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { PartialGenerationError } from '../../../src/redteam/types';
+import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -49,7 +51,48 @@ type SynthesizeMockResult = {
   failedPlugins: FailedPluginInfo[];
 };
 
-vi.mock('node:fs');
+const fsMocks = vi.hoisted(() => ({
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+vi.mock('fs/promises', () => {
+  const access = vi.fn((filePath: any) => {
+    if (fsMocks.existsSync(filePath)) {
+      return Promise.resolve();
+    }
+    return Promise.reject(
+      Object.assign(new Error(`ENOENT: no such file or directory, access '${filePath}'`), {
+        code: 'ENOENT',
+      }),
+    );
+  });
+  return {
+    default: {
+      readFile: fsMocks.readFileSync,
+      writeFile: fsMocks.writeFileSync,
+      mkdir: fsMocks.mkdirSync,
+      access,
+    },
+    readFile: fsMocks.readFileSync,
+    writeFile: fsMocks.writeFileSync,
+    mkdir: fsMocks.mkdirSync,
+    access,
+  };
+});
 vi.mock('../../../src/redteam', () => ({
   MAX_MAX_CONCURRENCY: 20,
   synthesize: vi.fn().mockResolvedValue({
@@ -3188,11 +3231,10 @@ describe('redteam generate command with target option', () => {
       'test-output.yaml',
     ]);
 
-    // Allow async operations to complete
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
     // Verify getConfigFromCloud was called with both config and target
-    expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
+    await vi.waitFor(() => {
+      expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
+    });
   });
 
   it('should handle backwards compatibility with empty targets', async () => {
@@ -3340,6 +3382,30 @@ describe('redteam generate command with target option', () => {
 
     // getConfigFromCloud should not be called
     expect(getConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should not log an unexpected error for recoverable email validation failures', async () => {
+    vi.mocked(checkEmailStatusAndMaybeExit).mockImplementationOnce(async () => {
+      const message = 'Please verify your email address and try again.';
+      logger.error(message);
+      throw new EmailValidationError('email_verification_required', message);
+    });
+
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+    expect(generateCommand).toBeDefined();
+
+    await generateCommand!.parseAsync([
+      'node',
+      'test',
+      '--purpose',
+      'Test purpose',
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    expect(process.exitCode).toBe(1);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith('Please verify your email address and try again.');
   });
 
   it('should accept -t/--target option in generate command', async () => {
@@ -3639,28 +3705,69 @@ describe('target ID extraction for retry strategy', () => {
         remaining: 0,
       });
 
-      const result = await doGenerateRedteam({
-        config: 'test-config.yaml',
-        output: 'output.yaml',
-        cache: true,
-        force: true,
-      });
+      await expect(
+        doGenerateRedteam({
+          config: 'test-config.yaml',
+          output: 'output.yaml',
+          cache: true,
+          force: true,
+        }),
+      ).rejects.toThrow(ProbeLimitExceededError);
 
-      expect(result).toBeNull();
-      expect(process.exitCode).toBe(1);
+      expect(process.exitCode).toBeUndefined();
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Monthly probe limit reached'),
       );
       expect(synthesize).not.toHaveBeenCalled();
 
-      // Reset
-      process.exitCode = 0;
       vi.mocked(checkRedteamProbeLimit).mockReturnValue({
         withinLimit: true,
         used: 0,
         limit: 100_000,
         remaining: 100_000,
       });
+    });
+
+    it.each([
+      { label: 'cache: false', cache: false, expectOverride: false, expectInfoLog: true },
+      { label: 'cache: true', cache: true, expectOverride: undefined, expectInfoLog: false },
+      {
+        label: 'cache: undefined',
+        cache: undefined,
+        expectOverride: undefined,
+        expectInfoLog: false,
+      },
+    ])('should respect $label without leaking globals', async ({
+      cache,
+      expectOverride,
+      expectInfoLog,
+    }) => {
+      vi.mocked(checkRedteamProbeLimit).mockReturnValue({
+        withinLimit: true,
+        used: 0,
+        limit: 100_000,
+        remaining: 100_000,
+      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      const withCacheEnabledSpy = vi.spyOn(cacheModule, 'withCacheEnabled');
+
+      await doGenerateRedteam({
+        purpose: 'test purpose',
+        output: 'output.yaml',
+        cache,
+        force: true,
+      });
+
+      expect(withCacheEnabledSpy).toHaveBeenCalledWith(expectOverride, expect.any(Function));
+      if (expectInfoLog) {
+        expect(logger.info).toHaveBeenCalledWith('Cache is disabled');
+      } else {
+        expect(logger.info).not.toHaveBeenCalledWith('Cache is disabled');
+      }
+
+      withCacheEnabledSpy.mockRestore();
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
     });
 
     it('should not block generation when within probe limit', async () => {

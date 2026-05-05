@@ -17,6 +17,7 @@ import {
   fetchWithCache,
   getCache,
   isCacheEnabled,
+  withCacheEnabled,
   withCacheNamespace,
 } from '../src/cache';
 import { fetchWithRetries } from '../src/util/fetch/index';
@@ -285,6 +286,65 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('should scope cache disabling to the current async context', async () => {
+      expect(isCacheEnabled()).toBe(true);
+
+      await withCacheEnabled(false, async () => {
+        expect(isCacheEnabled()).toBe(false);
+      });
+
+      expect(isCacheEnabled()).toBe(true);
+    });
+
+    it('should treat undefined as no override', async () => {
+      expect(isCacheEnabled()).toBe(true);
+
+      await withCacheEnabled(undefined, async () => {
+        expect(isCacheEnabled()).toBe(true);
+      });
+
+      // Inside a force-disabled scope, an undefined inner override must NOT
+      // shadow the outer false — pin this contract so a future refactor doesn't
+      // accidentally create a fresh storage frame.
+      await withCacheEnabled(false, async () => {
+        await withCacheEnabled(undefined, async () => {
+          expect(isCacheEnabled()).toBe(false);
+        });
+      });
+    });
+
+    it('should re-enable cache inside a globally disabled context', async () => {
+      disableCache();
+      try {
+        expect(isCacheEnabled()).toBe(false);
+        await withCacheEnabled(true, async () => {
+          expect(isCacheEnabled()).toBe(true);
+        });
+        expect(isCacheEnabled()).toBe(false);
+      } finally {
+        enableCache();
+      }
+    });
+
+    it('should isolate concurrent overrides between async contexts', async () => {
+      const observed: Array<boolean> = [];
+
+      await Promise.all([
+        withCacheEnabled(false, async () => {
+          await new Promise((resolve) => setImmediate(resolve));
+          observed.push(isCacheEnabled());
+        }),
+        withCacheEnabled(true, async () => {
+          await new Promise((resolve) => setImmediate(resolve));
+          observed.push(isCacheEnabled());
+        }),
+      ]);
+
+      expect(observed).toContain(false);
+      expect(observed).toContain(true);
+      expect(isCacheEnabled()).toBe(true);
+    });
+
     it('should isolate direct cache access by namespace', async () => {
       const cache = getCache();
 
@@ -1113,6 +1173,23 @@ describe('fetchWithCache', () => {
 
       await expect(fetchWithCache(url, {}, 1000)).rejects.toThrow('ECONNRESET from fetch');
       // Only 1 call — body retry loop does not re-invoke fetchWithRetries
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('propagates HttpRateLimitError without re-invoking fetchWithRetries', async () => {
+      // Hard quota / retry-exhausted rate limits surface as HttpRateLimitError
+      // from fetchWithRetries; the cache body-retry loop must NOT swallow them
+      // or retry — that would amplify load against an exhausted account.
+      const { HttpRateLimitError } = await import('../src/util/fetch/errors');
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+        retryAfterMs: 60_000,
+      });
+      mockFetchWithRetries.mockRejectedValueOnce(rateLimit);
+
+      await expect(fetchWithCache(url, {}, 1000)).rejects.toBeInstanceOf(HttpRateLimitError);
+      // Single call — body retry loop must not re-invoke fetchWithRetries.
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
   });

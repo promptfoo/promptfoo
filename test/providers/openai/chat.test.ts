@@ -167,6 +167,26 @@ describe('OpenAI Provider', () => {
       expect(result.metadata?.choices).toBeUndefined();
     });
 
+    it('preserves HttpRateLimitError as a structured error with metadata.rateLimitKind', async () => {
+      // Closes the regression where the chat catch block stringified
+      // HttpRateLimitError into "API call error: HttpRateLimitError: ..."
+      // and dropped `kind`, causing the scheduler to retry quota errors.
+      const { HttpRateLimitError } = await import('../../../src/util/fetch/errors');
+      const quota = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
+      mockFetchWithCache.mockRejectedValueOnce(quota);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+      expect(result.error).toContain('Retries will not help');
+      expect(result.metadata?.rateLimitKind).toBe('quota');
+      expect(result.metadata?.http?.status).toBe(429);
+    });
+
     it('should include HTTP metadata in error response', async () => {
       const mockResponse = {
         data: { error: { message: 'Rate limit exceeded' } },
@@ -223,6 +243,7 @@ describe('OpenAI Provider', () => {
       expect(result2.output).toBe('Test output 2');
       // Cached responses don't count as new requests, so numRequests is not included
       expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.cost).toBe(0);
     });
 
     it('should handle disabled cache correctly', async () => {
@@ -1874,6 +1895,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const body = JSON.parse(call[1].body);
       expect(body.max_tokens).toBe(2000);
+    });
+
+    it('should forward prompt cache options', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          prompt_cache_key: 'shared-prefix',
+          prompt_cache_retention: 'in_memory',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.prompt_cache_key).toBe('shared-prefix');
+      expect(body.prompt_cache_retention).toBe('in_memory');
     });
 
     it('should not share config between provider instances', () => {

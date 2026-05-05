@@ -7,7 +7,7 @@ import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt, toTitleCase } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
@@ -234,7 +234,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       organization: this.getOrganization(),
       baseURL: this.getApiUrl(),
       maxRetries: 3,
-      timeout: REQUEST_TIMEOUT_MS,
+      timeout: getRequestTimeoutMs(),
       defaultHeaders: this.assistantConfig.headers,
     });
 

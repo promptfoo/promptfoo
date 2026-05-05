@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
  *   - raw `href="/..."` in HTML/JSX or string-literal hrefs (e.g. config)
  *   - non-Docusaurus `<Link href="/...">` (e.g. MUI's Link)
  *   - `<Redirect to="/...">` (re-exports react-router-dom; no normalization)
+ *   - Docusaurus config `to: "/..."` string routes
  */
 
 const SITE_ROOT = path.resolve(__dirname, '../..');
@@ -33,10 +34,11 @@ const ASSET_EXT_RE =
 // quote in sync with the opener.
 const HREF_RE = /\bhref\s*=\s*\{?\s*(['"`])(\/[^'"`#?\s]*?)\1/g;
 const REDIRECT_TO_RE = /<Redirect\b[^>]*?\bto\s*=\s*\{?\s*(['"`])(\/[^'"`#?\s]*?)\1/g;
+const CONFIG_TO_RE = /\bto:\s*(['"`])(\/[^'"`#?\s]*?)\1/g;
 
 function walk(dir: string, out: string[]) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.') && entry.name !== '.') {
+    if (entry.name.startsWith('.')) {
       continue;
     }
     const full = path.join(dir, entry.name);
@@ -95,7 +97,7 @@ interface Violation {
   file: string;
   line: number;
   match: string;
-  kind: 'href' | 'redirect';
+  kind: 'href' | 'redirect' | 'config';
 }
 
 describe('internal links use canonical trailing slash', () => {
@@ -106,7 +108,7 @@ describe('internal links use canonical trailing slash', () => {
     expect(files.some((f) => f.endsWith(`${path.sep}docusaurus.config.ts`))).toBe(true);
   });
 
-  it('has no `href="/path"` or `<Redirect to="/path">` missing a trailing slash', () => {
+  it('has no non-normalized internal links missing a trailing slash', () => {
     const violations: Violation[] = [];
     for (const file of files) {
       const text = fs.readFileSync(file, 'utf-8');
@@ -114,6 +116,9 @@ describe('internal links use canonical trailing slash', () => {
         { re: HREF_RE, kind: 'href' },
         { re: REDIRECT_TO_RE, kind: 'redirect' },
       ];
+      if (file.endsWith(`${path.sep}docusaurus.config.ts`)) {
+        checks.push({ re: CONFIG_TO_RE, kind: 'config' });
+      }
       for (const { re, kind } of checks) {
         for (const m of text.matchAll(re)) {
           const target = m[2];
