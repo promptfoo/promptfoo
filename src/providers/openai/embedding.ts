@@ -14,14 +14,13 @@ type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
 };
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
-  config: OpenAiEmbeddingOptions;
+  declare config: OpenAiEmbeddingOptions;
 
   constructor(
     modelName: string,
     options: { config?: OpenAiEmbeddingOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
-    this.config = options.config || {};
   }
 
   protected getBillingModelName(): string {
