@@ -107,8 +107,28 @@ describe('GoogleLiveProvider', () => {
   let provider: GoogleLiveProvider;
 
   beforeEach(async () => {
-    // Reset fetchWithProxy mock to prevent test pollution from async callbacks
+    // Reset mocks that hold call history or implementations across tests so
+    // shuffled-order runs see a clean slate. clearAllMocks in afterEach clears
+    // call history but preserves implementations, and async work scheduled by
+    // a prior test can still record calls before the next test runs.
     mockFetchWithProxy.mockReset();
+
+    const spawnMock = vi.mocked((await import('child_process')).spawn);
+    spawnMock.mockReset();
+    spawnMock.mockImplementation(
+      () =>
+        ({
+          stdout: { on: vi.fn() },
+          stderr: { on: vi.fn() },
+          on: vi.fn((event, callback) => {
+            if (event === 'close') {
+              setImmediate(callback);
+            }
+          }),
+          kill: vi.fn(),
+          killed: false,
+        }) as any,
+    );
 
     mockWs = {
       on: vi.fn(),
@@ -749,6 +769,12 @@ describe('GoogleLiveProvider', () => {
 
   it('should skip tool side effects when tools are disabled', async () => {
     const mockSpawn = vi.mocked((await import('child_process')).spawn);
+    // Tests run in random order; a prior test may have invoked spawn through
+    // module-mocked code paths whose deferred work is not drained by the
+    // describe-level afterEach. Clear here so this test only sees spawn calls
+    // from its own provider invocation.
+    mockSpawn.mockClear();
+    mockFetchWithProxy.mockClear();
     mockImportModule.mockReset();
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -789,6 +815,7 @@ describe('GoogleLiveProvider', () => {
 
   it('should preserve inline non-function tools in arrays containing file:// references when disabled', async () => {
     const mockSpawn = vi.mocked((await import('child_process')).spawn);
+    mockSpawn.mockClear();
     mockImportModule.mockReset();
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -1149,6 +1176,7 @@ describe('GoogleLiveProvider', () => {
 
     it('should handle errors when spawning Python process', async () => {
       const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      mockSpawn.mockClear();
       const validatePythonPathMock = vi.mocked(
         (await import('../../../src/python/pythonUtils')).validatePythonPath,
       );
