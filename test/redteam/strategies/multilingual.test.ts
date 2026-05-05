@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
-import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import {
+  getRemoteGenerationUrl,
+  shouldGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
 import {
   addMultilingual,
   getConcurrencyLimit,
@@ -22,36 +25,41 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.url'),
-  shouldGenerateRemote: vi.fn().mockReturnValue(false),
+  getRemoteGenerationUrl: vi.fn(),
+  shouldGenerateRemote: vi.fn(),
 }));
 
 vi.mock('../../../src/cache', () => ({
-  fetchWithCache: vi.fn().mockResolvedValue({
-    data: { result: [] },
-    cached: false,
-    status: 200,
-    statusText: 'OK',
-  }),
+  fetchWithCache: vi.fn(),
 }));
 
 vi.mock('../../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
-    getProvider: vi.fn().mockResolvedValue({
-      callApi: vi.fn().mockResolvedValue({
-        output: '{"de": "Hallo Welt"}',
-      }),
-      config: {},
-      isAvailable: vi.fn().mockResolvedValue(true),
-    }),
-    getMultilingualProvider: vi.fn().mockResolvedValue(null),
+    getProvider: vi.fn(),
+    getMultilingualProvider: vi.fn(),
     clearProvider: vi.fn(),
   },
 }));
 
 describe('Multilingual Strategy', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('http://test.url');
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: { result: [] },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
+        output: '{"de": "Hallo Welt"}',
+      }),
+      config: {},
+      isAvailable: vi.fn().mockResolvedValue(true),
+    } as any);
+    vi.mocked(redteamProviderManager.getMultilingualProvider).mockResolvedValue(null);
   });
 
   describe('getConcurrencyLimit', () => {
