@@ -158,17 +158,6 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
       };
   stop?: string[];
   seed?: number;
-  /**
-   * Number of chat completion choices to generate per request.
-   * When n > 1, each choice is returned as a separate entry in `metadata.choices`.
-   * The main `output` field contains the text of the first choice.
-   * Use this when you need to inspect multiple raw choices from one API call.
-   * Promptfoo still evaluates the first choice as the primary output.
-   *
-   * Note: Using n > 1 increases token usage proportionally.
-   * @see https://platform.openai.com/docs/api-reference/chat/create#chat-create-n
-   */
-  n?: number;
   passthrough?: object;
   prompt_cache_key?: string;
   prompt_cache_retention?: OpenAiPromptCacheRetention;

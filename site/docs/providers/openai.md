@@ -111,7 +111,6 @@ Supported parameters include:
 | `max_tokens`             | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                            |
 | `maxRetries`             | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries. Hard-quota responses (`insufficient_quota`, `billing_hard_limit_reached`, `access_terminated`, etc.) are never retried regardless of this setting — retrying an exhausted account only amplifies load. |
 | `metadata`               | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                                        |
-| `n`                      | Number of Chat Completions choices to request in one API call. When `n > 1`, promptfoo keeps the first choice as `output` and exposes all returned choices in `metadata.choices`; it does not create extra evaluated rows like `--repeat`.                                                                   |
 | `omitDefaults`           | Omits hardcoded defaults for `temperature` and `max_tokens`/`max_output_tokens` unless values are explicitly set via config or environment variables. Supported by `openai:chat` and `openai:responses`.                                                                                                     |
 | `organization`           | Your OpenAI organization key.                                                                                                                                                                                                                                                                                |
 | `passthrough`            | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings.            |
@@ -157,7 +156,6 @@ interface OpenAiConfig {
   response_format?: { type: 'json_object' | 'json_schema'; json_schema?: object };
   stop?: string[];
   seed?: number;
-  n?: number;
   user?: string;
   metadata?: Record<string, string>;
   store?: boolean;
@@ -190,13 +188,14 @@ interface OpenAiConfig {
 
 ### Generating Multiple Responses
 
-Use `n` to ask OpenAI for multiple Chat Completions choices in a single request:
+Use `passthrough` to set OpenAI's `n` parameter for generating multiple responses in a single request:
 
 ```yaml
 providers:
   - id: openai:chat:gpt-4o
     config:
-      n: 3 # Generate 3 choices
+      passthrough:
+        n: 3 # Generate 3 responses
 ```
 
 When `n > 1`, the primary `output` contains the first choice's content, and all generated choices are available in the response metadata under `metadata.choices`. Each choice includes the full response object with `message`, `finish_reason`, and `index`.
