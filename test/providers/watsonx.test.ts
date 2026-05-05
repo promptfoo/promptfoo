@@ -881,12 +881,12 @@ describe('WatsonXProvider', () => {
 
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
-      // For class_c1 tier ($0.0001 per 1M tokens)
-      // Input: 50 tokens * $0.0001/1M = 0.000005
+      // For class_c1 tier ($0.106 per 1M tokens)
+      // Input: 50 tokens * $0.106/1M = 0.0000053
       // Output: (generated_token_count - input_token_count) = (100 - 50) = 50 tokens
-      // Output cost: 50 tokens * $0.0001/1M = 0.000005
-      // Total expected: 0.00001
-      expect(response.cost).toBeCloseTo(0.00001, 6);
+      // Output cost: 50 tokens * $0.106/1M = 0.0000053
+      // Total expected: 0.0000106
+      expect(response.cost).toBeCloseTo(0.0000106, 10);
     });
 
     it('should calculate cost correctly for class_9 tier', async () => {
@@ -960,17 +960,17 @@ describe('WatsonXProvider', () => {
 
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
-      // For class_9 tier ($0.00035 per 1M tokens):
+      // For class_9 tier ($0.371 per 1M tokens):
       // input_token_count = 50
       // generated_token_count = 100, so completion/output tokens = 100 - 50 = 50
-      // Input: 50 tokens * $0.00035/1M = 0.0000175
-      // Output: 50 tokens * $0.00035/1M = 0.0000175
-      // Total expected: 0.000035
-      expect(response.cost).toBeCloseTo(0.000035, 6);
+      // Input: 50 tokens * $0.371/1M = 0.00001855
+      // Output: 50 tokens * $0.371/1M = 0.00001855
+      // Total expected: 0.0000371
+      expect(response.cost).toBeCloseTo(0.0000371, 10);
     });
 
-    it('should calculate cost correctly for newer Granite models', async () => {
-      const modelId = 'ibm/granite-3-3-8b-instruct';
+    it('should calculate cost correctly for Granite 4 models with mixed pricing tiers', async () => {
+      const modelId = 'ibm/granite-4-h-small';
       const configWithGraniteModelId = { ...config, modelId };
 
       clearModelSpecsCache();
@@ -980,16 +980,16 @@ describe('WatsonXProvider', () => {
             resources: [
               {
                 model_id: modelId,
-                label: 'granite-3-3-8b-instruct',
+                label: 'granite-4-h-small',
                 provider: 'IBM',
                 source: 'IBM',
                 functions: [{ id: 'text_chat' }, { id: 'text_generation' }],
-                input_tier: 'class_c1',
-                output_tier: 'class_c1',
-                number_params: '8b',
+                input_tier: 'class_18',
+                output_tier: 'class_5',
+                number_params: '30b',
                 model_limits: {
-                  max_sequence_length: 8192,
-                  max_output_tokens: 4096,
+                  max_sequence_length: 131072,
+                  max_output_tokens: 16384,
                 },
               },
             ],
@@ -1006,11 +1006,11 @@ describe('WatsonXProvider', () => {
         generateText: vi.fn().mockResolvedValue({
           result: {
             model_id: modelId,
-            model_version: '3.3.0',
+            model_version: '4.0.0',
             created_at: '2024-10-01T00:00:00Z',
             results: [
               {
-                generated_text: 'Test response from Granite',
+                generated_text: 'Test response from Granite 4',
                 generated_token_count: 100,
                 input_token_count: 50,
                 stop_reason: 'max_tokens',
@@ -1040,13 +1040,89 @@ describe('WatsonXProvider', () => {
 
       expect(response.cost).toBeDefined();
       expect(typeof response.cost).toBe('number');
-      // For class_c1 tier ($0.0001 per 1M tokens)
+      // Input: 50 tokens * $0.0636/1M = 0.00000318
+      // Output: 50 tokens * $0.265/1M = 0.00001325
+      // Total expected: 0.00001643
+      expect(response.cost).toBeCloseTo(0.00001643, 10);
+    });
+
+    it('should calculate cost correctly for special Mistral pricing tiers', async () => {
+      const modelId = 'mistralai/mistral-medium-2505';
+      const configWithMistralModelId = { ...config, modelId };
+
+      clearModelSpecsCache();
+      vi.mocked(fetchWithCache).mockImplementation(async function () {
+        return {
+          data: {
+            resources: [
+              {
+                model_id: modelId,
+                label: 'mistral-medium-2505',
+                provider: 'Mistral AI',
+                source: 'Mistral AI',
+                functions: [{ id: 'text_chat' }, { id: 'text_generation' }],
+                input_tier: 'Mistral Large Input',
+                output_tier: 'Mistral Large',
+                number_params: 'unknown',
+                model_limits: {
+                  max_sequence_length: 131072,
+                  max_output_tokens: 16384,
+                },
+              },
+            ],
+          },
+
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        };
+      });
+
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: modelId,
+            model_version: '2505',
+            created_at: '2025-05-01T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Test response from Mistral Medium',
+                generated_token_count: 100,
+                input_token_count: 50,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = new WatsonXProvider(modelId, { config: configWithMistralModelId });
+      const response = await provider.callApi(prompt);
+
+      expect(response.cost).toBeDefined();
+      expect(typeof response.cost).toBe('number');
       // input_token_count = 50
       // generated_token_count = 100, so completion/output tokens = 100 - 50 = 50
-      // Input: 50 tokens * $0.0001/1M = 0.000005
-      // Output: 50 tokens * $0.0001/1M = 0.000005
-      // Total expected: 0.00001
-      expect(response.cost).toBeCloseTo(0.00001, 6);
+      // Input: 50 tokens * $3.37/1M = 0.0001685
+      // Output: 50 tokens * $10.07/1M = 0.0005035
+      // Total expected: 0.000672
+      expect(response.cost).toBeCloseTo(0.000672, 10);
     });
   });
 

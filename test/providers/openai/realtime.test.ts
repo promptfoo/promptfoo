@@ -320,8 +320,8 @@ describe('OpenAI Realtime Provider', () => {
             response: {
               usage: {
                 total_tokens: 10,
-                prompt_tokens: 5,
-                completion_tokens: 5,
+                input_tokens: 5,
+                output_tokens: 5,
               },
             },
           }),

@@ -204,7 +204,7 @@ describe('ProviderTypeSelector', () => {
       'JavaScript / TypeScript',
       'Python',
       'Go',
-      'Custom Provider',
+      'Custom Target',
       'Browser Automation',
       'Shell Command',
       'HTTP/HTTPS Endpoint',
