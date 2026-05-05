@@ -28,6 +28,7 @@ import {
 } from '../../src/providers/openai/codexDefaults';
 import {
   DefaultModerationProvider,
+  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
@@ -82,6 +83,7 @@ describe('Provider override tests', () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
     mockProcessEnv({ MISTRAL_API_KEY: undefined });
+    mockProcessEnv({ XAI_API_KEY: undefined });
     mockProcessEnv({ GEMINI_API_KEY: undefined });
     mockProcessEnv({ GOOGLE_API_KEY: undefined });
     mockProcessEnv({ PALM_API_KEY: undefined });
@@ -249,6 +251,20 @@ describe('Provider override tests', () => {
     expect(providers.redteamProvider?.id()).toContain('mistral');
   });
 
+  it('should use xAI providers when XAI_API_KEY is set', async () => {
+    mockProcessEnv({ XAI_API_KEY: 'test-key' });
+
+    const providers = await getDefaultProviders();
+
+    // xAI has no public embeddings/moderation API, so we fall back to OpenAI for those.
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+  });
+
   it('should use Codex SDK providers when ChatGPT/Codex credentials exist without API provider keys', async () => {
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
 
@@ -290,6 +306,16 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
   });
 
+  it('should prefer xAI defaults over Codex SDK defaults when XAI_API_KEY exists', async () => {
+    mockProcessEnv({ XAI_API_KEY: 'test-xai-key' });
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+  });
+
   it('should probe Google default credentials once per provider resolution', async () => {
     vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
 
@@ -321,6 +347,32 @@ describe('Provider override tests', () => {
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
     expect(providers.redteamProvider?.id()).toContain('mistral');
+  });
+
+  it('should use xAI providers when provided via env overrides', async () => {
+    const envOverrides: EnvOverrides = {
+      XAI_API_KEY: 'test-key',
+    } as EnvOverrides;
+
+    const providers = await getDefaultProviders(envOverrides);
+
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+  });
+
+  it('should prefer Mistral defaults over xAI defaults when both keys exist', async () => {
+    mockProcessEnv({ MISTRAL_API_KEY: 'mistral-key' });
+    mockProcessEnv({ XAI_API_KEY: 'xai-key' });
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    expect(providers.gradingProvider).toBe(MistralGradingProvider);
+    expect(providers.gradingProvider.id()).not.toBe('xai:grok-4.3');
   });
 
   it('should not use Mistral providers when OpenAI credentials exist', async () => {

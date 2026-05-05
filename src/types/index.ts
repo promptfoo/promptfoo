@@ -86,6 +86,8 @@ const FilterRangeSchema = z
   })
   .optional();
 
+export const MAX_SUGGESTIONS_COUNT = 50;
+
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
   description: z.string().optional(),
@@ -128,6 +130,7 @@ export const CommandLineOptionsSchema = z.object({
   var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
@@ -254,6 +257,7 @@ export const EvaluateOptionsSchema = z.object({
   delay: z.number().optional(),
   eventSource: z.string().optional(),
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
    * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.

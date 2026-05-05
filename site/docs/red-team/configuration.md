@@ -774,7 +774,7 @@ If you have set an environment variable for a supported provider, Promptfoo uses
 
 | Environment Variable       | Vendor           | Default Redteam Model                     |
 | :------------------------- | :--------------- | :---------------------------------------- |
-| `OPENAI_API_KEY`           | OpenAI           | `gpt-5.4-2026-03-05`                      |
+| `OPENAI_API_KEY`           | OpenAI           | `gpt-5.5-2026-04-23`                      |
 | `ANTHROPIC_API_KEY`        | Anthropic        | `claude-sonnet-4-6`                       |
 | `GEMINI_API_KEY`           | Google AI Studio | `gemini-2.5-pro`                          |
 | (Google Cloud Credentials) | Google Vertex AI | `gemini-2.5-pro`                          |
@@ -791,7 +791,7 @@ A common use case is to use an alternative platform like [Azure](/docs/providers
 You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
 :::warning
-Your choice of attack provider is critical to the quality of your red team tests. We recommend using a frontier model such as GPT-5.4 or Claude Sonnet 4.6.
+Your choice of attack provider is critical to the quality of your red team tests. We recommend using a frontier model such as GPT-5.5 or Claude Sonnet 4.6.
 :::
 
 ### How attacks are generated
@@ -803,7 +803,7 @@ The `redteam.provider` configuration controls both attack generation and grading
 If no API keys are configured:
 
 - When remote generation is enabled (default), Promptfoo uses the remote generation service for supported plugins/strategies.
-- When remote generation is disabled, you must set `redteam.provider` explicitly or supply an API key. If `OPENAI_API_KEY` is present, the hardcoded fallback is OpenAI's `gpt-5.4-2026-03-05`.
+- When remote generation is disabled, you must set `redteam.provider` explicitly or supply an API key. If `OPENAI_API_KEY` is present, the hardcoded fallback is OpenAI's `gpt-5.5-2026-04-23`.
 
 For users without API keys, Promptfoo provides remote generation capabilities through our API for certain plugins and strategies. Disable this by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
 

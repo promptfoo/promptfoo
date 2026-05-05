@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { OpenAiGenericProvider } from '.';
+import { calculateOpenAIUsageCost } from './billing';
 import { OPENAI_REALTIME_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -902,6 +903,18 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         output: finalOutput,
         tokenUsage: result.tokenUsage,
         cached: result.cached,
+        cost: calculateOpenAIUsageCost(
+          this.modelName,
+          this.config,
+          result.metadata?.usage ?? {
+            prompt_tokens: result.tokenUsage?.prompt,
+            completion_tokens: result.tokenUsage?.completion,
+            total_tokens: result.tokenUsage?.total,
+          },
+          {
+            cachedResponse: result.cached,
+          },
+        ),
         metadata,
         // Add audio at top level if available (EvalOutputCell expects this)
         ...(metadata.audio && {
