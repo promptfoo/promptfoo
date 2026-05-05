@@ -275,10 +275,16 @@ function requestCodexDefaultProviderBundleShutdown(
   void scheduleCodexDefaultProviderBundleShutdown(providers);
 }
 
-function resurrectCodexDefaultProviderBundle(providers: ManagedCodexDefaultProviderBundle): void {
-  // shutdown() unregistered each provider from providerRegistry, so re-register before
-  // forwarding the call. Without this, the resurrected Codex CLI subprocesses created on
-  // the next callApi would never be torn down by providerRegistry.shutdownAll().
+async function resurrectCodexDefaultProviderBundle(
+  providers: ManagedCodexDefaultProviderBundle,
+): Promise<void> {
+  // Wait for any in-flight teardown to settle, then re-register: shutdown() unregistered
+  // each provider from providerRegistry, so without this the Codex CLI subprocesses
+  // created on the next callApi would never be torn down by providerRegistry.shutdownAll().
+  await providers.shutdownPromise;
+  if (providers.cancelled) {
+    return;
+  }
   for (const provider of getUniqueCodexDefaultProviders(providers)) {
     providerRegistry.register(provider);
   }
@@ -292,13 +298,9 @@ function trackCodexDefaultProviderUsage(providers: ManagedCodexDefaultProviderBu
     const callApi = provider.callApi.bind(provider);
     provider.callApi = async (...args) => {
       // If the bundle was shut down (or is mid-shutdown) but a holder still has a
-      // reference, wait for the in-flight teardown to settle and then resurrect the
-      // bundle so the call can proceed against re-registered providers.
+      // reference, resurrect it so the call proceeds against re-registered providers.
       if (providers.shutdownPromise) {
-        await providers.shutdownPromise;
-        if (!providers.cancelled) {
-          resurrectCodexDefaultProviderBundle(providers);
-        }
+        await resurrectCodexDefaultProviderBundle(providers);
       }
       clearCodexDefaultProviderShutdownTimer(providers);
       providers.activeCalls += 1;
