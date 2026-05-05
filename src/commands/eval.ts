@@ -27,6 +27,7 @@ import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
+import { isCliEventSource } from '../types/eventSource';
 import {
   CommandLineOptionsSchema,
   MAX_SUGGESTIONS_COUNT,
@@ -168,7 +169,7 @@ export async function doEval(
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
-  const isCliInvocation = evaluateOptions.eventSource === 'cli';
+  const isCliInvocation = isCliEventSource(evaluateOptions);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;

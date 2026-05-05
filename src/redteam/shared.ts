@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
+import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { pathExists } from '../util/file';
@@ -20,7 +21,7 @@ import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
-  const isCliInvocation = options.eventSource === 'cli';
+  const isCliInvocation = isCliEventSource(options);
 
   if (options.verbose) {
     setLogLevel('debug');

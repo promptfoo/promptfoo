@@ -46,6 +46,7 @@ import {
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { isCliEventSource } from './types/eventSource';
 import {
   type Assertion,
   type AssertionOrSet,
@@ -1843,7 +1844,7 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
     return true;
   }
   logger.info(chalk.red('No prompts selected. Aborting.'));
-  if (options.eventSource === 'cli') {
+  if (isCliEventSource(options)) {
     process.exitCode = 1;
     return false;
   }

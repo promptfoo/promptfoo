@@ -11,3 +11,12 @@ import { z } from 'zod';
 export const EVENT_SOURCES = ['cli', 'library', 'web', 'mcp', 'default'] as const;
 export type EventSource = (typeof EVENT_SOURCES)[number];
 export const EventSourceSchema = z.enum(EVENT_SOURCES);
+
+/**
+ * The CLI is the only source that owns process lifecycle (SIGINT handlers,
+ * `process.exitCode`, raw-mode keystroke capture). Use this helper anywhere
+ * that gates such behavior so a single string literal isn't duplicated.
+ */
+export function isCliEventSource(options: { eventSource?: EventSource } | undefined): boolean {
+  return options?.eventSource === 'cli';
+}
