@@ -53,7 +53,6 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
-  type EvaluateOptions,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
@@ -108,6 +107,7 @@ import type {
   Vars,
   VarValue,
 } from './types/index';
+import type { InternalEvaluateOptions as EvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
 
 export class PromptSuggestionsRejectedError extends Error {

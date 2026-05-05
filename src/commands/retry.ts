@@ -24,7 +24,8 @@ import {
 } from '../util/tokenUsageUtils';
 import type { Command } from 'commander';
 
-import type { EvaluateOptions, TokenUsage } from '../types/index';
+import type { TokenUsage } from '../types/index';
+import type { InternalEvaluateOptions as EvaluateOptions } from '../types/internal';
 
 interface RetryCommandOptions {
   config?: string;

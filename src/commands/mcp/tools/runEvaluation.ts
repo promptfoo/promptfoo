@@ -11,7 +11,8 @@ import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions } from '../../../types/index';
+import type { CommandLineOptions } from '../../../types/index';
+import type { InternalEvaluateOptions as EvaluateOptions } from '../../../types/internal';
 
 /**
  * Run an eval from a promptfoo config with optional test case filtering

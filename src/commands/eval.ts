@@ -60,13 +60,8 @@ import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from 
 import { notCloudEnabledShareInstructions } from './share';
 import type { Command } from 'commander';
 
-import type {
-  CommandLineOptions,
-  EvaluateOptions,
-  Scenario,
-  TestSuite,
-  UnifiedConfig,
-} from '../types/index';
+import type { CommandLineOptions, Scenario, TestSuite, UnifiedConfig } from '../types/index';
+import type { InternalEvaluateOptions as EvaluateOptions } from '../types/internal';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
