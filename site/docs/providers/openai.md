@@ -490,11 +490,13 @@ providers:
 
 OpenAI exposes the current ChatGPT Instant model as `chat-latest`. As of May 5, 2026, that alias points to GPT-5.5 Instant. Because `chat-latest` is a floating alias, use a dated or family-specific model when you need a stable eval baseline.
 
+OpenAI's pricing docs currently list `gpt-5.5`, but do not yet publish a separate `chat-latest` rate. Promptfoo therefore leaves automatic cost calculation unset for this alias until OpenAI documents alias-specific pricing.
+
 #### Available Models
 
-| Model       | Description                          | Pricing                 |
-| ----------- | ------------------------------------ | ----------------------- |
-| chat-latest | Latest Instant model used in ChatGPT | See current OpenAI docs |
+| Model       | Description                          | Pricing                      |
+| ----------- | ------------------------------------ | ---------------------------- |
+| chat-latest | Latest Instant model used in ChatGPT | Not separately published yet |
 
 #### Usage Example
 
