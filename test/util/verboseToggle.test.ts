@@ -65,6 +65,88 @@ describe('verboseToggle', () => {
     expect(() => disableVerboseToggle()).not.toThrow();
   });
 
+  it('should fall back to process.exit(130) when onInterrupt throws so Ctrl+C is never broken', async () => {
+    const originalStdinIsTTY = process.stdin.isTTY;
+    const originalStdoutIsTTY = process.stdout.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
+    const onInterrupt = vi.fn(() => {
+      throw new Error('caller-decided shutdown failed');
+    });
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdin, 'setRawMode', { value: vi.fn(), configurable: true });
+
+    try {
+      const { initVerboseToggle, isVerboseToggleActive } = await import(
+        '../../src/util/verboseToggle'
+      );
+
+      initVerboseToggle({ onInterrupt });
+      expect(() => process.stdin.emit('data', '')).not.toThrow();
+
+      expect(onInterrupt).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(130);
+      expect(isVerboseToggleActive()).toBe(false);
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalStdinIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalStdoutIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
+        configurable: true,
+      });
+      stderrWriteSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
+
+  it('should remove its exit listener during cleanup so init/teardown cycles do not leak', async () => {
+    const originalStdinIsTTY = process.stdin.isTTY;
+    const originalStdoutIsTTY = process.stdout.isTTY;
+    const originalSetRawMode = process.stdin.setRawMode;
+    const stderrWriteSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+    Object.defineProperty(process.stdin, 'setRawMode', { value: vi.fn(), configurable: true });
+
+    try {
+      const { initVerboseToggle, disableVerboseToggle } = await import(
+        '../../src/util/verboseToggle'
+      );
+
+      const before = process.listenerCount('exit');
+      const cleanup = initVerboseToggle({ onInterrupt: vi.fn() });
+      expect(cleanup).not.toBeNull();
+      expect(process.listenerCount('exit')).toBe(before + 1);
+
+      disableVerboseToggle();
+      expect(process.listenerCount('exit')).toBe(before);
+    } finally {
+      Object.defineProperty(process.stdin, 'isTTY', {
+        value: originalStdinIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdout, 'isTTY', {
+        value: originalStdoutIsTTY,
+        configurable: true,
+      });
+      Object.defineProperty(process.stdin, 'setRawMode', {
+        value: originalSetRawMode,
+        configurable: true,
+      });
+      stderrWriteSpy.mockRestore();
+    }
+  });
+
   it('should delegate Ctrl+C to the caller without exiting the process', async () => {
     const originalStdinIsTTY = process.stdin.isTTY;
     const originalStdoutIsTTY = process.stdout.isTTY;

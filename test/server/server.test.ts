@@ -234,6 +234,50 @@ describe('server', () => {
       expect(mockWatcher.close).toHaveBeenCalled();
     });
 
+    it('should not deadlock the shutdown promise if watcher.close throws', async () => {
+      const mockWatcher = {
+        close: vi.fn().mockImplementation(() => {
+          throw new Error('watcher already closed');
+        }),
+        on: vi.fn(),
+      };
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
+
+      const serverPromise = startServer(0);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      triggerSignal('SIGINT');
+      await expect(serverPromise).resolves.toBeUndefined();
+
+      expect(mockWatcher.close).toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Error closing file watcher'),
+      );
+    });
+
+    it('should not deadlock startup-error rejection if watcher.close throws', async () => {
+      const startupError = new Error('Address in use') as NodeJS.ErrnoException;
+      startupError.code = 'EADDRINUSE';
+      const mockWatcher = {
+        close: vi.fn().mockImplementation(() => {
+          throw new Error('watcher unhappy');
+        }),
+        on: vi.fn(),
+      };
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
+
+      mockHttpServer.listen = vi.fn().mockImplementation(function (this: MockHttpServer) {
+        setImmediate(() => this.emit('error', startupError));
+        return this;
+      });
+
+      await expect(startServer(3000)).rejects.toMatchObject({
+        name: 'ServerError',
+        phase: 'startup',
+      });
+      expect(mockWatcher.close).toHaveBeenCalled();
+    });
+
     it('should log server closure', async () => {
       const serverPromise = startServer(0);
 

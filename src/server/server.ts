@@ -75,6 +75,21 @@ export function setJavaScriptMimeType(
 
 export type ServerErrorPhase = 'startup' | 'runtime';
 
+function buildServerErrorMessage(
+  error: NodeJS.ErrnoException,
+  port: number,
+  phase: ServerErrorPhase,
+): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  if (phase === 'runtime') {
+    return `Server error: ${detail}`;
+  }
+  if (error.code === 'EADDRINUSE') {
+    return `Port ${port} is already in use. Do you have another Promptfoo instance running?`;
+  }
+  return `Failed to start server: ${detail}`;
+}
+
 /**
  * Server failures returned to reusable callers after the server path has already
  * logged the user-facing message.
@@ -85,14 +100,7 @@ export class ServerError extends Error {
   readonly port: number;
 
   constructor(error: NodeJS.ErrnoException, port: number, phase: ServerErrorPhase) {
-    super(
-      phase === 'runtime'
-        ? `Server error: ${error instanceof Error ? error.message : error}`
-        : error.code === 'EADDRINUSE'
-          ? `Port ${port} is already in use. Do you have another Promptfoo instance running?`
-          : `Failed to start server: ${error instanceof Error ? error.message : error}`,
-      { cause: error },
-    );
+    super(buildServerErrorMessage(error, port, phase), { cause: error });
     this.name = 'ServerError';
     this.code = error.code;
     this.phase = phase;
@@ -427,14 +435,33 @@ export async function startServer(
       process.removeListener('SIGTERM', shutdown);
     };
 
-    const closeRunningServer = (onClosed: () => void) => {
-      watcher.close();
+    const safeCloseWatcher = () => {
+      try {
+        watcher.close();
+      } catch (err) {
+        // watcher.close() can throw on double-close or partially-failed FSWatchers.
+        // Surface it but never let it deadlock the lifecycle promise.
+        logger.warn(`Error closing file watcher: ${err instanceof Error ? err.message : err}`);
+      }
+    };
+
+    const closeRunningServer = (onClose: (timedOut: boolean) => void) => {
+      safeCloseWatcher();
 
       // Set a timeout in case connections don't close gracefully
       const SHUTDOWN_TIMEOUT_MS = 5000;
+      let settled = false;
+      const settle = (timedOut: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(forceCloseTimeout);
+        onClose(timedOut);
+      };
       const forceCloseTimeout = setTimeout(() => {
         logger.warn('Server close timeout - forcing shutdown');
-        onClosed();
+        settle(true);
       }, SHUTDOWN_TIMEOUT_MS);
 
       // Close Socket.io connections (this also closes the underlying HTTP server)
@@ -442,19 +469,17 @@ export async function startServer(
         // Socket.io's close() already closes the HTTP server, so check if it's still listening
         // before attempting to close it again to avoid "Server is not running" errors
         if (!httpServer.listening) {
-          clearTimeout(forceCloseTimeout);
           logger.info('Server closed');
-          onClosed();
+          settle(false);
           return;
         }
 
         httpServer.close((err) => {
-          clearTimeout(forceCloseTimeout);
           if (err) {
             logger.warn(`Error closing server: ${err.message}`);
           }
           logger.info('Server closed');
-          onClosed();
+          settle(false);
         });
       });
     };
@@ -465,11 +490,18 @@ export async function startServer(
       logger.info('Shutting down server...');
       removeShutdownHandlers();
       httpServer.removeListener('error', handleRuntimeError);
-      closeRunningServer(resolve);
+      closeRunningServer((timedOut) => {
+        if (timedOut) {
+          // A force-close means open handles were left dangling. Surface it through
+          // the exit code so CI / scripts can distinguish unclean shutdowns.
+          process.exitCode = process.exitCode ?? 1;
+        }
+        resolve();
+      });
     };
 
     const handleStartupError = (error: NodeJS.ErrnoException) => {
-      watcher.close();
+      safeCloseWatcher();
       removeShutdownHandlers();
       reject(handleServerError(error, port));
     };

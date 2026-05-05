@@ -6,7 +6,7 @@ import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-import { evalCommand } from './commands/eval';
+import { EvalRunError, evalCommand } from './commands/eval';
 import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
@@ -163,8 +163,10 @@ if (isMain) {
         error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       });
     }
-    // Set exit code immediately so watchdog timeouts preserve the error state
-    process.exitCode = 1;
+    // Set exit code immediately so watchdog timeouts preserve the error state.
+    // EvalRunError carries an explicit exit code (defaults to 1) so library
+    // callers and CLI wrappers see the same outcome.
+    process.exitCode = error instanceof EvalRunError ? error.exitCode : 1;
   } finally {
     try {
       await shutdownGracefully();

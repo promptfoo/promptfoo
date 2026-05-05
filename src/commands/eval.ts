@@ -89,16 +89,17 @@ export class EvalRunError extends Error {
 function failEvalRun(
   message: string,
   isCliInvocation: boolean,
-  logForCli: () => void,
-  exitCode = 1,
+  options: { logForCli?: () => void; cliFallback?: Eval } = {},
 ): Eval {
   if (isCliInvocation) {
-    logForCli();
-    process.exitCode = exitCode;
-    return new Eval({}, { persisted: false });
+    (options.logForCli ?? (() => logger.error(chalk.red(message))))();
+    process.exitCode = 1;
+    // Preserve a real Eval (e.g. a just-completed run flagged for a follow-up
+    // failure like watch-mode setup) so downstream summaries don't misreport.
+    return options.cliFallback ?? new Eval({}, { persisted: false });
   }
 
-  throw new EvalRunError(message, exitCode);
+  throw new EvalRunError(message);
 }
 
 export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
@@ -211,9 +212,10 @@ export async function doEval(
     const retryErrors = cmdObj.retryErrors;
 
     if (resumeRaw && retryErrors) {
-      const message =
-        'Cannot use --resume and --retry-errors together. Please use one or the other.';
-      return failEvalRun(message, isCliInvocation, () => logger.error(chalk.red(message)));
+      return failEvalRun(
+        'Cannot use --resume and --retry-errors together. Please use one or the other.',
+        isCliInvocation,
+      );
     }
 
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
@@ -223,14 +225,17 @@ export async function doEval(
     if (resumeRaw) {
       // Check if --no-write is set with --resume
       if (cmdObj.write === false) {
-        const message =
-          'Cannot use --resume with --no-write. Resume functionality requires database persistence.';
-        return failEvalRun(message, isCliInvocation, () => logger.error(chalk.red(message)));
+        return failEvalRun(
+          'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
+          isCliInvocation,
+        );
       }
       resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
       if (!resumeEval) {
         const message = `Could not find evaluation to resume: ${resumeId}`;
-        return failEvalRun(message, isCliInvocation, () => logger.error(message));
+        return failEvalRun(message, isCliInvocation, {
+          logForCli: () => logger.error(message),
+        });
       }
       logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       // Use the saved config as our base to ensure identical test ordering
@@ -256,9 +261,10 @@ export async function doEval(
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
       if (cmdObj.write === false) {
-        const message =
-          'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.';
-        return failEvalRun(message, isCliInvocation, () => logger.error(chalk.red(message)));
+        return failEvalRun(
+          'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
+          isCliInvocation,
+        );
       }
 
       logger.info('🔄 Retrying ERROR results from latest evaluation...');
@@ -267,7 +273,9 @@ export async function doEval(
       const latestEval = await Eval.latest();
       if (!latestEval) {
         const message = 'No previous evaluation found to retry errors from';
-        return failEvalRun(message, isCliInvocation, () => logger.error(message));
+        return failEvalRun(message, isCliInvocation, {
+          logForCli: () => logger.error(message),
+        });
       }
 
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
@@ -494,16 +502,18 @@ export async function doEval(
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
         .map(([envVar, providerIds]) => `${envVar} (${providerIds.join(', ')})`)
         .join('; ')}`;
-      return failEvalRun(missingKeysMessage, isCliInvocation, () => {
-        for (const [envVar, providerIds] of missingApiKeys) {
-          logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
-        }
-        logger.error('');
-        logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
-        for (const envVar of missingApiKeys.keys()) {
-          logger.error(`    export ${envVar}=your-api-key-here`);
-        }
-        logger.error('');
+      return failEvalRun(missingKeysMessage, isCliInvocation, {
+        logForCli: () => {
+          for (const [envVar, providerIds] of missingApiKeys) {
+            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+          }
+          logger.error('');
+          logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
+          for (const envVar of missingApiKeys.keys()) {
+            logger.error(`    export ${envVar}=your-api-key-here`);
+          }
+          logger.error('');
+        },
       });
     }
 
@@ -894,7 +904,12 @@ export async function doEval(
           const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
             ',',
           )}}.`;
-          return failEvalRun(message, isCliInvocation, () => logger.error(message));
+          // CLI: keep the just-completed eval result so the run summary is accurate.
+          // Library: throw so callers can react to the watch-setup failure.
+          return failEvalRun(message, isCliInvocation, {
+            logForCli: () => logger.error(message),
+            cliFallback: ret,
+          });
         }
         const basePath = path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)

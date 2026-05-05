@@ -249,10 +249,19 @@ export interface RunEvalOptions {
   providerCallQueue?: ProviderCallQueueRef;
 }
 
+/**
+ * Identifies the caller invoking the evaluator. Library code keys process-lifecycle
+ * behavior off `'cli'` (e.g. installs SIGINT handlers, mutates `process.exitCode`),
+ * so adding a new source means deciding whether it should opt into CLI semantics.
+ */
+export const EVENT_SOURCES = ['cli', 'library', 'web', 'mcp', 'default'] as const;
+export type EventSource = (typeof EVENT_SOURCES)[number];
+export const EventSourceSchema = z.enum(EVENT_SOURCES);
+
 export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
-  eventSource: z.string().optional(),
+  eventSource: EventSourceSchema.optional(),
   generateSuggestions: z.boolean().optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.

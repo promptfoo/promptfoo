@@ -373,6 +373,34 @@ describe('doRedteamRun', () => {
       });
     });
 
+    it('should re-emit SIGINT through process.kill when Ctrl+C delegation fires', async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      try {
+        await doRedteamRun({ eventSource: 'cli' });
+
+        const lastCall = vi.mocked(initVerboseToggle).mock.calls.at(-1);
+        expect(lastCall).toBeDefined();
+        const onInterrupt = lastCall![0]!.onInterrupt;
+
+        onInterrupt();
+
+        expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGINT');
+      } finally {
+        killSpy.mockRestore();
+      }
+    });
+
+    it('should forward eventSource into the wrapped doEval call', async () => {
+      await doRedteamRun({ eventSource: 'cli' });
+
+      expect(doEval).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ eventSource: 'cli' }),
+      );
+    });
+
     it('should NOT initialize verbose toggle when logCallback is provided', async () => {
       const mockLogCallback = vi.fn();
 

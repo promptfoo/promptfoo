@@ -1,11 +1,16 @@
 import chalk from 'chalk';
 import { isCI } from '../envars';
-import { getLogLevel, setLogLevel } from '../logger';
+import logger, { getLogLevel, setLogLevel } from '../logger';
 
 let isVerboseToggleEnabled = false;
 let cleanupFn: (() => void) | null = null;
 
 export interface VerboseToggleOptions {
+  /**
+   * Called when the user presses Ctrl+C while the toggle owns stdin.
+   * The terminal is already restored before this fires; the callback's job is
+   * to re-enter the host's normal interruption pathway (e.g. `process.kill`).
+   */
   onInterrupt: () => void;
 }
 
@@ -55,7 +60,18 @@ export function initVerboseToggle(options: VerboseToggleOptions): (() => void) |
       // terminal first, then let the caller decide how interruption should work.
       if (key === '\u0003') {
         disableVerboseToggle();
-        options.onInterrupt();
+        try {
+          options.onInterrupt();
+        } catch (err) {
+          // A throwing onInterrupt would otherwise surface as an uncaughtException
+          // out of an EventEmitter listener and leave Ctrl+C broken for the user.
+          // Log the bug, then force-exit with the conventional SIGINT exit code so
+          // the keypress still terminates the process.
+          logger.error(
+            `verboseToggle onInterrupt callback threw: ${err instanceof Error ? err.message : err}`,
+          );
+          process.exit(130);
+        }
         return;
       }
 
@@ -70,10 +86,20 @@ export function initVerboseToggle(options: VerboseToggleOptions): (() => void) |
 
     process.stdin.on('data', handleKeypress);
 
+    // Auto-cleanup on process exit. Stored so cleanupFn can deregister it and
+    // avoid accumulating one listener per init/teardown cycle.
+    const exitHandler = () => {
+      if (cleanupFn) {
+        cleanupFn();
+      }
+    };
+    process.on('exit', exitHandler);
+
     isVerboseToggleEnabled = true;
 
     cleanupFn = () => {
       process.stdin.removeListener('data', handleKeypress);
+      process.removeListener('exit', exitHandler);
       if (process.stdin.setRawMode) {
         process.stdin.setRawMode(false);
       }
@@ -81,13 +107,6 @@ export function initVerboseToggle(options: VerboseToggleOptions): (() => void) |
       isVerboseToggleEnabled = false;
       cleanupFn = null;
     };
-
-    // Auto-cleanup on process exit
-    process.on('exit', () => {
-      if (cleanupFn) {
-        cleanupFn();
-      }
-    });
 
     // Show initial hint
     const initialVerbose = getLogLevel() === 'debug';

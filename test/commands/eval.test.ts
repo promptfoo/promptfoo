@@ -29,6 +29,7 @@ import {
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
+import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
@@ -95,6 +96,10 @@ vi.mock('../../src/util/config/load', async (importOriginal) => ({
   resolveConfigs: vi.fn(),
 }));
 vi.mock('../../src/util/tokenUsage');
+vi.mock('../../src/util/provider', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/provider')>()),
+  checkProviderApiKeys: vi.fn(() => new Map<string, string[]>()),
+}));
 vi.mock('../../src/database/index', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -377,6 +382,7 @@ describe('evalCommand', () => {
   it('should preserve CLI exit-code behavior for recoverable eval failures', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
     try {
       const result = await doEval(
@@ -388,8 +394,149 @@ describe('evalCommand', () => {
 
       expect(result.persisted).toBe(false);
       expect(process.exitCode).toBe(1);
+      // The user-facing message must still reach the CLI; verifying it here so a
+      // future refactor of `failEvalRun` can't silently drop the chalk-red log.
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Cannot use --resume and --retry-errors together. Please use one or the other.',
+        ),
+      );
+    } finally {
+      loggerErrorSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it.each([
+    {
+      name: 'resume + --no-write',
+      cmdObj: { resume: 'latest', write: false },
+      message:
+        'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
+    },
+    {
+      name: 'retry-errors + --no-write',
+      cmdObj: { retryErrors: true, write: false },
+      message:
+        'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
+    },
+  ])('throws EvalRunError for library callers: $name', async ({ cmdObj, message }) => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      await expect(
+        doEval(cmdObj as Parameters<typeof doEval>[0], defaultConfig, defaultConfigPath, {}),
+      ).rejects.toEqual(
+        expect.objectContaining<EvalRunError>({ name: 'EvalRunError', exitCode: 1, message }),
+      );
+      expect(process.exitCode).toBeUndefined();
     } finally {
       process.exitCode = previousExitCode;
+    }
+  });
+
+  it.each([
+    {
+      name: 'resume + --no-write',
+      cmdObj: { resume: 'latest', write: false } as Parameters<typeof doEval>[0],
+      messageFragment: 'Cannot use --resume with --no-write',
+    },
+    {
+      name: 'retry-errors + --no-write',
+      cmdObj: { retryErrors: true, write: false } as Parameters<typeof doEval>[0],
+      messageFragment: 'Cannot use --retry-errors with --no-write',
+    },
+  ])('logs to CLI and sets exitCode for: $name', async ({ cmdObj, messageFragment }) => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    try {
+      const result = await doEval(cmdObj, defaultConfig, defaultConfigPath, {
+        eventSource: 'cli',
+      });
+
+      expect(result.persisted).toBe(false);
+      expect(process.exitCode).toBe(1);
+      expect(loggerErrorSpy).toHaveBeenCalledWith(expect.stringContaining(messageFragment));
+    } finally {
+      loggerErrorSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('throws EvalRunError with all missing keys joined for library callers', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    vi.mocked(checkProviderApiKeys).mockReturnValueOnce(
+      new Map([
+        ['OPENAI_API_KEY', ['openai:gpt-4']],
+        ['ANTHROPIC_API_KEY', ['anthropic:claude']],
+      ]),
+    );
+
+    try {
+      await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toEqual(
+        expect.objectContaining<EvalRunError>({
+          name: 'EvalRunError',
+          exitCode: 1,
+          message: expect.stringContaining(
+            'Missing required API keys: OPENAI_API_KEY (openai:gpt-4); ANTHROPIC_API_KEY (anthropic:claude)',
+          ),
+        }),
+      );
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      vi.mocked(checkProviderApiKeys).mockReturnValue(new Map());
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('logs per-key error lines for CLI callers when API keys are missing', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    vi.mocked(checkProviderApiKeys).mockReturnValueOnce(
+      new Map([['OPENAI_API_KEY', ['openai:gpt-4']]]),
+    );
+
+    try {
+      const result = await doEval({}, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+      expect(result.persisted).toBe(false);
+      expect(process.exitCode).toBe(1);
+      // Ensures the per-key list, the empty-line spacers, and the --env-file
+      // hint all reach the user. A regression that strips any of these would
+      // have been silent before this test.
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Missing OPENAI_API_KEY (openai:gpt-4)'),
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('To fix, set the environment variable'),
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('export OPENAI_API_KEY=your-api-key-here'),
+      );
+    } finally {
+      vi.mocked(checkProviderApiKeys).mockReturnValue(new Map());
+      loggerErrorSpy.mockRestore();
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('should register SIGINT for CLI invocations writing to the database', async () => {
+    const processOnSpy = vi.spyOn(process, 'on');
+    const mockEvalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
+
+    try {
+      await doEval({ write: true }, defaultConfig, defaultConfigPath, { eventSource: 'cli' });
+
+      const sigintCalls = processOnSpy.mock.calls.filter(([event]) => event === 'SIGINT');
+      expect(sigintCalls.length).toBeGreaterThan(0);
+    } finally {
+      processOnSpy.mockRestore();
     }
   });
 
@@ -400,9 +547,61 @@ describe('evalCommand', () => {
 
     try {
       await doEval({ write: true }, defaultConfig, defaultConfigPath, {});
-      expect(processOnSpy).not.toHaveBeenCalledWith('SIGINT', expect.any(Function));
+      const sigintCalls = processOnSpy.mock.calls.filter(([event]) => event === 'SIGINT');
+      expect(sigintCalls).toHaveLength(0);
     } finally {
       processOnSpy.mockRestore();
+    }
+  });
+
+  it('preserves the just-completed Eval as cliFallback when watch mode cannot find configs', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const mockEvalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
+
+    try {
+      const result = await doEval(
+        { watch: true, config: undefined } as Parameters<typeof doEval>[0],
+        defaultConfig,
+        undefined,
+        { eventSource: 'cli' },
+      );
+
+      // CLI summary code reads the returned Eval — must be the real run result,
+      // not a freshly-constructed empty Eval. A regression that drops cliFallback
+      // would silently mis-report 0 tests / 0 successes for watch failures.
+      expect(result).toBe(mockEvalRecord);
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  it('throws EvalRunError for library callers when watch mode cannot find configs', async () => {
+    const previousExitCode = process.exitCode;
+    process.exitCode = undefined;
+    const mockEvalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValueOnce(mockEvalRecord);
+
+    try {
+      await expect(
+        doEval(
+          { watch: true, config: undefined } as Parameters<typeof doEval>[0],
+          defaultConfig,
+          undefined,
+          {},
+        ),
+      ).rejects.toEqual(
+        expect.objectContaining<EvalRunError>({
+          name: 'EvalRunError',
+          exitCode: 1,
+          message: expect.stringContaining('Could not locate config file(s) to watch'),
+        }),
+      );
+      expect(process.exitCode).toBeUndefined();
+    } finally {
+      process.exitCode = previousExitCode;
     }
   });
 
@@ -1173,6 +1372,10 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
     // Set up cloud permissions check
     vi.mocked(checkCloudPermissions).mockResolvedValue(undefined);
+
+    // resetAllMocks above wipes the module-level default; restore the empty-Map
+    // implementation so unrelated tests don't blow up reading `.size`.
+    vi.mocked(checkProviderApiKeys).mockReturnValue(new Map());
   });
 
   afterEach(() => {
