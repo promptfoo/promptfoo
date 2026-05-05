@@ -33,4 +33,34 @@ describe('Google AI Studio Default Providers', () => {
     expect(providers.gradingProvider.config.generationConfig?.response_mime_type).toBeUndefined();
     expect(providers.llmRubricProvider.config.generationConfig?.response_mime_type).toBeUndefined();
   });
+
+  it('should share a single chat provider instance across grading/suggestions/synthesize', () => {
+    const providers = getGoogleAiStudioProviders();
+    expect(providers.suggestionsProvider).toBe(providers.gradingProvider);
+    expect(providers.synthesizeProvider).toBe(providers.gradingProvider);
+  });
+
+  it('should return fresh provider instances on each call', () => {
+    const a = getGoogleAiStudioProviders();
+    const b = getGoogleAiStudioProviders();
+    expect(b.gradingProvider).not.toBe(a.gradingProvider);
+    expect(b.gradingJsonProvider).not.toBe(a.gradingJsonProvider);
+    expect(b.llmRubricProvider).not.toBe(a.llmRubricProvider);
+  });
+
+  it('should propagate env overrides into provider api keys', () => {
+    const providers = getGoogleAiStudioProviders({ GOOGLE_API_KEY: 'override-key' });
+    expect(providers.gradingProvider.getApiKey()).toBe('override-key');
+    expect(providers.gradingJsonProvider.getApiKey()).toBe('override-key');
+    expect(providers.llmRubricProvider.getApiKey()).toBe('override-key');
+  });
+
+  it('should not throw "Not implemented" from default grading callApi', () => {
+    // Regression: the previous AIStudioGenericProvider.callApi() threw a literal
+    // "Not implemented" error, breaking llm-rubric whenever AI Studio defaults were
+    // selected. The replacement AIStudioChatProvider must expose a real implementation.
+    const providers = getGoogleAiStudioProviders();
+    expect(typeof providers.gradingProvider.callApi).toBe('function');
+    expect(providers.gradingProvider.callApi.toString()).not.toContain('Not implemented');
+  });
 });

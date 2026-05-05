@@ -11,7 +11,7 @@ import {
 } from './github/defaults';
 import { getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
-import { getGoogleVertexProviders } from './google/vertex';
+import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -195,7 +195,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else if (useGoogleAiStudioDefaults) {
     logger.debug('Using Google AI Studio default providers');
     providers = {
-      embeddingProvider: getGoogleVertexProviders(env).embeddingProvider, // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
+      embeddingProvider: getGoogleVertexEmbeddingProvider(env), // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
       moderationProvider: OpenAiModerationProvider,
       ...getGoogleAiStudioProviders(env),
     };
