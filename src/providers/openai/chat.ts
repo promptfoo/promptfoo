@@ -10,6 +10,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { sha256 } from '../../util/createHash';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
@@ -29,7 +30,8 @@ import {
   transformTools,
 } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { calculateOpenAIUsageCost } from './billing';
+import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -46,6 +48,14 @@ type OpenAiStreamingUsage = {
   total_tokens?: number;
   audio_prompt_tokens?: number;
   audio_completion_tokens?: number;
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+  };
+  completion_tokens_details?: {
+    reasoning_tokens?: number;
+    accepted_prediction_tokens?: number;
+    rejected_prediction_tokens?: number;
+  };
 };
 
 type OpenAiStreamingFunctionCall = { name: string; arguments: string };
@@ -60,6 +70,7 @@ type OpenAiStreamingState = {
   content: string;
   finishReason: string | null;
   usage?: OpenAiStreamingUsage;
+  serviceTier?: string | null;
   functionCall: OpenAiStreamingFunctionCall | null;
   toolCalls: OpenAiStreamingToolCall[];
 };
@@ -152,10 +163,14 @@ function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string):
     const chunk = JSON.parse(data) as {
       choices?: Array<Parameters<typeof appendStreamingChoice>[1]>;
       usage?: OpenAiStreamingUsage;
+      service_tier?: string | null;
     };
     appendStreamingChoice(state, chunk.choices?.[0]);
     if (chunk.usage) {
       state.usage = chunk.usage;
+    }
+    if (chunk.service_tier !== undefined) {
+      state.serviceTier = chunk.service_tier;
     }
   } catch {
     logger.debug(`Failed to parse SSE chunk: ${data}`);
@@ -211,7 +226,7 @@ async function readOpenAiStreamingResponse(
 }
 
 async function getCachedOpenAiStreamingResponse(
-  cache: Awaited<ReturnType<typeof getCache>>,
+  cache: ReturnType<typeof getCache>,
   cacheKey: string,
   modelName: string,
 ): Promise<ProviderResponse | undefined> {
@@ -223,10 +238,14 @@ async function getCachedOpenAiStreamingResponse(
   logger.debug(`Returning cached streaming response for ${modelName}`);
   try {
     const parsed = JSON.parse(cachedResponse) as ProviderResponse;
-    if (parsed.tokenUsage) {
-      parsed.tokenUsage.cached = parsed.tokenUsage.total || 0;
-    }
-    return { ...parsed, cached: true };
+    const totalTokens = parsed.tokenUsage?.total;
+    return {
+      ...parsed,
+      tokenUsage:
+        totalTokens === undefined ? parsed.tokenUsage : { total: totalTokens, cached: totalTokens },
+      cached: true,
+      ...(parsed.cost === undefined ? {} : { cost: 0 }),
+    };
   } catch {
     logger.warn('Failed to parse cached streaming response');
     return undefined;
@@ -265,17 +284,12 @@ function getOpenAiStreamingTokenUsage(
   if (!usage) {
     return undefined;
   }
-  return {
-    prompt: usage.prompt_tokens || 0,
-    completion: usage.completion_tokens || 0,
-    total: usage.total_tokens || 0,
-    cached: 0,
-  };
+  return getTokenUsage({ usage }, false);
 }
 
 function buildOpenAiStreamingResponse(
   state: OpenAiStreamingState,
-  modelName: string,
+  billingModelName: string,
   config: OpenAiCompletionOptions,
   latencyMs: number,
 ): ProviderResponse {
@@ -289,20 +303,16 @@ function buildOpenAiStreamingResponse(
     cached: false,
     latencyMs,
     ...(normalizedFinishReason && { finishReason: normalizedFinishReason }),
-    cost: calculateOpenAICost(
-      modelName,
-      config,
-      state.usage?.prompt_tokens,
-      state.usage?.completion_tokens,
-      state.usage?.audio_prompt_tokens,
-      state.usage?.audio_completion_tokens,
-    ),
+    cost: calculateOpenAIUsageCost(billingModelName, config, state.usage, {
+      cachedResponse: false,
+      serviceTier: state.serviceTier ?? config.service_tier,
+    }),
     guardrails: { flagged: contentFiltered },
   };
 }
 
 async function cacheOpenAiStreamingResponse(
-  cache: Awaited<ReturnType<typeof getCache>>,
+  cache: ReturnType<typeof getCache>,
   cacheKey: string,
   providerResponse: ProviderResponse,
 ) {
@@ -315,6 +325,24 @@ async function cacheOpenAiStreamingResponse(
   } catch (err) {
     logger.error(`Failed to cache streaming response: ${String(err)}`);
   }
+}
+
+function getOpenAiStreamingCacheKey(
+  providerId: string,
+  apiUrl: string,
+  body: Record<string, any>,
+): string {
+  return `openai:stream:${sha256(JSON.stringify({ providerId, apiUrl, body }))}`;
+}
+
+function getOpenAiStreamingHttpMetadata(response: Response): ProviderResponse['metadata'] {
+  return {
+    http: {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers ? Object.fromEntries(response.headers.entries()) : {},
+    },
+  };
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
@@ -487,6 +515,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
+  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
+    return this.modelName;
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -578,6 +610,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
       ...(this.modelName.includes('audio')
         ? {
@@ -1037,14 +1075,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             latencyMs,
             logProbs,
             ...(finishReason && { finishReason }),
-            cost: calculateOpenAICost(
-              this.modelName,
-              config,
-              data.usage?.prompt_tokens,
-              data.usage?.completion_tokens,
-              data.usage?.audio_prompt_tokens,
-              data.usage?.audio_completion_tokens,
-            ),
+            cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+              cachedResponse: cached,
+              serviceTier: data.service_tier ?? config.service_tier,
+            }),
             guardrails: { flagged: contentFiltered },
             metadata: {
               http: {
@@ -1081,14 +1115,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           latencyMs,
           logProbs,
           ...(finishReason && { finishReason }),
-          cost: calculateOpenAICost(
-            this.modelName,
-            config,
-            data.usage?.prompt_tokens,
-            data.usage?.completion_tokens,
-            data.usage?.audio_prompt_tokens,
-            data.usage?.audio_completion_tokens,
-          ),
+          cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+            cachedResponse: cached,
+            serviceTier: data.service_tier ?? config.service_tier,
+          }),
           guardrails: { flagged: contentFiltered },
           metadata: {
             http: {
@@ -1107,14 +1137,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         logProbs,
         ...(finishReason && { finishReason }),
-        cost: calculateOpenAICost(
-          this.modelName,
-          config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-          data.usage?.audio_prompt_tokens,
-          data.usage?.audio_completion_tokens,
-        ),
+        cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+          cachedResponse: cached,
+          serviceTier: data.service_tier ?? config.service_tier,
+        }),
         guardrails: { flagged: contentFiltered },
         metadata: {
           http: {
@@ -1152,14 +1178,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const startTime = Date.now();
+    const shouldUseCache = isCacheEnabled() && !context?.bustCache && !context?.debug;
+    const cacheKey = getOpenAiStreamingCacheKey(this.id(), this.getApiUrl(), body);
+    const cache = shouldUseCache ? getCache() : undefined;
 
-    // Check cache first
-    const cache = await getCache();
-    // Include provider ID and API URL in cache key to prevent collisions between
-    // different providers (e.g., OpenAI vs QuiverAI) with the same request body
-    const cacheKey = `openai:stream:${this.id()}:${this.getApiUrl()}:${JSON.stringify(body)}`;
-
-    if (isCacheEnabled() && !context?.bustCache && !context?.debug) {
+    if (cache) {
       const cachedResponse = await getCachedOpenAiStreamingResponse(
         cache,
         cacheKey,
@@ -1198,16 +1221,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         body: JSON.stringify(streamBody),
         signal: AbortSignal.timeout(requestTimeoutMs),
       });
+      const metadata = getOpenAiStreamingHttpMetadata(response);
 
       if (!response.ok) {
         const errorText = await response.text();
         return {
           error: `API error: ${response.status} ${response.statusText}\n${errorText}`,
+          metadata,
         };
       }
 
       if (!response.body) {
-        return { error: 'No response body for streaming request' };
+        return { error: 'No response body for streaming request', metadata };
       }
 
       // Parse SSE stream
@@ -1222,13 +1247,14 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
       const providerResponse = buildOpenAiStreamingResponse(
         streamingState,
-        this.modelName,
+        this.getBillingModelName(config),
         config,
         latencyMs,
       );
+      providerResponse.metadata = metadata;
 
       // Cache the successful response
-      if (isCacheEnabled() && !context?.bustCache && !context?.debug) {
+      if (cache) {
         await cacheOpenAiStreamingResponse(cache, cacheKey, providerResponse);
       }
 

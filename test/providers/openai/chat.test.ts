@@ -278,6 +278,7 @@ describe('OpenAI Provider', () => {
       expect(result2.output).toBe('Test output 2');
       // Cached responses don't count as new requests, so numRequests is not included
       expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.cost).toBe(0);
     });
 
     it('should handle disabled cache correctly', async () => {
@@ -1931,6 +1932,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(body.max_tokens).toBe(2000);
     });
 
+    it('should forward prompt cache options', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          prompt_cache_key: 'shared-prefix',
+          prompt_cache_retention: 'in_memory',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.prompt_cache_key).toBe('shared-prefix');
+      expect(body.prompt_cache_retention).toBe('in_memory');
+    });
+
     it('should not share config between provider instances', () => {
       const sharedConfig = {
         max_tokens: 16000,
@@ -2640,7 +2655,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockReset();
       // Disable cache for streaming tests to ensure test isolation
       mockIsCacheEnabled.mockReturnValue(false);
-      mockGetCache.mockResolvedValue({
+      mockGetCache.mockReturnValue({
         get: vi.fn().mockResolvedValue(undefined),
         set: vi.fn().mockResolvedValue(undefined),
       } as any);
@@ -2656,6 +2671,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'x-request-id': 'stream-123' }),
         body: createMockSSEStream(sseChunks),
       } as unknown as Response);
 
@@ -2672,9 +2690,51 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         prompt: 10,
         completion: 5,
         total: 15,
-        cached: 0,
+        numRequests: 1,
       });
       expect(result.cached).toBe(false);
+      expect(result.metadata?.http).toEqual({
+        status: 200,
+        statusText: 'OK',
+        headers: { 'x-request-id': 'stream-123' },
+      });
+      expect(mockGetCache).not.toHaveBeenCalled();
+    });
+
+    it('should preserve prompt-cache token details in streaming usage', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":2}}}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Say hello' }]),
+      );
+
+      expect(result.tokenUsage).toEqual({
+        prompt: 10,
+        completion: 5,
+        total: 15,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 2,
+          acceptedPrediction: undefined,
+          rejectedPrediction: undefined,
+          cacheReadInputTokens: 4,
+        },
+      });
     });
 
     it('should handle streaming with tool calls', async () => {
@@ -2688,6 +2748,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'x-request-id': 'stream-123' }),
         body: createMockSSEStream(sseChunks),
       } as unknown as Response);
 
@@ -2742,6 +2805,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         ok: false,
         status: 429,
         statusText: 'Too Many Requests',
+        headers: new Headers({ 'retry-after': '60' }),
         text: () => Promise.resolve('Rate limit exceeded'),
       } as unknown as Response);
 
@@ -2752,11 +2816,19 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(result.error).toContain('429 Too Many Requests');
       expect(result.error).toContain('Rate limit exceeded');
+      expect(result.metadata?.http).toEqual({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'retry-after': '60' },
+      });
     });
 
     it('should handle streaming with missing response body', async () => {
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers(),
         body: null,
       } as unknown as Response);
 
@@ -2873,7 +2945,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         prompt: 4,
         completion: 2,
         total: 6,
-        cached: 0,
+        numRequests: 1,
       });
     });
 
@@ -3072,6 +3144,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const cachedResponse = {
         output: 'Cached response',
         tokenUsage: { prompt: 10, completion: 5, total: 15, cached: 0 },
+        cost: 0.01,
       };
 
       // Enable cache for this test
@@ -3080,7 +3153,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         get: vi.fn().mockResolvedValue(JSON.stringify(cachedResponse)),
         set: vi.fn().mockResolvedValue(undefined),
       };
-      mockGetCache.mockResolvedValue(mockCache as any);
+      mockGetCache.mockReturnValue(mockCache as any);
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: { stream: true },
@@ -3090,7 +3163,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.output).toBe('Cached response');
       expect(result.cached).toBe(true);
       // tokenUsage.cached should equal total to indicate all tokens came from cache
-      expect(result.tokenUsage?.cached).toBe(15);
+      expect(result.tokenUsage).toEqual({ total: 15, cached: 15 });
+      expect(result.cost).toBe(0);
       expect(mockFetchWithProxy).not.toHaveBeenCalled();
     });
 
@@ -3101,7 +3175,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         get: vi.fn().mockResolvedValue('not valid json {{{'),
         set: vi.fn().mockResolvedValue(undefined),
       };
-      mockGetCache.mockResolvedValue(mockCache as any);
+      mockGetCache.mockReturnValue(mockCache as any);
 
       const sseChunks = [
         'data: {"choices":[{"delta":{"content":"Fresh response"}}]}\n\n',
@@ -3131,7 +3205,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         get: vi.fn().mockResolvedValue(undefined),
         set: vi.fn().mockResolvedValue(undefined),
       };
-      mockGetCache.mockResolvedValue(mockCache as any);
+      mockGetCache.mockReturnValue(mockCache as any);
 
       const sseChunks = [
         'data: {"choices":[{"delta":{"content":"Response to cache"}}]}\n\n',
@@ -3155,6 +3229,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect.stringContaining('openai:stream:'),
         expect.stringContaining('Response to cache'),
       );
+      expect(mockCache.set.mock.calls[0]?.[0]).not.toContain('Test');
     });
 
     it('should not cache content-filtered responses', async () => {
@@ -3164,7 +3239,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         get: vi.fn().mockResolvedValue(undefined),
         set: vi.fn().mockResolvedValue(undefined),
       };
-      mockGetCache.mockResolvedValue(mockCache as any);
+      mockGetCache.mockReturnValue(mockCache as any);
 
       const sseChunks = [
         'data: {"choices":[{"delta":{"content":"Filtered"}}]}\n\n',

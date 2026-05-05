@@ -12,6 +12,8 @@ import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
 import ScanResultHeader from '../model-audit/components/ScanResultHeader';
 import { useSeverityCounts } from '../model-audit/hooks';
+import { useModelAuditConfigStore } from '../model-audit/stores';
+import { hasModelAuditFindings } from '../model-audit/utils';
 
 import type { HistoricalScan } from '../model-audit/stores';
 
@@ -20,6 +22,7 @@ export default function ModelAuditResultLatestPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showFilesDialog, setShowFilesDialog] = useState(false);
+  const startNewScan = useModelAuditConfigStore((state) => state.startNewScan);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -68,6 +71,9 @@ export default function ModelAuditResultLatestPage() {
   }, []);
 
   const severityCounts = useSeverityCounts(latestScan?.results?.issues);
+  const hasFindings = latestScan
+    ? latestScan.hasErrors || hasModelAuditFindings(latestScan.results)
+    : false;
 
   if (isLoading) {
     return (
@@ -90,7 +96,9 @@ export default function ModelAuditResultLatestPage() {
           </Alert>
           <div className="flex gap-3">
             <Button asChild>
-              <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>Go to Setup</RouterLink>
+              <RouterLink to={MODEL_AUDIT_ROUTES.SETUP} onClick={startNewScan}>
+                Go to Setup
+              </RouterLink>
             </Button>
             <Button variant="outline" asChild>
               <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>View History</RouterLink>
@@ -126,7 +134,7 @@ export default function ModelAuditResultLatestPage() {
                 </a>
               </p>
               <Button size="lg" asChild>
-                <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
+                <RouterLink to={MODEL_AUDIT_ROUTES.SETUP} onClick={startNewScan}>
                   <AddIcon className="size-4 mr-2" />
                   Run Your First Scan
                 </RouterLink>
@@ -145,6 +153,7 @@ export default function ModelAuditResultLatestPage() {
         modelPath={latestScan.modelPath}
         createdAt={new Date(latestScan.createdAt).toISOString()}
         severityCounts={severityCounts}
+        hasFindings={hasFindings}
         size="sm"
       />
 
@@ -159,7 +168,7 @@ export default function ModelAuditResultLatestPage() {
             </RouterLink>
           </Button>
           <Button size="sm" asChild>
-            <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
+            <RouterLink to={MODEL_AUDIT_ROUTES.SETUP} onClick={startNewScan}>
               <AddIcon className="size-4 mr-2" />
               New Scan
             </RouterLink>
