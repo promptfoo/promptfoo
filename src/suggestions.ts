@@ -2,6 +2,7 @@ import async from 'async';
 import logger from './logger';
 import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts/index';
 import { getDefaultProviders } from './providers/defaults';
+import { MAX_SUGGESTIONS_COUNT } from './types/index';
 import {
   accumulateTokenUsage,
   createEmptyTokenUsage,
@@ -19,6 +20,12 @@ interface GeneratePromptsOutput {
 const SUGGESTIONS_CONCURRENCY = 4;
 
 export async function generatePrompts(prompt: string, num: number): Promise<GeneratePromptsOutput> {
+  if (!Number.isInteger(num) || num < 1 || num > MAX_SUGGESTIONS_COUNT) {
+    return {
+      error: `generatePrompts: num must be an integer between 1 and ${MAX_SUGGESTIONS_COUNT} (got ${num})`,
+      tokensUsed: createEmptyTokenUsage(),
+    };
+  }
   const provider = (await getDefaultProviders()).suggestionsProvider;
   const payload = JSON.stringify([
     SUGGEST_PROMPTS_SYSTEM_MESSAGE,

@@ -868,6 +868,42 @@ describe('evaluateOptions behavior', () => {
       expect(options.suggestionsCount).toBe(4);
     });
 
+    it('should let commandLineOptions.generateSuggestions=false override evaluateOptions.generateSuggestions=true', async () => {
+      const tempConfig = writeTempConfig(
+        tmpDir,
+        'test-cli-options-disable-overrides-evaluate.yaml',
+        {
+          commandLineOptions: { generateSuggestions: false },
+          evaluateOptions: { generateSuggestions: true, suggestionsCount: 4 },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      );
+
+      const options = await runEvalAndGetOptions({ config: [tempConfig] });
+
+      expect(options.generateSuggestions).toBe(false);
+      expect(options.suggestionsCount).toBe(4);
+    });
+
+    it('should honor cmdObj.suggestionsCount from non-Commander callers', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-cmdobj-suggestions-count.yaml', {
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+        generateSuggestions: true,
+        suggestionsCount: 7,
+      });
+
+      expect(options.generateSuggestions).toBe(true);
+      expect(options.suggestionsCount).toBe(7);
+    });
+
     it('should let --suggest-prompts override an explicit generateSuggestions=false', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-suggest-prompts-overrides-disable.yaml', {
         providers: [{ id: 'openai:gpt-4o-mini' }],

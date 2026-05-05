@@ -106,7 +106,12 @@ function resolveSuggestionOptions(
     return explicitGenerate === false ? { generateSuggestions: false } : {};
   }
 
-  const suggestionsCount = commandLineOptions?.suggestionsCount ?? evaluateOptions.suggestionsCount;
+  // Read cmdObj.suggestionsCount too: doEval is exported and non-Commander
+  // callers may pass the canonical key directly instead of the suggestPrompts CLI alias.
+  const suggestionsCount =
+    cmdObj.suggestionsCount ??
+    commandLineOptions?.suggestionsCount ??
+    evaluateOptions.suggestionsCount;
   return suggestionsCount === undefined
     ? { generateSuggestions: true }
     : { generateSuggestions: true, suggestionsCount };

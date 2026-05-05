@@ -19,6 +19,30 @@ describe('generatePrompts', () => {
     vi.resetAllMocks();
   });
 
+  it.each([
+    ['zero', 0],
+    ['negative', -2],
+    ['fractional', 1.5],
+    ['NaN', Number.NaN],
+    ['above max', 51],
+  ])('rejects invalid num (%s) without calling the provider', async (_label, num) => {
+    const provider = createMockProvider({ id: 'openai:codex-sdk' });
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: provider,
+      gradingJsonProvider: provider,
+      gradingProvider: provider,
+      moderationProvider: provider,
+      suggestionsProvider: provider,
+      synthesizeProvider: provider,
+    } satisfies DefaultProviders);
+
+    const result = await generatePrompts('Original prompt', num);
+
+    expect(provider.callApi).not.toHaveBeenCalled();
+    expect(result.prompts).toBeUndefined();
+    expect(result.error).toContain('num must be an integer between 1 and 50');
+  });
+
   it('uses the resolved default suggestions provider', async () => {
     const provider = createMockProvider({
       id: 'openai:codex-sdk',

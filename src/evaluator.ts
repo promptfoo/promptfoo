@@ -56,6 +56,7 @@ import {
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
+  MAX_SUGGESTIONS_COUNT,
   type Prompt,
   type ProviderResponse,
   ResultFailureReason,
@@ -1790,7 +1791,15 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
     return true;
   }
 
-  const requestedCount = options.suggestionsCount ?? 1;
+  // Library callers bypass CLI/config schema validation, so re-clamp here.
+  const rawCount = options.suggestionsCount ?? 1;
+  let requestedCount = Number.isInteger(rawCount) && rawCount >= 1 ? rawCount : 1;
+  if (requestedCount > MAX_SUGGESTIONS_COUNT) {
+    logger.warn(
+      `suggestionsCount=${rawCount} exceeds max of ${MAX_SUGGESTIONS_COUNT}; clamping to ${MAX_SUGGESTIONS_COUNT}.`,
+    );
+    requestedCount = MAX_SUGGESTIONS_COUNT;
+  }
   logger.info(`Generating prompt variations...`);
   const { prompts: newPrompts, error } = await generatePrompts(
     testSuite.prompts[0].raw,
