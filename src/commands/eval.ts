@@ -10,7 +10,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate } from '../evaluator';
+import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -27,6 +27,7 @@ import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
+import { isCliEventSource } from '../types/eventSource';
 import {
   CommandLineOptionsSchema,
   MAX_SUGGESTIONS_COUNT,
@@ -82,6 +83,54 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+export class EvalRunError extends Error {
+  readonly exitCode: number;
+
+  constructor(message: string, exitCode: number = 1) {
+    super(message);
+    this.name = 'EvalRunError';
+    // POSIX exit codes are 1-255 (0 means success). Coerce silly values to the
+    // default rather than letting `exitCode = 0` silently mask a real failure.
+    this.exitCode = Number.isInteger(exitCode) && exitCode >= 1 && exitCode <= 255 ? exitCode : 1;
+  }
+}
+
+function failEvalRun(
+  message: string,
+  isCliInvocation: boolean,
+  options: { logForCli?: () => void; cliFallback?: Eval } = {},
+): Eval {
+  if (isCliInvocation) {
+    (options.logForCli ?? (() => logger.error(chalk.red(message))))();
+    process.exitCode = 1;
+    // Preserve a real Eval (e.g. a just-completed run flagged for a follow-up
+    // failure like watch-mode setup) so downstream summaries don't misreport.
+    return options.cliFallback ?? new Eval({}, { persisted: false });
+  }
+
+  throw new EvalRunError(message);
+}
+
+function handleRecoverableWatchError(error: unknown): boolean {
+  if (error instanceof ConfigResolutionError) {
+    logConfigResolutionError(error);
+    return true;
+  }
+  if (error instanceof EmailValidationError) {
+    // Account helpers already render these user-facing failures.
+    return true;
+  }
+  if (error instanceof EvalRunError) {
+    logger.error(error.message);
+    return true;
+  }
+  if (error instanceof PromptSuggestionsRejectedError) {
+    logger.error(error.message);
+    return true;
+  }
+  return false;
+}
 
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
@@ -140,6 +189,7 @@ export async function doEval(
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
+  const isCliInvocation = isCliEventSource(evaluateOptions);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let testSuite: TestSuite | undefined = undefined;
@@ -226,11 +276,10 @@ export async function doEval(
     const retryErrors = cmdObj.retryErrors;
 
     if (resumeRaw && retryErrors) {
-      logger.error(
-        chalk.red('Cannot use --resume and --retry-errors together. Please use one or the other.'),
+      return failEvalRun(
+        'Cannot use --resume and --retry-errors together. Please use one or the other.',
+        isCliInvocation,
       );
-      process.exitCode = 1;
-      return new Eval({}, { persisted: false });
     }
 
     // If resuming, load config from existing eval and avoid CLI filters that could change indices
@@ -240,19 +289,17 @@ export async function doEval(
     if (resumeRaw) {
       // Check if --no-write is set with --resume
       if (cmdObj.write === false) {
-        logger.error(
-          chalk.red(
-            'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
-          ),
+        return failEvalRun(
+          'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
+          isCliInvocation,
         );
-        process.exitCode = 1;
-        return new Eval({}, { persisted: false });
       }
       resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
       if (!resumeEval) {
-        logger.error(`Could not find evaluation to resume: ${resumeId}`);
-        process.exitCode = 1;
-        return new Eval({}, { persisted: false });
+        const message = `Could not find evaluation to resume: ${resumeId}`;
+        return failEvalRun(message, isCliInvocation, {
+          logForCli: () => logger.error(message),
+        });
       }
       logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       // Use the saved config as our base to ensure identical test ordering
@@ -278,13 +325,10 @@ export async function doEval(
     } else if (retryErrors) {
       // Check if --no-write is set with --retry-errors
       if (cmdObj.write === false) {
-        logger.error(
-          chalk.red(
-            'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
-          ),
+        return failEvalRun(
+          'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
+          isCliInvocation,
         );
-        process.exitCode = 1;
-        return new Eval({}, { persisted: false });
       }
 
       logger.info('🔄 Retrying ERROR results from latest evaluation...');
@@ -292,9 +336,10 @@ export async function doEval(
       // Find the latest evaluation
       const latestEval = await Eval.latest();
       if (!latestEval) {
-        logger.error('No previous evaluation found to retry errors from');
-        process.exitCode = 1;
-        return new Eval({}, { persisted: false });
+        const message = 'No previous evaluation found to retry errors from';
+        return failEvalRun(message, isCliInvocation, {
+          logForCli: () => logger.error(message),
+        });
       }
 
       // Get all ERROR result IDs - capture BEFORE retry so we know what to delete on success
@@ -377,11 +422,14 @@ export async function doEval(
       }
     }
 
-    // Ensure evaluateOptions from the config file are applied
+    // Ensure evaluateOptions from the config file are applied. Pin eventSource
+    // to the caller's value — a config file must not be able to flip a library
+    // run into CLI semantics (process.exitCode mutation, SIGINT handlers).
     if (config.evaluateOptions) {
       evaluateOptions = {
         ...evaluateOptions,
         ...config.evaluateOptions,
+        eventSource: evaluateOptions.eventSource,
       };
     }
 
@@ -518,17 +566,22 @@ export async function doEval(
     const missingApiKeys = checkProviderApiKeys(testSuite.providers);
 
     if (missingApiKeys.size > 0) {
-      for (const [envVar, providerIds] of missingApiKeys) {
-        logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
-      }
-      logger.error('');
-      logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
-      for (const envVar of missingApiKeys.keys()) {
-        logger.error(`    export ${envVar}=your-api-key-here`);
-      }
-      logger.error('');
-      process.exitCode = 1;
-      return new Eval({}, { persisted: false });
+      const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
+        .map(([envVar, providerIds]) => `${envVar} (${providerIds.join(', ')})`)
+        .join('; ')}`;
+      return failEvalRun(missingKeysMessage, isCliInvocation, {
+        logForCli: () => {
+          for (const [envVar, providerIds] of missingApiKeys) {
+            logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+          }
+          logger.error('');
+          logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
+          for (const envVar of missingApiKeys.keys()) {
+            logger.error(`    export ${envVar}=your-api-key-here`);
+          }
+          logger.error('');
+        },
+      });
     }
 
     await checkCloudPermissions(config as UnifiedConfig);
@@ -636,8 +689,8 @@ export async function doEval(
       evaluateOptions.abortSignal = previousAbortSignal;
     };
 
-    // Only set up pause/resume handler when writing to database
-    if (cmdObj.write !== false) {
+    // Pause/resume SIGINT behavior is CLI policy. Reusable callers should own cancellation.
+    if (isCliInvocation && cmdObj.write !== false) {
       sigintHandler = () => {
         // Atomic check-and-set to handle rapid successive SIGINTs safely
         const wasPaused = paused;
@@ -679,7 +732,6 @@ export async function doEval(
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        eventSource: 'cli',
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
       });
@@ -915,13 +967,13 @@ export async function doEval(
       if (initialization) {
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
-          logger.error(
-            `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
-              ',',
-            )}}.`,
-          );
-          process.exitCode = 1;
-          return ret;
+          const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+            ',',
+          )}}.`;
+          return failEvalRun(message, isCliInvocation, {
+            logForCli: () => logger.error(message),
+            cliFallback: ret,
+          });
         }
         const basePath = path.dirname(configPaths[0]);
         const promptPaths = Array.isArray(config.prompts)
@@ -976,12 +1028,7 @@ export async function doEval(
             try {
               await runEvaluation();
             } catch (error) {
-              if (error instanceof ConfigResolutionError) {
-                logConfigResolutionError(error);
-                return;
-              }
-              if (error instanceof EmailValidationError) {
-                // Account helpers already render these user-facing failures.
+              if (handleRecoverableWatchError(error)) {
                 return;
               }
               throw error;
@@ -998,7 +1045,10 @@ export async function doEval(
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
-      if (passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)) {
+      if (
+        isCliInvocation &&
+        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)
+      ) {
         if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
           logger.info(
             chalk.white(
@@ -1249,7 +1299,7 @@ export function evalCommand(
         validatedOpts as Partial<CommandLineOptions & Command>,
         defaultConfig,
         defaultConfigPath,
-        evaluateOptions,
+        { ...evaluateOptions, eventSource: 'cli' },
       );
     });
 
