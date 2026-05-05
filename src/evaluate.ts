@@ -312,6 +312,10 @@ async function writeConfiguredOutputs(
   outputPath: EvaluateTestSuite['outputPath'],
   evalRecord: Eval,
 ): Promise<void> {
+  if (!outputPath) {
+    return;
+  }
+
   if (typeof outputPath === 'string') {
     await writeOutput(outputPath, evalRecord, null);
   } else if (Array.isArray(outputPath)) {

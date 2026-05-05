@@ -560,6 +560,17 @@ describe('evaluate function', () => {
     expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
   });
 
+  it('should skip writing output when outputPath is empty', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: '',
+    };
+    await evaluate(testSuite);
+    expect(writeOutput).not.toHaveBeenCalled();
+    expect(writeMultipleOutputs).not.toHaveBeenCalled();
+  });
+
   it('should write multiple outputs when outputPath is an array', async () => {
     const testSuite = {
       prompts: ['test'],
