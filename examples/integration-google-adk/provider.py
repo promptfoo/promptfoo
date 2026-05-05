@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from contextlib import contextmanager
@@ -32,6 +33,8 @@ DEFAULT_MODEL = "gemini-2.5-flash"
 DEFAULT_USER_ID = "promptfoo-user"
 DEFAULT_OTLP_ENDPOINT = "http://localhost:4318"
 
+_logger = logging.getLogger(__name__)
+_configured_tracer_provider: TracerProvider | None = None
 _configured_otlp_endpoint: str | None = None
 
 
@@ -40,7 +43,10 @@ def _build_steps(prompt: str, vars_dict: dict[str, Any]) -> list[str]:
     if not raw_steps:
         return [prompt]
 
-    steps = json.loads(raw_steps)
+    try:
+        steps = json.loads(raw_steps)
+    except json.JSONDecodeError as exc:
+        raise ValueError("steps_json must be a JSON array of strings") from exc
     if not isinstance(steps, list) or not all(isinstance(step, str) for step in steps):
         raise ValueError("steps_json must be a JSON array of strings")
     return steps
@@ -68,31 +74,43 @@ def _otlp_endpoint(options: dict[str, Any]) -> str:
     return str(config.get("otlp_endpoint") or DEFAULT_OTLP_ENDPOINT)
 
 
-def _ensure_tracer_provider(otlp_endpoint: str) -> None:
-    global _configured_otlp_endpoint
+def _ensure_tracer_provider(otlp_endpoint: str) -> TracerProvider:
+    """Install a TracerProvider that exports to ``otlp_endpoint`` exactly once.
 
-    if _configured_otlp_endpoint == otlp_endpoint:
-        return
+    OpenTelemetry's global ``set_tracer_provider`` is set-once: a subsequent
+    call is silently rejected with an "Overriding of current TracerProvider is
+    not allowed" warning. We mirror that by installing on the first call and
+    refusing to swap endpoints later, which avoids stacking a second
+    SimpleSpanProcessor onto the same provider (which would cause every span
+    to be exported twice).
+    """
+
+    global _configured_tracer_provider, _configured_otlp_endpoint
+
+    if _configured_tracer_provider is not None:
+        if _configured_otlp_endpoint != otlp_endpoint:
+            _logger.warning(
+                "TracerProvider already configured for %s; ignoring request to switch to %s",
+                _configured_otlp_endpoint,
+                otlp_endpoint,
+            )
+        return _configured_tracer_provider
 
     exporter = OTLPSpanExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/traces")
-    processor = SimpleSpanProcessor(exporter)
-    current_provider = trace.get_tracer_provider()
+    provider = TracerProvider(
+        resource=Resource.create({"service.name": "promptfoo-google-adk-example"})
+    )
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
 
-    if current_provider.__class__.__name__ == "ProxyTracerProvider":
-        provider = TracerProvider(
-            resource=Resource.create({"service.name": "promptfoo-google-adk-example"})
-        )
-        provider.add_span_processor(processor)
-        trace.set_tracer_provider(provider)
-    elif hasattr(current_provider, "add_span_processor"):
-        current_provider.add_span_processor(processor)
-
+    _configured_tracer_provider = provider
     _configured_otlp_endpoint = otlp_endpoint
+    return provider
 
 
 @contextmanager
 def _provider_span(context: dict[str, Any], otlp_endpoint: str) -> Iterator[None]:
-    _ensure_tracer_provider(otlp_endpoint)
+    provider = _ensure_tracer_provider(otlp_endpoint)
     tracer = trace.get_tracer("promptfoo.google-adk.example", "1.0.0")
     parent_context = extract({"traceparent": context.get("traceparent", "")})
     token = otel_context.attach(parent_context)
@@ -107,9 +125,7 @@ def _provider_span(context: dict[str, Any], otlp_endpoint: str) -> Iterator[None
             yield
     finally:
         otel_context.detach(token)
-        tracer_provider = trace.get_tracer_provider()
-        if hasattr(tracer_provider, "force_flush"):
-            tracer_provider.force_flush()
+        provider.force_flush()
 
 
 def _final_text_from_events(events: list[Any]) -> str:
