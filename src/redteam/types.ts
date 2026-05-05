@@ -476,3 +476,21 @@ export class PartialGenerationError extends Error {
     this.failedPlugins = failedPlugins;
   }
 }
+
+/**
+ * Raised when a local user has exhausted the monthly free redteam probe quota.
+ * CLI handlers translate this into an exit code; package callers can catch it.
+ */
+export class ProbeLimitExceededError extends Error {
+  public readonly used: number;
+  public readonly limit: number;
+
+  constructor(used: number, limit: number) {
+    super(
+      `Monthly redteam probe limit reached: ${used.toLocaleString('en-US')}/${limit.toLocaleString('en-US')}`,
+    );
+    this.name = 'ProbeLimitExceededError';
+    this.used = used;
+    this.limit = limit;
+  }
+}

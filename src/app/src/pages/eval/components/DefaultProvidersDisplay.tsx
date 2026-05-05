@@ -57,7 +57,8 @@ export function DefaultProvidersDisplay({ info }: DefaultProvidersDisplayProps) 
               .map(([slot, slotInfo]) => (
                 <li key={slot}>
                   <span className="capitalize">{slot}:</span>{' '}
-                  <span className="font-mono text-[10px]">{slotInfo?.model || slotInfo?.id}</span>
+                  <span className="font-mono text-[10px]">{slotInfo?.id}</span>
+                  {slotInfo?.model && <span> ({slotInfo.model})</span>}
                 </li>
               ))}
           </ul>

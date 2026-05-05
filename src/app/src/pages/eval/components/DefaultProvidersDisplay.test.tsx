@@ -1,5 +1,6 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { DefaultProvidersDisplay } from './DefaultProvidersDisplay';
 import type { DefaultProviderSelectionInfo } from '@promptfoo/types/providers';
@@ -85,5 +86,17 @@ describe('DefaultProvidersDisplay', () => {
     };
     renderWithProviders(<DefaultProvidersDisplay info={mistralInfo} />);
     expect(screen.getByText('Mistral')).toBeInTheDocument();
+  });
+
+  it('shows provider IDs even when model names are available', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<DefaultProvidersDisplay info={baseInfo} />);
+
+    await user.hover(screen.getByRole('button'));
+
+    expect(
+      await screen.findAllByText('anthropic:messages:claude-sonnet-4-20250514'),
+    ).not.toHaveLength(0);
+    expect(screen.getAllByText(/claude-sonnet-4-20250514/)).not.toHaveLength(0);
   });
 });

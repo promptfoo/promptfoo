@@ -24,6 +24,7 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
+import { EmailValidationError } from './globalConfig/accounts';
 import logger, { initializeRunLogging } from './logger';
 import {
   addCommonOptionsRecursively,
@@ -41,7 +42,9 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
+import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
 import { printErrorInformation } from './util/errors/index';
+import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonErrors';
 import { VERSION } from './version';
 
 async function main() {
@@ -54,7 +57,7 @@ async function main() {
   }
 
   await checkForUpdates();
-  await runDbMigrations();
+  await runDbMigrations({ suppressNativeAddonLogging: true });
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
 
@@ -147,10 +150,20 @@ try {
 
 if (isMain) {
   let mainError: unknown;
+  let nativeAddonVersionMismatchMessage: string | undefined;
   try {
     await main();
   } catch (error) {
     mainError = error;
+    if (error instanceof ConfigResolutionError) {
+      logConfigResolutionError(error);
+    }
+    nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
+    if (nativeAddonVersionMismatchMessage) {
+      logger.debug('better-sqlite3 ABI mismatch (original error follows)', {
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      });
+    }
     // Set exit code immediately so watchdog timeouts preserve the error state
     process.exitCode = 1;
   } finally {
@@ -163,8 +176,17 @@ if (isMain) {
       );
     }
   }
-  // Re-throw the original error after cleanup is complete
+  // Re-throw unexpected errors after cleanup is complete. Config resolution
+  // errors and email-validation failures are expected user input failures that
+  // have already been rendered before reaching this boundary.
   if (mainError) {
-    throw mainError;
+    if (mainError instanceof ConfigResolutionError || mainError instanceof EmailValidationError) {
+      // User-facing message has already been rendered.
+    } else if (nativeAddonVersionMismatchMessage) {
+      console.error(nativeAddonVersionMismatchMessage);
+      // exit code preserved by process.exitCode = 1 above
+    } else {
+      throw mainError;
+    }
   }
 }

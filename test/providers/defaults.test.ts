@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
+  getDefaultProviderSelectionInfo,
   getDefaultProviders,
   getDefaultProvidersWithInfo,
   setDefaultCompletionProviders,
@@ -22,12 +23,14 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from '../../src/providers/mistral/defaults';
+import * as codexDefaults from '../../src/providers/openai/codexDefaults';
 import {
   clearCodexDefaultProvidersForTesting,
   hasCodexDefaultCredentials,
 } from '../../src/providers/openai/codexDefaults';
 import {
   DefaultModerationProvider,
+  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
   DefaultGradingProvider as OpenAiGradingProvider,
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
@@ -81,6 +84,7 @@ describe('Provider override tests', () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
     mockProcessEnv({ MISTRAL_API_KEY: undefined });
+    mockProcessEnv({ XAI_API_KEY: undefined });
     mockProcessEnv({ GEMINI_API_KEY: undefined });
     mockProcessEnv({ GOOGLE_API_KEY: undefined });
     mockProcessEnv({ PALM_API_KEY: undefined });
@@ -204,6 +208,20 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
   });
 
+  it('should use xAI providers when XAI_API_KEY is set', async () => {
+    mockProcessEnv({ XAI_API_KEY: 'test-key' });
+
+    const providers = await getDefaultProviders();
+
+    // xAI has no public embeddings/moderation API, so we fall back to OpenAI for those.
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+  });
+
   it('should use Codex SDK providers when ChatGPT/Codex credentials exist without API provider keys', async () => {
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
 
@@ -244,6 +262,16 @@ describe('Provider override tests', () => {
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
   });
 
+  it('should prefer xAI defaults over Codex SDK defaults when XAI_API_KEY exists', async () => {
+    mockProcessEnv({ XAI_API_KEY: 'test-xai-key' });
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+  });
+
   it('should probe Google default credentials once per provider resolution', async () => {
     vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
 
@@ -274,6 +302,32 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider).toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+  });
+
+  it('should use xAI providers when provided via env overrides', async () => {
+    const envOverrides: EnvOverrides = {
+      XAI_API_KEY: 'test-key',
+    } as EnvOverrides;
+
+    const providers = await getDefaultProviders(envOverrides);
+
+    expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+    expect(providers.gradingJsonProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.gradingProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.suggestionsProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.synthesizeProvider.id()).toBe('xai:grok-4.3');
+    expect(providers.webSearchProvider?.id()).toBe('xai:responses:grok-4.3');
+  });
+
+  it('should prefer Mistral defaults over xAI defaults when both keys exist', async () => {
+    mockProcessEnv({ MISTRAL_API_KEY: 'mistral-key' });
+    mockProcessEnv({ XAI_API_KEY: 'xai-key' });
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.embeddingProvider).toBe(MistralEmbeddingProvider);
+    expect(providers.gradingProvider).toBe(MistralGradingProvider);
+    expect(providers.gradingProvider.id()).not.toBe('xai:grok-4.3');
   });
 
   it('should not use Mistral providers when OpenAI credentials exist', async () => {
@@ -528,6 +582,16 @@ describe('getDefaultProvidersWithInfo', () => {
     expect(result.selectionInfo.detectedCredentials).toContain('MISTRAL_API_KEY');
   });
 
+  it('should return xAI when XAI_API_KEY is set', async () => {
+    mockProcessEnv({ XAI_API_KEY: 'test-key' });
+
+    const result = await getDefaultProvidersWithInfo();
+
+    expect(result.selectionInfo.selectedProvider).toBe('xAI');
+    expect(result.selectionInfo.detectedCredentials).toContain('XAI_API_KEY');
+    expect(result.selectionInfo.providerSlots.grading?.id).toBe('xai:grok-4.3');
+  });
+
   it('should work with env overrides', async () => {
     const envOverrides = {
       ANTHROPIC_API_KEY: 'override-key',
@@ -548,5 +612,76 @@ describe('getDefaultProvidersWithInfo', () => {
     expect(result.selectionInfo).toBeDefined();
     expect(result.providers.gradingProvider).toBeDefined();
     expect(result.providers.embeddingProvider).toBeDefined();
+  });
+});
+
+describe('getDefaultProviderSelectionInfo', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    setDefaultCompletionProviders(undefined as any);
+    setDefaultEmbeddingProviders(undefined as any);
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
+    clearCodexDefaultProvidersForTesting();
+    mockProcessEnv({
+      ANTHROPIC_API_KEY: undefined,
+      AZURE_API_KEY: undefined,
+      AZURE_DEPLOYMENT_NAME: undefined,
+      AZURE_OPENAI_API_KEY: undefined,
+      AZURE_OPENAI_DEPLOYMENT_NAME: undefined,
+      GEMINI_API_KEY: undefined,
+      GITHUB_TOKEN: undefined,
+      GOOGLE_API_KEY: undefined,
+      MISTRAL_API_KEY: undefined,
+      OPENAI_API_KEY: undefined,
+      PALM_API_KEY: undefined,
+      XAI_API_KEY: undefined,
+    });
+  });
+
+  afterEach(async () => {
+    mockProcessEnv(originalEnv, { clear: true });
+    clearCodexDefaultProvidersForTesting();
+    await providerRegistry.shutdownAll();
+    vi.resetAllMocks();
+  });
+
+  it('should report the actual Azure API key variable that was detected', async () => {
+    mockProcessEnv({
+      AZURE_API_KEY: 'legacy-key',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'chat',
+    });
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Azure OpenAI');
+    expect(result.detectedCredentials).toContain('AZURE_API_KEY');
+    expect(result.detectedCredentials).not.toContain('AZURE_OPENAI_API_KEY');
+  });
+
+  it('should use legacy Azure deployment names when present', async () => {
+    mockProcessEnv({
+      AZURE_OPENAI_API_KEY: 'test-key',
+      AZURE_DEPLOYMENT_NAME: 'legacy-chat',
+    });
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Azure OpenAI');
+    expect(result.providerSlots.grading?.id).toBe('azure:legacy-chat');
+  });
+
+  it('should avoid instantiating Codex providers when only selection info is requested', async () => {
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+    const getCodexDefaultProvidersSpy = vi.spyOn(codexDefaults, 'getCodexDefaultProviders');
+
+    const result = await getDefaultProviderSelectionInfo();
+
+    expect(result.selectedProvider).toBe('Codex SDK');
+    expect(result.providerSlots.grading?.id).toBe('openai:codex-sdk');
+    expect(getCodexDefaultProvidersSpy).not.toHaveBeenCalled();
+    getCodexDefaultProvidersSpy.mockRestore();
   });
 });

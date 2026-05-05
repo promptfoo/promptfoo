@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -11,9 +13,28 @@ import { getTraceStore } from '../../../src/tracing/store';
 const mockedGetTraceStore = vi.mocked(getTraceStore);
 
 describe('Traces Routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
   let mockGetTracesByEvaluation: ReturnType<typeof vi.fn>;
   let mockGetTrace: ReturnType<typeof vi.fn>;
+
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -26,8 +47,6 @@ describe('Traces Routes', () => {
       getTracesByEvaluation: mockGetTracesByEvaluation,
       getTrace: mockGetTrace,
     } as any);
-
-    app = createApp();
   });
 
   afterEach(() => {
@@ -55,7 +74,7 @@ describe('Traces Routes', () => {
 
       mockGetTracesByEvaluation.mockResolvedValue(mockTraces);
 
-      const response = await request(app).get('/api/traces/evaluation/eval-123');
+      const response = await api.get('/api/traces/evaluation/eval-123');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -67,7 +86,7 @@ describe('Traces Routes', () => {
     it('should return empty array when no traces found', async () => {
       mockGetTracesByEvaluation.mockResolvedValue([]);
 
-      const response = await request(app).get('/api/traces/evaluation/eval-456');
+      const response = await api.get('/api/traces/evaluation/eval-456');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -79,7 +98,7 @@ describe('Traces Routes', () => {
     it('should return 500 on database error', async () => {
       mockGetTracesByEvaluation.mockRejectedValue(new Error('Database connection failed'));
 
-      const response = await request(app).get('/api/traces/evaluation/eval-789');
+      const response = await api.get('/api/traces/evaluation/eval-789');
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({
@@ -108,7 +127,7 @@ describe('Traces Routes', () => {
 
       mockGetTrace.mockResolvedValue(mockTrace);
 
-      const response = await request(app).get('/api/traces/trace-abc');
+      const response = await api.get('/api/traces/trace-abc');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -120,7 +139,7 @@ describe('Traces Routes', () => {
     it('should return 404 when trace not found', async () => {
       mockGetTrace.mockResolvedValue(null);
 
-      const response = await request(app).get('/api/traces/trace-nonexistent');
+      const response = await api.get('/api/traces/trace-nonexistent');
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({
@@ -132,7 +151,7 @@ describe('Traces Routes', () => {
     it('should return 500 on database error', async () => {
       mockGetTrace.mockRejectedValue(new Error('Database connection failed'));
 
-      const response = await request(app).get('/api/traces/trace-error');
+      const response = await api.get('/api/traces/trace-error');
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({

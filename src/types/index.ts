@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
+import { parseFilterRange } from '../util/filterRange';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 
@@ -69,6 +70,25 @@ export * from './tracing';
 
 export type { EnvOverrides };
 
+const FilterRangeSchema = z
+  .string()
+  .superRefine((value, ctx) => {
+    try {
+      parseFilterRange(value);
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          error instanceof Error
+            ? error.message
+            : '--filter-range must be specified in start:end format using zero-based indices',
+      });
+    }
+  })
+  .optional();
+
+export const MAX_SUGGESTIONS_COUNT = 50;
+
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
   description: z.string().optional(),
@@ -105,11 +125,13 @@ export const CommandLineOptionsSchema = z.object({
   filterPattern: z.string().optional(),
   filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
@@ -236,6 +258,7 @@ export const EvaluateOptionsSchema = z.object({
   delay: z.number().optional(),
   eventSource: z.string().optional(),
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
    * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
@@ -274,8 +297,15 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  /**
+   * Zero-based test index range in start:end format (end exclusive).
+   * Persisted on the eval record so resume runs reproduce the original slice.
+   */
+  filterRange: FilterRangeSchema,
 });
-export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
+  abortSignal?: AbortSignal;
+};
 
 const PromptMetricsSchema = z.object({
   score: z.number(),
@@ -513,6 +543,8 @@ export interface GradingResult {
     // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
     context?: string | string[];
     contextUnits?: string[];
+    // Raw textual responses returned by one or more LLM grader phases
+    graderOutputs?: Record<string, string>;
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)

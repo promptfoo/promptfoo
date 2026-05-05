@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import chalk from 'chalk';
@@ -13,6 +13,7 @@ import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   promptForEmailUnverified,
 } from '../globalConfig/accounts';
@@ -20,19 +21,28 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { getDefaultProvidersWithInfo } from '../providers/defaults';
+import { getDefaultProviderSelectionInfo } from '../providers/defaults';
 import { loadApiProvider } from '../providers/index';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
-import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
+import {
+  CommandLineOptionsSchema,
+  MAX_SUGGESTIONS_COUNT,
+  OutputFileExtension,
+  TestSuiteSchema,
+} from '../types/index';
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
-import { resolveConfigs } from '../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
@@ -96,12 +106,48 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
+  // CLI alias preserved for the existing --suggest-prompts <n> flag; canonical key is suggestionsCount.
+  suggestPrompts: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   extension: z.array(z.string()).optional(),
   // Allow --resume or --resume <id>
   resume: z.union([z.string(), z.boolean()]).optional(),
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+
+function resolveSuggestionOptions(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  commandLineOptions: Record<string, any> | undefined,
+  evaluateOptions: EvaluateOptions,
+): Pick<EvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
+  const { suggestPrompts } = cmdObj as EvalCommandOptions;
+
+  // --suggest-prompts is itself an enable signal — passing a count opts in even
+  // if some other source explicitly set generateSuggestions=false.
+  if (suggestPrompts !== undefined) {
+    return { generateSuggestions: true, suggestionsCount: suggestPrompts };
+  }
+
+  const explicitGenerate =
+    cmdObj.generateSuggestions ??
+    commandLineOptions?.generateSuggestions ??
+    evaluateOptions.generateSuggestions;
+
+  if (explicitGenerate !== true) {
+    // Return explicit false so Object.assign clears any truthy default already on options.
+    return explicitGenerate === false ? { generateSuggestions: false } : {};
+  }
+
+  // Read cmdObj.suggestionsCount too: doEval is exported and non-Commander
+  // callers may pass the canonical key directly instead of the suggestPrompts CLI alias.
+  const suggestionsCount =
+    cmdObj.suggestionsCount ??
+    commandLineOptions?.suggestionsCount ??
+    evaluateOptions.suggestionsCount;
+  return suggestionsCount === undefined
+    ? { generateSuggestions: true }
+    : { generateSuggestions: true, suggestionsCount };
+}
 
 export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   const hasProviderWithoutLabel = testSuite.providers.some((p) => !p.label);
@@ -190,7 +236,8 @@ export async function doEval(
     if (cmdObj.config !== undefined) {
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
-        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+        const configStats = await fs.stat(configPath).catch(() => undefined);
+        if (configStats?.isDirectory()) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
             await loadDefaultConfig(configPath);
           if (newConfigPath) {
@@ -430,8 +477,31 @@ export async function doEval(
       cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
+    const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const explicitTestCountBeforeFiltering = testSuite.tests?.length;
+    const resumeRuntimeOptions = resumeEval?.runtimeOptions as EvaluateOptions | undefined;
+    const persistedFilterRange =
+      typeof resumeRuntimeOptions?.filterRange === 'string'
+        ? resumeRuntimeOptions.filterRange
+        : undefined;
+    const resumeConfigFilterRange = commandLineOptions?.filterRange ?? evaluateOptions.filterRange;
+    const resumeFilterRange = persistedFilterRange ?? resumeConfigFilterRange;
+    if (resumeEval && cmdObj.filterRange && cmdObj.filterRange !== resumeFilterRange) {
+      logger.warn(
+        `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with stored range ${resumeFilterRange ?? '(none)'} to preserve test indices.`,
+      );
+    }
+    const filterRange = resumeEval
+      ? resumeFilterRange
+      : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const shouldApplyRangeToImplicitDefaultTest =
+      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
+
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
+      if (shouldApplyRangeToImplicitDefaultTest) {
+        testSuite.tests = [{}];
+      }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
         failingOnly: cmdObj.filterFailingOnly,
@@ -439,9 +509,18 @@ export async function doEval(
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
+        range: hasScenarios ? undefined : filterRange,
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
+      if (
+        filterRange !== undefined &&
+        !hasScenarios &&
+        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
+        testSuite.tests.length === 0
+      ) {
+        testSuite.scenarios = [];
+      }
     }
 
     if (
@@ -498,6 +577,7 @@ export async function doEval(
             : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
+      filterRange,
       maxConcurrency,
       cache,
     };
@@ -529,8 +609,8 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
     }
-    if (!resumeEval && (cmdObj.generateSuggestions ?? commandLineOptions?.generateSuggestions)) {
-      options.generateSuggestions = true;
+    if (!resumeEval) {
+      Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
@@ -634,10 +714,13 @@ export async function doEval(
 
     let defaultProviderSelectionInfo: DefaultProviderSelectionInfo | undefined;
     if (!hasExplicitGradingProvider && !resumeEval) {
-      // Get the default provider selection info to display and store
-      const { selectionInfo } = await getDefaultProvidersWithInfo(config.env);
-      defaultProviderSelectionInfo = selectionInfo;
-      displayDefaultProviderInfo(selectionInfo);
+      try {
+        // Get the default provider selection info to display and store
+        defaultProviderSelectionInfo = await getDefaultProviderSelectionInfo(config.env);
+        displayDefaultProviderInfo(defaultProviderSelectionInfo);
+      } catch (error) {
+        logger.debug('[eval] Failed to get default provider info', { error });
+      }
     }
 
     // Run the evaluation!!!!!!
@@ -645,6 +728,7 @@ export async function doEval(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         eventSource: 'cli',
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
@@ -740,7 +824,10 @@ export async function doEval(
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
-      const outputTable = generateTable(table);
+      const outputTable = generateTable(
+        table,
+        cmdObj.tableCellMaxLength ?? commandLineOptions?.tableCellMaxLength,
+      );
 
       logger.info('\n' + outputTable.toString());
       if (table.body.length > 25) {
@@ -937,7 +1024,19 @@ export async function doEval(
             logger.info(`File change detected: ${path}`);
             printBorder();
             clearConfigCache();
-            await runEvaluation();
+            try {
+              await runEvaluation();
+            } catch (error) {
+              if (error instanceof ConfigResolutionError) {
+                logConfigResolutionError(error);
+                return;
+              }
+              if (error instanceof EmailValidationError) {
+                // Account helpers already render these user-facing failures.
+                return;
+              }
+              throw error;
+            }
           })
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>
@@ -992,6 +1091,7 @@ export function evalCommand(
   const evaluateOptions: EvaluateOptions = {};
   if (defaultConfig.evaluateOptions) {
     evaluateOptions.generateSuggestions = defaultConfig.evaluateOptions.generateSuggestions;
+    evaluateOptions.suggestionsCount = defaultConfig.evaluateOptions.suggestionsCount;
     evaluateOptions.maxConcurrency = defaultConfig.evaluateOptions.maxConcurrency;
     evaluateOptions.showProgressBar = defaultConfig.evaluateOptions.showProgressBar;
   }
@@ -1070,6 +1170,10 @@ export function evalCommand(
       'Only run tests whose description matches the regular expression pattern',
     )
     .option(
+      '--filter-range <start:end>',
+      'Only run tests whose zero-based index is in the range. End is exclusive (e.g. 0:10, 10:20, 10:, :10)',
+    )
+    .option(
       '--filter-prompts <pattern>',
       'Only run tests with prompts whose id or label matches the regex pattern',
     )
@@ -1105,11 +1209,7 @@ export function evalCommand(
     )
     .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
-    .option(
-      '--table-cell-max-length <number>',
-      'Truncate console table cells to this length',
-      '250',
-    )
+    .option('--table-cell-max-length <number>', 'Truncate console table cells to this length')
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option('--no-share', 'Do not share, this overrides the config file')
     .option(
@@ -1131,7 +1231,7 @@ export function evalCommand(
     )
     .option(
       '--suggest-prompts <number>',
-      'Generate N new prompts and append them to the prompt list',
+      `Generate N new prompts (1-${MAX_SUGGESTIONS_COUNT}) and append them to the prompt list`,
     )
     .option('-w, --watch', 'Watch for changes in config and re-run')
     .option(

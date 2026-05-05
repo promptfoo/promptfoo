@@ -578,6 +578,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table,
           version: resultsFile.version,
+          defaultProviderInfo: null,
           highlightedResultsCount: computeHighlightCount(table),
           userRatedResultsCount: computeUserRatedCount(table),
           filters: {
@@ -602,6 +603,7 @@ export const useTableStore = create<TableState>()(
         set((prevState) => ({
           table: results.table,
           version: resultsFile.version,
+          defaultProviderInfo: null,
           highlightedResultsCount: computeHighlightCount(results.table),
           userRatedResultsCount: computeUserRatedCount(results.table),
           filters: {

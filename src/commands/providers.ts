@@ -1,9 +1,11 @@
 import chalk from 'chalk';
 import logger from '../logger';
-import { getDefaultProvidersWithInfo } from '../providers/defaults';
+import { getDefaultProviderSelectionInfo } from '../providers/defaults';
 import telemetry from '../telemetry';
 import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
+
+import type { DefaultProviderSelectionInfo } from '../types/index';
 
 /**
  * CLI command to display information about default provider selection.
@@ -19,7 +21,14 @@ export function providersCommand(program: Command) {
 
       telemetry.record('command_used', { name: 'providers' });
 
-      const { selectionInfo } = await getDefaultProvidersWithInfo();
+      let selectionInfo: DefaultProviderSelectionInfo;
+      try {
+        selectionInfo = await getDefaultProviderSelectionInfo();
+      } catch (error) {
+        logger.error('Failed to determine default provider selection', { error });
+        process.exitCode = 1;
+        return;
+      }
 
       const { selectedProvider, reason, detectedCredentials, skippedProviders, providerSlots } =
         selectionInfo;
@@ -41,8 +50,10 @@ export function providersCommand(program: Command) {
         'GOOGLE_API_KEY',
         'PALM_API_KEY',
         'MISTRAL_API_KEY',
+        'XAI_API_KEY',
         'GITHUB_TOKEN',
         'AZURE_OPENAI_API_KEY',
+        'AZURE_API_KEY',
         'AZURE_CLIENT_CREDENTIALS',
         'AZURE_CONTENT_SAFETY_ENDPOINT',
         'GOOGLE_APPLICATION_CREDENTIALS',

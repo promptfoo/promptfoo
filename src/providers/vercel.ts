@@ -4,7 +4,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -16,8 +16,6 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { TokenUsage } from '../types/shared';
-
-const DEFAULT_TIMEOUT_MS = REQUEST_TIMEOUT_MS;
 
 /**
  * Message format for chat completions.
@@ -267,7 +265,7 @@ export class VercelAiProvider implements ApiProvider {
    * Handles streaming API calls using streamText().
    */
   private async callApiStreaming(messages: ChatMessage[]): Promise<ProviderResponse> {
-    const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const timeout = this.config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout);
 
     try {
@@ -314,7 +312,7 @@ export class VercelAiProvider implements ApiProvider {
    * Handles structured output API calls using generateObject().
    */
   private async callApiStructured(messages: ChatMessage[]): Promise<ProviderResponse> {
-    const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const timeout = this.config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout);
 
     try {
@@ -408,7 +406,7 @@ export class VercelAiProvider implements ApiProvider {
    * Handles non-streaming API calls using generateText().
    */
   private async callApiNonStreaming(messages: ChatMessage[]): Promise<ProviderResponse> {
-    const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const timeout = this.config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout);
 
     try {
@@ -507,7 +505,7 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
       }
     }
 
-    const timeout = this.config.timeout ?? DEFAULT_TIMEOUT_MS;
+    const timeout = this.config.timeout ?? getRequestTimeoutMs();
     const { signal, cleanup } = createTimeoutController(timeout);
 
     try {

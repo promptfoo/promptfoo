@@ -6,14 +6,14 @@ import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { getDefaultProvidersWithInfo } from '../../providers/defaults';
+import { getDefaultProviderSelectionInfo } from '../../providers/defaults';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { sanitizeObject } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { sendError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -43,8 +43,16 @@ export const evalRouter = Router();
 export const evalJobs = new Map<string, Job>();
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
+  let parsedPayload: EvalTableDTO;
   try {
-    res.json(responsePayload);
+    parsedPayload = EvalSchemas.Table.Response.parse(responsePayload) as unknown as EvalTableDTO;
+  } catch (error) {
+    sendError(res, 500, 'Failed to render eval table', error);
+    return;
+  }
+
+  try {
+    res.json(parsedPayload);
   } catch (error) {
     if (!(error instanceof RangeError)) {
       throw error;
@@ -54,7 +62,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       evalId,
     });
 
-    const promptLocations = getEvalTableOutputPromptLocationsBySize(responsePayload);
+    const promptLocations = getEvalTableOutputPromptLocationsBySize(parsedPayload);
     if (promptLocations.length === 0) {
       logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
         evalId,
@@ -65,7 +73,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
 
     const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
       const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
-        responsePayload,
+        parsedPayload,
         promptLocations,
         promptCountToStrip,
       );
@@ -466,8 +474,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   );
   if (!hasExplicitGradingProvider) {
     try {
-      const { selectionInfo } = await getDefaultProvidersWithInfo(eval_.config?.env);
-      defaultProviderInfo = selectionInfo;
+      defaultProviderInfo = await getDefaultProviderSelectionInfo(eval_.config?.env);
     } catch (error) {
       logger.debug('[GET /:id/table] Failed to get default provider info', { error, evalId: id });
     }
@@ -708,13 +715,13 @@ evalRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     const paramsResult = EvalSchemas.SubmitRating.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
 
     const bodyResult = EvalSchemas.SubmitRating.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
 
@@ -793,7 +800,7 @@ evalRouter.post(
       await eval_.save();
       await result.save();
 
-      res.json(result);
+      res.json(EvalSchemas.SubmitRating.Response.parse(result));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }

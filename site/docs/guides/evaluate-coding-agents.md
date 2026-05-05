@@ -41,6 +41,8 @@ Choose the provider by the runtime boundary you need to evaluate:
 
 `openai:codex-desktop` is an alias for the app-server protocol provider. Promptfoo starts its own `codex app-server` child process; it does not attach to an already-running Codex Desktop app window or reuse Desktop UI state.
 
+Across the coding-agent providers, relative `working_dir` values resolve from the directory containing the config file. That keeps configs portable when you run the same eval from the example directory, the repo root, or CI.
+
 ## Examples
 
 ### Security audit with structured output
