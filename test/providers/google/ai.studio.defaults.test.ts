@@ -1,39 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DefaultGradingJsonProvider,
-  DefaultGradingProvider,
-  DefaultLlmRubricProvider,
-  DefaultSuggestionsProvider,
-  DefaultSynthesizeProvider,
+  AIStudioChatProvider,
+  getGoogleAiStudioProviders,
 } from '../../../src/providers/google/ai.studio';
 
 describe('Google AI Studio Default Providers', () => {
-  it('should have correct model names', () => {
-    expect(DefaultGradingProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(DefaultGradingJsonProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(DefaultLlmRubricProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(DefaultSuggestionsProvider.id()).toBe('google:gemini-2.5-pro');
-    expect(DefaultSynthesizeProvider.id()).toBe('google:gemini-2.5-pro');
+  it('should create providers with correct model names', () => {
+    const providers = getGoogleAiStudioProviders();
+    expect(providers.gradingProvider.id()).toBe('google:gemini-2.5-pro');
+    expect(providers.gradingJsonProvider.id()).toBe('google:gemini-2.5-pro');
+    expect(providers.llmRubricProvider.id()).toBe('google:gemini-2.5-pro');
+    expect(providers.suggestionsProvider.id()).toBe('google:gemini-2.5-pro');
+    expect(providers.synthesizeProvider.id()).toBe('google:gemini-2.5-pro');
   });
 
-  it('should use gemini-2.5-pro as the default model', () => {
-    expect(DefaultGradingProvider.modelName).toBe('gemini-2.5-pro');
-    expect(DefaultGradingJsonProvider.modelName).toBe('gemini-2.5-pro');
-    expect(DefaultLlmRubricProvider.modelName).toBe('gemini-2.5-pro');
-    expect(DefaultSuggestionsProvider.modelName).toBe('gemini-2.5-pro');
-    expect(DefaultSynthesizeProvider.modelName).toBe('gemini-2.5-pro');
+  it('should create AIStudioChatProvider instances', () => {
+    const providers = getGoogleAiStudioProviders();
+    expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+    expect(providers.gradingJsonProvider).toBeInstanceOf(AIStudioChatProvider);
+    expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
   });
 
   it('should configure JSON provider with correct response format', () => {
-    expect(DefaultGradingJsonProvider.config.generationConfig?.response_mime_type).toBe(
+    const providers = getGoogleAiStudioProviders();
+    expect(providers.gradingJsonProvider.config.generationConfig?.response_mime_type).toBe(
       'application/json',
     );
   });
 
   it('should not configure JSON response format for non-JSON providers', () => {
-    expect(DefaultGradingProvider.config.generationConfig?.response_mime_type).toBeUndefined();
-    expect(DefaultLlmRubricProvider.config.generationConfig?.response_mime_type).toBeUndefined();
-    expect(DefaultSuggestionsProvider.config.generationConfig?.response_mime_type).toBeUndefined();
-    expect(DefaultSynthesizeProvider.config.generationConfig?.response_mime_type).toBeUndefined();
+    const providers = getGoogleAiStudioProviders();
+    expect(providers.gradingProvider.config.generationConfig?.response_mime_type).toBeUndefined();
+    expect(providers.llmRubricProvider.config.generationConfig?.response_mime_type).toBeUndefined();
   });
 });
