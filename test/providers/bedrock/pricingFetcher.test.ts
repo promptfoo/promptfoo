@@ -39,7 +39,13 @@ const MockPricingClient = vi.mocked(PricingClient);
 
 describe('pricingFetcher', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    MockPricingClient.mockImplementation(
+      () =>
+        ({
+          send: vi.fn(),
+        }) as InstanceType<typeof PricingClient>,
+    );
   });
 
   describe('mapBedrockModelIdToApiName', () => {
