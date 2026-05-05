@@ -112,6 +112,22 @@ function failEvalRun(
   throw new EvalRunError(message);
 }
 
+function handleRecoverableWatchError(error: unknown): boolean {
+  if (error instanceof ConfigResolutionError) {
+    logConfigResolutionError(error);
+    return true;
+  }
+  if (error instanceof EmailValidationError) {
+    // Account helpers already render these user-facing failures.
+    return true;
+  }
+  if (error instanceof EvalRunError) {
+    logger.error(error.message);
+    return true;
+  }
+  return false;
+}
+
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -1008,12 +1024,7 @@ export async function doEval(
             try {
               await runEvaluation();
             } catch (error) {
-              if (error instanceof ConfigResolutionError) {
-                logConfigResolutionError(error);
-                return;
-              }
-              if (error instanceof EmailValidationError) {
-                // Account helpers already render these user-facing failures.
+              if (handleRecoverableWatchError(error)) {
                 return;
               }
               throw error;
