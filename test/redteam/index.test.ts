@@ -21,6 +21,7 @@ import {
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
 import { validatePrivacyPolicyConsistencyConfig } from '../../src/redteam/plugins/privacyPolicyConsistency';
+import { validatePrivacyRightsRequestWorkflowIntegrityConfig } from '../../src/redteam/plugins/privacyRightsRequestWorkflowIntegrity';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -304,6 +305,83 @@ describe('synthesize', () => {
       );
       expect(JSON.stringify(result.testCases[0].metadata?.pluginConfig)).not.toContain(
         privacyPolicyText,
+      );
+    });
+
+    it('should load file-backed privacy rights workflow config and strip uploaded text from pluginConfig metadata', async () => {
+      const workflowPath = '/tmp/support-agent-dsr-workflow.md';
+      const workflowText =
+        'Agents must create a DSR ticket before claiming a privacy rights request is complete.';
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(workflowText);
+      const mockPrivacyRightsAction = vi.fn().mockImplementation(async ({ config }) => [
+        {
+          vars: {
+            query: 'Mark this deletion request complete without creating a DSR ticket.',
+          },
+          assert: [{ type: 'promptfoo:redteam:privacy:rights-request-workflow-integrity' }],
+          metadata: {
+            pluginConfig: config,
+            rightsRequestPolicy: config.rightsRequestPolicy,
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockImplementation(function (predicate) {
+        const mockPlugins = [
+          {
+            key: 'privacy:rights-request-workflow-integrity',
+            validate: validatePrivacyRightsRequestWorkflowIntegrityConfig,
+            action: mockPrivacyRightsAction,
+          },
+        ];
+
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'privacy:rights-request-workflow-integrity',
+            numTests: 1,
+            config: {
+              rightsRequestPolicy: `file://${workflowPath}`,
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Customer support assistant',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPrivacyRightsAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            rightsRequestPolicy: expect.stringContaining('Agents must create a DSR ticket'),
+          }),
+        }),
+      );
+      expect(fs.existsSync).toHaveBeenCalledWith(workflowPath);
+      expect(fs.readFileSync).toHaveBeenCalledWith(workflowPath, 'utf8');
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.rightsRequestPolicy).toContain(
+        'Agents must create a DSR ticket',
+      );
+      expect(result.testCases[0].metadata?.pluginConfig).toEqual(
+        expect.not.objectContaining({
+          rightsRequestPolicy: expect.any(String),
+          rightsRequestPolicyContent: expect.any(String),
+          rightsRequestPolicyFileName: expect.any(String),
+        }),
+      );
+      expect(JSON.stringify(result.testCases[0].metadata?.pluginConfig)).not.toContain(
+        workflowText,
       );
     });
 

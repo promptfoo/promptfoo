@@ -1810,6 +1810,21 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests whether users can prompt AI apps or agents into mishandling privacy-rights request workflows',
+    label: 'privacy',
+    link: '/docs/red-team/plugins/privacy-rights-request-workflow-integrity/',
+    name: 'Privacy Rights Workflow',
+    pluginId: 'privacy:rights-request-workflow-integrity',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'privacy',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to get the model to reveal its system prompt',
     label: 'technical',
     link: '/docs/red-team/plugins/prompt-extraction/',

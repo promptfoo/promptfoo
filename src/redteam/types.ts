@@ -94,6 +94,10 @@ export const PluginConfigSchema = z.object({
   privacyPolicy: z.string().optional(),
   privacyPolicyContent: z.string().optional(),
   privacyPolicyFileName: z.string().optional(),
+  rightsRequestPolicy: z.string().optional(),
+  rightsRequestPolicyContent: z.string().optional(),
+  rightsRequestPolicyFileName: z.string().optional(),
+  frameworks: z.union([z.string(), z.array(z.string())]).optional(),
   systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),

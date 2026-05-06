@@ -31,6 +31,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   pii: `${BASE_DOCS_URL}/pii/`,
   'prompt-extraction': `${BASE_DOCS_URL}/prompt-extraction/`,
   'privacy-policy-consistency': `${BASE_DOCS_URL}/privacy-policy-consistency/`,
+  'privacy:rights-request-workflow-integrity': `${BASE_DOCS_URL}/privacy-rights-request-workflow-integrity/`,
   'agentic:memory-poisoning': `${BASE_DOCS_URL}/memory-poisoning/`,
 
   // Compliance & Legal

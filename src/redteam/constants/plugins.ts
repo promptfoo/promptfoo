@@ -419,6 +419,7 @@ export const ADDITIONAL_PLUGINS = [
   'realestate:source-of-income',
   'pliny',
   'privacy-policy-consistency',
+  'privacy:rights-request-workflow-integrity',
   'prompt-extraction',
   'rag-document-exfiltration',
   'rag-poisoning',

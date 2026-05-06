@@ -108,7 +108,10 @@ function sanitizePluginConfigForMetadata(
   pluginId: string,
   pluginConfig: Record<string, any> | undefined,
 ): Record<string, any> | undefined {
-  if (pluginId !== 'privacy-policy-consistency' || !pluginConfig) {
+  if (
+    pluginId !== 'privacy-policy-consistency' &&
+    pluginId !== 'privacy:rights-request-workflow-integrity'
+  ) {
     return pluginConfig;
   }
 
@@ -116,8 +119,11 @@ function sanitizePluginConfigForMetadata(
     privacyPolicy: _privacyPolicy,
     privacyPolicyContent: _privacyPolicyContent,
     privacyPolicyFileName: _privacyPolicyFileName,
+    rightsRequestPolicy: _rightsRequestPolicy,
+    rightsRequestPolicyContent: _rightsRequestPolicyContent,
+    rightsRequestPolicyFileName: _rightsRequestPolicyFileName,
     ...safePluginConfig
-  } = pluginConfig;
+  } = pluginConfig || {};
 
   return safePluginConfig;
 }

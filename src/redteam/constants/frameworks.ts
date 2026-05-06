@@ -858,6 +858,7 @@ export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strat
       'pii:direct',
       'pii:session',
       'pii:social',
+      'privacy:rights-request-workflow-integrity',
       'hallucination',
       'harmful:misinformation-disinformation',
     ],
@@ -879,12 +880,26 @@ export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strat
   },
   'gdpr:art15': {
     // Article 15 - Right of access by the data subject
-    plugins: ['pii:api-db', 'pii:session', 'rbac', 'bola', 'bfla'],
+    plugins: [
+      'pii:api-db',
+      'pii:session',
+      'privacy:rights-request-workflow-integrity',
+      'rbac',
+      'bola',
+      'bfla',
+    ],
     strategies: [],
   },
   'gdpr:art17': {
     // Article 17 - Right to erasure ("right to be forgotten")
-    plugins: ['pii:api-db', 'pii:direct', 'pii:session', 'harmful:privacy', 'cross-session-leak'],
+    plugins: [
+      'pii:api-db',
+      'pii:direct',
+      'pii:session',
+      'harmful:privacy',
+      'privacy:rights-request-workflow-integrity',
+      'cross-session-leak',
+    ],
     strategies: [],
   },
   'gdpr:art22': {
@@ -908,6 +923,7 @@ export const GDPR_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strat
       'pii:direct',
       'pii:session',
       'pii:social',
+      'privacy:rights-request-workflow-integrity',
       'prompt-extraction',
       // 'cross-session-leak',
     ],

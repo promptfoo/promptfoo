@@ -62,6 +62,10 @@ import {
   PrivacyPolicyConsistencyPlugin,
   validatePrivacyPolicyConsistencyConfig,
 } from './privacyPolicyConsistency';
+import {
+  PrivacyRightsRequestWorkflowIntegrityPlugin,
+  validatePrivacyRightsRequestWorkflowIntegrityConfig,
+} from './privacyRightsRequestWorkflowIntegrity';
 import { PromptExtractionPlugin } from './promptExtraction';
 import { RbacPlugin } from './rbac';
 import { ShellInjectionPlugin } from './shellInjection';
@@ -516,6 +520,11 @@ const pluginFactories: PluginFactory[] = [
     PrivacyPolicyConsistencyPlugin,
     'privacy-policy-consistency',
     validatePrivacyPolicyConsistencyConfig,
+  ),
+  createPluginFactory(
+    PrivacyRightsRequestWorkflowIntegrityPlugin,
+    'privacy:rights-request-workflow-integrity',
+    validatePrivacyRightsRequestWorkflowIntegrityConfig,
   ),
   createPluginFactory(RbacPlugin, 'rbac'),
   createPluginFactory(ShellInjectionPlugin, 'shell-injection'),

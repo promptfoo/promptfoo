@@ -181,6 +181,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'prompt-extraction': 'Tests for system prompt disclosure vulnerabilities',
   'privacy-policy-consistency':
     'Tests whether users can induce app or agent behavior that deviates from a provided privacy policy',
+  'privacy:rights-request-workflow-integrity':
+    'Tests whether users can prompt AI apps or agents into mishandling privacy-rights request workflows',
   'jailbreak-templates':
     'Tests LLM resistance to known jailbreak techniques using static templates (DAN, Skeleton Key, etc.)',
   'prompt-injection': 'Tests for direct prompt injection vulnerabilities',
@@ -434,6 +436,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   politics: 'Political Bias',
   'prompt-extraction': 'System Prompt Disclosure',
   'privacy-policy-consistency': 'Privacy Policy Consistency',
+  'privacy:rights-request-workflow-integrity': 'Privacy Rights Workflow',
   'jailbreak-templates': 'Jailbreak Templates',
   'prompt-injection': 'Direct Prompt Injection',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
@@ -645,6 +648,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   politics: Severity.Low,
   'prompt-extraction': Severity.Medium,
   'privacy-policy-consistency': Severity.High,
+  'privacy:rights-request-workflow-integrity': Severity.High,
   'rag-document-exfiltration': Severity.Medium,
   'rag-poisoning': Severity.Medium,
   'rag-source-attribution': Severity.High,
@@ -700,6 +704,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'pii',
     'prompt-extraction',
     'privacy-policy-consistency',
+    'privacy:rights-request-workflow-integrity',
     'rag-document-exfiltration',
     'rag-poisoning',
     'rag-source-attribution',
@@ -1004,6 +1009,7 @@ export const categoryAliases: Record<Plugin, string> = {
   politics: 'PoliticalStatement',
   'prompt-extraction': 'PromptExtraction',
   'privacy-policy-consistency': 'PrivacyPolicyConsistency',
+  'privacy:rights-request-workflow-integrity': 'PrivacyRightsRequestWorkflowIntegrity',
   'rag-document-exfiltration': 'RAG Document Exfiltration',
   'rag-poisoning': 'RAG Poisoning',
   'rag-source-attribution': 'RAGSourceAttribution',
@@ -1248,6 +1254,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'prompt-extraction': 'Evaluates protection against system prompt disclosure attempts',
   'privacy-policy-consistency':
     'Evaluates whether adversarial users can get an AI app or agent to take, claim, approve, or enable behavior that deviates from a provided company privacy policy',
+  'privacy:rights-request-workflow-integrity':
+    'Evaluates whether adversarial users can get an AI app or agent to skip, misroute, deny, falsely complete, or otherwise mishandle privacy-rights requests',
   'rag-document-exfiltration': 'Tests handling of RAG document exfiltration',
   'rag-poisoning': 'Tests resistance against poisoning attacks on RAG retrieval systems',
   'rag-source-attribution':

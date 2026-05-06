@@ -222,6 +222,37 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'privacy:rights-request-workflow-integrity':
+        specificConfig = (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              The Privacy Rights Request Workflow Integrity plugin tests whether users can prompt
+              your app or agent into mishandling privacy-rights requests. Add workflow or policy
+              files when you want generation and grading grounded in your actual process.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="rights-request-policy">Privacy Rights Workflow File</Label>
+              <Input
+                id="rights-request-policy"
+                placeholder="file://privacy-rights-workflow.md"
+                value={(localConfig.rightsRequestPolicy as string) || ''}
+                onChange={(e) =>
+                  setLocalConfig({ ...localConfig, rightsRequestPolicy: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="privacy-rights-policy">Privacy Policy File</Label>
+              <Input
+                id="privacy-rights-policy"
+                placeholder="file://privacy-policy.md"
+                value={(localConfig.privacyPolicy as string) || ''}
+                onChange={(e) => setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })}
+              />
+            </div>
+          </div>
+        );
+        break;
       case 'bfla':
       case 'bola':
       case 'ssrf':
