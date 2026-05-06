@@ -58,13 +58,16 @@ describe('setupReadiness', () => {
           { raw: 'raw prompt', label: 'Raw prompt' },
           { id: 'x' },
         ]),
-      ).toEqual(['inline prompt', 'raw prompt']);
+      ).toEqual(['inline prompt', 'raw prompt', 'x']);
       expect(normalizePrompts({ 'file://prompt.txt': 'Prompt label' })).toEqual(['Prompt label']);
     });
 
     it('filters blank prompt values', () => {
       expect(normalizePrompts('   ')).toEqual([]);
       expect(normalizePrompts(['', { raw: '   ', label: 'Blank prompt' }])).toEqual([]);
+      expect(normalizePrompts([{ raw: '   ', id: 'file://prompt.txt' }])).toEqual([
+        'file://prompt.txt',
+      ]);
       expect(normalizePrompts(undefined)).toEqual([]);
     });
   });

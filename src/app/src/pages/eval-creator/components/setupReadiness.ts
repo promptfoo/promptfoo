@@ -72,8 +72,13 @@ export function normalizePrompts(prompts: UnifiedConfig['prompts'] | undefined):
         if (typeof prompt === 'string') {
           return prompt;
         }
-        if (isRecord(prompt) && typeof prompt.raw === 'string') {
-          return prompt.raw;
+        if (isRecord(prompt)) {
+          if (typeof prompt.raw === 'string' && prompt.raw.trim() !== '') {
+            return prompt.raw;
+          }
+          if (typeof prompt.id === 'string') {
+            return prompt.id;
+          }
         }
         return '';
       })
