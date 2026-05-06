@@ -60,6 +60,21 @@ const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
   }),
 );
 
+const AgenticConfigSchema = z.object({
+  mode: z.enum(['auto', 'local', 'remote']).optional(),
+  provider: ProviderSchema.optional(),
+  promptAdjuster: z
+    .object({
+      enabled: z.boolean().optional(),
+      instructions: z.string().optional(),
+      contextFiles: z.array(z.string()).optional(),
+      inlineContext: z.boolean().optional(),
+      maxContextChars: z.int().positive().optional(),
+      capturePrompt: z.boolean().optional(),
+    })
+    .optional(),
+});
+
 /**
  * Schema for redteam contexts - allows testing multiple security contexts/states
  */
@@ -203,6 +218,8 @@ export const RedteamGenerateOptionsSchema = z.object({
     .array(z.enum(REDTEAM_ADDITIONAL_STRATEGIES as readonly string[] as [string, ...string[]]))
     .optional()
     .describe('Additional strategies to include'),
+  agenticMode: z.enum(['auto', 'local', 'remote']).optional().describe('Agentic strategy mode'),
+  agenticProvider: z.string().optional().describe('Provider for local agentic strategy decisions'),
   cache: z.boolean().describe('Whether to use caching'),
   config: z.string().optional().describe('Path to the configuration file'),
   target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
@@ -271,6 +288,9 @@ export const RedteamConfigSchema = z
       .optional()
       .describe('Additional instructions for test generation applied to each plugin'),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
+    agentic: AgenticConfigSchema.optional().describe(
+      'Configuration for agentic redteam strategies such as Hydra and jailbreak:meta',
+    ),
     numTests: z.int().positive().optional().describe('Number of tests to generate'),
     language: z
       .union([z.string(), z.array(z.string())])
@@ -568,6 +588,7 @@ export const RedteamConfigSchema = z
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
+      ...(data.agentic ? { agentic: data.agentic } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),
       ...(data.contexts ? { contexts: data.contexts as RedteamContext[] } : {}),
       ...(data.excludeTargetOutputFromAgenticAttackGeneration

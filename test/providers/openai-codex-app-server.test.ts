@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
@@ -116,6 +117,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   afterEach(async () => {
     await providerRegistry.shutdownAll();
+    cliState.maxConcurrency = undefined;
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -1849,6 +1851,111 @@ describe('OpenAICodexAppServerProvider', () => {
     await expect(secondResultPromise).resolves.toMatchObject({ output: 'Concurrent second' });
   });
 
+  it('uses eval max concurrency as a reusable app-server connection pool size', async () => {
+    cliState.maxConcurrency = 2;
+    const firstServer = createMockAppServer();
+    const secondServer = createMockAppServer();
+    mocks.spawn
+      .mockImplementationOnce(() => firstServer.proc)
+      .mockImplementationOnce(() => secondServer.proc);
+
+    const provider = new OpenAICodexAppServerProvider();
+    const firstResultPromise = provider.callApi('Pooled prompt one');
+    const secondResultPromise = provider.callApi('Pooled prompt two');
+
+    const firstInitialize = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'initialize',
+    );
+    const secondInitialize = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'initialize',
+    );
+    firstServer.send({ id: firstInitialize.id, result: {} });
+    secondServer.send({ id: secondInitialize.id, result: {} });
+
+    const firstThreadStart = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'thread/start',
+    );
+    const secondThreadStart = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'thread/start',
+    );
+    firstServer.send({ id: firstThreadStart.id, result: { thread: { id: 'thr_pool_1' } } });
+    secondServer.send({ id: secondThreadStart.id, result: { thread: { id: 'thr_pool_2' } } });
+
+    const firstTurnStart = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'turn/start',
+    );
+    const secondTurnStart = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'turn/start',
+    );
+    expect(firstTurnStart.params.threadId).toBe('thr_pool_1');
+    expect(secondTurnStart.params.threadId).toBe('thr_pool_2');
+
+    firstServer.send({
+      id: firstTurnStart.id,
+      result: { turn: { id: 'turn_pool_1', status: 'inProgress' } },
+    });
+    secondServer.send({
+      id: secondTurnStart.id,
+      result: { turn: { id: 'turn_pool_2', status: 'inProgress' } },
+    });
+
+    firstServer.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_pool_1',
+        turnId: 'turn_pool_1',
+        itemId: 'msg_pool_1',
+        delta: 'Pooled first',
+      },
+    });
+    firstServer.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_pool_1',
+        turn: { id: 'turn_pool_1', status: 'completed', items: [], error: null },
+      },
+    });
+    secondServer.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_pool_2',
+        turnId: 'turn_pool_2',
+        itemId: 'msg_pool_2',
+        delta: 'Pooled second',
+      },
+    });
+    secondServer.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_pool_2',
+        turn: { id: 'turn_pool_2', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const firstUnsubscribe = await waitForMessage(
+      firstServer,
+      (message) =>
+        message.method === 'thread/unsubscribe' && message.params?.threadId === 'thr_pool_1',
+    );
+    const secondUnsubscribe = await waitForMessage(
+      secondServer,
+      (message) =>
+        message.method === 'thread/unsubscribe' && message.params?.threadId === 'thr_pool_2',
+    );
+    firstServer.send({ id: firstUnsubscribe.id, result: { status: 'unsubscribed' } });
+    secondServer.send({ id: secondUnsubscribe.id, result: { status: 'unsubscribed' } });
+
+    await expect(firstResultPromise).resolves.toMatchObject({ output: 'Pooled first' });
+    await expect(secondResultPromise).resolves.toMatchObject({ output: 'Pooled second' });
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  });
+
   it('shares an in-flight persistent thread start for concurrent calls with the same cache key', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
@@ -3404,6 +3511,104 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     await expect(resultPromise).resolves.toMatchObject({ output: 'Recovered' });
+  });
+
+  it('retries a pooled app-server connection after a transient auth failure', async () => {
+    const firstServer = createMockAppServer();
+    const secondServer = createMockAppServer();
+    mocks.spawn
+      .mockImplementationOnce(() => firstServer.proc)
+      .mockImplementationOnce(() => secondServer.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+        max_retries: 1,
+        retry_delay_ms: 0,
+      },
+    });
+
+    const resultPromise = provider.callApi('Recover after app-server auth race');
+    const firstInitialize = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'initialize',
+    );
+    firstServer.send({ id: firstInitialize.id, result: {} });
+    const firstThreadStart = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'thread/start',
+    );
+    firstServer.send({ id: firstThreadStart.id, result: { thread: { id: 'thr_auth_retry_1' } } });
+    const firstTurnStart = await waitForMessage(
+      firstServer,
+      (message) => message.method === 'turn/start',
+    );
+    firstServer.send({
+      id: firstTurnStart.id,
+      result: { turn: { id: 'turn_auth_retry_1', status: 'inProgress' } },
+    });
+    firstServer.send({
+      method: 'error',
+      params: {
+        threadId: 'thr_auth_retry_1',
+        turnId: 'turn_auth_retry_1',
+        error: {
+          message:
+            'unexpected status 401 Unauthorized: Missing bearer or basic authentication in header',
+        },
+      },
+    });
+
+    const secondInitialize = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'initialize',
+    );
+    secondServer.send({ id: secondInitialize.id, result: {} });
+    const secondThreadStart = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'thread/start',
+    );
+    secondServer.send({
+      id: secondThreadStart.id,
+      result: { thread: { id: 'thr_auth_retry_2' } },
+    });
+    const secondTurnStart = await waitForMessage(
+      secondServer,
+      (message) => message.method === 'turn/start',
+    );
+    secondServer.send({
+      id: secondTurnStart.id,
+      result: { turn: { id: 'turn_auth_retry_2', status: 'inProgress' } },
+    });
+    secondServer.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_auth_retry_2',
+        turnId: 'turn_auth_retry_2',
+        itemId: 'msg_auth_retry_2',
+        delta: 'Recovered after auth retry',
+      },
+    });
+    secondServer.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_auth_retry_2',
+        turn: { id: 'turn_auth_retry_2', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Recovered after auth retry' });
+    expect(firstServer.proc.kill).toHaveBeenCalled();
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats stale pooled connection cleanup races as retryable', () => {
+    const provider = new OpenAICodexAppServerProvider();
+    expect(
+      (provider as any).isRetryableAppServerError(
+        'codex app-server connection was closed during cleanup',
+      ),
+    ).toBe(true);
   });
 
   it('parses JSON-RPC notifications whose string payloads contain literal newlines', async () => {

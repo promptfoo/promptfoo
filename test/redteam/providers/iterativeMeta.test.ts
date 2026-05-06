@@ -152,7 +152,13 @@ describe('RedteamIterativeMetaProvider', () => {
       mockShouldGenerateRemote.mockReturnValue(false);
       mockNeverGenerateRemote.mockReturnValue(false);
 
-      expect(() => new RedteamIterativeMetaProvider({ injectVar: 'query' })).toThrow(
+      expect(
+        () =>
+          new RedteamIterativeMetaProvider({
+            injectVar: 'query',
+            agentic: { mode: 'remote' },
+          }),
+      ).toThrow(
         'jailbreak:meta strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
       );
     });
@@ -161,7 +167,13 @@ describe('RedteamIterativeMetaProvider', () => {
       mockShouldGenerateRemote.mockReturnValue(false);
       mockNeverGenerateRemote.mockReturnValue(true);
 
-      expect(() => new RedteamIterativeMetaProvider({ injectVar: 'query' })).toThrow(
+      expect(
+        () =>
+          new RedteamIterativeMetaProvider({
+            injectVar: 'query',
+            agentic: { mode: 'remote' },
+          }),
+      ).toThrow(
         /jailbreak:meta strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
     });
@@ -192,6 +204,43 @@ describe('RedteamIterativeMetaProvider', () => {
 
       expect(result.metadata.finalIteration).toBe(3);
       expect(result.metadata.redteamHistory).toHaveLength(3);
+    });
+
+    it('should send plugin, strategy, severity, and target context to agent decisions', async () => {
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: {
+          metadata: {
+            goal: 'Extract private records',
+            pluginId: 'pii:direct',
+            severity: 'high',
+            purpose: 'A support chatbot',
+          },
+        } as any,
+        vars: { query: 'test' },
+      });
+
+      const request = JSON.parse(mockAgentProvider.callApi.mock.calls[0][0] as string);
+      expect(request).toMatchObject({
+        strategyId: 'jailbreak:meta',
+        pluginId: 'pii:direct',
+        severity: 'high',
+        targetProvider: 'mock-target',
+        goal: 'Extract private records',
+        purpose: 'A support chatbot',
+      });
     });
 
     it('should stop early on vulnerability found', async () => {

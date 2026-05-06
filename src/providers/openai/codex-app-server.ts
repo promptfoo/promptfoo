@@ -216,6 +216,7 @@ export interface CodexAppServerConfig {
   experimental_raw_events?: boolean;
   experimental_api?: boolean;
   include_raw_events?: boolean;
+  connection_pool_size?: number;
 
   cli_config?: Record<string, unknown>;
   cli_env?: Record<string, string | number | boolean>;
@@ -225,6 +226,8 @@ export interface CodexAppServerConfig {
   request_timeout_ms?: number;
   startup_timeout_ms?: number;
   turn_timeout_ms?: number;
+  max_retries?: number;
+  retry_delay_ms?: number;
   server_request_policy?: CodexAppServerRequestPolicy;
 }
 
@@ -311,6 +314,7 @@ interface ThreadHandle {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
+const MAX_CONNECTION_POOL_SIZE = 32;
 
 const MINIMAL_CLI_ENV_KEYS = [
   'PATH',
@@ -499,6 +503,7 @@ const CodexAppServerConfigShape = {
   experimental_raw_events: z.boolean().optional(),
   experimental_api: z.boolean().optional(),
   include_raw_events: z.boolean().optional(),
+  connection_pool_size: z.number().int().positive().optional(),
   cli_config: z.record(z.string(), z.unknown()).optional(),
   cli_env: z.record(z.string(), CodexCliEnvValueSchema).optional(),
   inherit_process_env: z.boolean().optional(),
@@ -507,6 +512,8 @@ const CodexAppServerConfigShape = {
   request_timeout_ms: z.number().int().positive().optional(),
   startup_timeout_ms: z.number().int().positive().optional(),
   turn_timeout_ms: z.number().int().positive().optional(),
+  max_retries: z.number().int().min(0).optional(),
+  retry_delay_ms: z.number().int().nonnegative().optional(),
   server_request_policy: ServerRequestPolicySchema.optional(),
 } as const;
 
@@ -1047,6 +1054,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
   private threadRunQueues = new Map<string, Promise<void>>();
   private activeTurnsByThread = new Map<string, CodexAppServerTurnState>();
   private activeTurnsByTurn = new Map<string, CodexAppServerTurnState>();
+  private connectionPoolNextIndexes = new Map<string, number>();
+  private connectionActiveCounts = new Map<string, number>();
   private validatedWorkingDirs = new Set<string>();
   private ignoredProviderEnvWarningShown = false;
   private omittedProcessEnvWarningShown = false;
@@ -1097,6 +1106,8 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.activeTurnsByThread.clear();
     this.activeTurnsByTurn.clear();
     this.protectedThreadCounts.clear();
+    this.connectionPoolNextIndexes.clear();
+    this.connectionActiveCounts.clear();
     this.validatedWorkingDirs.clear();
 
     const connections = Array.from(
@@ -1201,6 +1212,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     callOptions: CallApiOptionsParams | undefined,
     rawConfig: CodexAppServerConfig,
+    attempt = 0,
   ): Promise<ProviderResponse> {
     let config: CodexAppServerConfig;
     try {
@@ -1232,9 +1244,12 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const apiKey = this.getApiKey(resolvedConfig);
     const env = this.prepareEnvironment(resolvedConfig, currentTraceparent, apiKey);
     const promptInput = this.parsePromptInput(prompt);
-    const connectionKey = this.generateConnectionKey(env, resolvedConfig);
     const useReusableConnection =
       resolvedConfig.reuse_server !== false && !resolvedConfig.deep_tracing;
+    const baseConnectionKey = this.generateConnectionKey(env, resolvedConfig);
+    const connectionKey = useReusableConnection
+      ? this.acquireReusableConnectionKey(baseConnectionKey, resolvedConfig)
+      : baseConnectionKey;
     let localConnection: CodexAppServerConnection | undefined;
 
     try {
@@ -1323,9 +1338,25 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       }
 
       const errorMessage = error instanceof Error ? error.message : String(error);
+      if (
+        useReusableConnection &&
+        attempt < this.getMaxRetries(resolvedConfig) &&
+        this.isRetryableAppServerError(errorMessage) &&
+        !callOptions?.abortSignal?.aborted
+      ) {
+        await this.discardReusableConnection(connectionKey, errorMessage);
+        const retryDelayMs = this.getRetryDelayMs(resolvedConfig);
+        if (retryDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        }
+        return this.callApiInternal(prompt, context, callOptions, rawConfig, attempt + 1);
+      }
       logger.error('Error calling OpenAI Codex app-server', { error: errorMessage });
       return { error: `Error calling OpenAI Codex app-server: ${errorMessage}` };
     } finally {
+      if (useReusableConnection) {
+        this.releaseReusableConnectionKey(connectionKey);
+      }
       if (localConnection) {
         await localConnection.close().catch((error) => {
           logger.debug('[CodexAppServer] Error closing local connection', { error });
@@ -1464,6 +1495,55 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     return config.request_timeout_ms ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
+  private getMaxRetries(config: CodexAppServerConfig): number {
+    return Math.max(0, Math.floor(config.max_retries ?? 0));
+  }
+
+  private getRetryDelayMs(config: CodexAppServerConfig): number {
+    return Math.max(0, Math.floor(config.retry_delay_ms ?? 500));
+  }
+
+  private isRetryableAppServerError(errorMessage: string): boolean {
+    return /401 Unauthorized|Missing bearer|responses_websocket|request timed out: (initialize|account\/login\/start|thread\/start|turn\/start)|turn timed out|connection (is |was )?closed|provider cleanup interrupted active turn/i.test(
+      errorMessage,
+    );
+  }
+
+  private async discardReusableConnection(
+    connectionKey: string,
+    errorMessage: string,
+  ): Promise<void> {
+    const connection = this.connections.get(connectionKey);
+    this.connections.delete(connectionKey);
+    this.connectionPromises.delete(connectionKey);
+
+    for (const [threadCacheKey, handle] of this.threads) {
+      if (handle.connectionKey === connectionKey) {
+        this.threads.delete(threadCacheKey);
+      }
+    }
+    for (const [threadCacheKey, connectionInstance] of this.threadPromiseConnectionInstances) {
+      if (connectionInstance.startsWith(`${connectionKey}:`)) {
+        this.threadPromises.delete(threadCacheKey);
+        this.threadPromiseConnectionInstances.delete(threadCacheKey);
+      }
+    }
+
+    if (!connection) {
+      return;
+    }
+
+    logger.warn('[CodexAppServer] Retrying with a fresh app-server connection', {
+      connectionKey,
+      error: errorMessage,
+    });
+    await connection.close().catch((closeError) => {
+      logger.debug('[CodexAppServer] Error closing retryable app-server connection', {
+        error: closeError,
+      });
+    });
+  }
+
   private async getOrCreateConnection(
     connectionKey: string,
     env: Record<string, string>,
@@ -1593,6 +1673,60 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     };
     const hash = crypto.createHash('sha256').update(JSON.stringify(keyData)).digest('hex');
     return `openai:codex-app-server:connection:${hash}`;
+  }
+
+  private getConnectionPoolSize(config: CodexAppServerConfig): number {
+    const configuredSize = config.connection_pool_size ?? cliState.maxConcurrency ?? 1;
+    const normalizedSize = Math.max(1, Math.floor(configuredSize));
+    return Math.min(normalizedSize, MAX_CONNECTION_POOL_SIZE);
+  }
+
+  private acquireReusableConnectionKey(baseConnectionKey: string, config: CodexAppServerConfig) {
+    const poolSize = this.getConnectionPoolSize(config);
+    if (poolSize <= 1) {
+      this.connectionActiveCounts.set(
+        baseConnectionKey,
+        (this.connectionActiveCounts.get(baseConnectionKey) ?? 0) + 1,
+      );
+      return baseConnectionKey;
+    }
+
+    const nextIndex = this.connectionPoolNextIndexes.get(baseConnectionKey) ?? 0;
+    let selectedIndex = nextIndex;
+    let selectedActiveCount = Number.POSITIVE_INFINITY;
+    for (let offset = 0; offset < poolSize; offset++) {
+      const index = (nextIndex + offset) % poolSize;
+      const candidateKey = this.getPooledConnectionKey(baseConnectionKey, index);
+      const activeCount = this.connectionActiveCounts.get(candidateKey) ?? 0;
+      if (activeCount < selectedActiveCount) {
+        selectedIndex = index;
+        selectedActiveCount = activeCount;
+        if (activeCount === 0) {
+          break;
+        }
+      }
+    }
+
+    this.connectionPoolNextIndexes.set(baseConnectionKey, (selectedIndex + 1) % poolSize);
+    const connectionKey = this.getPooledConnectionKey(baseConnectionKey, selectedIndex);
+    this.connectionActiveCounts.set(
+      connectionKey,
+      (this.connectionActiveCounts.get(connectionKey) ?? 0) + 1,
+    );
+    return connectionKey;
+  }
+
+  private releaseReusableConnectionKey(connectionKey: string): void {
+    const activeCount = this.connectionActiveCounts.get(connectionKey);
+    if (!activeCount || activeCount <= 1) {
+      this.connectionActiveCounts.delete(connectionKey);
+      return;
+    }
+    this.connectionActiveCounts.set(connectionKey, activeCount - 1);
+  }
+
+  private getPooledConnectionKey(baseConnectionKey: string, index: number): string {
+    return `${baseConnectionKey}:pool:${index}`;
   }
 
   private generateThreadCacheKey(
@@ -2672,7 +2806,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       state.items,
       this.getSkillRootPrefixes(config, state.appServerEnv),
     );
+    const runnerEvents = normalizedItems.map((item) => this.normalizeRunnerEvent(item));
     return {
+      runner: {
+        type: 'codex-app-server',
+        sessionId: threadHandle.threadId,
+        turnId: state.turnId,
+        workspace: {
+          root: config.working_dir,
+        },
+        events: runnerEvents,
+      },
       codexAppServer: {
         threadId: threadHandle.threadId,
         turnId: state.turnId,
@@ -2692,6 +2836,90 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
         ? { attemptedSkillCalls: skillMetadata.attemptedSkillCalls }
         : {}),
     };
+  }
+
+  private normalizeRunnerEvent(item: Record<string, unknown>): Record<string, unknown> {
+    const type = item.type;
+    const base = {
+      id: item.id,
+      status: item.status,
+    };
+
+    switch (type) {
+      case 'commandExecution':
+        return {
+          ...base,
+          type: 'command',
+          name: item.command,
+          input: {
+            command: item.command,
+            cwd: item.cwd,
+          },
+          output: item.aggregatedOutput,
+          metadata: {
+            exitCode: item.exitCode,
+            durationMs: item.durationMs,
+          },
+        };
+      case 'fileChange':
+        return {
+          ...base,
+          type: 'file',
+          name: 'fileChange',
+          output: item.changes,
+        };
+      case 'mcpToolCall':
+        return {
+          ...base,
+          type: 'tool',
+          name: `${String(item.server ?? 'mcp')}:${String(item.tool ?? 'tool')}`,
+          input: item.arguments,
+          output: item.result,
+          metadata: {
+            server: item.server,
+            error: item.error,
+            durationMs: item.durationMs,
+          },
+        };
+      case 'dynamicToolCall':
+        return {
+          ...base,
+          type: 'tool',
+          name: item.tool,
+          input: item.arguments,
+          output: item.contentItems,
+          metadata: {
+            success: item.success,
+            durationMs: item.durationMs,
+          },
+        };
+      case 'webSearch':
+        return {
+          ...base,
+          type: 'tool',
+          name: 'webSearch',
+          input: { query: item.query, action: item.action },
+        };
+      case 'agentMessage':
+        return {
+          ...base,
+          type: 'message',
+          name: 'assistant',
+          output: item.text,
+        };
+      case 'reasoning':
+        return {
+          ...base,
+          type: 'reasoning',
+          name: 'reasoning',
+          output: item.summary ?? item.content,
+        };
+      default:
+        return {
+          ...base,
+          type: String(type ?? 'event'),
+        };
+    }
   }
 
   private normalizeItemForMetadata(item: any): Record<string, unknown> {

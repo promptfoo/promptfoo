@@ -58,8 +58,10 @@ import {
 import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
 import type { Inputs } from '../types/shared';
 import type {
+  AgenticConfig,
   FailedPluginInfo,
   Policy,
+  RedteamFileConfig,
   RedteamPluginObject,
   RedteamStrategyObject,
   SynthesizeOptions,
@@ -534,6 +536,8 @@ async function applyStrategies(
   injectVar: string,
   provider: ApiProvider,
   purpose: string,
+  redteamProviderConfig?: RedteamFileConfig['provider'],
+  agentic?: AgenticConfig,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
   maxCharsPerMessage?: number,
 ): Promise<{
@@ -613,7 +617,8 @@ async function applyStrategies(
         ...(strategy.config || {}),
         ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
-        redteamProvider: cliState.config?.redteam?.provider,
+        redteamProvider: redteamProviderConfig ?? cliState.config?.redteam?.provider,
+        agentic: agentic ?? cliState.config?.redteam?.agentic,
         excludeTargetOutputFromAgenticAttackGeneration,
       },
       strategy.id,
@@ -905,6 +910,7 @@ export async function synthesize({
   plugins,
   prompts,
   provider,
+  agentic,
   purpose: purposeOverride,
   strategies,
   targetIds,
@@ -1588,6 +1594,8 @@ export async function synthesize({
       injectVar,
       redteamProvider,
       purpose,
+      provider,
+      agentic,
       undefined,
       maxCharsPerMessage,
     );
@@ -1612,6 +1620,8 @@ export async function synthesize({
       injectVar,
       redteamProvider,
       purpose,
+      provider,
+      agentic,
       excludeTargetOutputFromAgenticAttackGeneration,
       maxCharsPerMessage,
     );

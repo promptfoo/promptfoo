@@ -11,13 +11,16 @@ import {
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
-  getRemoteGenerationDisabledError,
-  getRemoteGenerationExplicitlyDisabledError,
-  neverGenerateRemote,
-  shouldGenerateRemote,
-} from '../remoteGeneration';
+  type AgenticStrategyConfig,
+  assertRemoteAgenticAvailable,
+  getAgenticPromptAdjuster,
+  getAgenticProvider,
+  shouldUseRemoteAgentic,
+} from '../agentic/config';
+import { isLocalAgenticProvider, LocalAgenticDecisionProvider } from '../agentic/localProvider';
+import { materializeInputVariablesWithMetadata } from '../inputVariables';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializationContextVars,
@@ -55,6 +58,7 @@ import type {
   Inputs,
   NunjucksFilterMap,
   Prompt,
+  ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
   VarValue,
@@ -82,6 +86,7 @@ interface IterativeMetaMetadata {
     trace?: Record<string, unknown>;
     traceSummary?: string;
     inputVars?: Record<string, string>;
+    agent?: ProviderResponse['metadata'];
   }[];
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -143,7 +148,7 @@ export async function runMetaAgentRedteam({
   const originalVars = { ...vars };
   const transformVarsConfig = test?.options?.transformVars;
 
-  const goal = context?.test?.metadata?.goal || vars[injectVar];
+  const goal = context?.test?.metadata?.goal || test?.metadata?.goal || vars[injectVar];
   const additionalRubric = getIterativeMetaGoalRubric(goal);
 
   // Generate unique test run ID
@@ -161,6 +166,8 @@ export async function runMetaAgentRedteam({
 
   const sessionIds: string[] = [];
   const totalTokenUsage = createEmptyTokenUsage();
+  const useRemoteAgenticMaterialization =
+    shouldGenerateRemote() && !isLocalAgenticProvider(agentProvider);
 
   let vulnerabilityAchieved = false;
   let bestPrompt: string | undefined = undefined;
@@ -205,6 +212,10 @@ export async function runMetaAgentRedteam({
       task: 'meta-agent-decision',
       testRunId,
       iteration: i + 1,
+      strategyId: 'jailbreak:meta',
+      pluginId: test?.metadata?.pluginId,
+      severity: test?.metadata?.severity,
+      targetProvider: targetProvider.id?.(),
       goal,
       purpose: test?.metadata?.purpose,
       modifiers: test?.metadata?.modifiers,
@@ -237,7 +248,7 @@ export async function runMetaAgentRedteam({
           raw: JSON.stringify(cloudRequest),
           label: 'meta-agent',
         },
-        vars: shouldGenerateRemote()
+        vars: useRemoteAgenticMaterialization
           ? buildRemoteMaterializationContextVars({
               injectVar,
               inputs,
@@ -355,14 +366,19 @@ export async function runMetaAgentRedteam({
       .replace(/%\}/g, '% }');
 
     // Extract input vars from the attack prompt for multi-input mode
-    if (inputs && shouldGenerateRemote()) {
+    if (inputs && useRemoteAgenticMaterialization) {
       assertRemoteMaterializationHandled(agentResp, 'Iterative Meta multi-input generation');
     }
     const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
     let materializedInputVars:
       | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
       | undefined;
-    if (inputs && shouldGenerateRemote() && !currentInputVars && !agentResp.materializedVars) {
+    if (
+      inputs &&
+      useRemoteAgenticMaterialization &&
+      !currentInputVars &&
+      !agentResp.materializedVars
+    ) {
       failClosedError =
         'Iterative Meta remote multi-input generation returned an invalid prompt format';
       logger.warn(
@@ -375,7 +391,7 @@ export async function runMetaAgentRedteam({
       break;
     }
     if ((currentInputVars || agentResp.materializedVars) && inputs) {
-      if (shouldGenerateRemote()) {
+      if (useRemoteAgenticMaterialization) {
         materializedInputVars = buildRemoteMaterializedInputVariables(
           agentResp,
           currentInputVars ?? {},
@@ -627,6 +643,7 @@ export async function runMetaAgentRedteam({
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
+      agent: agentResp.metadata,
       // Include input vars for multi-input mode (extracted from current prompt)
       inputVars: currentRenderInputVars,
     });
@@ -704,27 +721,32 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
-    // Meta-agent strategy requires remote generation
-    if (!shouldGenerateRemote()) {
-      throw new Error(
-        neverGenerateRemote()
-          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:meta strategy')
-          : getRemoteGenerationDisabledError('jailbreak:meta strategy'),
-      );
-    }
+    const agenticConfig = config as AgenticStrategyConfig;
+    assertRemoteAgenticAvailable('jailbreak:meta strategy', agenticConfig);
 
-    this.gradingProvider = new PromptfooChatCompletionProvider({
-      task: 'judge',
-      jsonOnly: true,
-      preferSmallModel: false,
-    });
-    this.agentProvider = new PromptfooChatCompletionProvider({
-      task: 'meta-agent-decision',
-      jsonOnly: true,
-      preferSmallModel: false,
-      // Pass inputs schema for multi-input mode
-      inputs: this.inputs,
-    });
+    if (shouldUseRemoteAgentic(agenticConfig)) {
+      this.gradingProvider = new PromptfooChatCompletionProvider({
+        task: 'judge',
+        jsonOnly: true,
+        preferSmallModel: false,
+      });
+      this.agentProvider = new PromptfooChatCompletionProvider({
+        task: 'meta-agent-decision',
+        jsonOnly: true,
+        preferSmallModel: false,
+        // Pass inputs schema for multi-input mode
+        inputs: this.inputs,
+      });
+    } else {
+      const localProvider = getAgenticProvider(agenticConfig);
+      this.gradingProvider = localProvider;
+      this.agentProvider = new LocalAgenticDecisionProvider({
+        task: 'meta-agent-decision',
+        provider: localProvider,
+        promptAdjuster: getAgenticPromptAdjuster(agenticConfig),
+        inputs: this.inputs,
+      });
+    }
   }
 
   id() {

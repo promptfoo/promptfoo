@@ -813,6 +813,57 @@ redteam:
   provider: ollama:chat:llama3.3
 ```
 
+### Local agentic strategies
+
+Hydra and `jailbreak:meta` can run their attack-planning loop locally instead of calling Promptfoo Cloud. Set `redteam.agentic.mode` to `local` and choose a provider for the agentic brain:
+
+```yaml
+redteam:
+  agentic:
+    mode: local
+    provider:
+      id: openai:codex-app-server
+      config:
+        sandbox_mode: read-only
+        approval_policy: never
+        skip_git_repo_check: true
+```
+
+This is useful when you want agentic strategy decisions to use a local Codex login or another configured provider. The top-level `providers` section still controls the target being tested.
+
+When using Codex for agentic strategies, you can add a prompt adjuster that wraps each Hydra or `jailbreak:meta` planning prompt with local context instructions before it is sent to Codex:
+
+```yaml
+redteam:
+  agentic:
+    mode: local
+    provider:
+      id: openai:codex-app-server
+      config:
+        working_dir: .promptfoo-redteam-memory
+        sandbox_mode: read-only
+        approval_policy: never
+    promptAdjuster:
+      enabled: true
+      instructions: >-
+        Inspect the listed context before choosing the attack. Prefer
+        source-derived or prior-eval failure patterns when they match the
+        plugin goal. Return only the strategy JSON.
+      contextFiles:
+        - target-context.md
+      inlineContext: true
+      maxContextChars: 24000
+```
+
+Use a small `working_dir` with only the target source, traces, or prior eval notes when possible. Point Codex at the full repository only when the target implementation itself is the context you want it to inspect.
+
+Set `promptAdjuster.inlineContext: true` when the context files are compact notes or summaries that Codex should use on every strategy call. Promptfoo embeds those files directly into the planning prompt, which avoids spending repeated Codex turns just reading the same files.
+
+For offline experiments, set `promptAdjuster.capturePrompt: true` to include the
+fully adjusted Hydra or `jailbreak:meta` planning prompt in redteam history metadata.
+Leave it unset for normal runs because captured prompts may include local source,
+trace, or prior-eval context.
+
 For an OpenAI-compatible API (e.g., local models with vLLM, LM Studio, or other OpenAI-compatible servers):
 
 ```yaml

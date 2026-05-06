@@ -208,7 +208,7 @@ describe('HydraProvider', () => {
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       expect(() => {
-        new HydraProvider({ injectVar: 'input' });
+        new HydraProvider({ injectVar: 'input', agentic: { mode: 'remote' } });
       }).toThrow(
         'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
       );
@@ -221,7 +221,7 @@ describe('HydraProvider', () => {
       vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
       expect(() => {
-        new HydraProvider({ injectVar: 'input' });
+        new HydraProvider({ injectVar: 'input', agentic: { mode: 'remote' } });
       }).toThrow(
         /jailbreak:hydra strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
@@ -259,6 +259,78 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - basic functionality', () => {
+    it('keeps conversation state isolated across concurrent calls', async () => {
+      const pendingDecisions: Array<{
+        resolve: (response: {
+          output: string;
+          tokenUsage: { total: number; prompt: number; completion: number };
+        }) => void;
+      }> = [];
+      const targetPrompts: string[][] = [];
+
+      mockAgentProvider.callApi.mockImplementation(async function (prompt: string) {
+        const request = JSON.parse(prompt);
+        if (request.testComplete) {
+          return {
+            output: 'Learning updated',
+            tokenUsage: { total: 1, prompt: 1, completion: 0 },
+          };
+        }
+
+        return new Promise((resolve) => {
+          pendingDecisions.push({ resolve });
+        });
+      });
+
+      mockTargetProvider.callApi.mockImplementation(async function (prompt: string) {
+        targetPrompts.push(
+          JSON.parse(prompt).map((message: { content: string }) => message.content),
+        );
+        return {
+          output: 'Target defended',
+          tokenUsage: { total: 50, prompt: 25, completion: 25 },
+        };
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+      const context = (goal: string): CallApiContextParams => ({
+        originalProvider: mockTargetProvider,
+        vars: { input: goal },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal, pluginId: 'harmful:test' },
+        } as any,
+      });
+
+      const first = provider.callApi('', context('first goal'));
+      const second = provider.callApi('', context('second goal'));
+
+      await vi.waitFor(
+        () => {
+          expect(pendingDecisions).toHaveLength(2);
+        },
+        { timeout: 5000 },
+      );
+      pendingDecisions[0].resolve({
+        output: 'Attack one',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+      pendingDecisions[1].resolve({
+        output: 'Attack two',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      await Promise.all([first, second]);
+
+      expect(targetPrompts).toHaveLength(2);
+      expect(targetPrompts).toContainEqual(['Attack one']);
+      expect(targetPrompts).toContainEqual(['Attack two']);
+    });
+
     it('should execute single turn attack successfully', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
@@ -409,7 +481,12 @@ describe('HydraProvider', () => {
         prompt: { raw: 'test prompt', label: 'test' },
         test: {
           assert: [{ type: 'harmful:test' }],
-          metadata: { goal: 'metadata goal', pluginId: 'harmful:test' },
+          metadata: {
+            goal: 'metadata goal',
+            pluginId: 'harmful:test',
+            severity: 'high',
+            purpose: 'A support chatbot',
+          },
         } as any,
       };
 
@@ -418,6 +495,11 @@ describe('HydraProvider', () => {
       const agentCall = mockAgentProvider.callApi.mock.calls[0];
       const request = JSON.parse(agentCall[0] as string);
       expect(request.goal).toBe('metadata goal');
+      expect(request.strategyId).toBe('jailbreak:hydra');
+      expect(request.pluginId).toBe('harmful:test');
+      expect(request.severity).toBe('high');
+      expect(request.targetProvider).toBe('mock-target');
+      expect(request.purpose).toBe('A support chatbot');
 
       // Reset mocks
       vi.clearAllMocks();
@@ -1144,6 +1226,7 @@ describe('HydraProvider', () => {
       expect(request.lastGraderResult).toEqual({
         pass: true,
         score: 1,
+        reason: 'Safe',
       });
     });
 

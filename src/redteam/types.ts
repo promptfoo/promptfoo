@@ -51,6 +51,21 @@ export interface TracingConfig {
   strategies?: Record<string, TracingConfig>;
 }
 
+export type AgenticMode = 'auto' | 'local' | 'remote';
+
+export interface AgenticConfig {
+  mode?: AgenticMode;
+  provider?: string | ProviderOptions | ApiProvider;
+  promptAdjuster?: {
+    enabled?: boolean;
+    instructions?: string;
+    contextFiles?: string[];
+    inlineContext?: boolean;
+    maxContextChars?: number;
+    capturePrompt?: boolean;
+  };
+}
+
 export const PluginConfigSchema = z.object({
   examples: z.array(z.string()).optional(),
   graderExamples: z
@@ -234,6 +249,9 @@ export interface RedteamContext {
 
 // Shared redteam options
 type CommonOptions = {
+  agentic?: AgenticConfig;
+  agenticMode?: AgenticMode;
+  agenticProvider?: string;
   injectVar?: string;
   language?: string | string[];
   numTests?: number;
@@ -318,6 +336,8 @@ export interface RedteamRunOptions {
   progressBar?: boolean;
   description?: string;
   strict?: boolean;
+  agenticMode?: AgenticMode;
+  agenticProvider?: string;
 
   // Used by webui
   liveRedteamConfig?: any;

@@ -43,6 +43,8 @@ export function redteamRunCommand(program: Command) {
       Number.parseInt(val, 10),
     )
     .option('--remote', 'Force remote inference wherever possible', false)
+    .option('--agentic-mode <mode>', 'Agentic strategy mode: auto, local, or remote')
+    .option('--agentic-provider <provider>', 'Provider to use as the local agentic strategy brain')
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option(

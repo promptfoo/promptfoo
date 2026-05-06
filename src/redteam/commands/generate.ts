@@ -479,6 +479,14 @@ async function doGenerateRedteamInternal(
     resolvedConfig?.evaluateOptions?.maxConcurrency;
 
   const config = {
+    agentic:
+      redteamConfig?.agentic || options.agenticMode || options.agenticProvider
+        ? {
+            ...(redteamConfig?.agentic ?? {}),
+            ...(options.agenticMode ? { mode: options.agenticMode } : {}),
+            ...(options.agenticProvider ? { provider: options.agenticProvider } : {}),
+          }
+        : undefined,
     injectVar: redteamConfig?.injectVar || options.injectVar,
     // Multi-variable inputs for test case generation (read from target)
     inputs: targetInputs,
@@ -943,6 +951,8 @@ export function redteamGenerateCommand(
       Number.parseInt(val, 10),
     )
     .option('--remote', 'Force remote inference wherever possible', false)
+    .option('--agentic-mode <mode>', 'Agentic strategy mode: auto, local, or remote')
+    .option('--agentic-provider <provider>', 'Provider to use as the local agentic strategy brain')
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)

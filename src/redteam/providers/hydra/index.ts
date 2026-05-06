@@ -13,13 +13,16 @@ import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
-  getRemoteGenerationDisabledError,
-  getRemoteGenerationExplicitlyDisabledError,
-  neverGenerateRemote,
-  shouldGenerateRemote,
-} from '../../remoteGeneration';
+  type AgenticStrategyConfig,
+  assertRemoteAgenticAvailable,
+  getAgenticPromptAdjuster,
+  getAgenticProvider,
+  shouldUseRemoteAgentic,
+} from '../../agentic/config';
+import { isLocalAgenticProvider, LocalAgenticDecisionProvider } from '../../agentic/localProvider';
+import { materializeInputVariablesWithMetadata } from '../../inputVariables';
+import { shouldGenerateRemote } from '../../remoteGeneration';
 import {
   assertRemoteMaterializationHandled,
   buildRemoteMaterializedInputVariables,
@@ -94,6 +97,8 @@ interface HydraMetadata extends BaseRedteamMetadata {
     graderPassed: boolean | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
+    agent?: ProviderResponse['metadata'];
   }>;
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -105,6 +110,8 @@ interface HydraResponse extends ProviderResponse {
 
 interface HydraConfig {
   injectVar: string;
+  agentic?: AgenticStrategyConfig['agentic'];
+  redteamProvider?: AgenticStrategyConfig['redteamProvider'];
   scanId?: string;
   maxTurns?: number;
   maxBacktracks?: number;
@@ -154,8 +161,6 @@ export class HydraProvider implements ApiProvider {
   private readonly stateful: boolean;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  private conversationHistory: Message[] = [];
-  private sessionId?: string;
 
   constructor(config: HydraConfig) {
     this.config = config;
@@ -174,22 +179,25 @@ export class HydraProvider implements ApiProvider {
       logger.debug('[Hydra] Backtracking disabled in stateful mode');
     }
 
-    // Hydra strategy requires remote generation
-    if (!shouldGenerateRemote()) {
-      throw new Error(
-        neverGenerateRemote()
-          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:hydra strategy')
-          : getRemoteGenerationDisabledError('jailbreak:hydra strategy'),
-      );
-    }
+    const agenticConfig = config as AgenticStrategyConfig;
+    assertRemoteAgenticAvailable('jailbreak:hydra strategy', agenticConfig);
 
-    this.agentProvider = new PromptfooChatCompletionProvider({
-      task: 'hydra-decision',
-      jsonOnly: true,
-      preferSmallModel: false,
-      // Pass inputs schema for multi-input mode
-      inputs: this.config.inputs,
-    });
+    if (shouldUseRemoteAgentic(agenticConfig)) {
+      this.agentProvider = new PromptfooChatCompletionProvider({
+        task: 'hydra-decision',
+        jsonOnly: true,
+        preferSmallModel: false,
+        // Pass inputs schema for multi-input mode
+        inputs: this.config.inputs,
+      });
+    } else {
+      this.agentProvider = new LocalAgenticDecisionProvider({
+        task: 'hydra-decision',
+        provider: getAgenticProvider(agenticConfig),
+        promptAdjuster: getAgenticPromptAdjuster(agenticConfig),
+        inputs: this.config.inputs,
+      });
+    }
 
     logger.debug('[Hydra] Provider initialized', {
       maxTurns: this.maxTurns,
@@ -272,9 +280,10 @@ export class HydraProvider implements ApiProvider {
       tracingEnabled: tracingOptions.enabled,
     });
 
-    // Reset state
-    this.conversationHistory = [];
-    this.sessionId = undefined;
+    // Keep per-call conversation state local so the same provider instance can
+    // run safely against multiple target providers concurrently.
+    const conversationHistory: Message[] = [];
+    let sessionId: string | undefined;
     const sessionIds: string[] = [];
     const successfulAttacks: Array<{
       turn: number;
@@ -292,6 +301,8 @@ export class HydraProvider implements ApiProvider {
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
     let agentFailureError: string | undefined;
+    const useRemoteAgenticMaterialization =
+      shouldGenerateRemote() && !isLocalAgenticProvider(this.agentProvider);
 
     const redteamHistory: Array<{
       prompt: string;
@@ -331,18 +342,22 @@ export class HydraProvider implements ApiProvider {
       // Build request for cloud agent
       // Conditionally exclude target outputs from conversation history for privacy
       const conversationHistoryForCloud = this.excludeTargetOutputFromAgenticAttackGeneration
-        ? this.conversationHistory.map((msg) =>
+        ? conversationHistory.map((msg) =>
             msg.role === 'assistant'
               ? { ...msg, content: '[Response hidden for privacy - grader feedback provided]' }
               : msg,
           )
-        : this.conversationHistory;
+        : conversationHistory;
 
       const cloudRequest = {
         task: 'hydra-decision',
         testRunId,
         scanId,
         turn,
+        strategyId: 'jailbreak:hydra',
+        pluginId: test?.metadata?.pluginId,
+        severity: test?.metadata?.severity,
+        targetProvider: targetProvider.id?.(),
         goal,
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
@@ -353,6 +368,7 @@ export class HydraProvider implements ApiProvider {
             ? {
                 pass: storedGraderResult.pass,
                 score: storedGraderResult.score,
+                reason: storedGraderResult.reason,
               }
             : undefined,
         stateful: this.stateful,
@@ -421,7 +437,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Extract input vars from the processed message for multi-input mode
-      if (this.config.inputs && shouldGenerateRemote()) {
+      if (this.config.inputs && useRemoteAgenticMaterialization) {
         assertRemoteMaterializationHandled(agentResp, 'Hydra multi-input generation');
       }
       const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
@@ -430,7 +446,7 @@ export class HydraProvider implements ApiProvider {
         | undefined;
       if (
         this.config.inputs &&
-        shouldGenerateRemote() &&
+        useRemoteAgenticMaterialization &&
         !currentInputVars &&
         !agentResp.materializedVars
       ) {
@@ -442,7 +458,7 @@ export class HydraProvider implements ApiProvider {
         continue;
       }
       if ((currentInputVars || agentResp.materializedVars) && this.config.inputs) {
-        if (shouldGenerateRemote()) {
+        if (useRemoteAgenticMaterialization) {
           materializedInputVars = buildRemoteMaterializedInputVariables(
             agentResp,
             currentInputVars ?? {},
@@ -464,7 +480,7 @@ export class HydraProvider implements ApiProvider {
       const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
       // Add message to conversation history (without <Prompt> tags)
-      this.conversationHistory.push({
+      conversationHistory.push({
         role: 'user',
         content: processedMessage,
       });
@@ -484,7 +500,7 @@ export class HydraProvider implements ApiProvider {
         const updatedVars: Record<string, VarValue> = {
           ...vars,
           [this.injectVar]: escapedMessage,
-          ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+          ...(sessionId ? { sessionId } : {}),
           // Add extracted input vars if available
           ...(currentRenderInputVars || {}),
         };
@@ -514,14 +530,14 @@ export class HydraProvider implements ApiProvider {
           const parsed = JSON.parse(samplePrompt);
           if (isValidChatMessageArray(parsed)) {
             // It's already chat format, inject our conversation
-            targetPrompt = JSON.stringify(this.conversationHistory);
+            targetPrompt = JSON.stringify(conversationHistory);
           } else {
             // Not chat format, use standard rendering
-            targetPrompt = JSON.stringify(this.conversationHistory);
+            targetPrompt = JSON.stringify(conversationHistory);
           }
         } else {
           // Not JSON, send as conversation array
-          targetPrompt = JSON.stringify(this.conversationHistory);
+          targetPrompt = JSON.stringify(conversationHistory);
         }
       }
 
@@ -564,7 +580,7 @@ export class HydraProvider implements ApiProvider {
             error: lastTransformResult.error,
           });
           // Remove the user message we added since we're skipping
-          this.conversationHistory.pop();
+          conversationHistory.pop();
           continue;
         }
 
@@ -574,7 +590,7 @@ export class HydraProvider implements ApiProvider {
         // This allows the target model to understand conversation context while receiving the current attack in the transformed format
         if (lastTransformResult.audio || lastTransformResult.image) {
           // Build hybrid payload with conversation history + current transformed turn
-          const historyWithoutCurrentTurn = this.conversationHistory.slice(0, -1);
+          const historyWithoutCurrentTurn = conversationHistory.slice(0, -1);
           const hybridPayload = {
             _promptfoo_audio_hybrid: true,
             history: historyWithoutCurrentTurn,
@@ -625,7 +641,7 @@ export class HydraProvider implements ApiProvider {
             ...context,
             vars: {
               ...vars,
-              ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+              ...(sessionId ? { sessionId } : {}),
               ...(currentRenderInputVars || {}),
               [this.injectVar]: finalTargetPrompt,
             },
@@ -711,7 +727,7 @@ export class HydraProvider implements ApiProvider {
 
       // Capture sessionId if stateful
       if (this.stateful && targetResponse.sessionId) {
-        this.sessionId = targetResponse.sessionId;
+        sessionId = targetResponse.sessionId;
         sessionIds.push(targetResponse.sessionId);
         vars['sessionId'] = targetResponse.sessionId;
         if (!context) {
@@ -755,7 +771,7 @@ export class HydraProvider implements ApiProvider {
           : targetResponse.output;
 
       // Add response to conversation history
-      this.conversationHistory.push({
+      conversationHistory.push({
         role: 'assistant',
         content: historyOutput,
       });
@@ -768,20 +784,20 @@ export class HydraProvider implements ApiProvider {
           turn,
           backtrackCount: backtrackCount + 1,
           maxBacktracks: this.maxBacktracks,
-          conversationLengthBefore: this.conversationHistory.length,
+          conversationLengthBefore: conversationHistory.length,
         });
         backtrackCount++;
 
         // Remove last user + assistant messages
-        if (this.conversationHistory.length >= 2) {
-          this.conversationHistory.pop(); // Remove assistant
-          this.conversationHistory.pop(); // Remove user
+        if (conversationHistory.length >= 2) {
+          conversationHistory.pop(); // Remove assistant
+          conversationHistory.pop(); // Remove user
         }
 
         logger.debug('[Hydra] After backtracking state', {
           turn,
           backtrackCount,
-          conversationLength: this.conversationHistory.length,
+          conversationLength: conversationHistory.length,
           willDecrementTurn: turn > 1,
         });
 
@@ -906,6 +922,7 @@ export class HydraProvider implements ApiProvider {
         graderPassed: graderResult?.pass,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
+        agent: agentResp.metadata,
         // Include input vars for multi-input mode (extracted from current prompt)
         inputVars: currentRenderInputVars,
       });
@@ -929,7 +946,7 @@ export class HydraProvider implements ApiProvider {
     // Update scan learnings
     if (scanId) {
       try {
-        const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
+        const turnsCompleted = conversationHistory.filter((m) => m.role === 'user').length;
         const learningRequest = {
           task: 'hydra-decision',
           testRunId,
@@ -964,12 +981,12 @@ export class HydraProvider implements ApiProvider {
       }
     }
 
-    const messages = this.conversationHistory.map((msg) => ({
+    const messages = conversationHistory.map((msg) => ({
       role: msg.role,
       content: msg.content,
     })) as Record<string, any>[];
     const targetProbeCount = totalTokenUsage.numRequests ?? 0;
-    const hydraRoundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
+    const hydraRoundsCompleted = conversationHistory.filter((m) => m.role === 'user').length;
     const failClosedError =
       targetProbeCount === 0
         ? agentFailureError || 'Hydra did not execute any target probes'
@@ -983,7 +1000,7 @@ export class HydraProvider implements ApiProvider {
           ? { error: lastTargetResponse.error }
           : {}),
       metadata: {
-        sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+        sessionId: sessionId || getSessionId(lastTargetResponse, context),
         messages,
         hydraRoundsCompleted,
         hydraBacktrackCount: backtrackCount,

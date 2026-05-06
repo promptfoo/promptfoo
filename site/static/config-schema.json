@@ -2029,6 +2029,579 @@
             }
           ]
         },
+        "agentic": {
+          "description": "Configuration for agentic redteam strategies such as Hydra and jailbreak:meta",
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["auto", "local", "remote"]
+            },
+            "provider": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {},
+                    "callApi": {},
+                    "callEmbeddingApi": {},
+                    "callClassificationApi": {},
+                    "label": {},
+                    "transform": {
+                      "type": "string"
+                    },
+                    "delay": {
+                      "type": "number"
+                    },
+                    "config": {},
+                    "inputs": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "config": {
+                                "type": "object",
+                                "properties": {
+                                  "benign": {
+                                    "type": "boolean"
+                                  },
+                                  "inputPurpose": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "injectionPlacements": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "description": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": ["text", "pdf", "docx", "image"]
+                              }
+                            },
+                            "required": ["description"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["id", "callApi"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {},
+                    "label": {},
+                    "config": {},
+                    "prompts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "transform": {
+                      "type": "string"
+                    },
+                    "delay": {
+                      "type": "number"
+                    },
+                    "env": {
+                      "type": "object",
+                      "properties": {
+                        "ABLIT_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "ABLIT_KEY": {
+                          "type": "string"
+                        },
+                        "AI21_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AI21_API_KEY": {
+                          "type": "string"
+                        },
+                        "AIML_API_KEY": {
+                          "type": "string"
+                        },
+                        "ANTHROPIC_API_KEY": {
+                          "type": "string"
+                        },
+                        "ANTHROPIC_BASE_URL": {
+                          "type": "string"
+                        },
+                        "ATLASCLOUD_API_KEY": {
+                          "type": "string"
+                        },
+                        "AWS_BEDROCK_REGION": {
+                          "type": "string"
+                        },
+                        "AZURE_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AZURE_API_HOST": {
+                          "type": "string"
+                        },
+                        "AZURE_API_KEY": {
+                          "type": "string"
+                        },
+                        "AZURE_AUTHORITY_HOST": {
+                          "type": "string"
+                        },
+                        "AZURE_CLIENT_ID": {
+                          "type": "string"
+                        },
+                        "AZURE_CLIENT_SECRET": {
+                          "type": "string"
+                        },
+                        "AZURE_DEPLOYMENT_NAME": {
+                          "type": "string"
+                        },
+                        "AZURE_EMBEDDING_DEPLOYMENT_NAME": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_API_HOST": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_API_KEY": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_BASE_URL": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_DEPLOYMENT_NAME": {
+                          "type": "string"
+                        },
+                        "AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME": {
+                          "type": "string"
+                        },
+                        "AZURE_TENANT_ID": {
+                          "type": "string"
+                        },
+                        "AZURE_TOKEN_SCOPE": {
+                          "type": "string"
+                        },
+                        "CLAUDE_CODE_USE_BEDROCK": {
+                          "type": "string"
+                        },
+                        "CLAUDE_CODE_USE_VERTEX": {
+                          "type": "string"
+                        },
+                        "CLOUDFLARE_ACCOUNT_ID": {
+                          "type": "string"
+                        },
+                        "CLOUDFLARE_API_KEY": {
+                          "type": "string"
+                        },
+                        "CLOUDFLARE_GATEWAY_ID": {
+                          "type": "string"
+                        },
+                        "CF_AIG_TOKEN": {
+                          "type": "string"
+                        },
+                        "COMETAPI_KEY": {
+                          "type": "string"
+                        },
+                        "COHERE_API_KEY": {
+                          "type": "string"
+                        },
+                        "COHERE_CLIENT_NAME": {
+                          "type": "string"
+                        },
+                        "DATABRICKS_TOKEN": {
+                          "type": "string"
+                        },
+                        "DATABRICKS_WORKSPACE_URL": {
+                          "type": "string"
+                        },
+                        "DOCKER_MODEL_RUNNER_BASE_URL": {
+                          "type": "string"
+                        },
+                        "DOCKER_MODEL_RUNNER_API_KEY": {
+                          "type": "string"
+                        },
+                        "ELEVENLABS_API_KEY": {
+                          "type": "string"
+                        },
+                        "FAL_KEY": {
+                          "type": "string"
+                        },
+                        "GITHUB_TOKEN": {
+                          "type": "string"
+                        },
+                        "GOOGLE_API_HOST": {
+                          "type": "string"
+                        },
+                        "GOOGLE_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "GOOGLE_API_KEY": {
+                          "type": "string"
+                        },
+                        "GOOGLE_PROJECT_ID": {
+                          "type": "string"
+                        },
+                        "GOOGLE_LOCATION": {
+                          "type": "string"
+                        },
+                        "GOOGLE_GENERATIVE_AI_API_KEY": {
+                          "type": "string"
+                        },
+                        "GEMINI_API_KEY": {
+                          "type": "string"
+                        },
+                        "GROQ_API_KEY": {
+                          "type": "string"
+                        },
+                        "HELICONE_API_KEY": {
+                          "type": "string"
+                        },
+                        "HF_API_TOKEN": {
+                          "type": "string"
+                        },
+                        "HF_TOKEN": {
+                          "type": "string"
+                        },
+                        "HYPERBOLIC_API_KEY": {
+                          "type": "string"
+                        },
+                        "HUGGING_FACE_HUB_TOKEN": {
+                          "type": "string"
+                        },
+                        "JFROG_API_KEY": {
+                          "type": "string"
+                        },
+                        "LANGFUSE_HOST": {
+                          "type": "string"
+                        },
+                        "LANGFUSE_PUBLIC_KEY": {
+                          "type": "string"
+                        },
+                        "LANGFUSE_SECRET_KEY": {
+                          "type": "string"
+                        },
+                        "LITELLM_API_BASE": {
+                          "type": "string"
+                        },
+                        "LLAMA_BASE_URL": {
+                          "type": "string"
+                        },
+                        "LOCALAI_BASE_URL": {
+                          "type": "string"
+                        },
+                        "MISTRAL_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "MISTRAL_API_HOST": {
+                          "type": "string"
+                        },
+                        "MISTRAL_API_KEY": {
+                          "type": "string"
+                        },
+                        "MODELSLAB_API_KEY": {
+                          "type": "string"
+                        },
+                        "NSCALE_SERVICE_TOKEN": {
+                          "type": "string"
+                        },
+                        "NSCALE_API_KEY": {
+                          "type": "string"
+                        },
+                        "OLLAMA_API_KEY": {
+                          "type": "string"
+                        },
+                        "OLLAMA_BASE_URL": {
+                          "type": "string"
+                        },
+                        "OPENAI_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "OPENAI_API_HOST": {
+                          "type": "string"
+                        },
+                        "OPENAI_API_KEY": {
+                          "type": "string"
+                        },
+                        "OPENAI_BASE_URL": {
+                          "type": "string"
+                        },
+                        "OPENAI_ORGANIZATION": {
+                          "type": "string"
+                        },
+                        "CLAWDBOT_GATEWAY_PASSWORD": {
+                          "type": "string"
+                        },
+                        "CLAWDBOT_GATEWAY_TOKEN": {
+                          "type": "string"
+                        },
+                        "CLAWDBOT_GATEWAY_URL": {
+                          "type": "string"
+                        },
+                        "CODEX_API_KEY": {
+                          "type": "string"
+                        },
+                        "OPENCLAW_CONFIG_PATH": {
+                          "type": "string"
+                        },
+                        "OPENCLAW_GATEWAY_PASSWORD": {
+                          "type": "string"
+                        },
+                        "OPENCLAW_GATEWAY_PORT": {
+                          "type": "string"
+                        },
+                        "OPENCLAW_GATEWAY_TOKEN": {
+                          "type": "string"
+                        },
+                        "OPENCLAW_GATEWAY_URL": {
+                          "type": "string"
+                        },
+                        "PALM_API_HOST": {
+                          "type": "string"
+                        },
+                        "PALM_API_KEY": {
+                          "type": "string"
+                        },
+                        "PORTKEY_API_KEY": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_CA_CERT_PATH": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_PFX_CERT_PATH": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_PFX_PASSWORD": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_JKS_CERT_PATH": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_JKS_PASSWORD": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_JKS_ALIAS": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_INSECURE_SSL": {
+                          "type": "string"
+                        },
+                        "QUIVERAI_API_KEY": {
+                          "type": "string"
+                        },
+                        "REPLICATE_API_KEY": {
+                          "type": "string"
+                        },
+                        "REPLICATE_API_TOKEN": {
+                          "type": "string"
+                        },
+                        "SHAREPOINT_BASE_URL": {
+                          "type": "string"
+                        },
+                        "SHAREPOINT_CERT_PATH": {
+                          "type": "string"
+                        },
+                        "SHAREPOINT_CLIENT_ID": {
+                          "type": "string"
+                        },
+                        "SHAREPOINT_TENANT_ID": {
+                          "type": "string"
+                        },
+                        "VERCEL_AI_GATEWAY_API_KEY": {
+                          "type": "string"
+                        },
+                        "VERCEL_AI_GATEWAY_BASE_URL": {
+                          "type": "string"
+                        },
+                        "VERTEX_API_HOST": {
+                          "type": "string"
+                        },
+                        "VERTEX_API_KEY": {
+                          "type": "string"
+                        },
+                        "VERTEX_API_VERSION": {
+                          "type": "string"
+                        },
+                        "VERTEX_PROJECT_ID": {
+                          "type": "string"
+                        },
+                        "VERTEX_PUBLISHER": {
+                          "type": "string"
+                        },
+                        "VERTEX_REGION": {
+                          "type": "string"
+                        },
+                        "VOYAGE_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "VOYAGE_API_KEY": {
+                          "type": "string"
+                        },
+                        "WATSONX_AI_APIKEY": {
+                          "type": "string"
+                        },
+                        "WATSONX_AI_AUTH_TYPE": {
+                          "type": "string"
+                        },
+                        "WATSONX_AI_BEARER_TOKEN": {
+                          "type": "string"
+                        },
+                        "WATSONX_AI_PROJECT_ID": {
+                          "type": "string"
+                        },
+                        "XAI_API_BASE_URL": {
+                          "type": "string"
+                        },
+                        "XAI_API_KEY": {
+                          "type": "string"
+                        },
+                        "AZURE_CONTENT_SAFETY_ENDPOINT": {
+                          "type": "string"
+                        },
+                        "AZURE_CONTENT_SAFETY_API_KEY": {
+                          "type": "string"
+                        },
+                        "AZURE_CONTENT_SAFETY_API_VERSION": {
+                          "type": "string"
+                        },
+                        "AWS_REGION": {
+                          "type": "string"
+                        },
+                        "AWS_DEFAULT_REGION": {
+                          "type": "string"
+                        },
+                        "AWS_SAGEMAKER_MAX_TOKENS": {
+                          "type": "string"
+                        },
+                        "AWS_SAGEMAKER_TEMPERATURE": {
+                          "type": "string"
+                        },
+                        "AWS_SAGEMAKER_TOP_P": {
+                          "type": "string"
+                        },
+                        "AWS_SAGEMAKER_MAX_RETRIES": {
+                          "type": "string"
+                        },
+                        "PROMPTFOO_EVAL_TIMEOUT_MS": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "inputs": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+                      },
+                      "additionalProperties": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "config": {
+                                "type": "object",
+                                "properties": {
+                                  "benign": {
+                                    "type": "boolean"
+                                  },
+                                  "inputPurpose": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "injectionPlacements": {
+                                    "minItems": 1,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              },
+                              "description": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": ["text", "pdf", "docx", "image"]
+                              }
+                            },
+                            "required": ["description"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "promptAdjuster": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "instructions": {
+                  "type": "string"
+                },
+                "contextFiles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "inlineContext": {
+                  "type": "boolean"
+                },
+                "maxContextChars": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "capturePrompt": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
         "numTests": {
           "description": "Number of tests to generate",
           "type": "integer",
