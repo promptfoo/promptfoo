@@ -262,8 +262,7 @@ function createThenableQuery(rows: unknown[] = []) {
     offset: vi.fn(() => query),
     orderBy: vi.fn(() => query),
     // biome-ignore lint/suspicious/noThenProperty: Drizzle select builders are thenables, and config routes await them directly.
-    then: (resolve: (value: unknown[]) => void, reject: (reason: unknown) => void) =>
-      Promise.resolve(rows).then(resolve, reject),
+    then: (...args: Parameters<Promise<unknown[]>['then']>) => Promise.resolve(rows).then(...args),
     where: vi.fn(() => query),
   };
 
@@ -773,14 +772,14 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
 
   res.write = ((chunk: unknown, encoding?: BufferEncoding | ((error?: Error) => void)) => {
     if (chunk !== undefined) {
-      chunks.push(Buffer.isBuffer(chunk) ? Buffer.from(chunk) : Buffer.from(String(chunk)));
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
     }
     return write(chunk as never, encoding as never);
   }) as typeof res.write;
 
   res.end = ((chunk?: unknown, encoding?: BufferEncoding | (() => void), callback?: () => void) => {
     if (chunk !== undefined) {
-      chunks.push(Buffer.isBuffer(chunk) ? Buffer.from(chunk) : Buffer.from(String(chunk)));
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
     }
     return end(chunk as never, encoding as never, callback);
   }) as typeof res.end;

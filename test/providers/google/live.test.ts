@@ -11,16 +11,16 @@ import { mockProcessEnv } from '../../util/utils';
 
 const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
 
-// Mock setTimeout globally to speed up tests
 const originalSetTimeout = global.setTimeout;
-global.setTimeout = vi.fn((callback: any, delay?: number) => {
+// Mock Python startup delays during each test, then restore the global timer.
+const mockSetTimeout = vi.fn((callback: any, delay?: number, ...args: any[]) => {
   // For delays of 1000ms (Python startup), execute immediately
   if (delay === 1000) {
-    return originalSetTimeout(callback, 0);
+    return originalSetTimeout(callback, 0, ...args);
   }
   // For other delays, use the original setTimeout
-  return originalSetTimeout(callback, delay);
-}) as any;
+  return originalSetTimeout(callback, delay, ...args);
+});
 
 vi.mock('ws');
 vi.mock('../../../src/esm', async (importOriginal) => {
@@ -33,8 +33,8 @@ vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
   return {
     ...(await importOriginal()),
 
-    validatePythonPath: vi.fn().mockImplementation(async function (path) {
-      return path;
+    validatePythonPath: vi.fn().mockImplementation(async function (pythonPath) {
+      return pythonPath;
     }),
   };
 });
@@ -107,6 +107,9 @@ describe('GoogleLiveProvider', () => {
   let provider: GoogleLiveProvider;
 
   beforeEach(async () => {
+    global.setTimeout = mockSetTimeout as unknown as typeof setTimeout;
+    mockSetTimeout.mockClear();
+
     // Reset mocks that hold call history or implementations across tests so
     // shuffled-order runs see a clean slate. clearAllMocks in afterEach clears
     // call history but preserves implementations, and async work scheduled by
@@ -146,8 +149,8 @@ describe('GoogleLiveProvider', () => {
     // Reset validatePythonPath mock for each test
     vi.mocked(
       (await import('../../../src/python/pythonUtils')).validatePythonPath,
-    ).mockImplementation(async function (path: string) {
-      return path;
+    ).mockImplementation(async function (pythonPath: string) {
+      return pythonPath;
     });
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -162,6 +165,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   afterEach(() => {
+    global.setTimeout = originalSetTimeout;
     vi.clearAllMocks();
   });
 
@@ -1084,11 +1088,6 @@ describe('GoogleLiveProvider', () => {
       json: vi.fn().mockResolvedValue({ counter: 5 }),
     } as any);
 
-    // Record call count before API call to handle async pollution from other tests
-    // Using difference-based counting instead of mockClear() to avoid race conditions
-    // with setImmediate callbacks from previous tests
-    const callCountBefore = mockFetchWithProxy.mock.calls.length;
-
     const response = await provider.callApi('Add to the counter until it reaches 5');
     expect(response).toEqual({
       output: {
@@ -1107,29 +1106,28 @@ describe('GoogleLiveProvider', () => {
       metadata: {},
     });
 
-    // Check the specific calls made to the stateful API during this test
-    // Using slice to only check calls made during this test, avoiding pollution from
-    // async callbacks of previous tests that may complete during this test
-    const testCalls = mockFetchWithProxy.mock.calls.slice(callCountBefore);
-    const getCallUrls = testCalls.map((call) => call[0]) as string[];
+    const statefulApiUrls = mockFetchWithProxy.mock.calls
+      .map((call) => call[0] as string)
+      .filter((url) => url.startsWith('http://127.0.0.1:5000/'));
+    expect(statefulApiUrls).toEqual([
+      'http://127.0.0.1:5000/get_count',
+      'http://127.0.0.1:5000/add_one',
+      'http://127.0.0.1:5000/get_count',
+      'http://127.0.0.1:5000/add_one',
+      'http://127.0.0.1:5000/get_count',
+      'http://127.0.0.1:5000/get_state',
+    ]);
 
-    // Verify minimum number of calls (5 function calls + 1 get_state)
-    // Note: Due to async timing variations (especially on Node 24.x), there may be extra calls
-    expect(getCallUrls.length).toBeGreaterThanOrEqual(6);
-
-    // Verify get_state was called last (this is deterministic - happens in finalizeResponse)
-    expect(getCallUrls[getCallUrls.length - 1]).toBe('http://127.0.0.1:5000/get_state');
-
-    // Verify all expected function calls were made (filter to just function call URLs)
-    const functionCallUrls = getCallUrls.filter((url) => url !== 'http://127.0.0.1:5000/get_state');
+    const functionCallUrls = statefulApiUrls.filter(
+      (url) => url !== 'http://127.0.0.1:5000/get_state',
+    );
     const addOneCalls = functionCallUrls.filter((url) => url === 'http://127.0.0.1:5000/add_one');
     const getCountCalls = functionCallUrls.filter(
       (url) => url === 'http://127.0.0.1:5000/get_count',
     );
 
-    // Should have at least 2 add_one calls and 3 get_count calls
-    expect(addOneCalls.length).toBeGreaterThanOrEqual(2);
-    expect(getCountCalls.length).toBeGreaterThanOrEqual(3);
+    expect(addOneCalls.length).toBe(2);
+    expect(getCountCalls.length).toBe(3);
   });
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {
