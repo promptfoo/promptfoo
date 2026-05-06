@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: ProviderClassificationResponse'
 ---
 
-[promptfoo](../README.md) / ProviderClassificationResponse
-
-# Interface: ProviderClassificationResponse
-
-Defined in: [types/providers.ts:639](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L639)
+Defined in: [types/providers.ts:649](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L649)
 
 Response returned by classification-capable providers.
 
@@ -24,7 +20,7 @@ const response: ProviderClassificationResponse = {
 
 > `optional` **classification?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/providers.ts:643](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L643)
+Defined in: [types/providers.ts:653](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L653)
 
 Class labels mapped to provider-reported scores.
 
@@ -34,6 +30,6 @@ Class labels mapped to provider-reported scores.
 
 > `optional` **error?**: `string`
 
-Defined in: [types/providers.ts:641](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L641)
+Defined in: [types/providers.ts:651](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L651)
 
 Error message when the classification call failed without throwing.

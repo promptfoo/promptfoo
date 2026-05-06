@@ -54,6 +54,7 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+export type { ConversationMessage } from './external/matchers/deepeval';
 export type {
   AdaptiveModification,
   AdaptiveRequest,
@@ -62,6 +63,7 @@ export type {
   GuardResult,
   GuardResultEntry,
 } from './guardrails';
+export type { ModerationMatchOptions } from './matchers/moderation';
 export type { LoadApiProvidersOptions } from './providers/index';
 export type {
   PluginConfig,
@@ -78,6 +80,7 @@ export type {
   AtomicTestCase,
   CompletedPrompt,
   EvaluateOptions,
+  EvaluateProgressCallback,
   EvaluateTable,
   EvaluateTableHead,
   EvaluateTableOutput,

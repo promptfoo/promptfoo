@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / RunAssertionOptions
-
-# Interface: RunAssertionOptions
+title: 'Interface: RunAssertionOptions'
+---
 
 Defined in: [assertions/index.ts:417](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L417)
 

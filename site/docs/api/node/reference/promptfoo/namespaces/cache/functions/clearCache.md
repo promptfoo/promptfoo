@@ -1,14 +1,10 @@
-[**promptfoo**](../../../../README.md)
-
 ---
-
-[promptfoo](../../../../README.md) / [cache](../README.md) / clearCache
-
-# Function: clearCache()
+title: 'Function: clearCache()'
+---
 
 > **clearCache**(): `Promise`\<`boolean`\>
 
-Defined in: [cache.ts:740](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L740)
+Defined in: [cache.ts:752](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L752)
 
 Clear the shared promptfoo cache.
 

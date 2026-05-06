@@ -1,14 +1,10 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / AssertionValueFunction
-
-# Type Alias: AssertionValueFunction
+title: 'Type Alias: AssertionValueFunction'
+---
 
 > **AssertionValueFunction** = (`output`, `context`) => `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>
 
-Defined in: [types/index.ts:1114](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1114)
+Defined in: [types/index.ts:1104](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1104)
 
 Function form accepted by JavaScript assertions.
 

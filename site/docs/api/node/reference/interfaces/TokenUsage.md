@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / TokenUsage
-
-# Interface: TokenUsage
+title: 'Interface: TokenUsage'
+---
 
 Defined in: [types/shared.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L147)
 

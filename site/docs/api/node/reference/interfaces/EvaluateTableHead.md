@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: EvaluateTableHead'
 ---
 
-[promptfoo](../README.md) / EvaluateTableHead
-
-# Interface: EvaluateTableHead
-
-Defined in: [types/index.ts:666](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L666)
+Defined in: [types/index.ts:656](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L656)
 
 Header metadata for an eval table.
 
@@ -25,7 +21,7 @@ const head: EvaluateTableHead = {
 
 > **prompts**: [`CompletedPrompt`](CompletedPrompt.md)[]
 
-Defined in: [types/index.ts:668](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L668)
+Defined in: [types/index.ts:658](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L658)
 
 Completed prompts rendered as provider columns.
 
@@ -35,6 +31,6 @@ Completed prompts rendered as provider columns.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:670](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L670)
+Defined in: [types/index.ts:660](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L660)
 
 Variable names rendered before provider columns.

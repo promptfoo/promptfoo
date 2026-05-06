@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / ProviderFunction
-
-# Type Alias: ProviderFunction
+title: 'Type Alias: ProviderFunction'
+---
 
 > **ProviderFunction** = [`CallApiFunction`](../interfaces/CallApiFunction.md)
 

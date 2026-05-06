@@ -456,19 +456,22 @@ export interface RunAssertionOptions {
  * console.log(result.pass);
  * ```
  *
+ * @param options - Assertion, provider response, and supporting runtime context.
+ * @returns The grading result for this single assertion.
  * @public
  */
-export async function runAssertion({
-  prompt,
-  provider,
-  assertion,
-  test,
-  vars,
-  latencyMs,
-  providerResponse,
-  traceId,
-  traceData,
-}: RunAssertionOptions): Promise<GradingResult> {
+export async function runAssertion(options: RunAssertionOptions): Promise<GradingResult> {
+  const {
+    prompt,
+    provider,
+    assertion,
+    test,
+    vars,
+    latencyMs,
+    providerResponse,
+    traceId,
+    traceData,
+  } = options;
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -774,18 +777,21 @@ export interface RunAssertionsOptions {
  * console.log(result.pass, result.score);
  * ```
  *
+ * @param options - Test case, provider response, and aggregation controls.
+ * @returns The aggregated grading result for the test case.
  * @public
  */
-export async function runAssertions({
-  assertScoringFunction,
-  latencyMs,
-  prompt,
-  provider,
-  providerResponse,
-  test,
-  vars,
-  traceId,
-}: RunAssertionsOptions): Promise<GradingResult> {
+export async function runAssertions(options: RunAssertionsOptions): Promise<GradingResult> {
+  const {
+    assertScoringFunction,
+    latencyMs,
+    prompt,
+    provider,
+    providerResponse,
+    test,
+    vars,
+    traceId,
+  } = options;
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
   }
@@ -926,6 +932,17 @@ export async function readAssertions(filePath: string): Promise<Assertion[]> {
  * `runAssertion()` and `runAssertions()` are the supported low-level execution
  * hooks. The matcher helpers are also public and are useful when integrating
  * promptfoo with test frameworks such as Jest or Vitest.
+ *
+ * @example
+ * ```ts
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertion({
+ *   assertion: { type: 'contains', value: 'Ada' },
+ *   test: { vars: {} },
+ *   providerResponse: { output: 'Hello Ada' },
+ * });
+ * ```
  *
  * @public
  */

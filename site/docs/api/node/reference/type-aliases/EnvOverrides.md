@@ -1,19 +1,17 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / EnvOverrides
-
-# Type Alias: EnvOverrides
+title: 'Type Alias: EnvOverrides'
+---
 
 > **EnvOverrides** = `z.infer`\<_typeof_ `ProviderEnvOverridesSchema`\> & `Record`\<`string`, `string` \| `undefined`\>
 
-Defined in: [types/env.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/types/env.ts#L148)
+Defined in: [types/env.ts:150](https://github.com/promptfoo/promptfoo/blob/main/src/types/env.ts#L150)
 
 Environment-variable overrides accepted by provider-loading APIs.
 
-Allows arbitrary environment variables for template rendering (for example,
-`{{ env.MY_CUSTOM_VAR }}`) while preserving known provider keys.
+Every value is a string override or `undefined`. Built-in provider keys such
+as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are accepted, and arbitrary custom
+keys are also allowed for template rendering (for example,
+`{{ env.MY_CUSTOM_VAR }}`).
 
 ## Example
 

@@ -7,16 +7,41 @@ import { getAndCheckProvider } from './providers';
 
 import type { ApiModerationProvider, GradingConfig, GradingResult } from '../types/index';
 
-interface ModerationMatchOptions {
+/**
+ * Input passed to `assertions.matchesModeration()`.
+ *
+ * @example
+ * ```ts
+ * const options: ModerationMatchOptions = {
+ *   userPrompt: 'Tell me a joke.',
+ *   assistantResponse: 'Here is one...',
+ *   categories: ['violence'],
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface ModerationMatchOptions {
+  /** User prompt that led to the assistant response. */
   userPrompt: string;
+  /** Assistant response to moderate. */
   assistantResponse: string;
+  /** Optional subset of moderation categories that should count as failures. */
   categories?: string[];
 }
 
+/**
+ * Check a model response with the configured moderation provider.
+ *
+ * @param options - Prompt, response, and optional category filter.
+ * @param grading - Optional moderation-provider override.
+ * @returns Moderation grading result without the surrounding assertion payload.
+ */
 export async function matchesModeration(
-  { userPrompt, assistantResponse, categories = [] }: ModerationMatchOptions,
+  options: ModerationMatchOptions,
   grading?: GradingConfig,
 ): Promise<Omit<GradingResult, 'assertion'>> {
+  const { userPrompt, assistantResponse, categories = [] } = options;
   if (!assistantResponse) {
     return {
       pass: true,

@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: PromptConfig'
 ---
 
-[promptfoo](../README.md) / PromptConfig
-
-# Interface: PromptConfig
-
-Defined in: [types/prompts.ts:39](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L39)
+Defined in: [types/prompts.ts:40](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L40)
 
 Prompt-local text decoration applied before provider execution.
 
@@ -29,7 +25,7 @@ const config: PromptConfig = {
 
 > `optional` **prefix?**: `string`
 
-Defined in: [types/prompts.ts:41](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L41)
+Defined in: [types/prompts.ts:42](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L42)
 
 Text prepended to the rendered prompt before it is sent to the provider.
 
@@ -39,6 +35,6 @@ Text prepended to the rendered prompt before it is sent to the provider.
 
 > `optional` **suffix?**: `string`
 
-Defined in: [types/prompts.ts:43](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L43)
+Defined in: [types/prompts.ts:44](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L44)
 
 Text appended to the rendered prompt before it is sent to the provider.

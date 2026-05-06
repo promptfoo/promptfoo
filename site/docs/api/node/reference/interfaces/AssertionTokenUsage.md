@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / AssertionTokenUsage
-
-# Interface: AssertionTokenUsage
+title: 'Interface: AssertionTokenUsage'
+---
 
 Defined in: [types/shared.ts:118](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L118)
 

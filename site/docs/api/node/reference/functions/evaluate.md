@@ -1,14 +1,10 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / evaluate
-
-# Function: evaluate()
+title: 'Function: evaluate()'
+---
 
 > **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`\>
 
-Defined in: [index.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L157)
+Defined in: [index.ts:160](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L160)
 
 Run an eval from a JavaScript or TypeScript program.
 

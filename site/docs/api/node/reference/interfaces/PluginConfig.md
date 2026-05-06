@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / PluginConfig
-
-# Interface: PluginConfig
+title: 'Interface: PluginConfig'
+---
 
 Defined in: [redteam/types.ts:279](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L279)
 

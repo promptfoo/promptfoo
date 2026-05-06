@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: ProviderSimilarityResponse'
 ---
 
-[promptfoo](../README.md) / ProviderSimilarityResponse
-
-# Interface: ProviderSimilarityResponse
-
-Defined in: [types/providers.ts:618](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L618)
+Defined in: [types/providers.ts:628](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L628)
 
 Response returned by similarity-capable providers.
 
@@ -24,7 +20,7 @@ const response: ProviderSimilarityResponse = {
 
 > `optional` **error?**: `string`
 
-Defined in: [types/providers.ts:620](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L620)
+Defined in: [types/providers.ts:630](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L630)
 
 Error message when the similarity call failed without throwing.
 
@@ -34,7 +30,7 @@ Error message when the similarity call failed without throwing.
 
 > `optional` **similarity?**: `number`
 
-Defined in: [types/providers.ts:622](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L622)
+Defined in: [types/providers.ts:632](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L632)
 
 Similarity score reported by the provider.
 
@@ -44,6 +40,6 @@ Similarity score reported by the provider.
 
 > `optional` **tokenUsage?**: `Partial`\<[`TokenUsage`](TokenUsage.md)\>
 
-Defined in: [types/providers.ts:624](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L624)
+Defined in: [types/providers.ts:634](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L634)
 
 Token usage attributed to the similarity request.

@@ -308,17 +308,7 @@ export const EvaluateOptionsSchema = z.object({
    * Arguments are completed-row count, total-row count, zero-based row index,
    * the current eval step, and aggregate metrics so far.
    */
-  progressCallback: z
-    .custom<
-      (
-        completed: number,
-        total: number,
-        index: number,
-        evalStep: RunEvalOptions,
-        metrics: PromptMetrics,
-      ) => void
-    >((v) => typeof v === 'function')
-    .optional(),
+  progressCallback: z.custom<EvaluateProgressCallback>((v) => typeof v === 'function').optional(),
   /**
    * Number of times to repeat each test case.
    */
@@ -1190,6 +1180,9 @@ export const VarsSchema = z.custom<Vars>((data) => {
 /**
  * Custom scorer used to aggregate named assertion scores for one test case.
  *
+ * @param namedScores - Named assertion scores keyed by each assertion's `metric` value.
+ * @param context - Optional aggregation metadata for the surrounding assertion set.
+ *
  * @example
  * ```ts
  * const scoreAssertions: ScoringFunction = async (namedScores, context) => ({
@@ -1202,21 +1195,57 @@ export const VarsSchema = z.custom<Vars>((data) => {
  * @public
  */
 export type ScoringFunction = (
+  /** Named assertion scores keyed by each assertion's `metric` value. */
   namedScores: Record<string, number>,
   context?: {
+    /** Threshold applied by the surrounding assertion set, when configured. */
     threshold?: number;
+    /** Parent assertion-set metadata when this scorer runs inside one. */
     parentAssertionSet?: {
+      /** Zero-based position of the parent assertion set in the test case. */
       index: number;
+      /** Assertion set being aggregated. */
       assertionSet: AssertionSet;
     };
+    /** Individual assertion results available for custom aggregation. */
     componentResults?: GradingResult[];
+    /** Token totals accumulated across component results. */
     tokensUsed?: {
+      /** Total tokens used by all component results. */
       total: number;
+      /** Prompt tokens used by all component results. */
       prompt: number;
+      /** Completion tokens used by all component results. */
       completion: number;
     };
   },
 ) => Promise<GradingResult> | GradingResult;
+
+/**
+ * Progress callback invoked as rows finish during evaluation.
+ *
+ * @param completed - Number of rows completed so far.
+ * @param total - Total number of rows scheduled for the eval.
+ * @param index - Zero-based index of the row that just completed.
+ * @param evalStep - Current evaluator step for the completed row.
+ * @param metrics - Aggregate prompt metrics accumulated so far.
+ *
+ * @example
+ * ```ts
+ * const onProgress: EvaluateProgressCallback = (completed, total) => {
+ *   console.log(`${completed}/${total}`);
+ * };
+ * ```
+ *
+ * @public
+ */
+export type EvaluateProgressCallback = (
+  completed: number,
+  total: number,
+  index: number,
+  evalStep: RunEvalOptions,
+  metrics: PromptMetrics,
+) => void;
 
 // Each test case is graded pass/fail with a score.  A test case represents a unique input to the LLM after substituting `vars` in the prompt.
 // HEADS UP: When you add a property here, you probably need to load it from `defaultTest` in evaluator.ts.
@@ -1825,8 +1854,10 @@ export interface EvalWithMetadata {
 /**
  * Test-suite shape accepted by the Node.js `evaluate()` API.
  *
- * Additional config fields follow the same schema as the YAML configuration
- * reference. See the configuration docs for the full config model.
+ * In addition to the Node-specific `prompts`, `providers`, `author`, and
+ * `writeLatestResults` fields listed below, this type accepts the same shared
+ * suite fields as the YAML config model, including `tests`, `defaultTest`,
+ * `env`, and scenarios.
  *
  * @example
  * ```ts

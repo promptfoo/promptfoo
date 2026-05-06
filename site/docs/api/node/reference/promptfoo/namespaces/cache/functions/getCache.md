@@ -1,14 +1,10 @@
-[**promptfoo**](../../../../README.md)
-
 ---
-
-[promptfoo](../../../../README.md) / [cache](../README.md) / getCache
-
-# Function: getCache()
+title: 'Function: getCache()'
+---
 
 > **getCache**(): `Cache`
 
-Defined in: [cache.ts:67](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L67)
+Defined in: [cache.ts:76](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L76)
 
 Return the active promptfoo cache instance.
 

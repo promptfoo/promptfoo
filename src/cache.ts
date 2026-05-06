@@ -4,6 +4,15 @@
  * Use this namespace when custom providers need shared cache access or when
  * related evals need isolated cache namespaces.
  *
+ * @example
+ * ```ts
+ * import { cache } from 'promptfoo';
+ *
+ * await cache.withCacheNamespace('preview', async () => {
+ *   await cache.getCache().set('last-provider', 'openai:chat:gpt-5.5');
+ * });
+ * ```
+ *
  * @module
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -240,6 +249,7 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
  * @param fn - Async operation to run inside the scoped namespace.
  * @returns The value returned by `fn`.
  *
+ * @typeParam T - Value returned by `fn`.
  * @public
  */
 export function withCacheNamespace<T>(namespace: string | undefined, fn: () => Promise<T>) {
@@ -286,6 +296,7 @@ function getEffectiveCacheEnabled() {
  * };
  * ```
  *
+ * @typeParam T - Parsed response payload type.
  * @public
  */
 export type FetchWithCacheResult<T> = {
@@ -613,6 +624,7 @@ async function prepareFetchResponse(
  * console.log(cached, data.args.model);
  * ```
  *
+ * @typeParam T - Parsed response payload type returned from JSON mode.
  * @public
  */
 export async function fetchWithCache<T = unknown>(

@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / TransformPrompt
-
-# Interface: TransformPrompt
+title: 'Interface: TransformPrompt'
+---
 
 Defined in: [types/transform.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L46)
 

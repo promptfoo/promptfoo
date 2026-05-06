@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: PromptFunctionResult'
 ---
 
-[promptfoo](../README.md) / PromptFunctionResult
-
-# Interface: PromptFunctionResult
-
-Defined in: [types/prompts.ts:90](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L90)
+Defined in: [types/prompts.ts:91](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L91)
 
 Result type for prompt functions.
 
@@ -31,7 +27,7 @@ const result: PromptFunctionResult = {
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/prompts.ts:94](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L94)
+Defined in: [types/prompts.ts:95](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L95)
 
 Provider config overrides to merge for this rendered prompt.
 
@@ -41,6 +37,6 @@ Provider config overrides to merge for this rendered prompt.
 
 > **prompt**: [`PromptContent`](../type-aliases/PromptContent.md)
 
-Defined in: [types/prompts.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L92)
+Defined in: [types/prompts.ts:93](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L93)
 
 Prompt content to send to the provider.

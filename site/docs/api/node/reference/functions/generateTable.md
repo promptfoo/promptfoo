@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / generateTable
-
-# Function: generateTable()
+title: 'Function: generateTable()'
+---
 
 > **generateTable**(`evaluateTable`, `tableCellMaxLength?`, `maxRows?`): `string`
 

@@ -1,14 +1,10 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / PromptFunction
-
-# Type Alias: PromptFunction
+title: 'Type Alias: PromptFunction'
+---
 
 > **PromptFunction** = (`context`) => `Promise`\<[`PromptContent`](PromptContent.md) \| [`PromptFunctionResult`](../interfaces/PromptFunctionResult.md)\>
 
-Defined in: [types/prompts.ts:114](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L114)
+Defined in: [types/prompts.ts:115](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L115)
 
 Function form accepted anywhere the Node.js API accepts a prompt.
 
@@ -25,9 +21,13 @@ Rendered vars and the selected provider when one is available.
 
 `ApiProvider`
 
+Provider selected for this invocation when one is available.
+
 #### vars
 
 `Record`\<`string`, `VarValue`\>
+
+Rendered variables for the current test case.
 
 ## Returns
 

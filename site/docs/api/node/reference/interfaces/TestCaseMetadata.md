@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: TestCaseMetadata'
 ---
 
-[promptfoo](../README.md) / TestCaseMetadata
-
-# Interface: TestCaseMetadata
-
-Defined in: [types/index.ts:1343](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1343)
+Defined in: [types/index.ts:1372](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1372)
 
 Arbitrary metadata attached to a test case.
 
@@ -32,7 +28,7 @@ const metadata: TestCaseMetadata = {
 
 > `optional` **pluginConfig?**: [`PluginConfig`](PluginConfig.md)
 
-Defined in: [types/index.ts:1345](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1345)
+Defined in: [types/index.ts:1374](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1374)
 
 Advanced red-team plugin config carried on generated test cases.
 
@@ -42,6 +38,6 @@ Advanced red-team plugin config carried on generated test cases.
 
 > `optional` **strategyConfig?**: [`StrategyConfig`](StrategyConfig.md)
 
-Defined in: [types/index.ts:1347](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1347)
+Defined in: [types/index.ts:1376](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1376)
 
 Advanced red-team strategy config carried on generated test cases.

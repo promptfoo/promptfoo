@@ -10,7 +10,7 @@ import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancy
 import { matchesConversationRelevance } from '../matchers/deepeval';
 
 import type { AssertionParams, GradingResult } from '../../types/index';
-import type { Message } from '../matchers/deepeval';
+import type { ConversationMessage } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
 
@@ -21,9 +21,9 @@ export const handleConversationRelevance = async ({
   providerCallContext,
   test,
 }: AssertionParams): Promise<GradingResult> => {
-  let messages: Message[] = [];
-  if (test.vars?._conversation && (test.vars._conversation as Message[]).length > 0) {
-    messages = test.vars?._conversation as Message[];
+  let messages: ConversationMessage[] = [];
+  if (test.vars?._conversation && (test.vars._conversation as ConversationMessage[]).length > 0) {
+    messages = test.vars?._conversation as ConversationMessage[];
   } else {
     invariant(
       typeof outputString === 'string',

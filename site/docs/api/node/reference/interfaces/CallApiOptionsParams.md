@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / CallApiOptionsParams
-
-# Interface: CallApiOptionsParams
+title: 'Interface: CallApiOptionsParams'
+---
 
 Defined in: [types/providers.ts:238](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L238)
 

@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / ApiProvider
-
-# Interface: ApiProvider
+title: 'Interface: ApiProvider'
+---
 
 Defined in: [types/providers.ts:259](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L259)
 
@@ -32,51 +28,11 @@ Execute one provider request.
 
 ---
 
-### callClassificationApi?
-
-> `optional` **callClassificationApi?**: (`prompt`) => `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
-
-Defined in: [types/providers.ts:265](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L265)
-
-Optional classification-specific entrypoint for compatible providers.
-
-#### Parameters
-
-##### prompt
-
-`string`
-
-#### Returns
-
-`Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
-
----
-
-### callEmbeddingApi?
-
-> `optional` **callEmbeddingApi?**: (`input`) => `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
-
-Defined in: [types/providers.ts:267](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L267)
-
-Optional embedding-specific entrypoint for compatible providers.
-
-#### Parameters
-
-##### input
-
-`string`
-
-#### Returns
-
-`Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
-
----
-
 ### cleanup?
 
 > `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
-Defined in: [types/providers.ts:297](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L297)
+Defined in: [types/providers.ts:307](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L307)
 
 Provider-wide cleanup hook for releasing long-lived resources such as worker
 processes, browser sessions, or pooled connections at eval shutdown.
@@ -92,7 +48,7 @@ Request-scoped cancellation should be implemented with `abortSignal`.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:274](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L274)
+Defined in: [types/providers.ts:284](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L284)
 
 Provider-specific configuration retained for later calls and serialization.
 The shape mirrors [ProviderOptions.config](ProviderOptions.md#config); consult the documentation
@@ -104,7 +60,7 @@ for the specific provider for the supported keys.
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:276](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L276)
+Defined in: [types/providers.ts:286](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L286)
 
 Delay in milliseconds before provider calls.
 
@@ -114,7 +70,7 @@ Delay in milliseconds before provider calls.
 
 > `optional` **getSessionId?**: () => `string`
 
-Defined in: [types/providers.ts:278](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L278)
+Defined in: [types/providers.ts:288](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L288)
 
 Optional stable session id for conversational providers.
 
@@ -142,7 +98,7 @@ Stable id used in result tables, cache keys, and provider lookups.
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:280](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L280)
+Defined in: [types/providers.ts:290](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L290)
 
 Named provider inputs used by multi-input targets.
 
@@ -152,7 +108,7 @@ Named provider inputs used by multi-input targets.
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:282](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L282)
+Defined in: [types/providers.ts:292](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L292)
 
 Human-readable label shown in reports.
 
@@ -162,7 +118,7 @@ Human-readable label shown in reports.
 
 > `optional` **toJSON?**: () => `any`
 
-Defined in: [types/providers.ts:291](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L291)
+Defined in: [types/providers.ts:301](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L301)
 
 Custom JSON serialization hook used when persisting the provider on an eval
 record. Implementations should return a value that is structurally
@@ -178,6 +134,54 @@ serializable (no functions or circular references).
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:284](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L284)
+Defined in: [types/providers.ts:294](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L294)
 
 Transform provider output before assertions run.
+
+## Methods
+
+### callClassificationApi()?
+
+> `optional` **callClassificationApi**(`prompt`): `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
+
+Defined in: [types/providers.ts:270](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L270)
+
+Optional classification-specific entrypoint for compatible providers.
+
+#### Parameters
+
+##### prompt
+
+`string`
+
+Text to classify.
+
+#### Returns
+
+`Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
+
+Class labels mapped to provider-reported scores.
+
+---
+
+### callEmbeddingApi()?
+
+> `optional` **callEmbeddingApi**(`input`): `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
+
+Defined in: [types/providers.ts:277](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L277)
+
+Optional embedding-specific entrypoint for compatible providers.
+
+#### Parameters
+
+##### input
+
+`string`
+
+Text to embed.
+
+#### Returns
+
+`Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
+
+Embedding vector plus any provider-reported metadata.

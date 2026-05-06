@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / CompletionTokenDetails
-
-# Interface: CompletionTokenDetails
+title: 'Interface: CompletionTokenDetails'
+---
 
 Defined in: [types/shared.ts:42](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L42)
 

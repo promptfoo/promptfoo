@@ -1,14 +1,10 @@
-[**promptfoo**](../../../../README.md)
-
 ---
-
-[promptfoo](../../../../README.md) / [cache](../README.md) / withCacheNamespace
-
-# Function: withCacheNamespace()
+title: 'Function: withCacheNamespace()'
+---
 
 > **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
 
-Defined in: [cache.ts:245](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L245)
+Defined in: [cache.ts:255](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L255)
 
 Run an async operation inside an isolated cache namespace.
 
@@ -20,6 +16,8 @@ cached responses, such as baseline and candidate comparisons.
 ### T
 
 `T`
+
+Value returned by `fn`.
 
 ## Parameters
 

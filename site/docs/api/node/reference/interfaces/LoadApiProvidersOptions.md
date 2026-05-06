@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / LoadApiProvidersOptions
-
-# Interface: LoadApiProvidersOptions
+title: 'Interface: LoadApiProvidersOptions'
+---
 
 Defined in: [providers/index.ts:378](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L378)
 

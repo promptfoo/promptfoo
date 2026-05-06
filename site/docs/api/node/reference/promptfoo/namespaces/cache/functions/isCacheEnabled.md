@@ -1,14 +1,10 @@
-[**promptfoo**](../../../../README.md)
-
 ---
-
-[promptfoo](../../../../README.md) / [cache](../README.md) / isCacheEnabled
-
-# Function: isCacheEnabled()
+title: 'Function: isCacheEnabled()'
+---
 
 > **isCacheEnabled**(): `boolean`
 
-Defined in: [cache.ts:762](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L762)
+Defined in: [cache.ts:774](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L774)
 
 Return whether the shared promptfoo cache is enabled.
 

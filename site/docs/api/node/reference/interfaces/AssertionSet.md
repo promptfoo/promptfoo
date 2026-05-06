@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: AssertionSet'
 ---
 
-[promptfoo](../README.md) / AssertionSet
-
-# Interface: AssertionSet
-
-Defined in: [types/index.ts:953](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L953)
+Defined in: [types/index.ts:943](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L943)
 
 Grouped assertions evaluated under one shared threshold.
 
@@ -29,7 +25,7 @@ const assertionSet: AssertionSet = {
 
 > **assert**: [`Assertion`](Assertion.md)[]
 
-Defined in: [types/index.ts:957](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L957)
+Defined in: [types/index.ts:947](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L947)
 
 Sub-assertions to run as one grouped assertion set.
 
@@ -39,7 +35,7 @@ Sub-assertions to run as one grouped assertion set.
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/index.ts:965](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L965)
+Defined in: [types/index.ts:955](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L955)
 
 Shared custom config passed into every assertion in the set.
 
@@ -49,7 +45,7 @@ Shared custom config passed into every assertion in the set.
 
 > `optional` **metric?**: `string`
 
-Defined in: [types/index.ts:961](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L961)
+Defined in: [types/index.ts:951](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L951)
 
 Optional metric name used to expose the grouped score.
 
@@ -59,7 +55,7 @@ Optional metric name used to expose the grouped score.
 
 > `optional` **threshold?**: `number`
 
-Defined in: [types/index.ts:963](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L963)
+Defined in: [types/index.ts:953](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L953)
 
 Required score for the set; without one, the set is graded pass/fail.
 
@@ -69,7 +65,7 @@ Required score for the set; without one, the set is graded pass/fail.
 
 > **type**: `"assert-set"`
 
-Defined in: [types/index.ts:955](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L955)
+Defined in: [types/index.ts:945](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L945)
 
 Assertion-set discriminator.
 
@@ -79,6 +75,6 @@ Assertion-set discriminator.
 
 > `optional` **weight?**: `number`
 
-Defined in: [types/index.ts:959](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L959)
+Defined in: [types/index.ts:949](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L949)
 
 Weight of this assertion set relative to other assertions. Defaults to `1`.

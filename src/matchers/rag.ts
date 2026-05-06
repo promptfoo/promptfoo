@@ -24,6 +24,16 @@ import {
 
 import type { CallApiContextParams, GradingConfig, GradingResult, VarValue } from '../types/index';
 
+/**
+ * Score how relevant a generated answer is to the original input question.
+ *
+ * @param input - Original user question or prompt.
+ * @param output - Model answer to grade.
+ * @param threshold - Minimum average relevance score required to pass.
+ * @param grading - Optional provider and rubric overrides.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Relevance grading result without the surrounding assertion payload.
+ */
 export async function matchesAnswerRelevance(
   input: string,
   output: string,
@@ -131,6 +141,17 @@ export async function matchesAnswerRelevance(
   };
 }
 
+/**
+ * Score how much of the ground truth is supported by the supplied context.
+ *
+ * @param context - Retrieved context chunks or a serialized context string.
+ * @param groundTruth - Reference answer whose claims should be attributable.
+ * @param threshold - Minimum recall score required to pass.
+ * @param grading - Optional provider and rubric overrides.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Context-recall grading result without the surrounding assertion payload.
+ */
 export async function matchesContextRecall(
   context: string | string[],
   groundTruth: string,
@@ -224,6 +245,16 @@ export async function matchesContextRecall(
   };
 }
 
+/**
+ * Score how much of the supplied context is relevant to the question.
+ *
+ * @param question - Question used to judge whether context is relevant.
+ * @param context - Retrieved context chunks or a serialized context string.
+ * @param threshold - Minimum relevance score required to pass.
+ * @param grading - Optional provider and rubric overrides.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Context-relevance grading result without the surrounding assertion payload.
+ */
 export async function matchesContextRelevance(
   question: string,
   context: string | string[],
@@ -311,6 +342,18 @@ export async function matchesContextRelevance(
   };
 }
 
+/**
+ * Score whether the answer is faithful to the supplied context.
+ *
+ * @param query - Original question posed to the model.
+ * @param output - Model answer to grade.
+ * @param context - Retrieved context chunks or a serialized context string.
+ * @param threshold - Minimum faithfulness score required to pass.
+ * @param grading - Optional provider and rubric overrides.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Context-faithfulness grading result without the surrounding assertion payload.
+ */
 export async function matchesContextFaithfulness(
   query: string,
   output: string,

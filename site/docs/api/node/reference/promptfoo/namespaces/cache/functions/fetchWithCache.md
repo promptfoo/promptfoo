@@ -1,14 +1,10 @@
-[**promptfoo**](../../../../README.md)
-
 ---
-
-[promptfoo](../../../../README.md) / [cache](../README.md) / fetchWithCache
-
-# Function: fetchWithCache()
+title: 'Function: fetchWithCache()'
+---
 
 > **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bust?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
 
-Defined in: [cache.ts:618](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L618)
+Defined in: [cache.ts:630](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L630)
 
 Fetch a URL through promptfoo's retrying cache wrapper.
 
@@ -20,6 +16,8 @@ behavior as built-in HTTP-backed providers.
 ### T
 
 `T` = `unknown`
+
+Parsed response payload type returned from JSON mode.
 
 ## Parameters
 

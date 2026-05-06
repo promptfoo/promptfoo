@@ -1,14 +1,10 @@
-[**promptfoo**](../../../../README.md)
-
 ---
-
-[promptfoo](../../../../README.md) / [cache](../README.md) / disableCache
-
-# Function: disableCache()
+title: 'Function: disableCache()'
+---
 
 > **disableCache**(): `void`
 
-Defined in: [cache.ts:722](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L722)
+Defined in: [cache.ts:734](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L734)
 
 Disable the shared promptfoo cache for future calls.
 

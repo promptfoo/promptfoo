@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / TransformFunction
-
-# Type Alias: TransformFunction\<TIn, TOut\>
+title: "Type Alias: TransformFunction\\<TIn, TOut\\>"
+---
 
 > **TransformFunction**\<`TIn`, `TOut`\> = (`output`, `context`) => `TOut` \| `Promise`\<`TOut`\>
 

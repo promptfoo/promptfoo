@@ -19,8 +19,23 @@ import type {
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
-export interface Message {
+/**
+ * One user / assistant exchange used by conversation-relevance grading.
+ *
+ * @example
+ * ```ts
+ * const message: ConversationMessage = {
+ *   input: 'What is promptfoo?',
+ *   output: 'An eval framework for LLM applications.',
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface ConversationMessage {
+  /** User input for this turn. */
   input: string;
+  /** Assistant output for this turn. Structured outputs are stringified before grading. */
   output: string | object;
 }
 
@@ -29,8 +44,18 @@ interface VerdictResult {
   reason?: string;
 }
 
+/**
+ * Score whether assistant responses stay relevant across a conversation.
+ *
+ * @param messages - Ordered user / assistant turns to judge together.
+ * @param threshold - Minimum score required to pass.
+ * @param vars - Template variables available while rendering custom rubrics.
+ * @param grading - Optional provider and rubric overrides.
+ * @param providerCallContext - Provider context forwarded to grader calls.
+ * @returns Conversation-relevance grading result without the surrounding assertion payload.
+ */
 export async function matchesConversationRelevance(
-  messages: Message[],
+  messages: ConversationMessage[],
   threshold: number,
   vars?: Record<string, VarValue>,
   grading?: GradingConfig,

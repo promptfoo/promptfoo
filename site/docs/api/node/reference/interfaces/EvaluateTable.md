@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: EvaluateTable'
 ---
 
-[promptfoo](../README.md) / EvaluateTable
-
-# Interface: EvaluateTable
-
-Defined in: [types/index.ts:686](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L686)
+Defined in: [types/index.ts:676](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L676)
 
 Table-shaped eval output used by `generateTable()` and the web UI.
 
@@ -25,7 +21,7 @@ const table: EvaluateTable = {
 
 > **body**: [`EvaluateTableRow`](EvaluateTableRow.md)[]
 
-Defined in: [types/index.ts:690](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L690)
+Defined in: [types/index.ts:680](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L680)
 
 Ordered table rows, one per evaluated test case.
 
@@ -35,6 +31,6 @@ Ordered table rows, one per evaluated test case.
 
 > **head**: [`EvaluateTableHead`](EvaluateTableHead.md)
 
-Defined in: [types/index.ts:688](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L688)
+Defined in: [types/index.ts:678](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L678)
 
 Prompt and variable headers rendered above the table body.

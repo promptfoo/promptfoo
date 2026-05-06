@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / BlobRef
-
-# Interface: BlobRef
+title: 'Interface: BlobRef'
+---
 
 Defined in: [blobs/types.ts:27](https://github.com/promptfoo/promptfoo/blob/main/src/blobs/types.ts#L27)
 

@@ -1,14 +1,10 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / ScoringFunction
-
-# Type Alias: ScoringFunction
+title: 'Type Alias: ScoringFunction'
+---
 
 > **ScoringFunction** = (`namedScores`, `context?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\> \| [`GradingResult`](../interfaces/GradingResult.md)
 
-Defined in: [types/index.ts:1204](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1204)
+Defined in: [types/index.ts:1197](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1197)
 
 Custom scorer used to aggregate named assertion scores for one test case.
 
@@ -18,43 +14,65 @@ Custom scorer used to aggregate named assertion scores for one test case.
 
 `Record`\<`string`, `number`\>
 
+Named assertion scores keyed by each assertion's `metric` value.
+
 ### context?
+
+Optional aggregation metadata for the surrounding assertion set.
 
 #### componentResults?
 
 [`GradingResult`](../interfaces/GradingResult.md)[]
 
+Individual assertion results available for custom aggregation.
+
 #### parentAssertionSet?
 
 \{ `assertionSet`: [`AssertionSet`](../interfaces/AssertionSet.md); `index`: `number`; \}
+
+Parent assertion-set metadata when this scorer runs inside one.
 
 #### parentAssertionSet.assertionSet
 
 [`AssertionSet`](../interfaces/AssertionSet.md)
 
+Assertion set being aggregated.
+
 #### parentAssertionSet.index
 
 `number`
+
+Zero-based position of the parent assertion set in the test case.
 
 #### threshold?
 
 `number`
 
+Threshold applied by the surrounding assertion set, when configured.
+
 #### tokensUsed?
 
 \{ `completion`: `number`; `prompt`: `number`; `total`: `number`; \}
+
+Token totals accumulated across component results.
 
 #### tokensUsed.completion
 
 `number`
 
+Completion tokens used by all component results.
+
 #### tokensUsed.prompt
 
 `number`
 
+Prompt tokens used by all component results.
+
 #### tokensUsed.total
 
 `number`
+
+Total tokens used by all component results.
 
 ## Returns
 

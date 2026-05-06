@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / StrategyConfig
-
-# Interface: StrategyConfig
+title: 'Interface: StrategyConfig'
+---
 
 Defined in: [redteam/types.ts:476](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L476)
 

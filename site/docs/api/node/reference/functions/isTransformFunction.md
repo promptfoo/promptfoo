@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / isTransformFunction
-
-# Function: isTransformFunction()
+title: 'Function: isTransformFunction()'
+---
 
 > **isTransformFunction**(`value`): `value is TransformFunction<unknown, unknown>`
 

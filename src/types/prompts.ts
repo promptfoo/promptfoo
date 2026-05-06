@@ -10,7 +10,8 @@ declare interface ApiProvider {
 /**
  * Prompt payload accepted from function-valued prompts.
  *
- * Strings are used directly. Objects and arrays are JSON-stringified before the
+ * Strings are sent as-is. Structured values such as chat-message arrays are
+ * accepted through the `object` branch and are JSON-stringified before the
  * provider receives them.
  *
  * @example
@@ -112,7 +113,9 @@ export interface PromptFunctionResult {
  * @param context - Rendered vars and the selected provider when one is available.
  */
 export type PromptFunction = (context: {
+  /** Rendered variables for the current test case. */
   vars: Record<string, VarValue>;
+  /** Provider selected for this invocation when one is available. */
   provider?: ApiProvider;
 }) => Promise<PromptContent | PromptFunctionResult>;
 

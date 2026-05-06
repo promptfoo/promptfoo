@@ -1,19 +1,17 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / EvaluateTestSuite
-
-# Type Alias: EvaluateTestSuite
+title: 'Type Alias: EvaluateTestSuite'
+---
 
 > **EvaluateTestSuite** = `object` & `Omit`\<`TestSuiteConfig`, `"prompts"` \| `"providers"`\>
 
-Defined in: [types/index.ts:1842](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1842)
+Defined in: [types/index.ts:1873](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1873)
 
 Test-suite shape accepted by the Node.js `evaluate()` API.
 
-Additional config fields follow the same schema as the YAML configuration
-reference. See the configuration docs for the full config model.
+In addition to the Node-specific `prompts`, `providers`, `author`, and
+`writeLatestResults` fields listed below, this type accepts the same shared
+suite fields as the YAML config model, including `tests`, `defaultTest`,
+`env`, and scenarios.
 
 ## Type Declaration
 

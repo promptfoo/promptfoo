@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / loadApiProviders
-
-# Function: loadApiProviders()
+title: 'Function: loadApiProviders()'
+---
 
 > **loadApiProviders**(`providerPaths`, `options?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)[]\>
 

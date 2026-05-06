@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / PluginGraderExample
-
-# Interface: PluginGraderExample
+title: 'Interface: PluginGraderExample'
+---
 
 Defined in: [redteam/types.ts:251](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L251)
 

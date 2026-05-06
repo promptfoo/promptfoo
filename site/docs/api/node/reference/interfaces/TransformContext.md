@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / TransformContext
-
-# Interface: TransformContext
+title: 'Interface: TransformContext'
+---
 
 Defined in: [types/transform.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L17)
 

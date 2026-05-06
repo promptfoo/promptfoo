@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / ChatMessage
-
-# Interface: ChatMessage
+title: 'Interface: ChatMessage'
+---
 
 Defined in: [types/providers.ts:78](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L78)
 

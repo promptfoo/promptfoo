@@ -132,8 +132,10 @@ export const ProviderEnvOverridesSchema = z.object({
 /**
  * Environment-variable overrides accepted by provider-loading APIs.
  *
- * Allows arbitrary environment variables for template rendering (for example,
- * `{{ env.MY_CUSTOM_VAR }}`) while preserving known provider keys.
+ * Every value is a string override or `undefined`. Built-in provider keys such
+ * as `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are accepted, and arbitrary custom
+ * keys are also allowed for template rendering (for example,
+ * `{{ env.MY_CUSTOM_VAR }}`).
  *
  * @example
  * ```ts

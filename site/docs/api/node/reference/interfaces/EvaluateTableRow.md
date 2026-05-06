@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: EvaluateTableRow'
 ---
 
-[promptfoo](../README.md) / EvaluateTableRow
-
-# Interface: EvaluateTableRow
-
-Defined in: [types/index.ts:640](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L640)
+Defined in: [types/index.ts:630](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L630)
 
 One row in an eval table.
 
@@ -27,7 +23,7 @@ const row: EvaluateTableRow = {
 
 > `optional` **description?**: `string`
 
-Defined in: [types/index.ts:642](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L642)
+Defined in: [types/index.ts:632](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L632)
 
 Optional human-readable description for the row's test case.
 
@@ -37,7 +33,7 @@ Optional human-readable description for the row's test case.
 
 > **outputs**: [`EvaluateTableOutput`](EvaluateTableOutput.md)[]
 
-Defined in: [types/index.ts:644](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L644)
+Defined in: [types/index.ts:634](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L634)
 
 Provider outputs rendered across this row.
 
@@ -47,7 +43,7 @@ Provider outputs rendered across this row.
 
 > **test**: [`AtomicTestCase`](AtomicTestCase.md)
 
-Defined in: [types/index.ts:648](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L648)
+Defined in: [types/index.ts:638](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L638)
 
 Test case represented by this row.
 
@@ -57,7 +53,7 @@ Test case represented by this row.
 
 > **testIdx**: `number`
 
-Defined in: [types/index.ts:650](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L650)
+Defined in: [types/index.ts:640](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L640)
 
 Zero-based index of the test case in the eval.
 
@@ -67,6 +63,6 @@ Zero-based index of the test case in the eval.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:646](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L646)
+Defined in: [types/index.ts:636](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L636)
 
 Rendered variable values shown in the table row.

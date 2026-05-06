@@ -261,10 +261,20 @@ export interface ApiProvider {
   id: () => string;
   /** Execute one provider request. */
   callApi: CallApiFunction;
-  /** Optional classification-specific entrypoint for compatible providers. */
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
-  /** Optional embedding-specific entrypoint for compatible providers. */
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  /**
+   * Optional classification-specific entrypoint for compatible providers.
+   *
+   * @param prompt - Text to classify.
+   * @returns Class labels mapped to provider-reported scores.
+   */
+  callClassificationApi?(prompt: string): Promise<ProviderClassificationResponse>;
+  /**
+   * Optional embedding-specific entrypoint for compatible providers.
+   *
+   * @param input - Text to embed.
+   * @returns Embedding vector plus any provider-reported metadata.
+   */
+  callEmbeddingApi?(input: string): Promise<ProviderEmbeddingResponse>;
   /**
    * Provider-specific configuration retained for later calls and serialization.
    * The shape mirrors {@link ProviderOptions.config}; consult the documentation

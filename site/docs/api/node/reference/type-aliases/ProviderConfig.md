@@ -1,10 +1,6 @@
-[**promptfoo**](../README.md)
-
 ---
-
-[promptfoo](../README.md) / ProviderConfig
-
-# Type Alias: ProviderConfig
+title: 'Type Alias: ProviderConfig'
+---
 
 > **ProviderConfig** = `ProviderId` \| [`ProviderFunction`](ProviderFunction.md) \| [`ApiProvider`](../interfaces/ApiProvider.md) \| [`ProviderOptions`](../interfaces/ProviderOptions.md) \| `ProviderOptionsMap`
 

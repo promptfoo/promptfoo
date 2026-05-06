@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: RunAssertionsOptions'
 ---
 
-[promptfoo](../README.md) / RunAssertionsOptions
-
-# Interface: RunAssertionsOptions
-
-Defined in: [assertions/index.ts:734](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L734)
+Defined in: [assertions/index.ts:737](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L737)
 
 Options for `runAssertions()`.
 
@@ -28,7 +24,7 @@ const options: RunAssertionsOptions = {
 
 > `optional` **assertScoringFunction?**: [`ScoringFunction`](../type-aliases/ScoringFunction.md)
 
-Defined in: [assertions/index.ts:736](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L736)
+Defined in: [assertions/index.ts:739](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L739)
 
 Custom aggregation function for assertion results, when needed.
 
@@ -38,7 +34,7 @@ Custom aggregation function for assertion results, when needed.
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [assertions/index.ts:738](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L738)
+Defined in: [assertions/index.ts:741](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L741)
 
 Latency for latency-based assertions, in milliseconds.
 
@@ -48,7 +44,7 @@ Latency for latency-based assertions, in milliseconds.
 
 > `optional` **prompt?**: `string`
 
-Defined in: [assertions/index.ts:740](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L740)
+Defined in: [assertions/index.ts:743](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L743)
 
 Rendered prompt for the response being graded, when available.
 
@@ -58,7 +54,7 @@ Rendered prompt for the response being graded, when available.
 
 > `optional` **provider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [assertions/index.ts:742](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L742)
+Defined in: [assertions/index.ts:745](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L745)
 
 Provider that produced the response, when model-graded assertions need it.
 
@@ -68,7 +64,7 @@ Provider that produced the response, when model-graded assertions need it.
 
 > **providerResponse**: [`ProviderResponse`](ProviderResponse.md)
 
-Defined in: [assertions/index.ts:744](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L744)
+Defined in: [assertions/index.ts:747](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L747)
 
 Response to grade.
 
@@ -78,7 +74,7 @@ Response to grade.
 
 > **test**: [`AssertionTestContext`](AssertionTestContext.md)
 
-Defined in: [assertions/index.ts:746](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L746)
+Defined in: [assertions/index.ts:749](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L749)
 
 Test case containing the assertions to run.
 
@@ -88,7 +84,7 @@ Test case containing the assertions to run.
 
 > `optional` **traceId?**: `string`
 
-Defined in: [assertions/index.ts:750](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L750)
+Defined in: [assertions/index.ts:753](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L753)
 
 Trace identifier for trace-aware assertions, when tracing is enabled.
 
@@ -98,6 +94,6 @@ Trace identifier for trace-aware assertions, when tracing is enabled.
 
 > `optional` **vars?**: `Record`\<`string`, `VarValue`\>
 
-Defined in: [assertions/index.ts:748](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L748)
+Defined in: [assertions/index.ts:751](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L751)
 
 Rendered variables to use instead of `test.vars`, when already resolved.

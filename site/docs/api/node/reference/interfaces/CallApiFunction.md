@@ -1,12 +1,8 @@
-[**promptfoo**](../README.md)
-
+---
+title: 'Interface: CallApiFunction()'
 ---
 
-[promptfoo](../README.md) / CallApiFunction
-
-# Interface: CallApiFunction()
-
-Defined in: [types/providers.ts:670](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L670)
+Defined in: [types/providers.ts:680](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L680)
 
 Function signature used by custom providers.
 
@@ -26,7 +22,7 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 
 > **CallApiFunction**(`prompt`, `context?`, `options?`): `Promise`\<[`ProviderResponse`](ProviderResponse.md)\>
 
-Defined in: [types/providers.ts:671](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L671)
+Defined in: [types/providers.ts:681](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L681)
 
 Function signature used by custom providers.
 
@@ -74,6 +70,6 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:677](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L677)
+Defined in: [types/providers.ts:687](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L687)
 
 Human-readable label used when the provider function is shown in reports.
