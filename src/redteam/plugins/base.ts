@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
+import { loadTools } from '../../providers/openai/agents-loader';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -446,14 +447,19 @@ export abstract class RedteamGraderBase {
   }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
+    const providerId = provider?.id?.();
+    const tools = provider?.config?.tools
+      ? providerId?.startsWith('openai:agents:')
+        ? await loadTools(provider.config.tools)
+        : await maybeLoadToolsFromExternalFile(provider.config.tools)
+      : undefined;
+
     const vars = {
       ...test.metadata,
       goal: test.metadata?.goal || prompt,
       prompt,
       entities: test.metadata?.entities ?? [],
-      tools: provider?.config?.tools
-        ? await maybeLoadToolsFromExternalFile(provider.config.tools)
-        : undefined,
+      tools,
       testVars: test.vars ?? {},
       // Spread all gradingContext properties to make them accessible in rubrics
       ...(gradingContext || {}),
