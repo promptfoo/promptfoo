@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractModuleSpecifiers, resolveRelativeModule } from '../../scripts/architectureUtils';
+import { extractModuleSpecifiers, resolveInternalModule } from '../../scripts/architectureUtils';
 
 describe('extractModuleSpecifiers', () => {
   it('collects static ESM and CommonJS module specifiers', () => {
@@ -22,10 +22,16 @@ describe('extractModuleSpecifiers', () => {
   });
 });
 
-describe('resolveRelativeModule', () => {
+describe('resolveInternalModule', () => {
   it('maps runtime .js specifiers back to TypeScript source files', () => {
     expect(
-      resolveRelativeModule(process.cwd(), 'src/server/routes/eval.ts', '../../index.js'),
+      resolveInternalModule(process.cwd(), 'src/server/routes/eval.ts', '../../index.js'),
     ).toBe('src/index.ts');
+  });
+
+  it('resolves baseUrl-style src imports so they cannot bypass layer checks', () => {
+    expect(resolveInternalModule(process.cwd(), 'src/contracts/index.ts', 'src/index.js')).toBe(
+      'src/index.ts',
+    );
   });
 });

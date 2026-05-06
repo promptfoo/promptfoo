@@ -8,7 +8,7 @@ import {
   getSourceFiles,
   normalizePath,
   readLayerConfig,
-  resolveRelativeModule,
+  resolveInternalModule,
 } from './architectureUtils';
 
 interface BoundaryViolation {
@@ -37,7 +37,7 @@ for (const importer of getSourceFiles(repoRoot)) {
   const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
   const importerLayer = getLayerForFile(importer, config);
   for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
-    const resolvedImport = resolveRelativeModule(repoRoot, importer, specifier);
+    const resolvedImport = resolveInternalModule(repoRoot, importer, specifier);
     if (resolvedImport === publicFacade) {
       facadeViolations.push({
         importer,

@@ -112,17 +112,7 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
   return specifiers;
 }
 
-export function resolveRelativeModule(
-  repoRoot: string,
-  importerRelativePath: string,
-  specifier: string,
-): string | undefined {
-  if (!specifier.startsWith('.')) {
-    return undefined;
-  }
-
-  const importerDir = path.dirname(path.join(repoRoot, importerRelativePath));
-  const unresolvedPath = path.resolve(importerDir, specifier);
+function resolveTypescriptSource(repoRoot: string, unresolvedPath: string): string | undefined {
   const runtimeExtension = path.extname(unresolvedPath);
   const runtimeSourceCandidates = (
     SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION[runtimeExtension] ?? []
@@ -141,6 +131,22 @@ export function resolveRelativeModule(
   }
 
   return undefined;
+}
+
+export function resolveInternalModule(
+  repoRoot: string,
+  importerRelativePath: string,
+  specifier: string,
+): string | undefined {
+  if (!specifier.startsWith('.') && specifier !== 'src' && !specifier.startsWith('src/')) {
+    return undefined;
+  }
+
+  const unresolvedPath = specifier.startsWith('.')
+    ? path.resolve(path.dirname(path.join(repoRoot, importerRelativePath)), specifier)
+    : path.resolve(repoRoot, specifier);
+
+  return resolveTypescriptSource(repoRoot, unresolvedPath);
 }
 
 export function getPackageName(specifier: string): string | undefined {
