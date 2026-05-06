@@ -6,6 +6,7 @@ import {
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
   CODING_AGENT_PLUGINS,
 } from './codingAgents';
+
 import type { CodingAgentCollection, CodingAgentPlugin } from './codingAgents';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';

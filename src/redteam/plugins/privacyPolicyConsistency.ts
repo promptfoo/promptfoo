@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import invariant from '../../util/invariant';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+
 import type {
   ApiProvider,
   Assertion,

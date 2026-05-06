@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
 import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Separator } from '@app/components/ui/separator';
@@ -22,6 +23,7 @@ import PageWrapper from './PageWrapper';
 import PluginsTab from './PluginsTab';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { PluginConfig } from '@promptfoo/redteam/types';
+
 import type { Config, LocalPluginConfig } from '../types';
 
 interface PluginsProps {

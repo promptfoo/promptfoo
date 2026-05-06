@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -14,6 +15,7 @@ import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
+
 import type { LocalPluginConfig } from '../types';
 
 interface PluginConfigDialogProps {
