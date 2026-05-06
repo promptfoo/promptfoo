@@ -230,7 +230,7 @@ const EvaluateTestSuiteCreator = () => {
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight">Create Evaluation</h1>
                 <p className="text-muted-foreground">
-                  Configure providers, prompts, and test cases to evaluate your LLM application
+                  Choose what to evaluate, write prompts, and add test cases.
                 </p>
               </div>
 
@@ -277,7 +277,7 @@ const EvaluateTestSuiteCreator = () => {
                   </h2>
                   <p className="text-sm text-muted-foreground">
                     {isReadyToRun
-                      ? 'Providers, prompts, and test cases are configured. Review run options or start the evaluation.'
+                      ? 'Providers, prompts, and test cases are ready. Review run options or start the evaluation.'
                       : `Next up: ${nextRecommendedStep.title}.`}
                   </p>
                 </div>

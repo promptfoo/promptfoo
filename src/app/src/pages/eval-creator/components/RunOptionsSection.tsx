@@ -104,19 +104,19 @@ export function RunOptionsSection({
       </Card>
 
       <p className="text-sm text-muted-foreground">
-        These settings apply to all providers in this evaluation. Note: delay and max concurrency
-        are mutually exclusive.
+        These settings apply to every provider in this evaluation. Delay and max concurrency cannot
+        be used together.
       </p>
 
       {/* Run Evaluation Section */}
-      <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+      <Card className="border-primary/20 bg-primary/5 p-6">
         <div className="space-y-4">
           <div className="space-y-2">
             <h3 className="text-lg font-semibold">Ready to run your evaluation?</h3>
             <p className="text-sm text-muted-foreground">
               {isReadyToRun
-                ? 'All required steps are complete. Click below to start your evaluation.'
-                : 'Complete the required steps (Providers, Prompts, Test Cases) to run your evaluation.'}
+                ? 'All required steps are complete. Start when you are ready.'
+                : 'Add providers, prompts, and test cases to run this evaluation.'}
             </p>
           </div>
 
