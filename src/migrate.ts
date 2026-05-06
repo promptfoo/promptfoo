@@ -34,7 +34,7 @@ function getCurrentDir(): string {
 }
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { getDb } from './database/index';
+import { closeDbIfOpen, getDb } from './database/index';
 import logger from './logger';
 import {
   formatNativeAddonVersionMismatchMessage,
@@ -122,6 +122,8 @@ export async function runDbMigrationsFromCli(): Promise<void> {
       console.error(nativeAddonVersionMismatchMessage);
     }
     process.exitCode = 1;
+  } finally {
+    closeDbIfOpen();
   }
 }
 

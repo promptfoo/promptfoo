@@ -9,6 +9,7 @@ const TEST_INSTALLED_BETTER_SQLITE3_ABI = '115';
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
 const mockGetDb = vi.fn().mockReturnValue(mockDb);
+const mockCloseDbIfOpen = vi.fn();
 const mockGetDirectory = vi.fn();
 const mockLogger = {
   debug: vi.fn(),
@@ -18,6 +19,7 @@ const mockLogger = {
 };
 
 vi.mock('../src/database/index', () => ({
+  closeDbIfOpen: mockCloseDbIfOpen,
   getDb: mockGetDb,
 }));
 
@@ -248,6 +250,7 @@ describe('migrate', () => {
         await runDbMigrationsFromCli();
 
         expect(process.exitCode).toBe(0);
+        expect(mockCloseDbIfOpen).toHaveBeenCalledTimes(1);
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
@@ -265,6 +268,7 @@ describe('migrate', () => {
         await runDbMigrationsFromCli();
 
         expect(process.exitCode).toBe(1);
+        expect(mockCloseDbIfOpen).toHaveBeenCalledTimes(1);
         expect(exitSpy).not.toHaveBeenCalled();
       } finally {
         exitSpy.mockRestore();
