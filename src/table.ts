@@ -13,6 +13,7 @@ import { ellipsize } from './util/text';
  * the value resolved from `await evalRecord.getTable()`.
  * @param tableCellMaxLength - Maximum visible width for each rendered cell.
  * @param maxRows - Maximum number of body rows to render.
+ * @returns ANSI-colored terminal text for the table.
  *
  * @example
  * ```ts

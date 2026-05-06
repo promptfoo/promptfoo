@@ -23,6 +23,19 @@ export type ProviderLabel = string;
  */
 export type ProviderFunction = CallApiFunction;
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
+/**
+ * Provider override accepted anywhere a single provider configuration is allowed.
+ *
+ * @example
+ * ```ts
+ * const provider: ProviderConfig = {
+ *   id: 'openai:chat:gpt-5.5',
+ *   label: 'primary',
+ * };
+ * ```
+ *
+ * @public
+ */
 export type ProviderConfig =
   | ProviderId
   | ProviderFunction
@@ -50,10 +63,22 @@ export type ProvidersConfig = ProviderId | ProviderFunction | ApiProvider | Prov
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
 /**
- * Chat message type for provider-reported prompts and other multi-turn interactions.
+ * Chat message reported by providers for multi-turn prompts and transcripts.
+ *
+ * @example
+ * ```ts
+ * const message: ChatMessage = {
+ *   role: 'user',
+ *   content: 'Summarize this article.',
+ * };
+ * ```
+ *
+ * @public
  */
 export interface ChatMessage {
+  /** Speaker role for the message. */
   role: 'system' | 'user' | 'assistant' | 'tool' | 'function';
+  /** Text content sent or received for the turn. */
   content: string;
 }
 
@@ -288,10 +313,28 @@ export interface ApiModerationProvider extends ApiProvider {
   callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
 }
 
+/**
+ * Guardrail outcome metadata returned by moderation-aware providers.
+ *
+ * @example
+ * ```ts
+ * const guardrails: GuardrailResponse = {
+ *   flaggedInput: false,
+ *   flaggedOutput: true,
+ *   reason: 'Detected disallowed content',
+ * };
+ * ```
+ *
+ * @public
+ */
 export interface GuardrailResponse {
+  /** Whether the input prompt tripped a guardrail. */
   flaggedInput?: boolean;
+  /** Whether the provider output tripped a guardrail. */
   flaggedOutput?: boolean;
+  /** Aggregate flag when the provider does not distinguish input from output. */
   flagged?: boolean;
+  /** Provider-supplied reason for the guardrail outcome. */
   reason?: string;
 }
 
@@ -524,28 +567,79 @@ export interface ProviderResponse {
   images?: ImageOutput[];
 }
 
+/**
+ * Response returned by embedding-capable providers.
+ *
+ * @example
+ * ```ts
+ * const response: ProviderEmbeddingResponse = {
+ *   embedding: [0.1, 0.2, 0.3],
+ *   tokenUsage: { total: 4 },
+ * };
+ * ```
+ *
+ * @public
+ */
 export interface ProviderEmbeddingResponse {
+  /** Whether the embedding response came from cache. */
   cached?: boolean;
+  /** Estimated request cost when the provider can report it. */
   cost?: number;
+  /** Error message when the embedding call failed without throwing. */
   error?: string;
+  /** Embedding vector returned by the provider. */
   embedding?: number[];
+  /** End-to-end provider latency in milliseconds. */
   latencyMs?: number;
+  /** Token usage attributed to the embedding request. */
   tokenUsage?: Partial<TokenUsage>;
+  /** Additional embedding-specific metadata preserved for callers. */
   metadata?: {
+    /** Whether a provider-level transform changed the original input text. */
     transformed?: boolean;
+    /** Original text before any provider-level transform. */
     originalText?: string;
     [key: string]: any;
   };
 }
 
+/**
+ * Response returned by similarity-capable providers.
+ *
+ * @example
+ * ```ts
+ * const response: ProviderSimilarityResponse = {
+ *   similarity: 0.93,
+ * };
+ * ```
+ *
+ * @public
+ */
 export interface ProviderSimilarityResponse {
+  /** Error message when the similarity call failed without throwing. */
   error?: string;
+  /** Similarity score reported by the provider. */
   similarity?: number;
+  /** Token usage attributed to the similarity request. */
   tokenUsage?: Partial<TokenUsage>;
 }
 
+/**
+ * Response returned by classification-capable providers.
+ *
+ * @example
+ * ```ts
+ * const response: ProviderClassificationResponse = {
+ *   classification: { positive: 0.91, negative: 0.09 },
+ * };
+ * ```
+ *
+ * @public
+ */
 export interface ProviderClassificationResponse {
+  /** Error message when the classification call failed without throwing. */
   error?: string;
+  /** Class labels mapped to provider-reported scores. */
   classification?: Record<string, number>;
 }
 

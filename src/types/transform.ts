@@ -81,6 +81,16 @@ export type TransformFunction<TIn = unknown, TOut = unknown> = (
 /**
  * Runtime type guard for `TransformFunction` values.
  *
+ * @param value - Candidate value to test.
+ * @returns `true` when `value` is callable as a transform function.
+ *
+ * @example
+ * ```ts
+ * if (isTransformFunction(config.transform)) {
+ *   await config.transform('hello', { vars: {} });
+ * }
+ * ```
+ *
  * @public
  */
 export function isTransformFunction(value: unknown): value is TransformFunction {

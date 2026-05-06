@@ -8,7 +8,7 @@
 
 > **FetchWithCacheResult**\<`T`\> = `object`
 
-Defined in: [cache.ts:274](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L274)
+Defined in: [cache.ts:291](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L291)
 
 Metadata returned by `fetchWithCache()`.
 
@@ -35,7 +35,7 @@ const result: FetchWithCacheResult<{ ok: boolean }> = {
 
 > **cached**: `boolean`
 
-Defined in: [cache.ts:278](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L278)
+Defined in: [cache.ts:295](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L295)
 
 Whether the response was served from cache.
 
@@ -45,7 +45,7 @@ Whether the response was served from cache.
 
 > **data**: `T`
 
-Defined in: [cache.ts:276](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L276)
+Defined in: [cache.ts:293](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L293)
 
 Parsed response payload.
 
@@ -55,7 +55,7 @@ Parsed response payload.
 
 > `optional` **deleteFromCache?**: () => `Promise`\<`void`\>
 
-Defined in: [cache.ts:288](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L288)
+Defined in: [cache.ts:305](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L305)
 
 Delete this response from cache when it was cache-backed.
 
@@ -69,7 +69,7 @@ Delete this response from cache when it was cache-backed.
 
 > `optional` **headers?**: `Record`\<`string`, `string`\>
 
-Defined in: [cache.ts:284](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L284)
+Defined in: [cache.ts:301](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L301)
 
 Response headers normalized to string values.
 
@@ -79,7 +79,7 @@ Response headers normalized to string values.
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [cache.ts:286](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L286)
+Defined in: [cache.ts:303](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L303)
 
 End-to-end fetch latency in milliseconds.
 
@@ -89,7 +89,7 @@ End-to-end fetch latency in milliseconds.
 
 > **status**: `number`
 
-Defined in: [cache.ts:280](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L280)
+Defined in: [cache.ts:297](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L297)
 
 HTTP response status code.
 
@@ -99,6 +99,6 @@ HTTP response status code.
 
 > **statusText**: `string`
 
-Defined in: [cache.ts:282](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L282)
+Defined in: [cache.ts:299](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L299)
 
 HTTP response status text.

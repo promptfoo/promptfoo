@@ -6,7 +6,7 @@
 
 # Interface: ProviderResponse
 
-Defined in: [types/providers.ts:419](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L419)
+Defined in: [types/providers.ts:462](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L462)
 
 Response shape returned by custom providers.
 
@@ -30,7 +30,7 @@ const response: ProviderResponse = {
 
 > `optional` **audio?**: [`AudioOutput`](AudioOutput.md)
 
-Defined in: [types/providers.ts:520](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L520)
+Defined in: [types/providers.ts:563](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L563)
 
 Audio attachment returned by audio-capable providers.
 
@@ -40,7 +40,7 @@ Audio attachment returned by audio-capable providers.
 
 > `optional` **cached?**: `boolean`
 
-Defined in: [types/providers.ts:421](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L421)
+Defined in: [types/providers.ts:464](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L464)
 
 Whether the response came from cache.
 
@@ -50,7 +50,7 @@ Whether the response came from cache.
 
 > `optional` **conversationEnded?**: `boolean`
 
-Defined in: [types/providers.ts:507](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L507)
+Defined in: [types/providers.ts:550](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L550)
 
 Indicates the target intentionally ended the active conversation/session.
 Multi-turn redteam strategies can use this to stop probing gracefully.
@@ -61,7 +61,7 @@ Multi-turn redteam strategies can use this to stop probing gracefully.
 
 > `optional` **conversationEndReason?**: `string`
 
-Defined in: [types/providers.ts:512](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L512)
+Defined in: [types/providers.ts:555](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L555)
 
 Optional machine-readable reason explaining why the conversation ended.
 Example: `thread_closed`.
@@ -72,7 +72,7 @@ Example: `thread_closed`.
 
 > `optional` **cost?**: `number`
 
-Defined in: [types/providers.ts:423](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L423)
+Defined in: [types/providers.ts:466](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L466)
 
 Estimated request cost when the provider can report it.
 
@@ -82,7 +82,7 @@ Estimated request cost when the provider can report it.
 
 > `optional` **error?**: `string`
 
-Defined in: [types/providers.ts:425](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L425)
+Defined in: [types/providers.ts:468](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L468)
 
 Error message when the provider call failed without throwing.
 
@@ -92,7 +92,7 @@ Error message when the provider call failed without throwing.
 
 > `optional` **finishReason?**: `string`
 
-Defined in: [types/providers.ts:518](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L518)
+Defined in: [types/providers.ts:561](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L561)
 
 Provider-reported completion stop reason.
 
@@ -102,7 +102,7 @@ Provider-reported completion stop reason.
 
 > `optional` **format?**: `string`
 
-Defined in: [types/providers.ts:443](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L443)
+Defined in: [types/providers.ts:486](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L486)
 
 Optional format hint for `output` (e.g. `'json'` when `output` is a JSON string).
 
@@ -110,9 +110,9 @@ Optional format hint for `output` (e.g. `'json'` when `output` is a JSON string)
 
 ### guardrails?
 
-> `optional` **guardrails?**: `GuardrailResponse`
+> `optional` **guardrails?**: [`GuardrailResponse`](GuardrailResponse.md)
 
-Defined in: [types/providers.ts:516](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L516)
+Defined in: [types/providers.ts:559](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L559)
 
 Structured guardrail metadata returned by providers that run moderation checks.
 
@@ -122,7 +122,7 @@ Structured guardrail metadata returned by providers that run moderation checks.
 
 > `optional` **images?**: [`ImageOutput`](ImageOutput.md)[]
 
-Defined in: [types/providers.ts:524](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L524)
+Defined in: [types/providers.ts:567](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L567)
 
 Image attachments returned by image-capable providers.
 
@@ -132,7 +132,7 @@ Image attachments returned by image-capable providers.
 
 > `optional` **inputMaterialization?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [types/providers.ts:492](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L492)
+Defined in: [types/providers.ts:535](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L535)
 
 Input materialization metadata returned by a remote Promptfoo server.
 
@@ -142,7 +142,7 @@ Input materialization metadata returned by a remote Promptfoo server.
 
 > `optional` **isBase64?**: `boolean`
 
-Defined in: [types/providers.ts:439](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L439)
+Defined in: [types/providers.ts:482](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L482)
 
 Indicates that `output` contains base64-encoded binary data (often as JSON like OpenAI `b64_json`).
 Used to enable blob externalization and avoid token bloat in downstream grading/agentic strategies.
@@ -153,7 +153,7 @@ Used to enable blob externalization and avoid token bloat in downstream grading/
 
 > `optional` **isRefusal?**: `boolean`
 
-Defined in: [types/providers.ts:502](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L502)
+Defined in: [types/providers.ts:545](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L545)
 
 Whether the provider identified the output as a refusal.
 
@@ -163,7 +163,7 @@ Whether the provider identified the output as a refusal.
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [types/providers.ts:447](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L447)
+Defined in: [types/providers.ts:490](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L490)
 
 End-to-end provider latency in milliseconds.
 
@@ -173,7 +173,7 @@ End-to-end provider latency in milliseconds.
 
 > `optional` **logProbs?**: `number`[]
 
-Defined in: [types/providers.ts:445](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L445)
+Defined in: [types/providers.ts:488](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L488)
 
 Token-level log probabilities when exposed by the provider.
 
@@ -183,7 +183,7 @@ Token-level log probabilities when exposed by the provider.
 
 > `optional` **materializationHandled?**: `boolean`
 
-Defined in: [types/providers.ts:430](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L430)
+Defined in: [types/providers.ts:473](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L473)
 
 Indicates that a remote Promptfoo server already materialized multi-input vars
 for this response. When true, callers must not re-materialize locally.
@@ -194,7 +194,7 @@ for this response. When true, callers must not re-materialize locally.
 
 > `optional` **materializedVars?**: `Record`\<`string`, `string`\>
 
-Defined in: [types/providers.ts:434](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L434)
+Defined in: [types/providers.ts:477](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L477)
 
 Materialized per-input vars returned by a remote Promptfoo server.
 
@@ -204,7 +204,7 @@ Materialized per-input vars returned by a remote Promptfoo server.
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/providers.ts:453](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L453)
+Defined in: [types/providers.ts:496](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L496)
 
 Additional provider-specific metadata preserved on the result row. The
 named keys below are recognized by built-in features; providers can add
@@ -256,7 +256,7 @@ Final prompt sent by some red team flows after mutation or wrapping.
 
 > `optional` **output?**: `any`
 
-Defined in: [types/providers.ts:488](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L488)
+Defined in: [types/providers.ts:531](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L531)
 
 Main provider output consumed by assertions and result rendering. Most
 providers return a string; complex providers may return a JSON object.
@@ -265,9 +265,9 @@ providers return a string; complex providers may return a JSON object.
 
 ### prompt?
 
-> `optional` **prompt?**: `string` \| `ChatMessage`[]
+> `optional` **prompt?**: `string` \| [`ChatMessage`](ChatMessage.md)[]
 
-Defined in: [types/providers.ts:479](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L479)
+Defined in: [types/providers.ts:522](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L522)
 
 The actual prompt sent to the LLM. If set by a provider, this overrides
 the rendered prompt for display and assertions.
@@ -283,7 +283,7 @@ Can be a simple string or an array of chat messages.
 
 > `optional` **providerTransformedOutput?**: `any`
 
-Defined in: [types/providers.ts:498](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L498)
+Defined in: [types/providers.ts:541](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L541)
 
 Output after provider-level transform. Used by contextTransform to ensure
 it operates on provider-normalized output, independent of test transforms.
@@ -294,7 +294,7 @@ it operates on provider-normalized output, independent of test transforms.
 
 > `optional` **raw?**: `any`
 
-Defined in: [types/providers.ts:482](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L482)
+Defined in: [types/providers.ts:525](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L525)
 
 Raw provider payload retained for advanced consumers.
 
@@ -304,7 +304,7 @@ Raw provider payload retained for advanced consumers.
 
 > `optional` **sessionId?**: `string`
 
-Defined in: [types/providers.ts:514](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L514)
+Defined in: [types/providers.ts:557](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L557)
 
 Stable conversation or thread id returned by session-aware providers.
 
@@ -312,103 +312,11 @@ Stable conversation or thread id returned by session-aware providers.
 
 ### tokenUsage?
 
-> `optional` **tokenUsage?**: `object`
+> `optional` **tokenUsage?**: [`TokenUsage`](TokenUsage.md)
 
-Defined in: [types/providers.ts:500](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L500)
+Defined in: [types/providers.ts:543](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L543)
 
 Provider-reported token usage.
-
-#### assertions?
-
-> `optional` **assertions?**: `object`
-
-##### assertions.cached?
-
-> `optional` **cached?**: `number`
-
-##### assertions.completion?
-
-> `optional` **completion?**: `number`
-
-##### assertions.completionDetails?
-
-> `optional` **completionDetails?**: `object`
-
-##### assertions.completionDetails.acceptedPrediction?
-
-> `optional` **acceptedPrediction?**: `number`
-
-##### assertions.completionDetails.cacheCreationInputTokens?
-
-> `optional` **cacheCreationInputTokens?**: `number`
-
-##### assertions.completionDetails.cacheReadInputTokens?
-
-> `optional` **cacheReadInputTokens?**: `number`
-
-##### assertions.completionDetails.reasoning?
-
-> `optional` **reasoning?**: `number`
-
-##### assertions.completionDetails.rejectedPrediction?
-
-> `optional` **rejectedPrediction?**: `number`
-
-##### assertions.numRequests?
-
-> `optional` **numRequests?**: `number`
-
-##### assertions.prompt?
-
-> `optional` **prompt?**: `number`
-
-##### assertions.total?
-
-> `optional` **total?**: `number`
-
-#### cached?
-
-> `optional` **cached?**: `number`
-
-#### completion?
-
-> `optional` **completion?**: `number`
-
-#### completionDetails?
-
-> `optional` **completionDetails?**: `object`
-
-##### completionDetails.acceptedPrediction?
-
-> `optional` **acceptedPrediction?**: `number`
-
-##### completionDetails.cacheCreationInputTokens?
-
-> `optional` **cacheCreationInputTokens?**: `number`
-
-##### completionDetails.cacheReadInputTokens?
-
-> `optional` **cacheReadInputTokens?**: `number`
-
-##### completionDetails.reasoning?
-
-> `optional` **reasoning?**: `number`
-
-##### completionDetails.rejectedPrediction?
-
-> `optional` **rejectedPrediction?**: `number`
-
-#### numRequests?
-
-> `optional` **numRequests?**: `number`
-
-#### prompt?
-
-> `optional` **prompt?**: `number`
-
-#### total?
-
-> `optional` **total?**: `number`
 
 ---
 
@@ -416,6 +324,6 @@ Provider-reported token usage.
 
 > `optional` **video?**: [`VideoOutput`](VideoOutput.md)
 
-Defined in: [types/providers.ts:522](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L522)
+Defined in: [types/providers.ts:565](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L565)
 
 Video attachment returned by video-capable providers.

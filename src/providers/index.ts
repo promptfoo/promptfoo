@@ -363,15 +363,32 @@ export function resolveProviderConfigs(
 }
 
 /**
+ * Shared options for loading one or more providers.
+ *
+ * @example
+ * ```ts
+ * const options: LoadApiProvidersOptions = {
+ *   basePath: process.cwd(),
+ *   env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY },
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface LoadApiProvidersOptions {
+  /** Base path used to resolve relative `file://` provider config references. */
+  basePath?: string;
+  /** Environment overrides available while providers are loaded. */
+  env?: EnvOverrides;
+}
+
+/**
  * Helper function to load providers from a file path.
  * Uses loadProviderConfigsFromFile to read configs, then instantiates them.
  */
 async function loadProvidersFromFile(
   filePath: string,
-  options: {
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: LoadApiProvidersOptions = {},
 ): Promise<ApiProvider[]> {
   const { basePath, env } = options;
   const configs = loadProviderConfigsFromFile(filePath, basePath);
@@ -410,10 +427,7 @@ async function loadProvidersFromFile(
  */
 export async function loadApiProviders(
   providerPaths: ProvidersConfig,
-  options: {
-    basePath?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: LoadApiProvidersOptions = {},
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
 

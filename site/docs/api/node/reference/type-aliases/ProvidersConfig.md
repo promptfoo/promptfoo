@@ -6,9 +6,9 @@
 
 # Type Alias: ProvidersConfig
 
-> **ProvidersConfig** = `ProviderId` \| [`ProviderFunction`](ProviderFunction.md) \| [`ApiProvider`](../interfaces/ApiProvider.md) \| `ProviderConfig`[]
+> **ProvidersConfig** = `ProviderId` \| [`ProviderFunction`](ProviderFunction.md) \| [`ApiProvider`](../interfaces/ApiProvider.md) \| [`ProviderConfig`](ProviderConfig.md)[]
 
-Defined in: [types/providers.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L48)
+Defined in: [types/providers.ts:61](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L61)
 
 Provider input accepted by `evaluate()` and `loadApiProviders()`.
 

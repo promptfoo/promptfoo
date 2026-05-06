@@ -27,7 +27,7 @@ import type {
   StrategyConfig,
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
-import type { Prompt, PromptFunction } from './prompts';
+import type { Prompt, PromptConfig, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   AudioOutput,
@@ -38,11 +38,15 @@ import type {
   ProvidersConfig,
   VideoOutput,
 } from './providers';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
+import type { BaseTokenUsage, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 
 export type { VarValue } from './shared';
 
 import type { TraceData } from './tracing';
+import type { TransformFunction } from './transform';
+
+type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
+function assert<_T extends true>() {}
 
 /**
  * Minimal interface for RateLimitRegistry to avoid circular dependency.
@@ -161,6 +165,7 @@ export type VarMapping = Record<string, string>;
 // 1. Testing key overlap in merged schemas (see test/types/index.test.ts)
 // 2. External consumers who need to validate grading config independently
 export const GradingConfigSchema = z.object({
+  /** Rubric prompt override used by model-graded assertions. */
   rubricPrompt: z
     .union([
       z.string(),
@@ -173,15 +178,22 @@ export const GradingConfigSchema = z.object({
       ),
     ])
     .optional(),
+  /** Provider override used by model-graded assertions. */
   provider: z
     .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
     .optional(),
+  /** Score mapping used by factuality-oriented graders. */
   factuality: z
     .object({
+      /** Score awarded when the answer is a factual subset of the expected answer. */
       subset: z.number().optional(),
+      /** Score awarded when the answer is a factual superset of the expected answer. */
       superset: z.number().optional(),
+      /** Score awarded when answer and reference agree factually. */
       agree: z.number().optional(),
+      /** Score awarded when answer and reference disagree factually. */
       disagree: z.number().optional(),
+      /** Score awarded when wording differs but remains factual. */
       differButFactual: z.number().optional(),
     })
     .optional(),
@@ -194,10 +206,12 @@ export const OutputConfigSchema = z.object({
    * @deprecated in > 0.38.0. Use `transform` instead.
    */
   postprocess: StringOrFunctionSchema.optional(),
+  /** Transform provider output before assertions run. */
   transform: StringOrFunctionSchema.optional(),
+  /** Transform vars before prompt rendering. */
   transformVars: StringOrFunctionSchema.optional(),
 
-  // The name of the variable to store the output of this test case
+  /** Name of the variable that should receive this test case's output. */
   storeOutputAs: z.string().optional(),
 });
 
@@ -363,28 +377,103 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 };
 
 const PromptMetricsSchema = z.object({
+  /** Aggregate normalized score across outputs for this prompt. */
   score: z.number(),
+  /** Number of test rows that passed for this prompt. */
   testPassCount: z.number(),
+  /** Number of test rows that failed assertions for this prompt. */
   testFailCount: z.number(),
+  /** Number of test rows that errored before normal grading completed. */
   testErrorCount: z.number(),
+  /** Number of individual assertions that passed. */
   assertPassCount: z.number(),
+  /** Number of individual assertions that failed. */
   assertFailCount: z.number(),
+  /** Sum of provider latency for this prompt in milliseconds. */
   totalLatencyMs: z.number(),
+  /** Token usage accumulated across provider calls for this prompt. */
   tokenUsage: BaseTokenUsageSchema,
+  /** Aggregate values for named assertion metrics. */
   namedScores: z.record(z.string(), z.number()),
+  /** Number of contributions included in each named score. */
   namedScoresCount: z.record(z.string(), z.number()),
+  /** Sum of assertion weights contributing to each named score. */
   namedScoreWeights: z.record(z.string(), z.number()).optional(),
+  /** Red-team pass/fail counts grouped by plugin and strategy. */
   redteam: z
     .object({
+      /** Passing result counts by red-team plugin id. */
       pluginPassCount: z.record(z.string(), z.number()),
+      /** Failing result counts by red-team plugin id. */
       pluginFailCount: z.record(z.string(), z.number()),
+      /** Passing result counts by red-team strategy id. */
       strategyPassCount: z.record(z.string(), z.number()),
+      /** Failing result counts by red-team strategy id. */
       strategyFailCount: z.record(z.string(), z.number()),
     })
     .optional(),
+  /** Estimated cost accumulated across provider calls for this prompt. */
   cost: z.number(),
 });
-export type PromptMetrics = z.infer<typeof PromptMetricsSchema>;
+/**
+ * Aggregate metrics tracked for one completed prompt.
+ *
+ * @example
+ * ```ts
+ * const metrics: PromptMetrics = {
+ *   score: 1,
+ *   testPassCount: 1,
+ *   testFailCount: 0,
+ *   testErrorCount: 0,
+ *   assertPassCount: 1,
+ *   assertFailCount: 0,
+ *   totalLatencyMs: 120,
+ *   tokenUsage: { total: 12 },
+ *   namedScores: {},
+ *   namedScoresCount: {},
+ *   cost: 0,
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface PromptMetrics {
+  /** Aggregate normalized score across outputs for this prompt. */
+  score: number;
+  /** Number of test rows that passed for this prompt. */
+  testPassCount: number;
+  /** Number of test rows that failed assertions for this prompt. */
+  testFailCount: number;
+  /** Number of test rows that errored before normal grading completed. */
+  testErrorCount: number;
+  /** Number of individual assertions that passed. */
+  assertPassCount: number;
+  /** Number of individual assertions that failed. */
+  assertFailCount: number;
+  /** Sum of provider latency for this prompt in milliseconds. */
+  totalLatencyMs: number;
+  /** Token usage accumulated across provider calls for this prompt. */
+  tokenUsage: BaseTokenUsage;
+  /** Aggregate values for named assertion metrics. */
+  namedScores: Record<string, number>;
+  /** Number of contributions included in each named score. */
+  namedScoresCount: Record<string, number>;
+  /** Sum of assertion weights contributing to each named score. */
+  namedScoreWeights?: Record<string, number>;
+  /** Red-team pass/fail counts grouped by plugin and strategy. */
+  redteam?: {
+    /** Passing result counts by red-team plugin id. */
+    pluginPassCount: Record<string, number>;
+    /** Failing result counts by red-team plugin id. */
+    pluginFailCount: Record<string, number>;
+    /** Passing result counts by red-team strategy id. */
+    strategyPassCount: Record<string, number>;
+    /** Failing result counts by red-team strategy id. */
+    strategyFailCount: Record<string, number>;
+  };
+  /** Estimated cost accumulated across provider calls for this prompt. */
+  cost: number;
+}
 
 // Used for final prompt display
 export const CompletedPromptSchema = PromptSchema.extend({
@@ -392,7 +481,26 @@ export const CompletedPromptSchema = PromptSchema.extend({
   metrics: PromptMetricsSchema.optional(),
 });
 
-export type CompletedPrompt = z.infer<typeof CompletedPromptSchema>;
+/**
+ * Prompt metadata attached to completed eval results.
+ *
+ * @example
+ * ```ts
+ * const prompt: CompletedPrompt = {
+ *   raw: 'Hello {{name}}',
+ *   label: 'Greeting',
+ *   provider: 'custom:echo',
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface CompletedPrompt extends Prompt {
+  /** Provider id associated with the completed prompt column. */
+  provider: string;
+  /** Aggregate metrics accumulated for this prompt. */
+  metrics?: PromptMetrics;
+}
 
 // Used when building prompts index from files.
 export interface PromptWithMetadata {
@@ -825,7 +933,37 @@ export const AssertionSetSchema = z.object({
   config: z.record(z.string(), z.any()).optional(),
 });
 
-export type AssertionSet = z.infer<typeof AssertionSetSchema>;
+/**
+ * Grouped assertions evaluated under one shared threshold.
+ *
+ * @example
+ * ```ts
+ * const assertionSet: AssertionSet = {
+ *   type: 'assert-set',
+ *   threshold: 0.8,
+ *   assert: [
+ *     { type: 'contains', value: 'Ada' },
+ *     { type: 'llm-rubric', value: 'Answer is concise' },
+ *   ],
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface AssertionSet {
+  /** Assertion-set discriminator. */
+  type: 'assert-set';
+  /** Sub-assertions to run as one grouped assertion set. */
+  assert: Assertion[];
+  /** Weight of this assertion set relative to other assertions. Defaults to `1`. */
+  weight?: number;
+  /** Optional metric name used to expose the grouped score. */
+  metric?: string;
+  /** Required score for the set; without one, the set is graded pass/fail. */
+  threshold?: number;
+  /** Shared custom config passed into every assertion in the set. */
+  config?: Record<string, any>;
+}
 
 // TODO(ian): maybe Assertion should support {type: config} to make the yaml cleaner
 export const AssertionSchema = z.object({
@@ -872,17 +1010,53 @@ export const AssertionSchema = z.object({
  * };
  * ```
  *
- * @interface
  * @public
  */
-export type Assertion = z.infer<typeof AssertionSchema>;
+export interface Assertion {
+  /** Assertion kind to run, such as `contains`, `javascript`, or `llm-rubric`. */
+  type: AssertionType;
+  /** Expected value or callback consumed by assertion types that need one. */
+  value?: AssertionValue;
+  /** Arbitrary custom config exposed to assertion callbacks through `context.config`. */
+  config?: Record<string, any>;
+  /** Minimum score required by threshold-aware assertions such as `similar`. */
+  threshold?: number;
+  /** Weight of this assertion relative to the rest of the test case. Defaults to `1`. */
+  weight?: number;
+  /** Provider override used by model-graded assertions that need one. */
+  provider?: GradingConfig['provider'];
+  /** Rubric override used by model-graded assertions. */
+  rubricPrompt?: GradingConfig['rubricPrompt'];
+  /** Optional metric name used when the assertion contributes a named score. */
+  metric?: string;
+  /** Transform provider output before this assertion runs. */
+  transform?: string | TransformFunction;
+  /** Extract assertion-specific context from output before grading. */
+  contextTransform?: string | TransformFunction;
+}
 
 /**
  * Schema for validating individual assertions (regular or assert-set).
  * Used for runtime validation of user-provided config.
  */
 export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
-export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
+/**
+ * Assertion entry accepted by test cases.
+ *
+ * Use a plain `Assertion` for one check or an `assert-set` when several checks
+ * should be grouped under one threshold.
+ *
+ * @example
+ * ```ts
+ * const assertion: AssertionOrSet = {
+ *   type: 'contains',
+ *   value: 'Ada',
+ * };
+ * ```
+ *
+ * @public
+ */
+export type AssertionOrSet = AssertionSet | Assertion;
 
 /**
  * Runtime context passed to function-valued assertions.
@@ -1013,6 +1187,20 @@ export const VarsSchema = z.custom<Vars>((data) => {
   return Object.values(data as Record<string, unknown>).every(isValidVarValue);
 });
 
+/**
+ * Custom scorer used to aggregate named assertion scores for one test case.
+ *
+ * @example
+ * ```ts
+ * const scoreAssertions: ScoringFunction = async (namedScores, context) => ({
+ *   pass: Object.values(namedScores).every((score) => score >= 0.8),
+ *   score: Math.min(...Object.values(namedScores)),
+ *   reason: `Checked ${context?.componentResults?.length ?? 0} assertions`,
+ * });
+ * ```
+ *
+ * @public
+ */
 export type ScoringFunction = (
   namedScores: Record<string, number>,
   context?: {
@@ -1099,14 +1287,105 @@ export const TestCaseSchema = z.object({
   // which would reject custom metadata keys. See: https://github.com/colinhacks/zod/issues/4564
   metadata: z
     .object({
+      /** Advanced red-team plugin config carried on generated test cases. */
       pluginConfig: z.custom<PluginConfig>().optional(),
+      /** Advanced red-team strategy config carried on generated test cases. */
       strategyConfig: z.custom<StrategyConfig>().optional(),
     })
     .catchall(z.any())
     .optional(),
 });
 
-export type TestCase = z.infer<typeof TestCaseSchema>;
+/**
+ * Additional per-test options merged with prompt, output, and grading behavior.
+ *
+ * Unknown keys are preserved so provider-specific config can travel with a test.
+ *
+ * @example
+ * ```ts
+ * const options: TestCaseOptions = {
+ *   prefix: 'System: ',
+ *   transform: (output) => output.trim(),
+ *   disableVarExpansion: true,
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface TestCaseOptions extends PromptConfig, OutputConfig, GradingConfig {
+  /** Do not expand array-valued vars into multiple eval cases. */
+  disableVarExpansion?: boolean;
+  /** Do not include the implicit `_conversation` variable. */
+  disableConversationVar?: boolean;
+  /** Skip `defaultTest` assertions while still inheriting other defaults. */
+  disableDefaultAsserts?: boolean;
+  /** Run this test serially even when the eval otherwise uses concurrency. */
+  runSerially?: boolean;
+  [key: string]: any;
+}
+
+/**
+ * Arbitrary metadata attached to a test case.
+ *
+ * Known red-team fields are typed, and additional keys are preserved for custom
+ * integrations.
+ *
+ * @example
+ * ```ts
+ * const metadata: TestCaseMetadata = {
+ *   source: 'golden-set',
+ *   pluginConfig: { language: 'Spanish' },
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface TestCaseMetadata {
+  /** Advanced red-team plugin config carried on generated test cases. */
+  pluginConfig?: PluginConfig;
+  /** Advanced red-team strategy config carried on generated test cases. */
+  strategyConfig?: StrategyConfig;
+  [key: string]: any;
+}
+
+/**
+ * Author-facing test case configuration accepted by eval suites.
+ *
+ * @example
+ * ```ts
+ * const test: TestCase = {
+ *   description: 'Greets the named user',
+ *   vars: { name: 'Ada' },
+ *   assert: [{ type: 'contains', value: 'Ada' }],
+ * };
+ * ```
+ *
+ * @public
+ */
+export interface TestCase {
+  /** Optional human-readable description of what the test covers. */
+  description?: string;
+  /** Key-value pairs substituted into prompts for this test case. */
+  vars?: Vars;
+  /** Provider override for this specific test case. */
+  provider?: string | ProviderOptions | ApiProvider;
+  /** Provider labels or ids this test should run against; supports wildcards such as `openai:*`. */
+  providers?: string[];
+  /** Prompt labels or ids this test should run against; omitted means all prompts. */
+  prompts?: string[];
+  /** Precomputed provider output; when set, promptfoo skips the provider call and grades this output directly. */
+  providerOutput?: string | Record<string, unknown>;
+  /** Assertions to run against the provider output. */
+  assert?: AssertionOrSet[];
+  /** Optional custom scoring function for aggregating assertion results. */
+  assertScoringFunction?: string | ScoringFunction;
+  /** Additional configuration settings for the prompt and grader. */
+  options?: TestCaseOptions;
+  /** Required aggregate score for the test case; without one, the case is graded pass/fail. */
+  threshold?: number;
+  /** Arbitrary metadata attached to the test case. */
+  metadata?: TestCaseMetadata;
+}
 
 export type TestCaseWithPlugin = TestCase & { metadata: { pluginId: string } };
 
@@ -1141,6 +1420,7 @@ export const ScenarioSchema = z.object({
 export type Scenario = z.infer<typeof ScenarioSchema>;
 
 export const AtomicTestCaseSchema = TestCaseSchema.extend({
+  /** Flattened variables used for this exact eval row. */
   vars: VarsSchema.optional(),
 }).strict();
 
@@ -1159,10 +1439,19 @@ export const AtomicTestCaseSchema = TestCaseSchema.extend({
  * };
  * ```
  *
- * @interface
  * @public
  */
-export type AtomicTestCase = z.infer<typeof AtomicTestCaseSchema>;
+export interface AtomicTestCase extends TestCase {
+  /** Flattened variables used for this exact eval row. */
+  vars?: Vars;
+}
+
+assert<AssertEqual<PromptMetrics, z.infer<typeof PromptMetricsSchema>>>();
+assert<AssertEqual<CompletedPrompt, z.infer<typeof CompletedPromptSchema>>>();
+assert<AssertEqual<AssertionSet, z.infer<typeof AssertionSetSchema>>>();
+assert<AssertEqual<Assertion, z.infer<typeof AssertionSchema>>>();
+assert<AssertEqual<TestCase, z.infer<typeof TestCaseSchema>>>();
+assert<AssertEqual<AtomicTestCase, z.infer<typeof AtomicTestCaseSchema>>>();
 
 /**
  * Configuration schema for test generators that accept parameters

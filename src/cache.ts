@@ -50,6 +50,18 @@ function getCacheTtlMs(): number {
 /**
  * Return the active promptfoo cache instance.
  *
+ * Most callers should prefer the higher-level cache helpers. Reach for the raw
+ * cache only when a custom provider needs to manage its own cached values.
+ *
+ * @returns The active cache instance for the current namespace.
+ *
+ * @example
+ * ```ts
+ * import { cache } from 'promptfoo';
+ *
+ * const value = await cache.getCache().get('provider:last-response');
+ * ```
+ *
  * @public
  */
 export function getCache() {
@@ -222,6 +234,11 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
  *   evaluate(candidateSuite),
  * );
  * ```
+ *
+ * @param namespace - Namespace suffix to apply for the duration of the call.
+ * Pass `undefined` to reuse the current namespace unchanged.
+ * @param fn - Async operation to run inside the scoped namespace.
+ * @returns The value returned by `fn`.
  *
  * @public
  */
@@ -677,6 +694,13 @@ export async function fetchWithCache<T = unknown>(
 /**
  * Enable the shared promptfoo cache.
  *
+ * @example
+ * ```ts
+ * import { cache } from 'promptfoo';
+ *
+ * cache.enableCache();
+ * ```
+ *
  * @public
  */
 export function enableCache() {
@@ -686,6 +710,13 @@ export function enableCache() {
 /**
  * Disable the shared promptfoo cache for future calls.
  *
+ * @example
+ * ```ts
+ * import { cache } from 'promptfoo';
+ *
+ * cache.disableCache();
+ * ```
+ *
  * @public
  */
 export function disableCache() {
@@ -694,6 +725,15 @@ export function disableCache() {
 
 /**
  * Clear the shared promptfoo cache.
+ *
+ * @returns `true` after the active cache store has been cleared.
+ *
+ * @example
+ * ```ts
+ * import { cache } from 'promptfoo';
+ *
+ * await cache.clearCache();
+ * ```
  *
  * @public
  */
@@ -705,6 +745,17 @@ export async function clearCache() {
 
 /**
  * Return whether the shared promptfoo cache is enabled.
+ *
+ * @returns `true` when cache reads and writes are enabled for the current call.
+ *
+ * @example
+ * ```ts
+ * import { cache } from 'promptfoo';
+ *
+ * if (cache.isCacheEnabled()) {
+ *   console.log('cache is active');
+ * }
+ * ```
  *
  * @public
  */

@@ -6,7 +6,7 @@
 
 # Interface: AudioOutput
 
-Defined in: [types/providers.ts:313](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L313)
+Defined in: [types/providers.ts:356](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L356)
 
 Audio attachment returned by providers that produce or transform sound.
 
@@ -25,9 +25,9 @@ const audio: AudioOutput = {
 
 ### blobRef?
 
-> `optional` **blobRef?**: `BlobRef`
+> `optional` **blobRef?**: [`BlobRef`](BlobRef.md)
 
-Defined in: [types/providers.ts:321](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L321)
+Defined in: [types/providers.ts:364](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L364)
 
 External blob reference when audio is stored outside the result row.
 
@@ -37,7 +37,7 @@ External blob reference when audio is stored outside the result row.
 
 > `optional` **channels?**: `number`
 
-Defined in: [types/providers.ts:329](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L329)
+Defined in: [types/providers.ts:372](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L372)
 
 Number of audio channels.
 
@@ -47,7 +47,7 @@ Number of audio channels.
 
 > `optional` **data?**: `string`
 
-Defined in: [types/providers.ts:319](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L319)
+Defined in: [types/providers.ts:362](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L362)
 
 Base64-encoded audio payload when data is embedded inline.
 
@@ -57,7 +57,7 @@ Base64-encoded audio payload when data is embedded inline.
 
 > `optional` **duration?**: `number`
 
-Defined in: [types/providers.ts:331](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L331)
+Defined in: [types/providers.ts:374](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L374)
 
 Audio duration in seconds.
 
@@ -67,7 +67,7 @@ Audio duration in seconds.
 
 > `optional` **expiresAt?**: `number`
 
-Defined in: [types/providers.ts:317](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L317)
+Defined in: [types/providers.ts:360](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L360)
 
 Expiration time for provider-hosted audio, as a Unix timestamp.
 
@@ -77,7 +77,7 @@ Expiration time for provider-hosted audio, as a Unix timestamp.
 
 > `optional` **format?**: `string`
 
-Defined in: [types/providers.ts:325](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L325)
+Defined in: [types/providers.ts:368](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L368)
 
 Container or codec name such as `wav` or `mp3`.
 
@@ -87,7 +87,7 @@ Container or codec name such as `wav` or `mp3`.
 
 > `optional` **id?**: `string`
 
-Defined in: [types/providers.ts:315](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L315)
+Defined in: [types/providers.ts:358](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L358)
 
 Provider-defined audio identifier.
 
@@ -97,7 +97,7 @@ Provider-defined audio identifier.
 
 > `optional` **sampleRate?**: `number`
 
-Defined in: [types/providers.ts:327](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L327)
+Defined in: [types/providers.ts:370](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L370)
 
 Audio sample rate in hertz.
 
@@ -107,6 +107,6 @@ Audio sample rate in hertz.
 
 > `optional` **transcript?**: `string`
 
-Defined in: [types/providers.ts:323](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L323)
+Defined in: [types/providers.ts:366](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L366)
 
 Transcript associated with the audio payload, when available.

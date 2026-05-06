@@ -6,7 +6,7 @@
 
 # Interface: GradingResult
 
-Defined in: [types/index.ts:643](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L643)
+Defined in: [types/index.ts:751](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L751)
 
 Result returned by assertions and matcher helpers.
 
@@ -24,71 +24,11 @@ const result: GradingResult = {
 
 ### assertion?
 
-> `optional` **assertion?**: `object`
+> `optional` **assertion?**: [`Assertion`](Assertion.md)
 
-Defined in: [types/index.ts:666](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L666)
+Defined in: [types/index.ts:774](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L774)
 
 Assertion that produced this result, when retained by the caller.
-
-#### config?
-
-> `optional` **config?**: `Record`\<`string`, `any`\>
-
-Arbitrary custom config exposed to assertion callbacks through `context.config`.
-
-#### contextTransform?
-
-> `optional` **contextTransform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
-
-Extract assertion-specific context from output before grading.
-
-#### metric?
-
-> `optional` **metric?**: `string`
-
-Optional metric name used when the assertion contributes a named score.
-
-#### provider?
-
-> `optional` **provider?**: `any`
-
-Provider override used by model-graded assertions that need one.
-
-#### rubricPrompt?
-
-> `optional` **rubricPrompt?**: `string` \| `string`[] \| `object`[]
-
-Rubric override used by model-graded assertions.
-
-#### threshold?
-
-> `optional` **threshold?**: `number`
-
-Minimum score required by threshold-aware assertions such as `similar`.
-
-#### transform?
-
-> `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
-
-Transform provider output before this assertion runs.
-
-#### type
-
-> **type**: `"regex"` \| `"moderation"` \| `` `promptfoo:redteam:${string}` `` \| `"cost"` \| `"factuality"` \| `"answer-relevance"` \| `"bleu"` \| `"classifier"` \| `"contains"` \| `"contains-all"` \| `"contains-any"` \| `"contains-html"` \| `"contains-json"` \| `"contains-sql"` \| `"contains-xml"` \| `"context-faithfulness"` \| `"context-recall"` \| `"context-relevance"` \| `"conversation-relevance"` \| `"equals"` \| `"finish-reason"` \| `"g-eval"` \| `"gleu"` \| `"guardrails"` \| `"icontains"` \| `"icontains-all"` \| `"icontains-any"` \| `"is-html"` \| `"is-json"` \| `"is-refusal"` \| `"is-sql"` \| `"is-valid-function-call"` \| `"is-valid-openai-function-call"` \| `"is-valid-openai-tools-call"` \| `"is-xml"` \| `"javascript"` \| `"latency"` \| `"levenshtein"` \| `"llm-rubric"` \| `"pi"` \| `"meteor"` \| `"model-graded-closedqa"` \| `"model-graded-factuality"` \| `"perplexity"` \| `"perplexity-score"` \| `"python"` \| `"rouge-n"` \| `"ruby"` \| `"similar"` \| `"similar:cosine"` \| `"similar:dot"` \| `"similar:euclidean"` \| `"starts-with"` \| `"tool-call-f1"` \| `"skill-used"` \| `"trajectory:goal-success"` \| `"trajectory:tool-args-match"` \| `"trajectory:step-count"` \| `"trajectory:tool-sequence"` \| `"trajectory:tool-used"` \| `"trace-error-spans"` \| `"trace-span-count"` \| `"trace-span-duration"` \| `"search-rubric"` \| `"webhook"` \| `"word-count"` \| `"not-regex"` \| `"not-moderation"` \| `"not-cost"` \| `"not-factuality"` \| `"not-answer-relevance"` \| `"not-bleu"` \| `"not-classifier"` \| `"not-contains"` \| `"not-contains-all"` \| `"not-contains-any"` \| `"not-contains-html"` \| `"not-contains-json"` \| `"not-contains-sql"` \| `"not-contains-xml"` \| `"not-context-faithfulness"` \| `"not-context-recall"` \| `"not-context-relevance"` \| `"not-conversation-relevance"` \| `"not-equals"` \| `"not-finish-reason"` \| `"not-g-eval"` \| `"not-gleu"` \| `"not-guardrails"` \| `"not-icontains"` \| `"not-icontains-all"` \| `"not-icontains-any"` \| `"not-is-html"` \| `"not-is-json"` \| `"not-is-refusal"` \| `"not-is-sql"` \| `"not-is-valid-function-call"` \| `"not-is-valid-openai-function-call"` \| `"not-is-valid-openai-tools-call"` \| `"not-is-xml"` \| `"not-javascript"` \| `"not-latency"` \| `"not-levenshtein"` \| `"not-llm-rubric"` \| `"not-pi"` \| `"not-meteor"` \| `"not-model-graded-closedqa"` \| `"not-model-graded-factuality"` \| `"not-perplexity"` \| `"not-perplexity-score"` \| `"not-python"` \| `"not-rouge-n"` \| `"not-ruby"` \| `"not-similar"` \| `"not-similar:cosine"` \| `"not-similar:dot"` \| `"not-similar:euclidean"` \| `"not-starts-with"` \| `"not-tool-call-f1"` \| `"not-skill-used"` \| `"not-trajectory:goal-success"` \| `"not-trajectory:tool-args-match"` \| `"not-trajectory:step-count"` \| `"not-trajectory:tool-sequence"` \| `"not-trajectory:tool-used"` \| `"not-trace-error-spans"` \| `"not-trace-span-count"` \| `"not-trace-span-duration"` \| `"not-search-rubric"` \| `"not-webhook"` \| `"not-word-count"` \| `"select-best"` \| `"human"` \| `"max-score"` = `AssertionTypeSchema`
-
-Assertion kind to run, such as `contains`, `javascript`, or `llm-rubric`.
-
-#### value?
-
-> `optional` **value?**: `AssertionValue`
-
-Expected value or callback consumed by assertion types that need one.
-
-#### weight?
-
-> `optional` **weight?**: `number`
-
-Weight of this assertion relative to the rest of the test case. Defaults to `1`.
 
 ---
 
@@ -96,7 +36,7 @@ Weight of this assertion relative to the rest of the test case. Defaults to `1`.
 
 > `optional` **comment?**: `string`
 
-Defined in: [types/index.ts:669](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L669)
+Defined in: [types/index.ts:777](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L777)
 
 Optional user-authored comment attached to the result.
 
@@ -106,7 +46,7 @@ Optional user-authored comment attached to the result.
 
 > `optional` **componentResults?**: `GradingResult`[]
 
-Defined in: [types/index.ts:663](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L663)
+Defined in: [types/index.ts:771](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L771)
 
 Component results for compound assertions such as assertion sets.
 
@@ -116,7 +56,7 @@ Component results for compound assertions such as assertion sets.
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/index.ts:675](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L675)
+Defined in: [types/index.ts:783](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L783)
 
 Additional assertion-specific metadata.
 
@@ -180,7 +120,7 @@ Red-team strategy id associated with the result, when applicable.
 
 > `optional` **namedScores?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:654](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L654)
+Defined in: [types/index.ts:762](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L762)
 
 Map of named metric values emitted by the assertion.
 
@@ -190,7 +130,7 @@ Map of named metric values emitted by the assertion.
 
 > `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:657](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L657)
+Defined in: [types/index.ts:765](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L765)
 
 Total weight contributing to each named score.
 
@@ -200,7 +140,7 @@ Total weight contributing to each named score.
 
 > **pass**: `boolean`
 
-Defined in: [types/index.ts:645](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L645)
+Defined in: [types/index.ts:753](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L753)
 
 Whether the test passed or failed.
 
@@ -210,7 +150,7 @@ Whether the test passed or failed.
 
 > **reason**: `string`
 
-Defined in: [types/index.ts:651](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L651)
+Defined in: [types/index.ts:759](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L759)
 
 Plain-text explanation suitable for logs and reports.
 
@@ -220,7 +160,7 @@ Plain-text explanation suitable for logs and reports.
 
 > **score**: `number`
 
-Defined in: [types/index.ts:648](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L648)
+Defined in: [types/index.ts:756](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L756)
 
 Test score, typically between 0 and 1.
 
@@ -230,7 +170,7 @@ Test score, typically between 0 and 1.
 
 > `optional` **suggestions?**: `ResultSuggestion`[]
 
-Defined in: [types/index.ts:672](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L672)
+Defined in: [types/index.ts:780](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L780)
 
 Follow-up suggestions produced by some graders.
 
@@ -238,100 +178,8 @@ Follow-up suggestions produced by some graders.
 
 ### tokensUsed?
 
-> `optional` **tokensUsed?**: `object`
+> `optional` **tokensUsed?**: [`TokenUsage`](TokenUsage.md)
 
-Defined in: [types/index.ts:660](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L660)
+Defined in: [types/index.ts:768](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L768)
 
 Token usage attributed to the assertion or grader.
-
-#### assertions?
-
-> `optional` **assertions?**: `object`
-
-##### assertions.cached?
-
-> `optional` **cached?**: `number`
-
-##### assertions.completion?
-
-> `optional` **completion?**: `number`
-
-##### assertions.completionDetails?
-
-> `optional` **completionDetails?**: `object`
-
-##### assertions.completionDetails.acceptedPrediction?
-
-> `optional` **acceptedPrediction?**: `number`
-
-##### assertions.completionDetails.cacheCreationInputTokens?
-
-> `optional` **cacheCreationInputTokens?**: `number`
-
-##### assertions.completionDetails.cacheReadInputTokens?
-
-> `optional` **cacheReadInputTokens?**: `number`
-
-##### assertions.completionDetails.reasoning?
-
-> `optional` **reasoning?**: `number`
-
-##### assertions.completionDetails.rejectedPrediction?
-
-> `optional` **rejectedPrediction?**: `number`
-
-##### assertions.numRequests?
-
-> `optional` **numRequests?**: `number`
-
-##### assertions.prompt?
-
-> `optional` **prompt?**: `number`
-
-##### assertions.total?
-
-> `optional` **total?**: `number`
-
-#### cached?
-
-> `optional` **cached?**: `number`
-
-#### completion?
-
-> `optional` **completion?**: `number`
-
-#### completionDetails?
-
-> `optional` **completionDetails?**: `object`
-
-##### completionDetails.acceptedPrediction?
-
-> `optional` **acceptedPrediction?**: `number`
-
-##### completionDetails.cacheCreationInputTokens?
-
-> `optional` **cacheCreationInputTokens?**: `number`
-
-##### completionDetails.cacheReadInputTokens?
-
-> `optional` **cacheReadInputTokens?**: `number`
-
-##### completionDetails.reasoning?
-
-> `optional` **reasoning?**: `number`
-
-##### completionDetails.rejectedPrediction?
-
-> `optional` **rejectedPrediction?**: `number`
-
-#### numRequests?
-
-> `optional` **numRequests?**: `number`
-
-#### prompt?
-
-> `optional` **prompt?**: `number`
-
-#### total?
-
-> `optional` **total?**: `number`

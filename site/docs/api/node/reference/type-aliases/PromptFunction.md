@@ -8,7 +8,7 @@
 
 > **PromptFunction** = (`context`) => `Promise`\<[`PromptContent`](PromptContent.md) \| [`PromptFunctionResult`](../interfaces/PromptFunctionResult.md)\>
 
-Defined in: [types/prompts.ts:99](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L99)
+Defined in: [types/prompts.ts:114](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L114)
 
 Function form accepted anywhere the Node.js API accepts a prompt.
 

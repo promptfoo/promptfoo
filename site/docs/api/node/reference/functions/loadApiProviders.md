@@ -8,7 +8,7 @@
 
 > **loadApiProviders**(`providerPaths`, `options?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)[]\>
 
-Defined in: [providers/index.ts:411](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L411)
+Defined in: [providers/index.ts:428](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L428)
 
 Load one or more providers from provider config input.
 
@@ -27,16 +27,10 @@ Provider config input to normalize into provider instances.
 
 ### options?
 
+[`LoadApiProvidersOptions`](../interfaces/LoadApiProvidersOptions.md) = `{}`
+
 Optional base path and environment overrides used while
 loading providers.
-
-#### basePath?
-
-`string`
-
-#### env?
-
-[`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
 ## Returns
 

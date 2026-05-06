@@ -6,7 +6,7 @@
 
 # Interface: ProviderOptions
 
-Defined in: [types/providers.ts:109](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L109)
+Defined in: [types/providers.ts:134](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L134)
 
 Declarative provider configuration accepted by provider-loading APIs.
 
@@ -26,7 +26,7 @@ const provider: ProviderOptions = {
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L122)
+Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
 
 Provider-specific configuration passed to the provider factory. Each
 built-in provider documents its own config shape; for custom providers
@@ -40,7 +40,7 @@ the provider implementation.
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:128](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L128)
+Defined in: [types/providers.ts:153](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L153)
 
 Delay in milliseconds before provider calls.
 
@@ -50,7 +50,7 @@ Delay in milliseconds before provider calls.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/providers.ts:130](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L130)
+Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L155)
 
 Environment overrides available while loading and calling the provider.
 
@@ -60,7 +60,7 @@ Environment overrides available while loading and calling the provider.
 
 > `optional` **id?**: `string`
 
-Defined in: [types/providers.ts:111](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L111)
+Defined in: [types/providers.ts:136](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L136)
 
 Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
@@ -70,7 +70,7 @@ Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:132](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L132)
+Defined in: [types/providers.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L157)
 
 Declared named inputs accepted by the provider.
 
@@ -80,7 +80,7 @@ Declared named inputs accepted by the provider.
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:113](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L113)
+Defined in: [types/providers.ts:138](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L138)
 
 Human-readable label used in reports and provider maps.
 
@@ -90,7 +90,7 @@ Human-readable label used in reports and provider maps.
 
 > `optional` **prompts?**: `string`[]
 
-Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L124)
+Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L149)
 
 Restrict this provider to named prompts.
 
@@ -100,6 +100,6 @@ Restrict this provider to named prompts.
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L126)
+Defined in: [types/providers.ts:151](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L151)
 
 Transform provider output before assertions run.

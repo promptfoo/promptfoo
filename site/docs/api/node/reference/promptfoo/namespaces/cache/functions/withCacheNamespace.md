@@ -8,7 +8,7 @@
 
 > **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
 
-Defined in: [cache.ts:228](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L228)
+Defined in: [cache.ts:245](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L245)
 
 Run an async operation inside an isolated cache namespace.
 
@@ -27,13 +27,20 @@ cached responses, such as baseline and candidate comparisons.
 
 `string` \| `undefined`
 
+Namespace suffix to apply for the duration of the call.
+Pass `undefined` to reuse the current namespace unchanged.
+
 ### fn
 
 () => `Promise`\<`T`\>
 
+Async operation to run inside the scoped namespace.
+
 ## Returns
 
 `Promise`\<`T`\>
+
+The value returned by `fn`.
 
 ## Example
 

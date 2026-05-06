@@ -23,8 +23,23 @@ declare interface ApiProvider {
  */
 export type PromptContent = string | object;
 
+/**
+ * Prompt-local text decoration applied before provider execution.
+ *
+ * @example
+ * ```ts
+ * const config: PromptConfig = {
+ *   prefix: 'System: ',
+ *   suffix: '\nAnswer briefly.',
+ * };
+ * ```
+ *
+ * @public
+ */
 export interface PromptConfig {
+  /** Text prepended to the rendered prompt before it is sent to the provider. */
   prefix?: string;
+  /** Text appended to the rendered prompt before it is sent to the provider. */
   suffix?: string;
 }
 
@@ -101,16 +116,36 @@ export type PromptFunction = (context: {
   provider?: ApiProvider;
 }) => Promise<PromptContent | PromptFunctionResult>;
 
+/**
+ * Normalized prompt record stored on eval results and passed to providers.
+ *
+ * @example
+ * ```ts
+ * const prompt: Prompt = {
+ *   id: 'summary',
+ *   raw: 'Summarize {{article}}',
+ *   label: 'Summary',
+ * };
+ * ```
+ *
+ * @public
+ */
 export interface Prompt {
+  /** Stable prompt identifier used in results and prompt selection. */
   id?: string;
+  /** Raw prompt template before display-only decoration. */
   raw: string;
   // Internal-only copy of the undecorated prompt template used when prefix/suffix
   // wraps the runtime prompt.
+  /** Internal undecorated prompt copy used when prefix or suffix wrapping is applied. */
   template?: string;
+  /** @deprecated in > 0.59.0. Use `label` instead. */
   display?: string;
+  /** Human-readable label shown in reports and prompt selectors. */
   label: string;
+  /** Function-valued prompt renderer when the prompt is assembled at runtime. */
   function?: PromptFunction;
 
-  // These config options are merged into the provider config.
+  /** Prompt-local provider config overrides merged into the selected provider config. */
   config?: any;
 }

@@ -6,7 +6,7 @@
 
 # Interface: EvaluateOptions
 
-Defined in: [types/index.ts:358](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L358)
+Defined in: [types/index.ts:372](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L372)
 
 Runtime-only options accepted by `evaluate()`.
 
@@ -26,7 +26,7 @@ const options: EvaluateOptions = {
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: [types/index.ts:362](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L362)
+Defined in: [types/index.ts:376](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L376)
 
 Signal used to cancel the eval and pass cancellation through to providers.
 
@@ -36,7 +36,7 @@ Signal used to cancel the eval and pass cancellation through to providers.
 
 > `optional` **cache?**: `boolean`
 
-Defined in: [types/index.ts:267](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L267)
+Defined in: [types/index.ts:281](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L281)
 
 Whether to reuse cached provider responses during the eval.
 
@@ -46,7 +46,7 @@ Whether to reuse cached provider responses during the eval.
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/index.ts:271](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L271)
+Defined in: [types/index.ts:285](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L285)
 
 Delay in milliseconds between provider calls.
 
@@ -56,7 +56,7 @@ Delay in milliseconds between provider calls.
 
 > `optional` **filterRange?**: `string` = `FilterRangeSchema`
 
-Defined in: [types/index.ts:341](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L341)
+Defined in: [types/index.ts:355](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L355)
 
 Zero-based test index range in start:end format (end exclusive).
 Persisted on the eval record so resume runs reproduce the original slice.
@@ -67,7 +67,7 @@ Persisted on the eval record so resume runs reproduce the original slice.
 
 > `optional` **generateSuggestions?**: `boolean`
 
-Defined in: [types/index.ts:276](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L276)
+Defined in: [types/index.ts:290](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L290)
 
 Whether promptfoo should generate follow-up prompt improvement suggestions
 after the eval completes.
@@ -78,7 +78,7 @@ after the eval completes.
 
 > `optional` **interactiveProviders?**: `boolean`
 
-Defined in: [types/index.ts:286](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L286)
+Defined in: [types/index.ts:300](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L300)
 
 #### Deprecated
 
@@ -98,7 +98,7 @@ mldangelo
 
 > `optional` **isRedteam?**: `boolean`
 
-Defined in: [types/index.ts:331](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L331)
+Defined in: [types/index.ts:345](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L345)
 
 Marks the eval as a red team run for downstream behavior and reporting.
 
@@ -108,7 +108,7 @@ Marks the eval as a red team run for downstream behavior and reporting.
 
 > `optional` **maxConcurrency?**: `number`
 
-Defined in: [types/index.ts:290](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L290)
+Defined in: [types/index.ts:304](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L304)
 
 Maximum number of provider calls to run concurrently.
 
@@ -118,7 +118,7 @@ Maximum number of provider calls to run concurrently.
 
 > `optional` **maxEvalTimeMs?**: `number`
 
-Defined in: [types/index.ts:327](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L327)
+Defined in: [types/index.ts:341](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L341)
 
 Maximum total runtime in milliseconds for the entire evaluation process.
 When reached, all remaining tests are marked as errors and the evaluation ends.
@@ -130,7 +130,7 @@ Default is 0 (no limit).
 
 > `optional` **progressCallback?**: (`completed`, `total`, `index`, `evalStep`, `metrics`) => `void`
 
-Defined in: [types/index.ts:297](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L297)
+Defined in: [types/index.ts:311](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L311)
 
 Callback invoked as rows finish during evaluation.
 
@@ -157,165 +157,7 @@ the current eval step, and aggregate metrics so far.
 
 ##### metrics
 
-###### assertFailCount
-
-`number` = `...`
-
-###### assertPassCount
-
-`number` = `...`
-
-###### cost
-
-`number` = `...`
-
-###### namedScores
-
-`Record`\<`string`, `number`\> = `...`
-
-###### namedScoresCount
-
-`Record`\<`string`, `number`\> = `...`
-
-###### namedScoreWeights?
-
-`Record`\<`string`, `number`\> = `...`
-
-###### redteam?
-
-\{ `pluginFailCount`: `Record`\<`string`, `number`\>; `pluginPassCount`: `Record`\<`string`, `number`\>; `strategyFailCount`: `Record`\<`string`, `number`\>; `strategyPassCount`: `Record`\<`string`, `number`\>; \} = `...`
-
-###### redteam.pluginFailCount
-
-`Record`\<`string`, `number`\> = `...`
-
-###### redteam.pluginPassCount
-
-`Record`\<`string`, `number`\> = `...`
-
-###### redteam.strategyFailCount
-
-`Record`\<`string`, `number`\> = `...`
-
-###### redteam.strategyPassCount
-
-`Record`\<`string`, `number`\> = `...`
-
-###### score
-
-`number` = `...`
-
-###### testErrorCount
-
-`number` = `...`
-
-###### testFailCount
-
-`number` = `...`
-
-###### testPassCount
-
-`number` = `...`
-
-###### tokenUsage
-
-\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \} = `BaseTokenUsageSchema`
-
-###### tokenUsage.assertions?
-
-\{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \} = `...`
-
-###### tokenUsage.assertions.cached?
-
-`number` = `...`
-
-###### tokenUsage.assertions.completion?
-
-`number` = `...`
-
-###### tokenUsage.assertions.completionDetails?
-
-\{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \} = `...`
-
-###### tokenUsage.assertions.completionDetails.acceptedPrediction?
-
-`number` = `...`
-
-###### tokenUsage.assertions.completionDetails.cacheCreationInputTokens?
-
-`number` = `...`
-
-###### tokenUsage.assertions.completionDetails.cacheReadInputTokens?
-
-`number` = `...`
-
-###### tokenUsage.assertions.completionDetails.reasoning?
-
-`number` = `...`
-
-###### tokenUsage.assertions.completionDetails.rejectedPrediction?
-
-`number` = `...`
-
-###### tokenUsage.assertions.numRequests?
-
-`number` = `...`
-
-###### tokenUsage.assertions.prompt?
-
-`number` = `...`
-
-###### tokenUsage.assertions.total?
-
-`number` = `...`
-
-###### tokenUsage.cached?
-
-`number` = `...`
-
-###### tokenUsage.completion?
-
-`number` = `...`
-
-###### tokenUsage.completionDetails?
-
-\{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \} = `...`
-
-###### tokenUsage.completionDetails.acceptedPrediction?
-
-`number` = `...`
-
-###### tokenUsage.completionDetails.cacheCreationInputTokens?
-
-`number` = `...`
-
-###### tokenUsage.completionDetails.cacheReadInputTokens?
-
-`number` = `...`
-
-###### tokenUsage.completionDetails.reasoning?
-
-`number` = `...`
-
-###### tokenUsage.completionDetails.rejectedPrediction?
-
-`number` = `...`
-
-###### tokenUsage.numRequests?
-
-`number` = `...`
-
-###### tokenUsage.prompt?
-
-`number` = `...`
-
-###### tokenUsage.total?
-
-`number` = `...`
-
-###### totalLatencyMs
-
-`number` = `...`
+[`PromptMetrics`](PromptMetrics.md)
 
 #### Returns
 
@@ -327,7 +169,7 @@ the current eval step, and aggregate metrics so far.
 
 > `optional` **repeat?**: `number`
 
-Defined in: [types/index.ts:311](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L311)
+Defined in: [types/index.ts:325](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L325)
 
 Number of times to repeat each test case.
 
@@ -337,7 +179,7 @@ Number of times to repeat each test case.
 
 > `optional` **showProgressBar?**: `boolean`
 
-Defined in: [types/index.ts:315](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L315)
+Defined in: [types/index.ts:329](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L329)
 
 Whether CLI-oriented callers should render a progress bar.
 
@@ -347,7 +189,7 @@ Whether CLI-oriented callers should render a progress bar.
 
 > `optional` **silent?**: `boolean`
 
-Defined in: [types/index.ts:336](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L336)
+Defined in: [types/index.ts:350](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L350)
 
 When true, suppresses informational output like "Starting evaluation" messages.
 Useful for internal evaluations like provider validation.
@@ -358,7 +200,7 @@ Useful for internal evaluations like provider validation.
 
 > `optional` **suggestionsCount?**: `number`
 
-Defined in: [types/index.ts:280](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L280)
+Defined in: [types/index.ts:294](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L294)
 
 Maximum number of prompt improvement suggestions to generate.
 
@@ -368,7 +210,7 @@ Maximum number of prompt improvement suggestions to generate.
 
 > `optional` **timeoutMs?**: `number`
 
-Defined in: [types/index.ts:321](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L321)
+Defined in: [types/index.ts:335](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L335)
 
 Timeout in milliseconds for each individual test case/provider API call.
 When reached, that specific test is marked as an error.

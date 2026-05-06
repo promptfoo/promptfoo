@@ -8,7 +8,7 @@
 
 > **generateTable**(`evaluateTable`, `tableCellMaxLength?`, `maxRows?`): `string`
 
-Defined in: [table.ts:28](https://github.com/promptfoo/promptfoo/blob/main/src/table.ts#L28)
+Defined in: [table.ts:29](https://github.com/promptfoo/promptfoo/blob/main/src/table.ts#L29)
 
 Render eval table data as terminal-friendly text.
 
@@ -38,6 +38,8 @@ Maximum number of body rows to render.
 ## Returns
 
 `string`
+
+ANSI-colored terminal text for the table.
 
 ## Example
 

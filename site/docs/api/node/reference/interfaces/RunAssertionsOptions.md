@@ -26,7 +26,7 @@ const options: RunAssertionsOptions = {
 
 ### assertScoringFunction?
 
-> `optional` **assertScoringFunction?**: `ScoringFunction`
+> `optional` **assertScoringFunction?**: [`ScoringFunction`](../type-aliases/ScoringFunction.md)
 
 Defined in: [assertions/index.ts:736](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L736)
 

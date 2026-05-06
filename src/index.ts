@@ -45,6 +45,7 @@ export type {
   RunAssertionOptions,
   RunAssertionsOptions,
 } from './assertions/index';
+export type { BlobRef } from './blobs/types';
 // Extension hook context types for users writing custom extensions
 export type {
   AfterAllExtensionHookContext,
@@ -61,7 +62,66 @@ export type {
   GuardResult,
   GuardResultEntry,
 } from './guardrails';
+export type { LoadApiProvidersOptions } from './providers/index';
+export type {
+  PluginConfig,
+  PluginGraderExample,
+  StrategyConfig,
+} from './redteam/types';
 export type { EnvOverrides } from './types/env';
+export type {
+  Assertion,
+  AssertionOrSet,
+  AssertionSet,
+  AssertionValueFunction,
+  AssertionValueFunctionContext,
+  AtomicTestCase,
+  CompletedPrompt,
+  EvaluateOptions,
+  EvaluateTable,
+  EvaluateTableHead,
+  EvaluateTableOutput,
+  EvaluateTableRow,
+  EvaluateTestSuite,
+  GradingResult,
+  LoadApiProviderContext,
+  PromptMetrics,
+  ScoringFunction,
+  TestCase,
+  TestCaseMetadata,
+  TestCaseOptions,
+} from './types/index';
+export type {
+  Prompt,
+  PromptConfig,
+  PromptContent,
+  PromptFunction,
+  PromptFunctionResult,
+} from './types/prompts';
+export type {
+  ApiProvider,
+  AudioOutput,
+  CallApiContextParams,
+  CallApiFunction,
+  CallApiOptionsParams,
+  ChatMessage,
+  GuardrailResponse,
+  ImageOutput,
+  ProviderClassificationResponse,
+  ProviderConfig,
+  ProviderEmbeddingResponse,
+  ProviderFunction,
+  ProviderOptions,
+  ProviderResponse,
+  ProviderSimilarityResponse,
+  ProvidersConfig,
+  VideoOutput,
+} from './types/providers';
+export type {
+  AssertionTokenUsage,
+  CompletionTokenDetails,
+  TokenUsage,
+} from './types/shared';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
 /**
