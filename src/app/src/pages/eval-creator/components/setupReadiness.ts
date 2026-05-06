@@ -20,7 +20,9 @@ function isProviderOptionsShape(value: Record<string, unknown>): boolean {
   return keys.length > 0 && keys.every((key) => PROVIDER_OPTION_KEYS.has(key));
 }
 
-function hasRunnableProviderId(provider: ProviderOptions): provider is ProviderOptions & { id: string } {
+function hasRunnableProviderId(
+  provider: ProviderOptions,
+): provider is ProviderOptions & { id: string } {
   return typeof provider.id === 'string' && provider.id.trim() !== '';
 }
 
