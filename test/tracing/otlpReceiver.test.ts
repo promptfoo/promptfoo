@@ -621,7 +621,7 @@ describe('OTLPReceiver', () => {
       });
     });
 
-    it('stores unlinked OTLP spans against existing traces without creating invalid rows', async () => {
+    it('stores unlinked OTLP spans without creating invalid trace rows', async () => {
       const traceIdHex = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
       const otlpRequest = {
         resourceSpans: [
