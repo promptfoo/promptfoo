@@ -260,6 +260,42 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(screen.getByRole('button', { name: 'Providers: 1 ready' })).toBeInTheDocument();
   });
 
+  it('should count provider maps from YAML as configured providers', () => {
+    useStore.getState().updateConfig({
+      providers: [{ 'openai:gpt-4.1': { config: { temperature: 0 } } }],
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByText('1 of 3 required steps complete')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Providers: 1 ready' })).toBeInTheDocument();
+  });
+
+  it('should not count provider option objects without ids as configured providers', () => {
+    useStore.getState().updateConfig({
+      providers: [{ label: 'Missing id', config: { foo: 'bar' } }],
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByText('0 of 3 required steps complete')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Providers: Missing' })).toBeInTheDocument();
+  });
+
+  it('should count scalar prompt and test configs as complete setup steps', () => {
+    useStore.getState().updateConfig({
+      providers: ['openai:gpt-4.1'],
+      prompts: 'file://prompt.txt',
+      tests: 'file://tests.csv',
+    });
+
+    render(<EvaluateTestSuiteCreator />);
+
+    expect(screen.getByText('Ready to run')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Prompts: 1 ready' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Test Cases: 1 ready' })).toBeInTheDocument();
+  });
+
   it('should let users jump between required steps from the progress summary', async () => {
     render(<EvaluateTestSuiteCreator />);
 
@@ -325,6 +361,23 @@ describe('EvaluateTestSuiteCreator', () => {
     render(<EvaluateTestSuiteCreator />);
 
     const mockFile = new File([''], 'empty.yaml', { type: 'application/yaml' });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, mockFile);
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        'The file appears to be empty. Please select a YAML file with content.',
+        'error',
+      );
+    });
+  });
+
+  it('should handle whitespace-only YAML files with the empty-file error toast', async () => {
+    const user = userEvent.setup();
+    render(<EvaluateTestSuiteCreator />);
+
+    const mockFile = new File([' \n\t '], 'empty.yaml', { type: 'application/yaml' });
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fileInput, mockFile);

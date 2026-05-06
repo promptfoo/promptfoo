@@ -25,9 +25,10 @@ import PromptsSection from './PromptsSection';
 import { ProvidersListSection } from './ProvidersListSection';
 import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
+import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
-import type { ProviderOptions, UnifiedConfig } from '@promptfoo/types';
+import type { UnifiedConfig } from '@promptfoo/types';
 
 type SetupStepId = 1 | 2 | 3 | 4;
 
@@ -38,31 +39,6 @@ interface SetupStep {
   isComplete: boolean;
   count?: number;
   required: boolean;
-}
-
-function normalizeProviders(providers: UnifiedConfig['providers']): ProviderOptions[] {
-  const providerList = Array.isArray(providers) ? providers : providers ? [providers] : [];
-
-  return providerList.flatMap((provider) => {
-    if (typeof provider === 'string') {
-      return [{ id: provider }];
-    }
-
-    if (!provider || typeof provider !== 'object' || Array.isArray(provider)) {
-      return [];
-    }
-
-    if ('id' in provider) {
-      return [provider as ProviderOptions];
-    }
-
-    return Object.entries(provider as Record<string, ProviderOptions>).flatMap(
-      ([id, providerOptions]) =>
-        providerOptions && typeof providerOptions === 'object' && !Array.isArray(providerOptions)
-          ? [{ ...providerOptions, id: providerOptions.id ?? id }]
-          : [],
-    );
-  });
 }
 
 function extractVarsFromPrompts(prompts: string[]): string[] {
@@ -148,34 +124,14 @@ const EvaluateTestSuiteCreator = () => {
     };
   }, []);
 
-  // Normalize prompts to string array
-  const normalizedPrompts = React.useMemo(() => {
-    if (!prompts || !Array.isArray(prompts)) {
-      return [];
-    }
-
-    return prompts
-      .map((prompt) => {
-        if (typeof prompt === 'string') {
-          return prompt;
-        } else if (typeof prompt === 'object' && prompt !== null && 'raw' in prompt) {
-          return (prompt as { raw: string }).raw;
-        }
-        // For functions or other types, return empty string
-        return '';
-      })
-      .filter((p): p is string => p !== ''); // Filter out empty strings
-  }, [prompts]);
+  const normalizedPrompts = React.useMemo(() => normalizePrompts(prompts), [prompts]);
 
   const varsList = React.useMemo(
     () => extractVarsFromPrompts(normalizedPrompts),
     [normalizedPrompts],
   );
 
-  // Get test count safely
-  const testCount = React.useMemo(() => {
-    return Array.isArray(config.tests) ? config.tests.length : 0;
-  }, [config.tests]);
+  const testCount = React.useMemo(() => countTests(config.tests), [config.tests]);
 
   const isReadyToRun =
     normalizedProviders.length > 0 && normalizedPrompts.length > 0 && testCount > 0;
@@ -232,7 +188,12 @@ const EvaluateTestSuiteCreator = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         const content = e.target?.result as string;
-        if (content) {
+        if (content.trim() === '') {
+          showToast(
+            'The file appears to be empty. Please select a YAML file with content.',
+            'error',
+          );
+        } else {
           try {
             const parsedConfig = yaml.load(content) as Record<string, unknown>;
             if (parsedConfig && typeof parsedConfig === 'object') {
@@ -248,11 +209,6 @@ const EvaluateTestSuiteCreator = () => {
               'error',
             );
           }
-        } else {
-          showToast(
-            'The file appears to be empty. Please select a YAML file with content.',
-            'error',
-          );
         }
       };
       reader.onerror = () => {
@@ -269,7 +225,7 @@ const EvaluateTestSuiteCreator = () => {
       <Tabs defaultValue="ui" className="w-full">
         {/* Header */}
         <PageHeader>
-          <div className="container max-w-7xl mx-auto px-4 py-10">
+          <div className="container max-w-7xl mx-auto px-4 py-6 lg:py-10">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight">Create Evaluation</h1>
@@ -298,7 +254,7 @@ const EvaluateTestSuiteCreator = () => {
             </div>
 
             {/* Tabs Toggle */}
-            <div className="mt-6">
+            <div className="mt-4 lg:mt-6">
               <TabsList>
                 <TabsTrigger value="ui">UI Editor</TabsTrigger>
                 <TabsTrigger value="yaml">YAML Editor</TabsTrigger>
@@ -309,9 +265,9 @@ const EvaluateTestSuiteCreator = () => {
 
         {/* Main Content */}
         <TabsContent value="ui">
-          <div className="container max-w-7xl mx-auto px-4 py-8">
-            <Card className="mb-6 shadow-sm">
-              <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="container max-w-7xl mx-auto px-4 py-4 lg:py-8">
+            <Card className="mb-4 shadow-sm lg:mb-6">
+              <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between lg:p-5">
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-muted-foreground">Evaluation setup</p>
                   <h2 className="text-xl font-semibold">
@@ -327,27 +283,35 @@ const EvaluateTestSuiteCreator = () => {
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <div className="flex flex-wrap gap-2">
-                    {requiredSteps.map((step) => (
-                      <button
-                        key={step.id}
-                        type="button"
-                        onClick={() => setActiveStep(step.id)}
-                        aria-label={`${step.label}: ${step.isComplete ? `${step.count} ready` : 'Missing'}`}
-                        className={cn(
-                          'rounded-md border px-3 py-2 text-left text-sm transition-colors',
-                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                          step.isComplete
-                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50'
-                            : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/60',
-                        )}
-                      >
-                        <span className="font-medium">{step.label}</span>
-                        <span className="ml-2 text-xs">
-                          {step.isComplete ? `${step.count} ready` : 'Missing'}
-                        </span>
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                    {setupSteps.map((step) => {
+                      const summaryStatus = step.required
+                        ? step.isComplete
+                          ? `${step.count} ready`
+                          : 'Missing'
+                        : step.isComplete
+                          ? 'Configured'
+                          : 'Optional';
+
+                      return (
+                        <button
+                          key={step.id}
+                          type="button"
+                          onClick={() => setActiveStep(step.id)}
+                          aria-label={`${step.label}: ${summaryStatus}`}
+                          className={cn(
+                            'rounded-md border px-3 py-2 text-left text-sm transition-colors',
+                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                            step.isComplete
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50'
+                              : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/60',
+                          )}
+                        >
+                          <span className="font-medium">{step.label}</span>
+                          <span className="ml-2 text-xs">{summaryStatus}</span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {shouldShowSummaryAction && (
@@ -368,7 +332,7 @@ const EvaluateTestSuiteCreator = () => {
 
             <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] xl:gap-8">
               {/* Left Sidebar - Step Navigation */}
-              <nav aria-label="Setup steps">
+              <nav aria-label="Setup steps" className="hidden lg:block">
                 <div className="space-y-2 lg:sticky lg:top-8">
                   <h3 className="mb-4 px-3 text-sm font-semibold text-muted-foreground">
                     SETUP STEPS

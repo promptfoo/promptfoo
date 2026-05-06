@@ -22,7 +22,7 @@ export function StepSection({
   defaultOpen: _defaultOpen = false,
 }: StepSectionProps) {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-4 lg:gap-6">
       {/* Header */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -41,10 +41,10 @@ export function StepSection({
       </div>
 
       {/* Guidance */}
-      {guidance && <div>{guidance}</div>}
+      {guidance && <div className="order-3 lg:order-2">{guidance}</div>}
 
       {/* Content */}
-      <div className="min-w-0">{children}</div>
+      <div className="order-2 min-w-0 lg:order-3">{children}</div>
     </div>
   );
 }

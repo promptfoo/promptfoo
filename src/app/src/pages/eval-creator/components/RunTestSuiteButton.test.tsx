@@ -73,6 +73,30 @@ describe('RunTestSuiteButton', () => {
     expect(button).not.toBeDisabled();
   });
 
+  it('should be enabled for scalar provider, prompt, and test configs', () => {
+    useStore.getState().updateConfig({
+      prompts: 'file://prompt.txt',
+      providers: 'openai:gpt-4',
+      tests: 'file://tests.csv',
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+
+    expect(screen.getByRole('button', { name: 'Run Eval' })).not.toBeDisabled();
+  });
+
+  it('should be disabled for provider option objects without ids', () => {
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: [{ label: 'Missing id', config: { foo: 'bar' } }],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+
+    expect(screen.getByRole('button', { name: 'Run Eval' })).toBeDisabled();
+  });
+
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';
     mockCallApiRoutes([
@@ -162,6 +186,46 @@ describe('RunTestSuiteButton', () => {
     unmount();
 
     await act(async () => {
+      await timers.advanceByAsync(1500);
+    });
+
+    expect(getCallApiMock()).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not start polling if unmounted before job creation finishes', async () => {
+    let resolveJobCreation: ((value: Response) => void) | undefined;
+    getCallApiMock().mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveJobCreation = resolve;
+        }),
+    );
+
+    useStore.getState().updateConfig({
+      prompts: ['prompt 1'],
+      providers: ['openai:gpt-4'],
+      tests: [{ vars: { foo: 'bar' } }],
+    });
+
+    const { unmount } = renderWithProvider(<RunTestSuiteButton />);
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    unmount();
+
+    await act(async () => {
+      resolveJobCreation?.(
+        new Response(JSON.stringify({ id: 'late-job' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
       await timers.advanceByAsync(1500);
     });
 

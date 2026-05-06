@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -9,6 +9,7 @@ import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useNavigate } from 'react-router-dom';
+import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const RunTestSuiteButton = () => {
@@ -32,33 +33,33 @@ const RunTestSuiteButton = () => {
   const [progressPercent, setProgressPercent] = useState(0);
   const [runError, setRunError] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isMountedRef = useRef(true);
 
-  const clearPollInterval = () => {
+  const clearPollInterval = useCallback(() => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
-  };
+  }, []);
 
-  useEffect(
-    () => () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-        pollIntervalRef.current = null;
-      }
-    },
-    [],
-  );
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      clearPollInterval();
+    };
+  }, [clearPollInterval]);
+
+  const normalizedProviders = normalizeProviders(providers);
+  const normalizedPrompts = normalizePrompts(prompts);
+  const testCount = countTests(tests);
 
   const isDisabled =
     isRunning ||
-    !providers ||
-    !Array.isArray(providers) ||
-    providers.length === 0 ||
-    !prompts ||
-    prompts.length === 0 ||
-    !tests ||
-    (Array.isArray(tests) && tests.length === 0);
+    normalizedProviders.length === 0 ||
+    normalizedPrompts.length === 0 ||
+    testCount === 0;
 
   const runTestSuite = async () => {
     setIsRunning(true);
@@ -79,6 +80,10 @@ const RunTestSuiteButton = () => {
     };
 
     const handleRunError = (error: unknown) => {
+      if (!isMountedRef.current) {
+        return;
+      }
+
       const message = error instanceof Error ? error.message : 'An unknown error occurred';
       setIsRunning(false);
       setRunError(message);
@@ -99,11 +104,18 @@ const RunTestSuiteButton = () => {
       }
 
       const job: CreateJobResponse = await response.json();
+      if (!isMountedRef.current) {
+        return;
+      }
 
       clearPollInterval();
       const intervalId = setInterval(async () => {
         try {
           const progressResponse = await callApi(`/eval/job/${job.id}/`);
+          if (!isMountedRef.current) {
+            clearPollInterval();
+            return;
+          }
 
           if (!progressResponse.ok) {
             clearPollInterval();
@@ -111,6 +123,10 @@ const RunTestSuiteButton = () => {
           }
 
           const progressData: GetJobResponse = await progressResponse.json();
+          if (!isMountedRef.current) {
+            clearPollInterval();
+            return;
+          }
 
           if (progressData.status === 'complete') {
             clearPollInterval();
