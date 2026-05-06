@@ -17,9 +17,11 @@ describe('OpenAI Provider', () => {
   });
 
   describe('OpenAiEmbeddingProvider', () => {
+    const configuredEmbeddingCostPerToken = 0.42 / 1e6;
     const provider = new OpenAiEmbeddingProvider('text-embedding-3-large', {
       config: {
         apiKey: 'test-key',
+        cost: configuredEmbeddingCostPerToken,
       },
     });
 
@@ -45,6 +47,7 @@ describe('OpenAI Provider', () => {
       });
 
       const result = await provider.callEmbeddingApi('test text');
+      const expectedCost = 10 * provider.config.cost!;
       expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
       expect(result.tokenUsage).toEqual({
         total: 10,
@@ -52,7 +55,7 @@ describe('OpenAI Provider', () => {
         completion: 0,
         numRequests: 1,
       });
-      expect(result.cost).toBeCloseTo((10 * 0.13) / 1e6, 12);
+      expect(result.cost).toBeCloseTo(expectedCost, 12);
     });
 
     it('should pass through embedding request fields', async () => {
@@ -66,15 +69,17 @@ describe('OpenAI Provider', () => {
         },
       });
 
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
-          data: [{ embedding: [0.1, 0.2, 0.3] }],
-          usage: {
-            total_tokens: 10,
-            prompt_tokens: 10,
-            completion_tokens: 0,
-          },
+      const mockEmbeddingResponse = {
+        data: [{ embedding: [0.1, 0.2, 0.3] }],
+        usage: {
+          total_tokens: 10,
+          prompt_tokens: 10,
+          completion_tokens: 0,
         },
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: mockEmbeddingResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
@@ -97,6 +102,7 @@ describe('OpenAI Provider', () => {
         false,
         undefined,
       );
+      expect(mockEmbeddingResponse.usage.completion_tokens).toBe(0);
     });
 
     it('should handle API errors', async () => {
@@ -108,7 +114,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should validate input type', async () => {
-      const result = await provider.callEmbeddingApi({ message: 'test' } as any);
+      const result = await provider.callEmbeddingApi({ message: 'test' } as unknown as string);
       expect(result.error).toBe(
         'Invalid input type for embedding API. Expected string, got object. Input: {"message":"test"}',
       );
