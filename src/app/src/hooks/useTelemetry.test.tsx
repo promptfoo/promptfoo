@@ -10,4 +10,15 @@ describe('useTelemetry', () => {
     expect(() => result.current.recordEvent('command_used', { foo: 'bar' })).not.toThrow();
     expect(() => result.current.identifyUser('user123', { plan: 'preview' })).not.toThrow();
   });
+
+  it('keeps no-op callbacks stable across renders', () => {
+    const { result, rerender } = renderHook(() => useTelemetry());
+    const firstRecordEvent = result.current.recordEvent;
+    const firstIdentifyUser = result.current.identifyUser;
+
+    rerender();
+
+    expect(result.current.recordEvent).toBe(firstRecordEvent);
+    expect(result.current.identifyUser).toBe(firstIdentifyUser);
+  });
 });
