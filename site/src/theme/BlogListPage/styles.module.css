@@ -221,6 +221,10 @@
     transform: none;
   }
 
+  .featuredPost {
+    flex-direction: column;
+  }
+
   .featuredBadge {
     top: 8px;
     left: 8px;
@@ -229,12 +233,16 @@
   }
 
   .featuredPostImage {
-    min-width: 110px;
-    max-width: 140px;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    aspect-ratio: 16 / 9;
   }
 
   .featuredPostContent {
     padding: 1rem;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .featuredTitle {
@@ -251,6 +259,10 @@
     font-size: 0.75rem;
     padding-top: 0.5rem;
   }
+
+  .preview {
+    display: -webkit-box;
+  }
 }
 
 /* Small mobile */
@@ -260,8 +272,8 @@
   }
 
   .featuredPostImage {
-    min-width: 90px;
-    max-width: 110px;
+    min-width: 0;
+    max-width: none;
   }
 
   .featuredPostContent {
