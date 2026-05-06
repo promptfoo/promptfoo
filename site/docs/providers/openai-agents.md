@@ -553,5 +553,6 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 - [Tracing](/docs/tracing) - OTLP ingestion and trajectory assertions
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety
 - [Multi-turn Jailbreaks](/docs/red-team/strategies/multi-turn) - Stateful red-team strategy guidance
+- [Multi-turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions) - Provider-specific session setup
 - [Assertions](/docs/configuration/expected-outputs) - Validate agent responses
 - [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) - Official SDK documentation

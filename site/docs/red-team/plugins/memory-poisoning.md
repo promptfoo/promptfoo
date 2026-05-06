@@ -108,6 +108,7 @@ To protect against memory poisoning attacks:
 
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [Stateful OpenAI Agents Sessions](/docs/providers/openai-agents/#stateful-red-team-runs)
+- [Multi-Turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions)
 - [Tool Discovery](/docs/red-team/plugins/tool-discovery)
 - [Excessive Agency](/docs/red-team/plugins/excessive-agency)
 - [Hijacking](/docs/red-team/plugins/hijacking)
