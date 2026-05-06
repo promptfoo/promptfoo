@@ -254,7 +254,7 @@ Use this for local application state that should be available to tools and hooks
 
 ## Stateful Red Team Runs
 
-Stateful red-team strategies such as `crescendo` need two things at once:
+Stateful red-team strategies such as [`crescendo`](/docs/red-team/strategies/multi-turn) need two things at once:
 
 - all turns within one attack should share history
 - separate tests should not share the same session
@@ -301,7 +301,7 @@ export default async function createSession(context?: {
 }
 ```
 
-This keeps each multi-turn attack stateful while still isolating one generated test case from another.
+This keeps each multi-turn attack stateful while still isolating one generated test case from another. The same pattern is useful for [`agentic:memory-poisoning`](/docs/red-team/plugins/memory-poisoning), which also depends on persistent state across turns.
 
 ## Sandbox Agents
 
@@ -439,7 +439,7 @@ npx promptfoo eval
 
 Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo normalizes SDK tool spans into `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans into command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
 
-When Promptfoo tracing is enabled, the provider replaces the SDK's default OpenAI exporter with Promptfoo OTLP export for that process. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
+When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
 
 Once Promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
 
@@ -550,6 +550,8 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
 - [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing and framework-specific provider wrapping
+- [Tracing](/docs/tracing) - OTLP ingestion and trajectory assertions
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety
+- [Multi-turn Jailbreaks](/docs/red-team/strategies/multi-turn) - Stateful red-team strategy guidance
 - [Assertions](/docs/configuration/expected-outputs) - Validate agent responses
 - [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) - Official SDK documentation

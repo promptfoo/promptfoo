@@ -23,3 +23,5 @@ Follow the instructions in the [Client Side Session Management](/docs/providers/
 Promptfoo provides tools to extract the Session ID from the response and pass it to the next turn.
 
 Follow the instructions in the [Server Side Session Management](/docs/providers/http/#server-side-session-management) docs.
+
+If you are using the built-in JavaScript [`openai:agents:*` provider](/docs/providers/openai-agents), use the [stateful red-team session pattern](/docs/providers/openai-agents/#stateful-red-team-runs) instead.

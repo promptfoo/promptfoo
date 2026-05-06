@@ -35,7 +35,7 @@ npx promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 
 The second test depends on the first test's remembered code word, so run this config with `-j 1`.
 
-For stateful red-team strategies, use a session factory keyed by a per-test `sessionId` rather than one shared inline session. The [OpenAI Agents provider docs](https://www.promptfoo.dev/docs/providers/openai-agents/#stateful-red-team-runs) show the `transformVars` plus session-factory pattern that keeps turns together without sharing history across unrelated tests.
+For stateful red-team strategies, use a session factory keyed by a per-test `sessionId` rather than one shared inline session. The [OpenAI Agents provider docs](https://www.promptfoo.dev/docs/providers/openai-agents/#stateful-red-team-runs) show the `transformVars` plus session-factory pattern that keeps turns together without sharing history across unrelated tests; the [multi-turn strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/multi-turn/) explain when `stateful: true` is appropriate.
 
 ## Run the sandbox and skill eval
 
@@ -44,3 +44,5 @@ npx promptfoo eval -c promptfooconfig.sandbox.yaml --no-cache
 ```
 
 The sandbox eval mounts a synthetic `task.md`, asks the agent to use the `ticket-summary` skill, and asserts on traced shell activity plus the final answer.
+
+See also the [Tracing docs](https://www.promptfoo.dev/docs/tracing/) for trajectory assertions and the [OpenAI Agents provider docs](https://www.promptfoo.dev/docs/providers/openai-agents/) for the full JavaScript SDK configuration surface.
