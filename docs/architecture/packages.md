@@ -54,6 +54,11 @@ Leaf layers may import only themselves plus external packages. The same
 architecture check enforces that rule so this first extracted surface cannot
 quietly grow back upward into Node, provider, or redteam code.
 
+`packages/schema` is the first private workspace wrapper around that leaf. It
+builds the current contracts surface as `@promptfoo/schema` and verifies the
+packed artifact through ESM import, CommonJS require, and downstream TypeScript
+resolution without changing the existing `promptfoo` facade yet.
+
 ## Dependency Ownership Report
 
 The dependency report groups direct runtime imports by the private layer that

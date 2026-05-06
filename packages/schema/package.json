@@ -1,0 +1,38 @@
+{
+  "name": "@promptfoo/schema",
+  "description": "Shared Promptfoo contracts and runtime schemas",
+  "version": "0.121.9",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/promptfoo/promptfoo.git",
+    "directory": "packages/schema"
+  },
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "engines": {
+    "node": "^20.20.0 || >=22.22.0"
+  },
+  "scripts": {
+    "build:clean": "shx rm -rf dist",
+    "build": "npm run tsc && npm run build:clean && tsdown",
+    "tsc": "tsc --noEmit --project tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}

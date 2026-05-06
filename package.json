@@ -17,6 +17,7 @@
     }
   },
   "workspaces": [
+    "packages/*",
     "src/app",
     "site"
   ],
@@ -41,8 +42,9 @@
     "bin": "dist/src/entrypoint.js",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
+    "build:schema-package": "npm run build --workspace @promptfoo/schema",
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
-    "build": "concurrently -g --kill-others-on-fail \"npm run tsc\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
+    "build": "concurrently -g --kill-others-on-fail \"npm run tsc\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\" \"npm run build:schema-package\"",
     "postbuild": "tsx scripts/postbuild.ts",
     "citation:generate": "tsx scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
@@ -80,6 +82,7 @@
     "test:vitest:watch": "vitest",
     "test:watch": "vitest",
     "test:redteam:integration": "npm run build && ./test/redteam/integration/test.sh",
+    "test:schema-package": "tsx scripts/checkSchemaPackage.ts",
     "test:smoke": "vitest run --config vitest.smoke.config.ts",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage && npm run test:coverage --prefix src/app",

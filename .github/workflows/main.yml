@@ -160,6 +160,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test Schema Package Artifact
+        if: matrix.node == '20.20'
+        run: npm run test:schema-package -- --skip-build
+
       - name: Check Telemetry
         run: |
           # Skip PostHog key check for forks as they don't have access to secrets
