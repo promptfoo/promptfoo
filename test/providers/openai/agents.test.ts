@@ -340,6 +340,7 @@ describe('OpenAiAgentsProvider', () => {
         handoffs: 'file:///tmp/handoffs.ts',
         inputGuardrails: 'file:///tmp/input-guardrails.ts',
         outputGuardrails: 'file:///tmp/output-guardrails.ts',
+        model: 'gpt-5-mini',
         modelSettings: {
           retry: {
             maxRetries: 2,
@@ -549,6 +550,21 @@ describe('OpenAiAgentsProvider', () => {
     expect(runOptions.session).toBeInstanceOf(MemorySession);
     expect(await runOptions.session.getSessionId()).toBe('session-1');
     expect(runOptions.sandbox.client.backendId).toBe('unix_local');
+  });
+
+  it('does not treat the provider label as a model override', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(mockRun.mock.calls[0][2].model).toBeUndefined();
   });
 
   it('passes Promptfoo vars through the SDK local run context', async () => {

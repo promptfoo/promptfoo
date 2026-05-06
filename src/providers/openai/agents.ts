@@ -185,9 +185,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         signal: callApiOptions?.abortSignal,
       };
 
-      // Override model if specified in config
-      if (this.agentConfig.model || this.modelName) {
-        runOptions.model = this.agentConfig.model || this.modelName;
+      // Override the agent's model only when the provider config explicitly asks to.
+      // The provider suffix is an agent label, not a model identifier.
+      if (this.agentConfig.model) {
+        runOptions.model = this.agentConfig.model;
       }
 
       // Override model settings if specified
