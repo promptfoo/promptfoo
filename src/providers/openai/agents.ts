@@ -1,9 +1,9 @@
 import {
+  addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
   protocol,
   run,
-  setTraceProcessors,
   startTraceExportLoop,
 } from '@openai/agents';
 import logger from '../../logger';
@@ -40,6 +40,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
   private session?: Session;
+  private sharedSessionQueue: Promise<void> = Promise.resolve();
 
   constructor(
     modelName: string,
@@ -205,15 +206,20 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       // Run the agent within the evaluator trace when Promptfoo supplied one so
       // nested agent spans stay attached to trajectory assertions and UI traces.
-      const result = await getOrCreateTrace(
-        async () => {
-          return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
-        },
-        {
-          ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
-          ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
-        },
-      );
+      const executeRun = () =>
+        getOrCreateTrace(
+          async () => {
+            return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
+          },
+          {
+            ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
+            ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
+          },
+        );
+      const result =
+        runOptions.session && runOptions.session === this.session
+          ? await this.withSharedSessionLock(executeRun)
+          : await executeRun();
 
       logger.debug('[AgentsProvider] Agent run result', {
         hasOutput: !!result.finalOutput,
@@ -320,7 +326,8 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private async resolveRunOptions(
     context?: CallApiContextParams,
   ): Promise<Record<string, unknown>> {
-    const runOptions = { ...(this.agentConfig.runOptions ?? {}) };
+    const runOptions = { ...(this.agentConfig.runOptions ?? {}) } as Record<string, any>;
+    delete runOptions.stream;
 
     if (typeof runOptions.sessionInputCallback === 'string') {
       runOptions.sessionInputCallback = await loadValueFromFile(
@@ -401,6 +408,21 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
     return this.session;
   }
+
+  private async withSharedSessionLock<T>(callback: () => Promise<T>): Promise<T> {
+    const previousRun = this.sharedSessionQueue;
+    let release: () => void = () => {};
+    this.sharedSessionQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await previousRun;
+    try {
+      return await callback();
+    } finally {
+      release();
+    }
+  }
 }
 
 function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
@@ -422,7 +444,7 @@ async function ensureTracingExporterRegistered(): Promise<void> {
         scheduleDelay: 1000,
       });
 
-      setTraceProcessors([processor]);
+      addTraceProcessor(processor);
       startTraceExportLoop();
       logger.debug('[AgentsProvider] Tracing processor registered');
     });
