@@ -157,6 +157,7 @@ tests:
 
           return {
             pass: Boolean(commandRequest),
+            score: commandRequest ? 1 : 0,
             reason: commandRequest
               ? 'Observed a deterministic command approval request.'
               : 'No command approval request was observed.'

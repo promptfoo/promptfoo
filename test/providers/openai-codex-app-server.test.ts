@@ -207,6 +207,7 @@ describe('OpenAICodexAppServerProvider', () => {
         model_reasoning_effort: 'none',
         reasoning_summary: 'detailed',
         personality: 'friendly',
+        approvals_reviewer: 'auto_review',
         base_instructions: 'You are evaluating repository quality.',
         developer_instructions: 'Return concise, actionable output.',
         collaboration_mode: {
@@ -249,6 +250,7 @@ describe('OpenAICodexAppServerProvider', () => {
       baseInstructions: 'You are evaluating repository quality.',
       developerInstructions: 'Return concise, actionable output.',
       personality: 'friendly',
+      approvalsReviewer: 'auto_review',
     });
     server.send({
       id: threadStart.id,
@@ -523,6 +525,64 @@ describe('OpenAICodexAppServerProvider', () => {
         response: { decision: 'decline' },
       },
     ]);
+  });
+
+  it('continues with env-based auth when older app-server binaries lack account/login/start', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        apiKey: 'legacy-api-key',
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Use legacy auth compatibility');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+
+    const loginStart = await waitForMessage(
+      server,
+      (message) => message.method === 'account/login/start',
+    );
+    server.send({
+      id: loginStart.id,
+      error: {
+        code: -32601,
+        message: 'Method not found',
+      },
+    });
+
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_legacy_auth' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_legacy_auth', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_legacy_auth',
+        turnId: 'turn_legacy_auth',
+        itemId: 'msg_legacy_auth',
+        delta: 'Legacy auth ok',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_legacy_auth',
+        turn: { id: 'turn_legacy_auth', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Legacy auth ok' });
   });
 
   it('maps legacy approval requests by conversation id and legacy decision names', async () => {
@@ -2805,6 +2865,7 @@ describe('OpenAICodexAppServerProvider', () => {
           permissions: {
             permissions: { read: true },
             scope: 'session',
+            strict_auto_review: true,
           },
           dynamic_tools: {
             providerTool: {
@@ -2902,6 +2963,7 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(permissionsApproval.result).toEqual({
       permissions: { read: true },
       scope: 'session',
+      strictAutoReview: true,
     });
 
     server.send({
@@ -3437,6 +3499,23 @@ describe('OpenAICodexAppServerProvider', () => {
     );
     server.stdout.write('line two"}}\n');
     server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_multiline',
+        turnId: 'turn_multiline',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_multiline',
+          command: 'printf "line one\\nline two"',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: null,
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    server.send({
       method: 'item/agentMessage/delta',
       params: {
         threadId: 'thr_multiline',
@@ -3465,7 +3544,104 @@ describe('OpenAICodexAppServerProvider', () => {
         }),
       ]),
     );
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'line one\nline two',
+        }),
+      ]),
+    );
+    expect(result.metadata?.codexAppServer.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'commandExecution',
+          aggregatedOutput: 'line one\nline two',
+        }),
+      ]),
+    );
     expect(result.output).toBe('Done');
+  });
+
+  it('emits SDK-compatible raw items for coding-agent verifiers', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Inspect raw evidence');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_raw_evidence' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_raw_evidence', status: 'inProgress' } },
+    });
+
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_raw_evidence',
+        turnId: 'turn_raw_evidence',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_raw_evidence',
+          command: 'cat env_dump.txt',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_raw_evidence',
+        turnId: 'turn_raw_evidence',
+        item: {
+          type: 'agentMessage',
+          id: 'msg_raw_evidence',
+          text: 'Done',
+          status: 'completed',
+        },
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_raw_evidence',
+        turn: { id: 'turn_raw_evidence', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    const raw = JSON.parse(result.raw as string);
+    expect(raw.finalResponse).toBe('Done');
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+          exit_code: 0,
+        }),
+        expect.objectContaining({
+          type: 'agent_message',
+          text: 'Done',
+        }),
+      ]),
+    );
   });
 
   it('counts notifications without retaining raw notification payloads by default', async () => {

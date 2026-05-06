@@ -128,8 +128,8 @@ The provider validates top-level provider config strictly. Prompt-level config i
 | `sandbox_mode`            | string        | `read-only`, `workspace-write`, or `danger-full-access`.                                                                                                            | `read-only`          |
 | `sandbox_policy`          | object        | Raw app-server sandbox policy override for `turn/start`.                                                                                                            | Generated from mode  |
 | `network_access_enabled`  | boolean       | Adds network access to generated sandbox policies.                                                                                                                  | `false`              |
-| `approval_policy`         | string/object | `never`, `on-request`, `on-failure`, `untrusted`, or granular approval policy object.                                                                               | `never`              |
-| `approvals_reviewer`      | string        | `user` or `guardian_subagent`.                                                                                                                                      | App-server default   |
+| `approval_policy`         | string/object | `never`, `on-request`, `on-failure`, `untrusted`, or granular approval policy object. `on-failure` is accepted for compatibility but deprecated by Codex.           | `never`              |
+| `approvals_reviewer`      | string        | `user` or `auto_review`. `guardian_subagent` is still accepted as a legacy alias.                                                                                   | App-server default   |
 | `model_reasoning_effort`  | string        | `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`.                                                                                                             | App-server default   |
 | `reasoning_summary`       | string        | `auto`, `concise`, `detailed`, or `none`.                                                                                                                           | App-server default   |
 | `personality`             | string        | `none`, `friendly`, or `pragmatic`.                                                                                                                                 | App-server default   |
@@ -209,6 +209,7 @@ providers:
             source: promptfoo
         permissions:
           scope: session
+          strict_auto_review: true
           permissions:
             network:
               enabled: true
@@ -234,6 +235,8 @@ server_request_policy:
 ```
 
 Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled for older app-server versions. Advanced command decision objects are only supported on the modern `item/commandExecution/requestApproval` flow.
+
+`permissions.strict_auto_review` maps to the app-server `strictAutoReview` response field and asks Codex to review every subsequent command in the current turn before normal sandboxed execution.
 
 ## Structured Output
 
