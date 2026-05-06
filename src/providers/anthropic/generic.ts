@@ -40,8 +40,26 @@ interface AnthropicBaseOptions {
 
 const ANTHROPIC_CACHE_HASH_CONTEXT = 'promptfoo:anthropic:cache-key:v1';
 
+// Canonicalize before hashing so semantically identical objects with different
+// property insertion orders produce the same cache key. See
+// `src/providers/AGENTS.md` "Cache Key Hygiene".
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map((k) => [k, canonicalize((value as Record<string, unknown>)[k])] as const);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
 export function hashAnthropicCacheValue(value: unknown): string {
-  const serialized = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
+  const canonical = canonicalize(value);
+  const serialized =
+    typeof canonical === 'string' ? canonical : (JSON.stringify(canonical) ?? String(canonical));
   return createHmac('sha256', ANTHROPIC_CACHE_HASH_CONTEXT).update(serialized).digest('hex');
 }
 

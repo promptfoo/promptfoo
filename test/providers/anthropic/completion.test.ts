@@ -220,6 +220,23 @@ describe('AnthropicCompletionProvider', () => {
       );
     });
 
+    it('should hash semantically identical objects to the same value regardless of key order', async () => {
+      const { hashAnthropicCacheValue } = await import(
+        '../../../src/providers/anthropic/generic'
+      );
+
+      expect(hashAnthropicCacheValue({ a: 1, b: 2, c: 3 })).toBe(
+        hashAnthropicCacheValue({ c: 3, a: 1, b: 2 }),
+      );
+      expect(
+        hashAnthropicCacheValue({ messages: [{ role: 'user', content: 'hi' }], model: 'claude' }),
+      ).toBe(
+        hashAnthropicCacheValue({ model: 'claude', messages: [{ content: 'hi', role: 'user' }] }),
+      );
+      // Arrays preserve order — element ordering is semantically meaningful.
+      expect(hashAnthropicCacheValue([1, 2, 3])).not.toBe(hashAnthropicCacheValue([3, 2, 1]));
+    });
+
     it('should avoid logging prompts and generated outputs in debug metadata', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
