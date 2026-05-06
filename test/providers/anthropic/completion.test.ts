@@ -173,15 +173,24 @@ describe('AnthropicCompletionProvider', () => {
         }));
       `;
 
-      const firstRun = spawnSync(process.execPath, ['--import', 'tsx', '-e', importProbe], {
+      const spawnOptions = {
         cwd: process.cwd(),
-        encoding: 'utf8',
-      });
-      const secondRun = spawnSync(process.execPath, ['--import', 'tsx', '-e', importProbe], {
-        cwd: process.cwd(),
-        encoding: 'utf8',
-      });
+        encoding: 'utf8' as const,
+        timeout: 30_000,
+      };
+      const firstRun = spawnSync(
+        process.execPath,
+        ['--import', 'tsx', '-e', importProbe],
+        spawnOptions,
+      );
+      const secondRun = spawnSync(
+        process.execPath,
+        ['--import', 'tsx', '-e', importProbe],
+        spawnOptions,
+      );
 
+      expect(firstRun.error, firstRun.error?.message).toBeUndefined();
+      expect(secondRun.error, secondRun.error?.message).toBeUndefined();
       expect(firstRun.status, firstRun.stderr || firstRun.stdout).toBe(0);
       expect(secondRun.status, secondRun.stderr || secondRun.stdout).toBe(0);
       expect(firstRun.stdout).toBe(secondRun.stdout);
@@ -190,6 +199,25 @@ describe('AnthropicCompletionProvider', () => {
         requestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
       expect(firstRun.stdout).not.toContain('sk-ant-restart-secret');
+    });
+
+    it('should produce known hex digests for fixed inputs', async () => {
+      const { getAnthropicAuthCacheNamespace, hashAnthropicCacheValue } = await import(
+        '../../../src/providers/anthropic/generic'
+      );
+
+      expect(getAnthropicAuthCacheNamespace('sk-ant-restart-secret')).toBe(
+        '7c26fdc69a372e71532057f3039c789205d499e73d7b7356842127c3f9280701',
+      );
+      expect(hashAnthropicCacheValue({ prompt: 'same prompt' })).toBe(
+        'e1436b0a7084971817a4a1cfea0202abca38ec5fcf652c536c5a1686010603cc',
+      );
+      expect(hashAnthropicCacheValue(undefined)).toBe(
+        '1a7e490079dddef29372602f205771e36d0d1e43d9da356f22194ea8f685e397',
+      );
+      expect(getAnthropicAuthCacheNamespace('')).toBe(
+        '7b632cd5180136645b21af8e6f3708e0782bdc3a9d81f094a9385cade8ce0987',
+      );
     });
 
     it('should avoid logging prompts and generated outputs in debug metadata', async () => {
