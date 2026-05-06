@@ -1,6 +1,13 @@
 ---
 title: 'Interface: TokenUsage'
+description: 'Token accounting reported by providers and graders.'
 ---
+
+## Import
+
+```ts
+import type { TokenUsage } from 'promptfoo';
+```
 
 Defined in: [types/shared.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L147)
 

@@ -1,6 +1,13 @@
 ---
 title: 'Interface: TransformContext'
+description: 'Metadata supplied to every transform invocation.'
 ---
+
+## Import
+
+```ts
+import type { TransformContext } from 'promptfoo';
+```
 
 Defined in: [types/transform.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L17)
 

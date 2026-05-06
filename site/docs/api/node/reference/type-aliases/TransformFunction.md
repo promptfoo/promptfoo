@@ -1,6 +1,13 @@
 ---
 title: "Type Alias: TransformFunction\\<TIn, TOut\\>"
+description: 'A function that transforms output or vars at various stages of the evaluation pipeline.'
 ---
+
+## Import
+
+```ts
+import type { TransformFunction } from 'promptfoo';
+```
 
 > **TransformFunction**\<`TIn`, `TOut`\> = (`output`, `context`) => `TOut` \| `Promise`\<`TOut`\>
 

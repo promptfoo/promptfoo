@@ -12,6 +12,15 @@ This file is used only by TypeDoc. Every export here is also available from
 the root `promptfoo` package entrypoint, but the runtime package exports more
 compatibility types and helpers than we want to present as first-class docs.
 
+## How to use this reference
+
+Start with the [Node.js package guide](../../../usage/node-package.md) when you
+need workflows and examples. Use this generated reference when you need the
+exact public symbols, signatures, import form, and field-level contracts.
+
+The pages below document the curated package surface exported from `promptfoo`,
+not every internal compatibility type that exists in the runtime build.
+
 ## Namespaces
 
 - [cache](promptfoo/namespaces/cache/README.md)

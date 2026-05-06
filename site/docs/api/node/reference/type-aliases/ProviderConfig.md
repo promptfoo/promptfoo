@@ -1,12 +1,23 @@
 ---
 title: 'Type Alias: ProviderConfig'
+description: 'Provider override accepted anywhere a single provider configuration is allowed.'
 ---
+
+## Import
+
+```ts
+import type { ProviderConfig } from 'promptfoo';
+```
 
 > **ProviderConfig** = `ProviderId` \| [`ProviderFunction`](ProviderFunction.md) \| [`ApiProvider`](../interfaces/ApiProvider.md) \| [`ProviderOptions`](../interfaces/ProviderOptions.md) \| `ProviderOptionsMap`
 
-Defined in: [types/providers.ts:39](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L39)
+Defined in: [types/providers.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L47)
 
 Provider override accepted anywhere a single provider configuration is allowed.
+
+Use a string for a built-in provider id, a function for a small custom
+provider, or an object when you need labels, env overrides, transforms, or
+other provider options.
 
 ## Example
 

@@ -27,6 +27,9 @@ export type PromptContent = string | object;
 /**
  * Prompt-local text decoration applied before provider execution.
  *
+ * This only changes rendered prompt text. Use provider configuration for model
+ * settings such as temperature, retries, or auth.
+ *
  * @example
  * ```ts
  * const config: PromptConfig = {
@@ -72,6 +75,10 @@ export interface PromptFunctionContext {
 
 /**
  * Result type for prompt functions.
+ *
+ * Return this wrapper only when a prompt function needs to pair rendered prompt
+ * content with per-prompt config overrides; otherwise returning `PromptContent`
+ * directly is simpler.
  *
  * Prompt functions can return:
  * - A string (used directly as the prompt)

@@ -1,6 +1,13 @@
 ---
 title: 'Function: isTransformFunction()'
+description: 'Runtime type guard for TransformFunction values.'
 ---
+
+## Import
+
+```ts
+import { isTransformFunction } from 'promptfoo';
+```
 
 > **isTransformFunction**(`value`): `value is TransformFunction<unknown, unknown>`
 

@@ -1,8 +1,15 @@
 ---
 title: 'Interface: CallApiFunction()'
+description: 'Function signature used by custom providers.'
 ---
 
-Defined in: [types/providers.ts:680](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L680)
+## Import
+
+```ts
+import type { CallApiFunction } from 'promptfoo';
+```
+
+Defined in: [types/providers.ts:709](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L709)
 
 Function signature used by custom providers.
 
@@ -22,7 +29,7 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 
 > **CallApiFunction**(`prompt`, `context?`, `options?`): `Promise`\<[`ProviderResponse`](ProviderResponse.md)\>
 
-Defined in: [types/providers.ts:681](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L681)
+Defined in: [types/providers.ts:710](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L710)
 
 Function signature used by custom providers.
 
@@ -70,6 +77,6 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:687](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L687)
+Defined in: [types/providers.ts:716](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L716)
 
 Human-readable label used when the provider function is shown in reports.

@@ -365,6 +365,9 @@ export function resolveProviderConfigs(
 /**
  * Shared options for loading one or more providers.
  *
+ * Pass these when provider configs need a caller-controlled resolution base or
+ * scoped environment values without mutating `process.env`.
+ *
  * @example
  * ```ts
  * const options: LoadApiProvidersOptions = {

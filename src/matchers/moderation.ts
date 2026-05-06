@@ -10,6 +10,10 @@ import type { ApiModerationProvider, GradingConfig, GradingResult } from '../typ
 /**
  * Input passed to `assertions.matchesModeration()`.
  *
+ * Pass both sides of the exchange so moderation providers can inspect the
+ * triggering prompt as well as the model response. Use `categories` to narrow
+ * failures when only specific policy buckets matter to the test.
+ *
  * @example
  * ```ts
  * const options: ModerationMatchOptions = {

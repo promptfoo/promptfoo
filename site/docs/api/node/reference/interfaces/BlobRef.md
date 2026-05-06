@@ -1,6 +1,13 @@
 ---
 title: 'Interface: BlobRef'
+description: 'External blob reference used by media-capable provider responses.'
 ---
+
+## Import
+
+```ts
+import type { BlobRef } from 'promptfoo';
+```
 
 Defined in: [blobs/types.ts:27](https://github.com/promptfoo/promptfoo/blob/main/src/blobs/types.ts#L27)
 

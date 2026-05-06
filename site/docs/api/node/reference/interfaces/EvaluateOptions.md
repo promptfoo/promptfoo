@@ -1,6 +1,13 @@
 ---
 title: 'Interface: EvaluateOptions'
+description: 'Runtime-only options accepted by evaluate().'
 ---
+
+## Import
+
+```ts
+import type { EvaluateOptions } from 'promptfoo';
+```
 
 Defined in: [types/index.ts:362](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L362)
 

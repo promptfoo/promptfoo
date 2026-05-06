@@ -22,6 +22,9 @@ const nunjucks = getNunjucksEngine(undefined, false, true);
 /**
  * One user / assistant exchange used by conversation-relevance grading.
  *
+ * Supply messages in chronological order so the grader can judge whether the
+ * assistant stays on topic across the full conversation, not just one turn.
+ *
  * @example
  * ```ts
  * const message: ConversationMessage = {

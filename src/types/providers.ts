@@ -12,6 +12,10 @@ export type ProviderLabel = string;
 /**
  * Function form accepted anywhere the Node.js API accepts a provider.
  *
+ * Use a function when the provider is easiest to express inline. Use an
+ * `ApiProvider` object instead when you need additional capabilities such as
+ * embeddings, similarity, or classification methods.
+ *
  * @example
  * ```ts
  * const provider: ProviderFunction = async (prompt) => ({
@@ -25,6 +29,10 @@ export type ProviderFunction = CallApiFunction;
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
 /**
  * Provider override accepted anywhere a single provider configuration is allowed.
+ *
+ * Use a string for a built-in provider id, a function for a small custom
+ * provider, or an object when you need labels, env overrides, transforms, or
+ * other provider options.
  *
  * @example
  * ```ts
@@ -64,6 +72,9 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 
 /**
  * Chat message reported by providers for multi-turn prompts and transcripts.
+ *
+ * Providers use this lightweight shape when they need to preserve the exact
+ * conversation that was sent to or returned from a chat-capable model.
  *
  * @example
  * ```ts
@@ -221,6 +232,10 @@ export interface CallApiContextParams {
 /**
  * Per-request options passed to custom providers.
  *
+ * These are execution controls for one call, not provider configuration. Read
+ * them inside `callApi()` when the transport can honor cancellation or optional
+ * log-prob requests.
+ *
  * @example
  * ```ts
  * const provider: ProviderFunction = async (prompt, _context, options) => {
@@ -244,6 +259,10 @@ export interface CallApiOptionsParams {
 
 /**
  * Provider object shape accepted by the Node.js API.
+ *
+ * Start with `ProviderFunction` for a simple text-only integration. Implement
+ * `ApiProvider` when the provider needs a stable id, lifecycle hooks, or extra
+ * methods for embeddings, similarity, classification, or moderation.
  *
  * @example
  * ```ts
@@ -432,6 +451,9 @@ export interface VideoOutput {
 /**
  * Image attachment returned by providers that produce images.
  *
+ * Populate either `data` for inline payloads or `blobRef` when the image has
+ * already been externalized out of the result row.
+ *
  * @example
  * ```ts
  * const image: ImageOutput = {
@@ -616,6 +638,9 @@ export interface ProviderEmbeddingResponse {
 /**
  * Response returned by similarity-capable providers.
  *
+ * This is the payload returned from `callSimilarityApi()` when assertions or
+ * custom code ask a provider to compare two strings.
+ *
  * @example
  * ```ts
  * const response: ProviderSimilarityResponse = {
@@ -636,6 +661,10 @@ export interface ProviderSimilarityResponse {
 
 /**
  * Response returned by classification-capable providers.
+ *
+ * This is the payload returned from `callClassificationApi()`. Label names and
+ * score ranges are provider-defined, so consumers should not assume a fixed
+ * taxonomy unless the provider documents one.
  *
  * @example
  * ```ts

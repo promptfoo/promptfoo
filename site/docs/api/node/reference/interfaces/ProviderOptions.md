@@ -1,8 +1,15 @@
 ---
 title: 'Interface: ProviderOptions'
+description: 'Declarative provider configuration accepted by provider-loading APIs.'
 ---
 
-Defined in: [types/providers.ts:134](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L134)
+## Import
+
+```ts
+import type { ProviderOptions } from 'promptfoo';
+```
+
+Defined in: [types/providers.ts:145](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L145)
 
 Declarative provider configuration accepted by provider-loading APIs.
 
@@ -22,7 +29,7 @@ const provider: ProviderOptions = {
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
+Defined in: [types/providers.ts:158](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L158)
 
 Provider-specific configuration passed to the provider factory. Each
 built-in provider documents its own config shape; for custom providers
@@ -36,7 +43,7 @@ the provider implementation.
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:153](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L153)
+Defined in: [types/providers.ts:164](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L164)
 
 Delay in milliseconds before provider calls.
 
@@ -46,7 +53,7 @@ Delay in milliseconds before provider calls.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/providers.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L155)
+Defined in: [types/providers.ts:166](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L166)
 
 Environment overrides available while loading and calling the provider.
 
@@ -56,7 +63,7 @@ Environment overrides available while loading and calling the provider.
 
 > `optional` **id?**: `string`
 
-Defined in: [types/providers.ts:136](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L136)
+Defined in: [types/providers.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L147)
 
 Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
@@ -66,7 +73,7 @@ Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L157)
+Defined in: [types/providers.ts:168](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L168)
 
 Declared named inputs accepted by the provider.
 
@@ -76,7 +83,7 @@ Declared named inputs accepted by the provider.
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:138](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L138)
+Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L149)
 
 Human-readable label used in reports and provider maps.
 
@@ -86,7 +93,7 @@ Human-readable label used in reports and provider maps.
 
 > `optional` **prompts?**: `string`[]
 
-Defined in: [types/providers.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L149)
+Defined in: [types/providers.ts:160](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L160)
 
 Restrict this provider to named prompts.
 
@@ -96,6 +103,6 @@ Restrict this provider to named prompts.
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:151](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L151)
+Defined in: [types/providers.ts:162](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L162)
 
 Transform provider output before assertions run.

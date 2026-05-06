@@ -1,6 +1,15 @@
 ---
 title: "Type Alias: FetchWithCacheResult\\<T\\>"
+description: 'Metadata returned by fetchWithCache().'
 ---
+
+## Import
+
+```ts
+import { cache } from 'promptfoo';
+
+type Result = cache.FetchWithCacheResult<unknown>;
+```
 
 > **FetchWithCacheResult**\<`T`\> = `object`
 

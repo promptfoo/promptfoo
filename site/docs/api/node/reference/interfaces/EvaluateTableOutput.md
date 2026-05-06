@@ -1,6 +1,13 @@
 ---
 title: 'Interface: EvaluateTableOutput'
+description: 'One provider output cell in an eval table.'
 ---
+
+## Import
+
+```ts
+import type { EvaluateTableOutput } from 'promptfoo';
+```
 
 Defined in: [types/index.ts:574](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L574)
 

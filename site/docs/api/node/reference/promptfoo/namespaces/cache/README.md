@@ -1,6 +1,13 @@
 ---
 title: 'cache'
+description: 'Cache helpers exposed through the Node.js package.'
 ---
+
+## Import
+
+```ts
+import { cache } from 'promptfoo';
+```
 
 Cache helpers exposed through the Node.js package.
 

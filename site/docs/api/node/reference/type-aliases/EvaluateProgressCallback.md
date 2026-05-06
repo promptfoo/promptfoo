@@ -1,10 +1,17 @@
 ---
 title: 'Type Alias: EvaluateProgressCallback'
+description: 'Progress callback invoked as rows finish during evaluation.'
 ---
+
+## Import
+
+```ts
+import type { EvaluateProgressCallback } from 'promptfoo';
+```
 
 > **EvaluateProgressCallback** = (`completed`, `total`, `index`, `evalStep`, `metrics`) => `void`
 
-Defined in: [types/index.ts:1242](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1242)
+Defined in: [types/index.ts:1249](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1249)
 
 Progress callback invoked as rows finish during evaluation.
 

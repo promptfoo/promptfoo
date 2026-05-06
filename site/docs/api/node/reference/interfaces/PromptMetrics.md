@@ -1,6 +1,13 @@
 ---
 title: 'Interface: PromptMetrics'
+description: 'Aggregate metrics tracked for one completed prompt.'
 ---
+
+## Import
+
+```ts
+import type { PromptMetrics } from 'promptfoo';
+```
 
 Defined in: [types/index.ts:430](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L430)
 

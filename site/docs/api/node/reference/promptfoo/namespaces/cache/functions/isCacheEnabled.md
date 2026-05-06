@@ -1,12 +1,22 @@
 ---
 title: 'Function: isCacheEnabled()'
+description: 'Return whether the shared promptfoo cache is enabled.'
 ---
+
+## Import
+
+```ts
+import { cache } from 'promptfoo';
+```
 
 > **isCacheEnabled**(): `boolean`
 
-Defined in: [cache.ts:774](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L774)
+Defined in: [cache.ts:786](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L786)
 
 Return whether the shared promptfoo cache is enabled.
+
+This reports the effective state for the current call context, including any
+scoped override applied by internal helpers.
 
 ## Returns
 

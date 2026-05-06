@@ -1,6 +1,13 @@
 ---
 title: 'Function: withCacheNamespace()'
+description: 'Run an async operation inside an isolated cache namespace.'
 ---
+
+## Import
+
+```ts
+import { cache } from 'promptfoo';
+```
 
 > **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
 

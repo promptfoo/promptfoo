@@ -1,6 +1,13 @@
 ---
 title: 'Function: loadApiProvider()'
+description: 'Load one provider by id or config-file reference.'
 ---
+
+## Import
+
+```ts
+import { loadApiProvider } from 'promptfoo';
+```
 
 > **loadApiProvider**(`providerPath`, `context?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)\>
 

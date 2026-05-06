@@ -1,10 +1,20 @@
 ---
 title: 'Interface: LoadApiProviderContext'
+description: 'Optional context accepted by loadApiProvider().'
 ---
 
-Defined in: [types/index.ts:1993](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1993)
+## Import
+
+```ts
+import type { LoadApiProviderContext } from 'promptfoo';
+```
+
+Defined in: [types/index.ts:2003](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2003)
 
 Optional context accepted by `loadApiProvider()`.
+
+Prefer passing per-load overrides here instead of mutating global process
+state when a library needs to load providers on behalf of a caller.
 
 ## Example
 
@@ -21,7 +31,7 @@ const context: LoadApiProviderContext = {
 
 > `optional` **basePath?**: `string`
 
-Defined in: [types/index.ts:2001](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2001)
+Defined in: [types/index.ts:2011](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2011)
 
 Base path used to resolve relative config-file references.
 
@@ -31,7 +41,7 @@ Base path used to resolve relative config-file references.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/index.ts:2005](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2005)
+Defined in: [types/index.ts:2015](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2015)
 
 Environment overrides available while loading the provider.
 
@@ -41,6 +51,6 @@ Environment overrides available while loading the provider.
 
 > `optional` **options?**: [`ProviderOptions`](ProviderOptions.md)
 
-Defined in: [types/index.ts:1997](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1997)
+Defined in: [types/index.ts:2007](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2007)
 
 Provider-specific options to merge into the resolved provider.

@@ -1,6 +1,13 @@
 ---
 title: 'Interface: EvaluateTableRow'
+description: 'One row in an eval table.'
 ---
+
+## Import
+
+```ts
+import type { EvaluateTableRow } from 'promptfoo';
+```
 
 Defined in: [types/index.ts:630](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L630)
 

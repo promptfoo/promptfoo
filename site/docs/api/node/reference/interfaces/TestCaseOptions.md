@@ -1,8 +1,15 @@
 ---
 title: 'Interface: TestCaseOptions'
+description: 'Additional per-test options merged with prompt, output, and grading behavior.'
 ---
 
-Defined in: [types/index.ts:1344](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1344)
+## Import
+
+```ts
+import type { TestCaseOptions } from 'promptfoo';
+```
+
+Defined in: [types/index.ts:1351](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1351)
 
 Additional per-test options merged with prompt, output, and grading behavior.
 
@@ -32,7 +39,7 @@ const options: TestCaseOptions = {
 
 > `optional` **disableConversationVar?**: `boolean`
 
-Defined in: [types/index.ts:1348](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1348)
+Defined in: [types/index.ts:1355](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1355)
 
 Do not include the implicit `_conversation` variable.
 
@@ -42,7 +49,7 @@ Do not include the implicit `_conversation` variable.
 
 > `optional` **disableDefaultAsserts?**: `boolean`
 
-Defined in: [types/index.ts:1350](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1350)
+Defined in: [types/index.ts:1357](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1357)
 
 Skip `defaultTest` assertions while still inheriting other defaults.
 
@@ -52,7 +59,7 @@ Skip `defaultTest` assertions while still inheriting other defaults.
 
 > `optional` **disableVarExpansion?**: `boolean`
 
-Defined in: [types/index.ts:1346](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1346)
+Defined in: [types/index.ts:1353](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1353)
 
 Do not expand array-valued vars into multiple eval cases.
 
@@ -122,7 +129,7 @@ in > 0.38.0. Use `transform` instead.
 
 > `optional` **prefix?**: `string`
 
-Defined in: [types/prompts.ts:42](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L42)
+Defined in: [types/prompts.ts:45](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L45)
 
 Text prepended to the rendered prompt before it is sent to the provider.
 
@@ -164,7 +171,7 @@ Rubric prompt override used by model-graded assertions.
 
 > `optional` **runSerially?**: `boolean`
 
-Defined in: [types/index.ts:1352](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1352)
+Defined in: [types/index.ts:1359](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1359)
 
 Run this test serially even when the eval otherwise uses concurrency.
 
@@ -188,7 +195,7 @@ Name of the variable that should receive this test case's output.
 
 > `optional` **suffix?**: `string`
 
-Defined in: [types/prompts.ts:44](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L44)
+Defined in: [types/prompts.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L47)
 
 Text appended to the rendered prompt before it is sent to the provider.
 

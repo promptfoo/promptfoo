@@ -1,6 +1,13 @@
 ---
 title: 'Interface: PluginConfig'
+description: 'Advanced plugin configuration carried on generated red-team test cases.'
 ---
+
+## Import
+
+```ts
+import type { PluginConfig } from 'promptfoo';
+```
 
 Defined in: [redteam/types.ts:279](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L279)
 

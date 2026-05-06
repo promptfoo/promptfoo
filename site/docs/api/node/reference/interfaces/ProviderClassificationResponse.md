@@ -1,10 +1,21 @@
 ---
 title: 'Interface: ProviderClassificationResponse'
+description: 'Response returned by classification-capable providers.'
 ---
 
-Defined in: [types/providers.ts:649](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L649)
+## Import
+
+```ts
+import type { ProviderClassificationResponse } from 'promptfoo';
+```
+
+Defined in: [types/providers.ts:678](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L678)
 
 Response returned by classification-capable providers.
+
+This is the payload returned from `callClassificationApi()`. Label names and
+score ranges are provider-defined, so consumers should not assume a fixed
+taxonomy unless the provider documents one.
 
 ## Example
 
@@ -20,7 +31,7 @@ const response: ProviderClassificationResponse = {
 
 > `optional` **classification?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/providers.ts:653](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L653)
+Defined in: [types/providers.ts:682](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L682)
 
 Class labels mapped to provider-reported scores.
 
@@ -30,6 +41,6 @@ Class labels mapped to provider-reported scores.
 
 > `optional` **error?**: `string`
 
-Defined in: [types/providers.ts:651](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L651)
+Defined in: [types/providers.ts:680](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L680)
 
 Error message when the classification call failed without throwing.

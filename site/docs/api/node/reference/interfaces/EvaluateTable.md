@@ -1,10 +1,21 @@
 ---
 title: 'Interface: EvaluateTable'
+description: 'Table-shaped eval output used by generateTable() and the web UI.'
 ---
 
-Defined in: [types/index.ts:676](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L676)
+## Import
+
+```ts
+import type { EvaluateTable } from 'promptfoo';
+```
+
+Defined in: [types/index.ts:683](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L683)
 
 Table-shaped eval output used by `generateTable()` and the web UI.
+
+Read this when you need the presentation-oriented table model. Use the eval
+record summary APIs instead when you need per-result analysis rather than
+terminal or UI rendering.
 
 ## Example
 
@@ -21,7 +32,7 @@ const table: EvaluateTable = {
 
 > **body**: [`EvaluateTableRow`](EvaluateTableRow.md)[]
 
-Defined in: [types/index.ts:680](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L680)
+Defined in: [types/index.ts:687](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L687)
 
 Ordered table rows, one per evaluated test case.
 
@@ -31,6 +42,6 @@ Ordered table rows, one per evaluated test case.
 
 > **head**: [`EvaluateTableHead`](EvaluateTableHead.md)
 
-Defined in: [types/index.ts:678](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L678)
+Defined in: [types/index.ts:685](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L685)
 
 Prompt and variable headers rendered above the table body.

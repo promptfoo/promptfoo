@@ -1,10 +1,17 @@
 ---
 title: 'Type Alias: ScoringFunction'
+description: 'Custom scorer used to aggregate named assertion scores for one test case.'
 ---
+
+## Import
+
+```ts
+import type { ScoringFunction } from 'promptfoo';
+```
 
 > **ScoringFunction** = (`namedScores`, `context?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\> \| [`GradingResult`](../interfaces/GradingResult.md)
 
-Defined in: [types/index.ts:1197](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1197)
+Defined in: [types/index.ts:1204](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1204)
 
 Custom scorer used to aggregate named assertion scores for one test case.
 

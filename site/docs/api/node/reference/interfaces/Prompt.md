@@ -1,8 +1,15 @@
 ---
 title: 'Interface: Prompt'
+description: 'Normalized prompt record stored on eval results and passed to providers.'
 ---
 
-Defined in: [types/prompts.ts:136](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L136)
+## Import
+
+```ts
+import type { Prompt } from 'promptfoo';
+```
+
+Defined in: [types/prompts.ts:143](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L143)
 
 Normalized prompt record stored on eval results and passed to providers.
 
@@ -26,7 +33,7 @@ const prompt: Prompt = {
 
 > `optional` **config?**: `any`
 
-Defined in: [types/prompts.ts:153](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L153)
+Defined in: [types/prompts.ts:160](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L160)
 
 Prompt-local provider config overrides merged into the selected provider config.
 
@@ -36,7 +43,7 @@ Prompt-local provider config overrides merged into the selected provider config.
 
 > `optional` **display?**: `string`
 
-Defined in: [types/prompts.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L146)
+Defined in: [types/prompts.ts:153](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L153)
 
 #### Deprecated
 
@@ -48,7 +55,7 @@ in > 0.59.0. Use `label` instead.
 
 > `optional` **function?**: [`PromptFunction`](../type-aliases/PromptFunction.md)
 
-Defined in: [types/prompts.ts:150](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L150)
+Defined in: [types/prompts.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L157)
 
 Function-valued prompt renderer when the prompt is assembled at runtime.
 
@@ -58,7 +65,7 @@ Function-valued prompt renderer when the prompt is assembled at runtime.
 
 > `optional` **id?**: `string`
 
-Defined in: [types/prompts.ts:138](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L138)
+Defined in: [types/prompts.ts:145](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L145)
 
 Stable prompt identifier used in results and prompt selection.
 
@@ -68,7 +75,7 @@ Stable prompt identifier used in results and prompt selection.
 
 > **label**: `string`
 
-Defined in: [types/prompts.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L148)
+Defined in: [types/prompts.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L155)
 
 Human-readable label shown in reports and prompt selectors.
 
@@ -78,7 +85,7 @@ Human-readable label shown in reports and prompt selectors.
 
 > **raw**: `string`
 
-Defined in: [types/prompts.ts:140](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L140)
+Defined in: [types/prompts.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L147)
 
 Raw prompt template before display-only decoration.
 
@@ -88,6 +95,6 @@ Raw prompt template before display-only decoration.
 
 > `optional` **template?**: `string`
 
-Defined in: [types/prompts.ts:144](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L144)
+Defined in: [types/prompts.ts:151](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L151)
 
 Internal undecorated prompt copy used when prefix or suffix wrapping is applied.

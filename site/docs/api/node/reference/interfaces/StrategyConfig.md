@@ -1,6 +1,13 @@
 ---
 title: 'Interface: StrategyConfig'
+description: 'Advanced strategy configuration carried on generated red-team test cases.'
 ---
+
+## Import
+
+```ts
+import type { StrategyConfig } from 'promptfoo';
+```
 
 Defined in: [redteam/types.ts:476](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L476)
 

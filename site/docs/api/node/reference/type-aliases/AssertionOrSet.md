@@ -1,10 +1,17 @@
 ---
 title: 'Type Alias: AssertionOrSet'
+description: 'Assertion entry accepted by test cases.'
 ---
+
+## Import
+
+```ts
+import type { AssertionOrSet } from 'promptfoo';
+```
 
 > **AssertionOrSet** = [`AssertionSet`](../interfaces/AssertionSet.md) \| [`Assertion`](../interfaces/Assertion.md)
 
-Defined in: [types/index.ts:1049](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1049)
+Defined in: [types/index.ts:1056](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1056)
 
 Assertion entry accepted by test cases.
 

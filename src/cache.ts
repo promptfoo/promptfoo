@@ -706,6 +706,9 @@ export async function fetchWithCache<T = unknown>(
 /**
  * Enable the shared promptfoo cache.
  *
+ * Call this after a previous `disableCache()` when later work in the same
+ * process should resume normal cache reads and writes.
+ *
  * @example
  * ```ts
  * import { cache } from 'promptfoo';
@@ -722,6 +725,9 @@ export function enableCache() {
 /**
  * Disable the shared promptfoo cache for future calls.
  *
+ * This changes process-level cache behavior for subsequent calls; it does not
+ * delete entries that are already stored.
+ *
  * @example
  * ```ts
  * import { cache } from 'promptfoo';
@@ -737,6 +743,9 @@ export function disableCache() {
 
 /**
  * Clear the shared promptfoo cache.
+ *
+ * Use this when tests or scripts need to remove existing shared entries before
+ * running a fresh request path.
  *
  * @returns `true` after the active cache store has been cleared.
  *
@@ -757,6 +766,9 @@ export async function clearCache() {
 
 /**
  * Return whether the shared promptfoo cache is enabled.
+ *
+ * This reports the effective state for the current call context, including any
+ * scoped override applied by internal helpers.
  *
  * @returns `true` when cache reads and writes are enabled for the current call.
  *

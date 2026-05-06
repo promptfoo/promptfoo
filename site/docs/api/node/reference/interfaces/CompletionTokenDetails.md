@@ -1,6 +1,13 @@
 ---
 title: 'Interface: CompletionTokenDetails'
+description: 'Detailed completion-token breakdown reported by reasoning-capable models.'
 ---
+
+## Import
+
+```ts
+import type { CompletionTokenDetails } from 'promptfoo';
+```
 
 Defined in: [types/shared.ts:42](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L42)
 

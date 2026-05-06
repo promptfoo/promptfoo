@@ -1,6 +1,13 @@
 ---
 title: 'Function: generateTable()'
+description: 'Render eval table data as terminal-friendly text.'
 ---
+
+## Import
+
+```ts
+import { generateTable } from 'promptfoo';
+```
 
 > **generateTable**(`evaluateTable`, `tableCellMaxLength?`, `maxRows?`): `string`
 

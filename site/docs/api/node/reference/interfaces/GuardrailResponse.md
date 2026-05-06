@@ -1,8 +1,15 @@
 ---
 title: 'Interface: GuardrailResponse'
+description: 'Guardrail outcome metadata returned by moderation-aware providers.'
 ---
 
-Defined in: [types/providers.ts:340](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L340)
+## Import
+
+```ts
+import type { GuardrailResponse } from 'promptfoo';
+```
+
+Defined in: [types/providers.ts:359](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L359)
 
 Guardrail outcome metadata returned by moderation-aware providers.
 
@@ -22,7 +29,7 @@ const guardrails: GuardrailResponse = {
 
 > `optional` **flagged?**: `boolean`
 
-Defined in: [types/providers.ts:346](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L346)
+Defined in: [types/providers.ts:365](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L365)
 
 Aggregate flag when the provider does not distinguish input from output.
 
@@ -32,7 +39,7 @@ Aggregate flag when the provider does not distinguish input from output.
 
 > `optional` **flaggedInput?**: `boolean`
 
-Defined in: [types/providers.ts:342](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L342)
+Defined in: [types/providers.ts:361](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L361)
 
 Whether the input prompt tripped a guardrail.
 
@@ -42,7 +49,7 @@ Whether the input prompt tripped a guardrail.
 
 > `optional` **flaggedOutput?**: `boolean`
 
-Defined in: [types/providers.ts:344](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L344)
+Defined in: [types/providers.ts:363](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L363)
 
 Whether the provider output tripped a guardrail.
 
@@ -52,6 +59,6 @@ Whether the provider output tripped a guardrail.
 
 > `optional` **reason?**: `string`
 
-Defined in: [types/providers.ts:348](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L348)
+Defined in: [types/providers.ts:367](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L367)
 
 Provider-supplied reason for the guardrail outcome.

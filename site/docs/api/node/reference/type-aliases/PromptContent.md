@@ -1,6 +1,13 @@
 ---
 title: 'Type Alias: PromptContent'
+description: 'Prompt payload accepted from function-valued prompts.'
 ---
+
+## Import
+
+```ts
+import type { PromptContent } from 'promptfoo';
+```
 
 > **PromptContent** = `string` \| `object`
 

@@ -1,6 +1,13 @@
 ---
 title: 'Type Alias: EnvOverrides'
+description: 'Environment-variable overrides accepted by provider-loading APIs.'
 ---
+
+## Import
+
+```ts
+import type { EnvOverrides } from 'promptfoo';
+```
 
 > **EnvOverrides** = `z.infer`\<_typeof_ `ProviderEnvOverridesSchema`\> & `Record`\<`string`, `string` \| `undefined`\>
 

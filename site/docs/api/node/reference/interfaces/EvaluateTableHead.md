@@ -1,10 +1,20 @@
 ---
 title: 'Interface: EvaluateTableHead'
+description: 'Header metadata for an eval table.'
 ---
 
-Defined in: [types/index.ts:656](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L656)
+## Import
+
+```ts
+import type { EvaluateTableHead } from 'promptfoo';
+```
+
+Defined in: [types/index.ts:659](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L659)
 
 Header metadata for an eval table.
+
+`prompts` and `vars` define the visible column order used by rows in the
+matching `EvaluateTable.body`.
 
 ## Example
 
@@ -21,7 +31,7 @@ const head: EvaluateTableHead = {
 
 > **prompts**: [`CompletedPrompt`](CompletedPrompt.md)[]
 
-Defined in: [types/index.ts:658](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L658)
+Defined in: [types/index.ts:661](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L661)
 
 Completed prompts rendered as provider columns.
 
@@ -31,6 +41,6 @@ Completed prompts rendered as provider columns.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:660](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L660)
+Defined in: [types/index.ts:663](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L663)
 
 Variable names rendered before provider columns.

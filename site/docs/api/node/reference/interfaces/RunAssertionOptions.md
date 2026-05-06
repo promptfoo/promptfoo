@@ -1,6 +1,13 @@
 ---
 title: 'Interface: RunAssertionOptions'
+description: 'Options for runAssertion().'
 ---
+
+## Import
+
+```ts
+import type { RunAssertionOptions } from 'promptfoo';
+```
 
 Defined in: [assertions/index.ts:417](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L417)
 

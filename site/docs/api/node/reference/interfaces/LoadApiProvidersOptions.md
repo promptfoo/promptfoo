@@ -1,10 +1,20 @@
 ---
 title: 'Interface: LoadApiProvidersOptions'
+description: 'Shared options for loading one or more providers.'
 ---
 
-Defined in: [providers/index.ts:378](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L378)
+## Import
+
+```ts
+import type { LoadApiProvidersOptions } from 'promptfoo';
+```
+
+Defined in: [providers/index.ts:381](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L381)
 
 Shared options for loading one or more providers.
+
+Pass these when provider configs need a caller-controlled resolution base or
+scoped environment values without mutating `process.env`.
 
 ## Example
 
@@ -21,7 +31,7 @@ const options: LoadApiProvidersOptions = {
 
 > `optional` **basePath?**: `string`
 
-Defined in: [providers/index.ts:380](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L380)
+Defined in: [providers/index.ts:383](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L383)
 
 Base path used to resolve relative `file://` provider config references.
 
@@ -31,6 +41,6 @@ Base path used to resolve relative `file://` provider config references.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [providers/index.ts:382](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L382)
+Defined in: [providers/index.ts:385](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L385)
 
 Environment overrides available while providers are loaded.

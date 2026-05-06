@@ -1,10 +1,20 @@
 ---
 title: 'Interface: ImageOutput'
+description: 'Image attachment returned by providers that produce images.'
 ---
 
-Defined in: [types/providers.ts:445](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L445)
+## Import
+
+```ts
+import type { ImageOutput } from 'promptfoo';
+```
+
+Defined in: [types/providers.ts:467](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L467)
 
 Image attachment returned by providers that produce images.
+
+Populate either `data` for inline payloads or `blobRef` when the image has
+already been externalized out of the result row.
 
 ## Example
 
@@ -21,7 +31,7 @@ const image: ImageOutput = {
 
 > `optional` **blobRef?**: [`BlobRef`](BlobRef.md)
 
-Defined in: [types/providers.ts:449](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L449)
+Defined in: [types/providers.ts:471](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L471)
 
 External blob reference when image data is stored outside the result row.
 
@@ -31,7 +41,7 @@ External blob reference when image data is stored outside the result row.
 
 > `optional` **data?**: `string`
 
-Defined in: [types/providers.ts:447](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L447)
+Defined in: [types/providers.ts:469](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L469)
 
 Inline data URI or base64 payload.
 
@@ -41,6 +51,6 @@ Inline data URI or base64 payload.
 
 > `optional` **mimeType?**: `string`
 
-Defined in: [types/providers.ts:451](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L451)
+Defined in: [types/providers.ts:473](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L473)
 
 MIME type such as `image/png`.

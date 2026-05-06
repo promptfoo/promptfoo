@@ -1,6 +1,13 @@
 ---
 title: 'Variable: assertions'
+description: 'Assertion helpers exposed through the Node.js package.'
 ---
+
+## Import
+
+```ts
+import { assertions } from 'promptfoo';
+```
 
 > **assertions**: `object`
 

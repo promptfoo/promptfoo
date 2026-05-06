@@ -1,6 +1,13 @@
 ---
 title: 'Function: evaluate()'
+description: 'Run an eval from a JavaScript or TypeScript program.'
 ---
+
+## Import
+
+```ts
+import { evaluate } from 'promptfoo';
+```
 
 > **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`\>
 

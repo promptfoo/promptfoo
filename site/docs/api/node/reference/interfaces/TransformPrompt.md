@@ -1,6 +1,13 @@
 ---
 title: 'Interface: TransformPrompt'
+description: 'Conventional shape for TransformContext.prompt.'
 ---
+
+## Import
+
+```ts
+import type { TransformPrompt } from 'promptfoo';
+```
 
 Defined in: [types/transform.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L46)
 

@@ -1,6 +1,13 @@
 ---
 title: 'Interface: AssertionTokenUsage'
+description: 'Token accounting attributed to model-graded assertions.'
 ---
+
+## Import
+
+```ts
+import type { AssertionTokenUsage } from 'promptfoo';
+```
 
 Defined in: [types/shared.ts:118](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L118)
 

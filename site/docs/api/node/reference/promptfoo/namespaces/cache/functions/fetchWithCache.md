@@ -1,6 +1,13 @@
 ---
 title: 'Function: fetchWithCache()'
+description: "Fetch a URL through promptfoo's retrying cache wrapper."
 ---
+
+## Import
+
+```ts
+import { cache } from 'promptfoo';
+```
 
 > **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bust?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
 

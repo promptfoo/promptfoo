@@ -1,8 +1,15 @@
 ---
 title: 'Interface: ProviderEmbeddingResponse'
+description: 'Response returned by embedding-capable providers.'
 ---
 
-Defined in: [types/providers.ts:593](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L593)
+## Import
+
+```ts
+import type { ProviderEmbeddingResponse } from 'promptfoo';
+```
+
+Defined in: [types/providers.ts:615](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L615)
 
 Response returned by embedding-capable providers.
 
@@ -21,7 +28,7 @@ const response: ProviderEmbeddingResponse = {
 
 > `optional` **cached?**: `boolean`
 
-Defined in: [types/providers.ts:595](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L595)
+Defined in: [types/providers.ts:617](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L617)
 
 Whether the embedding response came from cache.
 
@@ -31,7 +38,7 @@ Whether the embedding response came from cache.
 
 > `optional` **cost?**: `number`
 
-Defined in: [types/providers.ts:597](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L597)
+Defined in: [types/providers.ts:619](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L619)
 
 Estimated request cost when the provider can report it.
 
@@ -41,7 +48,7 @@ Estimated request cost when the provider can report it.
 
 > `optional` **embedding?**: `number`[]
 
-Defined in: [types/providers.ts:601](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L601)
+Defined in: [types/providers.ts:623](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L623)
 
 Embedding vector returned by the provider.
 
@@ -51,7 +58,7 @@ Embedding vector returned by the provider.
 
 > `optional` **error?**: `string`
 
-Defined in: [types/providers.ts:599](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L599)
+Defined in: [types/providers.ts:621](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L621)
 
 Error message when the embedding call failed without throwing.
 
@@ -61,7 +68,7 @@ Error message when the embedding call failed without throwing.
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [types/providers.ts:603](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L603)
+Defined in: [types/providers.ts:625](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L625)
 
 End-to-end provider latency in milliseconds.
 
@@ -71,7 +78,7 @@ End-to-end provider latency in milliseconds.
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/providers.ts:607](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L607)
+Defined in: [types/providers.ts:629](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L629)
 
 Additional embedding-specific metadata preserved for callers.
 
@@ -97,6 +104,6 @@ Whether a provider-level transform changed the original input text.
 
 > `optional` **tokenUsage?**: `Partial`\<[`TokenUsage`](TokenUsage.md)\>
 
-Defined in: [types/providers.ts:605](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L605)
+Defined in: [types/providers.ts:627](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L627)
 
 Token usage attributed to the embedding request.

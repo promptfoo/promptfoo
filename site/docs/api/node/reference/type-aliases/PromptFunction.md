@@ -1,10 +1,17 @@
 ---
 title: 'Type Alias: PromptFunction'
+description: 'Function form accepted anywhere the Node.js API accepts a prompt.'
 ---
+
+## Import
+
+```ts
+import type { PromptFunction } from 'promptfoo';
+```
 
 > **PromptFunction** = (`context`) => `Promise`\<[`PromptContent`](PromptContent.md) \| [`PromptFunctionResult`](../interfaces/PromptFunctionResult.md)\>
 
-Defined in: [types/prompts.ts:115](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L115)
+Defined in: [types/prompts.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L122)
 
 Function form accepted anywhere the Node.js API accepts a prompt.
 

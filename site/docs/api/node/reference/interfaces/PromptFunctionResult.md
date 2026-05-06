@@ -1,10 +1,21 @@
 ---
 title: 'Interface: PromptFunctionResult'
+description: 'Result type for prompt functions.'
 ---
 
-Defined in: [types/prompts.ts:91](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L91)
+## Import
+
+```ts
+import type { PromptFunctionResult } from 'promptfoo';
+```
+
+Defined in: [types/prompts.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L98)
 
 Result type for prompt functions.
+
+Return this wrapper only when a prompt function needs to pair rendered prompt
+content with per-prompt config overrides; otherwise returning `PromptContent`
+directly is simpler.
 
 Prompt functions can return:
 
@@ -27,7 +38,7 @@ const result: PromptFunctionResult = {
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/prompts.ts:95](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L95)
+Defined in: [types/prompts.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L102)
 
 Provider config overrides to merge for this rendered prompt.
 
@@ -37,6 +48,6 @@ Provider config overrides to merge for this rendered prompt.
 
 > **prompt**: [`PromptContent`](../type-aliases/PromptContent.md)
 
-Defined in: [types/prompts.ts:93](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L93)
+Defined in: [types/prompts.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L100)
 
 Prompt content to send to the provider.

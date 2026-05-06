@@ -1,6 +1,13 @@
 ---
 title: 'Interface: PluginGraderExample'
+description: 'Example grader outcome used to calibrate plugin-specific red-team grading.'
 ---
+
+## Import
+
+```ts
+import type { PluginGraderExample } from 'promptfoo';
+```
 
 Defined in: [redteam/types.ts:251](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L251)
 

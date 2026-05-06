@@ -643,6 +643,9 @@ export interface EvaluateTableRow {
 /**
  * Header metadata for an eval table.
  *
+ * `prompts` and `vars` define the visible column order used by rows in the
+ * matching `EvaluateTable.body`.
+ *
  * @example
  * ```ts
  * const head: EvaluateTableHead = {
@@ -662,6 +665,10 @@ export interface EvaluateTableHead {
 
 /**
  * Table-shaped eval output used by `generateTable()` and the web UI.
+ *
+ * Read this when you need the presentation-oriented table model. Use the eval
+ * record summary APIs instead when you need per-result analysis rather than
+ * terminal or UI rendering.
  *
  * @example
  * ```ts
@@ -1979,6 +1986,9 @@ export type OutputFileExtension = z.infer<typeof OutputFileExtension>;
 
 /**
  * Optional context accepted by `loadApiProvider()`.
+ *
+ * Prefer passing per-load overrides here instead of mutating global process
+ * state when a library needs to load providers on behalf of a caller.
  *
  * @example
  * ```ts

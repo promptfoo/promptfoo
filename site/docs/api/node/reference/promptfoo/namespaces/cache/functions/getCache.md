@@ -1,6 +1,13 @@
 ---
 title: 'Function: getCache()'
+description: 'Return the active promptfoo cache instance.'
 ---
+
+## Import
+
+```ts
+import { cache } from 'promptfoo';
+```
 
 > **getCache**(): `Cache`
 
