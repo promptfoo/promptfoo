@@ -2,7 +2,7 @@
 sidebar_label: Node API Guide
 sidebar_position: 21
 title: Node API guide
-description: Guide to promptfoo's supported Node.js API surface, with links to generated reference pages for evals, providers, assertions, caching, and beta APIs.
+description: Guide to promptfoo's supported Node.js API surface, with links to generated reference pages for evals, providers, assertions, and caching.
 ---
 
 # Node.js API guide
@@ -36,8 +36,6 @@ import deep files from `dist/` or `src/`.
 | [`cache`](/docs/api/node/reference/promptfoo/namespaces/cache/)                   | Stable    | Shared caching, cache isolation, and cached fetches |
 | [`generateTable()`](/docs/api/node/reference/functions/generateTable)             | Stable    | Rendering eval tables in terminal-friendly text     |
 | [`isTransformFunction()`](/docs/api/node/reference/functions/isTransformFunction) | Stable    | Narrowing inline transform values at runtime        |
-| [`guardrails`](/docs/api/node/reference/variables/guardrails)                     | Beta      | Calling promptfoo guardrail endpoints from code     |
-| [`redteam`](/docs/api/node/reference/variables/redteam)                           | Beta      | Advanced red team orchestration from code           |
 
 The package still exports additional compatibility helpers and schema types, but
 the generated reference intentionally focuses on the Node APIs we recommend
@@ -94,14 +92,6 @@ For assertions, start with the task-oriented
 or [`assertions.runAssertions()`](/docs/api/node/reference/variables/assertions#runassertions)
 when you already have a provider response and want to reuse promptfoo grading
 outside a full eval run.
-
-## Stable and beta surfaces
-
-Stable APIs are intended for normal production use. Beta APIs are exported for
-advanced integrations, but their shape may still change between releases.
-
-`guardrails.*` and `redteam.*` are currently beta. Prefer the normal CLI and
-configuration flows unless you specifically need programmatic orchestration.
 
 ## Related docs
 

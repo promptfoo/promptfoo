@@ -200,20 +200,3 @@ const [baselineSummary, candidateSummary] = await Promise.all([
 
 console.log(baselineSummary.results.length, candidateSummary.results.length);
 ```
-
-## Use beta APIs deliberately
-
-`guardrails.*` and `redteam.*` are beta surfaces. They are available for advanced
-integrations, but prefer the CLI and documented config flows unless you need
-programmatic orchestration.
-
-```ts
-import { guardrails } from 'promptfoo';
-
-const result = await guardrails.pii('Contact me at ada@example.com');
-console.log(result.results[0]?.flagged);
-```
-
-See the generated [`guardrails`](/docs/api/node/reference/variables/guardrails)
-and [`redteam`](/docs/api/node/reference/variables/redteam) pages for their
-current signatures.

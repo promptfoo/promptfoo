@@ -18,9 +18,6 @@ compatibility types and helpers than we want to present as first-class docs.
 
 ## Interfaces
 
-- [AdaptiveModification](interfaces/AdaptiveModification.md)
-- [AdaptiveRequest](interfaces/AdaptiveRequest.md)
-- [AdaptiveResult](interfaces/AdaptiveResult.md)
 - [ApiProvider](interfaces/ApiProvider.md)
 - [Assertion](interfaces/Assertion.md)
 - [AssertionValueFunctionContext](interfaces/AssertionValueFunctionContext.md)
@@ -34,16 +31,11 @@ compatibility types and helpers than we want to present as first-class docs.
 - [EvaluateTableOutput](interfaces/EvaluateTableOutput.md)
 - [EvaluateTableRow](interfaces/EvaluateTableRow.md)
 - [GradingResult](interfaces/GradingResult.md)
-- [GuardPiiFinding](interfaces/GuardPiiFinding.md)
-- [GuardResult](interfaces/GuardResult.md)
-- [GuardResultEntry](interfaces/GuardResultEntry.md)
 - [ImageOutput](interfaces/ImageOutput.md)
 - [LoadApiProviderContext](interfaces/LoadApiProviderContext.md)
 - [PromptFunctionResult](interfaces/PromptFunctionResult.md)
 - [ProviderOptions](interfaces/ProviderOptions.md)
 - [ProviderResponse](interfaces/ProviderResponse.md)
-- [RedteamApi](interfaces/RedteamApi.md)
-- [RedteamRunOptions](interfaces/RedteamRunOptions.md)
 - [TransformContext](interfaces/TransformContext.md)
 - [TransformPrompt](interfaces/TransformPrompt.md)
 - [VideoOutput](interfaces/VideoOutput.md)
@@ -57,16 +49,11 @@ compatibility types and helpers than we want to present as first-class docs.
 - [PromptFunction](type-aliases/PromptFunction.md)
 - [ProviderFunction](type-aliases/ProviderFunction.md)
 - [ProvidersConfig](type-aliases/ProvidersConfig.md)
-- [RedteamGenerateOptions](type-aliases/RedteamGenerateOptions.md)
-- [RedteamGenerateResult](type-aliases/RedteamGenerateResult.md)
-- [RedteamRunResult](type-aliases/RedteamRunResult.md)
 - [TransformFunction](type-aliases/TransformFunction.md)
 
 ## Variables
 
 - [assertions](variables/assertions.md)
-- [guardrails](variables/guardrails.md)
-- [redteam](variables/redteam.md)
 
 ## Functions
 

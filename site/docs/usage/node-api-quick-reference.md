@@ -2,7 +2,7 @@
 sidebar_label: Node API Quick Reference
 sidebar_position: 23
 title: Node API quick reference
-description: Quick lookup for promptfoo's supported Node.js API surface, including evals, providers, assertions, caching, and beta programmatic APIs.
+description: Quick lookup for promptfoo's supported Node.js API surface, including evals, providers, assertions, and caching.
 ---
 
 # Node.js API quick reference
@@ -15,11 +15,9 @@ import {
   cache,
   evaluate,
   generateTable,
-  guardrails,
   isTransformFunction,
   loadApiProvider,
   loadApiProviders,
-  redteam,
 } from 'promptfoo';
 ```
 
@@ -79,20 +77,6 @@ See [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions).
 Config fields such as `outputPath`, `sharing`, and `writeLatestResults` belong in
 the test suite itself; see
 [`EvaluateTestSuite`](/docs/api/node/reference/type-aliases/EvaluateTestSuite).
-
-## Stable and beta
-
-| Surface                 | Stability |
-| ----------------------- | --------- |
-| `evaluate()`            | Stable    |
-| `loadApiProvider()`     | Stable    |
-| `loadApiProviders()`    | Stable    |
-| `assertions.*`          | Stable    |
-| `cache.*`               | Stable    |
-| `generateTable()`       | Stable    |
-| `isTransformFunction()` | Stable    |
-| `guardrails.*`          | Beta      |
-| `redteam.*`             | Beta      |
 
 ## Common snippets
 

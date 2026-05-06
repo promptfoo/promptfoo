@@ -25,7 +25,7 @@ the supported public boundary; do not import deep files from `dist/` or `src/`.
 | Compare several providers from code                 | `evaluate()` or `loadApiProviders()`                      |
 | Plug promptfoo grading into an existing test runner | `assertions.*`                                            |
 | Build custom prompts, providers, or transforms      | `PromptFunction`, `ProviderFunction`, `TransformFunction` |
-| Reuse advanced package services                     | `cache.*`, then beta `guardrails.*` or `redteam.*`        |
+| Reuse package services                              | `cache.*`                                                 |
 
 ## Install
 
@@ -98,8 +98,6 @@ for the full config schema. The main Node-facing surfaces are:
 | `cache.*`                                                  | Stable    | Shared caching, cache isolation, and cached fetches   |
 | `generateTable()`                                          | Stable    | Rendering eval tables in terminal-friendly text       |
 | `isTransformFunction()`                                    | Stable    | Narrowing inline transform values at runtime          |
-| `guardrails.*`                                             | Beta      | Calling promptfoo guardrail endpoints from code       |
-| `redteam.*`                                                | Beta      | Advanced red team orchestration from code             |
 
 Functions that are not exported from the root `promptfoo` package are not part of
 the supported Node.js API, even if they exist in the repository source.

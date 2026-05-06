@@ -1,7 +1,7 @@
 ---
 title: Node.js API reference
 sidebar_label: Overview
-description: Generated reference and stability guide for promptfoo's supported Node.js API surface.
+description: Generated reference for promptfoo's supported Node.js API surface.
 ---
 
 # Node.js API reference
@@ -29,7 +29,6 @@ import { evaluate } from 'promptfoo';
 | Stability | Meaning                                                                       |
 | --------- | ----------------------------------------------------------------------------- |
 | Stable    | Supported for production use and documented as part of the public Node.js API |
-| Beta      | Available for advanced use, but the shape may evolve between releases         |
 | Internal  | Implementation detail; not part of the supported public API                   |
 
 The most commonly used public surfaces are:
@@ -38,8 +37,6 @@ The most commonly used public surfaces are:
 - [`loadApiProvider()`](./reference/functions/loadApiProvider)
 - [`assertions`](./reference/variables/assertions)
 - [`cache`](./reference/promptfoo/namespaces/cache/)
-- [`guardrails`](./reference/variables/guardrails)
-- [`redteam`](./reference/variables/redteam)
 
 ## Start here
 
