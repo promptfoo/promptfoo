@@ -44,11 +44,11 @@ export function StepSection({
         <p className="text-muted-foreground">{description}</p>
       </div>
 
-      {/* Guidance */}
-      {guidance && <div className="order-3 lg:order-2">{guidance}</div>}
-
       {/* Content */}
-      <div className="order-2 min-w-0 lg:order-3">{children}</div>
+      <div className="min-w-0">{children}</div>
+
+      {/* Guidance */}
+      {guidance && <div>{guidance}</div>}
     </section>
   );
 }

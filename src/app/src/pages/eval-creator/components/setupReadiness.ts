@@ -17,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isProviderOptionsShape(value: Record<string, unknown>): boolean {
   const keys = Object.keys(value);
-  return keys.length > 0 && keys.every((key) => PROVIDER_OPTION_KEYS.has(key));
+  return keys.some((key) => PROVIDER_OPTION_KEYS.has(key));
 }
 
 function hasRunnableProviderId(
@@ -61,7 +61,7 @@ export function normalizeProviders(providers: UnifiedConfig['providers']): Provi
   });
 }
 
-export function normalizePrompts(prompts: UnifiedConfig['prompts']): string[] {
+export function normalizePrompts(prompts: UnifiedConfig['prompts'] | undefined): string[] {
   if (typeof prompts === 'string') {
     return prompts.trim() === '' ? [] : [prompts];
   }
@@ -90,7 +90,7 @@ export function normalizePrompts(prompts: UnifiedConfig['prompts']): string[] {
 }
 
 export function normalizePromptsForJob(
-  prompts: UnifiedConfig['prompts'],
+  prompts: UnifiedConfig['prompts'] | undefined,
 ): Array<string | Record<string, unknown>> {
   if (Array.isArray(prompts)) {
     return prompts as Array<string | Record<string, unknown>>;
@@ -112,7 +112,7 @@ export function normalizePromptsForJob(
   return [];
 }
 
-export function countTests(tests: UnifiedConfig['tests']): number {
+export function countTests(tests: UnifiedConfig['tests'] | undefined): number {
   if (Array.isArray(tests)) {
     return tests.length;
   }

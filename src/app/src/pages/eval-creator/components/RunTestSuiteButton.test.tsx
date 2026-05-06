@@ -101,8 +101,9 @@ describe('RunTestSuiteButton', () => {
       await Promise.resolve();
     });
 
-    const [, requestInit] = getCallApiMock().mock.calls[0];
-    expect(JSON.parse(requestInit.body)).toMatchObject({
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(typeof requestInit.body).toBe('string');
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({
       prompts: ['file://prompt.txt'],
       providers: 'openai:gpt-4',
       tests: 'file://tests.csv',
@@ -125,8 +126,9 @@ describe('RunTestSuiteButton', () => {
       await Promise.resolve();
     });
 
-    const [, requestInit] = getCallApiMock().mock.calls[0];
-    expect(JSON.parse(requestInit.body)).toMatchObject({
+    const [, requestInit] = getCallApiMock().mock.calls[0] as [string, RequestInit];
+    expect(typeof requestInit.body).toBe('string');
+    expect(JSON.parse(requestInit.body as string)).toMatchObject({
       prompts: [{ raw: 'file://prompt.txt', label: 'Prompt label' }],
       providers: 'openai:gpt-4',
       tests: 'file://tests.csv',

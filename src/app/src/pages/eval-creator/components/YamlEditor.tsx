@@ -104,7 +104,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     showToast(`Downloaded ${YAML_DOWNLOAD_FILE_NAME}`, 'success');
   };
 
-  const handleEditorKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
+  const handleEditorKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement | HTMLDivElement> = (
+    event,
+  ) => {
     const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
     if (readOnly || !isSaveShortcut) {
       return;

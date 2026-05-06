@@ -57,7 +57,7 @@ function isValidTestCase(obj: unknown): obj is TestCase {
 }
 
 function isTestGeneratorConfig(obj: unknown): obj is TestGeneratorConfig {
-  return Boolean(obj) && typeof obj === 'object' && 'path' in obj;
+  return obj !== null && typeof obj === 'object' && 'path' in obj;
 }
 
 function isInlineTestCase(obj: unknown): obj is TestCase {
