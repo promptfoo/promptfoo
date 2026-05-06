@@ -27,28 +27,24 @@ describe('setupReadiness', () => {
 
     it('does not fabricate providers from provider option objects without ids', () => {
       expect(
-        normalizeProviders(
-          [
-            {
-              label: 'Missing id',
-              config: { temperature: 0 },
-              customHeader: 'x-trace-id',
-            },
-          ] as unknown as Parameters<typeof normalizeProviders>[0],
-        ),
+        normalizeProviders([
+          {
+            label: 'Missing id',
+            config: { temperature: 0 },
+            customHeader: 'x-trace-id',
+          },
+        ] as unknown as Parameters<typeof normalizeProviders>[0]),
       ).toEqual([]);
     });
 
     it('normalizes provider maps and skips malformed entries', () => {
       expect(
-        normalizeProviders(
-          [
-            {
-              'openai:gpt-4.1': { config: { temperature: 0 } },
-              broken: 'not provider options',
-            },
-          ] as unknown as Parameters<typeof normalizeProviders>[0],
-        ),
+        normalizeProviders([
+          {
+            'openai:gpt-4.1': { config: { temperature: 0 } },
+            broken: 'not provider options',
+          },
+        ] as unknown as Parameters<typeof normalizeProviders>[0]),
       ).toEqual([{ id: 'openai:gpt-4.1', config: { temperature: 0 } }]);
     });
   });
@@ -57,7 +53,11 @@ describe('setupReadiness', () => {
     it('normalizes scalar, inline, raw, and legacy map prompts', () => {
       expect(normalizePrompts('file://prompt.txt')).toEqual(['file://prompt.txt']);
       expect(
-        normalizePrompts(['inline prompt', { raw: 'raw prompt', label: 'Raw prompt' }, { id: 'x' }]),
+        normalizePrompts([
+          'inline prompt',
+          { raw: 'raw prompt', label: 'Raw prompt' },
+          { id: 'x' },
+        ]),
       ).toEqual(['inline prompt', 'raw prompt']);
       expect(normalizePrompts({ 'file://prompt.txt': 'Prompt label' })).toEqual(['Prompt label']);
     });
