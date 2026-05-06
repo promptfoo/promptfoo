@@ -1,6 +1,6 @@
 import { rm } from 'fs/promises';
 
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -287,6 +287,14 @@ describe('initializeProject', () => {
 
   it('should return after prompt cancellation without terminating the host process', async () => {
     mockSelect.mockRejectedValueOnce(new ExitPromptError());
+
+    await expect(initializeProject(null, true)).resolves.toBeUndefined();
+
+    expect(process.exitCode).toBe(130);
+  });
+
+  it('should return after prompt abort without terminating the host process', async () => {
+    mockSelect.mockRejectedValueOnce(new AbortPromptError());
 
     await expect(initializeProject(null, true)).resolves.toBeUndefined();
 

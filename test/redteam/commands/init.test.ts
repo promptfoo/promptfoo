@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 
 import confirm from '@inquirer/confirm';
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
@@ -219,6 +219,19 @@ describe('redteamInit', () => {
   it('should mark prompt cancellation without hard-exiting', async () => {
     process.exitCode = undefined;
     vi.mocked(input).mockRejectedValueOnce(new ExitPromptError());
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const program = new Command();
+    redteamInitCommand(program);
+
+    await expect(program.parseAsync(['node', 'test', 'init', '--no-gui'])).resolves.toBe(program);
+
+    expect(process.exitCode).toBe(130);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('should mark prompt abort without hard-exiting', async () => {
+    process.exitCode = undefined;
+    vi.mocked(input).mockRejectedValueOnce(new AbortPromptError());
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     const program = new Command();
     redteamInitCommand(program);
