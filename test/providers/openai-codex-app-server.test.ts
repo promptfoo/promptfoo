@@ -551,7 +551,7 @@ describe('OpenAICodexAppServerProvider', () => {
       id: loginStart.id,
       error: {
         code: -32601,
-        message: 'Method not found',
+        message: 'account/login/start is unavailable on this binary',
       },
     });
 

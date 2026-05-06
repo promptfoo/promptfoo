@@ -669,8 +669,18 @@ function getJsonRpcErrorMessage(message: JsonRpcMessage): string {
   return 'Unknown app-server error';
 }
 
+class JsonRpcError extends Error {
+  readonly code?: number;
+
+  constructor(message: string, code?: number) {
+    super(message);
+    this.name = 'JsonRpcError';
+    this.code = code;
+  }
+}
+
 function isMethodNotFoundError(error: unknown): boolean {
-  return error instanceof Error && /method not found/i.test(error.message);
+  return error instanceof JsonRpcError && error.code === -32601;
 }
 
 function createAbortError(message: string): Error {
@@ -939,7 +949,7 @@ class CodexAppServerConnection {
     }
 
     if (message.error) {
-      pendingRequest.reject(new Error(getJsonRpcErrorMessage(message)));
+      pendingRequest.reject(new JsonRpcError(getJsonRpcErrorMessage(message), message.error.code));
       return;
     }
     try {
