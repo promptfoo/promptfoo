@@ -27,7 +27,8 @@ When changing repo-local Codex skills, also run:
 
 ```bash
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" .agents/skills/redteam-plugin-development
-python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" .agents/skills/search-params
+for skill in .agents/skills/*; do
+  python3 "$CODEX_HOME/skills/.system/skill-creator/scripts/quick_validate.py" "$skill"
+done
 npx vitest test/agentSkills/promptfooPlugin.test.ts --run
 ```
