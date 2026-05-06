@@ -395,6 +395,11 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                               </TooltipContent>
                             </Tooltip>
                           )}
+                          {hasMissingVars && (
+                            <span className="sr-only">
+                              Missing variables: {missingVars.join(', ')}.
+                            </span>
+                          )}
                           {testCase.description || (
                             <span className="text-muted-foreground italic">
                               Test Case #{index + 1}

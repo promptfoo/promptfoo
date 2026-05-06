@@ -9,7 +9,6 @@ interface StepSectionProps {
   count?: number;
   guidance?: React.ReactNode;
   children: React.ReactNode;
-  defaultOpen?: boolean;
 }
 
 export function StepSection({
@@ -21,7 +20,6 @@ export function StepSection({
   count,
   guidance,
   children,
-  defaultOpen: _defaultOpen = false,
 }: StepSectionProps) {
   const titleId = useId();
 

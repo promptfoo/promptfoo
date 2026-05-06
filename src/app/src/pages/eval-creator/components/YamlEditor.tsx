@@ -43,6 +43,8 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+  const textareaId = React.useId();
+  const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
   const { getTestSuite, updateConfig } = useStore();
@@ -102,6 +104,18 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     showToast(`Downloaded ${YAML_DOWNLOAD_FILE_NAME}`, 'success');
   };
 
+  const handleEditorKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
+    const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
+    if (readOnly || !isSaveShortcut) {
+      return;
+    }
+
+    event.preventDefault();
+    if (hasUnsavedChanges) {
+      handleSave();
+    }
+  };
+
   // Initial load effect
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
@@ -126,6 +140,20 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   React.useEffect(() => {
     setHasUnsavedChanges(code !== originalCode);
   }, [code, originalCode]);
+
+  React.useEffect(() => {
+    // react-simple-code-editor does not expose arbitrary textarea props directly.
+    const textarea = editorContainerRef.current?.querySelector('textarea');
+    if (!textarea) {
+      return;
+    }
+
+    if (readOnly) {
+      textarea.removeAttribute('aria-keyshortcuts');
+    } else {
+      textarea.setAttribute('aria-keyshortcuts', 'Control+S Meta+S');
+    }
+  }, [readOnly]);
 
   return (
     <div className="space-y-4 min-w-0">
@@ -192,7 +220,11 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
 
       {/* Editor Container */}
       <div className="relative min-w-0">
+        <label htmlFor={textareaId} className="sr-only">
+          {readOnly ? 'YAML configuration preview' : 'YAML configuration editor'}
+        </label>
         <div
+          ref={editorContainerRef}
           className={cn(
             'rounded-lg overflow-auto max-h-[60vh]',
             'border-2 transition-all',
@@ -200,9 +232,10 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
           )}
         >
           <Editor
-            aria-label={readOnly ? 'YAML configuration preview' : 'YAML configuration editor'}
             autoCapitalize="off"
+            textareaId={textareaId}
             value={code}
+            onKeyDown={handleEditorKeyDown}
             onValueChange={(newCode) => {
               if (readOnly) {
                 return;

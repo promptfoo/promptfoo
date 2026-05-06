@@ -430,7 +430,6 @@ const EvaluateTestSuiteCreator = () => {
                     isComplete={normalizedProviders.length > 0}
                     isRequired
                     count={normalizedProviders.length}
-                    defaultOpen={normalizedProviders.length === 0}
                     guidance={
                       normalizedProviders.length === 0 ? (
                         <InfoBox variant="help">
@@ -492,7 +491,6 @@ const EvaluateTestSuiteCreator = () => {
                     isComplete={normalizedPrompts.length > 0}
                     isRequired
                     count={normalizedPrompts.length}
-                    defaultOpen={normalizedProviders.length > 0 && normalizedPrompts.length === 0}
                     guidance={
                       normalizedPrompts.length === 0 ? (
                         <InfoBox variant="help">
@@ -564,11 +562,6 @@ const EvaluateTestSuiteCreator = () => {
                     isComplete={testCount > 0}
                     isRequired
                     count={testCount}
-                    defaultOpen={
-                      normalizedProviders.length > 0 &&
-                      normalizedPrompts.length > 0 &&
-                      testCount === 0
-                    }
                     guidance={
                       testCount === 0 ? (
                         <InfoBox variant="help">
@@ -654,7 +647,6 @@ const EvaluateTestSuiteCreator = () => {
                     isComplete={
                       !!(config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency)
                     }
-                    defaultOpen={false}
                   >
                     <RunOptionsSection
                       description={config.description}

@@ -106,6 +106,28 @@ describe('TestCasesSection', () => {
     expect(screen.getByTestId('test-case-dialog')).toBeInTheDocument();
   });
 
+  it('exposes missing variables to assistive technology', () => {
+    (useStore as any).mockReturnValue({
+      config: {
+        tests: [
+          {
+            description: 'Test 1',
+            vars: {},
+          },
+        ],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={['input']} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Missing variables: input.')).toHaveClass('sr-only');
+  });
+
   it('shows a YAML-managed state for scalar test configs and opens the YAML editor', async () => {
     const user = userEvent.setup();
     const onOpenYamlEditor = vi.fn();
