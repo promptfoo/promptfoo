@@ -859,6 +859,8 @@ Use a small `working_dir` with only the target source, traces, or prior eval not
 
 Set `promptAdjuster.inlineContext: true` when the context files are compact notes or summaries that Codex should use on every strategy call. Promptfoo embeds those files directly into the planning prompt, which avoids spending repeated Codex turns just reading the same files.
 
+Promptfoo also adds plugin-aware planner hints to local agentic prompts. For example, `prompt-extraction` nudges Codex toward operating-rule probes, while SQL, shell, RBAC, privacy, hallucination, and excessive-agency plugins get guidance tuned to those failure modes.
+
 For offline experiments, set `promptAdjuster.capturePrompt: true` to include the
 fully adjusted Hydra or `jailbreak:meta` planning prompt in redteam history metadata.
 Leave it unset for normal runs because captured prompts may include local source,
