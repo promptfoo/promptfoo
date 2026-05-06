@@ -9,7 +9,7 @@ sidebar_position: 27
 Use Google ADK's Python SDK with Promptfoo by wrapping your app as a Python provider. That keeps the ADK runtime in process, so Promptfoo can inspect the same sessions, artifacts, and native OpenTelemetry spans that the agent produced.
 
 :::note
-This guide targets stable ADK 1.x. Google's public docs also advertise ADK Python 2.0 preview releases, but those releases have breaking API and session-schema changes. Validate a 2.0 integration separately before moving production evals onto it.
+This guide targets stable ADK 1.x. Google's public docs also advertise ADK Python 2.0 beta releases, but those releases have breaking API and session-schema changes. Validate a 2.0 integration separately before moving production evals onto it.
 :::
 
 ## Quick Start
@@ -158,7 +158,7 @@ The example stays small enough to run quickly, but the same integration shape wo
 | multi-agent trees                     | span counts for each agent plus tool order assertions                 |
 | long-running tools and resumable apps | state / event assertions around pause and resume behavior             |
 
-ADK also has its own `adk eval` stack. Use that when you want ADK-native eval sets or ADK-specific metrics; use Promptfoo when you want one harness that can compare ADK against other frameworks, share the same assertion language, run red teams, or inspect OTEL traces alongside the final output.
+ADK also has its own `adk eval` stack. Use that when you want ADK-native eval sets or ADK-specific metrics; use Promptfoo when you want one harness that can compare ADK against other frameworks, share the same assertion language, run red teams, or inspect OpenTelemetry traces alongside the final output.
 
 ## Production Notes
 
