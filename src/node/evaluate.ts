@@ -1,382 +1,69 @@
-import * as cache from '../cache';
-import cliState from '../cliState';
-import { evaluate as doEvaluate } from '../evaluator';
-import { getAuthor } from '../globalConfig/accounts';
-import logger from '../logger';
-import { runDbMigrations } from '../migrate';
-import Eval from '../models/eval';
-import { sanitizeProvider } from '../models/evalResult';
-import { processPrompts, readProviderPromptMap } from '../prompts';
-import { loadApiProviders, resolveProvider } from '../providers';
-import { createShareableUrl, isSharingEnabled } from '../share';
-import { isApiProvider } from '../types/providers';
-import { isTransformFunction } from '../types/transform';
-import { maybeLoadFromExternalFile } from '../util/file';
-import { readFilters, writeMultipleOutputs, writeOutput } from '../util/index';
-import { readTests } from '../util/testCaseReader';
-import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from '../util/transform';
+import { evaluateWithSource } from '../evaluate';
 
-import type {
-  EvaluateOptions,
-  EvaluateTestSuite,
-  Scenario,
-  TestCase,
-  TestSuite,
-  UnifiedConfig,
-} from '../types';
-import type { ApiProvider } from '../types/providers';
+import type { EvaluateOptions, EvaluateTestSuite } from '../types';
 
 /**
- * Shallow-clone a test case so the caller can swap in resolved ApiProvider
- * instances on `options.provider` / `assert[].provider` without leaking those
- * mutations back to the input. The input may alias the unified config written
- * to the Eval record, and a live SDK client (e.g. Bedrock's BedrockRuntime,
- * Anthropic's client) holds circular references that break drizzle's JSON
- * serialization on `evalRecord.save()`. Fixes #8687.
+ * Run an evaluation test suite.
  *
- * Detaches only `options` and `assert[]`. Other reference fields (`provider`,
- * `vars`, `metadata`, `providerOutput`) remain aliased — callers must reassign
- * those by reference rather than mutating in place. `assert-set` children are
- * not deep-cloned because the resolve loop skips `assert-set`; if that ever
- * changes, extend this helper.
- */
-function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(test: T): T {
-  const cloned: T = { ...test };
-  if (test.options) {
-    cloned.options = { ...test.options };
-  }
-  if (test.assert) {
-    cloned.assert = test.assert.map((assertion) => ({ ...assertion }));
-  }
-  return cloned;
-}
-
-function toSerializableProviderRef(provider: unknown): unknown {
-  if (isApiProvider(provider)) {
-    return sanitizeProvider(provider);
-  }
-  if (Array.isArray(provider)) {
-    return provider.map(toSerializableProviderRef);
-  }
-  return provider;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
-  if (!isApiProvider(record.provider)) {
-    return record;
-  }
-  return {
-    ...record,
-    provider: sanitizeProvider(record.provider),
-  };
-}
-
-/**
- * Function-valued transforms are first-class at runtime but are silently dropped
- * by `JSON.stringify`. Persisted eval configs (drizzle-stored) must never retain
- * a function reference, so replace every `transform`-like field with a
- * `[inline function]: name` marker. Non-function values pass through unchanged.
+ * This is the main entry point for programmatic evaluation. It executes all tests
+ * against all providers, runs assertions, and returns a comprehensive summary.
  *
- * `droppedRef.value` is flipped to `true` the first time a function is replaced
- * so the caller can emit a single warning instead of logging per field.
+ * @param testSuite Configuration containing prompts, providers, tests, and metadata
+ * @param testSuite.prompts Array of prompts (strings or file paths)
+ * @param testSuite.providers Array of provider configurations (e.g., 'openai:gpt-4')
+ * @param testSuite.tests Array of test cases with variables and assertions
+ * @param testSuite.sharing Optional sharing configuration
+ * @param testSuite.writeLatestResults Whether to persist results to database
+ *
+ * @param options Optional evaluation settings
+ * @param options.cache Whether to use cached provider responses (default: true)
+ * @param options.outputPath File path(s) for saving results (JSON format)
+ * @param options.maxConcurrency Max parallel provider calls (default: 10)
+ * @param options.onTestComplete Callback invoked after each test completes
+ * @param options.nunjucksFilters Custom Nunjucks template filters
+ *
+ * @returns Eval record with persisted results and helper methods such as `toEvaluateSummary()`
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { evaluate } from 'promptfoo';
+ *
+ * const evalRecord = await evaluate({
+ *   prompts: ['What is 2+2?'],
+ *   providers: ['openai:gpt-4'],
+ *   tests: [
+ *     {
+ *       vars: {},
+ *       assert: [{ type: 'contains', value: '4' }]
+ *     }
+ *   ]
+ * });
+ *
+ * const summary = await evalRecord.toEvaluateSummary();
+ * console.log(`${summary.stats.successes}/${summary.results.length} passed`);
+ * ```
+ *
+ * @example With output file and caching disabled
+ * ```typescript
+ * const evalRecord = await evaluate(
+ *   {
+ *     prompts: ['prompts.txt'],
+ *     providers: ['openai:gpt-4', 'anthropic:claude-3-opus'],
+ *     tests: testCases
+ *   },
+ *   {
+ *     cache: false,
+ *     outputPath: 'eval-results.json',
+ *     maxConcurrency: 5
+ *   }
+ * );
+ * ```
+ *
+ * @see loadApiProvider for loading individual providers
+ * @see runAssertion for testing specific outputs
  */
-function replaceFunctionTransforms<T extends Record<string, unknown>>(
-  record: T,
-  droppedRef: { value: boolean },
-): T {
-  let result: T | undefined;
-  for (const key of TRANSFORM_KEYS) {
-    const value = record[key];
-    if (!isTransformFunction(value)) {
-      continue;
-    }
-    if (!result) {
-      result = { ...record };
-    }
-    (result as Record<string, unknown>)[key] = value.name
-      ? `${INLINE_FUNCTION_LABEL}: ${value.name}`
-      : INLINE_FUNCTION_LABEL;
-    droppedRef.value = true;
-  }
-  return result ?? record;
-}
-
-function toSerializableAssertion(assertion: unknown, droppedRef: { value: boolean }): unknown {
-  if (!isRecord(assertion)) {
-    return assertion;
-  }
-
-  let sanitizedAssertion = withSerializableProvider(assertion);
-  sanitizedAssertion = replaceFunctionTransforms(sanitizedAssertion, droppedRef);
-
-  if (Array.isArray(assertion.assert)) {
-    sanitizedAssertion = {
-      ...sanitizedAssertion,
-      assert: assertion.assert.map((a) => toSerializableAssertion(a, droppedRef)),
-    };
-  }
-
-  return sanitizedAssertion;
-}
-
-function toSerializableTestCase(test: unknown, droppedRef: { value: boolean }): unknown {
-  if (!isRecord(test)) {
-    return test;
-  }
-
-  let sanitizedTest = withSerializableProvider(test);
-
-  if (isRecord(test.options)) {
-    let options = withSerializableProvider(test.options);
-    options = replaceFunctionTransforms(options, droppedRef);
-    if (options !== test.options) {
-      sanitizedTest = {
-        ...sanitizedTest,
-        options,
-      };
-    }
-  }
-
-  if (Array.isArray(test.assert)) {
-    sanitizedTest = {
-      ...sanitizedTest,
-      assert: test.assert.map((a) => toSerializableAssertion(a, droppedRef)),
-    };
-  }
-
-  return sanitizedTest;
-}
-
-function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean }): unknown {
-  if (!isRecord(scenario)) {
-    return scenario;
-  }
-
-  if (!Array.isArray(scenario.tests)) {
-    return scenario;
-  }
-
-  return {
-    ...scenario,
-    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
-  };
-}
-
-function createSerializableUnifiedConfig(
-  testSuite: EvaluateTestSuite,
-  prompts: TestSuite['prompts'],
-): Partial<UnifiedConfig> {
-  const droppedRef = { value: false };
-  const config = {
-    ...testSuite,
-    providers: toSerializableProviderRef(testSuite.providers),
-    defaultTest: toSerializableTestCase(testSuite.defaultTest, droppedRef),
-    tests: Array.isArray(testSuite.tests)
-      ? testSuite.tests.map((t) => toSerializableTestCase(t, droppedRef))
-      : testSuite.tests,
-    scenarios: Array.isArray(testSuite.scenarios)
-      ? testSuite.scenarios.map((s) => toSerializableScenario(s, droppedRef))
-      : testSuite.scenarios,
-    prompts,
-  } as Partial<UnifiedConfig>;
-
-  if (droppedRef.value && testSuite.writeLatestResults) {
-    logger.warn(
-      'Function-valued transform(s) in testSuite were replaced with "[inline function]" markers in the persisted config. Re-running the saved eval will not invoke them; use string expressions or file:// references if you need the config to round-trip.',
-    );
-  }
-
-  return config;
-}
-
-function createProviderMap(loadedProviders: ApiProvider[]): Record<string, ApiProvider> {
-  const providerMap: Record<string, ApiProvider> = {};
-  for (const provider of loadedProviders) {
-    providerMap[provider.id()] = provider;
-    if (provider.label) {
-      providerMap[provider.label] = provider;
-    }
-  }
-  return providerMap;
-}
-
-async function loadDefaultTest(
-  defaultTest: EvaluateTestSuite['defaultTest'],
-): Promise<TestSuite['defaultTest']> {
-  if (typeof defaultTest === 'string' && defaultTest.startsWith('file://')) {
-    return maybeLoadFromExternalFile(defaultTest) as Promise<TestSuite['defaultTest']>;
-  }
-  return defaultTest as TestSuite['defaultTest'];
-}
-
-async function resolveDefaultTestProviders(
-  defaultTest: TestSuite['defaultTest'],
-  providerMap: Record<string, ApiProvider>,
-  env: EvaluateTestSuite['env'],
-): Promise<TestSuite['defaultTest']> {
-  if (typeof defaultTest !== 'object' || !defaultTest) {
-    return defaultTest;
-  }
-
-  const resolvedDefaultTest = cloneTestForResolve(defaultTest);
-  if (resolvedDefaultTest.provider && !isApiProvider(resolvedDefaultTest.provider)) {
-    resolvedDefaultTest.provider = await resolveProvider(
-      resolvedDefaultTest.provider,
-      providerMap,
-      {
-        env,
-        basePath: cliState.basePath,
-      },
-    );
-  }
-  if (
-    resolvedDefaultTest.options?.provider &&
-    !isApiProvider(resolvedDefaultTest.options.provider)
-  ) {
-    resolvedDefaultTest.options.provider = await resolveProvider(
-      resolvedDefaultTest.options.provider,
-      providerMap,
-      {
-        env,
-        basePath: cliState.basePath,
-      },
-    );
-  }
-  return resolvedDefaultTest;
-}
-
-async function resolveTestProviders(
-  tests: TestSuite['tests'],
-  providerMap: Record<string, ApiProvider>,
-  env: EvaluateTestSuite['env'],
-): Promise<TestSuite['tests']> {
-  const resolvedTests = (tests || []).map(cloneTestForResolve);
-  for (const test of resolvedTests) {
-    if (test.options?.provider && !isApiProvider(test.options.provider)) {
-      test.options.provider = await resolveProvider(test.options.provider, providerMap, {
-        env,
-        basePath: cliState.basePath,
-      });
-    }
-    for (const assertion of test.assert || []) {
-      if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
-        continue;
-      }
-      if (assertion.provider && !isApiProvider(assertion.provider)) {
-        assertion.provider = await resolveProvider(assertion.provider, providerMap, {
-          env,
-          basePath: cliState.basePath,
-        });
-      }
-    }
-  }
-  return resolvedTests;
-}
-
-async function maybeShareResult(shouldPersistAndShare: boolean, evalResult: Eval): Promise<void> {
-  if (!shouldPersistAndShare) {
-    return;
-  }
-
-  if (!isSharingEnabled(evalResult)) {
-    logger.debug('Sharing requested but not enabled (check cloud config or sharing settings)');
-    return;
-  }
-
-  try {
-    const shareableUrl = await createShareableUrl(evalResult, { silent: true });
-    if (shareableUrl) {
-      evalResult.shareableUrl = shareableUrl;
-      evalResult.shared = true;
-      logger.debug(`Eval shared successfully: ${shareableUrl}`);
-    }
-  } catch (error) {
-    logger.warn(`Failed to create shareable URL: ${error}`);
-  }
-}
-
-async function maybeWriteOutputs(
-  outputPath: EvaluateTestSuite['outputPath'],
-  evalRecord: Eval,
-): Promise<void> {
-  if (typeof outputPath === 'string') {
-    await writeOutput(outputPath, evalRecord, null);
-    return;
-  }
-  if (Array.isArray(outputPath)) {
-    await writeMultipleOutputs(outputPath, evalRecord, null);
-  }
-}
-
 export async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
-  const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
-
-  if (testSuiteConfig.writeLatestResults) {
-    await runDbMigrations();
-  }
-
-  const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
-    env: testSuiteConfig.env,
-  });
-  const providerMap = createProviderMap(loadedProviders);
-
-  const constructedTestSuite: TestSuite = {
-    ...testSuiteConfig,
-    defaultTest: await resolveDefaultTestProviders(
-      await loadDefaultTest(testSuiteConfig.defaultTest),
-      providerMap,
-      testSuiteConfig.env,
-    ),
-    scenarios: testSuiteConfig.scenarios as Scenario[],
-    providers: loadedProviders,
-    tests: await resolveTestProviders(
-      await readTests(testSuiteConfig.tests),
-      providerMap,
-      testSuiteConfig.env,
-    ),
-    nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
-    prompts: await processPrompts(testSuiteConfig.prompts),
-  };
-
-  if (options.cache === false) {
-    cache.disableCache();
-  }
-
-  const parsedProviderPromptMap = readProviderPromptMap(
-    testSuiteConfig,
-    constructedTestSuite.prompts,
-  );
-  const unifiedConfig = createSerializableUnifiedConfig(
-    testSuiteConfig,
-    constructedTestSuite.prompts,
-  );
-  const author = getAuthor(suiteAuthor);
-  const evalRecord = testSuiteConfig.writeLatestResults
-    ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })
-    : new Eval(unifiedConfig, { author });
-
-  const ret = await doEvaluate(
-    {
-      ...constructedTestSuite,
-      providerPromptMap: parsedProviderPromptMap,
-    },
-    evalRecord,
-    {
-      eventSource: 'library',
-      isRedteam: Boolean(testSuiteConfig.redteam),
-      ...options,
-    },
-  );
-
-  await maybeShareResult(
-    Boolean(testSuiteConfig.writeLatestResults && testSuiteConfig.sharing),
-    ret,
-  );
-  await maybeWriteOutputs(testSuiteConfig.outputPath, evalRecord);
-
-  return ret;
+  return evaluateWithSource(testSuite, { ...options, eventSource: 'library' });
 }
+
+export { evaluateWithSource };
