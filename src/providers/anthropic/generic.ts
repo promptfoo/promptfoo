@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'crypto';
+import { createHmac } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
@@ -39,37 +39,43 @@ interface AnthropicBaseOptions {
 }
 
 const ANTHROPIC_CACHE_HASH_CONTEXT = 'promptfoo:anthropic:cache-key:v1';
-const ANTHROPIC_CACHE_HASH_KEY_SYMBOL = Symbol.for('promptfoo.anthropic.cacheHashKey');
 
-function getAnthropicCacheHashKey(): Buffer {
-  const globalCache = globalThis as typeof globalThis & Record<symbol, Buffer | undefined>;
-  const existingKey = globalCache[ANTHROPIC_CACHE_HASH_KEY_SYMBOL];
-  if (existingKey) {
-    return existingKey;
+// Canonicalize before hashing so semantically identical plain objects with
+// different property insertion orders produce the same cache key. See
+// `src/providers/AGENTS.md` "Cache Key Hygiene". Class instances such as
+// `Date` or `Buffer` are passed through so their `toJSON` / default
+// serialization is preserved — rebuilding them via `Object.keys` would
+// collapse distinct values to the same shape and cause cache collisions.
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') {
+    return false;
   }
-
-  const newKey = randomBytes(32);
-  globalCache[ANTHROPIC_CACHE_HASH_KEY_SYMBOL] = newKey;
-  return newKey;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
 }
 
-const ANTHROPIC_CACHE_HASH_KEY = getAnthropicCacheHashKey();
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (isPlainObject(value)) {
+    const entries = Object.keys(value)
+      .sort()
+      .map((k) => [k, canonicalize(value[k])] as const);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
 
 export function hashAnthropicCacheValue(value: unknown): string {
-  const serialized = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
-  return createHmac('sha256', ANTHROPIC_CACHE_HASH_KEY)
-    .update(ANTHROPIC_CACHE_HASH_CONTEXT)
-    .update('\0')
-    .update(serialized)
-    .digest('hex');
+  const canonical = canonicalize(value);
+  const serialized =
+    typeof canonical === 'string' ? canonical : (JSON.stringify(canonical) ?? String(canonical));
+  return createHmac('sha256', ANTHROPIC_CACHE_HASH_CONTEXT).update(serialized).digest('hex');
 }
 
 export function getAnthropicAuthCacheNamespace(apiKey: string): string {
-  return createHmac('sha256', ANTHROPIC_CACHE_HASH_KEY)
-    .update(ANTHROPIC_CACHE_HASH_CONTEXT)
-    .update('\0')
-    .update(apiKey)
-    .digest('hex');
+  return createHmac('sha256', apiKey).update(`${ANTHROPIC_CACHE_HASH_CONTEXT}:auth`).digest('hex');
 }
 
 /**

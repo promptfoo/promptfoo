@@ -953,7 +953,7 @@ describe('DataTable', () => {
     expect(headerCells[3].className).toContain('overflow-hidden');
   });
 
-  it('should reserve inline space for sortable header actions without absolute positioning', () => {
+  it('should overlay sortable header actions without consuming label width', () => {
     const layoutColumns: ColumnDef<TestRow>[] = [
       {
         accessorKey: 'id',
@@ -977,7 +977,8 @@ describe('DataTable', () => {
       const headerLabel = screen.getByText(headerText);
       const headerContent = headerLabel.closest('div');
       expect(headerContent).not.toBeNull();
-      expect(headerContent).toHaveClass('flex', 'min-w-0', 'items-center', 'gap-1');
+      expect(headerContent).toHaveClass('flex', 'min-w-0', 'items-center');
+      expect(headerContent).not.toHaveClass('gap-1');
       expect(headerContent).toHaveClass('overflow-hidden');
 
       if (shouldBeRightAligned) {
@@ -990,8 +991,8 @@ describe('DataTable', () => {
 
       const actionGroup = headerContent?.querySelector('button')?.closest('span');
       expect(actionGroup).toBeInTheDocument();
-      expect(actionGroup).toHaveClass('flex', 'shrink-0', 'items-center');
-      expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
+      expect(actionGroup).toHaveClass('absolute', 'right-1', 'items-center');
+      expect(actionGroup).not.toHaveClass('shrink-0', 'left-0');
     };
 
     assertHeaderLayout('Identifier');
@@ -1346,6 +1347,50 @@ describe('DataTable', () => {
 
       const expandedRow = screen.getByTestId('expanded-1').closest('tr');
       expect(expandedRow).toHaveClass('bg-transparent');
+    });
+  });
+
+  describe('sticky columns', () => {
+    it('should pin configured edge columns during horizontal scrolling', () => {
+      const stickyColumns: ColumnDef<TestRow>[] = [
+        {
+          accessorKey: 'id',
+          header: 'Identifier',
+          size: 96,
+          meta: { sticky: 'left' },
+        },
+        {
+          accessorKey: 'name',
+          header: 'Name',
+          size: 160,
+        },
+        {
+          id: 'actions',
+          header: 'Actions',
+          size: 80,
+          meta: { sticky: 'right' },
+          cell: () => 'Open',
+        },
+      ];
+      const data: TestRow[] = [{ id: '1', name: 'Pinned row' }];
+
+      render(<DataTable columns={stickyColumns} data={data} />);
+
+      const leftHeader = screen.getByText('Identifier').closest('th');
+      const rightHeader = screen.getByText('Actions').closest('th');
+      const leftCell = screen.getByText('1').closest('td');
+      const rightCell = screen.getByText('Open').closest('td');
+
+      expect(leftHeader).toHaveClass('sticky');
+      expect(leftHeader).toHaveStyle({ left: '0px' });
+      expect(leftHeader).toHaveClass('border-r');
+      expect(rightHeader).toHaveClass('sticky');
+      expect(rightHeader).toHaveStyle({ right: '0px' });
+      expect(rightHeader).toHaveClass('border-l');
+      expect(leftCell).toHaveClass('sticky');
+      expect(leftCell).toHaveStyle({ left: '0px' });
+      expect(rightCell).toHaveClass('sticky');
+      expect(rightCell).toHaveStyle({ right: '0px' });
     });
   });
 });
