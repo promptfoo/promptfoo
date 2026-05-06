@@ -7,6 +7,7 @@ import logger from '../src/logger';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
+import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
 import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 import { createMockProvider } from './factories/provider';
@@ -67,6 +68,14 @@ vi.mock('../src/prompts', async () => {
   return {
     ...originalModule,
     readProviderPromptMap: vi.fn().mockReturnValue({}),
+  };
+});
+vi.mock('../src/redteam/shared', async () => {
+  const originalModule =
+    await vi.importActual<typeof import('../src/redteam/shared')>('../src/redteam/shared');
+  return {
+    ...originalModule,
+    doRedteamRun: vi.fn(),
   };
 });
 vi.mock('../src/providers', async () => {
@@ -273,6 +282,25 @@ describe('evaluate function', () => {
         ],
         providerPromptMap: {},
       }),
+      expect.anything(),
+      expect.objectContaining({
+        eventSource: 'library',
+      }),
+    );
+  });
+
+  it('should pin package callers to library semantics', async () => {
+    await evaluate(
+      {
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [],
+      },
+      { eventSource: 'cli' } as never,
+    );
+
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.anything(),
       expect.anything(),
       expect.objectContaining({
         eventSource: 'library',
@@ -530,6 +558,17 @@ describe('evaluate function', () => {
     };
     await evaluate(testSuite);
     expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
+  });
+
+  it('should skip writing output when outputPath is empty', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: '',
+    };
+    await evaluate(testSuite);
+    expect(writeOutput).not.toHaveBeenCalled();
+    expect(writeMultipleOutputs).not.toHaveBeenCalled();
   });
 
   it('should write multiple outputs when outputPath is an array', async () => {
@@ -924,6 +963,27 @@ describe('evaluate function', () => {
         );
       });
     });
+  });
+});
+
+describe('redteam package wrapper', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(doRedteamRun).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.mocked(doRedteamRun).mockReset();
+  });
+
+  it('should pin package callers to library semantics', async () => {
+    await index.redteam.run({ eventSource: 'cli' } as never);
+
+    expect(doRedteamRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventSource: 'library',
+      }),
+    );
   });
 });
 

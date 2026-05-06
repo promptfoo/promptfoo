@@ -12,7 +12,6 @@ export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
-import { EventSourceSchema } from './eventSource';
 
 export {
   EVENT_SOURCES,
@@ -263,7 +262,6 @@ export interface RunEvalOptions {
 export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
-  eventSource: EventSourceSchema.optional(),
   generateSuggestions: z.boolean().optional(),
   suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   /**
