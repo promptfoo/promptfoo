@@ -121,6 +121,7 @@
   line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* Legacy WebKit multiline truncation: keep this trio for line-clamp support. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -184,6 +185,7 @@
   .featuredTitle {
     font-size: 1.1rem;
     line-height: 1.35;
+    /* Legacy WebKit multiline truncation: keep this trio for line-clamp support. */
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -218,6 +220,7 @@
   }
 
   .featuredPost:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     transform: none;
   }
 
@@ -261,6 +264,7 @@
   }
 
   .preview {
+    /* Restore the legacy WebKit line-clamp display inherited from .preview. */
     display: -webkit-box;
   }
 }
