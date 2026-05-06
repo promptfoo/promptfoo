@@ -35,6 +35,8 @@ npx promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 
 The second test depends on the first test's remembered code word, so run this config with `-j 1`.
 
+For stateful red-team strategies, use a session factory keyed by a per-test `sessionId` rather than one shared inline session. The [OpenAI Agents provider docs](https://www.promptfoo.dev/docs/providers/openai-agents/#stateful-red-team-runs) show the `transformVars` plus session-factory pattern that keeps turns together without sharing history across unrelated tests.
+
 ## Run the sandbox and skill eval
 
 ```bash

@@ -252,6 +252,57 @@ export const lookupCustomerContext = tool({
 
 Use this for local application state that should be available to tools and hooks. It is separate from conversation history; use `session`, `conversationId`, or `previousResponseId` when you want to carry turns forward.
 
+## Stateful Red Team Runs
+
+Stateful red-team strategies such as `crescendo` need two things at once:
+
+- all turns within one attack should share history
+- separate tests should not share the same session
+
+Use `transformVars` to stamp each test with a stable per-test session ID, then export a session factory that reuses sessions by that ID:
+
+```yaml
+providers:
+  - openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      session: file://./sessions/redteam-session.ts
+
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+
+redteam:
+  strategies:
+    - id: crescendo
+      config:
+        stateful: true
+```
+
+```typescript title="sessions/redteam-session.ts"
+import { MemorySession } from '@openai/agents';
+
+const sessions = new Map<string, MemorySession>();
+
+export default async function createSession(context?: {
+  vars?: {
+    sessionId?: string;
+  };
+}) {
+  const sessionId = context?.vars?.sessionId ?? 'default-session';
+  const existing = sessions.get(sessionId);
+  if (existing) {
+    return existing;
+  }
+
+  const session = new MemorySession({ sessionId });
+  sessions.set(sessionId, session);
+  return session;
+}
+```
+
+This keeps each multi-turn attack stateful while still isolating one generated test case from another.
+
 ## Sandbox Agents
 
 `@openai/agents` v0.9 added beta `SandboxAgent` support in the JavaScript SDK. File-exported sandbox agents work with the same provider:
