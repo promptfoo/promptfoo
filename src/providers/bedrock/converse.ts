@@ -34,7 +34,7 @@ import {
   openaiToolChoiceToBedrock,
   openaiToolsToBedrock,
 } from '../shared';
-import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
+import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -1044,7 +1044,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Check cache
     const cache = await getCache();
-    const cacheKey = `bedrock:converse:${this.modelName}:${JSON.stringify(converseInput)}`;
+    const region = this.getRegion();
+    const cacheKey = `bedrock:converse:${this.modelName}:${region}:${createBedrockCacheKeyHash({
+      config: this.config,
+      params: converseInput,
+      region,
+    })}`;
 
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);

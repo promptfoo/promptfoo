@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import * as path from 'path';
 import checkbox, { Separator } from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
@@ -732,7 +732,7 @@ export function initCommand(program: Command) {
             await redteamInit(directory);
           }
         } catch (err) {
-          if (err instanceof ExitPromptError) {
+          if (err instanceof AbortPromptError || err instanceof ExitPromptError) {
             logger.info(
               '\n' +
                 chalk.blue(
@@ -745,7 +745,8 @@ export function initCommand(program: Command) {
                 chalk.green('https://www.promptfoo.dev/contact/'),
             );
             await recordOnboardingStep('early exit');
-            process.exit(130);
+            process.exitCode = 130;
+            return;
           } else {
             throw err;
           }

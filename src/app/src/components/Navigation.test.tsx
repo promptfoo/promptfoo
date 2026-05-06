@@ -165,7 +165,7 @@ describe('Navigation', () => {
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('bg-primary/10');
-    expect(modelAuditLink).toHaveClass('text-primary');
+    expect(modelAuditLink).toHaveClass('text-foreground');
   });
 
   it('activates the Model Audit NavLink on /model-audit/:id path', () => {
@@ -173,7 +173,7 @@ describe('Navigation', () => {
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('bg-primary/10');
-    expect(modelAuditLink).toHaveClass('text-primary');
+    expect(modelAuditLink).toHaveClass('text-foreground');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
@@ -308,7 +308,7 @@ describe('Navigation', () => {
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-primary');
+      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
     });
 
     it('activates Model Audit NavLink on /model-audit/:id path', () => {
@@ -320,7 +320,7 @@ describe('Navigation', () => {
       );
       expect(topLevelModelAuditLink).toBeDefined();
       expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
-      expect(topLevelModelAuditLink).toHaveClass('text-primary');
+      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
     });
 
     it('does not activate Model Audit NavLink on /model-audit/setup path', () => {

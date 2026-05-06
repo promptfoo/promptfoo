@@ -37,6 +37,7 @@
   },
   "scripts": {
     "audit:fix": "npm audit fix && npm audit fix --prefix src/app && npm audit fix --prefix site",
+    "architecture:check": "tsx scripts/checkArchitectureBoundaries.ts",
     "bin": "dist/src/entrypoint.js",
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
@@ -87,6 +88,7 @@
     "tsc": "tsc --noEmit",
     "mcp": "node dist/src/entrypoint.js mcp",
     "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/exec,@actions/github,@octokit/rest,nock,@vitest/coverage-v8,langium\" --ignore-dirs=\"dist,site,examples\"",
+    "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0"
   },
   "overrides": {

@@ -24,7 +24,7 @@ The OpenAI provider supports the following model formats:
 - `openai:chat:ft:gpt-5-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion` - defaults to `gpt-3.5-turbo-instruct`
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
-- `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
+- `openai:embedding:<model name>` / `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:moderation:<model name>` - uses moderation models (default: `omni-moderation-latest`)
 - `openai:image:<model name>` - uses image generation models
 - `openai:transcription:<model name>` - uses audio transcription models
@@ -199,6 +199,18 @@ providers:
 ```
 
 When `n > 1`, the primary `output` contains the first choice's content, and all generated choices are available in the response metadata under `metadata.choices`. Each choice includes the full response object with `message`, `finish_reason`, and `index`.
+
+### Reducing Embedding Dimensions
+
+Use `passthrough` to send raw [Embeddings API](https://platform.openai.com/docs/api-reference/embeddings) fields such as `dimensions`. OpenAI supports `dimensions` on `text-embedding-3` and later models when you want a smaller vector size:
+
+```yaml
+providers:
+  - id: openai:embedding:text-embedding-3-large
+    config:
+      passthrough:
+        dimensions: 1024
+```
 
 ## Models
 

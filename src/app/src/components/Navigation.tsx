@@ -48,7 +48,7 @@ function NavLink({ href, label }: NavLinkProps) {
         'inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
-          ? 'bg-primary/10 text-primary hover:bg-primary/15 focus-visible:bg-primary/15'
+          ? 'bg-primary/10 text-foreground hover:bg-primary/15 focus-visible:bg-primary/15'
           : 'text-foreground hover:bg-accent focus-visible:bg-accent',
       )}
     >
@@ -81,7 +81,7 @@ function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
           'data-[state=open]:bg-accent',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           isActive
-            ? 'bg-primary/10 text-primary hover:bg-primary/15 focus-visible:bg-primary/15'
+            ? 'bg-primary/10 text-foreground hover:bg-primary/15 focus-visible:bg-primary/15'
             : 'text-foreground hover:bg-accent focus-visible:bg-accent',
         )}
       >
@@ -168,7 +168,7 @@ export default function Navigation() {
       <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
         <div className="flex h-14 items-center justify-between px-4">
           {/* Left section: Logo and Navigation */}
-          <div className="flex items-center gap-6">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-6">
             <Logo />
             <NavigationMenu>
               <NavigationMenuList className="gap-1">

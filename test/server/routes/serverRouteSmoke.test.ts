@@ -130,10 +130,8 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: mocks.cloudConfig,
 }));
 
-vi.mock('../../../src/index', () => ({
-  default: {
-    evaluate: mocks.promptfooEvaluate,
-  },
+vi.mock('../../../src/node', () => ({
+  evaluate: mocks.promptfooEvaluate,
 }));
 
 vi.mock('../../../src/models/eval', () => ({
