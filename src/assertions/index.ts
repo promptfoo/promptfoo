@@ -363,10 +363,73 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
 }
 
 /**
+ * Assertion input accepted by `runAssertion()`.
+ *
+ * This wrapper keeps the low-level assertion API docs readable while preserving
+ * the full assertion shape used by eval configuration.
+ *
+ * @public
+ */
+export interface AssertionInput extends Assertion {}
+
+/**
+ * Test-case context accepted by low-level assertion APIs.
+ *
+ * For the common `runAssertion()` case, `{ vars: {} }` is enough. Use the same
+ * broader shape as an evaluated test case when custom assertions or assertion
+ * handlers need additional context. `runAssertions()` also reads `assert` and
+ * `threshold` from this object.
+ *
+ * @public
+ */
+export interface AssertionTestContext extends AtomicTestCase {}
+
+/**
+ * Options for `runAssertion()`.
+ *
+ * @public
+ */
+export interface RunAssertionOptions {
+  /** Rendered prompt for the response being graded, when available. */
+  prompt?: string;
+  /** Provider that produced the response, when model-graded assertions need it. */
+  provider?: ApiProvider;
+  /** Assertion to run against the response. */
+  assertion: AssertionInput;
+  /** Test case context associated with the response. */
+  test: AssertionTestContext;
+  /** Rendered variables to use instead of `test.vars`, when already resolved. */
+  vars?: Record<string, VarValue>;
+  /** Response to grade. */
+  providerResponse: ProviderResponse;
+  /** Latency for latency-based assertions, in milliseconds. */
+  latencyMs?: number;
+  /** Trace identifier for trace-aware assertions, when tracing is enabled. */
+  traceId?: string;
+  /** @internal */
+  assertIndex?: number;
+  /** @internal */
+  traceData?: TraceData | null;
+}
+
+/**
  * Run one assertion against a provider response.
  *
  * This is the supported low-level hook for advanced callers that want to reuse
  * promptfoo assertion logic outside a full eval run.
+ *
+ * @example
+ * ```ts
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertion({
+ *   assertion: { type: 'contains', value: 'Ada' },
+ *   test: { vars: {} },
+ *   providerResponse: { output: 'Hello Ada' },
+ * });
+ *
+ * console.log(result.pass);
+ * ```
  *
  * @public
  */
@@ -380,18 +443,7 @@ export async function runAssertion({
   providerResponse,
   traceId,
   traceData,
-}: {
-  prompt?: string;
-  provider?: ApiProvider;
-  assertion: Assertion;
-  test: AtomicTestCase;
-  vars?: Record<string, VarValue>;
-  providerResponse: ProviderResponse;
-  latencyMs?: number;
-  assertIndex?: number;
-  traceId?: string;
-  traceData?: TraceData | null;
-}): Promise<GradingResult> {
+}: RunAssertionOptions): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -639,10 +691,52 @@ export async function runAssertion({
 }
 
 /**
+ * Options for `runAssertions()`.
+ *
+ * @public
+ */
+export interface RunAssertionsOptions {
+  /** Custom aggregation function for assertion results, when needed. */
+  assertScoringFunction?: ScoringFunction;
+  /** Latency for latency-based assertions, in milliseconds. */
+  latencyMs?: number;
+  /** Rendered prompt for the response being graded, when available. */
+  prompt?: string;
+  /** Provider that produced the response, when model-graded assertions need it. */
+  provider?: ApiProvider;
+  /** Response to grade. */
+  providerResponse: ProviderResponse;
+  /** Test case containing the assertions to run. */
+  test: AssertionTestContext;
+  /** Rendered variables to use instead of `test.vars`, when already resolved. */
+  vars?: Record<string, VarValue>;
+  /** Trace identifier for trace-aware assertions, when tracing is enabled. */
+  traceId?: string;
+}
+
+/**
  * Run all assertions for one test case and aggregate the grading result.
  *
  * This is the supported batch counterpart to `runAssertion()` for advanced
  * callers that already have a provider response and test case in hand.
+ *
+ * @example
+ * ```ts
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertions({
+ *   test: {
+ *     vars: {},
+ *     assert: [
+ *       { type: 'contains', value: 'Ada' },
+ *       { type: 'word-count', value: 2 },
+ *     ],
+ *   },
+ *   providerResponse: { output: 'Hello Ada' },
+ * });
+ *
+ * console.log(result.pass, result.score);
+ * ```
  *
  * @public
  */
@@ -655,16 +749,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
-}: {
-  assertScoringFunction?: ScoringFunction;
-  latencyMs?: number;
-  prompt?: string;
-  provider?: ApiProvider;
-  providerResponse: ProviderResponse;
-  test: AtomicTestCase;
-  vars?: Record<string, VarValue>;
-  traceId?: string;
-}): Promise<GradingResult> {
+}: RunAssertionsOptions): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
   }

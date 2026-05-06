@@ -39,6 +39,12 @@ export * from './types/index';
 export { isTransformFunction } from './types/transform';
 export { ConfigResolutionError } from './util/config/load';
 
+export type {
+  AssertionInput,
+  AssertionTestContext,
+  RunAssertionOptions,
+  RunAssertionsOptions,
+} from './assertions/index';
 // Extension hook context types for users writing custom extensions
 export type {
   AfterAllExtensionHookContext,

@@ -20,6 +20,8 @@ compatibility types and helpers than we want to present as first-class docs.
 
 - [ApiProvider](interfaces/ApiProvider.md)
 - [Assertion](interfaces/Assertion.md)
+- [AssertionInput](interfaces/AssertionInput.md)
+- [AssertionTestContext](interfaces/AssertionTestContext.md)
 - [AssertionValueFunctionContext](interfaces/AssertionValueFunctionContext.md)
 - [AudioOutput](interfaces/AudioOutput.md)
 - [CallApiContextParams](interfaces/CallApiContextParams.md)
@@ -36,6 +38,8 @@ compatibility types and helpers than we want to present as first-class docs.
 - [PromptFunctionResult](interfaces/PromptFunctionResult.md)
 - [ProviderOptions](interfaces/ProviderOptions.md)
 - [ProviderResponse](interfaces/ProviderResponse.md)
+- [RunAssertionOptions](interfaces/RunAssertionOptions.md)
+- [RunAssertionsOptions](interfaces/RunAssertionsOptions.md)
 - [TransformContext](interfaces/TransformContext.md)
 - [TransformPrompt](interfaces/TransformPrompt.md)
 - [VideoOutput](interfaces/VideoOutput.md)
@@ -43,6 +47,7 @@ compatibility types and helpers than we want to present as first-class docs.
 ## Type Aliases
 
 - [AssertionValueFunction](type-aliases/AssertionValueFunction.md)
+- [AtomicTestCase](type-aliases/AtomicTestCase.md)
 - [EnvOverrides](type-aliases/EnvOverrides.md)
 - [EvaluateTestSuite](type-aliases/EvaluateTestSuite.md)
 - [PromptContent](type-aliases/PromptContent.md)
