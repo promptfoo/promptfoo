@@ -13,6 +13,8 @@ const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(__dirname, '../..');
 const pluginRoot = path.join(repoRoot, 'plugins', 'promptfoo');
 const existingClaudePluginRoot = path.join(repoRoot, 'plugins', 'promptfoo-evals');
+const repoClaudeSkillsRoot = path.join(repoRoot, '.claude', 'skills');
+const repoCodexSkillsRoot = path.join(repoRoot, '.agents', 'skills');
 const evalsSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-evals');
 const providerSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-provider-setup');
 const redteamSetupSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-redteam-setup');
@@ -1911,8 +1913,13 @@ describe('promptfoo Codex plugin package', () => {
       }
     > = {
       'promptfoo-evals': {
-        positives: ['eval configs', 'test cases', 'assertions', 'non-redteam'],
-        negatives: ['Do not use', 'provider connection', 'redteam plugin/strategy setup'],
+        positives: ['non-redteam promptfoo eval suites', 'test cases', 'assertions'],
+        negatives: [
+          'Do not use',
+          'connecting a new target/provider',
+          'smoke-testing an endpoint',
+          'redteam plugin/strategy setup',
+        ],
       },
       'promptfoo-provider-setup': {
         positives: ['providers or redteam targets', 'live HTTP', 'static-code-derived'],
@@ -1978,7 +1985,7 @@ describe('promptfoo Codex plugin package', () => {
 
     expect(docs).toContain('Via Claude Code marketplace');
     expect(docs).toContain('Via Codex plugin bundle');
-    expect(docs).toContain('repo-local Codex usage');
+    expect(docs).toContain('preferred Codex');
     expect(docs).toContain('intentionally no meta selector skill');
     expect(docs).toContain("routes from each skill's");
     expect(docs).toContain('Python providers are first-class');
@@ -2038,6 +2045,47 @@ describe('promptfoo Codex plugin package', () => {
     }
     expect(codexSkill).toContain('If the provider does not work yet, switch to');
     expect(codexReference).toContain('promptfoo-provider-setup');
+  });
+
+  it('keeps the repo-local and published portable eval skill copies byte-for-byte aligned', () => {
+    for (const relativePath of ['SKILL.md', path.join('references', 'cheatsheet.md')]) {
+      const repoLocalFile = readText(
+        path.join(repoClaudeSkillsRoot, 'promptfoo-evals', relativePath),
+      );
+      const publishedFile = readText(
+        path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals', relativePath),
+      );
+
+      expect(repoLocalFile).toBe(publishedFile);
+    }
+  });
+
+  it('keeps every repo-local Claude skill discoverable through canonical SKILL.md casing', () => {
+    const repoLocalSkillDirs = fs
+      .readdirSync(repoClaudeSkillsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    expect(repoLocalSkillDirs).toEqual(
+      expect.arrayContaining(['promptfoo-evals', 'redteam-plugin-development', 'search-params']),
+    );
+
+    for (const skillDir of repoLocalSkillDirs) {
+      const skillRoot = path.join(repoClaudeSkillsRoot, skillDir);
+      const entries = fs.readdirSync(skillRoot);
+      expect(entries).toContain('SKILL.md');
+      expect(entries).not.toContain('skill.md');
+    }
+  });
+
+  it('keeps shared repo-local contributor skills aligned between Claude and Codex', () => {
+    for (const skillDir of ['redteam-plugin-development', 'search-params']) {
+      const claudeSkill = readText(path.join(repoClaudeSkillsRoot, skillDir, 'SKILL.md'));
+      const codexSkill = readText(path.join(repoCodexSkillsRoot, skillDir, 'SKILL.md'));
+
+      expect(codexSkill).toBe(claudeSkill);
+    }
   });
 
   it('keeps every agents/openai.yaml aligned with UI metadata constraints', () => {
@@ -2557,11 +2605,13 @@ describe('promptfoo-evals skill', () => {
     const skill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
 
     expect(skill).toMatch(/^---\nname: promptfoo-evals\n/);
-    expect(skill).toContain('prompts, providers, vars, test cases, assertions');
+    expect(skill).toContain('after the target');
+    expect(skill).toContain('or provider already works');
+    expect(skill).toContain('prompts, vars, test cases, assertions');
     expect(skill).toContain('model-graded rubrics');
-    expect(skill).toContain('non-redteam evaluation suites');
-    expect(skill).toContain('Do not use for initial');
-    expect(skill).toContain('provider connection work');
+    expect(skill).toContain('non-redteam promptfoo eval suites');
+    expect(skill).toContain('connecting a new target/provider');
+    expect(skill).toContain('smoke-testing');
     expect(skill).toContain('redteam plugin/strategy setup');
   });
 

@@ -13,6 +13,10 @@ Skills are local instructions that teach an agent when and how to use a capabili
 
 Promptfoo can answer both questions by running the same tasks against each version side by side. Keep the model, task files, and permissions the same, swap only the `SKILL.md`, and compare the results.
 
+For a bundle with neighboring skills, add one more question:
+
+3. Does the agent avoid the nearby skill when the task belongs somewhere else?
+
 ## Start With One Comparison
 
 In this example, we're comparing two versions of a `review-standards` skill. Each version gets its own fixture directory with the same source file and a different copy of the skill:
@@ -328,3 +332,36 @@ Then use supporting checks where they add value:
 ```
 
 If two versions are close, rerun the eval with repeats and inspect the failures before choosing one. The better skill is the one that holds up across the tasks you care about, not the one that wins a single lucky run.
+
+## Test Routing Boundaries In Bundles
+
+For a bundle, do not test only the happy-path prompt for each skill. Add nearby
+prompts that should route to a sibling instead, then assert both the skill you
+want and the skills you do not want:
+
+```yaml
+tests:
+  - description: Eval authoring stays out of provider setup
+    vars:
+      request: Write a regression eval for this existing provider.
+    assert:
+      - type: skill-used
+        value: promptfoo-evals
+      - type: not-skill-used
+        value: promptfoo-provider-setup
+
+  - description: Provider wiring does not become eval authoring
+    vars:
+      request: Connect this HTTP endpoint and verify one safe smoke call.
+    assert:
+      - type: skill-used
+        value: promptfoo-provider-setup
+      - type: not-skill-used
+        value: promptfoo-evals
+```
+
+The useful bundle eval has three layers:
+
+1. Positive prompts that should trigger each skill.
+2. Near-miss prompts that should trigger a sibling instead.
+3. Output checks that prove the chosen skill changed the work, not just the routing trace.
