@@ -195,10 +195,6 @@ type EnvVars = {
    */
   MCP_VERBOSE?: boolean;
 
-  // Posthog
-  PROMPTFOO_POSTHOG_KEY?: string;
-  PROMPTFOO_POSTHOG_HOST?: string;
-
   //=========================================================================
   // UI configuration
   //=========================================================================

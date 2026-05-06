@@ -12,14 +12,6 @@ vi.mock('@app/components/Navigation', () => {
   };
 });
 
-vi.mock('@app/components/PostHogProvider', () => ({
-  PostHogProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-vi.mock('./PostHogPageViewTracker', () => ({
-  PostHogPageViewTracker: () => <div data-testid="posthog-tracker-mock" />,
-}));
-
 vi.mock('@app/components/UpdateBanner', () => {
   const MockUpdateBanner = () => {
     return <div data-testid="update-banner-mock">UpdateBanner</div>;
@@ -62,10 +54,4 @@ describe('PageShell', () => {
     });
   });
 
-  it('should render PostHog tracker', async () => {
-    renderPageShell();
-    await waitFor(() => {
-      expect(screen.getByTestId('posthog-tracker-mock')).toBeInTheDocument();
-    });
-  });
 });

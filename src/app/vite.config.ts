@@ -173,10 +173,6 @@ export default {
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
-    'import.meta.env.VITE_POSTHOG_KEY': JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
-    'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
-      process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
-    ),
     'import.meta.env.VITE_PUBLIC_BASENAME': JSON.stringify(process.env.VITE_PUBLIC_BASENAME || ''),
   },
 };

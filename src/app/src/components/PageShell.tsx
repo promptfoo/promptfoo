@@ -1,8 +1,6 @@
 import Navigation from '@app/components/Navigation';
-import { PostHogProvider } from '@app/components/PostHogProvider';
 import UpdateBanner from '@app/components/UpdateBanner';
 import { Outlet } from 'react-router-dom';
-import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
 function Layout({ children }: { children: React.ReactNode }) {
   return <div>{children}</div>;
@@ -10,13 +8,10 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 export default function PageShell() {
   return (
-    <PostHogProvider>
-      <Layout>
-        <Navigation />
-        <UpdateBanner />
-        <Outlet />
-        <PostHogPageViewTracker />
-      </Layout>
-    </PostHogProvider>
+    <Layout>
+      <Navigation />
+      <UpdateBanner />
+      <Outlet />
+    </Layout>
   );
 }

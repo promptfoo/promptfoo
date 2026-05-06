@@ -503,7 +503,7 @@ export const CustomPoliciesSection = () => {
       // Remove from suggested policies
       setSuggestedPolicies((prev) => prev.filter((p) => p.id !== policy.id));
 
-      // Log to PostHog
+      // Preserve the shared telemetry call site; this hook is inert unless a sink is added later.
       recordEvent('redteam_policy_dismissed', {
         policy_name: policy.name,
         policy_text: policy.text,
