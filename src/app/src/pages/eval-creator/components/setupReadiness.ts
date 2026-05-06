@@ -15,6 +15,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isProviderMapShape(value: Record<string, unknown>): boolean {
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    return false;
+  }
+
+  return entries.every(([, nestedValue]) => {
+    if (!isRecord(nestedValue)) {
+      return false;
+    }
+
+    return (
+      typeof nestedValue.id === 'string' ||
+      Object.keys(nestedValue).some((nestedKey) => PROVIDER_OPTION_KEYS.has(nestedKey))
+    );
+  });
+}
+
 function isProviderOptionsShape(value: Record<string, unknown>): boolean {
   const keys = Object.keys(value);
   return keys.some((key) => PROVIDER_OPTION_KEYS.has(key));
@@ -36,6 +54,24 @@ export function normalizeProviders(providers: UnifiedConfig['providers']): Provi
 
     if (!isRecord(provider)) {
       return [];
+    }
+
+    if (isProviderMapShape(provider)) {
+      return Object.entries(provider).flatMap(([id, providerOptions]) => {
+        if (!isRecord(providerOptions)) {
+          return [];
+        }
+
+        const normalizedProvider = {
+          ...(providerOptions as ProviderOptions),
+          id:
+            typeof providerOptions.id === 'string' && providerOptions.id.trim() !== ''
+              ? providerOptions.id
+              : id,
+        };
+
+        return hasRunnableProviderId(normalizedProvider) ? [normalizedProvider] : [];
+      });
     }
 
     if (isProviderOptionsShape(provider)) {

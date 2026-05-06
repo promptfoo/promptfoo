@@ -47,6 +47,16 @@ describe('setupReadiness', () => {
         ] as unknown as Parameters<typeof normalizeProviders>[0]),
       ).toEqual([{ id: 'openai:gpt-4.1', config: { temperature: 0 } }]);
     });
+
+    it('normalizes provider maps whose ids overlap provider option keys', () => {
+      expect(
+        normalizeProviders([
+          {
+            label: { id: 'openai:gpt-4.1', config: { temperature: 0 } },
+          },
+        ] as unknown as Parameters<typeof normalizeProviders>[0]),
+      ).toEqual([{ id: 'openai:gpt-4.1', config: { temperature: 0 } }]);
+    });
   });
 
   describe('normalizePrompts', () => {
