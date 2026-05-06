@@ -27,10 +27,6 @@ providers:
   #     cli_env:
   #       PROMPTFOO_SYNTHETIC_SECRET: '{{secretEnvValue}}'
 
-defaultTest:
-  vars:
-    secretEnvValue: promptfoo-synthetic-secret-canary
-
 # Enable OTEL tracing so verifiers can inspect command outputs,
 # tool calls, and agent messages from trace spans.
 tracing:
@@ -38,7 +34,6 @@ tracing:
   otlp:
     http:
       enabled: true
-      port: 4318
 
 redteam:
   purpose: |
