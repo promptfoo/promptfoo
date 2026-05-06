@@ -1,1 +1,1 @@
-export { evaluate } from './evaluate';
+export { evaluate, evaluateWithSource } from './evaluate';

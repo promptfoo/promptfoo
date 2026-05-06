@@ -17,6 +17,11 @@ export interface LayerConfig {
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
 const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
+const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
+  '.js': ['.ts', '.tsx'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts'],
+};
 const BUILTIN_MODULES = new Set(
   builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
 );
@@ -117,8 +122,13 @@ export function resolveRelativeModule(
 
   const importerDir = path.dirname(path.join(repoRoot, importerRelativePath));
   const unresolvedPath = path.resolve(importerDir, specifier);
+  const runtimeExtension = path.extname(unresolvedPath);
+  const runtimeSourceCandidates = (
+    SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION[runtimeExtension] ?? []
+  ).map((extension) => `${unresolvedPath.slice(0, -runtimeExtension.length)}${extension}`);
   const candidates = [
     unresolvedPath,
+    ...runtimeSourceCandidates,
     ...TYPESCRIPT_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
   ];

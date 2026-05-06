@@ -5,17 +5,17 @@ model the internal boundaries that would support a future multi-package split.
 
 ## Current Private Layers
 
-| Layer         | Current roots                                             | Intended role                             |
-| ------------- | --------------------------------------------------------- | ----------------------------------------- |
-| `facade`      | `src/index.ts`                                            | Public compatibility surface              |
-| `contracts`   | `src/types`, `src/validators`                             | Shared serializable contracts and schemas |
-| `core`        | assertions, matchers, prompts, scheduler, test-case logic | Evaluation domain logic                   |
-| `node`        | database, models, config, storage, `src/node`             | Node runtime adapters                     |
-| `providers`   | `src/providers`                                           | Concrete provider implementations         |
-| `redteam`     | `src/redteam`                                             | Red-team workflows                        |
-| `view-server` | `src/server`                                              | Local server and API routes               |
-| `cli`         | `src/main.ts`, `src/commands`                             | Command-line orchestration                |
-| `app`         | `src/app/src`                                             | Browser UI                                |
+| Layer         | Current roots                                                    | Intended role                             |
+| ------------- | ---------------------------------------------------------------- | ----------------------------------------- |
+| `facade`      | `src/index.ts`                                                   | Public compatibility surface              |
+| `contracts`   | `src/types`, `src/validators`                                    | Shared serializable contracts and schemas |
+| `core`        | assertions, matchers, prompts, scheduler, test-case logic        | Evaluation domain logic                   |
+| `node`        | database, models, config, storage, `src/evaluate.ts`, `src/node` | Node runtime adapters                     |
+| `providers`   | `src/providers`                                                  | Concrete provider implementations         |
+| `redteam`     | `src/redteam`                                                    | Red-team workflows                        |
+| `view-server` | `src/server`                                                     | Local server and API routes               |
+| `cli`         | `src/main.ts`, `src/commands`                                    | Command-line orchestration                |
+| `app`         | `src/app/src`                                                    | Browser UI                                |
 
 The source of truth for these temporary private layers is
 `architecture/layers.json`.

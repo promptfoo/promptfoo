@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractModuleSpecifiers } from '../../scripts/architectureUtils';
+import { extractModuleSpecifiers, resolveRelativeModule } from '../../scripts/architectureUtils';
 
 describe('extractModuleSpecifiers', () => {
   it('collects static ESM and CommonJS module specifiers', () => {
@@ -19,5 +19,13 @@ describe('extractModuleSpecifiers', () => {
       'cjs-require',
       'cjs-resolve',
     ]);
+  });
+});
+
+describe('resolveRelativeModule', () => {
+  it('maps runtime .js specifiers back to TypeScript source files', () => {
+    expect(
+      resolveRelativeModule(process.cwd(), 'src/server/routes/eval.ts', '../../index.js'),
+    ).toBe('src/index.ts');
   });
 });
