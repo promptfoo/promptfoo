@@ -40,6 +40,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
   private session?: Session;
+  private sessionInitialization?: Promise<Session>;
   private sharedSessionQueue: Promise<void> = Promise.resolve();
 
   constructor(
@@ -399,11 +400,19 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     }
 
     if (!this.session) {
-      const session = await loadSessionDefinition(this.agentConfig.session, context);
-      if (!session) {
-        throw new Error('Failed to initialize configured session');
-      }
-      this.session = session;
+      this.sessionInitialization ??= loadSessionDefinition(this.agentConfig.session, context)
+        .then((session) => {
+          if (!session) {
+            throw new Error('Failed to initialize configured session');
+          }
+          this.session = session;
+          return session;
+        })
+        .catch((error) => {
+          this.sessionInitialization = undefined;
+          throw error;
+        });
+      await this.sessionInitialization;
     }
 
     return this.session;

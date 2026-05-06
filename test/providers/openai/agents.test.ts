@@ -683,6 +683,26 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun.mock.calls[0][2].session).toBe(mockRun.mock.calls[1][2].session);
   });
 
+  it('reuses one configured session when the first calls start concurrently', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: {
+          type: 'memory',
+          sessionId: 'shared-session',
+        },
+      },
+    });
+
+    await Promise.all([provider.callApi('first'), provider.callApi('second')]);
+
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    expect(mockRun.mock.calls[0][2].session).toBe(mockRun.mock.calls[1][2].session);
+  });
+
   it('loads file-exported executable run options', async () => {
     const sessionInputCallback = vi.fn();
     mockImportModule.mockResolvedValue({
