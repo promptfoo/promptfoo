@@ -6,9 +6,18 @@
 
 # Interface: EvaluateTableHead
 
-Defined in: [types/index.ts:505](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L505)
+Defined in: [types/index.ts:558](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L558)
 
 Header metadata for an eval table.
+
+## Example
+
+```ts
+const head: EvaluateTableHead = {
+  prompts: [],
+  vars: ['name'],
+};
+```
 
 ## Properties
 
@@ -16,7 +25,7 @@ Header metadata for an eval table.
 
 > **prompts**: `object`[]
 
-Defined in: [types/index.ts:507](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L507)
+Defined in: [types/index.ts:560](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L560)
 
 Completed prompts rendered as provider columns.
 
@@ -226,6 +235,6 @@ in > 0.59.0. Use `label` instead.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:509](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L509)
+Defined in: [types/index.ts:562](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L562)
 
 Variable names rendered before provider columns.

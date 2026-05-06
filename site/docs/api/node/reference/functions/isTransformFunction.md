@@ -8,7 +8,7 @@
 
 > **isTransformFunction**(`value`): `value is TransformFunction<unknown, unknown>`
 
-Defined in: [types/transform.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L48)
+Defined in: [types/transform.ts:86](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L86)
 
 Runtime type guard for `TransformFunction` values.
 

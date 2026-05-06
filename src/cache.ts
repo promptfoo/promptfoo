@@ -259,6 +259,16 @@ function getEffectiveCacheEnabled() {
 /**
  * Metadata returned by `fetchWithCache()`.
  *
+ * @example
+ * ```ts
+ * const result: FetchWithCacheResult<{ ok: boolean }> = {
+ *   data: { ok: true },
+ *   cached: false,
+ *   status: 200,
+ *   statusText: 'OK',
+ * };
+ * ```
+ *
  * @public
  */
 export type FetchWithCacheResult<T> = {

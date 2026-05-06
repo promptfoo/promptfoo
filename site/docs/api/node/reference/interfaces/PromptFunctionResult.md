@@ -6,7 +6,7 @@
 
 # Interface: PromptFunctionResult
 
-Defined in: [types/prompts.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L50)
+Defined in: [types/prompts.ts:75](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L75)
 
 Result type for prompt functions.
 
@@ -16,13 +16,22 @@ Prompt functions can return:
 - An object/array (JSON stringified and used as the prompt)
 - A PromptFunctionResult object with prompt and optional config
 
+## Example
+
+```ts
+const result: PromptFunctionResult = {
+  prompt: 'Summarize this article.',
+  config: { temperature: 0.2 },
+};
+```
+
 ## Properties
 
 ### config?
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/prompts.ts:54](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L54)
+Defined in: [types/prompts.ts:79](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L79)
 
 Provider config overrides to merge for this rendered prompt.
 
@@ -32,6 +41,6 @@ Provider config overrides to merge for this rendered prompt.
 
 > **prompt**: [`PromptContent`](../type-aliases/PromptContent.md)
 
-Defined in: [types/prompts.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L52)
+Defined in: [types/prompts.ts:77](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L77)
 
 Prompt content to send to the provider.

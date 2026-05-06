@@ -6,12 +6,21 @@
 
 # Interface: AssertionInput
 
-Defined in: [assertions/index.ts:373](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L373)
+Defined in: [assertions/index.ts:381](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L381)
 
 Assertion input accepted by `runAssertion()`.
 
 This wrapper keeps the low-level assertion API docs readable while preserving
 the full assertion shape used by eval configuration.
+
+## Example
+
+```ts
+const assertion: AssertionInput = {
+  type: 'contains',
+  value: 'Ada',
+};
+```
 
 ## Extends
 
@@ -23,7 +32,9 @@ the full assertion shape used by eval configuration.
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/index.ts:768](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L768)
+Defined in: [types/index.ts:839](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L839)
+
+Arbitrary custom config exposed to assertion callbacks through `context.config`.
 
 #### Inherited from
 
@@ -35,7 +46,9 @@ Defined in: [types/index.ts:768](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **contextTransform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/index.ts:789](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L789)
+Defined in: [types/index.ts:860](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L860)
+
+Extract assertion-specific context from output before grading.
 
 #### Inherited from
 
@@ -47,7 +60,9 @@ Defined in: [types/index.ts:789](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **metric?**: `string`
 
-Defined in: [types/index.ts:783](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L783)
+Defined in: [types/index.ts:854](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L854)
+
+Optional metric name used when the assertion contributes a named score.
 
 #### Inherited from
 
@@ -59,7 +74,9 @@ Defined in: [types/index.ts:783](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **provider?**: `any`
 
-Defined in: [types/index.ts:777](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L777)
+Defined in: [types/index.ts:848](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L848)
+
+Provider override used by model-graded assertions that need one.
 
 #### Inherited from
 
@@ -71,7 +88,9 @@ Defined in: [types/index.ts:777](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **rubricPrompt?**: `string` \| `string`[] \| `object`[]
 
-Defined in: [types/index.ts:780](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L780)
+Defined in: [types/index.ts:851](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L851)
+
+Rubric override used by model-graded assertions.
 
 #### Inherited from
 
@@ -83,7 +102,9 @@ Defined in: [types/index.ts:780](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **threshold?**: `number`
 
-Defined in: [types/index.ts:771](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L771)
+Defined in: [types/index.ts:842](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L842)
+
+Minimum score required by threshold-aware assertions such as `similar`.
 
 #### Inherited from
 
@@ -95,7 +116,9 @@ Defined in: [types/index.ts:771](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/index.ts:786](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L786)
+Defined in: [types/index.ts:857](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L857)
+
+Transform provider output before this assertion runs.
 
 #### Inherited from
 
@@ -107,7 +130,9 @@ Defined in: [types/index.ts:786](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **type**: `"regex"` \| `"moderation"` \| `` `promptfoo:redteam:${string}` `` \| `"cost"` \| `"factuality"` \| `"answer-relevance"` \| `"bleu"` \| `"classifier"` \| `"contains"` \| `"contains-all"` \| `"contains-any"` \| `"contains-html"` \| `"contains-json"` \| `"contains-sql"` \| `"contains-xml"` \| `"context-faithfulness"` \| `"context-recall"` \| `"context-relevance"` \| `"conversation-relevance"` \| `"equals"` \| `"finish-reason"` \| `"g-eval"` \| `"gleu"` \| `"guardrails"` \| `"icontains"` \| `"icontains-all"` \| `"icontains-any"` \| `"is-html"` \| `"is-json"` \| `"is-refusal"` \| `"is-sql"` \| `"is-valid-function-call"` \| `"is-valid-openai-function-call"` \| `"is-valid-openai-tools-call"` \| `"is-xml"` \| `"javascript"` \| `"latency"` \| `"levenshtein"` \| `"llm-rubric"` \| `"pi"` \| `"meteor"` \| `"model-graded-closedqa"` \| `"model-graded-factuality"` \| `"perplexity"` \| `"perplexity-score"` \| `"python"` \| `"rouge-n"` \| `"ruby"` \| `"similar"` \| `"similar:cosine"` \| `"similar:dot"` \| `"similar:euclidean"` \| `"starts-with"` \| `"tool-call-f1"` \| `"skill-used"` \| `"trajectory:goal-success"` \| `"trajectory:tool-args-match"` \| `"trajectory:step-count"` \| `"trajectory:tool-sequence"` \| `"trajectory:tool-used"` \| `"trace-error-spans"` \| `"trace-span-count"` \| `"trace-span-duration"` \| `"search-rubric"` \| `"webhook"` \| `"word-count"` \| `"not-regex"` \| `"not-moderation"` \| `"not-cost"` \| `"not-factuality"` \| `"not-answer-relevance"` \| `"not-bleu"` \| `"not-classifier"` \| `"not-contains"` \| `"not-contains-all"` \| `"not-contains-any"` \| `"not-contains-html"` \| `"not-contains-json"` \| `"not-contains-sql"` \| `"not-contains-xml"` \| `"not-context-faithfulness"` \| `"not-context-recall"` \| `"not-context-relevance"` \| `"not-conversation-relevance"` \| `"not-equals"` \| `"not-finish-reason"` \| `"not-g-eval"` \| `"not-gleu"` \| `"not-guardrails"` \| `"not-icontains"` \| `"not-icontains-all"` \| `"not-icontains-any"` \| `"not-is-html"` \| `"not-is-json"` \| `"not-is-refusal"` \| `"not-is-sql"` \| `"not-is-valid-function-call"` \| `"not-is-valid-openai-function-call"` \| `"not-is-valid-openai-tools-call"` \| `"not-is-xml"` \| `"not-javascript"` \| `"not-latency"` \| `"not-levenshtein"` \| `"not-llm-rubric"` \| `"not-pi"` \| `"not-meteor"` \| `"not-model-graded-closedqa"` \| `"not-model-graded-factuality"` \| `"not-perplexity"` \| `"not-perplexity-score"` \| `"not-python"` \| `"not-rouge-n"` \| `"not-ruby"` \| `"not-similar"` \| `"not-similar:cosine"` \| `"not-similar:dot"` \| `"not-similar:euclidean"` \| `"not-starts-with"` \| `"not-tool-call-f1"` \| `"not-skill-used"` \| `"not-trajectory:goal-success"` \| `"not-trajectory:tool-args-match"` \| `"not-trajectory:step-count"` \| `"not-trajectory:tool-sequence"` \| `"not-trajectory:tool-used"` \| `"not-trace-error-spans"` \| `"not-trace-span-count"` \| `"not-trace-span-duration"` \| `"not-search-rubric"` \| `"not-webhook"` \| `"not-word-count"` \| `"select-best"` \| `"human"` \| `"max-score"` = `AssertionTypeSchema`
 
-Defined in: [types/index.ts:761](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L761)
+Defined in: [types/index.ts:833](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L833)
+
+Assertion kind to run, such as `contains`, `javascript`, or `llm-rubric`.
 
 #### Inherited from
 
@@ -119,7 +144,9 @@ Defined in: [types/index.ts:761](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **value?**: `AssertionValue`
 
-Defined in: [types/index.ts:764](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L764)
+Defined in: [types/index.ts:836](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L836)
+
+Expected value or callback consumed by assertion types that need one.
 
 #### Inherited from
 
@@ -131,7 +158,9 @@ Defined in: [types/index.ts:764](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **weight?**: `number`
 
-Defined in: [types/index.ts:774](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L774)
+Defined in: [types/index.ts:845](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L845)
+
+Weight of this assertion relative to the rest of the test case. Defaults to `1`.
 
 #### Inherited from
 

@@ -6,9 +6,19 @@
 
 # Interface: GradingResult
 
-Defined in: [types/index.ts:573](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L573)
+Defined in: [types/index.ts:643](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L643)
 
 Result returned by assertions and matcher helpers.
+
+## Example
+
+```ts
+const result: GradingResult = {
+  pass: true,
+  score: 1,
+  reason: 'Matched expected text',
+};
+```
 
 ## Properties
 
@@ -16,7 +26,7 @@ Result returned by assertions and matcher helpers.
 
 > `optional` **assertion?**: `object`
 
-Defined in: [types/index.ts:596](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L596)
+Defined in: [types/index.ts:666](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L666)
 
 Assertion that produced this result, when retained by the caller.
 
@@ -24,41 +34,61 @@ Assertion that produced this result, when retained by the caller.
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
+Arbitrary custom config exposed to assertion callbacks through `context.config`.
+
 #### contextTransform?
 
 > `optional` **contextTransform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
+
+Extract assertion-specific context from output before grading.
 
 #### metric?
 
 > `optional` **metric?**: `string`
 
+Optional metric name used when the assertion contributes a named score.
+
 #### provider?
 
 > `optional` **provider?**: `any`
+
+Provider override used by model-graded assertions that need one.
 
 #### rubricPrompt?
 
 > `optional` **rubricPrompt?**: `string` \| `string`[] \| `object`[]
 
+Rubric override used by model-graded assertions.
+
 #### threshold?
 
 > `optional` **threshold?**: `number`
+
+Minimum score required by threshold-aware assertions such as `similar`.
 
 #### transform?
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
+Transform provider output before this assertion runs.
+
 #### type
 
 > **type**: `"regex"` \| `"moderation"` \| `` `promptfoo:redteam:${string}` `` \| `"cost"` \| `"factuality"` \| `"answer-relevance"` \| `"bleu"` \| `"classifier"` \| `"contains"` \| `"contains-all"` \| `"contains-any"` \| `"contains-html"` \| `"contains-json"` \| `"contains-sql"` \| `"contains-xml"` \| `"context-faithfulness"` \| `"context-recall"` \| `"context-relevance"` \| `"conversation-relevance"` \| `"equals"` \| `"finish-reason"` \| `"g-eval"` \| `"gleu"` \| `"guardrails"` \| `"icontains"` \| `"icontains-all"` \| `"icontains-any"` \| `"is-html"` \| `"is-json"` \| `"is-refusal"` \| `"is-sql"` \| `"is-valid-function-call"` \| `"is-valid-openai-function-call"` \| `"is-valid-openai-tools-call"` \| `"is-xml"` \| `"javascript"` \| `"latency"` \| `"levenshtein"` \| `"llm-rubric"` \| `"pi"` \| `"meteor"` \| `"model-graded-closedqa"` \| `"model-graded-factuality"` \| `"perplexity"` \| `"perplexity-score"` \| `"python"` \| `"rouge-n"` \| `"ruby"` \| `"similar"` \| `"similar:cosine"` \| `"similar:dot"` \| `"similar:euclidean"` \| `"starts-with"` \| `"tool-call-f1"` \| `"skill-used"` \| `"trajectory:goal-success"` \| `"trajectory:tool-args-match"` \| `"trajectory:step-count"` \| `"trajectory:tool-sequence"` \| `"trajectory:tool-used"` \| `"trace-error-spans"` \| `"trace-span-count"` \| `"trace-span-duration"` \| `"search-rubric"` \| `"webhook"` \| `"word-count"` \| `"not-regex"` \| `"not-moderation"` \| `"not-cost"` \| `"not-factuality"` \| `"not-answer-relevance"` \| `"not-bleu"` \| `"not-classifier"` \| `"not-contains"` \| `"not-contains-all"` \| `"not-contains-any"` \| `"not-contains-html"` \| `"not-contains-json"` \| `"not-contains-sql"` \| `"not-contains-xml"` \| `"not-context-faithfulness"` \| `"not-context-recall"` \| `"not-context-relevance"` \| `"not-conversation-relevance"` \| `"not-equals"` \| `"not-finish-reason"` \| `"not-g-eval"` \| `"not-gleu"` \| `"not-guardrails"` \| `"not-icontains"` \| `"not-icontains-all"` \| `"not-icontains-any"` \| `"not-is-html"` \| `"not-is-json"` \| `"not-is-refusal"` \| `"not-is-sql"` \| `"not-is-valid-function-call"` \| `"not-is-valid-openai-function-call"` \| `"not-is-valid-openai-tools-call"` \| `"not-is-xml"` \| `"not-javascript"` \| `"not-latency"` \| `"not-levenshtein"` \| `"not-llm-rubric"` \| `"not-pi"` \| `"not-meteor"` \| `"not-model-graded-closedqa"` \| `"not-model-graded-factuality"` \| `"not-perplexity"` \| `"not-perplexity-score"` \| `"not-python"` \| `"not-rouge-n"` \| `"not-ruby"` \| `"not-similar"` \| `"not-similar:cosine"` \| `"not-similar:dot"` \| `"not-similar:euclidean"` \| `"not-starts-with"` \| `"not-tool-call-f1"` \| `"not-skill-used"` \| `"not-trajectory:goal-success"` \| `"not-trajectory:tool-args-match"` \| `"not-trajectory:step-count"` \| `"not-trajectory:tool-sequence"` \| `"not-trajectory:tool-used"` \| `"not-trace-error-spans"` \| `"not-trace-span-count"` \| `"not-trace-span-duration"` \| `"not-search-rubric"` \| `"not-webhook"` \| `"not-word-count"` \| `"select-best"` \| `"human"` \| `"max-score"` = `AssertionTypeSchema`
+
+Assertion kind to run, such as `contains`, `javascript`, or `llm-rubric`.
 
 #### value?
 
 > `optional` **value?**: `AssertionValue`
 
+Expected value or callback consumed by assertion types that need one.
+
 #### weight?
 
 > `optional` **weight?**: `number`
+
+Weight of this assertion relative to the rest of the test case. Defaults to `1`.
 
 ---
 
@@ -66,7 +96,7 @@ Assertion that produced this result, when retained by the caller.
 
 > `optional` **comment?**: `string`
 
-Defined in: [types/index.ts:599](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L599)
+Defined in: [types/index.ts:669](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L669)
 
 Optional user-authored comment attached to the result.
 
@@ -76,7 +106,7 @@ Optional user-authored comment attached to the result.
 
 > `optional` **componentResults?**: `GradingResult`[]
 
-Defined in: [types/index.ts:593](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L593)
+Defined in: [types/index.ts:663](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L663)
 
 Component results for compound assertions such as assertion sets.
 
@@ -86,7 +116,7 @@ Component results for compound assertions such as assertion sets.
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/index.ts:605](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L605)
+Defined in: [types/index.ts:675](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L675)
 
 Additional assertion-specific metadata.
 
@@ -98,33 +128,51 @@ Additional assertion-specific metadata.
 
 > `optional` **context?**: `string` \| `string`[]
 
+Context value used by context-related assertions.
+
 #### contextUnits?
 
 > `optional` **contextUnits?**: `string`[]
+
+Normalized context fragments used by context-related assertions.
 
 #### graderError?
 
 > `optional` **graderError?**: `true`
 
+Set when a grader transport or parse failure prevented a real eval.
+Inverse assertions must not flip this into a pass; the field is only
+meaningful when present.
+
 #### graderOutputs?
 
 > `optional` **graderOutputs?**: `Record`\<`string`, `string`\>
+
+Raw textual responses returned by one or more LLM grader phases.
 
 #### pluginId?
 
 > `optional` **pluginId?**: `string`
 
+Red-team plugin id associated with the result, when applicable.
+
 #### renderedAssertionValue?
 
 > `optional` **renderedAssertionValue?**: `string`
+
+Rendered assertion value after variable substitution.
 
 #### renderedGradingPrompt?
 
 > `optional` **renderedGradingPrompt?**: `string`
 
+Full prompt sent to the grading LLM, retained for debugging.
+
 #### strategyId?
 
 > `optional` **strategyId?**: `string`
+
+Red-team strategy id associated with the result, when applicable.
 
 ---
 
@@ -132,7 +180,7 @@ Additional assertion-specific metadata.
 
 > `optional` **namedScores?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:584](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L584)
+Defined in: [types/index.ts:654](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L654)
 
 Map of named metric values emitted by the assertion.
 
@@ -142,7 +190,7 @@ Map of named metric values emitted by the assertion.
 
 > `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:587](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L587)
+Defined in: [types/index.ts:657](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L657)
 
 Total weight contributing to each named score.
 
@@ -152,7 +200,7 @@ Total weight contributing to each named score.
 
 > **pass**: `boolean`
 
-Defined in: [types/index.ts:575](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L575)
+Defined in: [types/index.ts:645](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L645)
 
 Whether the test passed or failed.
 
@@ -162,7 +210,7 @@ Whether the test passed or failed.
 
 > **reason**: `string`
 
-Defined in: [types/index.ts:581](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L581)
+Defined in: [types/index.ts:651](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L651)
 
 Plain-text explanation suitable for logs and reports.
 
@@ -172,7 +220,7 @@ Plain-text explanation suitable for logs and reports.
 
 > **score**: `number`
 
-Defined in: [types/index.ts:578](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L578)
+Defined in: [types/index.ts:648](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L648)
 
 Test score, typically between 0 and 1.
 
@@ -182,7 +230,7 @@ Test score, typically between 0 and 1.
 
 > `optional` **suggestions?**: `ResultSuggestion`[]
 
-Defined in: [types/index.ts:602](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L602)
+Defined in: [types/index.ts:672](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L672)
 
 Follow-up suggestions produced by some graders.
 
@@ -192,7 +240,7 @@ Follow-up suggestions produced by some graders.
 
 > `optional` **tokensUsed?**: `object`
 
-Defined in: [types/index.ts:590](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L590)
+Defined in: [types/index.ts:660](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L660)
 
 Token usage attributed to the assertion or grader.
 

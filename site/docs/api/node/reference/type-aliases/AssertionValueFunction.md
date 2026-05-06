@@ -8,7 +8,7 @@
 
 > **AssertionValueFunction** = (`output`, `context`) => `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>
 
-Defined in: [types/index.ts:848](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L848)
+Defined in: [types/index.ts:940](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L940)
 
 Function form accepted by JavaScript assertions.
 
@@ -21,9 +21,13 @@ need to provide a custom score or reason.
 
 `string`
 
+Provider output after any assertion-local transform.
+
 ### context
 
 [`AssertionValueFunctionContext`](../interfaces/AssertionValueFunctionContext.md)
+
+Prompt, vars, provider, and trace context for the current result.
 
 ## Returns
 

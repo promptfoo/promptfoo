@@ -6,11 +6,21 @@
 
 # Interface: TransformContext
 
-Defined in: [types/transform.ts:6](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L6)
+Defined in: [types/transform.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L17)
 
 Metadata supplied to every transform invocation. Known fields are typed;
 the open index signature preserves extensibility for plugins that attach
 their own keys at runtime.
+
+## Example
+
+```ts
+const context: TransformContext = {
+  vars: { user: 'Ada' },
+  prompt: { label: 'summary' },
+  metadata: { source: 'fixture' },
+};
+```
 
 ## Indexable
 
@@ -22,7 +32,7 @@ their own keys at runtime.
 
 > `optional` **metadata?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [types/transform.ts:12](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L12)
+Defined in: [types/transform.ts:23](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L23)
 
 Additional runtime metadata passed through the pipeline.
 
@@ -32,7 +42,7 @@ Additional runtime metadata passed through the pipeline.
 
 > `optional` **prompt?**: `Record`\<`string`, `unknown`\> \| [`TransformPrompt`](TransformPrompt.md)
 
-Defined in: [types/transform.ts:10](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L10)
+Defined in: [types/transform.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L21)
 
 Prompt metadata associated with the transform call site.
 
@@ -42,7 +52,7 @@ Prompt metadata associated with the transform call site.
 
 > `optional` **uuid?**: `string`
 
-Defined in: [types/transform.ts:14](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L14)
+Defined in: [types/transform.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L25)
 
 Result identifier associated with the transform invocation, when available.
 
@@ -52,6 +62,6 @@ Result identifier associated with the transform invocation, when available.
 
 > `optional` **vars?**: `Record`\<`string`, `unknown`\>
 
-Defined in: [types/transform.ts:8](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L8)
+Defined in: [types/transform.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L19)
 
 Variables available at the transform call site.

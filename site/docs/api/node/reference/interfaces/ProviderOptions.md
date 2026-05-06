@@ -6,9 +6,19 @@
 
 # Interface: ProviderOptions
 
-Defined in: [types/providers.ts:85](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L85)
+Defined in: [types/providers.ts:109](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L109)
 
 Declarative provider configuration accepted by provider-loading APIs.
+
+## Example
+
+```ts
+const provider: ProviderOptions = {
+  id: 'openai:chat:gpt-5.5',
+  label: 'candidate',
+  config: { temperature: 0.2 },
+};
+```
 
 ## Properties
 
@@ -16,7 +26,7 @@ Declarative provider configuration accepted by provider-loading APIs.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L98)
+Defined in: [types/providers.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L122)
 
 Provider-specific configuration passed to the provider factory. Each
 built-in provider documents its own config shape; for custom providers
@@ -30,7 +40,7 @@ the provider implementation.
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:104](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L104)
+Defined in: [types/providers.ts:128](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L128)
 
 Delay in milliseconds before provider calls.
 
@@ -40,7 +50,7 @@ Delay in milliseconds before provider calls.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/providers.ts:106](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L106)
+Defined in: [types/providers.ts:130](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L130)
 
 Environment overrides available while loading and calling the provider.
 
@@ -50,7 +60,7 @@ Environment overrides available while loading and calling the provider.
 
 > `optional` **id?**: `string`
 
-Defined in: [types/providers.ts:87](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L87)
+Defined in: [types/providers.ts:111](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L111)
 
 Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
@@ -60,7 +70,7 @@ Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:108](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L108)
+Defined in: [types/providers.ts:132](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L132)
 
 Declared named inputs accepted by the provider.
 
@@ -70,7 +80,7 @@ Declared named inputs accepted by the provider.
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:89](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L89)
+Defined in: [types/providers.ts:113](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L113)
 
 Human-readable label used in reports and provider maps.
 
@@ -80,7 +90,7 @@ Human-readable label used in reports and provider maps.
 
 > `optional` **prompts?**: `string`[]
 
-Defined in: [types/providers.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L100)
+Defined in: [types/providers.ts:124](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L124)
 
 Restrict this provider to named prompts.
 
@@ -90,6 +100,6 @@ Restrict this provider to named prompts.
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L102)
+Defined in: [types/providers.ts:126](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L126)
 
 Transform provider output before assertions run.

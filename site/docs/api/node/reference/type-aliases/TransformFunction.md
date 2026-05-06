@@ -8,7 +8,7 @@
 
 > **TransformFunction**\<`TIn`, `TOut`\> = (`output`, `context`) => `TOut` \| `Promise`\<`TOut`\>
 
-Defined in: [types/transform.ts:38](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L38)
+Defined in: [types/transform.ts:76](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L76)
 
 A function that transforms output or vars at various stages of the evaluation pipeline.
 Function-valued transforms are only reachable via the Node.js package API; YAML configs
@@ -34,10 +34,20 @@ Return type; may be wrapped in a Promise.
 
 `TIn`
 
+Value being transformed at the current pipeline stage.
+
 ### context
 
 [`TransformContext`](../interfaces/TransformContext.md)
 
+Vars, prompt metadata, and runtime metadata for the transform.
+
 ## Returns
 
 `TOut` \| `Promise`\<`TOut`\>
+
+## Example
+
+```ts
+const uppercase: TransformFunction<string, string> = (output) => output.toUpperCase();
+```

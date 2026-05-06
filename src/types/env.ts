@@ -135,6 +135,14 @@ export const ProviderEnvOverridesSchema = z.object({
  * Allows arbitrary environment variables for template rendering (for example,
  * `{{ env.MY_CUSTOM_VAR }}`) while preserving known provider keys.
  *
+ * @example
+ * ```ts
+ * const env: EnvOverrides = {
+ *   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+ *   MY_CUSTOM_VAR: 'preview',
+ * };
+ * ```
+ *
  * @public
  */
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &

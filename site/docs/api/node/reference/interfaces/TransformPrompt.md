@@ -6,9 +6,22 @@
 
 # Interface: TransformPrompt
 
-Defined in: [types/transform.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L19)
+Defined in: [types/transform.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L46)
 
-Conventional shape for `TransformContext.prompt`. Callers may pass additional fields.
+Conventional shape for `TransformContext.prompt`.
+
+Callers may pass additional fields, but these are the prompt fields that
+built-in transforms and docs rely on.
+
+## Example
+
+```ts
+const prompt: TransformPrompt = {
+  id: 'summary',
+  label: 'Summary prompt',
+  raw: 'Summarize {{article}}',
+};
+```
 
 ## Properties
 
@@ -16,7 +29,7 @@ Conventional shape for `TransformContext.prompt`. Callers may pass additional fi
 
 > `optional` **display?**: `string`
 
-Defined in: [types/transform.ts:27](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L27)
+Defined in: [types/transform.ts:54](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L54)
 
 Display-friendly prompt text when it differs from `raw`.
 
@@ -26,7 +39,7 @@ Display-friendly prompt text when it differs from `raw`.
 
 > `optional` **id?**: `string`
 
-Defined in: [types/transform.ts:23](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L23)
+Defined in: [types/transform.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L50)
 
 Stable prompt identifier.
 
@@ -36,7 +49,7 @@ Stable prompt identifier.
 
 > `optional` **label?**: `string`
 
-Defined in: [types/transform.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L21)
+Defined in: [types/transform.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L48)
 
 Human-readable prompt label.
 
@@ -46,6 +59,6 @@ Human-readable prompt label.
 
 > `optional` **raw?**: `string`
 
-Defined in: [types/transform.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L25)
+Defined in: [types/transform.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/types/transform.ts#L52)
 
 Raw prompt text before display transforms.

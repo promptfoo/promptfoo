@@ -6,9 +6,19 @@
 
 # Interface: EvaluateOptions
 
-Defined in: [types/index.ts:339](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L339)
+Defined in: [types/index.ts:358](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L358)
 
 Runtime-only options accepted by `evaluate()`.
+
+## Example
+
+```ts
+const options: EvaluateOptions = {
+  cache: false,
+  maxConcurrency: 2,
+  timeoutMs: 30_000,
+};
+```
 
 ## Properties
 
@@ -16,7 +26,7 @@ Runtime-only options accepted by `evaluate()`.
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: [types/index.ts:343](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L343)
+Defined in: [types/index.ts:362](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L362)
 
 Signal used to cancel the eval and pass cancellation through to providers.
 
@@ -46,7 +56,7 @@ Delay in milliseconds between provider calls.
 
 > `optional` **filterRange?**: `string` = `FilterRangeSchema`
 
-Defined in: [types/index.ts:331](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L331)
+Defined in: [types/index.ts:341](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L341)
 
 Zero-based test index range in start:end format (end exclusive).
 Persisted on the eval record so resume runs reproduce the original slice.
@@ -57,7 +67,10 @@ Persisted on the eval record so resume runs reproduce the original slice.
 
 > `optional` **generateSuggestions?**: `boolean`
 
-Defined in: [types/index.ts:272](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L272)
+Defined in: [types/index.ts:276](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L276)
+
+Whether promptfoo should generate follow-up prompt improvement suggestions
+after the eval completes.
 
 ---
 
@@ -65,7 +78,7 @@ Defined in: [types/index.ts:272](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **interactiveProviders?**: `boolean`
 
-Defined in: [types/index.ts:279](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L279)
+Defined in: [types/index.ts:286](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L286)
 
 #### Deprecated
 
@@ -85,7 +98,7 @@ mldangelo
 
 > `optional` **isRedteam?**: `boolean`
 
-Defined in: [types/index.ts:321](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L321)
+Defined in: [types/index.ts:331](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L331)
 
 Marks the eval as a red team run for downstream behavior and reporting.
 
@@ -95,7 +108,7 @@ Marks the eval as a red team run for downstream behavior and reporting.
 
 > `optional` **maxConcurrency?**: `number`
 
-Defined in: [types/index.ts:283](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L283)
+Defined in: [types/index.ts:290](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L290)
 
 Maximum number of provider calls to run concurrently.
 
@@ -105,7 +118,7 @@ Maximum number of provider calls to run concurrently.
 
 > `optional` **maxEvalTimeMs?**: `number`
 
-Defined in: [types/index.ts:317](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L317)
+Defined in: [types/index.ts:327](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L327)
 
 Maximum total runtime in milliseconds for the entire evaluation process.
 When reached, all remaining tests are marked as errors and the evaluation ends.
@@ -117,9 +130,12 @@ Default is 0 (no limit).
 
 > `optional` **progressCallback?**: (`completed`, `total`, `index`, `evalStep`, `metrics`) => `void`
 
-Defined in: [types/index.ts:287](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L287)
+Defined in: [types/index.ts:297](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L297)
 
 Callback invoked as rows finish during evaluation.
+
+Arguments are completed-row count, total-row count, zero-based row index,
+the current eval step, and aggregate metrics so far.
 
 #### Parameters
 
@@ -311,7 +327,7 @@ Callback invoked as rows finish during evaluation.
 
 > `optional` **repeat?**: `number`
 
-Defined in: [types/index.ts:301](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L301)
+Defined in: [types/index.ts:311](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L311)
 
 Number of times to repeat each test case.
 
@@ -321,7 +337,7 @@ Number of times to repeat each test case.
 
 > `optional` **showProgressBar?**: `boolean`
 
-Defined in: [types/index.ts:305](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L305)
+Defined in: [types/index.ts:315](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L315)
 
 Whether CLI-oriented callers should render a progress bar.
 
@@ -331,7 +347,7 @@ Whether CLI-oriented callers should render a progress bar.
 
 > `optional` **silent?**: `boolean`
 
-Defined in: [types/index.ts:326](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L326)
+Defined in: [types/index.ts:336](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L336)
 
 When true, suppresses informational output like "Starting evaluation" messages.
 Useful for internal evaluations like provider validation.
@@ -342,7 +358,9 @@ Useful for internal evaluations like provider validation.
 
 > `optional` **suggestionsCount?**: `number`
 
-Defined in: [types/index.ts:273](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L273)
+Defined in: [types/index.ts:280](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L280)
+
+Maximum number of prompt improvement suggestions to generate.
 
 ---
 
@@ -350,7 +368,7 @@ Defined in: [types/index.ts:273](https://github.com/promptfoo/promptfoo/blob/mai
 
 > `optional` **timeoutMs?**: `number`
 
-Defined in: [types/index.ts:311](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L311)
+Defined in: [types/index.ts:321](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L321)
 
 Timeout in milliseconds for each individual test case/provider API call.
 When reached, that specific test is marked as an error.

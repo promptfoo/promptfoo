@@ -8,7 +8,7 @@
 
 > **disableCache**(): `void`
 
-Defined in: [cache.ts:681](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L681)
+Defined in: [cache.ts:691](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L691)
 
 Disable the shared promptfoo cache for future calls.
 

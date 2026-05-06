@@ -2,6 +2,17 @@
  * Metadata supplied to every transform invocation. Known fields are typed;
  * the open index signature preserves extensibility for plugins that attach
  * their own keys at runtime.
+ *
+ * @example
+ * ```ts
+ * const context: TransformContext = {
+ *   vars: { user: 'Ada' },
+ *   prompt: { label: 'summary' },
+ *   metadata: { source: 'fixture' },
+ * };
+ * ```
+ *
+ * @public
  */
 export interface TransformContext {
   /** Variables available at the transform call site. */
@@ -15,7 +26,23 @@ export interface TransformContext {
   [key: string]: unknown;
 }
 
-/** Conventional shape for `TransformContext.prompt`. Callers may pass additional fields. */
+/**
+ * Conventional shape for `TransformContext.prompt`.
+ *
+ * Callers may pass additional fields, but these are the prompt fields that
+ * built-in transforms and docs rely on.
+ *
+ * @example
+ * ```ts
+ * const prompt: TransformPrompt = {
+ *   id: 'summary',
+ *   label: 'Summary prompt',
+ *   raw: 'Summarize {{article}}',
+ * };
+ * ```
+ *
+ * @public
+ */
 export interface TransformPrompt {
   /** Human-readable prompt label. */
   label?: string;
@@ -34,6 +61,17 @@ export interface TransformPrompt {
  *
  * @typeParam TIn  - Input type (output for output-transforms, vars object for var-transforms).
  * @typeParam TOut - Return type; may be wrapped in a Promise.
+ *
+ * @example
+ * ```ts
+ * const uppercase: TransformFunction<string, string> = (output) =>
+ *   output.toUpperCase();
+ * ```
+ *
+ * @param output - Value being transformed at the current pipeline stage.
+ * @param context - Vars, prompt metadata, and runtime metadata for the transform.
+ *
+ * @public
  */
 export type TransformFunction<TIn = unknown, TOut = unknown> = (
   output: TIn,

@@ -6,7 +6,7 @@
 
 # Interface: CallApiFunction()
 
-Defined in: [types/providers.ts:469](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L469)
+Defined in: [types/providers.ts:576](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L576)
 
 Function signature used by custom providers.
 
@@ -26,7 +26,7 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 
 > **CallApiFunction**(`prompt`, `context?`, `options?`): `Promise`\<[`ProviderResponse`](ProviderResponse.md)\>
 
-Defined in: [types/providers.ts:470](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L470)
+Defined in: [types/providers.ts:577](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L577)
 
 Function signature used by custom providers.
 
@@ -41,13 +41,19 @@ cancellation when your provider supports it.
 
 `string`
 
+Rendered prompt text for the current provider call.
+
 ### context?
 
 [`CallApiContextParams`](CallApiContextParams.md)
 
+Runtime metadata for the current eval row, when available.
+
 ### options?
 
 [`CallApiOptionsParams`](CallApiOptionsParams.md)
+
+Per-request execution options such as cancellation.
 
 ## Returns
 
@@ -68,6 +74,6 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:476](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L476)
+Defined in: [types/providers.ts:583](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L583)
 
 Human-readable label used when the provider function is shown in reports.

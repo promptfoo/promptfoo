@@ -8,7 +8,7 @@
 
 > **EvaluateTestSuite** = `object` & `Omit`\<`TestSuiteConfig`, `"prompts"` \| `"providers"`\>
 
-Defined in: [types/index.ts:1431](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1431)
+Defined in: [types/index.ts:1553](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1553)
 
 Test-suite shape accepted by the Node.js `evaluate()` API.
 
@@ -43,3 +43,13 @@ Provider ids, provider functions, provider objects, or arrays of those forms.
 > `optional` **writeLatestResults?**: `boolean`
 
 Persist the eval so it is available to local result storage and the web UI.
+
+## Example
+
+```ts
+const suite: EvaluateTestSuite = {
+  prompts: ['Say hello to {{name}}'],
+  providers: ['openai:chat:gpt-5.5'],
+  tests: [{ vars: { name: 'Ada' } }],
+};
+```

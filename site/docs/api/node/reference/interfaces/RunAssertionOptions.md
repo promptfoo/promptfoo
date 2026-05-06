@@ -6,9 +6,19 @@
 
 # Interface: RunAssertionOptions
 
-Defined in: [assertions/index.ts:392](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L392)
+Defined in: [assertions/index.ts:417](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L417)
 
 Options for `runAssertion()`.
+
+## Example
+
+```ts
+const options: RunAssertionOptions = {
+  assertion: { type: 'contains', value: 'Ada' },
+  test: { vars: {} },
+  providerResponse: { output: 'Hello Ada' },
+};
+```
 
 ## Properties
 
@@ -16,7 +26,7 @@ Options for `runAssertion()`.
 
 > **assertion**: [`AssertionInput`](AssertionInput.md)
 
-Defined in: [assertions/index.ts:398](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L398)
+Defined in: [assertions/index.ts:423](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L423)
 
 Assertion to run against the response.
 
@@ -26,7 +36,7 @@ Assertion to run against the response.
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [assertions/index.ts:406](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L406)
+Defined in: [assertions/index.ts:431](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L431)
 
 Latency for latency-based assertions, in milliseconds.
 
@@ -36,7 +46,7 @@ Latency for latency-based assertions, in milliseconds.
 
 > `optional` **prompt?**: `string`
 
-Defined in: [assertions/index.ts:394](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L394)
+Defined in: [assertions/index.ts:419](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L419)
 
 Rendered prompt for the response being graded, when available.
 
@@ -46,7 +56,7 @@ Rendered prompt for the response being graded, when available.
 
 > `optional` **provider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [assertions/index.ts:396](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L396)
+Defined in: [assertions/index.ts:421](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L421)
 
 Provider that produced the response, when model-graded assertions need it.
 
@@ -56,7 +66,7 @@ Provider that produced the response, when model-graded assertions need it.
 
 > **providerResponse**: [`ProviderResponse`](ProviderResponse.md)
 
-Defined in: [assertions/index.ts:404](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L404)
+Defined in: [assertions/index.ts:429](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L429)
 
 Response to grade.
 
@@ -66,7 +76,7 @@ Response to grade.
 
 > **test**: [`AssertionTestContext`](AssertionTestContext.md)
 
-Defined in: [assertions/index.ts:400](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L400)
+Defined in: [assertions/index.ts:425](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L425)
 
 Test case context associated with the response.
 
@@ -76,7 +86,7 @@ Test case context associated with the response.
 
 > `optional` **traceId?**: `string`
 
-Defined in: [assertions/index.ts:408](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L408)
+Defined in: [assertions/index.ts:433](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L433)
 
 Trace identifier for trace-aware assertions, when tracing is enabled.
 
@@ -86,6 +96,6 @@ Trace identifier for trace-aware assertions, when tracing is enabled.
 
 > `optional` **vars?**: `Record`\<`string`, `VarValue`\>
 
-Defined in: [assertions/index.ts:402](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L402)
+Defined in: [assertions/index.ts:427](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L427)
 
 Rendered variables to use instead of `test.vars`, when already resolved.

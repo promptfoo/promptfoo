@@ -12,6 +12,13 @@ export type ProviderLabel = string;
 /**
  * Function form accepted anywhere the Node.js API accepts a provider.
  *
+ * @example
+ * ```ts
+ * const provider: ProviderFunction = async (prompt) => ({
+ *   output: `Echo: ${prompt}`,
+ * });
+ * ```
+ *
  * @public
  */
 export type ProviderFunction = CallApiFunction;
@@ -27,6 +34,14 @@ export type ProviderConfig =
  *
  * Pass one provider id, provider function, provider object, or an array that
  * mixes the supported provider config forms.
+ *
+ * @example
+ * ```ts
+ * const providers: ProvidersConfig = [
+ *   'openai:chat:gpt-5.5',
+ *   async (prompt) => ({ output: `Echo: ${prompt}` }),
+ * ];
+ * ```
  *
  * @public
  */
@@ -80,6 +95,15 @@ export interface ModerationFlag {
 /**
  * Declarative provider configuration accepted by provider-loading APIs.
  *
+ * @example
+ * ```ts
+ * const provider: ProviderOptions = {
+ *   id: 'openai:chat:gpt-5.5',
+ *   label: 'candidate',
+ *   config: { temperature: 0.2 },
+ * };
+ * ```
+ *
  * @public
  */
 export interface ProviderOptions {
@@ -110,6 +134,14 @@ export interface ProviderOptions {
 
 /**
  * Runtime context passed to custom provider functions.
+ *
+ * @example
+ * ```ts
+ * const provider: ProviderFunction = async (prompt, context) => ({
+ *   output: `${context?.vars.user}: ${prompt}`,
+ *   metadata: { evaluationId: context?.evaluationId },
+ * });
+ * ```
  *
  * @public
  */
@@ -164,6 +196,18 @@ export interface CallApiContextParams {
 /**
  * Per-request options passed to custom providers.
  *
+ * @example
+ * ```ts
+ * const provider: ProviderFunction = async (prompt, _context, options) => {
+ *   const response = await fetch('https://example.com/llm', {
+ *     method: 'POST',
+ *     body: prompt,
+ *     signal: options?.abortSignal,
+ *   });
+ *   return { output: await response.text() };
+ * };
+ * ```
+ *
  * @public
  */
 export interface CallApiOptionsParams {
@@ -175,6 +219,15 @@ export interface CallApiOptionsParams {
 
 /**
  * Provider object shape accepted by the Node.js API.
+ *
+ * @example
+ * ```ts
+ * const provider: ApiProvider = {
+ *   id: () => 'custom:echo',
+ *   label: 'echo',
+ *   callApi: async (prompt) => ({ output: `Echo: ${prompt}` }),
+ * };
+ * ```
  *
  * @public
  */
@@ -245,6 +298,16 @@ export interface GuardrailResponse {
 /**
  * Audio attachment returned by providers that produce or transform sound.
  *
+ * @example
+ * ```ts
+ * const audio: AudioOutput = {
+ *   data: 'UklGR...',
+ *   format: 'wav',
+ *   sampleRate: 24000,
+ *   channels: 1,
+ * };
+ * ```
+ *
  * @public
  */
 export interface AudioOutput {
@@ -271,6 +334,16 @@ export interface AudioOutput {
 /**
  * Video attachment returned by providers that produce video.
  *
+ * @example
+ * ```ts
+ * const video: VideoOutput = {
+ *   url: 'https://cdn.example.com/video.mp4',
+ *   format: 'mp4',
+ *   duration: 6,
+ *   aspectRatio: '16:9',
+ * };
+ * ```
+ *
  * @public
  */
 export interface VideoOutput {
@@ -279,7 +352,10 @@ export interface VideoOutput {
   /** External blob reference for video data. */
   blobRef?: BlobRef;
   /** Storage reference used by providers that persist generated media. */
-  storageRef?: { key?: string };
+  storageRef?: {
+    /** Provider-defined storage key for the generated video. */
+    key?: string;
+  };
   /** URL or storage URI for the generated video. */
   url?: string;
   /** Container or codec name such as `mp4`. */
@@ -303,6 +379,14 @@ export interface VideoOutput {
 /**
  * Image attachment returned by providers that produce images.
  *
+ * @example
+ * ```ts
+ * const image: ImageOutput = {
+ *   data: 'data:image/png;base64,...',
+ *   mimeType: 'image/png',
+ * };
+ * ```
+ *
  * @public
  */
 export interface ImageOutput {
@@ -316,6 +400,19 @@ export interface ImageOutput {
 
 /**
  * Response shape returned by custom providers.
+ *
+ * Return `output` for a successful call or `error` when the provider handled a
+ * failure without throwing. Use attachments and metadata only when the provider
+ * can supply them; most text providers only need `output`.
+ *
+ * @example
+ * ```ts
+ * const response: ProviderResponse = {
+ *   output: 'Hello Ada',
+ *   tokenUsage: { total: 3, prompt: 1, completion: 2 },
+ *   metadata: { model: 'custom-echo-v1' },
+ * };
+ * ```
  *
  * @public
  */
@@ -354,11 +451,17 @@ export interface ProviderResponse {
    * arbitrary additional keys.
    */
   metadata?: {
+    /** Final prompt sent by some red team flows after mutation or wrapping. */
     redteamFinalPrompt?: string;
+    /** HTTP transport details retained by HTTP-based providers. */
     http?: {
+      /** Response status code returned by the upstream HTTP service. */
       status: number;
+      /** Response status text returned by the upstream HTTP service. */
       statusText: string;
+      /** Response headers returned by the upstream HTTP service. */
       headers?: Record<string, string>;
+      /** Request headers sent to the upstream HTTP service. */
       requestHeaders?: Record<string, string>;
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -463,6 +566,10 @@ export type FilePath = string;
  *   metadata: { user: context?.vars.user },
  * });
  * ```
+ *
+ * @param prompt - Rendered prompt text for the current provider call.
+ * @param context - Runtime metadata for the current eval row, when available.
+ * @param options - Per-request execution options such as cancellation.
  *
  * @public
  */

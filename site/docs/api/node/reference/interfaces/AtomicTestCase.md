@@ -2,31 +2,30 @@
 
 ---
 
-[promptfoo](../README.md) / AssertionTestContext
+[promptfoo](../README.md) / AtomicTestCase
 
-# Interface: AssertionTestContext
+# Interface: AtomicTestCase
 
-Defined in: [assertions/index.ts:401](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L401)
+Defined in: [types/index.ts:1165](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1165)
 
-Test-case context accepted by low-level assertion APIs.
+Fully materialized test case used during evaluation.
 
-For the common `runAssertion()` case, `{ vars: {} }` is enough. Use the same
-broader shape as an evaluated test case when custom assertions or assertion
-handlers need additional context. `runAssertions()` also reads `assert` and
-`threshold` from this object.
+`AtomicTestCase` has the same author-facing fields as `TestCase`, but `vars`
+has already been flattened into the exact values used for one eval row.
 
 ## Example
 
 ```ts
-const test: AssertionTestContext = {
+const test: AtomicTestCase = {
+  description: 'Greets the named user',
   vars: { name: 'Ada' },
   assert: [{ type: 'contains', value: 'Ada' }],
 };
 ```
 
-## Extends
+## Extended by
 
-- [`AtomicTestCase`](AtomicTestCase.md)
+- [`AssertionTestContext`](AssertionTestContext.md)
 
 ## Properties
 
@@ -38,10 +37,6 @@ Defined in: [types/index.ts:1055](https://github.com/promptfoo/promptfoo/blob/ma
 
 Assertions to run against the provider output.
 
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`assert`](AtomicTestCase.md#assert)
-
 ---
 
 ### assertScoringFunction?
@@ -52,10 +47,6 @@ Defined in: [types/index.ts:1058](https://github.com/promptfoo/promptfoo/blob/ma
 
 Optional custom scoring function for aggregating assertion results.
 
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`assertScoringFunction`](AtomicTestCase.md#assertscoringfunction)
-
 ---
 
 ### description?
@@ -65,10 +56,6 @@ Optional custom scoring function for aggregating assertion results.
 Defined in: [types/index.ts:1037](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1037)
 
 Optional human-readable description of what the test covers.
-
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`description`](AtomicTestCase.md#description)
 
 ---
 
@@ -437,10 +424,6 @@ typed, and extra keys are preserved for custom integrations.
 
 > `optional` **plugins?**: `string`[]
 
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`metadata`](AtomicTestCase.md#metadata)
-
 ---
 
 ### options?
@@ -537,10 +520,6 @@ Run this test serially even when the eval otherwise uses concurrency.
 
 > `optional` **transformVars?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`options`](AtomicTestCase.md#options)
-
 ---
 
 ### prompts?
@@ -550,10 +529,6 @@ Run this test serially even when the eval otherwise uses concurrency.
 Defined in: [types/index.ts:1049](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1049)
 
 Prompt labels or ids this test should run against; omitted means all prompts.
-
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`prompts`](AtomicTestCase.md#prompts)
 
 ---
 
@@ -565,10 +540,6 @@ Defined in: [types/index.ts:1043](https://github.com/promptfoo/promptfoo/blob/ma
 
 Provider override for this specific test case.
 
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`provider`](AtomicTestCase.md#provider)
-
 ---
 
 ### providerOutput?
@@ -578,10 +549,6 @@ Provider override for this specific test case.
 Defined in: [types/index.ts:1052](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1052)
 
 Precomputed provider output; when set, promptfoo skips the provider call and grades this output directly.
-
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`providerOutput`](AtomicTestCase.md#provideroutput)
 
 ---
 
@@ -593,10 +560,6 @@ Defined in: [types/index.ts:1046](https://github.com/promptfoo/promptfoo/blob/ma
 
 Provider labels or ids this test should run against; supports wildcards such as `openai:*`.
 
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`providers`](AtomicTestCase.md#providers)
-
 ---
 
 ### threshold?
@@ -607,10 +570,6 @@ Defined in: [types/index.ts:1091](https://github.com/promptfoo/promptfoo/blob/ma
 
 Required aggregate score for the test case; without one, the case is graded pass/fail.
 
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`threshold`](AtomicTestCase.md#threshold)
-
 ---
 
 ### vars?
@@ -618,7 +577,3 @@ Required aggregate score for the test case; without one, the case is graded pass
 > `optional` **vars?**: `Vars`
 
 Defined in: [types/index.ts:1144](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1144)
-
-#### Inherited from
-
-[`AtomicTestCase`](AtomicTestCase.md).[`vars`](AtomicTestCase.md#vars)

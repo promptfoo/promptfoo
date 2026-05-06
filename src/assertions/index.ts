@@ -368,6 +368,14 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * This wrapper keeps the low-level assertion API docs readable while preserving
  * the full assertion shape used by eval configuration.
  *
+ * @example
+ * ```ts
+ * const assertion: AssertionInput = {
+ *   type: 'contains',
+ *   value: 'Ada',
+ * };
+ * ```
+ *
  * @public
  */
 export interface AssertionInput extends Assertion {}
@@ -380,12 +388,29 @@ export interface AssertionInput extends Assertion {}
  * handlers need additional context. `runAssertions()` also reads `assert` and
  * `threshold` from this object.
  *
+ * @example
+ * ```ts
+ * const test: AssertionTestContext = {
+ *   vars: { name: 'Ada' },
+ *   assert: [{ type: 'contains', value: 'Ada' }],
+ * };
+ * ```
+ *
  * @public
  */
 export interface AssertionTestContext extends AtomicTestCase {}
 
 /**
  * Options for `runAssertion()`.
+ *
+ * @example
+ * ```ts
+ * const options: RunAssertionOptions = {
+ *   assertion: { type: 'contains', value: 'Ada' },
+ *   test: { vars: {} },
+ *   providerResponse: { output: 'Hello Ada' },
+ * };
+ * ```
  *
  * @public
  */
@@ -692,6 +717,17 @@ export async function runAssertion({
 
 /**
  * Options for `runAssertions()`.
+ *
+ * @example
+ * ```ts
+ * const options: RunAssertionsOptions = {
+ *   test: {
+ *     vars: {},
+ *     assert: [{ type: 'contains', value: 'Ada' }],
+ *   },
+ *   providerResponse: { output: 'Hello Ada' },
+ * };
+ * ```
  *
  * @public
  */

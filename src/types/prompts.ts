@@ -13,6 +13,12 @@ declare interface ApiProvider {
  * Strings are used directly. Objects and arrays are JSON-stringified before the
  * provider receives them.
  *
+ * @example
+ * ```ts
+ * const textPrompt: PromptContent = 'Summarize this.';
+ * const chatPrompt: PromptContent = [{ role: 'user', content: 'Summarize this.' }];
+ * ```
+ *
  * @public
  */
 export type PromptContent = string | object;
@@ -24,6 +30,15 @@ export interface PromptConfig {
 
 /**
  * Runtime context passed to function-valued prompts.
+ *
+ * @example
+ * ```ts
+ * const context: PromptFunctionContext = {
+ *   vars: { topic: 'gradient descent' },
+ *   config: { temperature: 0.2 },
+ *   provider: { id: 'openai:chat:gpt-5.5' },
+ * };
+ * ```
  *
  * @public
  */
@@ -46,6 +61,16 @@ export interface PromptFunctionContext {
  * - A string (used directly as the prompt)
  * - An object/array (JSON stringified and used as the prompt)
  * - A PromptFunctionResult object with prompt and optional config
+ *
+ * @example
+ * ```ts
+ * const result: PromptFunctionResult = {
+ *   prompt: 'Summarize this article.',
+ *   config: { temperature: 0.2 },
+ * };
+ * ```
+ *
+ * @public
  */
 export interface PromptFunctionResult {
   /** Prompt content to send to the provider. */
@@ -69,6 +94,7 @@ export interface PromptFunctionResult {
  * ```
  *
  * @public
+ * @param context - Rendered vars and the selected provider when one is available.
  */
 export type PromptFunction = (context: {
   vars: Record<string, VarValue>;

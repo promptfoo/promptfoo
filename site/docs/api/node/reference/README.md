@@ -23,6 +23,7 @@ compatibility types and helpers than we want to present as first-class docs.
 - [AssertionInput](interfaces/AssertionInput.md)
 - [AssertionTestContext](interfaces/AssertionTestContext.md)
 - [AssertionValueFunctionContext](interfaces/AssertionValueFunctionContext.md)
+- [AtomicTestCase](interfaces/AtomicTestCase.md)
 - [AudioOutput](interfaces/AudioOutput.md)
 - [CallApiContextParams](interfaces/CallApiContextParams.md)
 - [CallApiFunction](interfaces/CallApiFunction.md)
@@ -47,7 +48,6 @@ compatibility types and helpers than we want to present as first-class docs.
 ## Type Aliases
 
 - [AssertionValueFunction](type-aliases/AssertionValueFunction.md)
-- [AtomicTestCase](type-aliases/AtomicTestCase.md)
 - [EnvOverrides](type-aliases/EnvOverrides.md)
 - [EvaluateTestSuite](type-aliases/EvaluateTestSuite.md)
 - [PromptContent](type-aliases/PromptContent.md)
