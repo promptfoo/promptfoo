@@ -86,9 +86,7 @@ export function normalizePrompts(prompts: UnifiedConfig['prompts'] | undefined):
   }
 
   if (isRecord(prompts)) {
-    return Object.values(prompts).filter(
-      (prompt): prompt is string => typeof prompt === 'string' && prompt.trim() !== '',
-    );
+    return Object.keys(prompts).filter((prompt) => prompt.trim() !== '');
   }
 
   return [];

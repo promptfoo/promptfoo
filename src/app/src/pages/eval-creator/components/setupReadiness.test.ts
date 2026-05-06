@@ -59,7 +59,9 @@ describe('setupReadiness', () => {
           { id: 'x' },
         ]),
       ).toEqual(['inline prompt', 'raw prompt', 'x']);
-      expect(normalizePrompts({ 'file://prompt.txt': 'Prompt label' })).toEqual(['Prompt label']);
+      expect(normalizePrompts({ 'Write about {{topic}}': 'Prompt label' })).toEqual([
+        'Write about {{topic}}',
+      ]);
     });
 
     it('filters blank prompt values', () => {
