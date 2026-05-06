@@ -254,7 +254,7 @@ Use this for local application state that should be available to tools and hooks
 
 ## Stateful Red Team Runs
 
-Stateful red-team strategies such as [`crescendo`](/docs/red-team/strategies/multi-turn) need two things at once:
+Stateful red-team strategies such as [`crescendo`](/docs/red-team/strategies/multi-turn) and [`hydra`](/docs/red-team/strategies/hydra) need two things at once:
 
 - all turns within one attack should share history
 - separate tests should not share the same session
@@ -301,7 +301,7 @@ export default async function createSession(context?: {
 }
 ```
 
-This keeps each multi-turn attack stateful while still isolating one generated test case from another. The same pattern is useful for [`agentic:memory-poisoning`](/docs/red-team/plugins/memory-poisoning), which also depends on persistent state across turns.
+This keeps each multi-turn attack stateful while still isolating one generated test case from another. With Hydra, set `stateful: true` only after configuring this session factory so Hydra can send just the newest turn while the SDK session preserves earlier turns. The same pattern is useful for [`agentic:memory-poisoning`](/docs/red-team/plugins/memory-poisoning), which also depends on persistent state across turns.
 
 ## Sandbox Agents
 

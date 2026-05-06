@@ -5,7 +5,9 @@ description: Red team multi-turn conversation attacks by exploiting session mana
 
 # Session Management
 
-Session management is important for [multi-turn strategies](/docs/red-team/strategies/multi-turn) like Crescendo and GOAT. In these cases you want to make sure that the target system is able to maintain context between turns.
+Session management is important for [multi-turn strategies](/docs/red-team/strategies/multi-turn) like Crescendo, GOAT, and [Hydra](/docs/red-team/strategies/hydra). In these cases you want to make sure that the target system is able to maintain context between turns.
+
+Use the default replay mode when the target expects the full conversation transcript in every request. Use `stateful: true` only when the target provider stores prior turns and expects just the newest message on each request.
 
 For HTTP and WebSocket targets, there are two common ways sessions can be managed:
 

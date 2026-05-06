@@ -81,6 +81,7 @@ redteam:
     - id: jailbreak:hydra
       config:
         maxTurns: 10
+        stateful: false # Replays the full conversation history by default
     - id: goat
       config:
         maxTurns: 5
