@@ -41,7 +41,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private agent?: Agent<any, any>;
   private session?: Session;
   private sessionInitialization?: Promise<Session>;
-  private sharedSessionQueue: Promise<void> = Promise.resolve();
+  private sessionQueues = new WeakMap<Session, Promise<void>>();
 
   constructor(
     modelName: string,
@@ -217,10 +217,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
             ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
           },
         );
-      const result =
-        runOptions.session && runOptions.session === this.session
-          ? await this.withSharedSessionLock(executeRun)
-          : await executeRun();
+      const result = runOptions.session
+        ? await this.withSessionLock(runOptions.session, executeRun)
+        : await executeRun();
 
       logger.debug('[AgentsProvider] Agent run result', {
         hasOutput: !!result.finalOutput,
@@ -418,18 +417,22 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     return this.session;
   }
 
-  private async withSharedSessionLock<T>(callback: () => Promise<T>): Promise<T> {
-    const previousRun = this.sharedSessionQueue;
+  private async withSessionLock<T>(session: Session, callback: () => Promise<T>): Promise<T> {
+    const previousRun = this.sessionQueues.get(session) ?? Promise.resolve();
     let release: () => void = () => {};
-    this.sharedSessionQueue = new Promise<void>((resolve) => {
+    const currentRun = new Promise<void>((resolve) => {
       release = resolve;
     });
+    this.sessionQueues.set(session, currentRun);
 
     await previousRun;
     try {
       return await callback();
     } finally {
       release();
+      if (this.sessionQueues.get(session) === currentRun) {
+        this.sessionQueues.delete(session);
+      }
     }
   }
 }

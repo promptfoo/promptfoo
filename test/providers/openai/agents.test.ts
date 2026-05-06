@@ -683,6 +683,55 @@ describe('OpenAiAgentsProvider', () => {
     expect(mockRun.mock.calls[0][2].session).toBe(mockRun.mock.calls[1][2].session);
   });
 
+  it('serializes calls when a session factory reuses one Session instance', async () => {
+    const sharedSession = new MemorySession({ sessionId: 'shared-session' });
+    const createSession = vi.fn(async () => sharedSession);
+    mockImportModule.mockResolvedValue({
+      default: createSession,
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: 'file://./sessions/support-session.ts',
+      },
+    });
+
+    let releaseFirstRun: () => void = () => {};
+    const firstRunStarted = new Promise<void>((resolve) => {
+      mockRun.mockImplementationOnce(async () => {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseFirstRun = release;
+        });
+        return { finalOutput: 'first', newItems: [], usage: undefined };
+      });
+    });
+    mockRun.mockImplementationOnce(async () => ({
+      finalOutput: 'second',
+      newItems: [],
+      usage: undefined,
+    }));
+
+    const firstCall = provider.callApi('first');
+    await firstRunStarted;
+    const secondCall = provider.callApi('second');
+
+    await Promise.resolve();
+    expect(mockRun).toHaveBeenCalledTimes(1);
+
+    releaseFirstRun();
+    await Promise.all([firstCall, secondCall]);
+
+    expect(createSession).toHaveBeenCalledTimes(2);
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    expect(mockRun.mock.calls[0][2].session).toBe(sharedSession);
+    expect(mockRun.mock.calls[1][2].session).toBe(sharedSession);
+  });
+
   it('reuses one configured session when the first calls start concurrently', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
