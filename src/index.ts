@@ -104,12 +104,6 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
 type LibraryRedteamRunOptions = Omit<RedteamRunOptions, 'eventSource'>;
 
-type LibraryRedteamGenerateOptions = Parameters<typeof doGenerateRedteam>[0];
-
-async function generateRedteam(options: LibraryRedteamGenerateOptions = {}) {
-  return doGenerateRedteam(options);
-}
-
 async function runRedteam(options: LibraryRedteamRunOptions = {}) {
   return doRedteamRun({ ...options, eventSource: 'library' });
 }
@@ -127,7 +121,7 @@ const redteam = {
     Plugin: RedteamPluginBase,
     Grader: RedteamGraderBase,
   },
-  generate: generateRedteam,
+  generate: doGenerateRedteam,
   run: runRedteam,
 };
 
