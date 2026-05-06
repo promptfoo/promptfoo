@@ -256,8 +256,12 @@ const EvaluateTestSuiteCreator = () => {
             {/* Tabs Toggle */}
             <div className="mt-4 lg:mt-6">
               <TabsList>
-                <TabsTrigger value="ui">UI Editor</TabsTrigger>
-                <TabsTrigger value="yaml">YAML Editor</TabsTrigger>
+                <TabsTrigger value="ui" className="dark:text-foreground/80">
+                  UI Editor
+                </TabsTrigger>
+                <TabsTrigger value="yaml" className="dark:text-foreground/80">
+                  YAML Editor
+                </TabsTrigger>
               </TabsList>
             </div>
           </div>
@@ -319,7 +323,10 @@ const EvaluateTestSuiteCreator = () => {
                       type="button"
                       variant={isReadyToRun ? 'default' : 'outline'}
                       onClick={() => setActiveStep(nextRecommendedStep.id)}
-                      className="shrink-0"
+                      className={cn(
+                        'shrink-0',
+                        isReadyToRun && 'dark:bg-blue-600 dark:hover:bg-blue-500',
+                      )}
                     >
                       {isReadyToRun
                         ? 'Review run options'
