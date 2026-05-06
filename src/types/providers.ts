@@ -137,6 +137,12 @@ export interface ModerationFlag {
  *   id: 'openai:chat:gpt-5.5',
  *   label: 'candidate',
  *   config: { temperature: 0.2 },
+ *   inputs: {
+ *     resume: {
+ *       description: 'Resume PDF to summarize',
+ *       type: 'pdf',
+ *     },
+ *   },
  * };
  * ```
  *
@@ -164,7 +170,13 @@ export interface ProviderOptions {
   delay?: number;
   /** Environment overrides available while loading and calling the provider. */
   env?: EnvOverrides;
-  /** Declared named inputs accepted by the provider. */
+  /**
+   * Declared named inputs accepted by the provider.
+   *
+   * Each key is the variable name. Use a short description string for simple
+   * text inputs, or an object when the input needs a declared media type or
+   * generation guidance.
+   */
   inputs?: Inputs;
 }
 
@@ -305,7 +317,13 @@ export interface ApiProvider {
   delay?: number;
   /** Optional stable session id for conversational providers. */
   getSessionId?: () => string;
-  /** Named provider inputs used by multi-input targets. */
+  /**
+   * Named provider inputs used by multi-input targets.
+   *
+   * Each key is the variable name. Use a short description string for simple
+   * text inputs, or an object when the input needs a declared media type or
+   * generation guidance.
+   */
   inputs?: Inputs;
   /** Human-readable label shown in reports. */
   label?: ProviderLabel;
@@ -370,6 +388,9 @@ export interface GuardrailResponse {
 /**
  * Audio attachment returned by providers that produce or transform sound.
  *
+ * Populate `data` for inline payloads or `blobRef` when the audio has already
+ * been externalized out of the result row.
+ *
  * @example
  * ```ts
  * const audio: AudioOutput = {
@@ -405,6 +426,9 @@ export interface AudioOutput {
 
 /**
  * Video attachment returned by providers that produce video.
+ *
+ * Providers usually return a retrievable `url`, `storageRef`, or `blobRef`;
+ * the remaining fields describe playback and generated-media metadata.
  *
  * @example
  * ```ts
@@ -601,6 +625,10 @@ export interface ProviderResponse {
 
 /**
  * Response returned by embedding-capable providers.
+ *
+ * This is the payload returned from `callEmbeddingApi()`. Successful responses
+ * normally populate `embedding`; providers may return `error` instead when they
+ * handle a failure without throwing.
  *
  * @example
  * ```ts

@@ -9,7 +9,7 @@ description: 'Response returned by classification-capable providers.'
 import type { ProviderClassificationResponse } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:678](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L678)
+Defined in: [types/providers.ts:706](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L706)
 
 Response returned by classification-capable providers.
 
@@ -31,7 +31,7 @@ const response: ProviderClassificationResponse = {
 
 > `optional` **classification?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/providers.ts:682](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L682)
+Defined in: [types/providers.ts:710](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L710)
 
 Class labels mapped to provider-reported scores.
 
@@ -41,6 +41,6 @@ Class labels mapped to provider-reported scores.
 
 > `optional` **error?**: `string`
 
-Defined in: [types/providers.ts:680](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L680)
+Defined in: [types/providers.ts:708](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L708)
 
 Error message when the classification call failed without throwing.

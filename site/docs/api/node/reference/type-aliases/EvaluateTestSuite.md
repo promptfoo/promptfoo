@@ -11,7 +11,7 @@ import type { EvaluateTestSuite } from 'promptfoo';
 
 > **EvaluateTestSuite** = `object` & `Omit`\<`TestSuiteConfig`, `"prompts"` \| `"providers"`\>
 
-Defined in: [types/index.ts:1880](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1880)
+Defined in: [types/index.ts:1944](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1944)
 
 Test-suite shape accepted by the Node.js `evaluate()` API.
 

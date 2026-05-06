@@ -11,7 +11,7 @@ import type { AssertionValueFunction } from 'promptfoo';
 
 > **AssertionValueFunction** = (`output`, `context`) => `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>
 
-Defined in: [types/index.ts:1111](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1111)
+Defined in: [types/index.ts:1166](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1166)
 
 Function form accepted by JavaScript assertions.
 

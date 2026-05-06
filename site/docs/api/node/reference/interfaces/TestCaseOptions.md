@@ -9,7 +9,7 @@ description: 'Additional per-test options merged with prompt, output, and gradin
 import type { TestCaseOptions } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:1351](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1351)
+Defined in: [types/index.ts:1415](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1415)
 
 Additional per-test options merged with prompt, output, and grading behavior.
 
@@ -39,7 +39,7 @@ const options: TestCaseOptions = {
 
 > `optional` **disableConversationVar?**: `boolean`
 
-Defined in: [types/index.ts:1355](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1355)
+Defined in: [types/index.ts:1419](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1419)
 
 Do not include the implicit `_conversation` variable.
 
@@ -49,7 +49,7 @@ Do not include the implicit `_conversation` variable.
 
 > `optional` **disableDefaultAsserts?**: `boolean`
 
-Defined in: [types/index.ts:1357](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1357)
+Defined in: [types/index.ts:1421](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1421)
 
 Skip `defaultTest` assertions while still inheriting other defaults.
 
@@ -59,7 +59,7 @@ Skip `defaultTest` assertions while still inheriting other defaults.
 
 > `optional` **disableVarExpansion?**: `boolean`
 
-Defined in: [types/index.ts:1353](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1353)
+Defined in: [types/index.ts:1417](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1417)
 
 Do not expand array-valued vars into multiple eval cases.
 
@@ -171,7 +171,7 @@ Rubric prompt override used by model-graded assertions.
 
 > `optional` **runSerially?**: `boolean`
 
-Defined in: [types/index.ts:1359](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1359)
+Defined in: [types/index.ts:1423](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1423)
 
 Run this test serially even when the eval otherwise uses concurrency.
 

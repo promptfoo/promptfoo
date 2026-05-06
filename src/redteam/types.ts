@@ -435,7 +435,13 @@ export interface PluginConfig {
   networkEgressReceipt?: string;
   /** Multiple receipt strings expected from network-egress fixtures. */
   networkEgressReceipts?: string[];
-  /** Multi-variable input definitions used while generating test cases. */
+  /**
+   * Multi-variable input definitions used while generating test cases.
+   *
+   * Each key is the variable name. Use a short description string for simple
+   * text inputs, or an object when the input needs a declared media type or
+   * generation guidance.
+   */
   inputs?: Inputs;
   /** Maximum generated characters per conversation message. */
   maxCharsPerMessage?: number;

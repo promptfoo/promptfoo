@@ -38,7 +38,7 @@ Additional plugin-specific settings preserved for custom integrations.
 
 > `optional` **\_\_nonce?**: `number`
 
-Defined in: [redteam/types.ts:443](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L443)
+Defined in: [redteam/types.ts:449](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L449)
 
 Nonce used to prevent reuse of cached generated test cases.
 
@@ -98,9 +98,13 @@ Variable name that receives the indirect prompt-injection payload.
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [redteam/types.ts:439](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L439)
+Defined in: [redteam/types.ts:445](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L445)
 
 Multi-variable input definitions used while generating test cases.
+
+Each key is the variable name. Use a short description string for simple
+text inputs, or an object when the input needs a declared media type or
+generation guidance.
 
 ---
 
@@ -138,7 +142,7 @@ Language or languages requested for generated tests.
 
 > `optional` **maxCharsPerMessage?**: `number`
 
-Defined in: [redteam/types.ts:441](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L441)
+Defined in: [redteam/types.ts:447](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L447)
 
 Maximum generated characters per conversation message.
 

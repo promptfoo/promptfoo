@@ -9,15 +9,30 @@ description: 'One row in an eval table.'
 import type { EvaluateTableRow } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:630](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L630)
+Defined in: [types/index.ts:647](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L647)
 
 One row in an eval table.
 
 ## Example
 
 ```ts
+import { ResultFailureReason } from 'promptfoo';
+
+const output: EvaluateTableOutput = {
+  cost: 0,
+  failureReason: ResultFailureReason.NONE,
+  id: 'result-1',
+  latencyMs: 120,
+  namedScores: { mentions_name: 1 },
+  pass: true,
+  prompt: 'Hello {{name}}',
+  score: 1,
+  testCase: { vars: { name: 'Ada' } },
+  text: 'Hello Ada',
+};
+
 const row: EvaluateTableRow = {
-  outputs: [],
+  outputs: [output],
   vars: ['Ada'],
   test: { vars: { name: 'Ada' } },
   testIdx: 0,
@@ -30,7 +45,7 @@ const row: EvaluateTableRow = {
 
 > `optional` **description?**: `string`
 
-Defined in: [types/index.ts:632](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L632)
+Defined in: [types/index.ts:649](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L649)
 
 Optional human-readable description for the row's test case.
 
@@ -40,7 +55,7 @@ Optional human-readable description for the row's test case.
 
 > **outputs**: [`EvaluateTableOutput`](EvaluateTableOutput.md)[]
 
-Defined in: [types/index.ts:634](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L634)
+Defined in: [types/index.ts:651](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L651)
 
 Provider outputs rendered across this row.
 
@@ -50,7 +65,7 @@ Provider outputs rendered across this row.
 
 > **test**: [`AtomicTestCase`](AtomicTestCase.md)
 
-Defined in: [types/index.ts:638](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L638)
+Defined in: [types/index.ts:655](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L655)
 
 Test case represented by this row.
 
@@ -60,7 +75,7 @@ Test case represented by this row.
 
 > **testIdx**: `number`
 
-Defined in: [types/index.ts:640](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L640)
+Defined in: [types/index.ts:657](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L657)
 
 Zero-based index of the test case in the eval.
 
@@ -70,6 +85,6 @@ Zero-based index of the test case in the eval.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:636](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L636)
+Defined in: [types/index.ts:653](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L653)
 
 Rendered variable values shown in the table row.

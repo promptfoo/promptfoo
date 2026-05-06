@@ -9,7 +9,7 @@ description: 'Guardrail outcome metadata returned by moderation-aware providers.
 import type { GuardrailResponse } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:359](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L359)
+Defined in: [types/providers.ts:377](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L377)
 
 Guardrail outcome metadata returned by moderation-aware providers.
 
@@ -29,7 +29,7 @@ const guardrails: GuardrailResponse = {
 
 > `optional` **flagged?**: `boolean`
 
-Defined in: [types/providers.ts:365](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L365)
+Defined in: [types/providers.ts:383](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L383)
 
 Aggregate flag when the provider does not distinguish input from output.
 
@@ -39,7 +39,7 @@ Aggregate flag when the provider does not distinguish input from output.
 
 > `optional` **flaggedInput?**: `boolean`
 
-Defined in: [types/providers.ts:361](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L361)
+Defined in: [types/providers.ts:379](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L379)
 
 Whether the input prompt tripped a guardrail.
 
@@ -49,7 +49,7 @@ Whether the input prompt tripped a guardrail.
 
 > `optional` **flaggedOutput?**: `boolean`
 
-Defined in: [types/providers.ts:363](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L363)
+Defined in: [types/providers.ts:381](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L381)
 
 Whether the provider output tripped a guardrail.
 
@@ -59,6 +59,6 @@ Whether the provider output tripped a guardrail.
 
 > `optional` **reason?**: `string`
 
-Defined in: [types/providers.ts:367](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L367)
+Defined in: [types/providers.ts:385](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L385)
 
 Provider-supplied reason for the guardrail outcome.

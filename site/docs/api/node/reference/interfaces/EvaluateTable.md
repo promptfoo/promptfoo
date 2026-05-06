@@ -9,7 +9,7 @@ description: 'Table-shaped eval output used by generateTable() and the web UI.'
 import type { EvaluateTable } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:683](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L683)
+Defined in: [types/index.ts:731](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L731)
 
 Table-shaped eval output used by `generateTable()` and the web UI.
 
@@ -20,9 +20,34 @@ terminal or UI rendering.
 ## Example
 
 ```ts
+import { ResultFailureReason } from 'promptfoo';
+
 const table: EvaluateTable = {
-  head: { prompts: [], vars: ['name'] },
-  body: [],
+  head: {
+    prompts: [{ raw: 'Hello {{name}}', label: 'Greeting', provider: 'custom:echo' }],
+    vars: ['name'],
+  },
+  body: [
+    {
+      outputs: [
+        {
+          cost: 0,
+          failureReason: ResultFailureReason.NONE,
+          id: 'result-1',
+          latencyMs: 120,
+          namedScores: { mentions_name: 1 },
+          pass: true,
+          prompt: 'Hello {{name}}',
+          score: 1,
+          testCase: { vars: { name: 'Ada' } },
+          text: 'Hello Ada',
+        },
+      ],
+      vars: ['Ada'],
+      test: { vars: { name: 'Ada' } },
+      testIdx: 0,
+    },
+  ],
 };
 ```
 
@@ -32,7 +57,7 @@ const table: EvaluateTable = {
 
 > **body**: [`EvaluateTableRow`](EvaluateTableRow.md)[]
 
-Defined in: [types/index.ts:687](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L687)
+Defined in: [types/index.ts:735](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L735)
 
 Ordered table rows, one per evaluated test case.
 
@@ -42,6 +67,6 @@ Ordered table rows, one per evaluated test case.
 
 > **head**: [`EvaluateTableHead`](EvaluateTableHead.md)
 
-Defined in: [types/index.ts:685](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L685)
+Defined in: [types/index.ts:733](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L733)
 
 Prompt and variable headers rendered above the table body.

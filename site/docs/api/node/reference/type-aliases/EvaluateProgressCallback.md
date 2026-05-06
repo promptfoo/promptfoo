@@ -11,7 +11,7 @@ import type { EvaluateProgressCallback } from 'promptfoo';
 
 > **EvaluateProgressCallback** = (`completed`, `total`, `index`, `evalStep`, `metrics`) => `void`
 
-Defined in: [types/index.ts:1249](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1249)
+Defined in: [types/index.ts:1313](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1313)
 
 Progress callback invoked as rows finish during evaluation.
 
@@ -54,7 +54,7 @@ Aggregate prompt metrics accumulated so far.
 ## Example
 
 ```ts
-const onProgress: EvaluateProgressCallback = (completed, total) => {
-  console.log(`${completed}/${total}`);
+const onProgress: EvaluateProgressCallback = (completed, total, index, _step, metrics) => {
+  console.log(`row ${index + 1}: ${completed}/${total}`, metrics.score);
 };
 ```

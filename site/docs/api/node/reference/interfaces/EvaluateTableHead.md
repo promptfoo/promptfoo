@@ -9,7 +9,7 @@ description: 'Header metadata for an eval table.'
 import type { EvaluateTableHead } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:659](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L659)
+Defined in: [types/index.ts:682](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L682)
 
 Header metadata for an eval table.
 
@@ -20,7 +20,13 @@ matching `EvaluateTable.body`.
 
 ```ts
 const head: EvaluateTableHead = {
-  prompts: [],
+  prompts: [
+    {
+      raw: 'Hello {{name}}',
+      label: 'Greeting',
+      provider: 'custom:echo',
+    },
+  ],
   vars: ['name'],
 };
 ```
@@ -31,7 +37,7 @@ const head: EvaluateTableHead = {
 
 > **prompts**: [`CompletedPrompt`](CompletedPrompt.md)[]
 
-Defined in: [types/index.ts:661](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L661)
+Defined in: [types/index.ts:684](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L684)
 
 Completed prompts rendered as provider columns.
 
@@ -41,6 +47,6 @@ Completed prompts rendered as provider columns.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:663](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L663)
+Defined in: [types/index.ts:686](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L686)
 
 Variable names rendered before provider columns.

@@ -9,7 +9,7 @@ description: 'Advanced strategy configuration carried on generated red-team test
 import type { StrategyConfig } from 'promptfoo';
 ```
 
-Defined in: [redteam/types.ts:476](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L476)
+Defined in: [redteam/types.ts:482](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L482)
 
 Advanced strategy configuration carried on generated red-team test cases.
 
@@ -33,7 +33,7 @@ const strategyConfig: StrategyConfig = {
 
 > `optional` **enabled?**: `boolean`
 
-Defined in: [redteam/types.ts:478](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L478)
+Defined in: [redteam/types.ts:484](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L484)
 
 Whether the strategy should be enabled.
 
@@ -43,7 +43,7 @@ Whether the strategy should be enabled.
 
 > `optional` **numTests?**: `number`
 
-Defined in: [redteam/types.ts:482](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L482)
+Defined in: [redteam/types.ts:488](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L488)
 
 Number of tests to generate for the strategy.
 
@@ -53,6 +53,6 @@ Number of tests to generate for the strategy.
 
 > `optional` **plugins?**: `string`[]
 
-Defined in: [redteam/types.ts:480](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L480)
+Defined in: [redteam/types.ts:486](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L486)
 
 Plugin ids that this strategy should target.

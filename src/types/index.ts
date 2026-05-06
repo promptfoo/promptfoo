@@ -555,12 +555,14 @@ export interface EvaluateResult {
  *
  * @example
  * ```ts
+ * import { ResultFailureReason } from 'promptfoo';
+ *
  * const output: EvaluateTableOutput = {
  *   cost: 0,
  *   failureReason: ResultFailureReason.NONE,
  *   id: 'result-1',
  *   latencyMs: 120,
- *   namedScores: {},
+ *   namedScores: { mentions_name: 1 },
  *   pass: true,
  *   prompt: 'Hello {{name}}',
  *   score: 1,
@@ -617,8 +619,23 @@ export interface EvaluateTableOutput {
  *
  * @example
  * ```ts
+ * import { ResultFailureReason } from 'promptfoo';
+ *
+ * const output: EvaluateTableOutput = {
+ *   cost: 0,
+ *   failureReason: ResultFailureReason.NONE,
+ *   id: 'result-1',
+ *   latencyMs: 120,
+ *   namedScores: { mentions_name: 1 },
+ *   pass: true,
+ *   prompt: 'Hello {{name}}',
+ *   score: 1,
+ *   testCase: { vars: { name: 'Ada' } },
+ *   text: 'Hello Ada',
+ * };
+ *
  * const row: EvaluateTableRow = {
- *   outputs: [],
+ *   outputs: [output],
  *   vars: ['Ada'],
  *   test: { vars: { name: 'Ada' } },
  *   testIdx: 0,
@@ -649,7 +666,13 @@ export interface EvaluateTableRow {
  * @example
  * ```ts
  * const head: EvaluateTableHead = {
- *   prompts: [],
+ *   prompts: [
+ *     {
+ *       raw: 'Hello {{name}}',
+ *       label: 'Greeting',
+ *       provider: 'custom:echo',
+ *     },
+ *   ],
  *   vars: ['name'],
  * };
  * ```
@@ -672,9 +695,34 @@ export interface EvaluateTableHead {
  *
  * @example
  * ```ts
+ * import { ResultFailureReason } from 'promptfoo';
+ *
  * const table: EvaluateTable = {
- *   head: { prompts: [], vars: ['name'] },
- *   body: [],
+ *   head: {
+ *     prompts: [{ raw: 'Hello {{name}}', label: 'Greeting', provider: 'custom:echo' }],
+ *     vars: ['name'],
+ *   },
+ *   body: [
+ *     {
+ *       outputs: [
+ *         {
+ *           cost: 0,
+ *           failureReason: ResultFailureReason.NONE,
+ *           id: 'result-1',
+ *           latencyMs: 120,
+ *           namedScores: { mentions_name: 1 },
+ *           pass: true,
+ *           prompt: 'Hello {{name}}',
+ *           score: 1,
+ *           testCase: { vars: { name: 'Ada' } },
+ *           text: 'Hello Ada',
+ *         },
+ *       ],
+ *       vars: ['Ada'],
+ *       test: { vars: { name: 'Ada' } },
+ *       testIdx: 0,
+ *     },
+ *   ],
  * };
  * ```
  *
@@ -1045,10 +1093,17 @@ export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema
  *
  * @example
  * ```ts
- * const assertion: AssertionOrSet = {
- *   type: 'contains',
- *   value: 'Ada',
- * };
+ * const assertions: AssertionOrSet[] = [
+ *   { type: 'contains', value: 'Ada' },
+ *   {
+ *     type: 'assert-set',
+ *     threshold: 0.8,
+ *     assert: [
+ *       { type: 'contains', value: 'Ada' },
+ *       { type: 'word-count', value: 2 },
+ *     ],
+ *   },
+ * ];
  * ```
  *
  * @public
@@ -1187,16 +1242,25 @@ export const VarsSchema = z.custom<Vars>((data) => {
 /**
  * Custom scorer used to aggregate named assertion scores for one test case.
  *
+ * `namedScores` only contains assertions that define a `metric`, so robust
+ * scorers should handle the empty-object case when a test mixes scored and
+ * unscored assertions.
+ *
  * @param namedScores - Named assertion scores keyed by each assertion's `metric` value.
  * @param context - Optional aggregation metadata for the surrounding assertion set.
  *
  * @example
  * ```ts
- * const scoreAssertions: ScoringFunction = async (namedScores, context) => ({
- *   pass: Object.values(namedScores).every((score) => score >= 0.8),
- *   score: Math.min(...Object.values(namedScores)),
- *   reason: `Checked ${context?.componentResults?.length ?? 0} assertions`,
- * });
+ * const scoreAssertions: ScoringFunction = async (namedScores, context) => {
+ *   const scores = Object.values(namedScores);
+ *   const score = scores.length > 0 ? Math.min(...scores) : 0;
+ *
+ *   return {
+ *     pass: scores.length > 0 && scores.every((value) => value >= 0.8),
+ *     score,
+ *     reason: `Checked ${context?.componentResults?.length ?? 0} assertions`,
+ *   };
+ * };
  * ```
  *
  * @public
@@ -1239,8 +1303,8 @@ export type ScoringFunction = (
  *
  * @example
  * ```ts
- * const onProgress: EvaluateProgressCallback = (completed, total) => {
- *   console.log(`${completed}/${total}`);
+ * const onProgress: EvaluateProgressCallback = (completed, total, index, _step, metrics) => {
+ *   console.log(`row ${index + 1}: ${completed}/${total}`, metrics.score);
  * };
  * ```
  *

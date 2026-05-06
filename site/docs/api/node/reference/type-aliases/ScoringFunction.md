@@ -11,9 +11,13 @@ import type { ScoringFunction } from 'promptfoo';
 
 > **ScoringFunction** = (`namedScores`, `context?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\> \| [`GradingResult`](../interfaces/GradingResult.md)
 
-Defined in: [types/index.ts:1204](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1204)
+Defined in: [types/index.ts:1268](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1268)
 
 Custom scorer used to aggregate named assertion scores for one test case.
+
+`namedScores` only contains assertions that define a `metric`, so robust
+scorers should handle the empty-object case when a test mixes scored and
+unscored assertions.
 
 ## Parameters
 
@@ -88,9 +92,14 @@ Total tokens used by all component results.
 ## Example
 
 ```ts
-const scoreAssertions: ScoringFunction = async (namedScores, context) => ({
-  pass: Object.values(namedScores).every((score) => score >= 0.8),
-  score: Math.min(...Object.values(namedScores)),
-  reason: `Checked ${context?.componentResults?.length ?? 0} assertions`,
-});
+const scoreAssertions: ScoringFunction = async (namedScores, context) => {
+  const scores = Object.values(namedScores);
+  const score = scores.length > 0 ? Math.min(...scores) : 0;
+
+  return {
+    pass: scores.length > 0 && scores.every((value) => value >= 0.8),
+    score,
+    reason: `Checked ${context?.componentResults?.length ?? 0} assertions`,
+  };
+};
 ```

@@ -9,7 +9,7 @@ description: 'Provider object shape accepted by the Node.js API.'
 import type { ApiProvider } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:278](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L278)
+Defined in: [types/providers.ts:290](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L290)
 
 Provider object shape accepted by the Node.js API.
 
@@ -33,7 +33,7 @@ const provider: ApiProvider = {
 
 > **callApi**: [`CallApiFunction`](CallApiFunction.md)
 
-Defined in: [types/providers.ts:282](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L282)
+Defined in: [types/providers.ts:294](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L294)
 
 Execute one provider request.
 
@@ -43,7 +43,7 @@ Execute one provider request.
 
 > `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
-Defined in: [types/providers.ts:326](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L326)
+Defined in: [types/providers.ts:344](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L344)
 
 Provider-wide cleanup hook for releasing long-lived resources such as worker
 processes, browser sessions, or pooled connections at eval shutdown.
@@ -59,7 +59,7 @@ Request-scoped cancellation should be implemented with `abortSignal`.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:303](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L303)
+Defined in: [types/providers.ts:315](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L315)
 
 Provider-specific configuration retained for later calls and serialization.
 The shape mirrors [ProviderOptions.config](ProviderOptions.md#config); consult the documentation
@@ -71,7 +71,7 @@ for the specific provider for the supported keys.
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:305](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L305)
+Defined in: [types/providers.ts:317](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L317)
 
 Delay in milliseconds before provider calls.
 
@@ -81,7 +81,7 @@ Delay in milliseconds before provider calls.
 
 > `optional` **getSessionId?**: () => `string`
 
-Defined in: [types/providers.ts:307](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L307)
+Defined in: [types/providers.ts:319](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L319)
 
 Optional stable session id for conversational providers.
 
@@ -95,7 +95,7 @@ Optional stable session id for conversational providers.
 
 > **id**: () => `string`
 
-Defined in: [types/providers.ts:280](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L280)
+Defined in: [types/providers.ts:292](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L292)
 
 Stable id used in result tables, cache keys, and provider lookups.
 
@@ -109,9 +109,13 @@ Stable id used in result tables, cache keys, and provider lookups.
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:309](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L309)
+Defined in: [types/providers.ts:327](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L327)
 
 Named provider inputs used by multi-input targets.
+
+Each key is the variable name. Use a short description string for simple
+text inputs, or an object when the input needs a declared media type or
+generation guidance.
 
 ---
 
@@ -119,7 +123,7 @@ Named provider inputs used by multi-input targets.
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:311](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L311)
+Defined in: [types/providers.ts:329](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L329)
 
 Human-readable label shown in reports.
 
@@ -129,7 +133,7 @@ Human-readable label shown in reports.
 
 > `optional` **toJSON?**: () => `any`
 
-Defined in: [types/providers.ts:320](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L320)
+Defined in: [types/providers.ts:338](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L338)
 
 Custom JSON serialization hook used when persisting the provider on an eval
 record. Implementations should return a value that is structurally
@@ -145,7 +149,7 @@ serializable (no functions or circular references).
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:313](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L313)
+Defined in: [types/providers.ts:331](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L331)
 
 Transform provider output before assertions run.
 
@@ -155,7 +159,7 @@ Transform provider output before assertions run.
 
 > `optional` **callClassificationApi**(`prompt`): `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
 
-Defined in: [types/providers.ts:289](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L289)
+Defined in: [types/providers.ts:301](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L301)
 
 Optional classification-specific entrypoint for compatible providers.
 
@@ -179,7 +183,7 @@ Class labels mapped to provider-reported scores.
 
 > `optional` **callEmbeddingApi**(`input`): `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
 
-Defined in: [types/providers.ts:296](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L296)
+Defined in: [types/providers.ts:308](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L308)
 
 Optional embedding-specific entrypoint for compatible providers.
 

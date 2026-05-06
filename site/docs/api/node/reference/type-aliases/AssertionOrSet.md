@@ -11,7 +11,7 @@ import type { AssertionOrSet } from 'promptfoo';
 
 > **AssertionOrSet** = [`AssertionSet`](../interfaces/AssertionSet.md) \| [`Assertion`](../interfaces/Assertion.md)
 
-Defined in: [types/index.ts:1056](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1056)
+Defined in: [types/index.ts:1111](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1111)
 
 Assertion entry accepted by test cases.
 
@@ -21,8 +21,15 @@ should be grouped under one threshold.
 ## Example
 
 ```ts
-const assertion: AssertionOrSet = {
-  type: 'contains',
-  value: 'Ada',
-};
+const assertions: AssertionOrSet[] = [
+  { type: 'contains', value: 'Ada' },
+  {
+    type: 'assert-set',
+    threshold: 0.8,
+    assert: [
+      { type: 'contains', value: 'Ada' },
+      { type: 'word-count', value: 2 },
+    ],
+  },
+];
 ```
