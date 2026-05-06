@@ -252,6 +252,7 @@ const EvaluateTestSuiteCreator = () => {
                   accept=".yaml,.yml"
                   onChange={handleFileUpload}
                   className="hidden"
+                  aria-label="Upload YAML configuration"
                 />
                 <Button variant="outline" onClick={() => setResetDialogOpen(true)}>
                   Reset
@@ -261,7 +262,7 @@ const EvaluateTestSuiteCreator = () => {
 
             {/* Tabs Toggle */}
             <div className="mt-4 lg:mt-6">
-              <TabsList>
+              <TabsList aria-label="Editor mode">
                 <TabsTrigger value="ui" className="dark:text-foreground/80">
                   UI Editor
                 </TabsTrigger>
@@ -309,9 +310,11 @@ const EvaluateTestSuiteCreator = () => {
                           type="button"
                           onClick={() => setActiveStep(step.id)}
                           aria-label={`${step.label}: ${summaryStatus}`}
+                          aria-current={activeStep === step.id ? 'step' : undefined}
                           className={cn(
                             'rounded-md border px-3 py-2 text-left text-sm transition-colors',
                             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                            activeStep === step.id && 'ring-2 ring-primary',
                             step.isComplete
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/50'
                               : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/60',
@@ -519,7 +522,7 @@ const EvaluateTestSuiteCreator = () => {
                           <strong>Variables detected:</strong>{' '}
                           {varsList.map((v, i) => (
                             <span key={v}>
-                              <code className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs">
+                              <code className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs text-foreground">
                                 {v}
                               </code>
                               {i < varsList.length - 1 ? ', ' : ''}
@@ -608,7 +611,7 @@ const EvaluateTestSuiteCreator = () => {
                           for{' '}
                           {varsList.map((v, i) => (
                             <span key={v}>
-                              <code className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-xs">
+                              <code className="rounded border border-primary/20 bg-primary/10 px-1.5 py-0.5 text-xs text-foreground">
                                 {v}
                               </code>
                               {i < varsList.length - 1 ? ', ' : ''}

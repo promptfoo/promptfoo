@@ -203,6 +203,24 @@ describe('PromptsSection', () => {
     expect(screen.queryByText(/Write a short story about a cat./)).toBeNull();
   });
 
+  it('should open an existing prompt from the keyboard', async () => {
+    const user = userEvent.setup();
+    setupStore(['Write a short story about a cat.']);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    const promptRow = screen.getByRole('button', { name: 'Open prompt 1 for editing' });
+    promptRow.focus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Edit Prompt 1')).toBeInTheDocument();
+  });
+
   it('should duplicate a prompt and append it to the list when the duplicate icon is clicked for a prompt row', async () => {
     const user = userEvent.setup();
     const initialPrompt = 'Translate the following sentence to French: {{sentence}}';

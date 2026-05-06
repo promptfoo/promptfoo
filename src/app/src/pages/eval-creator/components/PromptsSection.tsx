@@ -121,7 +121,10 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
     const truncated = text.length > 250 ? text.slice(0, 250) + ' ...' : text;
     return truncated.split(/({{\w+}})/g).map((part: string, i: number) =>
       /{{\s*(\w+)\s*}}/g.test(part) ? (
-        <span key={i} className="bg-primary/20 text-primary px-1 py-0.5 rounded font-mono text-xs">
+        <span
+          key={i}
+          className="rounded border border-primary/20 bg-primary/10 px-1 py-0.5 font-mono text-xs text-foreground"
+        >
           {part}
         </span>
       ) : (
@@ -154,7 +157,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
 
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold">Prompts</h2>
+        <h3 className="text-xl font-semibold">Prompts</h3>
         <div className="flex flex-wrap items-center gap-2">
           {canEditInlinePrompts && (
             <>
@@ -178,7 +181,12 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
                 <TooltipContent>Upload prompt from file</TooltipContent>
               </Tooltip>
 
-              <Button onClick={() => setPromptDialogOpen(true)}>Add Prompt</Button>
+              <Button
+                onClick={() => setPromptDialogOpen(true)}
+                className="dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                Add Prompt
+              </Button>
 
               {prompts.length === 0 && (
                 <Button
@@ -213,10 +221,18 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
                     'hover:bg-muted/50 transition-colors',
                   )}
                 >
-                  <p className="text-sm flex-1 sm:mr-4">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleEditPrompt(index);
+                    }}
+                    aria-label={`Open prompt ${index + 1} for editing`}
+                    className="flex-1 rounded-sm text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:mr-4"
+                  >
                     <span className="text-muted-foreground font-medium">Prompt #{index + 1}: </span>
                     {highlightVars(prompt)}
-                  </p>
+                  </button>
                   <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
                     <Tooltip>
                       <TooltipTrigger asChild>

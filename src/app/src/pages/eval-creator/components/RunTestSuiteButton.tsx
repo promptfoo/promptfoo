@@ -165,7 +165,11 @@ const RunTestSuiteButton = () => {
 
   return (
     <div className="space-y-2">
-      <Button onClick={runTestSuite} disabled={isDisabled}>
+      <Button
+        onClick={runTestSuite}
+        disabled={isDisabled}
+        className="dark:bg-blue-600 dark:hover:bg-blue-500"
+      >
         {isRunning ? (
           <span className="flex items-center gap-2" role="status" aria-live="polite">
             <Spinner className="size-4" />

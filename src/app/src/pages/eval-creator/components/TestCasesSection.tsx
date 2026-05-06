@@ -271,7 +271,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
 
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold">Test Cases</h2>
+        <h3 className="text-xl font-semibold">Test Cases</h3>
         <div className="flex flex-wrap items-center gap-2">
           {canEditInlineTests && (
             <>
@@ -294,7 +294,12 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                 <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
               </Tooltip>
 
-              <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
+              <Button
+                onClick={() => setTestCaseDialogOpen(true)}
+                className="dark:bg-blue-600 dark:hover:bg-blue-500"
+              >
+                Add Test Case
+              </Button>
 
               {testCases.length === 0 && (
                 <Button
@@ -337,7 +342,9 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
               <th className="px-4 py-3 text-left text-sm font-semibold">Description</th>
               <th className="px-4 py-3 text-left text-sm font-semibold">Assertions</th>
               <th className="px-4 py-3 text-left text-sm font-semibold">Variables</th>
-              <th className="px-4 py-3 text-right text-sm font-semibold w-[120px]"></th>
+              <th className="w-[120px] px-4 py-3 text-right text-sm font-semibold">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -368,7 +375,16 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                       )}
                     >
                       <td className="px-4 py-3 text-sm">
-                        <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setEditingTestCaseIndex(index);
+                            setTestCaseDialogOpen(true);
+                          }}
+                          aria-label={`Open test case ${index + 1} for editing`}
+                          className="flex w-full items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
                           {hasMissingVars && (
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -384,7 +400,7 @@ const TestCasesSection = ({ varsList, onOpenYamlEditor }: TestCasesSectionProps)
                               Test Case #{index + 1}
                             </span>
                           )}
-                        </div>
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">
                         {testCase.assert?.length ? (

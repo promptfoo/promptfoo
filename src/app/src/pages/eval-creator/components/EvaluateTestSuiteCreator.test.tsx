@@ -307,6 +307,10 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Prompts: Missing' }));
 
     expect(screen.getByTestId('mock-prompts-section')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Prompts: Missing' })).toHaveAttribute(
+      'aria-current',
+      'step',
+    );
   });
 
   it('should let nested editors open the YAML tab', async () => {

@@ -78,6 +78,34 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Test 1')).toBeInTheDocument();
   });
 
+  it('opens an existing test case from the keyboard', async () => {
+    const user = userEvent.setup();
+    (useStore as any).mockReturnValue({
+      config: {
+        tests: [
+          {
+            description: 'Test 1',
+            vars: { input: 'hello' },
+            assert: [{ type: 'contains', value: 'hi' }],
+          },
+        ],
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    const testCaseRow = screen.getByRole('button', { name: 'Open test case 1 for editing' });
+    testCaseRow.focus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByTestId('test-case-dialog')).toBeInTheDocument();
+  });
+
   it('shows a YAML-managed state for scalar test configs and opens the YAML editor', async () => {
     const user = userEvent.setup();
     const onOpenYamlEditor = vi.fn();

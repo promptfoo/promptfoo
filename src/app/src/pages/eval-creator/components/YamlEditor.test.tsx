@@ -39,12 +39,13 @@ vi.mock('@app/stores/evalConfig', () => ({
 
 // Mock the editor component to avoid prism.js issues
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ value, onValueChange, disabled }: any) => (
+  default: ({ value, onValueChange, disabled, ...props }: any) => (
     <textarea
       data-testid="yaml-editor"
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
       disabled={disabled}
+      {...props}
     />
   ),
 }));
@@ -95,6 +96,8 @@ describe('YamlEditor', () => {
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
+    expect(editor).toHaveAttribute('aria-label', 'YAML configuration editor');
+    expect(screen.getByRole('button', { name: 'Copy YAML configuration' })).toBeInTheDocument();
   });
 
   it('downloads the current YAML when Download YAML is clicked', async () => {
@@ -198,6 +201,7 @@ describe('YamlEditor', () => {
     // Editor should still be rendered
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor).toBeInTheDocument();
+    expect(editor).toHaveAttribute('aria-label', 'YAML configuration preview');
   });
 
   describe('handleCancel button state', () => {

@@ -1,3 +1,5 @@
+import { useId } from 'react';
+
 interface StepSectionProps {
   stepNumber: number;
   title: string;
@@ -21,8 +23,10 @@ export function StepSection({
   children,
   defaultOpen: _defaultOpen = false,
 }: StepSectionProps) {
+  const titleId = useId();
+
   return (
-    <div className="flex flex-col gap-4 lg:gap-6">
+    <section aria-labelledby={titleId} className="flex flex-col gap-4 lg:gap-6">
       {/* Header */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -36,7 +40,9 @@ export function StepSection({
             </>
           )}
         </div>
-        <h2 className="text-2xl font-bold mb-2">{title}</h2>
+        <h2 id={titleId} className="mb-2 text-2xl font-bold">
+          {title}
+        </h2>
         <p className="text-muted-foreground">{description}</p>
       </div>
 
@@ -45,6 +51,6 @@ export function StepSection({
 
       {/* Content */}
       <div className="order-2 min-w-0 lg:order-3">{children}</div>
-    </div>
+    </section>
   );
 }

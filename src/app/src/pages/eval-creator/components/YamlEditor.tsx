@@ -200,6 +200,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
           )}
         >
           <Editor
+            aria-label={readOnly ? 'YAML configuration preview' : 'YAML configuration editor'}
             autoCapitalize="off"
             value={code}
             onValueChange={(newCode) => {
@@ -233,7 +234,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
 
         {/* Copy button - offset to avoid scrollbar */}
         <div className="absolute top-2 right-5">
-          <CopyButton value={code} />
+          <CopyButton value={code} aria-label="Copy YAML configuration" />
         </div>
       </div>
     </div>
