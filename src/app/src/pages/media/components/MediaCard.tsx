@@ -119,12 +119,13 @@ export function MediaCard({
               : 'border-border',
       )}
     >
-      {/* Primary action overlay — covers the entire card so the card itself
-          is not an interactive element. Nested buttons sit above at z-10. */}
+      {/* Primary action overlay keeps the footer and keyboard focus path
+          interactive. The preview surface delegates ordinary pointer clicks
+          separately so its own controls can remain usable above it. */}
       <button
         data-media-card
         type="button"
-        className="absolute inset-0 z-[1] cursor-pointer rounded-xl bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="absolute inset-0 z-0 cursor-pointer rounded-xl bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         onClick={handlePrimaryAction}
         onFocus={onFocus}
         tabIndex={tabIndex}
@@ -132,7 +133,10 @@ export function MediaCard({
       />
 
       {/* Media Preview Area */}
-      <div className="relative aspect-square overflow-hidden rounded-t-xl bg-muted/30">
+      <div
+        className="relative aspect-square cursor-pointer overflow-hidden rounded-t-xl bg-muted/30"
+        onClick={handlePrimaryAction}
+      >
         {item.kind === 'image' && !imageError ? (
           <>
             {!imageLoaded && <Skeleton className="absolute inset-0 rounded-none" />}

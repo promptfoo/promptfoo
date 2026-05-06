@@ -30,6 +30,15 @@ describe('MediaFilters', () => {
       expect(screen.getByRole('tab', { name: 'Other' })).toBeInTheDocument();
     });
 
+    it('keeps compact type-filter labels available to assistive technology', () => {
+      render(<MediaFilters {...defaultProps} />);
+
+      expect(screen.getByRole('tab', { name: 'Videos' }).querySelector('span')).toHaveClass(
+        'sr-only',
+        'sm:not-sr-only',
+      );
+    });
+
     it('shows the current type filter as selected', () => {
       render(<MediaFilters {...defaultProps} typeFilter="image" />);
 

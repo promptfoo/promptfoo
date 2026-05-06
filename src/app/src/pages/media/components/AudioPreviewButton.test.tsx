@@ -15,4 +15,13 @@ describe('AudioPreviewButton', () => {
 
     expect(button).toHaveClass('pointer-events-auto', 'opacity-100');
   });
+
+  it('keeps the preview control available on touch-only devices', () => {
+    render(<AudioPreviewButton audioUrl="/audio.wav" hash="audio-1" />);
+
+    expect(screen.getByRole('button', { name: 'Play audio preview' })).toHaveClass(
+      '[@media(hover:none)]:pointer-events-auto',
+      '[@media(hover:none)]:opacity-100',
+    );
+  });
 });

@@ -163,6 +163,7 @@ export function AudioPreviewButton({
           'transition-opacity duration-200',
           'group-hover:pointer-events-auto group-hover:opacity-100',
           'focus-visible:pointer-events-auto focus-visible:opacity-100',
+          '[@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100',
           isHovering || isPlaying
             ? 'pointer-events-auto opacity-100'
             : 'pointer-events-none opacity-0',

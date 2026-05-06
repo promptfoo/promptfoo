@@ -105,7 +105,7 @@ export function MediaFilters({
                 className="gap-1.5 text-xs sm:text-sm"
               >
                 <option.icon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{option.label}</span>
+                <span className="sr-only sm:not-sr-only">{option.label}</span>
               </TabsTrigger>
             ))}
           </TabsList>

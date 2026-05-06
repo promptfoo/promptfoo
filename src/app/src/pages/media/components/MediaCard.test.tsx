@@ -202,6 +202,28 @@ describe('MediaCard', () => {
       expect(onClick).toHaveBeenCalledTimes(1);
     });
 
+    it('calls onClick when the passive preview surface is clicked', async () => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      const item = createMockMediaItem();
+      renderWithProviders(<MediaCard item={item} onClick={onClick} />);
+
+      await user.click(screen.getByRole('img'));
+
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps video preview controls from triggering the card action', async () => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      const item = createMockMediaItem({ kind: 'video', mimeType: 'video/mp4' });
+      renderWithProviders(<MediaCard item={item} onClick={onClick} />);
+
+      await user.click(screen.getByRole('button', { name: 'Play video preview' }));
+
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
     it('activates via Enter key (native button behavior)', async () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
