@@ -1,14 +1,32 @@
 import type {
   Agent,
+  AgentInputItem,
+  AgentOptions,
   Handoff,
   InputGuardrail,
   MCPServer,
   ModelSettings,
+  NonStreamRunOptions,
+  OpenAIConversationsSessionOptions,
+  OpenAIResponsesCompactionSessionOptions,
   OutputGuardrail,
   RetryPolicy,
+  Session,
+  SessionInputCallback,
   Tool,
-  ToolUseBehavior,
+  ToolErrorFormatter,
 } from '@openai/agents';
+import type {
+  Capability,
+  Manifest,
+  ManifestInit,
+  SandboxAgentOptions,
+  SandboxRunConfig,
+} from '@openai/agents/sandbox';
+import type {
+  DockerSandboxClientOptions,
+  UnixLocalSandboxClientOptions,
+} from '@openai/agents/sandbox/local';
 
 import type { OpenAiSharedOptions } from './types';
 
@@ -90,6 +108,30 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
    * Model settings to use for the agent
    */
   modelSettings?: OpenAiAgentsModelSettings;
+
+  /**
+   * Persistent conversation memory for the agent run.
+   *
+   * Supports built-in YAML-friendly definitions, SDK Session instances,
+   * file:// exports, or factories that return a Session for each call.
+   */
+  session?: OpenAiAgentsSessionConfig;
+
+  /**
+   * Sandbox runtime configuration for SandboxAgent workflows.
+   *
+   * Supports built-in local client definitions, SDK SandboxRunConfig objects,
+   * file:// exports, or factories that return a SandboxRunConfig for each call.
+   */
+  sandbox?: OpenAiAgentsSandboxConfig;
+
+  /**
+   * Pass-through options for the underlying SDK run() call.
+   *
+   * Promptfoo owns context, maxTurns, signal, and streaming mode. All other
+   * current SDK run options can be supplied here.
+   */
+  runOptions?: OpenAiAgentsRunOptions;
 }
 
 export type OpenAiAgentsRetryPolicyPreset =
@@ -120,25 +162,30 @@ export type OpenAiAgentsModelSettings = Omit<ModelSettings, 'retry'> & {
  */
 export interface AgentDefinition {
   /**
+   * Agent runtime to create for inline definitions.
+   * @default 'agent'
+   */
+  type?: 'agent' | 'sandbox';
+
+  /**
    * Name of the agent
    */
   name: string;
 
   /**
    * Instructions for the agent (system prompt)
-   * Can be a string or a function that returns a string
    */
-  instructions: string | ((context: any) => string | Promise<string>);
+  instructions: AgentOptions<any, any>['instructions'];
 
   /**
    * Prompt template to use for the agent
    */
-  prompt?: any;
+  prompt?: AgentOptions<any, any>['prompt'];
 
   /**
    * Model to use for the agent
    */
-  model?: string;
+  model?: AgentOptions<any, any>['model'];
 
   /**
    * Model settings to use for the agent
@@ -148,13 +195,18 @@ export interface AgentDefinition {
   /**
    * Description of what the agent does (used for handoffs)
    */
-  handoffDescription?: string;
+  handoffDescription?: AgentOptions<any, any>['handoffDescription'];
+
+  /**
+   * Whether to warn when handoff agents expose different output types.
+   */
+  handoffOutputTypeWarningEnabled?: AgentOptions<any, any>['handoffOutputTypeWarningEnabled'];
 
   /**
    * Output type schema
    * Can be 'text', a Zod schema, or a JSON schema definition
    */
-  outputType?: 'text' | any;
+  outputType?: AgentOptions<any, any>['outputType'];
 
   /**
    * Tools available to the agent
@@ -184,12 +236,33 @@ export interface AgentDefinition {
   /**
    * Configure how the agent should handle tool use
    */
-  toolUseBehavior?: ToolUseBehavior;
+  toolUseBehavior?: AgentOptions<any, any>['toolUseBehavior'];
 
   /**
    * Whether to reset the tool choice after a tool call
    */
-  resetToolChoice?: boolean;
+  resetToolChoice?: AgentOptions<any, any>['resetToolChoice'];
+
+  /**
+   * SandboxAgent-only manifest mounted into the sandbox workspace.
+   */
+  defaultManifest?: Manifest | ManifestInit;
+
+  /**
+   * SandboxAgent-only base instructions prepended to runtime instructions.
+   */
+  baseInstructions?: SandboxAgentOptions<any, any>['baseInstructions'];
+
+  /**
+   * SandboxAgent-only capability list. For YAML, prefer a file-exported agent
+   * when you need capabilities beyond the SDK defaults.
+   */
+  capabilities?: Capability[];
+
+  /**
+   * SandboxAgent-only execution user.
+   */
+  runAs?: SandboxAgentOptions<any, any>['runAs'];
 }
 
 /**
@@ -252,3 +325,85 @@ export interface LoadedAgent {
   tools?: any[];
   handoffs?: any[];
 }
+
+export type OpenAiAgentsSessionFactory = (context?: any) => Session | Promise<Session>;
+
+export type OpenAiAgentsMemorySessionDefinition = {
+  type: 'memory';
+  sessionId?: string;
+  initialItems?: AgentInputItem[];
+};
+
+export type OpenAiAgentsConversationsSessionDefinition = OpenAIConversationsSessionOptions & {
+  type: 'openai-conversations';
+};
+
+export type OpenAiAgentsResponsesCompactionSessionDefinition = Omit<
+  OpenAIResponsesCompactionSessionOptions,
+  'underlyingSession'
+> & {
+  type: 'openai-responses-compaction';
+  underlyingSession?: OpenAiAgentsSessionConfig;
+};
+
+export type OpenAiAgentsSessionDefinition =
+  | OpenAiAgentsMemorySessionDefinition
+  | OpenAiAgentsConversationsSessionDefinition
+  | OpenAiAgentsResponsesCompactionSessionDefinition;
+
+export type OpenAiAgentsSessionConfig =
+  | Session
+  | string
+  | OpenAiAgentsSessionFactory
+  | OpenAiAgentsSessionDefinition;
+
+export type OpenAiAgentsSandboxFactory = (
+  context?: any,
+) => SandboxRunConfig | Promise<SandboxRunConfig>;
+
+type OpenAiAgentsSandboxDefinitionBase = Omit<SandboxRunConfig<any, any>, 'client' | 'manifest'> & {
+  manifest?: Manifest | ManifestInit;
+};
+
+export type OpenAiAgentsUnixLocalSandboxDefinition = OpenAiAgentsSandboxDefinitionBase & {
+  type: 'unix-local';
+  clientOptions?: UnixLocalSandboxClientOptions;
+};
+
+export type OpenAiAgentsDockerSandboxDefinition = OpenAiAgentsSandboxDefinitionBase & {
+  type: 'docker';
+  clientOptions?: DockerSandboxClientOptions;
+};
+
+export type OpenAiAgentsSandboxDefinition =
+  | OpenAiAgentsUnixLocalSandboxDefinition
+  | OpenAiAgentsDockerSandboxDefinition;
+
+export type OpenAiAgentsSandboxConfig =
+  | SandboxRunConfig<any, any>
+  | string
+  | OpenAiAgentsSandboxFactory
+  | OpenAiAgentsSandboxDefinition;
+
+export type OpenAiAgentsRunOptions = Omit<
+  NonStreamRunOptions<any, any>,
+  | 'callModelInputFilter'
+  | 'context'
+  | 'errorHandlers'
+  | 'maxTurns'
+  | 'sandbox'
+  | 'session'
+  | 'sessionInputCallback'
+  | 'signal'
+  | 'stream'
+  | 'toolErrorFormatter'
+> & {
+  callModelInputFilter?:
+    | NonNullable<NonStreamRunOptions<any, any>['callModelInputFilter']>
+    | string;
+  errorHandlers?: NonNullable<NonStreamRunOptions<any, any>['errorHandlers']> | string;
+  sandbox?: OpenAiAgentsSandboxConfig;
+  session?: OpenAiAgentsSessionConfig;
+  sessionInputCallback?: SessionInputCallback | string;
+  toolErrorFormatter?: ToolErrorFormatter | string;
+};
