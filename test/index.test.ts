@@ -7,6 +7,7 @@ import logger from '../src/logger';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
+import { doGenerateRedteam } from '../src/redteam/commands/generate';
 import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
 import { writeMultipleOutputs, writeOutput } from '../src/util/index';
@@ -76,6 +77,15 @@ vi.mock('../src/redteam/shared', async () => {
   return {
     ...originalModule,
     doRedteamRun: vi.fn(),
+  };
+});
+vi.mock('../src/redteam/commands/generate', async () => {
+  const originalModule = await vi.importActual<typeof import('../src/redteam/commands/generate')>(
+    '../src/redteam/commands/generate',
+  );
+  return {
+    ...originalModule,
+    doGenerateRedteam: vi.fn(),
   };
 });
 vi.mock('../src/providers', async () => {
@@ -969,11 +979,21 @@ describe('evaluate function', () => {
 describe('redteam package wrapper', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(doGenerateRedteam).mockResolvedValue({});
     vi.mocked(doRedteamRun).mockResolvedValue(undefined);
   });
 
   afterEach(() => {
+    vi.mocked(doGenerateRedteam).mockReset();
     vi.mocked(doRedteamRun).mockReset();
+  });
+
+  it('should expose a package wrapper for generation', async () => {
+    expect(index.redteam.generate).not.toBe(doGenerateRedteam);
+
+    await index.redteam.generate({ cache: false });
+
+    expect(doGenerateRedteam).toHaveBeenCalledWith({ cache: false });
   });
 
   it('should pin package callers to library semantics', async () => {
