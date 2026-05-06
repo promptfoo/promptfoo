@@ -27,7 +27,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 1280px) {
   .githubStars {
     display: none;
   }
