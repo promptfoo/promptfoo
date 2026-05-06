@@ -123,6 +123,8 @@ export type OpenAiResponsesTool =
   | OpenAiWebSearchTool
   | OpenAiCodeInterpreterTool;
 
+export type OpenAiPromptCacheRetention = 'in_memory' | '24h' | null;
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
@@ -157,6 +159,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
+  prompt_cache_key?: string;
+  prompt_cache_retention?: OpenAiPromptCacheRetention;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
   service_tier?: ('auto' | 'default' | 'flex' | 'priority' | 'premium') | null;
@@ -172,6 +176,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   instructions?: string;
   max_output_tokens?: number;
   max_tool_calls?: number;
+  include?: OpenAI.Responses.ResponseIncludable[] | null;
   metadata?: Record<string, string>;
   parallel_tool_calls?: boolean;
   previous_response_id?: string;

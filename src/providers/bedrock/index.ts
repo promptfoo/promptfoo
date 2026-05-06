@@ -7,7 +7,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isClaudeOpus47Model, outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
-import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
+import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
 
 import type {
@@ -2534,7 +2534,12 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
     logger.debug('Calling Amazon Bedrock API', { params });
 
     const cache = await getCache();
-    const cacheKey = `bedrock:${this.modelName}:${JSON.stringify(params)}`;
+    const region = this.getRegion();
+    const cacheKey = `bedrock:${this.modelName}:${region}:${createBedrockCacheKeyHash({
+      config: this.config,
+      params,
+      region,
+    })}`;
 
     if (isCacheEnabled()) {
       // Try to get the cached response
