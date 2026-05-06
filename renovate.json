@@ -155,17 +155,6 @@
       "groupName": "langfuse"
     },
     {
-      "description": "Group PostHog packages together across all dependency types",
-      "matchPackagePatterns": ["^posthog-"],
-      "matchDepTypes": [
-        "dependencies",
-        "devDependencies",
-        "optionalDependencies",
-        "peerDependencies"
-      ],
-      "groupName": "PostHog packages"
-    },
-    {
       "description": "Group OpenTelemetry packages together",
       "matchPackagePatterns": ["^@opentelemetry/"],
       "groupName": "OpenTelemetry"
@@ -330,13 +319,6 @@
     {
       "description": "Storybook: monthly updates to reduce noise from frequent patch releases",
       "matchPackagePatterns": ["^@storybook/", "^storybook$", "^@chromatic-com/storybook"],
-      "schedule": ["before 6am on the first day of the month"],
-      "rangeStrategy": "bump",
-      "minimumReleaseAge": "7 days"
-    },
-    {
-      "description": "PostHog packages: monthly updates to reduce noise from frequent patch releases",
-      "matchPackagePatterns": ["^posthog-"],
       "schedule": ["before 6am on the first day of the month"],
       "rangeStrategy": "bump",
       "minimumReleaseAge": "7 days"

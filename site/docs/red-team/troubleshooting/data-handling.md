@@ -124,7 +124,6 @@ When using remote generation, Promptfoo requires access to:
 | ------------------- | ------------------------------------ |
 | `api.promptfoo.app` | Test generation and grading          |
 | `api.promptfoo.dev` | Consent tracking for harmful plugins |
-| `a.promptfoo.app`   | Telemetry (PostHog)                  |
 
 If blocked by your firewall, see [Remote Generation Troubleshooting](/docs/red-team/troubleshooting/remote-generation/).
 
