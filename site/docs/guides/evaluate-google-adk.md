@@ -43,28 +43,26 @@ PROMPTFOO_PYTHON=.venv/bin/python npx promptfoo@latest eval -c promptfooconfig.y
 
 ## What The Example Covers
 
-`promptfooconfig.yaml` evaluates one conversational task across three user turns. The ADK app uses:
+`promptfooconfig.yaml` evaluates one conversational task across three user turns against a single `Agent`:
 
-- `Agent` with function tools
-- `InMemorySessionService` state
-- a `before_agent_callback`
-- an app-wide `BasePlugin`
-- `InMemoryArtifactService`
-- native ADK OpenTelemetry traces
+```python title="agent.py"
+root_agent = Agent(
+    name="weather_agent",
+    model=model,
+    instruction="...travel weather assistant. Call get_weather... Call save_trip_note...",
+    tools=[get_weather, save_trip_note],
+    before_agent_callback=before_agent_callback,
+)
+app = App(name=APP_NAME, root_agent=root_agent, plugins=[audit_plugin])
+```
 
-`promptfooconfig.workflow.yaml` evaluates a small `SequentialAgent` flow with two child agents. It verifies that the weather lookup happens before the briefing agent finishes the task.
+The runtime wires up an `InMemorySessionService`, an `InMemoryArtifactService`, an app-wide `BasePlugin` (`AuditPlugin`), and the native ADK OpenTelemetry exporter. `promptfooconfig.workflow.yaml` evaluates a `SequentialAgent` flow with two child agents and asserts that the weather lookup runs before the briefing.
 
 ## Why Use A Python Provider
 
-You can put ADK behind `adk api_server` and test it over HTTP, but that is usually the wrong default for agent evals. An in-process Python provider gives Promptfoo access to the framework behavior that matters most:
+An in-process Python provider lets one Promptfoo row drive a multi-turn task, read session state, load artifacts, observe plugin and callback side effects, and assert against ADK's native trajectory spans — all without going over the wire. The HTTP shape around `adk api_server` cannot expose any of those without a parallel inspection channel.
 
-- one Promptfoo row can represent a multi-turn task
-- session state can be inspected directly
-- artifacts can be loaded after the run
-- ADK's internal spans are available for `trajectory:*` assertions
-- plugin and callback effects can be surfaced in the returned payload
-
-Use an HTTP provider when the deployed HTTP contract is what you need to test.
+Pick the HTTP provider when the deployed HTTP contract itself is what you want to validate (auth, request shape, status codes). Pick the Python provider for everything else.
 
 ## How Native ADK Tracing Fits Promptfoo
 
@@ -112,14 +110,19 @@ After the eval, inspect the row in the Trace Timeline. The bundled conversationa
 
 ## Sessions, State, Plugins, And Artifacts
 
-ADK separates short-lived conversation state from artifacts:
+State is mutated through `ToolContext`. Artifacts go through the same context but a different method:
 
-- the `get_weather` tool writes `last_city` into session state through `ToolContext.state`
-- `before_agent_callback` increments a callback counter in the same state
-- `AuditPlugin` records runner lifecycle callbacks
-- `save_trip_note` writes a Markdown artifact through `ToolContext.save_artifact`
+```python title="agent.py"
+async def save_trip_note(city: str, summary: str, tool_context: ToolContext):
+    artifact = types.Part.from_bytes(
+        data=f"# Trip note for {city}\n\n{summary}\n".encode("utf-8"),
+        mime_type="text/markdown",
+    )
+    await tool_context.save_artifact(filename=f"{city}-trip-note.md", artifact=artifact)
+    tool_context.state["last_saved_artifact"] = f"{city}-trip-note.md"
+```
 
-The provider returns a JSON inspection payload after each run so deterministic assertions can check those effects:
+The provider drains both back out and returns them as one JSON payload. Deterministic `contains` and `is-json` assertions can then check internal effects without a model grader:
 
 ```json
 {
@@ -133,39 +136,49 @@ The provider returns a JSON inspection payload after each run so deterministic a
 }
 ```
 
-That pattern is useful when you care about more than the final assistant sentence. It lets one eval verify user-visible output and internal agent behavior together.
+One eval row now covers the assistant's reply _and_ the agent's internal bookkeeping.
 
 ## Workflow Agents
 
-ADK's workflow agents are useful when orchestration should be explicit rather than model-routed. The bundled workflow example uses:
+When the order of work is fixed, encode it as a workflow agent instead of relying on the LLM to route. The bundled example chains a lookup agent into a briefing agent:
 
-1. `weather_lookup_agent` to call `get_weather`
-2. `briefing_agent` to turn the stored `weather_snapshot` into a trip brief
-3. `SequentialAgent` to run those steps in order
+```python title="agent.py"
+weather_lookup_agent = Agent(
+    name="weather_lookup_agent",
+    model=model,
+    tools=[get_weather],
+    output_key="weather_snapshot",  # writes the final response to session state
+)
+briefing_agent = Agent(name="briefing_agent", model=model, instruction="Use weather_snapshot...")
+workflow = SequentialAgent(
+    name="trip_planning_workflow",
+    sub_agents=[weather_lookup_agent, briefing_agent],
+)
+```
 
-The same provider pattern works for `ParallelAgent`, `LoopAgent`, custom `BaseAgent` implementations, and agent trees that use `sub_agents` or `AgentTool`. Add span-count assertions for the workflow agents you care about, then keep tool assertions focused on the side effects that must happen.
+The provider pattern is unchanged — `_run_workflow_provider` still calls `runner.run_async`. Swap `SequentialAgent` for `ParallelAgent`, `LoopAgent`, a custom `BaseAgent`, or any tree that uses `sub_agents` / `AgentTool`. Add a `trace-span-count` for each named workflow agent, and keep `trajectory:tool-used` focused on the tool calls that must happen.
 
 ## Structured Outputs, Memory, And Advanced Tools
 
-The example stays small enough to run quickly, but the same integration shape works with the rest of the stable ADK 1.x surface:
+The same provider shape covers the rest of the stable ADK 1.x surface. Map each ADK feature to the assertion type that proves it works:
 
-| ADK feature                           | Promptfoo check to add                                                |
-| ------------------------------------- | --------------------------------------------------------------------- |
-| `output_schema` or `output_key`       | deterministic JSON / schema assertions plus returned state            |
-| `MemoryService`                       | separate cases for same-session vs cross-session recall               |
-| MCP, OpenAPI, or authenticated tools  | `trajectory:tool-used`, argument checks, and negative-path assertions |
-| code executors                        | command / tool spans plus output and safety checks                    |
-| multi-agent trees                     | span counts for each agent plus tool order assertions                 |
-| long-running tools and resumable apps | state / event assertions around pause and resume behavior             |
+| ADK feature                          | Assertion to add                                                           |
+| ------------------------------------ | -------------------------------------------------------------------------- |
+| `output_schema` or `output_key`      | `is-json` with a JSON schema in `value`, plus `contains` on returned state |
+| `MemoryService`                      | paired test cases that share a session id vs use distinct ones             |
+| MCP, OpenAPI, or authenticated tools | `trajectory:tool-used`, `trajectory:tool-args-match`, `is-refusal`         |
+| code executors                       | `trace-span-count` on `execute_tool *` plus safety `contains` / `regex`    |
+| multi-agent trees                    | one `trace-span-count` per `invoke_agent <name>` you require               |
+| long-running / resumable apps        | `contains` on `session_state` snapshots before and after resume            |
 
-ADK also has its own `adk eval` stack. Use that when you want ADK-native eval sets or ADK-specific metrics; use Promptfoo when you want one harness that can compare ADK against other frameworks, share the same assertion language, run red teams, or inspect OpenTelemetry traces alongside the final output.
+ADK ships its own `adk eval` stack — use it for ADK-native eval sets and ADK-specific metrics. Promptfoo is the better fit when one harness has to compare ADK against other frameworks, run red teams against the same surface, or assert on OpenTelemetry traces alongside the final output.
 
 ## Production Notes
 
-- Keep the provider span small. ADK already emits the useful child spans; the wrapper only needs to preserve Promptfoo's parent trace and flush before the worker exits.
-- The bundled example uses in-memory services so it is deterministic and easy to inspect. Swap in your real `SessionService`, `ArtifactService`, or `MemoryService` when persistence is part of the behavior under test.
-- Prefer direct state and artifact assertions for deterministic effects, then use model-graded assertions for genuinely semantic outcomes.
-- If you test provider-style model strings such as `openai/...`, install `google-adk[extensions]`. That optional dependency set is much larger than the base SDK and may emit unrelated upstream warnings that do not indicate an eval failure.
+- Keep the provider span small. ADK emits the framework spans; the wrapper only has to preserve Promptfoo's parent trace and flush before the worker exits.
+- The bundled example uses in-memory services so runs are deterministic. Swap in your real `SessionService`, `ArtifactService`, or `MemoryService` when persistence is part of the behavior under test.
+- Reach for state and artifact assertions first; reserve model-graded assertions for outcomes that actually require semantics (tone, factuality, refusal quality).
+- The optional `google-adk[extensions]` set adds hundreds of MB of LiteLLM and provider SDKs. Install it only when you need provider-prefixed model strings (`openai/...`, `anthropic/...`), and expect upstream warnings unrelated to your eval.
 
 ## Source References
 
