@@ -221,9 +221,7 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('should hash semantically identical objects to the same value regardless of key order', async () => {
-      const { hashAnthropicCacheValue } = await import(
-        '../../../src/providers/anthropic/generic'
-      );
+      const { hashAnthropicCacheValue } = await import('../../../src/providers/anthropic/generic');
 
       expect(hashAnthropicCacheValue({ a: 1, b: 2, c: 3 })).toBe(
         hashAnthropicCacheValue({ c: 3, a: 1, b: 2 }),
@@ -235,6 +233,23 @@ describe('AnthropicCompletionProvider', () => {
       );
       // Arrays preserve order — element ordering is semantically meaningful.
       expect(hashAnthropicCacheValue([1, 2, 3])).not.toBe(hashAnthropicCacheValue([3, 2, 1]));
+    });
+
+    it('should preserve non-plain-object semantics so distinct values do not collide', async () => {
+      const { hashAnthropicCacheValue } = await import('../../../src/providers/anthropic/generic');
+
+      // Date and Buffer expose state via toJSON / default serialization rather
+      // than enumerable own keys. Naïve canonicalization would rebuild them as
+      // empty/index-only objects and collapse distinct values to the same hash.
+      expect(hashAnthropicCacheValue(new Date('2026-01-01T00:00:00.000Z'))).not.toBe(
+        hashAnthropicCacheValue(new Date('2027-06-15T12:00:00.000Z')),
+      );
+      expect(hashAnthropicCacheValue({ ts: new Date('2026-01-01T00:00:00.000Z') })).not.toBe(
+        hashAnthropicCacheValue({ ts: new Date('2027-06-15T12:00:00.000Z') }),
+      );
+      expect(hashAnthropicCacheValue(Buffer.from('alpha'))).not.toBe(
+        hashAnthropicCacheValue(Buffer.from('beta')),
+      );
     });
 
     it('should avoid logging prompts and generated outputs in debug metadata', async () => {

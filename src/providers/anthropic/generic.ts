@@ -40,17 +40,28 @@ interface AnthropicBaseOptions {
 
 const ANTHROPIC_CACHE_HASH_CONTEXT = 'promptfoo:anthropic:cache-key:v1';
 
-// Canonicalize before hashing so semantically identical objects with different
-// property insertion orders produce the same cache key. See
-// `src/providers/AGENTS.md` "Cache Key Hygiene".
+// Canonicalize before hashing so semantically identical plain objects with
+// different property insertion orders produce the same cache key. See
+// `src/providers/AGENTS.md` "Cache Key Hygiene". Class instances such as
+// `Date` or `Buffer` are passed through so their `toJSON` / default
+// serialization is preserved — rebuilding them via `Object.keys` would
+// collapse distinct values to the same shape and cause cache collisions.
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(canonicalize);
   }
-  if (value && typeof value === 'object') {
-    const entries = Object.keys(value as Record<string, unknown>)
+  if (isPlainObject(value)) {
+    const entries = Object.keys(value)
       .sort()
-      .map((k) => [k, canonicalize((value as Record<string, unknown>)[k])] as const);
+      .map((k) => [k, canonicalize(value[k])] as const);
     return Object.fromEntries(entries);
   }
   return value;
