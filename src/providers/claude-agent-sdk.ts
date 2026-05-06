@@ -20,7 +20,12 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from '../tracing/resourceAttributes';
 import { safeResolve } from '../util/pathUtils';
-import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
+import {
+  cacheResponse,
+  getCachedResponse,
+  initializeAgenticCache,
+  resolveAgenticWorkingDir,
+} from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
@@ -1104,7 +1109,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     let workingDir: string | undefined;
 
     if (config.working_dir) {
-      workingDir = safeResolve(basePath, config.working_dir);
+      workingDir = resolveAgenticWorkingDir(config.working_dir, basePath);
     } else {
       isTempDir = true;
     }

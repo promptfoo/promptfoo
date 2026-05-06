@@ -371,6 +371,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(loadedTools ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
+      ...(config.include === undefined ? {} : { include: config.include }),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
@@ -383,6 +384,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.background ? { background: config.background } : {}),
       ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
     };
 

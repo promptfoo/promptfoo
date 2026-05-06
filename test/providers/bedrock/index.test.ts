@@ -3,7 +3,10 @@ import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
-import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
+import {
+  AwsBedrockGenericProvider,
+  createBedrockCacheKeyHash,
+} from '../../../src/providers/bedrock/base';
 import {
   AWS_BEDROCK_MODELS,
   AwsBedrockCompletionProvider,
@@ -3292,6 +3295,300 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(mockCache.get).toHaveBeenCalled();
     // Verify invokeModel was not called because cache was used
     expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it('should hash prompt and secret values in the cache key', async () => {
+    const modelName = 'us.anthropic.claude-3-7-sonnet-20250219-v1:0';
+    const prompt = 'PFQA_BEDROCK_PROMPT_SENTINEL';
+    const apiKey = 'PFQA_BEDROCK_SECRET_SENTINEL';
+    const otherApiKey = 'PFQA_BEDROCK_OTHER_SECRET_SENTINEL';
+    const cachedResponseData = { completion: 'cached response' };
+
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(cachedResponseData));
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(AWS_BEDROCK_MODELS[modelName].params).mockImplementation(
+      async (config, promptText) => ({
+        prompt: promptText,
+        ...config,
+      }),
+    );
+
+    const provider = new AwsBedrockCompletionProvider(modelName, {
+      config: {
+        region: 'us-east-1',
+        apiKey,
+      } as BedrockClaudeMessagesCompletionOptions,
+    });
+
+    const result = await provider.callApi(prompt);
+
+    expect(result.cached).toBe(true);
+    expect(result.output).toBe('processed output');
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+    expect(mockCache.get).toHaveBeenCalledTimes(1);
+
+    const cacheKey = mockCache.get.mock.calls[0][0] as string;
+    const cacheKeyPrefix = `bedrock:${modelName}:us-east-1:`;
+    expect(cacheKey.startsWith(cacheKeyPrefix)).toBe(true);
+    expect(cacheKey.slice(cacheKeyPrefix.length)).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKey).not.toContain(prompt);
+    expect(cacheKey).not.toContain(apiKey);
+    expect(cacheKey).not.toContain(otherApiKey);
+
+    const otherProvider = new AwsBedrockCompletionProvider(modelName, {
+      config: {
+        region: 'us-east-1',
+        apiKey: otherApiKey,
+      } as BedrockClaudeMessagesCompletionOptions,
+    });
+
+    await otherProvider.callApi(prompt);
+
+    const otherCacheKey = mockCache.get.mock.calls[1][0] as string;
+    expect(otherCacheKey.startsWith(cacheKeyPrefix)).toBe(true);
+    expect(otherCacheKey.slice(cacheKeyPrefix.length)).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(otherCacheKey).not.toBe(cacheKey);
+    expect(otherCacheKey).not.toContain(prompt);
+    expect(otherCacheKey).not.toContain(apiKey);
+    expect(otherCacheKey).not.toContain(otherApiKey);
+  });
+
+  it('should separate cache keys across Bedrock auth configuration', () => {
+    const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+    const region = 'us-east-1';
+    const baseConfig = {
+      region,
+    } as BedrockClaudeMessagesCompletionOptions;
+
+    const cacheKeys = [
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          apiKey: 'PFQA_BEDROCK_API_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+          sessionToken: 'PFQA_BEDROCK_SESSION_TOKEN_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          profile: 'promptfoo-profile-b',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+      createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          endpoint: 'https://bedrock-runtime.us-west-2.amazonaws.com',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      }),
+    ];
+
+    expect(new Set(cacheKeys).size).toBe(cacheKeys.length);
+    for (const cacheKey of cacheKeys) {
+      expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKey).not.toContain('PFQA_BEDROCK');
+      expect(cacheKey).not.toContain('promptfoo-profile');
+      expect(cacheKey).not.toContain('bedrock-runtime');
+    }
+  });
+
+  it('should prefer explicit credentials over bearer auth in cache metadata', () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const sharedBearerConfig = {
+        region,
+        apiKey: 'PFQA_BEDROCK_SHARED_BEARER',
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      const explicitCredentialsA = createBedrockCacheKeyHash({
+        config: {
+          ...sharedBearerConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_A',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_A',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+      const explicitCredentialsB = createBedrockCacheKeyHash({
+        config: {
+          ...sharedBearerConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_B',
+          secretAccessKey: 'PFQA_BEDROCK_SECRET_ACCESS_KEY_B',
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+
+      expect(explicitCredentialsA).not.toBe(explicitCredentialsB);
+      for (const cacheKey of [explicitCredentialsA, explicitCredentialsB]) {
+        expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+        expect(cacheKey).not.toContain('PFQA_BEDROCK');
+      }
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should keep Bedrock auth cache metadata stable across module reloads', async () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const config = {
+        region,
+        accessKeyId: 'PFQA_BEDROCK_RELOAD_ACCESS_KEY',
+        secretAccessKey: 'PFQA_BEDROCK_RELOAD_SECRET_KEY',
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      async function getCacheKeyFromFreshModule() {
+        vi.resetModules();
+        const { createBedrockCacheKeyHash: createFreshBedrockCacheKeyHash } = await import(
+          '../../../src/providers/bedrock/base'
+        );
+        return createFreshBedrockCacheKeyHash({ config, params, region });
+      }
+
+      const firstCacheKey = await getCacheKeyFromFreshModule();
+      const secondCacheKey = await getCacheKeyFromFreshModule();
+
+      expect(firstCacheKey).toBe(secondCacheKey);
+      expect(firstCacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(firstCacheKey).not.toContain('PFQA_BEDROCK');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should ignore undefined auth config values in cache auth metadata', () => {
+    const restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const baseConfig = {
+        region,
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      const defaultCacheKey = createBedrockCacheKeyHash({ config: baseConfig, params, region });
+      const undefinedBearerCacheKey = createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          apiKey: undefined,
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+      const incompleteExplicitCacheKey = createBedrockCacheKeyHash({
+        config: {
+          ...baseConfig,
+          accessKeyId: 'PFQA_BEDROCK_ACCESS_KEY_ONLY',
+          secretAccessKey: undefined,
+        } as BedrockClaudeMessagesCompletionOptions,
+        params,
+        region,
+      });
+
+      expect(undefinedBearerCacheKey).toBe(defaultCacheKey);
+      expect(incompleteExplicitCacheKey).toBe(defaultCacheKey);
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should separate cache keys by effective bearer token env value', () => {
+    let restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+
+    try {
+      const params = { prompt: 'PFQA_BEDROCK_PROMPT_SENTINEL' };
+      const region = 'us-east-1';
+      const config = {
+        region,
+      } as BedrockClaudeMessagesCompletionOptions;
+
+      restoreEnv();
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'PFQA_BEDROCK_ENV_BEARER_A',
+      });
+      const bearerACacheKey = createBedrockCacheKeyHash({ config, params, region });
+      restoreEnv();
+      restoreEnv = mockProcessEnv({
+        AWS_BEARER_TOKEN_BEDROCK: 'PFQA_BEDROCK_ENV_BEARER_B',
+      });
+      const bearerBCacheKey = createBedrockCacheKeyHash({ config, params, region });
+
+      expect(bearerACacheKey).not.toBe(bearerBCacheKey);
+      for (const cacheKey of [bearerACacheKey, bearerBCacheKey]) {
+        expect(cacheKey).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_BEARER_A');
+        expect(cacheKey).not.toContain('PFQA_BEDROCK_ENV_BEARER_B');
+      }
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should preserve non-auth request fields named like credentials in request hashes', () => {
+    const region = 'us-east-1';
+    const config = {
+      region,
+      apiKey: 'PFQA_BEDROCK_AUTH_SECRET',
+    } as BedrockClaudeMessagesCompletionOptions;
+
+    const requestA = createBedrockCacheKeyHash({
+      config,
+      params: {
+        prompt: 'Shared prompt',
+        additionalModelRequestFields: {
+          toolSchema: {
+            apiKey: 'request-visible-api-key-a',
+          },
+        },
+      },
+      region,
+    });
+    const requestB = createBedrockCacheKeyHash({
+      config,
+      params: {
+        prompt: 'Shared prompt',
+        additionalModelRequestFields: {
+          toolSchema: {
+            apiKey: 'request-visible-api-key-b',
+          },
+        },
+      },
+      region,
+    });
+
+    expect(requestA).not.toBe(requestB);
+    expect(requestA).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(requestB).toMatch(/^[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(requestA).not.toContain('request-visible-api-key-a');
+    expect(requestB).not.toContain('request-visible-api-key-b');
   });
 });
 

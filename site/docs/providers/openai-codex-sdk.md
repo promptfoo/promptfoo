@@ -101,7 +101,7 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now u
 
 ### Basic Usage
 
-By default, the Codex SDK runs in the current working directory and requires that directory to be inside a Git repository unless you disable the check. For pure code-generation evals that should not touch the filesystem, use `sandbox_mode: read-only`.
+By default, the Codex SDK runs in the current working directory and requires that directory to be inside a Git repository unless you disable the check. When you set `working_dir`, relative values are resolved from the directory containing the config file. For pure code-generation evals that should not touch the filesystem, use `sandbox_mode: read-only`.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -177,31 +177,31 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 The provider validates top-level provider config strictly. If you mistype a provider field such as `sandboxMode` instead of `sandbox_mode`, provider loading can fail before any rows run. Prompt-level config is parsed more leniently because promptfoo merges generic test options into `prompt.config`; unrelated keys are ignored there, while invalid values for known Codex fields still return a row-level provider error. Put extra Codex CLI settings that are not listed below under `cli_config`.
 
-| Parameter                | Type     | Description                                                  | Default              |
-| ------------------------ | -------- | ------------------------------------------------------------ | -------------------- |
-| `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.    | Environment variable |
-| `base_url`               | string   | Custom API base URL                                          | None                 |
-| `working_dir`            | string   | Directory for Codex to operate in                            | Current directory    |
-| `additional_directories` | string[] | Additional directories the agent can access                  | None                 |
-| `model`                  | string   | Model to use                                                 | SDK default          |
-| `sandbox_mode`           | string   | Sandbox access level (see below)                             | `workspace-write`    |
-| `model_reasoning_effort` | string   | Reasoning intensity (see below)                              | SDK default          |
-| `network_access_enabled` | boolean  | Allow network requests                                       | false                |
-| `web_search_enabled`     | boolean  | Allow web search                                             | false                |
-| `web_search_mode`        | string   | Web search mode: `disabled`, `cached`, or `live`             | SDK default          |
-| `collaboration_mode`     | string   | Multi-agent preset mapped to `cli_config.collaboration_mode` | None                 |
-| `approval_policy`        | string   | When to require approval (see below)                         | SDK default          |
-| `cli_config`             | object   | Additional Codex CLI config overrides                        | None                 |
-| `skip_git_repo_check`    | boolean  | Skip Git repository validation                               | false                |
-| `codex_path_override`    | string   | Custom path to codex binary                                  | None                 |
-| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions                | None (creates new)   |
-| `persist_threads`        | boolean  | Keep threads alive between calls                             | false                |
-| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)                | 1                    |
-| `output_schema`          | object   | JSON schema for structured responses                         | None                 |
-| `cli_env`                | object   | Custom environment variables for Codex CLI                   | Minimal shell env    |
-| `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                | `false`              |
-| `enable_streaming`       | boolean  | Enable streaming events                                      | false                |
-| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                | false                |
+| Parameter                | Type     | Description                                                                                          | Default              |
+| ------------------------ | -------- | ---------------------------------------------------------------------------------------------------- | -------------------- |
+| `apiKey`                 | string   | OpenAI API key. Optional when Codex is already signed in.                                            | Environment variable |
+| `base_url`               | string   | Custom API base URL                                                                                  | None                 |
+| `working_dir`            | string   | Directory for Codex to operate in                                                                    | Current directory    |
+| `additional_directories` | string[] | Additional directories the agent can access. Relative values resolve from the config file directory. | None                 |
+| `model`                  | string   | Model to use                                                                                         | SDK default          |
+| `sandbox_mode`           | string   | Sandbox access level (see below)                                                                     | `workspace-write`    |
+| `model_reasoning_effort` | string   | Reasoning intensity (see below)                                                                      | SDK default          |
+| `network_access_enabled` | boolean  | Allow network requests                                                                               | false                |
+| `web_search_enabled`     | boolean  | Allow web search                                                                                     | false                |
+| `web_search_mode`        | string   | Web search mode: `disabled`, `cached`, or `live`                                                     | SDK default          |
+| `collaboration_mode`     | string   | Multi-agent preset mapped to `cli_config.collaboration_mode`                                         | None                 |
+| `approval_policy`        | string   | When to require approval (see below)                                                                 | SDK default          |
+| `cli_config`             | object   | Additional Codex CLI config overrides                                                                | None                 |
+| `skip_git_repo_check`    | boolean  | Skip Git repository validation                                                                       | false                |
+| `codex_path_override`    | string   | Custom path to codex binary                                                                          | None                 |
+| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions                                                        | None (creates new)   |
+| `persist_threads`        | boolean  | Keep threads alive between calls                                                                     | false                |
+| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)                                                        | 1                    |
+| `output_schema`          | object   | JSON schema for structured responses                                                                 | None                 |
+| `cli_env`                | object   | Custom environment variables for Codex CLI                                                           | Minimal shell env    |
+| `inherit_process_env`    | boolean  | Merge full process env into the Codex CLI env                                                        | `false`              |
+| `enable_streaming`       | boolean  | Enable streaming events                                                                              | false                |
+| `deep_tracing`           | boolean  | Enable OpenTelemetry tracing of CLI internals                                                        | false                |
 
 ### Sandbox Modes
 
@@ -652,7 +652,7 @@ tests:
         value: token-skill
 ```
 
-The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional. They are useful when you want to run the same config from a different current working directory, such as the repository root in CI.
+The `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` variables are optional. `working_dir` paths in the config resolve from the config file's directory, so `CODEX_SKILLS_WORKING_DIR` is mainly useful when you want to point at a different sample project. Codex resolves `CODEX_HOME` itself, so set `CODEX_HOME_OVERRIDE` to an absolute path when you run the example from another working directory or want Codex to use a different home directory.
 
 :::note
 
