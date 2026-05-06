@@ -1,11 +1,6 @@
-import {
-  localFile,
-  Manifest,
-  SandboxAgent,
-  shell,
-  skills,
-} from '@openai/agents/sandbox';
 import { fileURLToPath } from 'node:url';
+
+import { localFile, Manifest, SandboxAgent, shell, skills } from '@openai/agents/sandbox';
 
 const taskFilePath = fileURLToPath(new URL('../workspace/task.md', import.meta.url));
 

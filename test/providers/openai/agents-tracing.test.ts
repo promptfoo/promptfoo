@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { OTLPTracingExporter } from '../../../src/providers/openai/agents-tracing';
 
 function getAttributes(span: any): Record<string, unknown> {
