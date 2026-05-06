@@ -24,7 +24,6 @@
   transition: transform 0.2s ease;
 }
 
-.navMenuCard:hover .navMenuCardIcon,
 .navMenuCardButtonOpen .navMenuCardIcon {
   transform: rotate(180deg);
 }
@@ -42,13 +41,6 @@
     visibility 0.2s ease;
   padding-top: 8px;
   z-index: 1000;
-}
-
-/* Show dropdown on hover */
-.navMenuCard:hover .navMenuCardDropdown {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: all;
 }
 
 /* Inner dropdown with background and border */
@@ -134,6 +126,18 @@
 [data-theme='dark'] .navMenuCardItem:hover {
   background-color: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navMenuCardIcon,
+  .navMenuCardDropdown,
+  .navMenuCardItem {
+    transition: none;
+  }
+
+  .navMenuCardItem:hover {
+    transform: none;
+  }
 }
 
 /* Open state for mobile (when clicked) */

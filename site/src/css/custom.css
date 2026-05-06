@@ -203,7 +203,7 @@ html:not(.docs-wrapper) .DocSearch {
 }
 
 @media (max-width: 1280px) {
-  .navbar__items--right .header-discord-link {
+  .docs-wrapper .navbar__items--right .header-discord-link {
     display: none;
   }
 }

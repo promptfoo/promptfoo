@@ -36,15 +36,30 @@ export default function NavMenuCard({
       }
     }
 
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    }
+
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('keydown', handleEscape);
       };
     }
   }, [isOpen]);
 
+  const canHover = () => window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
   const handleToggle = () => {
+    if (canHover()) {
+      setIsOpen(true);
+      return;
+    }
+
     setIsOpen(!isOpen);
   };
   // Group items by section
@@ -80,7 +95,25 @@ export default function NavMenuCard({
         ];
 
   return (
-    <div className={styles.navMenuCard} ref={menuRef}>
+    <div
+      className={styles.navMenuCard}
+      ref={menuRef}
+      onMouseEnter={() => {
+        if (canHover()) {
+          setIsOpen(true);
+        }
+      }}
+      onMouseLeave={() => {
+        if (canHover()) {
+          setIsOpen(false);
+        }
+      }}
+      onBlurCapture={(event) => {
+        if (!menuRef.current?.contains(event.relatedTarget as Node)) {
+          setIsOpen(false);
+        }
+      }}
+    >
       <button
         type="button"
         className={`${styles.navMenuCardButton} ${isOpen ? styles.navMenuCardButtonOpen : ''} navbar__link`}
