@@ -116,6 +116,20 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo((1_500 * 0.5 + 500 * 0.05 + 1_000 * 4) / 1e6, 10);
   });
 
+  it('prices cached input for chat-latest', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        {
+          prompt_tokens: 2_000,
+          completion_tokens: 1_000,
+          prompt_tokens_details: { cached_tokens: 500 },
+        },
+      ),
+    ).toBeCloseTo((1_500 * 5 + 500 * 0.5 + 1_000 * 30) / 1e6, 10);
+  });
+
   it('uses returned service tiers when pricing flex and priority work', () => {
     const usage = {
       input_tokens: 1_000,

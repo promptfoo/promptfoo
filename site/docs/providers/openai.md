@@ -490,13 +490,13 @@ providers:
 
 OpenAI exposes the current ChatGPT Instant model as `chat-latest`. As of May 5, 2026, that alias points to GPT-5.5 Instant. Because `chat-latest` is a floating alias, use a dated or family-specific model when you need a stable eval baseline.
 
-OpenAI's pricing docs currently list `gpt-5.5`, but do not yet publish a separate `chat-latest` rate. Promptfoo therefore leaves automatic cost calculation unset for this alias until OpenAI documents alias-specific pricing.
+OpenAI's pricing docs list `chat-latest` at $5 input, $0.50 cached input, and $30 output per 1M tokens.
 
 #### Available Models
 
-| Model       | Description                          | Pricing                      |
-| ----------- | ------------------------------------ | ---------------------------- |
-| chat-latest | Latest Instant model used in ChatGPT | Not separately published yet |
+| Model       | Description                          | Pricing (Input / Cached Input / Output) |
+| ----------- | ------------------------------------ | --------------------------------------- |
+| chat-latest | Latest Instant model used in ChatGPT | $5 / $0.50 / $30 per 1M tokens          |
 
 #### Usage Example
 
@@ -505,6 +505,10 @@ providers:
   - id: openai:chat:chat-latest
     config:
       max_completion_tokens: 2048
+
+  - id: openai:responses:chat-latest
+    config:
+      max_output_tokens: 2048
 ```
 
 ### GPT-5.3 Instant
@@ -1941,6 +1945,7 @@ The Responses API supports a wide range of models, including:
 - `gpt-5.5-2026-04-23` - Dated snapshot of gpt-5.5
 - `gpt-5.5-pro` - Premium GPT-5.5 pro model
 - `gpt-5.5-pro-2026-04-23` - Dated snapshot of gpt-5.5-pro
+- `chat-latest` - Latest ChatGPT Instant alias
 - `gpt-5` - Earlier GPT-5 family model
 - `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 base model

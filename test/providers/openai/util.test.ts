@@ -275,9 +275,12 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 1.75 + 500 * 14) / 1e6, 6);
   });
 
-  it('should recognize chat-latest without inventing unpublished pricing', () => {
+  it('should calculate cost correctly for chat-latest', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'chat-latest')).toBe(true);
-    expect(calculateOpenAICost('chat-latest', {}, 1000, 500)).toBeUndefined();
+    expect(calculateOpenAICost('chat-latest', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 5 + 500 * 30) / 1e6,
+      6,
+    );
   });
 
   it('should calculate cost correctly for gpt-5.5', () => {
