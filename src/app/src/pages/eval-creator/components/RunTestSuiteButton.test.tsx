@@ -85,6 +85,54 @@ describe('RunTestSuiteButton', () => {
     expect(screen.getByRole('button', { name: 'Run Eval' })).not.toBeDisabled();
   });
 
+  it('should serialize scalar prompt configs as an array before submitting eval jobs', async () => {
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    useStore.getState().updateConfig({
+      prompts: 'file://prompt.txt',
+      providers: 'openai:gpt-4',
+      tests: 'file://tests.csv',
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0];
+    expect(JSON.parse(requestInit.body)).toMatchObject({
+      prompts: ['file://prompt.txt'],
+      providers: 'openai:gpt-4',
+      tests: 'file://tests.csv',
+    });
+  });
+
+  it('should serialize legacy prompt maps into prompt objects before submitting eval jobs', async () => {
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: '123' } }]);
+    useStore.getState().updateConfig({
+      prompts: { 'file://prompt.txt': 'Prompt label' },
+      providers: 'openai:gpt-4',
+      tests: 'file://tests.csv',
+    });
+
+    renderWithProvider(<RunTestSuiteButton />);
+    await act(async () => {
+      screen
+        .getByRole('button', { name: 'Run Eval' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const [, requestInit] = getCallApiMock().mock.calls[0];
+    expect(JSON.parse(requestInit.body)).toMatchObject({
+      prompts: [{ raw: 'file://prompt.txt', label: 'Prompt label' }],
+      providers: 'openai:gpt-4',
+      tests: 'file://tests.csv',
+    });
+  });
+
   it('should be disabled for provider option objects without ids', () => {
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],

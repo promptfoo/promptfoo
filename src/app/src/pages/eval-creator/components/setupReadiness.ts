@@ -89,6 +89,29 @@ export function normalizePrompts(prompts: UnifiedConfig['prompts']): string[] {
   return [];
 }
 
+export function normalizePromptsForJob(
+  prompts: UnifiedConfig['prompts'],
+): Array<string | Record<string, unknown>> {
+  if (Array.isArray(prompts)) {
+    return prompts as Array<string | Record<string, unknown>>;
+  }
+
+  if (typeof prompts === 'string') {
+    return prompts.trim() === '' ? [] : [prompts];
+  }
+
+  if (isRecord(prompts)) {
+    return Object.entries(prompts)
+      .filter(
+        (entry): entry is [string, string] =>
+          entry[0].trim() !== '' && typeof entry[1] === 'string' && entry[1].trim() !== '',
+      )
+      .map(([raw, label]) => ({ raw, label }));
+  }
+
+  return [];
+}
+
 export function countTests(tests: UnifiedConfig['tests']): number {
   if (Array.isArray(tests)) {
     return tests.length;

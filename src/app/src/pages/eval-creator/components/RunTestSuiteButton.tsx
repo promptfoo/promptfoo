@@ -9,7 +9,12 @@ import { useToast } from '@app/hooks/useToast';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useNavigate } from 'react-router-dom';
-import { countTests, normalizePrompts, normalizeProviders } from './setupReadiness';
+import {
+  countTests,
+  normalizePrompts,
+  normalizePromptsForJob,
+  normalizeProviders,
+} from './setupReadiness';
 import type { CreateJobResponse, GetJobResponse } from '@promptfoo/types/api/eval';
 
 const RunTestSuiteButton = () => {
@@ -53,6 +58,7 @@ const RunTestSuiteButton = () => {
 
   const normalizedProviders = normalizeProviders(providers);
   const normalizedPrompts = normalizePrompts(prompts);
+  const jobPrompts = normalizePromptsForJob(prompts);
   const testCount = countTests(tests);
 
   const isDisabled =
@@ -72,7 +78,7 @@ const RunTestSuiteButton = () => {
       description,
       env,
       evaluateOptions,
-      prompts,
+      prompts: jobPrompts,
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'

@@ -23,7 +23,7 @@ describe('PromptsSection', () => {
     vi.clearAllMocks();
   });
 
-  const setupStore = (prompts: string[]) => {
+  const setupStore = (prompts: unknown) => {
     mockedUseStore.mockReturnValue({
       config: { prompts },
       updateConfig: mockUpdateConfig,
@@ -108,6 +108,29 @@ describe('PromptsSection', () => {
     );
 
     expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
+  });
+
+  it('shows a YAML-managed state for scalar prompt configs and opens the YAML editor', async () => {
+    const user = userEvent.setup();
+    const onOpenYamlEditor = vi.fn();
+    setupStore('file://prompt.txt');
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection onOpenYamlEditor={onOpenYamlEditor} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByText('file://prompt.txt')).toBeInTheDocument();
+    expect(
+      screen.getByText('Prompt entries from YAML are not editable in the UI editor.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Prompt' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Edit YAML' }));
+
+    expect(onOpenYamlEditor).toHaveBeenCalledTimes(1);
   });
 
   it("should add a new prompt to the list when the 'Add Prompt' button is clicked, the PromptDialog is filled, and the prompt is submitted", async () => {

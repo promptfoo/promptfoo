@@ -26,7 +26,11 @@ vi.mock('./ConfigureEnvButton', () => ({
   default: vi.fn(() => <div data-testid="mock-configure-env-button" />),
 }));
 vi.mock('./PromptsSection', () => ({
-  default: vi.fn(() => <div data-testid="mock-prompts-section" />),
+  default: vi.fn(({ onOpenYamlEditor }) => (
+    <div data-testid="mock-prompts-section">
+      <button onClick={onOpenYamlEditor}>Mock Edit Prompt YAML</button>
+    </div>
+  )),
 }));
 vi.mock('./ProvidersListSection', () => ({
   ProvidersListSection: vi.fn(({ providers, onChange }) => (
@@ -45,9 +49,10 @@ vi.mock('./RunTestSuiteButton', () => ({
 }));
 vi.mock('./TestCasesSection', () => ({
   // TestCasesSection expects varsList prop.
-  default: vi.fn(({ varsList }) => (
+  default: vi.fn(({ varsList, onOpenYamlEditor }) => (
     <div data-testid="mock-test-cases-section">
       <span>Vars: {varsList?.join(', ')}</span>
+      <button onClick={onOpenYamlEditor}>Mock Edit Test YAML</button>
     </div>
   )),
 }));
@@ -302,6 +307,15 @@ describe('EvaluateTestSuiteCreator', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Prompts: Missing' }));
 
     expect(screen.getByTestId('mock-prompts-section')).toBeInTheDocument();
+  });
+
+  it('should let nested editors open the YAML tab', async () => {
+    render(<EvaluateTestSuiteCreator />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Prompts: Missing' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mock Edit Prompt YAML' }));
+
+    expect(screen.getByTestId('mock-yaml-editor')).toBeInTheDocument();
   });
 
   it('should show a ready state and jump to run options once required setup is complete', async () => {

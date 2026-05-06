@@ -31,6 +31,7 @@ import YamlEditor from './YamlEditor';
 import type { UnifiedConfig } from '@promptfoo/types';
 
 type SetupStepId = 1 | 2 | 3 | 4;
+type EditorTab = 'ui' | 'yaml';
 
 interface SetupStep {
   id: SetupStepId;
@@ -81,6 +82,7 @@ const EvaluateTestSuiteCreator = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [hasCustomConfig, setHasCustomConfig] = useState(false);
   const [activeStep, setActiveStep] = useState<SetupStepId>(1);
+  const [editorTab, setEditorTab] = useState<EditorTab>('ui');
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -222,7 +224,11 @@ const EvaluateTestSuiteCreator = () => {
 
   return (
     <PageContainer>
-      <Tabs defaultValue="ui" className="w-full">
+      <Tabs
+        value={editorTab}
+        onValueChange={(value) => setEditorTab(value as EditorTab)}
+        className="w-full"
+      >
         {/* Header */}
         <PageHeader>
           <div className="container max-w-7xl mx-auto px-4 py-6 lg:py-10">
@@ -452,7 +458,7 @@ const EvaluateTestSuiteCreator = () => {
                           </p>
                         </InfoBox>
                       ) : (
-                        <InfoBox variant="tip">
+                        <InfoBox variant="subtle">
                           <strong>Pro tip:</strong> Testing multiple providers helps you find the
                           best option for your use case. Compare different models, API versions, or
                           custom implementations to optimize for quality, cost, and latency.
@@ -525,7 +531,7 @@ const EvaluateTestSuiteCreator = () => {
                           </p>
                         </InfoBox>
                       ) : (
-                        <InfoBox variant="tip">
+                        <InfoBox variant="subtle">
                           <strong>Add variables</strong> to make your prompts more flexible. Use{' '}
                           <code className="bg-muted px-1 py-0.5 rounded text-xs">
                             {'{{variable_name}}'}
@@ -541,7 +547,7 @@ const EvaluateTestSuiteCreator = () => {
                         updateConfig({ prompts: [] });
                       }}
                     >
-                      <PromptsSection />
+                      <PromptsSection onOpenYamlEditor={() => setEditorTab('yaml')} />
                     </ErrorBoundary>
                   </StepSection>
                 )}
@@ -614,7 +620,7 @@ const EvaluateTestSuiteCreator = () => {
                           </p>
                         </InfoBox>
                       ) : (
-                        <InfoBox variant="tip">
+                        <InfoBox variant="subtle">
                           <strong>Add assertions</strong> to automatically verify response quality.
                           Common checks include: contains specific text, matches expected format,
                           stays within length limits, or passes custom validation.
@@ -628,7 +634,10 @@ const EvaluateTestSuiteCreator = () => {
                         updateConfig({ tests: [] });
                       }}
                     >
-                      <TestCasesSection varsList={varsList} />
+                      <TestCasesSection
+                        varsList={varsList}
+                        onOpenYamlEditor={() => setEditorTab('yaml')}
+                      />
                     </ErrorBoundary>
                   </StepSection>
                 )}

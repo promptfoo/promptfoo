@@ -78,6 +78,49 @@ describe('TestCasesSection', () => {
     expect(screen.getByText('Test 1')).toBeInTheDocument();
   });
 
+  it('shows a YAML-managed state for scalar test configs and opens the YAML editor', async () => {
+    const user = userEvent.setup();
+    const onOpenYamlEditor = vi.fn();
+    (useStore as any).mockReturnValue({
+      config: { tests: 'file://tests.csv' },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} onOpenYamlEditor={onOpenYamlEditor} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByText('file://tests.csv')).toBeInTheDocument();
+    expect(
+      screen.getByText('Test entries from YAML are not editable in the UI editor.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Test Case' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Edit YAML' }));
+
+    expect(onOpenYamlEditor).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a YAML-managed state for generated test configs', () => {
+    (useStore as any).mockReturnValue({
+      config: { tests: { path: 'file://generate-tests.js' } },
+      updateConfig: mockUpdateConfig,
+    });
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <TestCasesSection varsList={[]} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByText('file://generate-tests.js')).toBeInTheDocument();
+    expect(screen.queryByText('Something went wrong:')).toBeNull();
+  });
+
   describe('File Upload', () => {
     // Helper to create FileReader mock
     const createFileReaderMock = (fileContent: string) => {
