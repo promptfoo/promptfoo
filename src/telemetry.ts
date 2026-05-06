@@ -1,8 +1,6 @@
-import { PostHog } from 'posthog-node';
-import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
-import { POSTHOG_KEY } from './constants/build';
+import { CONSENT_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { getEnvBool, getEnvString, isCI } from './envars';
-import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
+import { getUserEmail, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
 
@@ -12,72 +10,21 @@ export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
-let posthogClient: PostHog | null = null;
-let isShuttingDown = false;
-
-function getPostHogClient(): PostHog | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
-    return null;
-  }
-
-  if (posthogClient === null && POSTHOG_KEY) {
-    try {
-      posthogClient = new PostHog(POSTHOG_KEY, {
-        host: EVENTS_ENDPOINT,
-        fetch: fetchWithProxy,
-        // Disable automatic flush interval to prevent keeping the event loop alive.
-        // Without this, PostHog's internal setInterval keeps the Node.js event loop
-        // alive indefinitely, causing processes that import promptfoo to hang.
-        // Events are still sent immediately via explicit flush() calls after each capture.
-        // See: https://github.com/promptfoo/promptfoo/issues/5893
-        flushInterval: 0,
-      });
-    } catch {
-      posthogClient = null;
-    }
-  }
-  return posthogClient;
-}
-
 const TELEMETRY_TIMEOUT_MS = 1000;
 
 export class Telemetry {
   private telemetryDisabledRecorded = false;
   private id: string;
+  private email: string | null;
 
   constructor() {
     this.id = getUserId();
-    void this.identify();
+    this.email = getUserEmail();
   }
 
-  private getPersonProperties(ciFlag: boolean) {
-    const personProperties = {
-      ...getUserAuthInfo(),
-      isRunningInCi: ciFlag,
-    };
-    return personProperties;
-  }
-
-  async identify() {
-    if (this.disabled || getEnvBool('IS_TESTING')) {
-      return;
-    }
-
-    const client = getPostHogClient();
-    if (client) {
-      try {
-        const personProperties = this.getPersonProperties(isCI());
-        client.identify({
-          distinctId: this.id,
-          properties: personProperties,
-        });
-        client.flush().catch(() => {
-          // Silently ignore flush errors
-        });
-      } catch (error) {
-        logger.debug(`PostHog identify error: ${error}`);
-      }
-    }
+  async identify(): Promise<void> {
+    // Retained as a no-op for compatibility with older callers now that the
+    // backend no longer initializes a vendor analytics client.
   }
 
   get disabled() {
@@ -100,35 +47,11 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    const ciFlag = isCI();
-    const personProperties = this.getPersonProperties(ciFlag);
     const propertiesWithMetadata = {
       ...properties,
       packageVersion: VERSION,
-      isRunningInCi: ciFlag,
+      isRunningInCi: isCI(),
     };
-
-    const client = getPostHogClient();
-    if (client && !getEnvBool('IS_TESTING')) {
-      try {
-        client.capture({
-          distinctId: this.id,
-          event: eventName,
-          properties: {
-            ...propertiesWithMetadata,
-            // Mirror person properties on every event so dashboard filters on person
-            // properties (e.g. excluding CI traffic) work even when the user only
-            // ever fires real events and never the auto-generated $identify.
-            $set: personProperties,
-          },
-        });
-        client.flush().catch(() => {
-          // Silently ignore flush errors
-        });
-      } catch (error) {
-        logger.debug(`PostHog capture error: ${error}`);
-      }
-    }
 
     fetchWithProxy(R_ENDPOINT, {
       method: 'POST',
@@ -138,7 +61,7 @@ export class Telemetry {
       body: JSON.stringify({
         event: eventName,
         environment: getEnvString('NODE_ENV', 'development'),
-        email: personProperties.email,
+        email: this.email,
         meta: {
           user_id: this.id,
           ...propertiesWithMetadata,
@@ -150,24 +73,8 @@ export class Telemetry {
   }
 
   async shutdown(): Promise<void> {
-    // Guard against multiple shutdown calls (from beforeExit + explicit shutdown in main.ts)
-    if (isShuttingDown) {
-      return;
-    }
-
-    const client = getPostHogClient();
-    if (!client) {
-      // No client to shut down - don't set the flag so future shutdowns work
-      // if telemetry becomes enabled (e.g., in test harnesses)
-      return;
-    }
-
-    isShuttingDown = true;
-    try {
-      await client.shutdown();
-    } catch (error) {
-      logger.debug(`PostHog shutdown error: ${error}`);
-    }
+    // Retained as a no-op because main.ts still treats telemetry cleanup as one
+    // step in graceful shutdown.
   }
 
   /**
@@ -197,31 +104,5 @@ export class Telemetry {
 }
 
 const telemetry = new Telemetry();
-
-// Use Symbol.for to ensure the same symbol across module reloads (e.g., in tests).
-// This prevents MaxListenersExceededWarning when tests use vi.resetModules().
-const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
-const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
-
-// Store telemetry instance on process so the beforeExit handler can access the current instance
-(process as unknown as Record<symbol, unknown>)[TELEMETRY_INSTANCE_KEY] = telemetry;
-
-// Register cleanup handler only once across all module reloads.
-// This is a safety net to ensure PostHog client is properly shut down when the process exits.
-// The primary fix is disabling PostHog's internal flush timer (flushInterval: 0) so it
-// doesn't keep the event loop alive. See: https://github.com/promptfoo/promptfoo/issues/5893
-if (!(process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY]) {
-  (process as unknown as Record<symbol, boolean>)[SHUTDOWN_HANDLER_KEY] = true;
-  process.once('beforeExit', () => {
-    const instance = (process as unknown as Record<symbol, Telemetry | undefined>)[
-      TELEMETRY_INSTANCE_KEY
-    ];
-    if (instance) {
-      instance.shutdown().catch(() => {
-        // Silently ignore - logger may be unavailable during shutdown
-      });
-    }
-  });
-}
 
 export default telemetry;

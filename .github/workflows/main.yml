@@ -135,8 +135,6 @@ jobs:
   build:
     needs: ci-config
     name: Build on Node ${{ matrix.node }}
-    env:
-      PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
     # Keep enough headroom for slow PR merge-ref checkout and npm install on GitHub-hosted runners.
     timeout-minutes: 10
     runs-on: ubuntu-latest
@@ -159,25 +157,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Check Telemetry
-        run: |
-          # Skip PostHog key check for forks as they don't have access to secrets
-          if [[ "${{ github.event_name }}" == "pull_request" ]] && [[ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
-            echo "Skipping PostHog key check for fork PR"
-          elif [[ -z "$PROMPTFOO_POSTHOG_KEY" ]]; then
-            echo "PostHog key not available (running without secret), skipping check"
-          else
-            # PostHog key is injected at build time via tsup's define option
-            # Check that it's present in the built output (it will be inlined as a string)
-            if ! grep -rq '"phc_' dist/src/*.js; then
-              echo "Error: PostHog key not found in built output"
-              echo "Checking for POSTHOG_KEY patterns in built files:"
-              grep -r "POSTHOG_KEY" dist/src/*.js | head -10 || echo "No POSTHOG_KEY found"
-              exit 1
-            fi
-            echo "PostHog key replacement verified successfully"
-          fi
 
   style-check:
     name: Style Check

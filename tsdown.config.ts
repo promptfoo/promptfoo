@@ -34,7 +34,6 @@ try {
 // Note: tsdown define requires all values to be strings
 const versionDefines = {
   __PROMPTFOO_VERSION__: JSON.stringify(packageJson.version),
-  __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
   __PROMPTFOO_NODE_ENGINE_RANGE__: JSON.stringify(enginesNode),
   __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: JSON.stringify(nodeEngineComparatorSets),
 };
