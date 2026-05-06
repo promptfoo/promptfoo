@@ -213,7 +213,7 @@ describe('PluginConfigDialog - OSS', () => {
         />,
       );
 
-      expect(screen.getByLabelText('Privacy Policy')).toBeInTheDocument();
+      expect(screen.getByLabelText('Privacy Policy File')).toBeInTheDocument();
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
     });
 

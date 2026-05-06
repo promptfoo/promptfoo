@@ -209,10 +209,9 @@ export default function PluginConfigDialog({
               can compare responses, claimed actions, and tool behavior against the policy.
             </p>
             <div className="space-y-2">
-              <Label htmlFor="privacy-policy">Privacy Policy</Label>
-              <Textarea
+              <Label htmlFor="privacy-policy">Privacy Policy File</Label>
+              <Input
                 id="privacy-policy"
-                className="min-h-[160px]"
                 placeholder="file://privacy-policy.md"
                 value={(localConfig.privacyPolicy as string) || ''}
                 onChange={(e) => setLocalConfig({ ...localConfig, privacyPolicy: e.target.value })}

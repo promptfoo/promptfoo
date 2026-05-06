@@ -104,6 +104,24 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
   return undefined;
 }
 
+function sanitizePluginConfigForMetadata(
+  pluginId: string,
+  pluginConfig: Record<string, any> | undefined,
+): Record<string, any> | undefined {
+  if (pluginId !== 'privacy-policy-consistency' || !pluginConfig) {
+    return pluginConfig;
+  }
+
+  const {
+    privacyPolicy: _privacyPolicy,
+    privacyPolicyContent: _privacyPolicyContent,
+    privacyPolicyFileName: _privacyPolicyFileName,
+    ...safePluginConfig
+  } = pluginConfig;
+
+  return safePluginConfig;
+}
+
 async function rematerializeStrategyInputVars(
   testCase: TestCase,
   injectVar: string,
@@ -478,6 +496,14 @@ function addLanguageToPluginMetadata(
       undefined,
     testGenerationInstructions,
   });
+  const resolvedPluginConfig = sanitizePluginConfigForMetadata(
+    plugin.id,
+    resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+  );
+  const testPluginConfig = sanitizePluginConfigForMetadata(
+    plugin.id,
+    (test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {},
+  );
 
   return {
     ...test,
@@ -486,8 +512,8 @@ function addLanguageToPluginMetadata(
       pluginId: plugin.id,
       ...(includePluginConfig && {
         pluginConfig: {
-          ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
-          ...((test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
+          ...resolvedPluginConfig,
+          ...testPluginConfig,
         },
       }),
       severity: plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),

@@ -458,18 +458,26 @@ export async function redteamInit(directory: string | undefined) {
     plugins = plugins.filter((p) => p !== 'privacy-policy-consistency');
 
     recordOnboardingStep('collect privacy policy reference');
-    const privacyPolicy = await editor({
+    const privacyPolicy = await input({
       message:
-        'You selected the `privacy-policy-consistency` plugin. Enter a file:// reference to your privacy policy, or leave empty to skip.',
+        'You selected the `privacy-policy-consistency` plugin. Enter a file:// reference to your privacy policy.',
+      validate: (value: string) => {
+        const trimmedValue = value.trim();
+        if (trimmedValue === '') {
+          return 'Privacy Policy Consistency requires a file:// reference to your privacy policy.';
+        }
+        if (!trimmedValue.startsWith('file://')) {
+          return 'Use a file:// reference, for example file://privacy-policy.md.';
+        }
+        return true;
+      },
     });
     recordOnboardingStep('choose privacy policy', { value: privacyPolicy.length });
 
-    if (privacyPolicy.trim() !== '') {
-      plugins.push({
-        id: 'privacy-policy-consistency',
-        config: { privacyPolicy: privacyPolicy.trim() },
-      } as RedteamPluginObject);
-    }
+    plugins.push({
+      id: 'privacy-policy-consistency',
+      config: { privacyPolicy: privacyPolicy.trim() },
+    } as RedteamPluginObject);
   }
 
   if (plugins.includes('indirect-prompt-injection')) {

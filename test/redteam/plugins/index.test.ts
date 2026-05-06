@@ -163,6 +163,23 @@ describe('Plugins', () => {
       expect(() => privacyPolicyConsistencyPlugin?.validate?.({})).toThrow(
         'Privacy Policy Consistency plugin requires `config.privacyPolicy` to be set to a file:// reference or an uploaded privacy policy file.',
       );
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'We use account data to provide support.',
+        }),
+      ).not.toThrow();
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'file://privacy-policy.md',
+        }),
+      ).not.toThrow();
+      expect(() =>
+        privacyPolicyConsistencyPlugin?.validate?.({
+          privacyPolicy: 'https://example.com/privacy-policy.md',
+        }),
+      ).toThrow(
+        'Privacy Policy Consistency plugin requires `config.privacyPolicy` URI references to use the file:// scheme.',
+      );
     });
 
     it('should validate indirect prompt injection plugin config', async () => {

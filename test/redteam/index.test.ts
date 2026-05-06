@@ -20,6 +20,7 @@ import {
   synthesize,
 } from '../../src/redteam/index';
 import { Plugins } from '../../src/redteam/plugins/index';
+import { validatePrivacyPolicyConsistencyConfig } from '../../src/redteam/plugins/privacyPolicyConsistency';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
@@ -229,6 +230,83 @@ describe('synthesize', () => {
 
   // Plugin and strategy tests
   describe('Plugins and strategies', () => {
+    it('should load file-backed privacy policy config and strip policy text from exported metadata', async () => {
+      const privacyPolicyPath = '/tmp/support-agent-privacy-policy.md';
+      const privacyPolicyText =
+        'Users may opt out of analytics sharing. Verified users may export their personal data through the approved workflow.';
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(privacyPolicyText);
+      const mockPrivacyPolicyAction = vi.fn().mockImplementation(async ({ config }) => [
+        {
+          vars: {
+            query: 'Export this verified user data through the approved privacy rights workflow.',
+          },
+          assert: [{ type: 'promptfoo:redteam:privacy-policy-consistency' }],
+          metadata: {
+            pluginConfig: config,
+            privacyPolicy: config.privacyPolicy,
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockImplementation(function (predicate) {
+        const mockPlugins = [
+          {
+            key: 'privacy-policy-consistency',
+            validate: validatePrivacyPolicyConsistencyConfig,
+            action: mockPrivacyPolicyAction,
+          },
+        ];
+
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: 'privacy-policy-consistency',
+            numTests: 1,
+            config: {
+              privacyPolicy: `file://${privacyPolicyPath}`,
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Customer support assistant',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPrivacyPolicyAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            privacyPolicy: expect.stringContaining('Users may opt out of analytics sharing'),
+          }),
+        }),
+      );
+      expect(fs.existsSync).toHaveBeenCalledWith(privacyPolicyPath);
+      expect(fs.readFileSync).toHaveBeenCalledWith(privacyPolicyPath, 'utf8');
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.privacyPolicy).toContain(
+        'Users may opt out of analytics sharing',
+      );
+      expect(result.testCases[0].metadata?.pluginConfig).toEqual(
+        expect.not.objectContaining({
+          privacyPolicy: expect.any(String),
+          privacyPolicyContent: expect.any(String),
+          privacyPolicyFileName: expect.any(String),
+        }),
+      );
+      expect(JSON.stringify(result.testCases[0].metadata?.pluginConfig)).not.toContain(
+        privacyPolicyText,
+      );
+    });
+
     it('should generate test cases for each plugin', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
