@@ -4,7 +4,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies BEFORE imports
-vi.mock('../../../src/evaluate', () => ({
+vi.mock('../../../src/node', () => ({
   evaluateWithSource: vi.fn().mockResolvedValue({
     toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
   }),
@@ -21,9 +21,9 @@ vi.mock('../../../src/models/eval', () => ({
 }));
 vi.mock('../../../src/globalConfig/accounts');
 
-import { evaluateWithSource } from '../../../src/evaluate';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
+import { evaluateWithSource } from '../../../src/node';
 import { createApp } from '../../../src/server/server';
 import { shouldShareResults } from '../../../src/util/sharing';
 

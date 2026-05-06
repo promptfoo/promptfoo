@@ -11,7 +11,7 @@ import { evaluate } from 'promptfoo';
 
 > **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`\>
 
-Defined in: [index.ts:160](https://github.com/promptfoo/promptfoo/blob/main/src/index.ts#L160)
+Defined in: [node/evaluate.ts:35](https://github.com/promptfoo/promptfoo/blob/main/src/node/evaluate.ts#L35)
 
 Run an eval from a JavaScript or TypeScript program.
 
