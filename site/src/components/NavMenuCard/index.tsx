@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 
 import Link from '@docusaurus/Link';
 import styles from './styles.module.css';
@@ -26,6 +26,7 @@ export default function NavMenuCard({
 }: NavMenuCardProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownId = useId();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -80,17 +81,11 @@ export default function NavMenuCard({
 
   return (
     <div className={styles.navMenuCard} ref={menuRef}>
-      <div
-        className={`${styles.navMenuCardButton} navbar__link`}
+      <button
+        type="button"
+        className={`${styles.navMenuCardButton} ${isOpen ? styles.navMenuCardButtonOpen : ''} navbar__link`}
         onClick={handleToggle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleToggle();
-          }
-        }}
-        role="button"
-        tabIndex={0}
+        aria-controls={dropdownId}
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
@@ -109,9 +104,10 @@ export default function NavMenuCard({
         >
           <path d="m6 9 6 6 6-6" />
         </svg>
-      </div>
+      </button>
 
       <div
+        id={dropdownId}
         className={`${styles.navMenuCardDropdown} ${isOpen ? styles.navMenuCardDropdownOpen : ''}`}
       >
         <div className={styles.navMenuCardContainer}>

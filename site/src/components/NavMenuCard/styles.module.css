@@ -11,6 +11,10 @@
   gap: 4px;
   cursor: pointer;
   padding: var(--ifm-navbar-item-padding-vertical) var(--ifm-navbar-item-padding-horizontal);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
 }
 
 /* Dropdown icon */
@@ -20,7 +24,8 @@
   transition: transform 0.2s ease;
 }
 
-.navMenuCard:hover .navMenuCardIcon {
+.navMenuCard:hover .navMenuCardIcon,
+.navMenuCardButtonOpen .navMenuCardIcon {
   transform: rotate(180deg);
 }
 
@@ -138,10 +143,6 @@
   pointer-events: all;
 }
 
-.navMenuCardDropdownOpen .navMenuCardIcon {
-  transform: rotate(180deg);
-}
-
 /* Responsive */
 @media (max-width: 1100px) {
   /* Hide dropdown menus in the top navbar but keep them for the hamburger menu */
@@ -167,6 +168,7 @@
     width: 100%;
     justify-content: space-between;
     font-weight: 600;
+    min-height: 44px;
   }
 
   .navMenuCardDropdown {
@@ -203,7 +205,10 @@
   }
 
   .navMenuCardItem {
-    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 10px 16px;
     font-size: 14px;
   }
 
@@ -212,7 +217,7 @@
   }
 
   .navMenuCardItemDescription {
-    font-size: 12px;
+    display: none;
   }
 
   .navMenuCardSectionTitle {
