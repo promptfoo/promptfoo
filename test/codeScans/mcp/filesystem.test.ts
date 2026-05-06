@@ -98,7 +98,7 @@ describe('filesystem MCP server management', () => {
 
   it('rejects immediately when the process has already exited', async () => {
     const mcpProcess = createFakeProcess();
-    mcpProcess.exitCode = 1;
+    Object.defineProperty(mcpProcess, 'exitCode', { value: 1 });
 
     await expect(waitForFilesystemMcpServerReady(mcpProcess)).rejects.toThrow(
       'Filesystem MCP server exited before ready: code 1',
@@ -107,7 +107,7 @@ describe('filesystem MCP server management', () => {
 
   it('rejects immediately when the process was already killed', async () => {
     const mcpProcess = createFakeProcess();
-    mcpProcess.killed = true;
+    Object.defineProperty(mcpProcess, 'killed', { value: true });
 
     await expect(waitForFilesystemMcpServerReady(mcpProcess)).rejects.toThrow(
       'Filesystem MCP server exited before ready: unknown reason',

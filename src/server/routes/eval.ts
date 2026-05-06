@@ -5,7 +5,7 @@ import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
-import { evaluate } from '../../node';
+import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
@@ -155,12 +155,14 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     logs: [],
   });
 
-  evaluate(
-    Object.assign({}, testSuite as EvaluateTestSuite, {
+  evaluateWithSource(
+    {
+      ...(testSuite as EvaluateTestSuite),
       writeLatestResults: true,
       sharing: testSuite.sharing ?? shouldShareResults({}),
-    }),
-    Object.assign({}, evaluateOptions, {
+    },
+    {
+      ...evaluateOptions,
       eventSource: 'web',
       progressCallback: (progress: number, total: number) => {
         const job = evalJobs.get(id);
@@ -169,7 +171,7 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
         job.total = total;
         console.log(`[${id}] ${progress}/${total}`);
       },
-    }),
+    },
   )
     .then(async (evalResult) => {
       const job = evalJobs.get(id);
@@ -631,7 +633,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Run the prompt through the provider
-    const result = await evaluate(
+    const result = await evaluateWithSource(
       {
         prompts: [
           {

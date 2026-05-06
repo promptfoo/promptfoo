@@ -109,6 +109,7 @@ prompts:
 ```
 
 This allows you to prepare a directory with files or sub-directories before running your tests.
+Relative `working_dir` values are resolved from the directory containing the config file.
 
 By default, when you specify a working directory, Claude Agent SDK is given read-only access to the directory.
 

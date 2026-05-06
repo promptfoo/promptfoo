@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/node', () => ({
-  evaluate: vi.fn().mockResolvedValue({
+  evaluateWithSource: vi.fn().mockResolvedValue({
     toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
   }),
 }));
@@ -23,13 +23,13 @@ vi.mock('../../../src/globalConfig/accounts');
 
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
-import { evaluate } from '../../../src/node';
+import { evaluateWithSource } from '../../../src/node';
 import { createApp } from '../../../src/server/server';
 import { shouldShareResults } from '../../../src/util/sharing';
 
 const errorSpy = vi.spyOn(logger, 'error');
 const mockedEvalCreate = vi.mocked(Eval.create);
-const mockedEvaluate = vi.mocked(evaluate);
+const mockedEvaluateWithSource = vi.mocked(evaluateWithSource);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
 describe('Eval Routes - Sharing behavior', () => {
@@ -58,7 +58,7 @@ describe('Eval Routes - Sharing behavior', () => {
     vi.resetAllMocks();
     errorSpy.mockClear();
 
-    mockedEvaluate.mockResolvedValue({
+    mockedEvaluateWithSource.mockResolvedValue({
       toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
     } as any);
 
@@ -82,10 +82,10 @@ describe('Eval Routes - Sharing behavior', () => {
 
     // Wait for async evaluate call
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(true);
   });
 
@@ -95,10 +95,10 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob({ ...minimalTestSuite, sharing: false });
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(false);
   });
 
@@ -108,16 +108,16 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob(minimalTestSuite);
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(true);
     expect(mockedShouldShareResults).toHaveBeenCalledWith({});
   });
 
   it('should not log the raw job body on evaluation failure', async () => {
-    mockedEvaluate.mockRejectedValueOnce(new Error('boom'));
+    mockedEvaluateWithSource.mockRejectedValueOnce(new Error('boom'));
 
     const sensitiveBody = {
       prompts: ['test prompt'],
@@ -184,10 +184,10 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob(minimalTestSuite);
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(false);
   });
 });
