@@ -738,6 +738,8 @@ export function calculateOpenAIUsageCost(
 
 function isReasoningModel(modelName: string): boolean {
   return (
+    modelName === 'chat-latest' ||
+    modelName.endsWith('/chat-latest') ||
     modelName.startsWith('gpt-5') ||
     modelName.startsWith('o1') ||
     modelName.startsWith('o3') ||

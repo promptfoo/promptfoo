@@ -417,6 +417,19 @@ describe('OpenAI billing helpers', () => {
     ).toBeCloseTo(0.01, 10);
   });
 
+  it('uses reasoning-model web search pricing for chat-latest aliases', () => {
+    const output = {
+      output: [{ type: 'web_search_call', action: { type: 'search' } }],
+    };
+    const config = { tools: [{ type: 'web_search_preview' as const }] };
+
+    expect(calculateObservableOpenAIToolCost(output, 'chat-latest', config)).toBeCloseTo(0.01, 10);
+    expect(calculateObservableOpenAIToolCost(output, 'openai/chat-latest', config)).toBeCloseTo(
+      0.01,
+      10,
+    );
+  });
+
   it('does not charge non-search web actions', () => {
     expect(
       calculateObservableOpenAIToolCost(
