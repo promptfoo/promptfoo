@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
-import { evaluateWithSource } from '../../evaluate';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
+import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
@@ -33,7 +33,7 @@ import type {
   PromptMetrics,
   ResultsFile,
   Vars,
-} from '../../index';
+} from '../../types/index';
 
 export const evalRouter = Router();
 
