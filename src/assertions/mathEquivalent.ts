@@ -84,10 +84,13 @@ export function normalizeLatex(text: string): string {
   // \fracAB (two bare single chars, no braces): \frac32 → \frac{3}{2}.
   s = s.replace(/\\frac([A-Za-z0-9])([A-Za-z0-9])/g, '\\frac{$1}{$2}');
 
-  // \frac{numerator}X (single non-brace denominator): \frac{32}3 → \frac{32}{3}.
-  // Restrict X to letter/digit/backslash so we don't auto-brace whitespace or
-  // operators (which would corrupt e.g. "\frac{32} + 2" → "\frac{32}{ }+ 2").
-  s = s.replace(/(\\frac\{[^{}]*\})([A-Za-z0-9\\])/g, (_m, p1, p2) => `${p1}{${p2}}`);
+  // \frac{numerator}X (single non-brace denominator): \frac{32}3 → \frac{32}{3}
+  // and \frac{1}\pi → \frac{1}{\pi}. Capture the WHOLE LaTeX command token
+  // when the denominator starts with `\`, otherwise a single letter or digit.
+  // Restrict to those forms so whitespace and operators don't get auto-braced
+  // (which previously corrupted e.g. "\frac{32} + 2" → "\frac{32}{ }+ 2",
+  // and "\frac{1}\pi" → "\frac{1}{\}pi").
+  s = s.replace(/(\\frac\{[^{}]*\})(\\[A-Za-z]+|[A-Za-z0-9])/g, (_m, p1, p2) => `${p1}{${p2}}`);
 
   for (const fn of TRIG_FNS) {
     // fn( → \fn(
@@ -133,9 +136,14 @@ export function cleanMathText(text: string): string {
   s = s.replace(/\\\(([\s\S]*?)\\\)/g, '$1');
   s = s.replace(/\$([^$]+)\$/g, '$1');
 
-  // Markdown bold/italic.
-  s = s.replace(/\*\*([^*]+)\*\*/g, '$1');
-  s = s.replace(/\*([^*]+)\*/g, '$1');
+  // Markdown bold/italic. Guard against asterisks used as math operators
+  // (e.g. "2*3*4" or "x**y**z") by requiring a non-word boundary on both
+  // sides of the marker pair — real markdown emphasis is whitespace- or
+  // punctuation-flanked, never digit/letter-flanked. The italic guard also
+  // excludes adjacent `*` so the inner pair of `**3**` isn't stripped to
+  // `*3*` then to `3`.
+  s = s.replace(/(?<![*A-Za-z0-9_])\*\*([^*]+)\*\*(?![*A-Za-z0-9_])/g, '$1');
+  s = s.replace(/(?<![*A-Za-z0-9_])\*([^*]+)\*(?![*A-Za-z0-9_])/g, '$1');
 
   return s.trim();
 }
@@ -290,8 +298,8 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   return cleanMathText(candidate);
 }
 
-function extractFromDisplayBlocks(rawText: string): string | undefined {
-  const blocks = [...rawText.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1]);
+function extractFromDisplayBlocks(text: string): string | undefined {
+  const blocks = [...text.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1]);
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
     const boxed = findAllBoxed(block);
@@ -307,6 +315,17 @@ function extractFromDisplayBlocks(rawText: string): string | undefined {
 }
 
 /**
+ * Strip hidden-reasoning blocks before scanning for display math or computing
+ * line positions. `<think>$$2$$</think>\nAnswer: 3` must not bubble the hidden
+ * `$$2$$` up as the answer; the docs promise that thinking blocks are ignored.
+ */
+function stripThinkingBlocks(text: string): string {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .replace(/Thinking:\s*\nSignature:[\s\S]*?(?=\n\n|$)/g, '');
+}
+
+/**
  * Extract the mathematical answer from arbitrary model prose.
  *
  * Priority (highest first):
@@ -314,7 +333,8 @@ function extractFromDisplayBlocks(rawText: string): string | undefined {
  *  2. Last non-trivial cleaned line, if its raw counterpart has no `$$` fence
  *     — pulls the rightmost numeric/LaTeX token from prose like
  *     "The answer is 0.5" or "$$intermediate$$\nAnswer: final".
- *  3. Latest `$$...$$` display block (boxed inside, then parseable content).
+ *  3. Latest `$$...$$` display block (boxed inside, then parseable content),
+ *     scanned over the visible text only (thinking blocks excluded).
  *  4. Last cleaned line as-is.
  */
 export function extractMathAnswer(text: string): string {
@@ -329,18 +349,23 @@ export function extractMathAnswer(text: string): string {
     return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
   }
 
-  const cleanedLines = filterNonTrivialLines(cleaned);
-  const rawLines = filterNonTrivialLines(text);
-  const lastRawHasDisplay = (rawLines[rawLines.length - 1] ?? '').includes('$$');
+  // Use the thinking-stripped text as the source of truth for both display
+  // block scanning and "is the last raw line a fence?" detection so hidden
+  // reasoning never leaks into the extracted answer.
+  const visible = stripThinkingBlocks(text);
 
-  if (!lastRawHasDisplay) {
+  const cleanedLines = filterNonTrivialLines(cleaned);
+  const visibleLines = filterNonTrivialLines(visible);
+  const lastVisibleHasDisplay = (visibleLines[visibleLines.length - 1] ?? '').includes('$$');
+
+  if (!lastVisibleHasDisplay) {
     const lineAnswer = extractFromLastLine(cleanedLines);
     if (lineAnswer) {
       return lineAnswer;
     }
   }
 
-  const blockAnswer = extractFromDisplayBlocks(text);
+  const blockAnswer = extractFromDisplayBlocks(visible);
   if (blockAnswer) {
     return blockAnswer;
   }
@@ -353,10 +378,11 @@ export type MathEquivalentResult = {
   score: number;
   reason: string;
   /**
-   * True when one or both sides could not be parsed as a math expression and
-   * the symbolic comparison never ran. Handlers should treat this as a hard
-   * failure (do not invert under `not-math-equivalent`) — otherwise garbage
-   * output silently satisfies a non-equivalence assertion.
+   * True when the symbolic comparison never produced a verdict — either one
+   * side failed to parse, or the engine threw mid-comparison. Handlers must
+   * treat this as a hard failure (do NOT invert under `not-math-equivalent`)
+   * — otherwise garbage output or engine glitches silently satisfy a
+   * non-equivalence assertion.
    */
   parseFailed?: boolean;
   metadata?: {
@@ -424,9 +450,14 @@ export function isMathEquivalent(
       },
     };
   } catch (err) {
+    // Comparison errors mean we never established (non-)equivalence. Mark
+    // parseFailed so handleMathEquivalent does NOT invert this false to a
+    // pass under not-math-equivalent — engine glitches must surface, not
+    // silently satisfy a negative assertion.
     return {
       pass: false,
       score: 0,
+      parseFailed: true,
       reason: `Math equivalence comparison failed: ${err instanceof Error ? err.message : String(err)}`,
       metadata: { actualAnswer, expectedAnswer },
     };

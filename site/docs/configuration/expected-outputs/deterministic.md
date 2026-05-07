@@ -886,7 +886,8 @@ trip up `equals` and `contains`:
 - Markdown bold `**...**` and italic `*...*`
 - `<think>...</think>` blocks and Anthropic-style redacted thinking blocks
 - Unicode minus `−`, multiplication `×`, and root `√`
-- `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom)
+- `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom),
+  `\frac{1}\pi` (backslash-command denominator)
 - European decimal commas (`2,00625` → `2.00625`)
 - Trailing units (`m`, `km`, `cm`, `mm`, `s`, `ms`, `kg`, `g`, `rad`, `deg`, `°`)
 - Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
@@ -898,6 +899,10 @@ trip up `equals` and `contains`:
   (the rightmost numeric/LaTeX token on a multi-word line wins)
 - A labelled final-line answer beats earlier display blocks:
   `$$2$$\nAnswer: 3` is graded against `3`, not `2`
+- `*` and `**` between digits/letters stay as multiplication operators
+  (`2*3*4 = 24`), not stripped as Markdown emphasis
+- Display math inside `<think>...</think>` (or redacted-thinking blocks) is
+  ignored — only the visible answer is graded
 
 Cases that intentionally do **not** pass:
 

@@ -81,6 +81,17 @@ describe('normalizeLatex', () => {
     it('does not auto-brace a non-letter/digit/backslash denominator', () => {
       expect(normalizeLatex('\\frac{32}+2')).toBe('\\frac{32}+2');
     });
+
+    it('braces a backslash-command denominator (\\frac{1}\\pi → \\frac{1}{\\pi})', () => {
+      // Earlier versions captured only the leading backslash and produced
+      // "\\frac{1}{\\}pi" which CortexJS could not parse; the regex must
+      // grab the entire LaTeX command token as the denominator.
+      expect(normalizeLatex('\\frac{1}\\pi')).toBe('\\frac{1}{\\pi}');
+    });
+
+    it('braces a multi-letter command denominator (\\frac{2}\\theta)', () => {
+      expect(normalizeLatex('\\frac{2}\\theta')).toBe('\\frac{2}{\\theta}');
+    });
   });
 
   describe('trig backslash insertion', () => {
@@ -249,6 +260,24 @@ describe('cleanMathText', () => {
 
   it('preserves V = 32 inside bold markers', () => {
     expect(cleanMathText('**V = 32**')).toBe('V = 32');
+  });
+
+  it.each([
+    ['2*3*4', '2*3*4'],
+    ['1*2', '1*2'],
+    ['x*y*z', 'x*y*z'],
+    ['2*x*3', '2*x*3'],
+  ])('preserves * multiplication operators (%s)', (input, expected) => {
+    // The italic regex must NOT match asterisks adjacent to digits/letters,
+    // otherwise "2*3*4" silently collapses to "234" before parsing.
+    expect(cleanMathText(input)).toBe(expected);
+  });
+
+  it.each([
+    ['2**3**4', '2**3**4'],
+    ['x**y**z', 'x**y**z'],
+  ])('preserves ** exponent / multiplication operators (%s)', (input, expected) => {
+    expect(cleanMathText(input)).toBe(expected);
   });
 
   it('returns empty string unchanged', () => {
@@ -487,6 +516,22 @@ describe('extractMathAnswer', () => {
       );
     });
   });
+
+  describe('hidden-thinking display blocks must not leak through', () => {
+    it('ignores $$...$$ inside <think> blocks', () => {
+      expect(extractMathAnswer('<think>$$2$$</think>\nFinal answer: 3')).toBe('3');
+    });
+
+    it('ignores $$...$$ inside <think> blocks even when only the display block is "answer-like"', () => {
+      // No labelled final-line answer here — the visible text is just "0.5".
+      // The hidden $$2$$ must not bubble up.
+      expect(extractMathAnswer('<think>$$2$$</think>\n0.5')).toBe('0.5');
+    });
+
+    it('ignores $$...$$ inside redacted-thinking blocks', () => {
+      expect(extractMathAnswer('Thinking: \nSignature: AbCd123\n$$99$$\n\nAnswer: 7')).toBe('7');
+    });
+  });
 });
 
 // =============================================================================
@@ -696,6 +741,36 @@ describe('isMathEquivalent', () => {
       expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
     });
 
+    it.each([
+      ['2*3*4', '24'],
+      ['1*2', 2],
+      ['2*3', '6'],
+    ])('grades * multiplication ("%s" vs %s) as equivalent', (actual, expected) => {
+      // Without the asterisk-preservation fix, "2*3*4" would clean to "234"
+      // and grade as 234 ≠ 24.
+      expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
+    });
+
+    it.each([
+      ['\\frac{1}\\pi', '\\frac{1}{\\pi}'],
+      ['\\frac{2}\\theta', '\\frac{2}{\\theta}'],
+    ])('grades \\frac with backslash-command denom ("%s" vs %s) as equivalent', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected).pass).toBe(true);
+    });
+
+    it.each([
+      ['<think>$$2$$</think>\nFinal answer: 3', '3'],
+      ['<think>$$2$$</think>\n0.5', '0.5'],
+    ])('ignores hidden display math inside <think> ("%s" vs %s)', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected).pass).toBe(true);
+    });
+
+    it('grades hidden-think display math against the WRONG value as false', () => {
+      // Inverse of the above: must NOT match the hidden intermediate.
+      expect(isMathEquivalent('<think>$$2$$</think>\nFinal answer: 3', '2').pass).toBe(false);
+      expect(isMathEquivalent('<think>$$2$$</think>\n0.5', '2').pass).toBe(false);
+    });
+
     it('grades "$$2$$\\nAnswer: 3" against 3 (not 2)', () => {
       // Earlier display blocks are intermediate work; the labelled final-line
       // answer should win.
@@ -762,6 +837,9 @@ describe('isMathEquivalent', () => {
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('Math equivalence comparison failed');
       expect(result.reason).toContain('simulated CortexJS box failure');
+      // Comparison errors must mark parseFailed so handlers do NOT invert them
+      // for not-math-equivalent (otherwise an engine glitch silently passes).
+      expect(result.parseFailed).toBe(true);
     });
   });
 
@@ -873,6 +951,37 @@ describe('handleMathEquivalent', () => {
       }),
     );
     expect(failed.pass).toBe(false);
+  });
+
+  it('does not let not-math-equivalent silently pass when comparison errors mid-flight', () => {
+    // ce.box throwing during Subtract means we did not actually establish
+    // (non-)equivalence. handleMathEquivalent must NOT flip the false to a
+    // pass for not-math-equivalent.
+    const originalBox = ComputeEngine.prototype.box;
+    const spy = vi.spyOn(ComputeEngine.prototype, 'box').mockImplementation(function (
+      this: ComputeEngine,
+      ...args: Parameters<typeof originalBox>
+    ) {
+      if (Array.isArray(args[0]) && args[0][0] === 'Subtract') {
+        throw new Error('synthetic comparison failure');
+      }
+      return originalBox.apply(this, args);
+    });
+    try {
+      const result = handleMathEquivalent(
+        makeParams({
+          renderedValue: '1',
+          outputString: '1',
+          inverse: true,
+          type: 'not-math-equivalent',
+        }),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Math equivalence comparison failed');
+      expect(result.reason).not.toContain('not equivalent, as expected');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('does not let not-math-equivalent silently pass on unparseable output', () => {
