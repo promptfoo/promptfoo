@@ -108,9 +108,9 @@ const PromptDialog = ({
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedEvals.map((evalData) => (
+                    {sortedEvals.map((evalData, index) => (
                       <tr
-                        key={`eval-${evalData.id}`}
+                        key={`eval-${evalData.id}-${index}`}
                         className="border-b border-border hover:bg-muted/30"
                       >
                         <td className="px-3 py-2">

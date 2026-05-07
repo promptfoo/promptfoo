@@ -236,6 +236,34 @@ describe('PromptDialog', () => {
     expect(footer).toHaveClass('shrink-0');
   });
 
+  it('keeps eval history rows distinct when repeated eval ids are present', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const duplicateEvalPrompt: ServerPromptWithMetadata = {
+      ...mockSelectedPrompt,
+      evals: [mockSelectedPrompt.evals[0], mockSelectedPrompt.evals[0]],
+    };
+
+    try {
+      render(
+        <MemoryRouter>
+          <PromptDialog
+            openDialog={true}
+            handleClose={vi.fn()}
+            selectedPrompt={duplicateEvalPrompt}
+            showDatasetColumn={true}
+          />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getAllByText(mockSelectedPrompt.evals[0].id)).toHaveLength(2);
+      expect(consoleErrorSpy.mock.calls.flat().join(' ')).not.toContain(
+        'Encountered two children with the same key',
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   it('should copy the prompt text to clipboard and show the Snackbar when the copy button is clicked', async () => {
     const handleClose = vi.fn();
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
