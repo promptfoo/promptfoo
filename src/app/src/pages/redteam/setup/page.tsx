@@ -171,21 +171,17 @@ export default function RedTeamSetupPage() {
   };
 
   const handleNext = () => {
-    setValue((prevValue) => {
-      const newValue = prevValue + 1;
-      updateHash(newValue);
-      window.scrollTo({ top: 0 });
-      return newValue;
-    });
+    const newValue = value + 1;
+    setValue(newValue);
+    updateHash(newValue);
+    window.scrollTo({ top: 0 });
   };
 
   const handleBack = () => {
-    setValue((prevValue) => {
-      const newValue = prevValue - 1;
-      updateHash(newValue);
-      window.scrollTo({ top: 0 });
-      return newValue;
-    });
+    const newValue = value - 1;
+    setValue(newValue);
+    updateHash(newValue);
+    window.scrollTo({ top: 0 });
   };
 
   const handleTabChange = (newValue: string) => {
