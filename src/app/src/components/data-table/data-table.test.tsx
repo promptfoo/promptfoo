@@ -113,6 +113,21 @@ describe('DataTable', () => {
     expect(screen.getByText('Test Item 2')).toBeInTheDocument();
   });
 
+  it('keeps filter value controls usable on narrow filter popovers', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [{ id: '1', name: 'Test Item 1' }];
+
+    render(<DataTable columns={columns} data={data} showToolbar />);
+
+    await user.click(screen.getByText('Filters'));
+
+    const filterRow = screen.getByTestId('data-table-filter-row');
+    const valueInput = screen.getByPlaceholderText('Value...');
+
+    expect(filterRow).toHaveClass('flex-wrap');
+    expect(valueInput).toHaveClass('min-w-[150px]');
+  });
+
   it('should render table with data when data is provided', () => {
     const data: TestRow[] = [
       { id: '1', name: 'Test Item 1' },
@@ -726,6 +741,7 @@ describe('DataTable', () => {
         return dialog as HTMLElement;
       });
       expect(toolbarDialog).toBeDefined();
+      expect(toolbarDialog).toHaveClass('w-[min(520px,calc(100vw-1rem))]');
       expect(await within(toolbarDialog).findByText('Status')).toBeInTheDocument();
       expect(await within(toolbarDialog).findByText(/beta/i)).toBeInTheDocument();
     });
@@ -991,12 +1007,35 @@ describe('DataTable', () => {
 
       const actionGroup = headerContent?.querySelector('button')?.closest('span');
       expect(actionGroup).toBeInTheDocument();
-      expect(actionGroup).toHaveClass('absolute', 'right-1', 'items-center');
-      expect(actionGroup).not.toHaveClass('shrink-0', 'left-0');
+      expect(actionGroup).toHaveClass('flex', 'shrink-0', 'items-center');
+      expect(actionGroup).toHaveClass(
+        'opacity-100',
+        'pointer-events-auto',
+        'sm:opacity-0',
+        'sm:pointer-events-none',
+        'sm:group-hover:opacity-100',
+        'sm:group-hover:pointer-events-auto',
+      );
+      expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
+
+      const sortButton = headerContent?.querySelector('button');
+      expect(sortButton).toHaveAttribute('aria-label', `Sort ${headerText} ascending`);
     };
 
     assertHeaderLayout('Identifier');
     assertHeaderLayout('Right Aligned Header', true);
+  });
+
+  it('uses a clear label when the next sort action removes sorting', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [{ id: '1', name: 'Long header row' }];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    await user.click(screen.getByRole('button', { name: 'Sort ID ascending' }));
+    await user.click(screen.getByRole('button', { name: 'Sort ID descending' }));
+
+    expect(screen.getByRole('button', { name: 'Clear sorting for ID' })).toBeInTheDocument();
   });
 
   describe('cell content wrapper', () => {
