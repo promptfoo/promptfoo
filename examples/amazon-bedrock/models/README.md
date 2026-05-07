@@ -115,6 +115,14 @@ promptfoo eval -c examples/amazon-bedrock/models/promptfooconfig.converse-mcp.ya
 
 Replace the `servers` entry with a local `command`/`args`, `path`, or another remote `url` to use your own MCP server.
 
+> **Note:** When the model emits `tool_use`, the provider executes the requested
+> MCP tool and returns the **raw tool result** as the eval output. There is no
+> follow-up Converse turn that feeds the tool result back to the model for a
+> synthesized answer, so the assertions in this example match substrings present
+> in the MCP server's response. If you need a model-summarized answer, wrap the
+> provider in an agent harness or run a second eval over the captured tool
+> output.
+
 ## Knowledge Base Example
 
 The Knowledge Base example (`promptfooconfig.kb.yaml`) demonstrates how to use AWS Bedrock Knowledge Base for Retrieval Augmented Generation (RAG).

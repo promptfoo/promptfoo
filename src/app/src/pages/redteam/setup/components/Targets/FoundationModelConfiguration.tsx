@@ -70,27 +70,37 @@ const FoundationModelConfiguration = ({
     updateCustomTarget('id', buildBedrockProviderId(apiMode, modelId));
   };
 
+  const isServerConfigured = (server: MCPServerConfig): boolean =>
+    Boolean(server.command || server.path || server.url);
+
   const updateMCPServers = (servers: MCPServerConfig[]) => {
     const { mcp: _mcp, ...configWithoutMcp } = selectedTarget.config || {};
 
-    updateCustomTarget(
-      'config',
-      servers.length > 0
-        ? {
-            ...selectedTarget.config,
-            mcp: {
-              ...selectedTarget.config?.mcp,
-              enabled: true,
-              servers,
-            },
-          }
-        : configWithoutMcp,
-    );
+    if (servers.length === 0) {
+      updateCustomTarget('config', configWithoutMcp);
+      return;
+    }
+
+    // Only enable MCP once at least one server has a usable transport. An empty
+    // `command` / `path` / `url` would cause `MCPClient.initialize()` to throw at
+    // eval time; defer enabling until the user actually fills the fields in.
+    const enabled = servers.some(isServerConfigured);
+
+    updateCustomTarget('config', {
+      ...selectedTarget.config,
+      mcp: {
+        ...selectedTarget.config?.mcp,
+        enabled,
+        servers,
+      },
+    });
   };
 
   const addMCPServer = () => {
     const servers = selectedTarget.config?.mcp?.servers || [];
-    updateMCPServers([...servers, { name: `server-${servers.length + 1}`, command: '', args: [] }]);
+    // Don't seed `command: ''`; an empty string would be persisted and later
+    // fail validation. Leave the field undefined and let the input render empty.
+    updateMCPServers([...servers, { name: `server-${servers.length + 1}`, args: [] }]);
     setIsMcpOpen(true);
   };
 

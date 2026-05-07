@@ -441,10 +441,79 @@ describe('FoundationModelConfiguration', () => {
     );
     await user.click(screen.getByRole('button', { name: /Add MCP Server/i }));
 
+    // A freshly-added server has no command/path/url yet, so MCP must remain
+    // disabled. Without this guard, MCPClient.initialize() throws "Either
+    // command+args or path or url must be specified" the first time an eval
+    // runs against the saved config.
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', {
       mcp: {
+        enabled: false,
+        servers: [{ name: 'server-1', args: [] }],
+      },
+    });
+  });
+
+  it('should enable MCP only after a server has a usable transport', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {
+            mcp: {
+              enabled: false,
+              servers: [{ name: 'server-1', args: [] }],
+            },
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    const commandInput = screen.getByLabelText(/Command/i);
+    await user.click(commandInput);
+    await user.paste('npx');
+
+    const calls = vi.mocked(mockUpdateCustomTarget).mock.calls;
+    const lastCall = calls[calls.length - 1];
+    expect(lastCall[0]).toBe('config');
+    expect(lastCall[1]).toMatchObject({
+      mcp: {
         enabled: true,
-        servers: [{ name: 'server-1', command: '', args: [] }],
+        servers: [expect.objectContaining({ name: 'server-1', command: 'npx' })],
+      },
+    });
+  });
+
+  it('should disable MCP when the only server is cleared back to no transport', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {
+            mcp: {
+              enabled: true,
+              servers: [{ name: 'server-1', command: 'npx', args: [] }],
+            },
+          },
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    const commandInput = screen.getByLabelText(/Command/i);
+    await user.clear(commandInput);
+
+    const calls = vi.mocked(mockUpdateCustomTarget).mock.calls;
+    const lastCall = calls[calls.length - 1];
+    expect(lastCall[0]).toBe('config');
+    expect(lastCall[1]).toMatchObject({
+      mcp: {
+        enabled: false,
+        servers: [expect.objectContaining({ name: 'server-1' })],
       },
     });
   });

@@ -510,6 +510,116 @@ describe('AwsBedrockConverseProvider', () => {
       expect(mcpMocks.mockCleanup).toHaveBeenCalled();
     });
 
+    it('should expose shutdown() that delegates to cleanup', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      // The evaluator calls provider.shutdown() via providerRegistry.shutdownAll().
+      // Without this method, MCP transports (including stdio child processes) leak.
+      expect(typeof (provider as any).shutdown).toBe('function');
+      await provider.shutdown();
+      expect(mcpMocks.mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should be safe to call cleanup() multiple times', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      await provider.cleanup();
+      await provider.cleanup();
+      // The second cleanup must be a no-op — not a double mcpClient.cleanup() and not a throw.
+      expect(mcpMocks.mockCleanup).toHaveBeenCalledTimes(1);
+    });
+
+    it('should still attempt cleanup when MCP initialization failed', async () => {
+      mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      // cleanup() must not re-throw the init failure; it must drain whatever
+      // partial state exists so we don't leak transports.
+      await expect(provider.cleanup()).resolves.toBeUndefined();
+      expect(mcpMocks.mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should not initialize MCP when no server has a usable transport', () => {
+      // Empty command/path/url means MCPClient.initialize() would throw later;
+      // the provider should refuse to start the client at all.
+      new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            servers: [{ name: 'empty', command: '', args: [] }],
+          },
+        },
+      });
+
+      expect(mcpMocks.mockConstructor).not.toHaveBeenCalled();
+      expect(mcpMocks.mockInitialize).not.toHaveBeenCalled();
+    });
+
+    it('should surface MCP init failure as ProviderResponse.error on callApi', async () => {
+      mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      const result = await provider.callApi('hi');
+      expect(result.error).toContain('MCP initialization failed');
+      // Bedrock must not be called when MCP init failed and the user wired MCP into the request.
+      expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('should not surface unhandled rejection if provider is constructed but never invoked', async () => {
+      mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
+      // Constructing the provider returns synchronously; the failed init promise
+      // must have a sink-handler attached so Node does not log an
+      // UnhandledPromiseRejection or terminate strict-mode processes.
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      // Wait for the init promise to settle without awaiting it directly.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      // Sanity: the recorded error is observable via callApi.
+      const result = await provider.callApi('hi');
+      expect(result.error).toContain('MCP initialization failed');
+    });
+
     it('should include MCP tools in Converse toolConfig', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
@@ -606,6 +716,122 @@ describe('AwsBedrockConverseProvider', () => {
       const result = await provider.callApi('List resources');
 
       expect(result.output).toBe('MCP Tool Error (list_resources): MCP server failed');
+      // MCP server errors must propagate into ProviderResponse.error so downstream
+      // assertions and exit codes treat broken MCP calls as failures rather than
+      // greenlighting them on the strength of an embedded error string.
+      expect(result.error).toBe('MCP Tool Error (list_resources): MCP server failed');
+    });
+
+    it('should propagate thrown MCP errors into ProviderResponse.error', async () => {
+      mcpMocks.mockCallTool.mockRejectedValueOnce(new Error('connection refused'));
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('List resources');
+
+      expect(result.error).toBe('MCP Tool Error (list_resources): connection refused');
+      expect(result.output).toContain('MCP Tool Error (list_resources)');
+    });
+
+    it('should not crash on malformed JSON tool_use input from the model', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          // String input that is not valid JSON. parseToolInput must coerce to {}
+          // rather than letting JSON.parse crash the eval row.
+          toolUse: { id: 'tool-123', name: 'list_resources', input: '{not json' as any },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('List resources');
+      // Falls through to normal MCP call with empty args; the loop must not crash.
+      expect(result.error).toBeUndefined();
+      expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
+    });
+
+    it('should drop config.tools entries that collide with MCP-discovered tool names', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+          tools: [
+            // Same name as the mocked MCP tool -> Bedrock would reject as duplicate
+            {
+              toolSpec: {
+                name: 'list_resources',
+                description: 'shadow',
+                inputSchema: { json: { type: 'object' } },
+              },
+            },
+          ],
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('ok'));
+
+      await provider.callApi('hi');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const sentInput = ConverseCommand.mock.calls.at(-1)?.[0];
+      const toolNames = (sentInput?.toolConfig?.tools || []).map(
+        (t: any) => t.toolSpec?.name,
+      );
+      expect(toolNames).toEqual(['list_resources']);
+    });
+
+    it('should not invoke MCP when toolChoice is none (non-streaming)', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tool_choice: 'none' as any,
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      // Even if the response somehow contains a tool_use block, MCP must not run
+      // when the user disabled tools.
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('answer', {
+          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('hi');
+      expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+      expect(result.output).toContain('answer');
     });
 
     it('should fall back to tool_use output when callback is not defined for the function', async () => {
@@ -741,6 +967,105 @@ describe('AwsBedrockConverseProvider', () => {
       // Claude 3.5 Sonnet: $3/MTok input, $15/MTok output
       // Default usage: (100/1M * 3) + (50/1M * 15) = 0.0003 + 0.00075 = 0.00105
       expect(result.cost).toBeCloseTo(0.00105, 6);
+    });
+  });
+
+  describe('MCP helper functions (via Converse command input)', () => {
+    it('should strip $schema from MCP tool input schema before sending to Bedrock', async () => {
+      mcpMocks.mockGetAllTools.mockReturnValueOnce([
+        {
+          name: 'list_resources',
+          description: 'List available resources',
+          inputSchema: {
+            $schema: 'https://json-schema.org/draft/2020-12/schema',
+            type: 'object',
+            properties: { resourceType: { type: 'string' } },
+          },
+        },
+      ]);
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('ok'));
+      await provider.callApi('hi');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const sentInput = ConverseCommand.mock.calls.at(-1)?.[0];
+      const tool = sentInput?.toolConfig?.tools?.[0];
+      // Bedrock rejects unknown root keys in inputSchema. $schema must be stripped.
+      expect(tool?.toolSpec?.inputSchema?.json).not.toHaveProperty('$schema');
+      expect(tool?.toolSpec?.inputSchema?.json).toMatchObject({
+        type: 'object',
+        properties: { resourceType: { type: 'string' } },
+      });
+    });
+
+    it('should join mixed-content MCP results into a readable string', async () => {
+      mcpMocks.mockCallTool.mockResolvedValueOnce({
+        content: [
+          'raw',
+          { text: 'hi' },
+          { json: { a: 1 } },
+          { data: [1, 2] },
+          { unknown: true },
+          42,
+        ],
+      });
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('hi');
+      expect(result.output).toBe(
+        'MCP Tool Result (list_resources): raw\nhi\n{"a":1}\n[1,2]\n{"unknown":true}\n42',
+      );
+    });
+
+    it('should coerce array tool_use input into empty args (parseToolInput safety)', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          // Array isn't a valid tool input shape; parseToolInput must return {}.
+          toolUse: { id: 'tool-123', name: 'list_resources', input: [{ a: 1 }] as any },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      await provider.callApi('hi');
+      expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
     });
   });
 
@@ -2313,6 +2638,72 @@ Third line`;
       const result = await provider.callApiStreaming('List resources');
 
       expect(result.output).toBe('MCP Tool Error (list_resources): MCP server failed');
+      expect(result.error).toBe('MCP Tool Error (list_resources): MCP server failed');
+    });
+
+    it('should not invoke MCP from streaming when toolChoice is none', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          streaming: true,
+          tool_choice: 'none' as any,
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      const streamEvents = [
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
+          },
+        },
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
+        { messageStop: { stopReason: 'tool_use' } },
+      ];
+
+      mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
+
+      const result = await provider.callApiStreaming('hi');
+      expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+      // Should fall through to default tool_use serialization
+      expect(result.output).toContain('"type":"tool_use"');
+    });
+
+    it('should report error when streaming tool_use input is invalid JSON', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          streaming: true,
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      const streamEvents = [
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
+          },
+        },
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{broken' } } } },
+        { messageStop: { stopReason: 'tool_use' } },
+      ];
+
+      mockSend.mockResolvedValueOnce({ stream: createMockStream(streamEvents) });
+
+      const result = await provider.callApiStreaming('hi');
+      // Don't call MCP with garbage args
+      expect(mcpMocks.mockCallTool).not.toHaveBeenCalled();
+      expect(result.error).toContain('invalid JSON arguments');
     });
 
     it('should combine streaming text with MCP tool results', async () => {
