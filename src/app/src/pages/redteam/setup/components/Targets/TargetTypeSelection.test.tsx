@@ -203,6 +203,14 @@ describe('TargetTypeSelection', () => {
     expect(mockSetProviderType).toHaveBeenCalledWith(undefined);
   });
 
+  it('stacks the quick-start prompt before the layout has room for a side-by-side treatment', () => {
+    renderComponent();
+
+    expect(
+      screen.getByText('New to red teaming? Load an example to explore the setup.').parentElement,
+    ).toHaveClass('flex-col', 'sm:flex-row');
+  });
+
   it('should update the selectedTarget and providerType when a new provider type is selected and record telemetry event', async () => {
     const user = userEvent.setup();
     const mockSetProviderType = vi.fn();
