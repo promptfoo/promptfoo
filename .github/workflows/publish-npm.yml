@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          ref: ${{ inputs.tag_name }}
+          ref: refs/tags/${{ inputs.tag_name }}
 
       - name: Verify package version matches tag
         run: |
