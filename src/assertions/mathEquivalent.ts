@@ -10,8 +10,7 @@
  *  4. Parsing each side with CortexJS Compute Engine (handles LaTeX).
  *  5. Returning pass when ce.box(['Subtract', a, b]).simplify().isEqual(0).
  *
- * Ported from a sympy/latex2sympy reference implementation; see
- * site/docs/configuration/expected-outputs/deterministic.md#math-equivalent.
+ * See site/docs/configuration/expected-outputs/deterministic.md#math-equivalent.
  */
 
 import { type BoxedExpression, ComputeEngine } from '@cortex-js/compute-engine';
@@ -49,8 +48,7 @@ function getEngine(): ComputeEngine {
 }
 
 /**
- * Normalize LaTeX quirks before parsing. Mirrors `_normalize_latex` from the
- * reference Python implementation.
+ * Normalize LaTeX quirks before parsing.
  */
 export function normalizeLatex(text: string): string {
   let s = text;
@@ -104,8 +102,7 @@ export function normalizeLatex(text: string): string {
 }
 
 /**
- * Strip formatting wrappers that don't affect mathematical meaning. Mirrors
- * `_clean` from the reference Python implementation.
+ * Strip formatting wrappers that don't affect mathematical meaning.
  */
 export function cleanMathText(text: string): string {
   let s = text;
@@ -226,7 +223,6 @@ function findAllBoxed(text: string): string[] {
 
 /**
  * Extract the mathematical answer from arbitrary model prose.
- * Mirrors `_extract_answer` from the reference Python implementation.
  */
 export function extractMathAnswer(text: string): string {
   if (!text) {

@@ -1,7 +1,7 @@
 /**
- * Tests for the math-equivalent assertion. Ported from the reference Python
- * implementation's test_eval.py — preserved behaviour where the underlying
- * symbolic engine (CortexJS) reaches the same conclusion as sympy.
+ * Tests for the math-equivalent assertion: helper-level coverage of
+ * normalization, cleaning, extraction, and parsing, plus end-to-end
+ * equivalence checks against representative LLM-output shapes.
  */
 import { describe, expect, it } from 'vitest';
 import {
