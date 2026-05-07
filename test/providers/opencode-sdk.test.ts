@@ -1,5 +1,6 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
@@ -9,6 +10,7 @@ import {
   FS_READONLY_TOOLS,
   OpenCodeSDKProvider,
 } from '../../src/providers/opencode-sdk';
+import { createDeferred } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -579,6 +581,27 @@ describe('OpenCodeSDKProvider', () => {
         );
       });
 
+      it('should resolve relative working_dir from cliState.basePath', async () => {
+        const provider = new OpenCodeSDKProvider({
+          config: { working_dir: './workspace' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const resolvedWorkingDir = path.resolve('/test/basePath', 'workspace');
+        expect(statSyncSpy).toHaveBeenCalledWith(resolvedWorkingDir);
+        expect(mockSessionCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            directory: resolvedWorkingDir,
+          }),
+        );
+        expect(mockSessionPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            directory: resolvedWorkingDir,
+          }),
+        );
+      });
+
       it('should throw error for non-existent working_dir', async () => {
         statSyncSpy.mockImplementation(() => {
           throw new Error('ENOENT');
@@ -847,6 +870,68 @@ describe('OpenCodeSDKProvider', () => {
         // Second provider with different MCP config - should NOT use cache from first
         const result = await providerB.callApi('Test prompt');
         expect(result.output).toBe('Response B');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should produce different cache keys for different session_id values', async () => {
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from session A' }]),
+        );
+
+        const providerForSessionA = new OpenCodeSDKProvider({
+          config: { session_id: 'session-A' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromSessionA = await providerForSessionA.callApi('Test prompt');
+        expect(resultFromSessionA.output).toBe('Response from session A');
+
+        const cachedResultFromSessionA = await providerForSessionA.callApi('Test prompt');
+        expect(cachedResultFromSessionA.output).toBe('Response from session A');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from session B' }]),
+        );
+
+        const providerForSessionB = new OpenCodeSDKProvider({
+          config: { session_id: 'session-B' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromSessionB = await providerForSessionB.callApi('Test prompt');
+        expect(resultFromSessionB.output).toBe('Response from session B');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
+      });
+
+      it('should produce different cache keys for different parent_session_id values', async () => {
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from parent A' }]),
+        );
+
+        const providerForParentA = new OpenCodeSDKProvider({
+          config: { parent_session_id: 'parent-A' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromParentA = await providerForParentA.callApi('Test prompt');
+        expect(resultFromParentA.output).toBe('Response from parent A');
+
+        const cachedResultFromParentA = await providerForParentA.callApi('Test prompt');
+        expect(cachedResultFromParentA.output).toBe('Response from parent A');
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+
+        mockSessionPrompt.mockResolvedValueOnce(
+          createMockPromptResponse([{ type: 'text', text: 'Response from parent B' }]),
+        );
+
+        const providerForParentB = new OpenCodeSDKProvider({
+          config: { parent_session_id: 'parent-B' },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+
+        const resultFromParentB = await providerForParentB.callApi('Test prompt');
+        expect(resultFromParentB.output).toBe('Response from parent B');
         expect(mockSessionPrompt).toHaveBeenCalledTimes(2);
       });
 
@@ -1601,12 +1686,14 @@ describe('OpenCodeSDKProvider', () => {
   describe('abortSignal mid-flight cancellation', () => {
     it('calls session.abort when the caller aborts during the prompt', async () => {
       const controller = new AbortController();
+      const promptStarted = createDeferred<void>();
       // The prompt mock waits for the abort signal itself, then returns a
       // canned response — that mirrors how a real server completes after an
       // abort request rather than hanging forever.
       mockSessionPrompt.mockImplementationOnce(
         () =>
           new Promise((resolve) => {
+            promptStarted.resolve();
             controller.signal.addEventListener(
               'abort',
               () =>
@@ -1629,10 +1716,7 @@ describe('OpenCodeSDKProvider', () => {
         abortSignal: controller.signal,
       });
 
-      // Yield enough microtasks for callApi to walk through ensureClient,
-      // getOrCreateSession, and reach `addEventListener('abort', ...)` before
-      // we trigger the signal.
-      await new Promise((resolve) => setImmediate(resolve));
+      await promptStarted.promise;
       controller.abort();
 
       const result = await callPromise;

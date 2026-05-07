@@ -45,6 +45,25 @@ def load_agent_provider():
         def run_sync(*args, **kwargs):
             raise AssertionError("Runner.run_sync should not be called in these tests")
 
+    class ShellCallOutcome:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class ShellCommandOutput:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class ShellCommandRequest:
+        pass
+
+    class ShellResult:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class ShellTool:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
     class SQLiteSession:
         def __init__(self, *args, **kwargs):
             self.args = args
@@ -111,6 +130,12 @@ def load_agent_provider():
     agents_module.ModelSettings = ModelSettings
     agents_module.RunContextWrapper = RunContextWrapper
     agents_module.Runner = Runner
+    agents_module.ShellCallOutcome = ShellCallOutcome
+    agents_module.ShellCommandOutput = ShellCommandOutput
+    agents_module.ShellCommandRequest = ShellCommandRequest
+    agents_module.ShellResult = ShellResult
+    agents_module.ShellTool = ShellTool
+    agents_module.ShellToolLocalSkill = dict
     agents_module.SQLiteSession = SQLiteSession
     agents_module.function_tool = function_tool
     agents_module.handoff = handoff
@@ -611,6 +636,27 @@ class AgentProviderTests(unittest.TestCase):
         self.assertIn("repo/src/discount_policy.py", agent.default_manifest.entries)
         self.assertEqual(
             agent.kwargs["model_settings"].kwargs["tool_choice"], "required"
+        )
+
+    def test_discount_review_skill_points_at_bundled_skill(self):
+        skill = AGENT_PROVIDER._build_discount_review_skill()
+
+        self.assertEqual(skill["name"], "discount-review")
+        self.assertTrue(skill["path"].endswith("skills/discount-review"))
+
+    def test_skill_agent_mounts_local_skill(self):
+        agent = AGENT_PROVIDER._build_skill_agent("gpt-5.4-mini")
+
+        self.assertEqual(agent.name, "Local Skill Analyst")
+        self.assertEqual(
+            agent.kwargs["model_settings"].kwargs["tool_choice"],
+            "required",
+        )
+        shell_tool = agent.kwargs["tools"][0]
+        self.assertEqual(shell_tool.kwargs["environment"]["type"], "local")
+        self.assertEqual(
+            shell_tool.kwargs["environment"]["skills"][0]["name"],
+            "discount-review",
         )
 
 

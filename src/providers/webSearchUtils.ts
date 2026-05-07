@@ -153,10 +153,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // Google Gemini 3 Pro Preview with googleSearch tool
+  // Google Gemini 3.1 Pro Preview with googleSearch tool
   const loadGoogleWebSearch = async () => {
     try {
-      return await loadApiProvider('google:gemini-3-pro-preview', {
+      return await loadApiProvider('google:gemini-3.1-pro-preview', {
         options: {
           config: { tools: [{ googleSearch: {} }] },
         },
@@ -167,10 +167,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // Vertex AI Gemini 3 Pro Preview with googleSearch tool
+  // Vertex AI Gemini 3.1 Pro Preview with googleSearch tool
   const loadVertexWebSearch = async () => {
     try {
-      return await loadApiProvider('vertex:gemini-3-pro-preview', {
+      return await loadApiProvider('vertex:gemini-3.1-pro-preview', {
         options: {
           config: { tools: [{ googleSearch: {} }] },
         },

@@ -25,7 +25,6 @@ Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `googl
 **Gemini 3.0 (Preview):**
 
 - `vertex:gemini-3-flash-preview` - Frontier intelligence with Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
-- `vertex:gemini-3-pro-preview` - Advanced reasoning, multimodal understanding, and agentic capabilities
 
 **Gemini 2.5:**
 
@@ -931,8 +930,8 @@ providers:
         thinkingConfig:
           thinkingLevel: MEDIUM # Balanced approach for moderate complexity
 
-  # Gemini 3 Pro supports: LOW, HIGH
-  - id: vertex:gemini-3-pro-preview
+  # Gemini 3.1 Pro supports: LOW, HIGH
+  - id: vertex:gemini-3.1-pro-preview
     config:
       generationConfig:
         thinkingConfig:

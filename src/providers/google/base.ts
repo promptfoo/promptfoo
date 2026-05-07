@@ -26,7 +26,7 @@ import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { normalizeTools } from './util';
+import { normalizeTools, stripExecutableToolFileReferences } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -215,7 +215,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    * @param context - Call context with variables
    * @returns Array of Google-format tools
    */
-  protected async getAllTools(context?: CallApiContextParams): Promise<Tool[]> {
+  protected async getAllTools(
+    context?: CallApiContextParams,
+    options: { skipExecutableToolFiles?: boolean } = {},
+  ): Promise<Tool[]> {
     // Get MCP tools if client is available
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
 
@@ -223,8 +226,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
     // This allows per-prompt tool overrides in test cases
     const promptConfig = context?.prompt?.config as CompletionOptions | undefined;
     const configTools = promptConfig?.tools ?? this.config.tools;
-    const loadedTools = configTools
-      ? await maybeLoadToolsFromExternalFile(configTools, context?.vars)
+    const requestTools = options.skipExecutableToolFiles
+      ? stripExecutableToolFileReferences(configTools, context?.vars)
+      : configTools;
+    const loadedTools = requestTools
+      ? await maybeLoadToolsFromExternalFile(requestTools, context?.vars)
       : [];
 
     // Transform tools to Google format if needed

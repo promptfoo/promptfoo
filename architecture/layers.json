@@ -1,0 +1,52 @@
+{
+  "publicFacade": "src/index.ts",
+  "layers": [
+    {
+      "name": "facade",
+      "roots": ["src/index.ts"]
+    },
+    {
+      "name": "app",
+      "roots": ["src/app/src"]
+    },
+    {
+      "name": "cli",
+      "roots": ["src/entrypoint.ts", "src/main.ts", "src/commands"]
+    },
+    {
+      "name": "view-server",
+      "roots": ["src/server"]
+    },
+    {
+      "name": "redteam",
+      "roots": ["src/redteam"]
+    },
+    {
+      "name": "providers",
+      "roots": ["src/providers"]
+    },
+    {
+      "name": "node",
+      "roots": [
+        "src/cache.ts",
+        "src/database",
+        "src/evaluate.ts",
+        "src/globalConfig",
+        "src/migrate.ts",
+        "src/models",
+        "src/node",
+        "src/share.ts",
+        "src/storage",
+        "src/util"
+      ]
+    },
+    {
+      "name": "core",
+      "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"]
+    },
+    {
+      "name": "contracts",
+      "roots": ["src/types", "src/validators"]
+    }
+  ]
+}
