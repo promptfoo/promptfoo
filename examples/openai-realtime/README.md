@@ -234,7 +234,7 @@ Each thread maintains its own independent context while tests are evaluated.
 The provider implementation in promptfoo creates a direct WebSocket connection with the OpenAI Realtime API, following the official protocol:
 
 1. **WebSocket Connection**: Establishes a secure WebSocket connection to `wss://api.openai.com/v1/realtime?model=MODEL_ID`
-2. **Authentication**: Authenticates using the API key in the request headers, including the required beta header
+2. **Authentication**: Authenticates using the API key in the request headers
 3. **Conversation Management**: Implements the full conversation protocol:
    - Creates user messages
    - Processes model responses
@@ -251,7 +251,6 @@ const wsUrl = `wss://api.openai.com/v1/realtime?model=${modelName}`;
 const ws = new WebSocket(wsUrl, {
   headers: {
     Authorization: `Bearer ${apiKey}`,
-    'OpenAI-Beta': 'realtime=v1',
     // Other headers...
   },
 });
