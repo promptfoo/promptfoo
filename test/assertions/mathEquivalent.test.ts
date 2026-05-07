@@ -635,6 +635,49 @@ describe('isMathEquivalent', () => {
       expect(result.reason).toContain('Could not parse');
     });
   });
+
+  describe('non-finite numeric inputs', () => {
+    it('rejects NaN expected value with a clear reason', () => {
+      const result = isMathEquivalent('0', Number.NaN);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('NaN');
+    });
+
+    it.each([
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ])('rejects %s expected value with a clear reason', (val) => {
+      const result = isMathEquivalent('0', val);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('finite');
+    });
+  });
+
+  describe('parse-failure flag for downstream handlers', () => {
+    it('marks parse failure on the actual side', () => {
+      const result = isMathEquivalent('no answer here', '42');
+      expect(result.pass).toBe(false);
+      expect(result.parseFailed).toBe(true);
+    });
+
+    it('marks parse failure on the expected side', () => {
+      const result = isMathEquivalent('42', 'apple');
+      expect(result.pass).toBe(false);
+      expect(result.parseFailed).toBe(true);
+    });
+
+    it('does not set parseFailed when comparison succeeds', () => {
+      const result = isMathEquivalent('1', '1');
+      expect(result.pass).toBe(true);
+      expect(result.parseFailed).toBeFalsy();
+    });
+
+    it('does not set parseFailed when comparison runs and reports false', () => {
+      const result = isMathEquivalent('1', '2');
+      expect(result.pass).toBe(false);
+      expect(result.parseFailed).toBeFalsy();
+    });
+  });
 });
 
 // =============================================================================
@@ -718,6 +761,25 @@ describe('handleMathEquivalent', () => {
       }),
     );
     expect(failed.pass).toBe(false);
+  });
+
+  it('does not let not-math-equivalent silently pass on unparseable output', () => {
+    // Without short-circuiting parse failure, "not-math-equivalent: 42" would
+    // accept any unparseable garbage (empty string, prose, etc.) since the
+    // unparseable→pass=false flips to true under inverse. That hides
+    // provider regressions; treat parse failure as a hard failure regardless
+    // of inverse.
+    for (const garbage of ['', 'no answer here', 'the model refused', 'apple']) {
+      const result = handleMathEquivalent(
+        makeParams({
+          renderedValue: '42',
+          outputString: garbage,
+          inverse: true,
+        }),
+      );
+      expect(result.pass, `garbage="${garbage}"`).toBe(false);
+      expect(result.reason).toContain('Could not parse');
+    }
   });
 
   it('throws when renderedValue is neither string nor number', () => {

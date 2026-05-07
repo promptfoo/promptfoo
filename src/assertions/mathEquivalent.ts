@@ -280,6 +280,13 @@ export type MathEquivalentResult = {
   pass: boolean;
   score: number;
   reason: string;
+  /**
+   * True when one or both sides could not be parsed as a math expression and
+   * the symbolic comparison never ran. Handlers should treat this as a hard
+   * failure (do not invert under `not-math-equivalent`) — otherwise garbage
+   * output silently satisfies a non-equivalence assertion.
+   */
+  parseFailed?: boolean;
   metadata?: {
     actualAnswer: string;
     expectedAnswer: string;
@@ -296,6 +303,18 @@ export function isMathEquivalent(
   llmOutput: string,
   expected: string | number,
 ): MathEquivalentResult {
+  if (typeof expected === 'number' && !Number.isFinite(expected)) {
+    return {
+      pass: false,
+      score: 0,
+      parseFailed: true,
+      reason: Number.isNaN(expected)
+        ? 'Expected value is NaN; math-equivalent requires a finite numeric or string expression'
+        : 'Expected value is not finite; math-equivalent requires a finite numeric or string expression',
+      metadata: { actualAnswer: '', expectedAnswer: String(expected) },
+    };
+  }
+
   const actualAnswer = extractMathAnswer(llmOutput);
   const expectedAnswer = extractMathAnswer(String(expected));
 
@@ -306,6 +325,7 @@ export function isMathEquivalent(
     return {
       pass: false,
       score: 0,
+      parseFailed: true,
       reason: expr1
         ? `Could not parse expected answer "${expectedAnswer}" as a math expression`
         : `Could not parse actual answer "${actualAnswer}" as a math expression`,
@@ -374,6 +394,12 @@ export function handleMathEquivalent({
   );
 
   const result = isMathEquivalent(outputString, renderedValue as string | number);
+  // Parse failure is not negatable: if we cannot parse, we cannot prove
+  // equivalence OR non-equivalence. Surface the parse error verbatim so
+  // not-math-equivalent does not silently accept garbage output.
+  if (result.parseFailed) {
+    return { pass: false, score: 0, reason: result.reason, assertion };
+  }
   const pass = result.pass !== inverse;
   return {
     pass,

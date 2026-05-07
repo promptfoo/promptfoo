@@ -902,6 +902,11 @@ Cases that intentionally do **not** pass:
 - Extra factors like a stray `\pi`
 - Pure prose that contains no parseable expression
 
+To prevent pathological misuse like `value: 'apple'` matching any output that
+happens to contain the same letters, the assertion rejects "prose-shaped"
+candidates: text that has no digits, operators (`+ - * / ^`), braces, `\` LaTeX
+commands, or `_` and contains 3 or more letters is treated as unparseable.
+
 Negate with `not-math-equivalent`:
 
 ```yaml
@@ -909,6 +914,14 @@ assert:
   - type: not-math-equivalent
     value: '0.5'
 ```
+
+`not-math-equivalent` only inverts the equivalence comparison; if the model
+output (or expected value) cannot be parsed as a math expression at all, the
+assertion fails with a parse-error reason rather than passing. This avoids
+silently accepting empty / refused / garbage outputs.
+
+Non-finite numeric expected values (`NaN`, `±Infinity`) are rejected with a
+clear reason. Use `\infty` in a string value if you want symbolic infinity.
 
 `value` can also reference template variables — useful when the ground truth
 comes from your dataset:
