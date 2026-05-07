@@ -104,7 +104,7 @@ Google's Gemini models support web search through the `googleSearch` tool:
 
 ```yaml
 grading:
-  provider: google:gemini-3-pro-preview
+  provider: google:gemini-3.1-pro-preview
   providerOptions:
     config:
       tools:

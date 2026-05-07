@@ -848,6 +848,193 @@ describe('ClaudeCodeSDKProvider', () => {
         }
       });
 
+      it('should select the human-origin result regardless of position when SDK reports origin', async () => {
+        // SDK >= 0.2.126 tags result messages with `origin.kind`. When the
+        // human-origin (user-prompted) result arrives BEFORE a trailing
+        // task-notification followup from a background sub-agent, the
+        // origin-aware selection must still pick the human result rather than
+        // falling back to "last result wins".
+        const mainAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'main-session',
+          uuid: 'aaaa3333-aaaa-aaaa-aaaa-aaaaaaaaaaaa' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Main agent final answer (origin: human)',
+          usage: createMockUsage(20, 30),
+          total_cost_usd: 0.003,
+          duration_ms: 1500,
+          duration_api_ms: 1200,
+          is_error: false,
+          num_turns: 4,
+          permission_denials: [],
+          terminal_reason: 'completed',
+          origin: { kind: 'human' },
+        };
+        const lateSubAgentResult: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-session',
+          uuid: 'bbbb3333-bbbb-bbbb-bbbb-bbbbbbbbbbbb' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Late background sub-agent summary',
+          usage: createMockUsage(5, 5),
+          total_cost_usd: 0.0005,
+          duration_ms: 200,
+          duration_api_ms: 150,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          origin: { kind: 'task-notification' },
+        };
+
+        // Human-origin main result arrives first; task-notification trailer
+        // arrives after — the inverse of the position heuristic's assumption.
+        mockQuery.mockReturnValue(createMockQuery([mainAgentResult, lateSubAgentResult]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Main agent final answer (origin: human)');
+        expect(result.sessionId).toBe('main-session');
+        expect(result.metadata?.numTurns).toBe(4);
+        expect(JSON.parse(result.raw as string).session_id).toBe('main-session');
+      });
+
+      it('should not warn about truncation when origin identifies the main result without terminal_reason', async () => {
+        // With SDK >= 0.2.126 the `origin` field is authoritative. If the
+        // human-origin result has no terminal_reason, that's the legitimate
+        // main-agent result — not a truncation signal. The pre-0.2.126
+        // position-heuristic warning would fire here (multiple results, last
+        // has no terminal_reason); origin-aware selection must suppress it.
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+        const setStatusSpy = vi.fn();
+        vi.spyOn(otelTrace, 'getActiveSpan').mockReturnValue({
+          setStatus: setStatusSpy,
+          setAttribute: vi.fn(),
+          setAttributes: vi.fn(),
+          addEvent: vi.fn(),
+          recordException: vi.fn(),
+          updateName: vi.fn(),
+          end: vi.fn(),
+          isRecording: () => true,
+          spanContext: () => ({ traceId: 't', spanId: 's', traceFlags: 1 }),
+        } as any);
+
+        try {
+          const subAgentResult: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'success',
+            session_id: 'sub-session',
+            uuid: 'cccc3333-cccc-cccc-cccc-cccccccccccc' as `${string}-${string}-${string}-${string}-${string}`,
+            result: 'Sub-agent finished',
+            usage: createMockUsage(5, 5),
+            total_cost_usd: 0.0005,
+            duration_ms: 200,
+            duration_api_ms: 150,
+            is_error: false,
+            num_turns: 1,
+            permission_denials: [],
+            origin: { kind: 'task-notification' },
+          };
+          const mainAgentResult: Partial<SDKMessage> = {
+            type: 'result',
+            subtype: 'success',
+            session_id: 'main-session',
+            uuid: 'dddd3333-dddd-dddd-dddd-dddddddddddd' as `${string}-${string}-${string}-${string}-${string}`,
+            result: 'Main agent reply',
+            usage: createMockUsage(20, 30),
+            total_cost_usd: 0.003,
+            duration_ms: 1500,
+            duration_api_ms: 1200,
+            is_error: false,
+            num_turns: 4,
+            permission_denials: [],
+            origin: { kind: 'human' },
+            // Intentionally no terminal_reason: origin is the signal here.
+          };
+
+          mockQuery.mockReturnValue(createMockQuery([subAgentResult, mainAgentResult]));
+
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('Main agent reply');
+          expect(warnSpy).not.toHaveBeenCalled();
+          expect(setStatusSpy).not.toHaveBeenCalledWith(
+            expect.objectContaining({ code: SpanStatusCode.ERROR }),
+          );
+        } finally {
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should fall back to the last result when every result is a task-notification', async () => {
+        // Defensive fallback: if origin tags every result as a
+        // task-notification (i.e. the main-agent result genuinely never
+        // arrived, perhaps due to a truncated stream), don't return undefined
+        // — surface the last result we did see so downstream evals don't
+        // crash, matching the pre-origin behavior.
+        const subAgent1: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-1',
+          uuid: 'eeee3333-eeee-eeee-eeee-eeeeeeeeeeee' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent 1',
+          usage: createMockUsage(2, 2),
+          total_cost_usd: 0.0001,
+          duration_ms: 100,
+          duration_api_ms: 50,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          origin: { kind: 'task-notification' },
+        };
+        const subAgent2: Partial<SDKMessage> = {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'sub-2',
+          uuid: 'ffff3333-ffff-ffff-ffff-ffffffffffff' as `${string}-${string}-${string}-${string}-${string}`,
+          result: 'Sub-agent 2 (last)',
+          usage: createMockUsage(3, 3),
+          total_cost_usd: 0.0002,
+          duration_ms: 100,
+          duration_api_ms: 50,
+          is_error: false,
+          num_turns: 1,
+          permission_denials: [],
+          origin: { kind: 'task-notification' },
+        };
+
+        mockQuery.mockReturnValue(createMockQuery([subAgent1, subAgent2]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Sub-agent 2 (last)');
+        expect(result.sessionId).toBe('sub-2');
+      });
+
+      it('should return error when no result message arrives at all', async () => {
+        // Locks the no-result early-return path when the stream closes
+        // without emitting any `result` message (origin or otherwise).
+        mockQuery.mockReturnValue(createMockQuery([]));
+
+        const provider = new ClaudeCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toBe("Claude Agent SDK call didn't return a result");
+      });
+
       it('should return error when API key is missing', async () => {
         // ensure process env won't provide the key or any other Claude Agent SDK env vars
         mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
