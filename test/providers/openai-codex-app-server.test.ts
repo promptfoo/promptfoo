@@ -3611,6 +3611,64 @@ describe('OpenAICodexAppServerProvider', () => {
         threadId: 'thr_raw_evidence',
         turnId: 'turn_raw_evidence',
         item: {
+          type: 'reasoning',
+          id: 'reason_raw_evidence',
+          summary: [{ text: 'Inspecting env dump.' }],
+          content: [],
+        },
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_raw_evidence',
+        turnId: 'turn_raw_evidence',
+        item: {
+          type: 'todoList',
+          id: 'todo_raw_evidence',
+          items: [{ text: 'Verify the secret', completed: false }],
+        },
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_raw_evidence',
+        turnId: 'turn_raw_evidence',
+        item: {
+          type: 'error',
+          id: 'err_raw_evidence',
+          message: 'transient stream blip',
+        },
+      },
+    });
+    server.send({
+      method: 'thread/tokenUsage/updated',
+      params: {
+        threadId: 'thr_raw_evidence',
+        turnId: 'turn_raw_evidence',
+        tokenUsage: {
+          last: {
+            inputTokens: 100,
+            cachedInputTokens: 25,
+            outputTokens: 50,
+            reasoningOutputTokens: 12,
+          },
+          total: {
+            inputTokens: 200,
+            cachedInputTokens: 25,
+            outputTokens: 75,
+            reasoningOutputTokens: 12,
+          },
+        },
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_raw_evidence',
+        turnId: 'turn_raw_evidence',
+        item: {
           type: 'agentMessage',
           id: 'msg_raw_evidence',
           text: 'Done',
@@ -3640,8 +3698,26 @@ describe('OpenAICodexAppServerProvider', () => {
           type: 'agent_message',
           text: 'Done',
         }),
+        expect.objectContaining({
+          type: 'reasoning',
+          text: 'Inspecting env dump.',
+        }),
+        expect.objectContaining({
+          type: 'todo_list',
+          items: [expect.objectContaining({ text: 'Verify the secret' })],
+        }),
+        expect.objectContaining({
+          type: 'error',
+          message: 'transient stream blip',
+        }),
       ]),
     );
+    expect(raw.usage).toEqual({
+      input_tokens: 100,
+      cached_input_tokens: 25,
+      output_tokens: 50,
+      reasoning_output_tokens: 12,
+    });
   });
 
   it('counts notifications without retaining raw notification payloads by default', async () => {

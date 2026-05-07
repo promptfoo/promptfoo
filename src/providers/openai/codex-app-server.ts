@@ -2692,13 +2692,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const normalizedItems = state.items.map((item) => this.normalizeItemForMetadata(item));
     const rawItems = state.items.map((item) => this.normalizeItemForRaw(item));
     const rawTokenUsage = this.sanitizeForMetadata(state.rawTokenUsage);
+    const sdkUsage = this.buildSdkUsage(state.rawTokenUsage);
     const raw = {
       finalResponse: output,
       output,
       thread: this.sanitizeForMetadata(threadHandle.response?.thread),
       turn: this.sanitizeForMetadata(state.turn),
       items: rawItems,
-      usage: rawTokenUsage,
+      usage: sdkUsage ?? rawTokenUsage,
       tokenUsage: rawTokenUsage,
       serverRequests: state.serverRequests,
       ...(config.include_raw_events
@@ -2884,9 +2885,91 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
           type: 'agent_message',
           text: item.text,
         }) as Record<string, unknown>;
+      case 'reasoning':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'reasoning',
+          text: this.extractReasoningText(item),
+          summary: item.summary,
+          content: item.content,
+        }) as Record<string, unknown>;
+      case 'todoList':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'todo_list',
+          items: item.items,
+        }) as Record<string, unknown>;
+      case 'error':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'error',
+          message: item.message,
+        }) as Record<string, unknown>;
+      case 'userMessage':
+        return this.sanitizeForMetadata({
+          ...base,
+          type: 'user_message',
+          text: item.text,
+          content: item.content,
+        }) as Record<string, unknown>;
       default:
         return this.sanitizeForMetadata(base) as Record<string, unknown>;
     }
+  }
+
+  private extractReasoningText(item: any): string | undefined {
+    if (typeof item?.text === 'string') {
+      return item.text;
+    }
+    const blocks = Array.isArray(item?.summary)
+      ? item.summary
+      : Array.isArray(item?.content)
+        ? item.content
+        : undefined;
+    if (!blocks) {
+      return undefined;
+    }
+    const parts = blocks
+      .map((block: unknown) => {
+        if (typeof block === 'string') {
+          return block;
+        }
+        if (block && typeof block === 'object' && typeof (block as any).text === 'string') {
+          return (block as any).text;
+        }
+        return '';
+      })
+      .filter((value: string) => value.length > 0);
+    return parts.length > 0 ? parts.join('\n') : undefined;
+  }
+
+  private buildSdkUsage(
+    rawTokenUsage: any,
+  ):
+    | {
+        input_tokens: number;
+        cached_input_tokens: number;
+        output_tokens: number;
+        reasoning_output_tokens: number;
+      }
+    | undefined {
+    const usage = rawTokenUsage?.last ?? rawTokenUsage?.total ?? rawTokenUsage;
+    if (!usage) {
+      return undefined;
+    }
+    const input = usage.inputTokens ?? usage.input_tokens;
+    const output = usage.outputTokens ?? usage.output_tokens;
+    if (typeof input !== 'number' || typeof output !== 'number') {
+      return undefined;
+    }
+    const cached = usage.cachedInputTokens ?? usage.cached_input_tokens ?? 0;
+    const reasoning = usage.reasoningOutputTokens ?? usage.reasoning_output_tokens ?? 0;
+    return {
+      input_tokens: input,
+      cached_input_tokens: cached,
+      output_tokens: output,
+      reasoning_output_tokens: reasoning,
+    };
   }
 
   private buildTokenUsage(rawTokenUsage: any): ProviderResponse['tokenUsage'] {
