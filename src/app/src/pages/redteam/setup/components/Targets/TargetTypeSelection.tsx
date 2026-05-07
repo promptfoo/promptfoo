@@ -39,8 +39,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_type_selection' });
-    // Initialize providerType if not already set
-    if (!providerType && config.target?.id) {
+    // Restore providerType only for saved selections that remain valid in local state.
+    if (hasCompleteSavedConfig && !providerType && config.target?.id) {
       setProviderType(getProviderType(config.target.id));
     }
   }, []);
@@ -98,13 +98,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
       return 'Please enter a target name';
     }
     if (!isValidSelection()) {
-      if (!selectedTarget.id && !selectedTarget.label?.trim()) {
-        return 'Please select a target';
-      }
-      if (selectedTarget.id === '' && !selectedTarget.label?.trim()) {
-        return 'Please enter a label for your custom target';
-      }
-      return 'Please complete the target selection';
+      return 'Please select a target type';
     }
     return undefined;
   };
