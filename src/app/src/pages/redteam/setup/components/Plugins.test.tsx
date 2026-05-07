@@ -179,6 +179,12 @@ describe('Plugins', () => {
     expect(nextButton).toBeDisabled();
   });
 
+  it('wraps top-level plugin tabs on narrow screens', () => {
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    expect(screen.getByRole('tablist')).toHaveClass('w-full', 'flex-wrap', 'sm:flex-nowrap');
+  });
+
   it('should render presets section', async () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
@@ -700,6 +706,7 @@ describe('Plugins', () => {
         // Custom Prompts section should be visible
         expect(screen.getByTestId('custom-intent-section')).toBeInTheDocument();
         expect(screen.getByText(/Custom Intents \(/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Intent file format help' })).toBeInTheDocument();
       });
     });
 

@@ -92,7 +92,15 @@ describe('TableSettingsModal', () => {
     const dialog = screen.getByRole('dialog');
 
     // The dialog uses Radix UI with Tailwind classes for sizing
-    expect(dialog).toHaveClass('max-w-[680px]');
+    expect(dialog).toHaveClass('max-h-[90vh]', 'max-w-[680px]', 'flex-col');
+  });
+
+  it('keeps the settings body scrollable while the footer stays visible', () => {
+    render(<TableSettingsModal open={true} onClose={mockOnClose} />);
+
+    const settingsPanel = screen.getByTestId('mock-settings-panel');
+    expect(settingsPanel.parentElement).toHaveClass('min-h-0', 'overflow-y-auto');
+    expect(screen.getByRole('button', { name: 'Done' }).closest('div')).toHaveClass('shrink-0');
   });
 
   it('should call the onClose callback when the modal is closed unexpectedly with unsaved changes', async () => {
