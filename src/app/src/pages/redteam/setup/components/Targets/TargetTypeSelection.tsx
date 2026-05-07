@@ -39,9 +39,11 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_target_type_selection' });
-    // Restore providerType only for saved selections that remain valid in local state.
+    // Keep persisted providerType aligned with the local selection state on mount.
     if (hasCompleteSavedConfig && !providerType && config.target?.id) {
       setProviderType(getProviderType(config.target.id));
+    } else if (!hasCompleteSavedConfig && providerType) {
+      setProviderType(undefined);
     }
   }, []);
 
