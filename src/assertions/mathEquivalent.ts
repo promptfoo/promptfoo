@@ -218,15 +218,10 @@ export function tryParseEachSegment(text: string): BoxedExpression | undefined {
 
 const TRIVIAL_LINE = /^[\\\]\[\)\(}\s]*$/;
 const BOXED_PATTERN = /\\boxed\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
+const DISPLAY_BLOCK_PATTERN = /\$\$([\s\S]*?)\$\$/g;
 
 function findAllBoxed(text: string): string[] {
-  const out: string[] = [];
-  BOXED_PATTERN.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = BOXED_PATTERN.exec(text)) !== null) {
-    out.push(m[1]);
-  }
-  return out;
+  return [...text.matchAll(BOXED_PATTERN)].map((m) => m[1]);
 }
 
 /**
@@ -240,12 +235,7 @@ export function extractMathAnswer(text: string): string {
 
   // Step 1: scan raw $$...$$ display blocks for \boxed{} or any parseable
   // expression, scanning the LATEST block first.
-  const displayBlocks: string[] = [];
-  const reDisplay = /\$\$([\s\S]*?)\$\$/g;
-  let dm: RegExpExecArray | null;
-  while ((dm = reDisplay.exec(text)) !== null) {
-    displayBlocks.push(dm[1]);
-  }
+  const displayBlocks = [...text.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1]);
   for (let i = displayBlocks.length - 1; i >= 0; i--) {
     const block = displayBlocks[i];
     const boxed = findAllBoxed(block);
@@ -306,9 +296,8 @@ export function isMathEquivalent(
   llmOutput: string,
   expected: string | number,
 ): MathEquivalentResult {
-  const expectedStr = typeof expected === 'number' ? String(expected) : expected;
   const actualAnswer = extractMathAnswer(llmOutput);
-  const expectedAnswer = extractMathAnswer(expectedStr);
+  const expectedAnswer = extractMathAnswer(String(expected));
 
   const expr1 = parseMathExpression(actualAnswer) ?? tryParseEachSegment(actualAnswer);
   const expr2 = parseMathExpression(expectedAnswer) ?? tryParseEachSegment(expectedAnswer);
@@ -352,6 +341,24 @@ export function isMathEquivalent(
   }
 }
 
+function buildHandlerReason(pass: boolean, inverse: boolean, result: MathEquivalentResult): string {
+  if (pass && !inverse) {
+    return 'Math equivalence assertion passed';
+  }
+  if (pass && inverse) {
+    const diff = result.metadata?.diff;
+    return diff
+      ? `Math expressions are not equivalent, as expected (diff: ${diff})`
+      : 'Math expressions are not equivalent, as expected';
+  }
+  if (!pass && inverse) {
+    const actual = result.metadata?.actualParse ?? result.metadata?.actualAnswer;
+    const expected = result.metadata?.expectedParse ?? result.metadata?.expectedAnswer;
+    return `Expected math expressions to differ but they are equivalent (actual: ${actual}, expected: ${expected})`;
+  }
+  return result.reason;
+}
+
 export function handleMathEquivalent({
   assertion,
   renderedValue,
@@ -371,13 +378,7 @@ export function handleMathEquivalent({
   return {
     pass,
     score: pass ? 1 : 0,
-    reason: pass
-      ? inverse
-        ? `Math expressions are not equivalent, as expected${result.metadata?.diff ? ` (diff: ${result.metadata.diff})` : ''}`
-        : 'Math equivalence assertion passed'
-      : inverse
-        ? `Expected math expressions to differ but they are equivalent (actual: ${result.metadata?.actualParse ?? result.metadata?.actualAnswer}, expected: ${result.metadata?.expectedParse ?? result.metadata?.expectedAnswer})`
-        : result.reason,
+    reason: buildHandlerReason(pass, inverse, result),
     assertion,
   };
 }
