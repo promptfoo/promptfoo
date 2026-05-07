@@ -1220,6 +1220,18 @@ describe('OpenAI Realtime Provider', () => {
       await promise;
     });
 
+    it('rejects direct WebSocket requests when loading tools fails during open', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { tools: 'file://missing-tools.yaml' as any },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((handler) => handler());
+
+      await expect(promise).rejects.toThrow('File does not exist');
+      expect(mockWs.close).toHaveBeenCalled();
+    });
+
     it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: { apiBaseUrl: 'https://my-custom-api.com/v1' },

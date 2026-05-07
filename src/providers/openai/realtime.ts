@@ -1055,44 +1055,50 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       };
 
       ws.on('open', async () => {
-        logger.debug('WebSocket connection established successfully');
+        try {
+          logger.debug('WebSocket connection established successfully');
 
-        // First, update the session with our configuration
-        sendEvent({
-          type: 'session.update',
-          session: {
-            modalities: this.config.modalities || ['text', 'audio'],
-            instructions: this.config.instructions || 'You are a helpful assistant.',
-            voice: this.config.voice || 'alloy',
-            input_audio_format: this.config.input_audio_format || 'pcm16',
-            output_audio_format: this.config.output_audio_format || 'pcm16',
-            temperature: this.config.temperature ?? 0.8,
-            max_response_output_tokens: this.getMaxResponseOutputTokens(),
-            ...(this.config.input_audio_transcription !== undefined && {
-              input_audio_transcription: this.config.input_audio_transcription,
-            }),
-            ...(this.config.turn_detection !== undefined && {
-              turn_detection: this.config.turn_detection,
-            }),
-            ...(await realtimeToolConfigPromise),
-          },
-        });
+          // First, update the session with our configuration
+          sendEvent({
+            type: 'session.update',
+            session: {
+              modalities: this.config.modalities || ['text', 'audio'],
+              instructions: this.config.instructions || 'You are a helpful assistant.',
+              voice: this.config.voice || 'alloy',
+              input_audio_format: this.config.input_audio_format || 'pcm16',
+              output_audio_format: this.config.output_audio_format || 'pcm16',
+              temperature: this.config.temperature ?? 0.8,
+              max_response_output_tokens: this.getMaxResponseOutputTokens(),
+              ...(this.config.input_audio_transcription !== undefined && {
+                input_audio_transcription: this.config.input_audio_transcription,
+              }),
+              ...(this.config.turn_detection !== undefined && {
+                turn_detection: this.config.turn_detection,
+              }),
+              ...(await realtimeToolConfigPromise),
+            },
+          });
 
-        // Then create a conversation item with the user's prompt
-        sendEvent({
-          type: 'conversation.item.create',
-          previous_item_id: null,
-          item: {
-            type: 'message',
-            role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: prompt,
-              },
-            ],
-          },
-        });
+          // Then create a conversation item with the user's prompt
+          sendEvent({
+            type: 'conversation.item.create',
+            previous_item_id: null,
+            item: {
+              type: 'message',
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: prompt,
+                },
+              ],
+            },
+          });
+        } catch (error) {
+          clearTimeout(timeout);
+          ws.close();
+          reject(error);
+        }
       });
 
       ws.on('message', async (data: Buffer) => {
