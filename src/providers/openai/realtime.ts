@@ -1044,6 +1044,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let functionCallOccurred = false;
       const functionCallResults: string[] = [];
       const realtimeToolConfigPromise = this.getRealtimeToolConfig();
+      void realtimeToolConfigPromise.catch(() => undefined);
 
       const sendEvent = (event: any) => {
         if (!event.event_id) {
