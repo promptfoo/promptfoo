@@ -442,6 +442,12 @@ export class GoogleLiveProvider implements ApiProvider {
       };
 
       ws.onmessage = async (event) => {
+        // Once the request has been resolved (e.g. by an early onclose or
+        // timeout), drop any in-flight messages so they don't trigger side
+        // effects like stateful-API fetches after the caller has moved on.
+        if (isResolved) {
+          return;
+        }
         // Handle different data types from WebSocket
         logger.debug('WebSocket message received');
         let responseData: string;
