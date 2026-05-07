@@ -138,7 +138,7 @@ describe('Navigation', () => {
     const themeButton = screen.getByRole('button', {
       name: 'Theme preference: System theme (light). Switch to Dark theme.',
     });
-    expect(themeButton).toHaveClass('size-9');
+    expect(themeButton).toHaveClass('size-11', 'sm:size-9');
 
     await user.click(themeButton);
 
@@ -160,7 +160,17 @@ describe('Navigation', () => {
       screen.getByRole('button', {
         name: 'Theme preference: System theme (light). Switch to Dark theme.',
       }),
-    ).toHaveClass('size-9');
+    ).toHaveClass('size-11', 'sm:size-9');
+  });
+
+  it('keeps the full nav hidden until the wider desktop breakpoint', () => {
+    renderNavigation();
+
+    const fullNav = screen
+      .getAllByRole('navigation')
+      .find((navigation) => navigation.classList.contains('min-[900px]:flex'));
+
+    expect(fullNav).toHaveClass('hidden', 'min-[900px]:flex');
   });
 
   it('renders appropriately on mobile viewport sizes', () => {

@@ -45,7 +45,7 @@ function NavLink({ href, label }: NavLinkProps) {
     <Link
       to={href}
       className={cn(
-        'inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors',
+        'inline-flex h-11 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors sm:h-8',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
           ? 'bg-primary/10 text-foreground hover:bg-primary/15 focus-visible:bg-primary/15'
@@ -79,7 +79,7 @@ function NavDropdown({ label, compactLabel, items, isActiveCheck }: NavDropdownP
       <NavigationMenuTrigger
         aria-label={label}
         className={cn(
-          'h-8 bg-transparent px-3 text-sm font-medium',
+          'h-11 bg-transparent px-3 text-sm font-medium sm:h-8',
           'data-[state=open]:bg-accent',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           isActive
@@ -202,7 +202,7 @@ export default function Navigation() {
                 />
               </NavigationMenuList>
             </NavigationMenu>
-            <nav className="hidden items-center gap-1 md:flex">
+            <nav className="hidden items-center gap-1 min-[900px]:flex">
               <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
               <NavLink href={ROUTES.PROMPTS} label="Prompts" />
               <NavLink href={ROUTES.DATASETS} label="Datasets" />
@@ -217,7 +217,7 @@ export default function Navigation() {
                 <button
                   type="button"
                   onClick={handleModalToggle}
-                  className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="inline-flex size-11 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-9"
                 >
                   <Info className="size-5" />
                   <span className="sr-only">Information</span>
@@ -232,7 +232,7 @@ export default function Navigation() {
                   <button
                     type="button"
                     onClick={handleApiSettingsModalToggle}
-                    className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="inline-flex size-11 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-9"
                   >
                     <Settings className="size-5" />
                     <span className="sr-only">API and Sharing Settings</span>
