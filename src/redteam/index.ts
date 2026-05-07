@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import async from 'async';
 import chalk from 'chalk';
@@ -353,17 +354,18 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
     const value = config[key];
     if (typeof value === 'string' && value.startsWith('file://')) {
       const filePath = value.slice('file://'.length);
+      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
 
-      if (!fs.existsSync(filePath)) {
-        throw new Error(`File not found: ${filePath}`);
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`File not found: ${resolvedPath}`);
       }
 
-      if (filePath.endsWith('.yaml')) {
-        config[key] = yaml.load(fs.readFileSync(filePath, 'utf8'));
-      } else if (filePath.endsWith('.json')) {
-        config[key] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      if (resolvedPath.endsWith('.yaml') || resolvedPath.endsWith('.yml')) {
+        config[key] = yaml.load(fs.readFileSync(resolvedPath, 'utf8'));
+      } else if (resolvedPath.endsWith('.json')) {
+        config[key] = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
       } else {
-        config[key] = fs.readFileSync(filePath, 'utf8');
+        config[key] = fs.readFileSync(resolvedPath, 'utf8');
       }
     }
   }

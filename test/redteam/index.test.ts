@@ -1,8 +1,10 @@
 import * as fs from 'fs';
+import * as path from 'path';
 
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
@@ -383,6 +385,28 @@ describe('synthesize', () => {
       expect(JSON.stringify(result.testCases[0].metadata?.pluginConfig)).not.toContain(
         workflowText,
       );
+    });
+
+    it('should resolve file-backed plugin config relative to the loaded config base path', () => {
+      const originalBasePath = cliState.basePath;
+      cliState.basePath = path.resolve(__dirname, '../fixtures/privacy-rights-workflows');
+      const expectedPath = path.resolve(cliState.basePath, 'support-dsr.md');
+      const workflowText =
+        'Support agents must create a request in the approved DSR queue before claiming completion.';
+      vi.spyOn(fs, 'existsSync').mockImplementation((filePath) => filePath === expectedPath);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(workflowText);
+
+      try {
+        const config = resolvePluginConfig({
+          rightsRequestPolicy: 'file://support-dsr.md',
+        });
+
+        expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+        expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
+        expect(config.rightsRequestPolicy).toBe(workflowText);
+      } finally {
+        cliState.basePath = originalBasePath;
+      }
     });
 
     it('should generate test cases for each plugin', async () => {
@@ -2166,10 +2190,11 @@ describe('resolvePluginConfig', () => {
     });
 
     const result = resolvePluginConfig(config);
+    const expectedPath = path.resolve('test.yaml');
 
     expect(result).toEqual({ key: yamlContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.yaml');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.yaml', 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
     expect(yaml.load).toHaveBeenCalledWith('yaml content');
   });
 
@@ -2180,10 +2205,11 @@ describe('resolvePluginConfig', () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(jsonContent));
 
     const result = resolvePluginConfig(config);
+    const expectedPath = path.resolve('test.json');
 
     expect(result).toEqual({ key: jsonContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.json');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.json', 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
   });
 
   it('should resolve text file references', () => {
@@ -2193,17 +2219,20 @@ describe('resolvePluginConfig', () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
 
     const result = resolvePluginConfig(config);
+    const expectedPath = path.resolve('test.txt');
 
     expect(result).toEqual({ key: fileContent });
-    expect(fs.existsSync).toHaveBeenCalledWith('test.txt');
-    expect(fs.readFileSync).toHaveBeenCalledWith('test.txt', 'utf8');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
+    expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
   });
 
   it('should throw an error if the file does not exist', () => {
     const config = { key: 'file://nonexistent.yaml' };
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
-    expect(() => resolvePluginConfig(config)).toThrow('File not found: nonexistent.yaml');
+    expect(() => resolvePluginConfig(config)).toThrow(
+      `File not found: ${path.resolve('nonexistent.yaml')}`,
+    );
   });
 
   it('should handle multiple file references', () => {

@@ -22,13 +22,13 @@ The target is deterministic and does not call an LLM. Red team generation and gr
 
 ## Run The Red Team
 
-From the Promptfoo repo root:
+From this example directory:
 
 ```bash
 export OPENAI_API_KEY=your-api-key
-npm run local -- redteam generate -c examples/redteam-privacy-rights-workflow/promptfooconfig.yaml
-npm run local -- redteam eval -c examples/redteam-privacy-rights-workflow/promptfooconfig.yaml
-npm run local -- view
+promptfoo redteam generate
+promptfoo redteam eval
+promptfoo view
 ```
 
 You should see more failures against the vulnerable target than the hardened target.
@@ -39,7 +39,7 @@ Use the static config when you want deterministic probes without first running r
 
 ```bash
 export OPENAI_API_KEY=your-api-key
-npm run local -- eval -c examples/redteam-privacy-rights-workflow/promptfooconfig.static.yaml
+promptfoo eval -c promptfooconfig.static.yaml
 ```
 
 ## Run As An HTTP App
@@ -47,15 +47,15 @@ npm run local -- eval -c examples/redteam-privacy-rights-workflow/promptfooconfi
 Start the sample app:
 
 ```bash
-node examples/redteam-privacy-rights-workflow/server.cjs
+node server.cjs
 ```
 
 Then red team the HTTP target from another terminal:
 
 ```bash
 export OPENAI_API_KEY=your-api-key
-npm run local -- redteam generate -c examples/redteam-privacy-rights-workflow/promptfooconfig.http.yaml
-npm run local -- redteam eval -c examples/redteam-privacy-rights-workflow/promptfooconfig.http.yaml
+promptfoo redteam generate -c promptfooconfig.http.yaml
+promptfoo redteam eval -c promptfooconfig.http.yaml
 ```
 
 Manual request:
