@@ -295,7 +295,7 @@ function SelectFilterInput({
             <Button
               variant="outline"
               disabled={disabled}
-              className="h-8 flex-1 justify-start font-normal"
+              className="h-8 min-w-[150px] flex-1 justify-start font-normal"
             >
               {selectedValues.length > 0 ? (
                 <span className="truncate">
@@ -339,7 +339,7 @@ function SelectFilterInput({
           onValueChange={handleSingleSelect}
           disabled={disabled}
         >
-          <SelectTrigger className="h-8 flex-1">
+          <SelectTrigger className="h-8 min-w-[150px] flex-1">
             <SelectValue placeholder="Select value..." />
           </SelectTrigger>
           <SelectContent>
@@ -390,7 +390,7 @@ function ComparisonFilterInput({
         value={value}
         onChange={(e) => onValueChange(e.target.value)}
         disabled={disabled}
-        className="h-8 flex-1"
+        className="h-8 min-w-[150px] flex-1"
       />
     </>
   );
@@ -936,7 +936,7 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[520px] p-3"
+        className="w-[min(520px,calc(100vw-1rem))] p-3"
         align="start"
         onInteractOutside={(e) => {
           // Prevent popover from closing when interacting with portaled Select/Popover content.
@@ -972,7 +972,11 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
               const { isSelectFilter, filterOptions } = getColumnMetadata(filter.columnId);
 
               return (
-                <div key={filter.id} className="flex items-center gap-1.5">
+                <div
+                  key={filter.id}
+                  data-testid="data-table-filter-row"
+                  className="flex flex-wrap items-center gap-1.5"
+                >
                   {/* Column selector */}
                   <Select
                     value={filter.columnId}
