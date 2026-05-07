@@ -3,6 +3,7 @@ import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
+import * as util from '../../../src/util/index';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
@@ -1174,6 +1175,167 @@ describe('OpenAI Realtime Provider', () => {
             functionCallResults: ['{"call_status":"callback"}'],
           },
         });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should start the persistent request timeout after tool config loads', async () => {
+      vi.useFakeTimers();
+
+      try {
+        let resolveTools: ((value: unknown[]) => void) | undefined;
+        const toolsPromise = new Promise<unknown[]>((resolve) => {
+          resolveTools = resolve;
+        });
+        const loadToolsSpy = vi
+          .spyOn(util, 'maybeLoadToolsFromExternalFile')
+          .mockReturnValue(toolsPromise as any);
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 1000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('Can you call me back later?', {
+          test: {
+            metadata: { conversationId: 'loan-application-flow' },
+          },
+        } as any);
+        let settled = false;
+        void responsePromise.finally(() => {
+          settled = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(1500);
+
+        expect(settled).toBe(false);
+        expect(provider.persistentConnection!.send).not.toHaveBeenCalled();
+
+        resolveTools?.([]);
+        await vi.waitFor(() => {
+          expect(provider.persistentConnection!.send).toHaveBeenCalled();
+        });
+
+        const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'conversation.item.created',
+                item: { id: 'msg_1', role: 'user' },
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.text.done',
+                text: 'We will call you back later.',
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.done',
+                response: {
+                  usage: {
+                    total_tokens: 11,
+                    input_tokens: 7,
+                    output_tokens: 4,
+                  },
+                },
+              }),
+            ),
+          ),
+        );
+
+        await expect(responsePromise).resolves.toMatchObject({
+          output: expect.stringContaining('We will call you back later.'),
+        });
+        loadToolsSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not leak a persistent request timeout when tool config loading fails', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const loadToolsSpy = vi
+          .spyOn(util, 'maybeLoadToolsFromExternalFile')
+          .mockRejectedValue(new Error('tools failed'));
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 1000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('Can you call me back later?', {
+          test: {
+            metadata: { conversationId: 'loan-application-flow' },
+          },
+        } as any);
+
+        await expect(responsePromise).resolves.toMatchObject({
+          error: expect.stringContaining('tools failed'),
+        });
+        await vi.advanceTimersByTimeAsync(1500);
+
+        expect(vi.getTimerCount()).toBe(0);
+        loadToolsSpy.mockRestore();
       } finally {
         vi.useRealTimers();
       }

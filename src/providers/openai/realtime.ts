@@ -1548,6 +1548,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   ): Promise<void> {
     // Reset audio state at the start of each request
     this.resetAudioState();
+    const realtimeToolConfig = await this.getRealtimeToolConfig();
 
     const startRequestTimeout = () =>
       setTimeout(() => {
@@ -1593,7 +1594,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     let functionCallOccurred = false;
     const functionCallResults: string[] = [];
     let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
-    const realtimeToolConfig = await this.getRealtimeToolConfig();
 
     const sendEvent = (event: any) => {
       if (!event.event_id) {
