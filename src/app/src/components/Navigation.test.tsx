@@ -93,6 +93,22 @@ describe('Navigation', () => {
     expect(screen.getByText('History')).toBeInTheDocument();
   });
 
+  it('keeps a compact results label available for very narrow screens', () => {
+    renderNavigation();
+
+    expect(screen.getByRole('button', { name: 'View Results' })).toBeInTheDocument();
+    expect(screen.getByText('Results')).toHaveClass('min-[390px]:hidden');
+  });
+
+  it('hides the logo below the extra-narrow breakpoint', () => {
+    renderNavigation();
+
+    expect(screen.getByRole('link', { name: /Promptfoo Logo/ })).toHaveClass(
+      'hidden',
+      'min-[360px]:inline-flex',
+    );
+  });
+
   it('should have the correct z-index class', () => {
     renderNavigation();
     const header = screen.getByRole('banner');
