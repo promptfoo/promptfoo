@@ -245,9 +245,14 @@ const DrawerContent = ({
               return (
                 <tr key={stat.plugin} className="hover:bg-muted/30">
                   <td className="px-4 py-3 font-medium">
-                    {customPolicy?.name ??
-                      (displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
-                        stat.plugin)}
+                    <div>
+                      {customPolicy?.name ??
+                        (displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
+                          stat.plugin)}
+                    </div>
+                    <div className="mt-1 text-xs font-normal text-muted-foreground sm:hidden">
+                      {stat.total - stat.successfulAttacks} flagged / {stat.total} attempts
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">{formatASRForDisplay(stat.asr)}%</td>
                   <td className="hidden px-4 py-3 text-right sm:table-cell">

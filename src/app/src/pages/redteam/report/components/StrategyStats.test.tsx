@@ -249,6 +249,9 @@ describe('StrategyStats', () => {
       expect(within(table).getByText('Attack Success Rate')).toBeInTheDocument();
       expect(within(table).getByText('# Flagged Attempts')).toHaveClass('hidden', 'sm:table-cell');
       expect(within(table).getByText('# Attempts')).toHaveClass('hidden', 'sm:table-cell');
+      const mobileCountSummaries = within(table).getAllByText('4 flagged / 5 attempts');
+      expect(mobileCountSummaries).toHaveLength(2);
+      mobileCountSummaries.forEach((summary) => expect(summary).toHaveClass('sm:hidden'));
 
       const pluginAStats = {
         plugin: 'plugin-A',
