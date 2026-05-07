@@ -34,7 +34,7 @@ function getCurrentDir(): string {
 }
 
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { getDb } from './database/index';
+import { closeDbIfOpen, getDb } from './database/index';
 import logger from './logger';
 import {
   formatNativeAddonVersionMismatchMessage,
@@ -112,6 +112,21 @@ export async function runDbMigrations(options: RunDbMigrationsOptions = {}): Pro
   });
 }
 
+export async function runDbMigrationsFromCli(): Promise<void> {
+  try {
+    await runDbMigrations({ suppressNativeAddonLogging: true });
+    process.exitCode = 0;
+  } catch (error) {
+    const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
+    if (nativeAddonVersionMismatchMessage) {
+      console.error(nativeAddonVersionMismatchMessage);
+    }
+    process.exitCode = 1;
+  } finally {
+    closeDbIfOpen();
+  }
+}
+
 /**
  * ESM replacement for the CommonJS `require.main === module` pattern.
  *
@@ -141,16 +156,7 @@ if (shouldCheckDirectExecution) {
       (currentModulePath.endsWith('migrate.js') || currentModulePath.endsWith('migrate.ts'));
 
     if (isMigrateModuleMainExecution) {
-      // Run migrations and exit with appropriate code
-      runDbMigrations({ suppressNativeAddonLogging: true })
-        .then(() => process.exit(0))
-        .catch((error) => {
-          const nativeAddonVersionMismatchMessage = formatNativeAddonVersionMismatchMessage(error);
-          if (nativeAddonVersionMismatchMessage) {
-            console.error(nativeAddonVersionMismatchMessage);
-          }
-          process.exit(1);
-        });
+      void runDbMigrationsFromCli();
     }
   } catch {
     // Expected in CJS environments (Jest) where import.meta syntax is invalid.

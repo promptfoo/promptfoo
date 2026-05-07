@@ -68,6 +68,7 @@ const ConfigureEnvButton = () => {
   const [env, setEnv] = useState<Record<string, string>>(defaultEnv as Record<string, string>);
 
   const handleOpen = () => {
+    setEnv(defaultEnv as Record<string, string>);
     setDialogOpen(true);
   };
 

@@ -39,12 +39,14 @@ vi.mock('@app/stores/evalConfig', () => ({
 
 // Mock the editor component to avoid prism.js issues
 vi.mock('react-simple-code-editor', () => ({
-  default: ({ value, onValueChange, disabled }: any) => (
+  default: ({ value, onValueChange, disabled, textareaId, ...props }: any) => (
     <textarea
       data-testid="yaml-editor"
+      id={textareaId}
       value={value}
       onChange={(e) => onValueChange(e.target.value)}
       disabled={disabled}
+      {...props}
     />
   ),
 }));
@@ -95,6 +97,9 @@ describe('YamlEditor', () => {
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
+    expect(editor).toHaveAccessibleName('YAML configuration editor');
+    expect(editor).toHaveAttribute('aria-keyshortcuts', 'Control+S Meta+S');
+    expect(screen.getByRole('button', { name: 'Copy YAML configuration' })).toBeInTheDocument();
   });
 
   it('downloads the current YAML when Download YAML is clicked', async () => {
@@ -108,6 +113,20 @@ describe('YamlEditor', () => {
     expect(clickSpy).toHaveBeenCalled();
     expect(global.URL.revokeObjectURL).toHaveBeenCalledWith('blob:yaml-editor-test');
     expect(mockShowToast).toHaveBeenCalledWith('Downloaded promptfooconfig.yaml', 'success');
+  });
+
+  it('saves YAML with Control+S', async () => {
+    const user = userEvent.setup();
+    render(<YamlEditorComponent />);
+
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    await user.click(editor);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('description: Saved with shortcut');
+    await user.keyboard('{Control>}s{/Control}');
+
+    expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
+    expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
   });
 
   it('initializes with initialConfig', () => {
@@ -198,6 +217,8 @@ describe('YamlEditor', () => {
     // Editor should still be rendered
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor).toBeInTheDocument();
+    expect(editor).toHaveAccessibleName('YAML configuration preview');
+    expect(editor).not.toHaveAttribute('aria-keyshortcuts');
   });
 
   describe('handleCancel button state', () => {

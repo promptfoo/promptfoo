@@ -57,7 +57,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
 
   return (
     <Dialog open={openDialog} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Dataset Details
@@ -67,7 +67,10 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
           </DialogTitle>
         </DialogHeader>
 
-        <div className="min-w-0 space-y-6 py-4">
+        <div
+          data-testid="dataset-dialog-scroll-body"
+          className="min-h-0 min-w-0 flex-1 space-y-6 overflow-y-auto py-4"
+        >
           {/* Test Cases YAML section */}
           <div className="space-y-2">
             <h4 className="text-sm font-semibold">Test Cases</h4>
@@ -181,7 +184,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter data-testid="dataset-dialog-footer" className="shrink-0">
           <Button variant="outline" onClick={handleClose}>
             Close
           </Button>

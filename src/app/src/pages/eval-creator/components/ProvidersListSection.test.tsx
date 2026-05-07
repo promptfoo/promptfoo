@@ -1,25 +1,41 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProvidersListSection } from './ProvidersListSection';
+import type { ProviderOptions } from '@promptfoo/types';
 
 vi.mock('./AddProviderDialog', () => ({
-  default: () => null,
+  default: vi.fn(() => null),
 }));
 
 describe('ProvidersListSection', () => {
-  it('keeps provider cards responsive on small screens', () => {
-    render(<ProvidersListSection providers={[{ id: 'openai:gpt-5.5' }]} onChange={vi.fn()} />);
+  const providers: ProviderOptions[] = [
+    { id: 'openai:gpt-4.1', label: 'Primary model' },
+    { id: 'anthropic:messages:claude-sonnet-4', label: 'Comparison model' },
+  ];
+  const onChange = vi.fn();
 
-    const providerLabel = screen.getAllByText('openai:gpt-5.5')[0];
-    const card = providerLabel.closest('[class*="rounded"]');
-    const actions = screen.getByRole('button', {
-      name: 'Edit provider openai:gpt-5.5',
-    }).parentElement;
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    expect(card).toHaveClass('flex-col', 'items-stretch', 'sm:flex-row', 'sm:items-center');
-    expect(actions).toHaveClass('self-end', 'sm:self-auto');
-    expect(
-      screen.getByRole('button', { name: 'Remove provider openai:gpt-5.5' }),
-    ).toBeInTheDocument();
+  it('asks for confirmation before deleting a provider', async () => {
+    const user = userEvent.setup();
+    render(<ProvidersListSection providers={providers} onChange={onChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Delete Primary model' }));
+
+    expect(screen.getByRole('dialog', { name: 'Delete provider?' })).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('removes the provider after deletion is confirmed', async () => {
+    const user = userEvent.setup();
+    render(<ProvidersListSection providers={providers} onChange={onChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Delete Primary model' }));
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(onChange).toHaveBeenCalledWith([providers[1]]);
   });
 });

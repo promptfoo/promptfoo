@@ -111,8 +111,8 @@ describe('VarsForm', () => {
     render(<VarsForm onAdd={onAddMock} varsList={['name']} initialValues={{ name: '' }} />);
 
     expect(screen.getByLabelText('name').parentElement).toHaveClass(
-      'grid-cols-1',
-      'sm:grid-cols-[200px_1fr]',
+      'grid',
+      'sm:grid-cols-[minmax(8rem,12.5rem)_1fr]',
     );
   });
 

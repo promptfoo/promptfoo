@@ -93,6 +93,16 @@ describe('ConfigureEnvButton', () => {
     expect(azureApiKeyInput).toHaveValue(initialEnv.AZURE_API_KEY);
   });
 
+  it('should refresh environment fields from the latest config when reopened', async () => {
+    render(<ConfigureEnvButton />);
+
+    useStore.getState().updateConfig({ env: { OPENAI_API_KEY: 'uploaded-key' } });
+
+    await openProviderSettingsDialog();
+
+    expect(screen.getByLabelText(/openai api key/i)).toHaveValue('uploaded-key');
+  });
+
   it('should handle partial updates to the environment configuration, preserving existing values', async () => {
     const initialEnv = {
       ANTHROPIC_API_KEY: 'existing-anthropic-key',

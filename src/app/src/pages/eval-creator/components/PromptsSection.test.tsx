@@ -7,6 +7,13 @@ import PromptsSection from './PromptsSection';
 
 vi.mock('@app/stores/evalConfig');
 
+const showToastMock = vi.fn();
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: showToastMock,
+  }),
+}));
+
 const mockedUseStore = vi.mocked(useStore);
 
 describe('PromptsSection', () => {
@@ -16,7 +23,7 @@ describe('PromptsSection', () => {
     vi.clearAllMocks();
   });
 
-  const setupStore = (prompts: string[]) => {
+  const setupStore = (prompts: unknown) => {
     mockedUseStore.mockReturnValue({
       config: { prompts },
       updateConfig: mockUpdateConfig,
@@ -103,16 +110,27 @@ describe('PromptsSection', () => {
     expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
   });
 
-  it('stacks the prompt header controls on narrow screens', () => {
-    setupStore([]);
+  it('shows a YAML-managed state for scalar prompt configs and opens the YAML editor', async () => {
+    const user = userEvent.setup();
+    const onOpenYamlEditor = vi.fn();
+    setupStore('file://prompt.txt');
 
     render(
       <TooltipProvider delayDuration={0}>
-        <PromptsSection />
+        <PromptsSection onOpenYamlEditor={onOpenYamlEditor} />
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('Prompts').parentElement).toHaveClass('flex-col', 'sm:flex-row');
+    expect(screen.getByText('Managed in YAML')).toBeInTheDocument();
+    expect(screen.getByText('file://prompt.txt')).toBeInTheDocument();
+    expect(
+      screen.getByText('Prompt entries from YAML are not editable in the UI editor.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Prompt' })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Edit YAML' }));
+
+    expect(onOpenYamlEditor).toHaveBeenCalledTimes(1);
   });
 
   it("should add a new prompt to the list when the 'Add Prompt' button is clicked, the PromptDialog is filled, and the prompt is submitted", async () => {
@@ -185,6 +203,24 @@ describe('PromptsSection', () => {
     expect(screen.queryByText(/Write a short story about a cat./)).toBeNull();
   });
 
+  it('should open an existing prompt from the keyboard', async () => {
+    const user = userEvent.setup();
+    setupStore(['Write a short story about a cat.']);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    const promptRow = screen.getByRole('button', { name: 'Open prompt 1 for editing' });
+    promptRow.focus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Edit Prompt 1')).toBeInTheDocument();
+  });
+
   it('should duplicate a prompt and append it to the list when the duplicate icon is clicked for a prompt row', async () => {
     const user = userEvent.setup();
     const initialPrompt = 'Translate the following sentence to French: {{sentence}}';
@@ -209,18 +245,6 @@ describe('PromptsSection', () => {
     updateStoreAndRerender([initialPrompt, initialPrompt], rerender);
 
     expect(screen.getAllByText(/Translate the following sentence to French/)).toHaveLength(2);
-  });
-
-  it('labels the prompt edit action', () => {
-    setupStore(['Write a short story about a cat.']);
-
-    render(
-      <TooltipProvider delayDuration={0}>
-        <PromptsSection />
-      </TooltipProvider>,
-    );
-
-    expect(screen.getByRole('button', { name: 'Edit prompt 1' })).toBeInTheDocument();
   });
 
   it('should remove a prompt from the list when the delete icon is clicked for a prompt row and the deletion is confirmed in the dialog', async () => {
@@ -307,6 +331,35 @@ describe('PromptsSection', () => {
     expect(mockUpdateConfig).toHaveBeenCalledWith({
       prompts: [longLineText],
     });
+    expect(showToastMock).toHaveBeenCalledWith('Prompt imported successfully', 'success');
+    expect(fileInput.value).toBe('');
+  });
+
+  it('should reject empty uploaded prompt files and reset the file input', async () => {
+    const user = userEvent.setup();
+    createFileReaderMock('');
+    setupStore([]);
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PromptsSection />
+      </TooltipProvider>,
+    );
+
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+
+    if (!fileInput) {
+      throw new Error('File input element not found');
+    }
+
+    await user.upload(fileInput, new File([''], 'empty.txt', { type: 'text/plain' }));
+
+    expect(mockUpdateConfig).not.toHaveBeenCalled();
+    expect(showToastMock).toHaveBeenCalledWith(
+      'The file appears to be empty. Please select a file with content.',
+      'error',
+    );
+    expect(fileInput.value).toBe('');
   });
 
   it('should handle malformed template variables in prompts without errors', () => {
