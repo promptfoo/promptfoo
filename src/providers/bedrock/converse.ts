@@ -364,6 +364,14 @@ function normalizeMCPToolContent(content: unknown): string {
 }
 
 /**
+ * Extract a printable message from an unknown thrown value without losing
+ * non-`Error` payloads to `[object Object]`.
+ */
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
  * Coerces a tool_use input value into a plain object suitable for `MCPClient.callTool`.
  * Total: never throws. Malformed JSON strings yield `{}` so an MCP call still happens with
  * empty args rather than crashing the whole eval row.
@@ -409,8 +417,16 @@ function hasUsableMCPServer(mcp: MCPConfig | undefined): boolean {
   return Boolean(mcp.servers?.some(isMCPServerConfigured));
 }
 
-function aggregateMcpErrors(errors: string[]): string | undefined {
+function joinMcpErrors(errors: string[]): string | undefined {
   return errors.length > 0 ? errors.join('; ') : undefined;
+}
+
+function formatMcpToolResult(name: string, content: unknown): string {
+  return `MCP Tool Result (${name}): ${normalizeMCPToolContent(content)}`;
+}
+
+function formatMcpToolError(name: string, message: string): string {
+  return `MCP Tool Error (${name}): ${message}`;
 }
 
 interface StreamingToolUseBlock {
@@ -419,15 +435,25 @@ interface StreamingToolUseBlock {
   input: string;
 }
 
-function parseStreamingToolInput(raw: string): { value: unknown; failed: boolean } {
+/**
+ * Parses streaming tool_use input that arrived as concatenated JSON deltas.
+ * Always returns a plain object (the only shape `MCPClient.callTool` accepts);
+ * `failed` is `true` when the raw text was non-empty but not valid JSON, so
+ * callers can surface the parse error rather than silently calling MCP with
+ * `{}`.
+ */
+function parseStreamingToolInput(raw: string): {
+  value: Record<string, unknown>;
+  failed: boolean;
+} {
   if (!raw) {
     return { value: {}, failed: false };
   }
   try {
-    return { value: JSON.parse(raw), failed: false };
+    return { value: parseToolInput(JSON.parse(raw)), failed: false };
   } catch (err) {
     logger.warn(
-      `[Bedrock Converse] Streaming tool_use input was not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      `[Bedrock Converse] Streaming tool_use input was not valid JSON: ${errorMessage(err)}`,
     );
     // Don't pass the broken string downstream; tracking the parse failure
     // here lets us surface it as an error on the response.
@@ -862,7 +888,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         await this.initializationPromise;
       } catch (err) {
         logger.warn(
-          `[Bedrock Converse] MCP init had failed; cleaning up anyway: ${err instanceof Error ? err.message : String(err)}`,
+          `[Bedrock Converse] MCP init had failed; cleaning up anyway: ${errorMessage(err)}`,
         );
       }
     }
@@ -870,9 +896,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       try {
         await this.mcpClient.cleanup();
       } catch (err) {
-        logger.error(
-          `[Bedrock Converse] MCP client cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        logger.error(`[Bedrock Converse] MCP client cleanup failed: ${errorMessage(err)}`);
       }
       this.mcpClient = null;
     }
@@ -1187,24 +1211,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * Main API call using Converse API
    */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
-    // Only block on a failed MCP init when tools are still active for this
-    // request. If the test case sets `toolChoice: 'none'` (or otherwise opts
-    // out of tools), the request can still succeed without MCP — surfacing
-    // the init error here would break valid configurations.
-    if (this.mcpInitError) {
-      const toolsDisabledForRequest = isDisabledToolChoice(
-        this.getEffectiveToolChoice(
-          context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-        ),
-      );
-      if (!toolsDisabledForRequest) {
-        return {
-          error: `Bedrock Converse MCP initialization failed: ${this.mcpInitError.message}`,
-        };
-      }
+    // Only wait on MCP init when this request actually needs MCP. A
+    // tool-disabled request must not stall on a slow or hung MCP transport,
+    // and a recorded init error must not block a request that opted out of
+    // tools entirely.
+    const initErrorResponse = await this.awaitMcpReadyForRequest(context);
+    if (initErrorResponse) {
+      return initErrorResponse;
     }
 
     const inferenceConfig = this.buildInferenceConfig();
@@ -1369,6 +1382,67 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   }
 
   /**
+   * Resolves the effective tool choice for a request without touching the MCP
+   * client. Used by `callApi`/`callApiStreaming` to short-circuit MCP init for
+   * tool-disabled requests so a hung MCP transport never stalls them.
+   */
+  private isRequestToolsDisabled(context?: CallApiContextParams): boolean {
+    return isDisabledToolChoice(
+      this.getEffectiveToolChoice(
+        context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
+      ),
+    );
+  }
+
+  /**
+   * Awaits MCP init only when this request actually needs MCP, then returns an
+   * error response if init failed. Tool-disabled requests skip both the wait
+   * and the error check entirely so they can proceed even with MCP offline.
+   * Returns `undefined` when the request can proceed.
+   */
+  private async awaitMcpReadyForRequest(
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse | undefined> {
+    if (this.isRequestToolsDisabled(context)) {
+      return undefined;
+    }
+    if (this.initializationPromise != null) {
+      await this.initializationPromise;
+    }
+    if (!this.mcpInitError) {
+      return undefined;
+    }
+    return {
+      error: `Bedrock Converse MCP initialization failed: ${this.mcpInitError.message}`,
+    };
+  }
+
+  /**
+   * Invoke a single MCP tool and return a formatted result string plus the
+   * error string (if any). Centralizes the try/catch + error-message wrapping
+   * shared by streaming and non-streaming dispatch paths. Caller is
+   * responsible for ensuring `this.mcpClient` is non-null and that `name`
+   * matches a discovered MCP tool.
+   */
+  private async dispatchMcpToolCall(
+    name: string,
+    input: unknown,
+  ): Promise<{ output: string; error?: string }> {
+    try {
+      const mcpResult = await this.mcpClient!.callTool(name, parseToolInput(input));
+      if (mcpResult?.error) {
+        const msg = formatMcpToolError(name, String(mcpResult.error));
+        return { output: msg, error: msg };
+      }
+      return { output: formatMcpToolResult(name, mcpResult?.content) };
+    } catch (err) {
+      logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
+      const msg = formatMcpToolError(name, errorMessage(err));
+      return { output: msg, error: msg };
+    }
+  }
+
+  /**
    * Format streaming tool_use blocks for output. Routes blocks to MCP when
    * MCP is enabled and a matching tool exists; otherwise falls back to
    * default tool_use JSON serialization.
@@ -1401,31 +1475,16 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
 
       if (parseFailed) {
-        const msg = `MCP Tool Error (${toolBlock.name}): model emitted invalid JSON arguments`;
+        const msg = formatMcpToolError(toolBlock.name, 'model emitted invalid JSON arguments');
         toolUseParts.push(msg);
         mcpErrors.push(msg);
         continue;
       }
 
-      try {
-        const mcpResult = await this.mcpClient.callTool(
-          toolBlock.name,
-          parseToolInput(parsedInput),
-        );
-        if (mcpResult?.error) {
-          const msg = `MCP Tool Error (${toolBlock.name}): ${mcpResult.error}`;
-          toolUseParts.push(msg);
-          mcpErrors.push(msg);
-        } else {
-          toolUseParts.push(
-            `MCP Tool Result (${toolBlock.name}): ${normalizeMCPToolContent(mcpResult?.content)}`,
-          );
-        }
-      } catch (err) {
-        logger.error(`[Bedrock Converse] MCP tool execution failed for ${toolBlock.name}: ${err}`);
-        const msg = `MCP Tool Error (${toolBlock.name}): ${err instanceof Error ? err.message : String(err)}`;
-        toolUseParts.push(msg);
-        mcpErrors.push(msg);
+      const { output, error } = await this.dispatchMcpToolCall(toolBlock.name, parsedInput);
+      toolUseParts.push(output);
+      if (error) {
+        mcpErrors.push(error);
       }
     }
 
@@ -1433,46 +1492,34 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   }
 
   /**
-   * Execute MCP tool calls for the given tool_use blocks.
-   * Returns formatted result strings and any errors encountered, plus a flag
-   * indicating whether at least one MCP tool was actually dispatched.
+   * Execute MCP tool calls for the given tool_use blocks. Blocks whose name
+   * doesn't match a discovered MCP tool are skipped silently; the caller is
+   * responsible for deciding what to do with them. Returns formatted result
+   * strings and any errors encountered.
    */
   private async executeMcpToolCalls(
     blocks: { name: string; input: unknown }[],
-  ): Promise<{ results: string[]; errors: string[]; invoked: boolean }> {
+  ): Promise<{ results: string[]; errors: string[] }> {
     const results: string[] = [];
     const errors: string[] = [];
-    let invoked = false;
 
     if (!this.mcpClient) {
-      return { results, errors, invoked };
+      return { results, errors };
     }
     const tools = this.mcpClient.getAllTools();
 
-    for (const block of blocks) {
-      const name = block.name;
+    for (const { name, input } of blocks) {
       if (!name || !tools.find((tool) => tool.name === name)) {
         continue;
       }
-      invoked = true;
-      try {
-        const mcpResult = await this.mcpClient.callTool(name, parseToolInput(block.input));
-        if (mcpResult?.error) {
-          const msg = `MCP Tool Error (${name}): ${mcpResult.error}`;
-          results.push(msg);
-          errors.push(msg);
-        } else {
-          results.push(`MCP Tool Result (${name}): ${normalizeMCPToolContent(mcpResult?.content)}`);
-        }
-      } catch (err) {
-        logger.error(`[Bedrock Converse] MCP tool execution failed for ${name}: ${err}`);
-        const msg = `MCP Tool Error (${name}): ${err instanceof Error ? err.message : String(err)}`;
-        results.push(msg);
-        errors.push(msg);
+      const { output, error } = await this.dispatchMcpToolCall(name, input);
+      results.push(output);
+      if (error) {
+        errors.push(error);
       }
     }
 
-    return { results, errors, invoked };
+    return { results, errors };
   }
 
   /**
@@ -1620,7 +1667,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
             handledIndexes.add(idx);
           } catch (err) {
             logger.warn(
-              `[Bedrock Converse] Function callback failed for ${functionName}: ${err instanceof Error ? err.message : String(err)}; falling back to tool_use output`,
+              `[Bedrock Converse] Function callback failed for ${functionName}: ${errorMessage(err)}; falling back to tool_use output`,
             );
             // Leave the block unhandled so the default serialization below
             // surfaces it.
@@ -1652,14 +1699,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // calls as failures rather than greenlighting them on the strength of an
       // embedded "MCP Tool Error: ..." string. Malformed-output stop reasons
       // take precedence since they're a model-level (not tool-level) failure.
-      const errorMessage = malformedError ?? aggregateMcpErrors(mcpErrors);
+      const error = malformedError ?? joinMcpErrors(mcpErrors);
       return {
         output: dispatchResults.join('\n'),
         tokenUsage,
         ...(cost === undefined ? {} : { cost }),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
         ...(guardrails ? { guardrails } : {}),
-        ...(errorMessage ? { error: errorMessage } : {}),
+        ...(error ? { error } : {}),
       };
     }
 
@@ -1695,22 +1742,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse & { stream?: AsyncIterable<string> }> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
-    // Only block on a failed MCP init when tools are still active. See the
-    // matching guard in `callApi` above for details.
-    if (this.mcpInitError) {
-      const toolsDisabledForRequest = isDisabledToolChoice(
-        this.getEffectiveToolChoice(
-          context?.prompt?.config as Partial<BedrockConverseOptions> | undefined,
-        ),
-      );
-      if (!toolsDisabledForRequest) {
-        return {
-          error: `Bedrock Converse MCP initialization failed: ${this.mcpInitError.message}`,
-        };
-      }
+    // Same MCP-init gating as `callApi`: tool-disabled requests must not stall
+    // on a slow or failed MCP transport.
+    const initErrorResponse = await this.awaitMcpReadyForRequest(context);
+    if (initErrorResponse) {
+      return initErrorResponse;
     }
 
     // Parse the prompt into messages
@@ -1762,8 +1798,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       let usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number } = {};
 
       // Track tool use blocks being streamed
-      const toolUseBlocks: Map<number, { toolUseId?: string; name?: string; input: string }> =
-        new Map();
+      const toolUseBlocks = new Map<number, StreamingToolUseBlock>();
 
       const showThinking = this.config.showThinking !== false;
 
@@ -1864,14 +1899,14 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // Surface MCP failures via the response `error` field. If the model also
       // produced a malformed-output stop reason, that takes precedence since it
       // is a model-level failure rather than a tool-level one.
-      const errorMessage = malformedError ?? aggregateMcpErrors(mcpErrors);
+      const error = malformedError ?? joinMcpErrors(mcpErrors);
 
       return {
         output: finalOutput,
         tokenUsage,
         ...(cost === undefined ? {} : { cost }),
         ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-        ...(errorMessage ? { error: errorMessage } : {}),
+        ...(error ? { error } : {}),
       };
     } catch (err: any) {
       return {

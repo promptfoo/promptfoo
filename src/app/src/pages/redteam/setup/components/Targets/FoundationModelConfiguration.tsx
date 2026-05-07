@@ -43,6 +43,9 @@ const getBedrockModelFromId = (id?: string): string => {
 const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string =>
   apiMode === 'converse' ? `bedrock:converse:${modelId}` : `bedrock:${modelId}`;
 
+const isServerConfigured = (server: MCPServerConfig): boolean =>
+  Boolean(server.command || server.path || server.url);
+
 const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -72,9 +75,6 @@ const FoundationModelConfiguration = ({
   const updateBedrockApiMode = (apiMode: BedrockApiMode) => {
     updateCustomTarget('id', buildBedrockProviderId(apiMode, modelId));
   };
-
-  const isServerConfigured = (server: MCPServerConfig): boolean =>
-    Boolean(server.command || server.path || server.url);
 
   const updateMCPServers = (servers: MCPServerConfig[]) => {
     const { mcp: _mcp, ...configWithoutMcp } = selectedTarget.config || {};

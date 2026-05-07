@@ -926,6 +926,48 @@ describe('AwsBedrockConverseProvider', () => {
       expect(mcpMocks.mockCleanup).toHaveBeenCalled();
     });
 
+    it('should not await MCP init for toolChoice=none requests', async () => {
+      // Hold MCP init open with a never-resolving promise. A tool-disabled
+      // request must NOT stall on this — even if MCP is hung, it should
+      // execute against Bedrock immediately. Without the up-front
+      // tools-disabled gate, awaiting initializationPromise would block.
+      let resolveInit: (() => void) | undefined;
+      const initStall = new Promise<void>((resolve) => {
+        resolveInit = resolve;
+      });
+      mcpMocks.mockInitialize.mockImplementationOnce(() => initStall);
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('hi'));
+
+      // Race a 200ms timeout against the call. If we accidentally await
+      // initializationPromise (which never resolves), the timeout wins and
+      // the test fails.
+      const callPromise = provider.callApi('hi', {
+        prompt: { config: { tool_choice: 'none' as any }, raw: 'hi', label: 'l' },
+      } as any);
+      const timeout = new Promise<{ output?: string }>((_, reject) =>
+        setTimeout(() => reject(new Error('callApi stalled on MCP init wait')), 200),
+      );
+
+      try {
+        const result = (await Promise.race([callPromise, timeout])) as { output?: string };
+        expect(result.output).toBe('hi');
+      } finally {
+        // Drain the dangling init promise so the test doesn't leak it.
+        resolveInit?.();
+      }
+    });
+
     it('should still serve toolChoice=none requests when MCP init failed', async () => {
       // A failed MCP init should not block requests where the test case has
       // explicitly opted out of tools.
