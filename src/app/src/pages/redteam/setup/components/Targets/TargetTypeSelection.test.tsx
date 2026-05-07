@@ -181,6 +181,28 @@ describe('TargetTypeSelection', () => {
     expect(mockSetProviderType).not.toHaveBeenCalled();
   });
 
+  it('should clear a stale persisted provider type for an incomplete target', () => {
+    const mockSetProviderType = vi.fn();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'http',
+          label: '',
+          config: {},
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: 'http',
+      setProviderType: mockSetProviderType,
+    });
+
+    renderComponent();
+
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Next$/i })).toBeDisabled();
+    expect(mockSetProviderType).toHaveBeenCalledWith(undefined);
+  });
+
   it('should update the selectedTarget and providerType when a new provider type is selected and record telemetry event', async () => {
     const user = userEvent.setup();
     const mockSetProviderType = vi.fn();
