@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { mockProcessEnv } from '../../util/utils';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
@@ -32,7 +32,7 @@ interface MockConverseCommandOutput {
   };
 }
 
-const mockSend = vi.hoisted(() => vi.fn<any>());
+const mockSend = vi.hoisted(() => vi.fn<(command: unknown) => Promise<unknown>>());
 const mcpMocks = vi.hoisted(() => {
   const mockConstructor = vi.fn();
   const mockInitialize = vi.fn().mockResolvedValue(undefined);
@@ -139,7 +139,14 @@ vi.mock('@smithy/node-http-handler', async (importOriginal) => {
   };
 });
 
-vi.mock('proxy-agent', () => vi.fn());
+// Provide the proxy-agent module shape without creating real agents in tests.
+vi.mock('proxy-agent', () => {
+  const ProxyAgentMock = vi.fn();
+  return {
+    default: ProxyAgentMock,
+    ProxyAgent: ProxyAgentMock,
+  };
+});
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -763,7 +770,12 @@ describe('AwsBedrockConverseProvider', () => {
         createMockConverseResponse('', {
           // String input that is not valid JSON. parseToolInput must coerce to {}
           // rather than letting JSON.parse crash the eval row.
-          toolUse: { id: 'tool-123', name: 'list_resources', input: '{not json' as any },
+          toolUse: {
+            id: 'tool-123',
+            name: 'list_resources',
+            // Intentionally invalid JSON plus type bypass for the error-handling path.
+            input: '{not json' as any,
+          },
           stopReason: 'tool_use',
         }),
       );

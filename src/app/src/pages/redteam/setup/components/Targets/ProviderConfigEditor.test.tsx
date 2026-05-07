@@ -511,6 +511,40 @@ describe('ProviderConfigEditor', () => {
     );
   });
 
+  it('should preserve Bedrock MCP config when provider is already using InvokeModel id format', () => {
+    const mockSetProvider = vi.fn();
+    const mcpConfig = {
+      enabled: true,
+      servers: [{ name: 'server-1', command: 'npx', args: ['mcp-server'] }],
+    };
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{
+          id: 'bedrock:anthropic.claude-3-5-sonnet',
+          config: {
+            mcp: mcpConfig,
+          },
+        }}
+        setProvider={mockSetProvider}
+        providerType="bedrock"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('switch-bedrock-invoke').click();
+    });
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'bedrock:anthropic.claude-3-5-sonnet',
+        config: {
+          mcp: mcpConfig,
+        },
+      }),
+    );
+  });
+
   describe('updateCustomTarget inputs handling', () => {
     it('should render CommonConfigurationOptions with proper props', () => {
       const mockSetProvider = vi.fn();

@@ -46,6 +46,11 @@ const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): strin
 const isServerConfigured = (server: MCPServerConfig): boolean =>
   Boolean(server.command || server.path || server.url);
 
+const createDefaultMCPServer = (index: number): MCPServerConfig => ({
+  name: `server-${index + 1}`,
+  args: [],
+});
+
 const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
@@ -103,7 +108,7 @@ const FoundationModelConfiguration = ({
     const servers = selectedTarget.config?.mcp?.servers || [];
     // Don't seed `command: ''`; an empty string would be persisted and later
     // fail validation. Leave the field undefined and let the input render empty.
-    updateMCPServers([...servers, { name: `server-${servers.length + 1}`, args: [] }]);
+    updateMCPServers([...servers, createDefaultMCPServer(servers.length)]);
     setIsMcpOpen(true);
   };
 

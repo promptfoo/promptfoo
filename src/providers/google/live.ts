@@ -35,10 +35,10 @@ const formatContentMessage = (
   contentIndex: number,
   useRealtimeTextInput = false,
 ) => {
-  if (contents[contentIndex].role != 'user') {
+  if (contents[contentIndex].role !== 'user') {
     throw new Error('Can only take user role inputs.');
   }
-  if (contents[contentIndex].parts.length != 1) {
+  if (contents[contentIndex].parts.length !== 1) {
     throw new Error('Unexpected number of parts in user input.');
   }
   const userMessage = contents[contentIndex].parts[0].text;
@@ -68,31 +68,34 @@ const formatContentMessage = (
 /**
  * Helper function to fetch JSON with error handling
  */
-export const fetchJson = async (url: string, options?: RequestInit): Promise<any> => {
+export const fetchJson = async <T = unknown>(url: string, options?: RequestInit): Promise<T> => {
   const response = await fetchWithProxy(url, options);
   if (!response.ok) {
     throw new Error(`HTTP error - status: ${response.status}`);
   }
-  return response.json();
+  return response.json() as Promise<T>;
 };
 
 /**
  * Helper function to try GET with query params, fallback to POST with JSON body
  */
-export const tryGetThenPost = async (url: string, data?: any): Promise<any> => {
+export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): Promise<T> => {
   try {
     // Try GET first with query params
     const urlWithParams = new URL(url);
     if (data) {
-      const params = typeof data === 'string' ? JSON.parse(data) : data;
+      const params = (typeof data === 'string' ? JSON.parse(data) : data) as Record<
+        string,
+        unknown
+      >;
       Object.entries(params).forEach(([key, value]) => {
         urlWithParams.searchParams.append(key, String(value));
       });
     }
-    return await fetchJson(urlWithParams.href);
+    return await fetchJson<T>(urlWithParams.href);
   } catch {
     // Fall back to POST
-    return fetchJson(url, {
+    return fetchJson<T>(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -292,7 +295,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let response_audio_transcript = '';
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
-      let statefulApiState: any = undefined;
+      let statefulApiState: unknown = undefined;
       let hasFinalized = false;
 
       const isTextExpected =
@@ -641,7 +644,7 @@ export class GoogleLiveProvider implements ApiProvider {
               for (const functionCall of response.toolCall.functionCalls) {
                 function_calls_total.push(functionCall);
                 if (functionCall && functionCall.id && functionCall.name) {
-                  let callbackResponse = {};
+                  let callbackResponse: unknown = {};
                   const functionName = functionCall.name;
                   try {
                     if (config.functionToolCallbacks?.[functionName]) {

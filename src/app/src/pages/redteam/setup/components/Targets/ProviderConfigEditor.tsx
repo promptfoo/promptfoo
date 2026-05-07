@@ -28,6 +28,15 @@ export interface ProviderConfigEditorProps {
   mode?: 'eval' | 'redteam';
 }
 
+const shouldRemoveMcpConfig = (
+  previousTargetId: string,
+  nextTargetId: string,
+  currentProviderType?: string,
+): boolean =>
+  currentProviderType === 'bedrock' &&
+  previousTargetId.startsWith('bedrock:converse:') &&
+  !nextTargetId.startsWith('bedrock:converse:');
+
 function ProviderConfigEditor({
   provider,
   setProvider,
@@ -76,7 +85,7 @@ function ProviderConfigEditor({
 
     if (field === 'id') {
       updatedTarget.id = value as string;
-      if (providerType === 'bedrock' && !updatedTarget.id.startsWith('bedrock:converse:')) {
+      if (shouldRemoveMcpConfig(provider.id, updatedTarget.id, providerType)) {
         delete updatedTarget.config.mcp;
       }
     } else if (field === 'url') {
