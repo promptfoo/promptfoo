@@ -208,6 +208,52 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
+    it('should normalize chat-style tools for Realtime session payloads', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get the weather',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    location: { type: 'string' },
+                  },
+                },
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            function: { name: 'get_weather' },
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body.tools).toEqual([
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get the weather',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+            },
+          },
+        },
+      ]);
+      expect(body.tool_choice).toEqual({
+        type: 'function',
+        name: 'get_weather',
+      });
+    });
+
     it.each([
       [0, 'inf'],
       [-1, 'inf'],
@@ -694,6 +740,209 @@ describe('OpenAI Realtime Provider', () => {
       expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
     });
 
+    it('should configure tools and handle function calls in persistent connections', async () => {
+      const functionCallHandler = vi.fn().mockResolvedValue('{"call_status":"callback"}');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          maintainContext: true,
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'end_of_dialog_tool',
+                description: 'End the dialog',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    call_status: { type: 'string' },
+                  },
+                },
+              },
+            },
+          ],
+          tool_choice: 'auto',
+          functionCallHandler,
+        },
+      });
+
+      provider.persistentConnection = {
+        on: vi.fn((event: string, handler: Function) => {
+          mockHandlers[event].push(handler);
+          return provider.persistentConnection;
+        }),
+        once: vi.fn((event: string, handler: Function) => {
+          mockHandlers[event].push(handler);
+          return provider.persistentConnection;
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+      } as unknown as WebSocket;
+
+      const responsePromise = provider.callApi('Can you call me back later?', {
+        test: {
+          metadata: { conversationId: 'loan-application-flow' },
+        },
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(provider.persistentConnection?.send).toHaveBeenCalled();
+      });
+
+      const sentEvents = vi
+        .mocked(provider.persistentConnection.send as Mock)
+        .mock.calls.map(([payload]) => JSON.parse(payload as string));
+
+      expect(sentEvents[0]).toMatchObject({
+        type: 'session.update',
+        session: {
+          tools: [
+            {
+              type: 'function',
+              name: 'end_of_dialog_tool',
+            },
+          ],
+          tool_choice: 'auto',
+        },
+      });
+
+      const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'conversation.item.created',
+              item: { id: 'msg_1', role: 'user' },
+            }),
+          ),
+        ),
+      );
+
+      const responseCreate = vi
+        .mocked(provider.persistentConnection.send as Mock)
+        .mock.calls.map(([payload]) => JSON.parse(payload as string))
+        .find((event) => event.type === 'response.create' && event.response);
+
+      expect(responseCreate.response).toMatchObject({
+        tools: [
+          {
+            type: 'function',
+            name: 'end_of_dialog_tool',
+          },
+        ],
+        tool_choice: 'auto',
+      });
+
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: {
+                type: 'function_call',
+                call_id: 'call_1',
+                name: 'end_of_dialog_tool',
+                arguments: '{}',
+              },
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.function_call_arguments.done',
+              call_id: 'call_1',
+              arguments: '{"call_status":"callback"}',
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: {
+                usage: {
+                  total_tokens: 8,
+                  input_tokens: 5,
+                  output_tokens: 3,
+                },
+              },
+            }),
+          ),
+        ),
+      );
+
+      expect(functionCallHandler).toHaveBeenCalledWith(
+        'end_of_dialog_tool',
+        '{"call_status":"callback"}',
+      );
+
+      const followupEvents = vi
+        .mocked(provider.persistentConnection.send as Mock)
+        .mock.calls.map(([payload]) => JSON.parse(payload as string));
+
+      expect(followupEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: 'call_1',
+              output: '{"call_status":"callback"}',
+            },
+          }),
+          expect.objectContaining({
+            type: 'response.create',
+          }),
+        ]),
+      );
+
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.text.done',
+              text: 'We will call you back later.',
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: {
+                usage: {
+                  total_tokens: 11,
+                  input_tokens: 7,
+                  output_tokens: 4,
+                },
+              },
+            }),
+          ),
+        ),
+      );
+
+      const response = await responsePromise;
+
+      expect(response.output).toContain('We will call you back later.');
+      expect(response.metadata?.functionCallOccurred).toBe(true);
+      expect(response.metadata?.functionCallResults).toEqual(['{"call_status":"callback"}']);
+      expect(response.tokenUsage).toEqual({
+        total: 11,
+        prompt: 7,
+        completion: 4,
+        cached: 0,
+        numRequests: 1,
+      });
+    });
+
     it('should reuse existing connection for subsequent requests', async () => {
       // Skip this test since it's difficult to mock properly and causes flakey results
       // The functionality is tested in other tests
@@ -789,6 +1038,10 @@ describe('OpenAI Realtime Provider', () => {
       const promise = provider.directWebSocketRequest('hi');
 
       mockHandlers.open.forEach((h) => h());
+
+      await vi.waitFor(() => {
+        expect(mockWs.send).toHaveBeenCalled();
+      });
 
       const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
       expect(sessionUpdate.session.max_response_output_tokens).toBe('inf');

@@ -139,6 +139,69 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   private isProcessingAudio: boolean = false;
   private audioTimeout: NodeJS.Timeout | null = null;
 
+  private hasConfiguredTools(): boolean {
+    return Array.isArray(this.config.tools)
+      ? this.config.tools.length > 0
+      : Boolean(this.config.tools);
+  }
+
+  private normalizeRealtimeTools(tools: unknown): unknown {
+    if (!Array.isArray(tools)) {
+      return tools;
+    }
+
+    return tools.map((tool) => {
+      if (
+        tool &&
+        typeof tool === 'object' &&
+        (tool as Record<string, unknown>).type === 'function' &&
+        typeof (tool as Record<string, unknown>).function === 'object' &&
+        (tool as Record<string, unknown>).function !== null
+      ) {
+        const { function: functionDefinition, ...rest } = tool as Record<string, any>;
+        return {
+          ...rest,
+          ...functionDefinition,
+        };
+      }
+
+      return tool;
+    });
+  }
+
+  private normalizeRealtimeToolChoice(): unknown {
+    const toolChoice = this.config.tool_choice;
+
+    if (
+      toolChoice &&
+      typeof toolChoice === 'object' &&
+      toolChoice.type === 'function' &&
+      toolChoice.function?.name
+    ) {
+      return {
+        type: 'function',
+        name: toolChoice.function.name,
+      };
+    }
+
+    return toolChoice;
+  }
+
+  private async getRealtimeToolConfig(): Promise<Record<string, unknown>> {
+    if (!this.hasConfiguredTools()) {
+      return {};
+    }
+
+    const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
+    const normalizedTools = this.normalizeRealtimeTools(loadedTools);
+    const toolChoice = this.normalizeRealtimeToolChoice() ?? 'auto';
+
+    return {
+      ...(normalizedTools === undefined ? {} : { tools: normalizedTools }),
+      tool_choice: toolChoice,
+    };
+  }
+
   private getMaxResponseOutputTokens(): number | 'inf' {
     const value = this.config.max_response_output_tokens;
     if (value === 'inf') {
@@ -245,20 +308,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       body.turn_detection = this.config.turn_detection;
     }
 
-    if (this.config.tools && this.config.tools.length > 0) {
-      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
-      if (loadedTools !== undefined) {
-        body.tools = loadedTools;
-      }
-      // If tools are provided but no tool_choice, default to auto
-      if (this.config.tool_choice === undefined) {
-        body.tool_choice = 'auto';
-      }
-    }
-
-    if (this.config.tool_choice) {
-      body.tool_choice = this.config.tool_choice;
-    }
+    Object.assign(body, await this.getRealtimeToolConfig());
 
     return body;
   }
@@ -993,6 +1043,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
       let functionCallOccurred = false;
       const functionCallResults: string[] = [];
+      const realtimeToolConfigPromise = this.getRealtimeToolConfig();
 
       const sendEvent = (event: any) => {
         if (!event.event_id) {
@@ -1023,11 +1074,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             ...(this.config.turn_detection !== undefined && {
               turn_detection: this.config.turn_detection,
             }),
-            ...(this.config.tools &&
-              this.config.tools.length > 0 && {
-                tools: await maybeLoadToolsFromExternalFile(this.config.tools),
-                tool_choice: this.config.tool_choice || 'auto',
-              }),
+            ...(await realtimeToolConfigPromise),
           },
         });
 
@@ -1086,18 +1133,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   },
                 };
 
-                // Add tools if configured
-                if (this.config.tools && this.config.tools.length > 0) {
-                  const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
-                  if (loadedTools !== undefined) {
-                    responseEvent.response.tools = loadedTools;
-                  }
-                  if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
-                    responseEvent.response.tool_choice = this.config.tool_choice;
-                  } else {
-                    responseEvent.response.tool_choice = 'auto';
-                  }
-                }
+                Object.assign(responseEvent.response, await realtimeToolConfigPromise);
 
                 sendEvent(responseEvent);
               }
@@ -1467,7 +1503,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       if (connection) {
         // Connection already exists, just set up message handlers
-        this.setupMessageHandlers(prompt, resolve, reject);
+        void this.setupMessageHandlers(prompt, resolve, reject).catch(reject);
       } else {
         // Create new connection
         const wsUrl = this.getWebSocketUrl(this.modelName);
@@ -1490,7 +1526,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         // Handle connection establishment
         this.persistentConnection.once('open', () => {
           logger.debug('Persistent WebSocket connection established successfully');
-          this.setupMessageHandlers(prompt, resolve, reject);
+          void this.setupMessageHandlers(prompt, resolve, reject).catch(reject);
         });
 
         this.persistentConnection.once('error', (err: Error) => {
@@ -1502,11 +1538,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   // Helper method to set up message handlers for persistent WebSocket
-  private setupMessageHandlers(
+  private async setupMessageHandlers(
     prompt: string,
     resolve: (value: RealtimeResponse) => void,
     reject: (reason: Error) => void,
-  ): void {
+  ): Promise<void> {
     // Reset audio state at the start of each request
     this.resetAudioState();
 
@@ -1522,17 +1558,22 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     let responseError = '';
     let textDone = false;
     let audioDone = true; // Default to true, set to false when audio processing starts
+    let responseDone = false;
     let _usage: {
       total_tokens?: number;
       prompt_tokens?: number;
       completion_tokens?: number;
+      input_tokens?: number;
+      output_tokens?: number;
     } | null = null;
 
     // Track message IDs and function call state
     let _messageId = '';
     let _responseId = '';
-    const functionCallOccurred = false;
+    let functionCallOccurred = false;
     const functionCallResults: string[] = [];
+    let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
+    const realtimeToolConfig = await this.getRealtimeToolConfig();
 
     const sendEvent = (event: any) => {
       if (!event.event_id) {
@@ -1583,8 +1624,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         output: responseText,
         tokenUsage: {
           total: _usage?.total_tokens || 0,
-          prompt: _usage?.prompt_tokens || 0,
-          completion: _usage?.completion_tokens || 0,
+          prompt: _usage?.input_tokens ?? _usage?.prompt_tokens ?? 0,
+          completion: _usage?.output_tokens ?? _usage?.completion_tokens ?? 0,
           cached: 0,
           numRequests: 1,
         },
@@ -1613,11 +1654,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     };
 
     const checkAndResolve = () => {
-      // Only resolve if both text and audio are done (or no audio was processed)
-      if (textDone && audioDone) {
+      // Only resolve after the server confirms the response is complete.
+      if (responseDone && textDone && audioDone) {
         resolveResponse();
       } else {
-        logger.info(`Waiting for completion - Text done: ${textDone}, Audio done: ${audioDone}`);
+        logger.info(
+          `Waiting for completion - Response done: ${responseDone}, Text done: ${textDone}, Audio done: ${audioDone}`,
+        );
       }
     };
 
@@ -1639,6 +1682,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   instructions: this.config.instructions || 'You are a helpful assistant.',
                   voice: this.config.voice || 'alloy',
                   temperature: this.config.temperature ?? 0.8,
+                  ...realtimeToolConfig,
                 },
               });
             } else if (message.item.role === 'assistant') {
@@ -1697,10 +1741,65 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             checkAndResolve();
             break;
 
-          case 'response.done':
-            if (message.usage) {
-              _usage = message.usage;
+          case 'response.output_item.added':
+            if (message.item.type === 'function_call') {
+              functionCallOccurred = true;
+              pendingFunctionCalls.push({
+                id: message.item.call_id,
+                name: message.item.name,
+                arguments: message.item.arguments || '{}',
+              });
             }
+            break;
+
+          case 'response.function_call_arguments.done': {
+            const callIndex = pendingFunctionCalls.findIndex((call) => call.id === message.call_id);
+            if (callIndex !== -1) {
+              pendingFunctionCalls[callIndex].arguments = message.arguments;
+            }
+            break;
+          }
+
+          case 'response.done':
+            responseDone = true;
+            if (message.response?.usage || message.usage) {
+              _usage = message.response?.usage ?? message.usage;
+            }
+
+            if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
+              for (const call of pendingFunctionCalls) {
+                try {
+                  const result = await this.config.functionCallHandler(call.name, call.arguments);
+                  functionCallResults.push(result);
+                  sendEvent({
+                    type: 'conversation.item.create',
+                    item: {
+                      type: 'function_call_output',
+                      call_id: call.id,
+                      output: result,
+                    },
+                  });
+                } catch (error) {
+                  logger.error(`Error executing function ${call.name}: ${error}`);
+                  sendEvent({
+                    type: 'conversation.item.create',
+                    item: {
+                      type: 'function_call_output',
+                      call_id: call.id,
+                      output: JSON.stringify({ error: String(error) }),
+                    },
+                  });
+                }
+              }
+
+              sendEvent({
+                type: 'response.create',
+              });
+              pendingFunctionCalls = [];
+              responseDone = false;
+              return;
+            }
+
             // Mark both as done if we get response.done without any audio processing
             if (!this.isProcessingAudio) {
               audioDone = true;
@@ -1743,6 +1842,26 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         }
       };
     }
+
+    sendEvent({
+      type: 'session.update',
+      session: {
+        modalities: this.config.modalities || ['text', 'audio'],
+        instructions: this.config.instructions || 'You are a helpful assistant.',
+        voice: this.config.voice || 'alloy',
+        input_audio_format: this.config.input_audio_format || 'pcm16',
+        output_audio_format: this.config.output_audio_format || 'pcm16',
+        temperature: this.config.temperature ?? 0.8,
+        max_response_output_tokens: this.getMaxResponseOutputTokens(),
+        ...(this.config.input_audio_transcription !== undefined && {
+          input_audio_transcription: this.config.input_audio_transcription,
+        }),
+        ...(this.config.turn_detection !== undefined && {
+          turn_detection: this.config.turn_detection,
+        }),
+        ...realtimeToolConfig,
+      },
+    });
 
     // Create a conversation item with the user's prompt
     sendEvent({
