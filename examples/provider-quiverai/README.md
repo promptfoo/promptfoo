@@ -25,6 +25,8 @@ npx promptfoo@latest eval -c promptfooconfig.vectorize.yaml
 ```
 
 Converts raster reference images into SVGs with both Arrow 1.1 and Arrow 1.1 Max so you can compare fidelity.
+The sample inputs are repo-hosted fixtures, which keeps the walkthrough stable
+when third-party image hosts change behavior.
 
 ## Run the GPT Image-2 → QuiverAI pipeline
 
@@ -34,7 +36,7 @@ npx promptfoo@latest eval -c promptfooconfig.pipeline.yaml
 
 Chains OpenAI `gpt-image-2` (high-quality raster) with the QuiverAI vectorize endpoint to produce a coherent red-panda icon set. The pipeline is a custom JS provider in [`pipeline-provider.js`](pipeline-provider.js); each call hits both APIs serially, so expect longer wall-clock times than a single-provider eval.
 
-Live cost reference (per call):
+Example live cost reference from the May 2026 verification run:
 
 | Step           | Model           | Credits / cost       |
 | -------------- | --------------- | -------------------- |
@@ -42,7 +44,9 @@ Live cost reference (per call):
 | Vectorize step | `arrow-1.1`     | 15 credits           |
 | Vectorize step | `arrow-1.1-max` | 20 credits           |
 
-Credits flow through to `result.metadata.credits` so you can budget evals.
+Credits flow through to `result.metadata.credits` so you can budget evals. Check
+`GET /v1/models` for the current `pricing_credits`; QuiverAI prices are
+model- and operation-specific.
 
 ## What This Example Shows
 

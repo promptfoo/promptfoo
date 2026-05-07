@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: QuiverAI Arrow models — text-to-SVG and image-to-SVG comparison
+description: QuiverAI Arrow models — text-to-SVG generation comparison
 
 prompts:
   - 'Create a simple SVG icon of: {{subject}}'

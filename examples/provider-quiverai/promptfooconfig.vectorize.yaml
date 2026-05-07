@@ -31,17 +31,17 @@ defaultTest:
 
 tests:
   - vars:
-      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/512px-React-icon.svg.png
+      image_url: https://raw.githubusercontent.com/promptfoo/promptfoo/main/site/static/android-chrome-192x192.png
     assert:
       - type: is-xml
       - type: llm-rubric
-        value: Contains the React atom logo with three orbital ellipses around a central nucleus
+        value: Contains the Promptfoo red panda mascot with a black magnifying glass.
         threshold: 0.4
 
   - vars:
-      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png
+      image_url: https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/google-vertex/assets/red-panda.jpg
     assert:
       - type: is-xml
       - type: llm-rubric
-        value: Contains a glass dice shape preserving translucent shading
+        value: Contains a reddish-orange red panda curled up on logs.
         threshold: 0.3

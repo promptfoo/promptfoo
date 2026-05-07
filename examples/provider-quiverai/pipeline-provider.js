@@ -6,9 +6,11 @@
 // providers in the same eval.
 //
 // Required env: OPENAI_API_KEY, QUIVERAI_API_KEY.
-// Optional config (set via providerConfig in promptfooconfig.yaml):
+// Optional config (set via the provider's config: block in promptfooconfig.yaml):
 //   - imageModel:        OpenAI image model id (default: 'gpt-image-2')
-//   - imageSize:         '1024x1024' | '1024x1536' | '1536x1024' (default: '1024x1024')
+//   - imageSize:         Image API size string (default: '1024x1024').
+//                        gpt-image-2 also supports 'auto' and custom sizes
+//                        allowed by the API.
 //   - imageQuality:      'low' | 'medium' | 'high' | 'auto' (default: 'high')
 //   - imageBackground:   'transparent' | 'opaque' | 'auto' (default: 'auto').
 //                        gpt-image-2 only accepts 'opaque' or 'auto'; gpt-image-1
@@ -55,14 +57,18 @@ class GptImageToQuiverPipeline {
     try {
       rasterB64 = await this.generateRaster(fullPrompt);
     } catch (err) {
-      return { error: `OpenAI image step failed: ${err.message || err}` };
+      return {
+        error: `OpenAI image step failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
 
     let vectorized;
     try {
       vectorized = await this.vectorize(rasterB64);
     } catch (err) {
-      return { error: `QuiverAI vectorize step failed: ${err.message || err}` };
+      return {
+        error: `QuiverAI vectorize step failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
     }
 
     return {

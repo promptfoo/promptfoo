@@ -598,6 +598,14 @@ describe('QuiverAI Provider', () => {
       expect(callBody.image).toEqual({ base64: 'aGVsbG8=' });
     });
 
+    it('should reject non-base64 data URL prompts before calling QuiverAI', async () => {
+      const provider = createVectorizeProvider({ stream: false });
+      const result = await provider.callApi('data:image/svg+xml,%3Csvg%3E%3C/svg%3E');
+
+      expect(result.error).toContain('data URLs must be base64-encoded');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should parse JSON object prompts as image input', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: makeSvgResponse(['<svg>vec</svg>']),
@@ -613,6 +621,26 @@ describe('QuiverAI Provider', () => {
         (vi.mocked(fetchWithCache).mock.calls[0] as any)[1].body as string,
       );
       expect(callBody.image).toEqual({ url: 'https://example.com/x.png' });
+    });
+
+    it('should reject malformed nested image objects before calling QuiverAI', async () => {
+      const provider = createVectorizeProvider({ stream: false });
+      const result = await provider.callApi('{"image":{"foo":"bar"}}');
+
+      expect(result.error).toContain(
+        'nested `image` must contain a non-empty `url` or `base64` string',
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject malformed JSON image objects before calling QuiverAI', async () => {
+      const provider = createVectorizeProvider({ stream: false });
+      const result = await provider.callApi('{"foo":"bar"}');
+
+      expect(result.error).toContain(
+        'JSON image input must contain a non-empty `url` or `base64` string',
+      );
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
     it('should treat raw base64 prompts as base64 image input', async () => {
@@ -636,6 +664,17 @@ describe('QuiverAI Provider', () => {
       const provider = createVectorizeProvider({ stream: false });
       const result = await provider.callApi('   ');
       expect(result.error).toContain('vectorize requires an image');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject malformed config.image before calling QuiverAI', async () => {
+      const provider = createVectorizeProvider({
+        stream: false,
+        image: { foo: 'bar' } as any,
+      });
+      const result = await provider.callApi('ignored');
+
+      expect(result.error).toContain('`image` must contain a non-empty `url` or `base64` string');
       expect(fetchWithCache).not.toHaveBeenCalled();
     });
 

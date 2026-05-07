@@ -185,7 +185,7 @@ export class QuiverAiProvider implements ApiProvider {
     const sampling = pickDefined(config as Record<string, unknown>, [...SAMPLING_KEYS]);
 
     if (this.mode === 'vectorize') {
-      const image = config.image ?? parsePromptAsImage(prompt);
+      const image = getConfiguredVectorizeImage(config.image) ?? parsePromptAsImage(prompt);
       return {
         model: this.modelName,
         image,
@@ -478,7 +478,36 @@ function normalizeReferences(refs: Array<string | ImageReference>): ImageReferen
   return refs.map((ref) => (typeof ref === 'string' ? { url: ref } : ref));
 }
 
-const DATA_URL_PATTERN = /^data:image\/[a-zA-Z0-9.+-]+(?:;[^,]+)?,(.+)$/;
+const BASE64_DATA_URL_PATTERN = /^data:image\/[a-zA-Z0-9.+-]+(?:;[^,;]+)*;base64,(.+)$/i;
+
+function normalizeImageReference(value: unknown): ImageReference | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const candidate = value as { url?: unknown; base64?: unknown };
+  if (typeof candidate.url === 'string' && candidate.url.trim()) {
+    return { url: candidate.url };
+  }
+  if (typeof candidate.base64 === 'string' && candidate.base64.trim()) {
+    return { base64: candidate.base64 };
+  }
+  return null;
+}
+
+function getConfiguredVectorizeImage(image: unknown): ImageReference | undefined {
+  if (image === undefined) {
+    return undefined;
+  }
+
+  const normalized = normalizeImageReference(image);
+  if (!normalized) {
+    throw new Error(
+      'QuiverAI vectorize `image` must contain a non-empty `url` or `base64` string.',
+    );
+  }
+  return normalized;
+}
 
 function parsePromptAsImage(prompt: string): ImageReference {
   const trimmed = prompt.trim();
@@ -487,32 +516,43 @@ function parsePromptAsImage(prompt: string): ImageReference {
       'QuiverAI vectorize requires an image: pass a URL or base64 string as the prompt, or set `image` in the provider config.',
     );
   }
-  const dataUrlMatch = DATA_URL_PATTERN.exec(trimmed);
+  const dataUrlMatch = BASE64_DATA_URL_PATTERN.exec(trimmed);
   if (dataUrlMatch) {
     return { base64: dataUrlMatch[1] };
+  }
+  if (/^data:image\//i.test(trimmed)) {
+    throw new Error('QuiverAI vectorize data URLs must be base64-encoded.');
   }
   if (/^https?:\/\//i.test(trimmed)) {
     return { url: trimmed };
   }
   if (trimmed.startsWith('{')) {
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(trimmed);
-      if (parsed && typeof parsed === 'object') {
-        if (typeof (parsed as { url?: string }).url === 'string') {
-          return { url: (parsed as { url: string }).url };
-        }
-        if (typeof (parsed as { base64?: string }).base64 === 'string') {
-          return { base64: (parsed as { base64: string }).base64 };
-        }
-        if (
-          (parsed as { image?: ImageReference }).image &&
-          typeof (parsed as { image?: ImageReference }).image === 'object'
-        ) {
-          return (parsed as { image: ImageReference }).image;
-        }
-      }
+      parsed = JSON.parse(trimmed);
     } catch {
-      // fall through to treat as raw base64
+      return { base64: trimmed };
+    }
+
+    if (parsed && typeof parsed === 'object') {
+      const image = normalizeImageReference(parsed);
+      if (image) {
+        return image;
+      }
+
+      if ('image' in parsed) {
+        const nestedImage = normalizeImageReference((parsed as { image?: unknown }).image);
+        if (nestedImage) {
+          return nestedImage;
+        }
+        throw new Error(
+          'QuiverAI vectorize nested `image` must contain a non-empty `url` or `base64` string.',
+        );
+      }
+
+      throw new Error(
+        'QuiverAI vectorize JSON image input must contain a non-empty `url` or `base64` string.',
+      );
     }
   }
   return { base64: trimmed };

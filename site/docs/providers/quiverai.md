@@ -8,7 +8,7 @@ keywords: [quiverai, svg, vector graphics, arrow, image generation, vectorizatio
 
 # QuiverAI
 
-The [QuiverAI](https://quiver.ai) provider generates and vectorizes SVG graphics with the Arrow family of models. Output is raw SVG markup, which works with text-based assertions like `is-xml`, `contains`, and `llm-rubric`.
+The [QuiverAI](https://quiver.ai) provider generates and vectorizes SVG graphics with the Arrow family of models. Output is raw SVG markup, which works with text-based assertions like `is-xml`, `contains`, and `llm-rubric`. Because the provider returns SVG markup as text rather than a stored media blob, these results appear in eval outputs and are not added to the Media Library automatically.
 
 Two endpoints are supported:
 
@@ -114,6 +114,11 @@ Accepted prompt forms:
 - A JSON object string like `{"url": "..."}` or `{"base64": "..."}`
 - A raw base64 payload (treated as `{ base64: ... }`)
 
+When using an inline data URL in a YAML config, pass it through a variable such as
+`'{{image_data}}'` or set `config.image.base64`. A bare `data:` string in
+`prompts:` is interpreted by Promptfoo's prompt loader before the QuiverAI
+provider sees it.
+
 You can also provide the image directly in the config and use the prompt for unrelated context:
 
 ```yaml
@@ -187,8 +192,14 @@ class GptImageToQuiverPipeline {
         n: 1,
       }),
     });
+    if (!imgRes.ok) {
+      throw new Error(`OpenAI image step failed: HTTP ${imgRes.status}`);
+    }
     const img = await imgRes.json();
-    const rasterB64 = img.data[0].b64_json;
+    const rasterB64 = img.data?.[0]?.b64_json;
+    if (!rasterB64) {
+      throw new Error('OpenAI image step returned no image data');
+    }
 
     // 2. Vectorize with QuiverAI Arrow.
     const svgRes = await fetch('https://api.quiver.ai/v1/svgs/vectorizations', {
@@ -204,9 +215,16 @@ class GptImageToQuiverPipeline {
         target_size: 1024,
       }),
     });
+    if (!svgRes.ok) {
+      throw new Error(`QuiverAI vectorize step failed: HTTP ${svgRes.status}`);
+    }
     const svg = await svgRes.json();
+    const outputSvg = svg.data?.[0]?.svg;
+    if (!outputSvg) {
+      throw new Error('QuiverAI vectorize step returned no SVG data');
+    }
     return {
-      output: svg.data[0].svg,
+      output: outputSvg,
       metadata: { credits: svg.credits, responseId: svg.id },
     };
   }
@@ -240,7 +258,7 @@ tests:
         value: A clearly recognizable red panda face with reddish-orange fur and dark facial markings.
 ```
 
-A complete working example, including red-panda-themed prompts and side-by-side Arrow 1.1 / Arrow 1.1 Max configs, lives at [`examples/provider-quiverai/promptfooconfig.pipeline.yaml`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-quiverai). On a live run, Arrow 1.1 debits 15 credits per vectorize and Arrow 1.1 Max debits 20 — both surfaced via `metadata.credits` so you can budget per eval.
+A complete working example, including red-panda-themed prompts and side-by-side Arrow 1.1 / Arrow 1.1 Max configs, lives at [`examples/provider-quiverai/promptfooconfig.pipeline.yaml`](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-quiverai). In the May 2026 verification run behind this example, Arrow 1.1 debited 15 credits per vectorize and Arrow 1.1 Max debited 20 — both surfaced via `metadata.credits` so you can budget per eval. Read the live `GET /v1/models` response for current `pricing_credits`.
 
 :::tip
 Each pipeline call hits two providers serially, so individual evaluations take longer than a pure generation run. Lower `--max-concurrency` if you start hitting QuiverAI's per-minute rate limit, and prefer `stream: false` on the vectorize step when you want response caching across re-runs.
