@@ -14,16 +14,6 @@ type McpToolCall = {
 
 const TOOL_NAME_FIELDS = ['tool', 'toolName', 'function', 'functionName', 'name'] as const;
 const TOOL_ARGS_FIELDS = ['args', 'arguments', 'params', 'parameters'] as const;
-const PREFERRED_STRING_ARG_NAMES = [
-  'query',
-  'prompt',
-  'input',
-  'text',
-  'request',
-  'question',
-  'search',
-  'message',
-] as const;
 
 const ajv = new Ajv({ allErrors: true, strictSchema: false });
 addFormats(ajv);
@@ -88,117 +78,6 @@ function validateMcpToolCall(
     );
     return false;
   }
-}
-
-function getPropertyType(property: unknown): string | undefined {
-  if (typeof property !== 'object' || property === null || Array.isArray(property)) {
-    return undefined;
-  }
-
-  const type = (property as { type?: unknown }).type;
-  return typeof type === 'string' ? type.toLowerCase() : undefined;
-}
-
-function getSchemaDefaults(tool: MCPTool): Record<string, unknown> {
-  const defaults: Record<string, unknown> = {};
-  const properties = tool.inputSchema?.properties ?? {};
-
-  for (const [name, schema] of Object.entries(properties)) {
-    if (typeof schema === 'object' && schema !== null && 'default' in schema) {
-      defaults[name] = (schema as { default?: unknown }).default;
-    }
-  }
-
-  return defaults;
-}
-
-function getPrimaryStringArgName(tool: MCPTool): string | undefined {
-  const properties = tool.inputSchema?.properties ?? {};
-  const required = new Set(tool.inputSchema?.required ?? []);
-
-  for (const preferredName of PREFERRED_STRING_ARG_NAMES) {
-    if (getPropertyType(properties[preferredName]) === 'string') {
-      return preferredName;
-    }
-  }
-
-  const requiredStringProperty = Object.entries(properties).find(
-    ([name, schema]) => required.has(name) && getPropertyType(schema) === 'string',
-  );
-  if (requiredStringProperty) {
-    return requiredStringProperty[0];
-  }
-
-  return Object.entries(properties).find(([, schema]) => getPropertyType(schema) === 'string')?.[0];
-}
-
-function buildSingleToolCall(
-  value: unknown,
-  tool: MCPTool,
-  baseArgs: Record<string, unknown> = {},
-): McpToolCall | undefined {
-  const primaryStringArgName = getPrimaryStringArgName(tool);
-  const args = {
-    ...getSchemaDefaults(tool),
-    ...baseArgs,
-  };
-
-  if (primaryStringArgName && typeof value === 'string') {
-    args[primaryStringArgName] = value;
-  }
-
-  const requiredFields = tool.inputSchema?.required ?? [];
-  const missingRequiredField = requiredFields.find((field) => args[field] === undefined);
-  if (missingRequiredField) {
-    return undefined;
-  }
-
-  return {
-    tool: tool.name,
-    args,
-  };
-}
-
-function getToolMatchScore(value: unknown, tool: MCPTool): number {
-  if (typeof value !== 'string') {
-    return 0;
-  }
-
-  const normalizedValue = value.toLowerCase();
-  const searchableToolText = [tool.name, tool.description ?? ''].join(' ').toLowerCase();
-  const toolTokens = searchableToolText.split(/[^a-z0-9]+/).filter((token) => token.length > 2);
-
-  let score = 0;
-  for (const token of toolTokens) {
-    if (normalizedValue.includes(token)) {
-      score += 1;
-    }
-  }
-
-  if (getPrimaryStringArgName(tool)) {
-    score += 1;
-  }
-
-  return score;
-}
-
-function buildBestDeterministicToolCall(
-  value: unknown,
-  tools: MCPTool[],
-  toolByName: Map<string, MCPTool>,
-): McpToolCall | undefined {
-  const candidates = tools
-    .map((tool, index) => ({
-      index,
-      score: getToolMatchScore(value, tool),
-      toolCall: buildSingleToolCall(value, tool),
-    }))
-    .filter((candidate): candidate is { index: number; score: number; toolCall: McpToolCall } =>
-      validateMcpToolCall(candidate.toolCall, toolByName),
-    )
-    .sort((a, b) => b.score - a.score || a.index - b.index);
-
-  return candidates[0]?.toolCall;
 }
 
 function stringifyToolCall(toolCall: McpToolCall): string {
@@ -338,27 +217,25 @@ export async function materializeMcpValue({
     };
   }
 
-  let existingSingleToolArgs: Record<string, unknown> = {};
-  if (existingToolCall && existingToolCall.tool === tools[0]?.name) {
-    existingSingleToolArgs = existingToolCall.args;
-  }
   const materializationIntentValue = intentValue ?? value;
-  const toolCall =
-    tools.length === 1
-      ? buildSingleToolCall(materializationIntentValue, tools[0], existingSingleToolArgs)
-      : ((provider
-          ? await repairMcpToolCallWithProvider({
-              allowedToolNames,
-              delay,
-              nextRepairAt: { value: Date.now() },
-              provider,
-              purpose: purpose ?? '',
-              toolByName,
-              tools,
-              value: materializationIntentValue,
-            })
-          : undefined) ??
-        buildBestDeterministicToolCall(materializationIntentValue, tools, toolByName));
+  if (!provider) {
+    throw new Error(
+      `Failed to materialize MCP value: inference provider is required for non-JSON MCP input ${JSON.stringify(
+        value,
+      )}`,
+    );
+  }
+
+  const toolCall = await repairMcpToolCallWithProvider({
+    allowedToolNames,
+    delay,
+    nextRepairAt: { value: Date.now() },
+    provider,
+    purpose: purpose ?? '',
+    toolByName,
+    tools,
+    value: materializationIntentValue,
+  });
 
   if (!toolCall || !validateMcpToolCall(toolCall, toolByName)) {
     throw new Error(`Failed to materialize MCP value: ${JSON.stringify(value)}`);

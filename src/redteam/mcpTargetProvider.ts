@@ -65,27 +65,34 @@ class RedteamMcpTargetProvider implements ApiProvider {
     }
 
     try {
-      let materializerProvider: ApiProvider | undefined;
-      if (tools.length > 1) {
-        try {
-          materializerProvider = await redteamProviderManager.getProvider({ jsonOnly: true });
-        } catch (error) {
-          logger.debug(
-            `Falling back to deterministic MCP materialization: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
-          );
-        }
-      }
+      const intentValue =
+        context?.test?.metadata?.goal ?? context?.test?.metadata?.originalPrompt ?? prompt;
+      const purpose = String(context?.test?.metadata?.purpose ?? '');
+      let materialized: Awaited<ReturnType<typeof materializeMcpValue>>;
 
-      const materialized = await materializeMcpValue({
-        intentValue:
-          context?.test?.metadata?.goal ?? context?.test?.metadata?.originalPrompt ?? prompt,
-        provider: materializerProvider,
-        purpose: String(context?.test?.metadata?.purpose ?? ''),
-        tools,
-        value: prompt,
-      });
+      try {
+        materialized = await materializeMcpValue({
+          intentValue,
+          purpose,
+          tools,
+          value: prompt,
+        });
+      } catch (error) {
+        logger.debug(
+          `MCP target prompt requires inference materialization: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+
+        const materializerProvider = await redteamProviderManager.getProvider({ jsonOnly: true });
+        materialized = await materializeMcpValue({
+          intentValue,
+          provider: materializerProvider,
+          purpose,
+          tools,
+          value: prompt,
+        });
+      }
 
       const materializedContext: CallApiContextParams | undefined = context
         ? {

@@ -1,13 +1,17 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MCPProvider } from '../../src/providers/mcp';
 import { maybeWrapMcpProviderForRedteam } from '../../src/redteam/mcpTargetProvider';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
 import type { CallApiContextParams, ProviderResponse } from '../../src/types';
 
+const providerManagerMocks = vi.hoisted(() => ({
+  getProvider: vi.fn(),
+}));
+
 vi.mock('../../src/redteam/providers/shared', () => ({
   redteamProviderManager: {
-    getProvider: vi.fn().mockRejectedValue(new Error('No repair provider configured')),
+    getProvider: providerManagerMocks.getProvider,
   },
 }));
 
@@ -42,7 +46,19 @@ class FakeMcpProvider extends MCPProvider {
 }
 
 describe('maybeWrapMcpProviderForRedteam', () => {
+  beforeEach(() => {
+    providerManagerMocks.getProvider.mockReset();
+  });
+
   it('materializes redteam target calls before they reach MCP providers', async () => {
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({
+        output:
+          '{"tool":"search_companies","args":{"query":"Find clean energy companies.","limit":10}}',
+      }),
+    });
+
     const target = new FakeMcpProvider([searchCompaniesTool]);
     const wrapped = maybeWrapMcpProviderForRedteam(target, {
       metadata: {
@@ -82,7 +98,46 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     });
   });
 
-  it('materializes multi-tool calls without requiring a repair provider', async () => {
+  it('does not request inference when the prompt is already valid MCP JSON', async () => {
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, {
+      metadata: {
+        pluginId: 'harmful:hate',
+        purpose: 'Search companies',
+      },
+    });
+    const prompt = JSON.stringify({
+      tool: 'search_companies',
+      args: { query: 'cloud', limit: 1 },
+    });
+
+    await wrapped.callApi(prompt, {
+      prompt: {
+        raw: '{{prompt}}',
+        label: 'prompt',
+      },
+      vars: { prompt },
+      test: {
+        metadata: {
+          pluginId: 'harmful:hate',
+          purpose: 'Search companies',
+        },
+      },
+    } as unknown as CallApiContextParams);
+
+    expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
+    expect(target.calls).toHaveLength(1);
+    expect(JSON.parse(target.calls[0].prompt)).toEqual({
+      tool: 'search_companies',
+      args: { query: 'cloud', limit: 1 },
+    });
+  });
+
+  it('returns a materialization error when inference provider is unavailable', async () => {
+    providerManagerMocks.getProvider.mockRejectedValueOnce(
+      new Error('No repair provider configured'),
+    );
+
     const target = new FakeMcpProvider([
       {
         name: 'list_industries',
@@ -98,27 +153,24 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       },
     });
 
-    await wrapped.callApi('Search for clean energy companies.', {
-      prompt: {
-        raw: '{{prompt}}',
-        label: 'prompt',
-      },
-      vars: { prompt: 'Search for clean energy companies.' },
-      test: {
-        metadata: {
-          pluginId: 'sql-injection',
-          purpose: 'Search companies',
+    await expect(
+      wrapped.callApi('Search for clean energy companies.', {
+        prompt: {
+          raw: '{{prompt}}',
+          label: 'prompt',
         },
-      },
-    } as unknown as CallApiContextParams);
-
-    expect(JSON.parse(target.calls[0].prompt)).toEqual({
-      tool: 'search_companies',
-      args: {
-        query: 'Search for clean energy companies.',
-        limit: 10,
-      },
+        vars: { prompt: 'Search for clean energy companies.' },
+        test: {
+          metadata: {
+            pluginId: 'sql-injection',
+            purpose: 'Search companies',
+          },
+        },
+      } as unknown as CallApiContextParams),
+    ).resolves.toEqual({
+      error: expect.stringContaining('Failed to materialize MCP target prompt'),
     });
+    expect(target.calls).toHaveLength(0);
   });
 
   it('does not wrap non-redteam MCP calls', () => {
