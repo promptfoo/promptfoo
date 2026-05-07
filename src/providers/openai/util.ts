@@ -582,6 +582,16 @@ const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   },
 ];
 
+export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
+  ...OPENAI_CHAT_MODELS,
+  ...RETIRED_OPENAI_AUDIO_MODELS,
+  ...OPENAI_COMPLETION_MODELS,
+  ...OPENAI_REALTIME_MODELS,
+  ...RETIRED_OPENAI_REALTIME_MODELS,
+  ...OPENAI_RESPONSES_ONLY_MODELS,
+  ...OPENAI_DEEP_RESEARCH_MODELS,
+];
+
 // Transcription models for /v1/audio/transcriptions endpoint
 export const OPENAI_TRANSCRIPTION_MODELS = [
   {
@@ -632,15 +642,7 @@ export function calculateOpenAICost(
   audioCompletionTokens?: number,
 ): number | undefined {
   if (!audioPromptTokens && !audioCompletionTokens) {
-    return calculateCost(modelName, config, promptTokens, completionTokens, [
-      ...OPENAI_CHAT_MODELS,
-      ...RETIRED_OPENAI_AUDIO_MODELS,
-      ...OPENAI_COMPLETION_MODELS,
-      ...OPENAI_REALTIME_MODELS,
-      ...RETIRED_OPENAI_REALTIME_MODELS,
-      ...OPENAI_RESPONSES_ONLY_MODELS,
-      ...OPENAI_DEEP_RESEARCH_MODELS,
-    ]);
+    return calculateCost(modelName, config, promptTokens, completionTokens, OPENAI_BILLING_MODELS);
   }
 
   // Calculate with audio tokens
@@ -657,15 +659,7 @@ export function calculateOpenAICost(
     return undefined;
   }
 
-  const model = [
-    ...OPENAI_CHAT_MODELS,
-    ...RETIRED_OPENAI_AUDIO_MODELS,
-    ...OPENAI_COMPLETION_MODELS,
-    ...OPENAI_REALTIME_MODELS,
-    ...RETIRED_OPENAI_REALTIME_MODELS,
-    ...OPENAI_RESPONSES_ONLY_MODELS,
-    ...OPENAI_DEEP_RESEARCH_MODELS,
-  ].find((m) => m.id === modelName);
+  const model = OPENAI_BILLING_MODELS.find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;
   }
