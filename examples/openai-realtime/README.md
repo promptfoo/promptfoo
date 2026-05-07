@@ -296,7 +296,7 @@ The provider supports the Realtime API's function calling capabilities:
 2. **Function Arguments**: When the model decides to use a function, the implementation captures the arguments
 3. **Function Result Handling**: Results from function calls are sent back to the model for further processing
 
-Realtime function tools use top-level `name`, `description`, and `parameters` fields:
+Realtime function tools use the native OpenAI Realtime shape with top-level `name`, `description`, and `parameters` fields:
 
 ```yaml
 providers:
@@ -315,7 +315,7 @@ providers:
       tool_choice: auto
 ```
 
-If you reuse a Chat Completions-style tools file that wraps those fields under `function:`, promptfoo normalizes the function tool definitions before sending them to the Realtime API.
+If you reuse a Chat Completions-style tools file that wraps those fields under `function:`, promptfoo still accepts it as a compatibility input and normalizes only that legacy shape before sending it to the Realtime API.
 
 When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to your handler. Validate the function name and parse or validate the arguments before side effects in your application code.
 

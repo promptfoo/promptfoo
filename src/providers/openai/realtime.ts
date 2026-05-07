@@ -174,7 +174,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     });
   }
 
-  private getForcedRealtimeToolName(): string | undefined {
+  private normalizeRealtimeToolChoice(): unknown {
     const toolChoice = this.config.tool_choice;
 
     if (
@@ -184,29 +184,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       'function' in toolChoice &&
       toolChoice.function?.name
     ) {
-      return toolChoice.function.name;
-    }
-
-    if (
-      toolChoice &&
-      typeof toolChoice === 'object' &&
-      toolChoice.type === 'function' &&
-      typeof (toolChoice as Record<string, unknown>).name === 'string'
-    ) {
-      return (toolChoice as Record<string, string>).name;
-    }
-
-    return undefined;
-  }
-
-  private normalizeRealtimeToolChoice(): unknown {
-    const toolChoice = this.config.tool_choice;
-    const forcedToolName = this.getForcedRealtimeToolName();
-
-    if (forcedToolName) {
       return {
         type: 'function',
-        name: forcedToolName,
+        name: toolChoice.function.name,
       };
     }
 
@@ -220,31 +200,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
     const normalizedTools = this.normalizeRealtimeTools(loadedTools);
-    const forcedToolName = this.getForcedRealtimeToolName();
-
-    // The live Realtime API accepts forced function objects but does not currently
-    // force a function call. Restricting the available tool set and using
-    // `required` preserves the documented forced-function behavior for evals.
-    if (forcedToolName && Array.isArray(normalizedTools)) {
-      const forcedTools = normalizedTools.filter(
-        (tool) =>
-          tool &&
-          typeof tool === 'object' &&
-          (tool as Record<string, unknown>).type === 'function' &&
-          (tool as Record<string, unknown>).name === forcedToolName,
-      );
-
-      if (forcedTools.length === 0) {
-        throw new Error(
-          `Realtime tool_choice requested function "${forcedToolName}", but no matching tool was configured.`,
-        );
-      }
-
-      return {
-        tools: forcedTools,
-        tool_choice: 'required',
-      };
-    }
 
     const toolChoice = this.normalizeRealtimeToolChoice() ?? 'auto';
 

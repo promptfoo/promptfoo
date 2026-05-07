@@ -208,6 +208,50 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
+    it('should preserve native Realtime tools and tool choices in session payloads', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              name: 'get_weather',
+              description: 'Get the weather',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string' },
+                },
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            name: 'get_weather',
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body.tools).toEqual([
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get the weather',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+            },
+          },
+        },
+      ]);
+      expect(body.tool_choice).toEqual({
+        type: 'function',
+        name: 'get_weather',
+      });
+    });
+
     it('should normalize chat-style tools for Realtime session payloads', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: {
@@ -248,7 +292,7 @@ describe('OpenAI Realtime Provider', () => {
       expect(body.tool_choice).toBe('auto');
     });
 
-    it('should emulate forced Realtime tool choices with a required single-tool payload', async () => {
+    it('should normalize chat-style forced tool choices to the native Realtime shape', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: {
           tools: [
@@ -285,32 +329,17 @@ describe('OpenAI Realtime Provider', () => {
           description: 'Get the weather',
           parameters: { type: 'object', properties: {} },
         },
-      ]);
-      expect(body.tool_choice).toBe('required');
-    });
-
-    it('should accept top-level forced Realtime tool choices', async () => {
-      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-        config: {
-          tools: [
-            {
-              type: 'function',
-              name: 'get_weather',
-              description: 'Get the weather',
-              parameters: { type: 'object', properties: {} },
-            },
-          ],
-          tool_choice: {
-            type: 'function',
-            name: 'get_weather',
-          },
+        {
+          type: 'function',
+          name: 'get_time',
+          description: 'Get the time',
+          parameters: { type: 'object', properties: {} },
         },
+      ]);
+      expect(body.tool_choice).toEqual({
+        type: 'function',
+        name: 'get_weather',
       });
-
-      const body = await provider.getRealtimeSessionBody();
-
-      expect(body.tools).toHaveLength(1);
-      expect(body.tool_choice).toBe('required');
     });
 
     it.each([
@@ -1429,7 +1458,10 @@ describe('OpenAI Realtime Provider', () => {
           parameters: { type: 'object', properties: {} },
         },
       ]);
-      expect(responseCreate.response.tool_choice).toBe('required');
+      expect(responseCreate.response.tool_choice).toEqual({
+        type: 'function',
+        name: 'get_weather',
+      });
     });
   });
 });

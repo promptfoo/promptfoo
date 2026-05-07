@@ -1820,7 +1820,7 @@ The Realtime API configuration supports these parameters in addition to standard
 | `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)                                 | 30000                  | Any number                                                          |
 | `max_response_output_tokens` | Maximum tokens in model response. Invalid Realtime values fall back to `'inf'`. | 'inf'                  | Integer from 1-4096 or 'inf'                                        |
 | `tools`                      | Array of tool definitions for function calling                                  | []                     | Array of tool objects                                               |
-| `tool_choice`                | Controls how tools are selected                                                 | 'auto'                 | 'none', 'auto', 'required', or forced-function object               |
+| `tool_choice`                | Controls how tools are selected                                                 | 'auto'                 | Follow the OpenAI Realtime API schema                               |
 
 #### Custom endpoints and proxies (Realtime)
 
@@ -1843,7 +1843,7 @@ Environment variables `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL` also apply to 
 
 The Realtime API supports function calling via tools, similar to the Chat API. Here's an example configuration:
 
-Realtime tools can be supplied inline or loaded through the same `file://` tool references supported by the rest of the OpenAI provider. Promptfoo normalizes Chat-style function tools for Realtime and preserves forced-function intent for either `{ type: 'function', function: { name } }` or `{ type: 'function', name }` tool-choice objects.
+Realtime tools can be supplied inline or loaded through the same `file://` tool references supported by the rest of the OpenAI provider. The native Realtime format matches the OpenAI docs: function tools use top-level fields, and `tool_choice` is passed through in the Realtime shape you provide.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -1863,9 +1863,9 @@ providers:
       tool_choice: 'auto'
 ```
 
-Realtime function tools use top-level `name`, `description`, and `parameters` fields. If you reuse a Chat Completions-style tools file such as `type: function` plus a nested `function:` object, promptfoo normalizes those function tools before sending them to the Realtime API, so the same shared `tools.yaml` can work with both `openai:chat:*` and `openai:realtime:*` providers.
+Realtime function tools use top-level `name`, `description`, and `parameters` fields, exactly as shown in the [OpenAI Realtime function-calling guide](https://developers.openai.com/api/docs/guides/realtime-conversations#configure-callable-functions). Native Realtime `tool_choice` values are sent unchanged.
 
-Promptfoo also preserves forced-function semantics for Realtime configs. When you set a specific Chat-style `tool_choice`, promptfoo narrows the Realtime payload to that function and sends a required tool choice so the selected function is actually invoked during the eval.
+For compatibility with shared Chat Completions configs, promptfoo also accepts nested Chat-style function tool objects such as `type: function` plus `function: { ... }` and converts only those legacy shapes into the native Realtime format before sending them.
 
 When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to that handler. If the handler performs side effects, validate the function name and parse or validate the arguments before acting on them. For deterministic eval checks, use an [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertion when you need to enforce an exact schema match.
 
