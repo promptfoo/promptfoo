@@ -30,6 +30,7 @@ const searchCompaniesTool: MCPTool = {
 
 class FakeMcpProvider extends MCPProvider {
   calls: { context?: CallApiContextParams; prompt: string }[] = [];
+  cleanupCalls = 0;
 
   constructor(private readonly tools: MCPTool[]) {
     super({ config: { enabled: false }, id: 'mcp' });
@@ -42,6 +43,10 @@ class FakeMcpProvider extends MCPProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     this.calls.push({ prompt, context });
     return { output: 'ok' };
+  }
+
+  async cleanup(): Promise<void> {
+    this.cleanupCalls += 1;
   }
 }
 
@@ -133,6 +138,37 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     });
   });
 
+  it('forwards directly when the MCP provider has no tools', async () => {
+    const target = new FakeMcpProvider([]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, {
+      metadata: {
+        strategyId: 'jailbreak:hydra',
+      },
+    });
+
+    const response = await wrapped.callApi('Plain prompt', undefined, { includeLogProbs: true });
+
+    expect(response).toEqual({ output: 'ok' });
+    expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
+    expect(target.calls).toEqual([{ prompt: 'Plain prompt', context: undefined }]);
+  });
+
+  it('preserves provider identity helpers and cleanup behavior', async () => {
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, {
+      metadata: {
+        pluginId: 'bias:age',
+      },
+    });
+
+    expect(wrapped.id()).toBe('mcp');
+    expect(wrapped.toString?.()).toBe('[MCP Provider]');
+
+    await wrapped.cleanup?.();
+
+    expect(target.cleanupCalls).toBe(1);
+  });
+
   it('returns a materialization error when inference provider is unavailable', async () => {
     providerManagerMocks.getProvider.mockRejectedValueOnce(
       new Error('No repair provider configured'),
@@ -177,6 +213,21 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     const target = new FakeMcpProvider([searchCompaniesTool]);
 
     expect(maybeWrapMcpProviderForRedteam(target, { metadata: {} })).toBe(target);
+  });
+
+  it('does not wrap non-MCP providers for redteam calls', () => {
+    const provider = {
+      id: () => 'openai:test',
+      callApi: vi.fn(),
+    };
+
+    expect(
+      maybeWrapMcpProviderForRedteam(provider, {
+        metadata: {
+          pluginId: 'bias:age',
+        },
+      }),
+    ).toBe(provider);
   });
 
   it('does not wrap the same MCP provider more than once', () => {
