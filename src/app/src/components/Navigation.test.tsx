@@ -87,6 +87,7 @@ describe('Navigation', () => {
     renderNavigation();
     expect(screen.getByText('New')).toBeInTheDocument();
     expect(screen.getByText('View Results')).toBeInTheDocument();
+    expect(screen.getByText('Browse')).toBeInTheDocument();
     expect(screen.getByText('Model Audit')).toBeInTheDocument();
     expect(screen.getByText('Prompts')).toBeInTheDocument();
     expect(screen.getByText('Datasets')).toBeInTheDocument();
@@ -138,7 +139,7 @@ describe('Navigation', () => {
     const themeButton = screen.getByRole('button', {
       name: 'Theme preference: System theme (light). Switch to Dark theme.',
     });
-    expect(themeButton).toHaveClass('size-9');
+    expect(themeButton).toHaveClass('size-11', 'sm:size-9');
 
     await user.click(themeButton);
 
@@ -160,7 +161,40 @@ describe('Navigation', () => {
       screen.getByRole('button', {
         name: 'Theme preference: System theme (light). Switch to Dark theme.',
       }),
-    ).toHaveClass('size-9');
+    ).toHaveClass('size-11', 'sm:size-9');
+  });
+
+  it('keeps the full nav hidden until the wider desktop breakpoint', () => {
+    renderNavigation();
+
+    const fullNav = screen
+      .getAllByRole('navigation')
+      .find((navigation) => navigation.classList.contains('lg:flex'));
+
+    expect(fullNav).toHaveClass('hidden', 'lg:flex');
+  });
+
+  it('keeps primary routes available in the compact browse menu', async () => {
+    const user = userEvent.setup();
+    renderNavigation();
+
+    const browseButton = screen.getByRole('button', { name: 'Browse' });
+    expect(browseButton.closest('li')).toHaveClass('hidden', 'md:block', 'lg:hidden');
+
+    await user.click(browseButton);
+
+    expect(screen.getByText('Prompts', { selector: 'div' }).closest('a')).toHaveAttribute(
+      'href',
+      ROUTES.PROMPTS,
+    );
+    expect(screen.getByText('Datasets', { selector: 'div' }).closest('a')).toHaveAttribute(
+      'href',
+      ROUTES.DATASETS,
+    );
+    expect(screen.getByText('History', { selector: 'div' }).closest('a')).toHaveAttribute(
+      'href',
+      ROUTES.HISTORY,
+    );
   });
 
   it('renders appropriately on mobile viewport sizes', () => {

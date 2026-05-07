@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { isInputComposing } from '@app/utils/keyboard';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
@@ -21,7 +19,7 @@ interface TargetTypeSelectionProps {
 export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelectionProps) {
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
 
-  // Check if we have a complete saved configuration
+  // Use saved selections only when they have enough data to represent an actual target.
   // For custom providers, id is intentionally empty but providerType is set to 'custom'
   const hasCompleteSavedConfig = Boolean(
     config.target?.label?.trim() && (config.target?.id || providerType === 'custom'),
@@ -35,9 +33,6 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     // Start with empty target - no default provider selected
     return { id: '', label: '', config: {} };
   });
-
-  // Only show target type section if we have a complete saved configuration
-  const [showTargetTypeSection, setShowTargetTypeSection] = useState(hasCompleteSavedConfig);
 
   const { recordEvent } = useTelemetry();
 
@@ -66,17 +61,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   };
 
   const handleNext = () => {
-    // If target type section is not shown yet, show it first
-    if (hasTargetName && !showTargetTypeSection) {
-      setShowTargetTypeSection(true);
-      recordEvent('feature_used', {
-        feature: 'redteam_config_target_type_section_revealed',
-      });
-      return;
-    }
-
-    // If target type section is shown and selection is valid, proceed to next step
-    if (showTargetTypeSection && isValidSelection()) {
+    if (hasTargetName && isValidSelection()) {
       // Track provider type selection when moving to next step
       recordEvent('feature_used', {
         feature: 'redteam_config_provider_selected',
@@ -108,14 +93,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     return !hasTargetName || !isValidSelection();
   };
 
-  const shouldShowFooterButton = () => {
-    return showTargetTypeSection;
-  };
-
   const getNextButtonTooltip = () => {
-    if (!showTargetTypeSection) {
-      return 'Please select a target type first';
-    }
     if (!hasTargetName) {
       return 'Please enter a target name';
     }
@@ -135,13 +113,11 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     <PageWrapper
       title="Target Setup"
       description="Configure the AI system you want to test"
-      onNext={shouldShowFooterButton() ? handleNext : undefined}
+      onNext={handleNext}
       onBack={onBack}
-      nextLabel={shouldShowFooterButton() ? getNextButtonText() : undefined}
-      nextDisabled={shouldShowFooterButton() ? isNextButtonDisabled() : true}
-      warningMessage={
-        shouldShowFooterButton() && isNextButtonDisabled() ? getNextButtonTooltip() : undefined
-      }
+      nextLabel={getNextButtonText()}
+      nextDisabled={isNextButtonDisabled()}
+      warningMessage={isNextButtonDisabled() ? getNextButtonTooltip() : undefined}
     >
       <div className="flex flex-col gap-6">
         {/* Quick Start */}
@@ -167,49 +143,20 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
               setSelectedTarget(newTarget);
               updateConfig('target', newTarget);
             }}
-            onKeyDown={(e) => {
-              if (isInputComposing(e)) {
-                return;
-              }
-              if (e.key === 'Enter' && hasTargetName && !showTargetTypeSection) {
-                setShowTargetTypeSection(true);
-                recordEvent('feature_used', {
-                  feature: 'redteam_config_target_type_section_revealed',
-                });
-              }
-            }}
             autoFocus
           />
         </div>
 
-        {/* Continue button - shown before target type is revealed */}
-        {hasTargetName && !showTargetTypeSection && (
-          <div>
-            <Button
-              onClick={() => {
-                setShowTargetTypeSection(true);
-                recordEvent('feature_used', {
-                  feature: 'redteam_config_target_type_section_revealed',
-                });
-              }}
-            >
-              Continue
-            </Button>
-          </div>
-        )}
-
         {/* Target Type Selection */}
-        {showTargetTypeSection && (
-          <section className="space-y-4">
-            <Label className="text-sm font-semibold">Select Target Type</Label>
+        <section className="space-y-4">
+          <Label className="text-sm font-semibold">Select Target Type</Label>
 
-            <ProviderTypeSelector
-              provider={selectedTarget}
-              setProvider={handleProviderChange}
-              providerType={providerType}
-            />
-          </section>
-        )}
+          <ProviderTypeSelector
+            provider={selectedTarget}
+            setProvider={handleProviderChange}
+            providerType={providerType}
+          />
+        </section>
       </div>
     </PageWrapper>
   );

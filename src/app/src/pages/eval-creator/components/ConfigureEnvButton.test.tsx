@@ -151,4 +151,15 @@ describe('ConfigureEnvButton', () => {
     const updatedConfig = useStore.getState().config;
     expect(updatedConfig.env?.OPENAI_API_KEY).toBe(invalidApiKey);
   });
+
+  it('keeps dialog actions visible while provider settings scroll independently', async () => {
+    render(<ConfigureEnvButton />);
+    const dialog = await openProviderSettingsDialog();
+    const scrollBody = screen.getByTestId('configure-env-dialog-scroll-body');
+    const footer = screen.getByTestId('configure-env-dialog-footer');
+
+    expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
+  });
 });

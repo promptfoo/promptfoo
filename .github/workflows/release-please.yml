@@ -48,7 +48,18 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
   build:
-    if: needs.release-please.outputs.release_created == 'true' || needs.release-please.outputs.code_scan_action_release_created == 'true'
+    # release-please can create a release, then still fail while opening the
+    # next release PR. Preserve artifact publication when the release outputs
+    # prove a release was already created.
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        (
+          needs.release-please.outputs.release_created == 'true' ||
+          needs.release-please.outputs.code_scan_action_release_created == 'true'
+        )
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: release-please
@@ -66,7 +77,13 @@ jobs:
       - run: npm test
 
   publish-npm:
-    if: needs.release-please.outputs.release_created == 'true'
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.release-please.outputs.release_created == 'true' &&
+        needs.build.result == 'success'
+      }}
     needs: [build, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -93,8 +110,8 @@ jobs:
   docker:
     if: >-
       ${{
+        always() &&
         !cancelled() &&
-        needs.release-please.result == 'success' &&
         needs.publish-npm.result == 'success' &&
         needs.release-please.outputs.release_created == 'true'
       }}
@@ -109,7 +126,13 @@ jobs:
       tag_name: ${{ needs.release-please.outputs.tag_name }}
 
   publish-code-scan-action:
-    if: needs.release-please.outputs.code_scan_action_release_created == 'true'
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.release-please.outputs.code_scan_action_release_created == 'true' &&
+        needs.build.result == 'success'
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Gate on `build` so root test failures block the mirror — code-scan-action
