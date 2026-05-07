@@ -69,6 +69,7 @@ import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
 import { handleLlmRubric } from './llmRubric';
+import { handleMathEquivalent } from './mathEquivalent';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
 import { handleIsValidOpenAiToolsCall } from './openai';
@@ -261,6 +262,7 @@ const ASSERTION_HANDLERS: Record<
   latency: handleLatency,
   levenshtein: handleLevenshtein,
   'llm-rubric': handleLlmRubric,
+  'math-equivalent': handleMathEquivalent,
   meteor: async (params: AssertionParams) => {
     try {
       const { handleMeteorAssertion } = await import('./meteor.js');

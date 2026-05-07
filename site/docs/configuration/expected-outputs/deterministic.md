@@ -63,6 +63,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
+| [math-equivalent](#math-equivalent)                             | output is mathematically equivalent to expected (LaTeX-aware)      |
 | [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
 | [pi](#pi)                                                       | Pi Labs scorer returns score above threshold                       |
@@ -845,6 +846,81 @@ tests:
       - type: levenshtein
         threshold: 2
         value: '{{expected}}'
+```
+
+### Math equivalent
+
+The `math-equivalent` assertion checks whether the model output is mathematically
+equivalent to the expected value, even when the surface form differs (LaTeX
+formatting, units, prose around the answer, decimal vs fraction, etc.).
+
+It's pure TypeScript — comparison runs through the [CortexJS Compute
+Engine](https://cortexjs.io/compute-engine/), so there is no Python dependency.
+
+Example:
+
+```yaml
+tests:
+  - vars:
+      question: 'What is one half?'
+    assert:
+      - type: math-equivalent
+        value: '0.5' # passes for "\\frac{1}{2}", "\\boxed{\\dfrac{1}{2}}", "**0.5**", etc.
+```
+
+Numeric expected values are also accepted:
+
+```yaml
+assert:
+  - type: math-equivalent
+    value: 0.5
+```
+
+The assertion answers the question "are these two expressions the same value?"
+by symbolically simplifying `actual - expected` and checking the result is
+zero. As a side effect it tolerates a number of common formatting quirks that
+trip up `equals` and `contains`:
+
+- `\boxed{...}` (one or two levels of nested braces) — last box wins
+- Display math `$$ ... $$` and `\[ ... \]`, inline math `\( ... \)` and `$ ... $`
+- Markdown bold `**...**` and italic `*...*`
+- `<think>...</think>` blocks and Anthropic-style redacted thinking blocks
+- Unicode minus `−`, multiplication `×`, and root `√`
+- `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom)
+- European decimal commas (`2,00625` → `2.00625`)
+- Trailing units (`m`, `km`, `cm`, `mm`, `s`, `ms`, `kg`, `g`, `rad`, `deg`, `°`)
+- Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
+- Approximation symbols (`≈`, `\approx`) treated as equality
+- Equality chains (`230/530 = 23/53`) — the rightmost parseable segment wins
+- "Total: 14", "Answer: 42" label prefixes
+- `, attained at (-2,3)` and similar comma-suffixed prose after the answer
+
+Cases that intentionally do **not** pass:
+
+- Numerically-close-but-unequal values, e.g. `49/106` vs `\frac{23}{53}`
+- Same angle modulo 2π is not the same value (`5\pi/3` vs `-\pi/3`)
+- Extra factors like a stray `\pi`
+- Pure prose that contains no parseable expression
+
+Negate with `not-math-equivalent`:
+
+```yaml
+assert:
+  - type: not-math-equivalent
+    value: '0.5'
+```
+
+`value` can also reference template variables — useful when the ground truth
+comes from your dataset:
+
+```yaml
+tests:
+  - vars:
+      question: 'Compute $\int_{0}^{1} x\,dx$'
+      ground_truth: '\frac{1}{2}'
+    assert:
+      - type: math-equivalent
+        value: '{{ground_truth}}'
 ```
 
 ### Perplexity

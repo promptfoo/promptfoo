@@ -1,0 +1,690 @@
+/**
+ * Tests for the math-equivalent assertion. Ported from the reference Python
+ * implementation's test_eval.py — preserved behaviour where the underlying
+ * symbolic engine (CortexJS) reaches the same conclusion as sympy.
+ */
+import { describe, expect, it } from 'vitest';
+import {
+  cleanMathText,
+  extractMathAnswer,
+  handleMathEquivalent,
+  isMathEquivalent,
+  normalizeLatex,
+  parseMathExpression,
+  tryParseEachSegment,
+} from '../../src/assertions/mathEquivalent';
+
+import type { AssertionParams } from '../../src/types/index';
+
+// =============================================================================
+// normalizeLatex
+// =============================================================================
+
+describe('normalizeLatex', () => {
+  describe('approximation symbols', () => {
+    it('strips ≈ and the variable assignment around it', () => {
+      const result = normalizeLatex('V ≈ 5.09');
+      expect(result.includes('≈')).toBe(false);
+      expect(result.includes('5.09')).toBe(true);
+    });
+
+    it('strips \\approx and the variable assignment around it', () => {
+      const result = normalizeLatex('V \\approx 5.09');
+      expect(result.includes('\\approx')).toBe(false);
+      expect(result.includes('5.09')).toBe(true);
+    });
+  });
+
+  describe('variable-assignment prefix', () => {
+    it('strips "V = " prefix', () => {
+      expect(normalizeLatex('V = 5.09')).toBe('5.09');
+    });
+
+    it('strips "V ≈ " prefix', () => {
+      expect(normalizeLatex('V ≈ 5.09')).toBe('5.09');
+    });
+
+    it('strips "x_0 = " prefix', () => {
+      expect(normalizeLatex('x_0 = 3')).toBe('3');
+    });
+
+    it('does not strip pure expressions', () => {
+      expect(normalizeLatex('5.09')).toBe('5.09');
+    });
+  });
+
+  describe('\\frac normalization', () => {
+    it('adds braces around single-char denominator', () => {
+      expect(normalizeLatex('\\frac{32}3')).toBe('\\frac{32}{3}');
+    });
+
+    it('does not corrupt nested \\frac with braced numerator', () => {
+      const expr = '\\frac{8\\pi(2\\sqrt{2}-1)}{3}';
+      expect(normalizeLatex(expr)).toBe(expr);
+    });
+
+    it('leaves a fully-braced \\frac alone', () => {
+      expect(normalizeLatex('\\frac{1}{2}')).toBe('\\frac{1}{2}');
+    });
+
+    it('expands \\fracAB (two bare single chars) to \\frac{A}{B}', () => {
+      expect(normalizeLatex('\\frac32')).toBe('\\frac{3}{2}');
+    });
+  });
+
+  describe('trig backslash insertion', () => {
+    it('escapes cos(', () => {
+      expect(normalizeLatex('cos(4)')).toContain('\\cos(');
+    });
+
+    it('escapes sin(', () => {
+      expect(normalizeLatex('sin(x)')).toContain('\\sin(');
+    });
+
+    it('escapes cos<digit> as \\cos(<digit>)', () => {
+      expect(normalizeLatex('6cos4')).toContain('\\cos');
+    });
+
+    it('escapes sin<digit> as \\sin(<digit>)', () => {
+      expect(normalizeLatex('sin2')).toContain('\\sin');
+    });
+
+    it('escapes ln(', () => {
+      expect(normalizeLatex('ln(x)')).toContain('\\ln(');
+    });
+
+    it('escapes sqrt(', () => {
+      expect(normalizeLatex('sqrt(x)')).toContain('\\sqrt(');
+    });
+
+    it('does not double-escape \\cos(', () => {
+      const result = normalizeLatex('\\cos(4)');
+      expect(result.split('\\cos').length - 1).toBe(1);
+    });
+
+    it('escapes arctan as \\arctan, not arc\\tan', () => {
+      const result = normalizeLatex('arctan(x)');
+      expect(result).toContain('\\arctan');
+      expect(result).not.toContain('arc\\tan');
+    });
+  });
+
+  describe('Unicode characters', () => {
+    it('converts unicode minus (−) to ASCII -', () => {
+      expect(normalizeLatex('−1/4')).toBe('-1/4');
+    });
+
+    it('converts √N to \\sqrt{N}', () => {
+      expect(normalizeLatex('20√57')).toBe('20\\sqrt{57}');
+    });
+
+    it('converts √{...} to \\sqrt{...}', () => {
+      expect(normalizeLatex('√{2}')).toBe('\\sqrt{2}');
+    });
+
+    it('converts × to *', () => {
+      // a × b = 2 → a * b = 2 → after assignment strip: not applied (lhs is "a * b")
+      // but the unicode replacement itself should fire.
+      expect(normalizeLatex('a × b')).toContain('*');
+    });
+  });
+
+  describe('european decimal comma', () => {
+    it('converts "2,00625" to "2.00625"', () => {
+      expect(normalizeLatex('2,00625')).toBe('2.00625');
+    });
+
+    it('does not mangle short comma-separated pairs (2,3)', () => {
+      // Single-digit on the right of the comma should be left as-is.
+      expect(normalizeLatex('2,3')).toBe('2,3');
+    });
+  });
+
+  describe('parenthetical suffixes', () => {
+    it('strips trailing "(i.e., ...)"', () => {
+      const result = normalizeLatex('-1/4 (i.e., -$0.25)');
+      expect(result).toBe('-1/4');
+    });
+
+    it('strips leading = symbol', () => {
+      expect(normalizeLatex('= 33167.52')).toBe('33167.52');
+    });
+
+    it('strips leading ≈ symbol after conversion', () => {
+      expect(normalizeLatex('≈ 33167.52')).toBe('33167.52');
+    });
+  });
+});
+
+// =============================================================================
+// cleanMathText
+// =============================================================================
+
+describe('cleanMathText', () => {
+  it('strips <think> blocks', () => {
+    expect(cleanMathText('<think>\nwork\n</think>\n0.5')).toBe('0.5');
+  });
+
+  it('strips multi-line <think> blocks', () => {
+    expect(cleanMathText('<think>\nlong\nwork\n</think>\n\n42')).toBe('42');
+  });
+
+  it('strips redacted thinking blocks', () => {
+    const raw = 'Thinking: \nSignature: AbCd123\n\n0.5';
+    expect(cleanMathText(raw)).toBe('0.5');
+  });
+
+  it('strips \\text{...} units', () => {
+    expect(cleanMathText('10 \\text{m}')).toBe('10');
+  });
+
+  it('strips \\text{...} with backslash-space prefix', () => {
+    expect(cleanMathText('10\\ \\text{km}')).toBe('10');
+  });
+
+  it.each([
+    ['10 m', '10'],
+    ['5.2 kg', '5.2'],
+    ['45 deg', '45'],
+    ['45°', '45'],
+    ['3.14 s', '3.14'],
+  ])('strips trailing unit "%s" → "%s"', (input, expected) => {
+    expect(cleanMathText(input)).toBe(expected);
+  });
+
+  it('strips display math $$...$$', () => {
+    expect(cleanMathText('$$\\frac{1}{2}$$')).toBe('\\frac{1}{2}');
+  });
+
+  it('strips display math \\[ ... \\]', () => {
+    expect(cleanMathText('\\[\\frac{1}{2}\\]')).toBe('\\frac{1}{2}');
+  });
+
+  it('strips inline math \\( ... \\)', () => {
+    expect(cleanMathText('\\(\\frac{1}{2}\\)')).toBe('\\frac{1}{2}');
+  });
+
+  it('strips inline math $...$', () => {
+    expect(cleanMathText('$\\frac{1}{2}$')).toBe('\\frac{1}{2}');
+  });
+
+  it('strips bold markdown', () => {
+    expect(cleanMathText('**42**')).toBe('42');
+  });
+
+  it('strips italic markdown', () => {
+    expect(cleanMathText('*42*')).toBe('42');
+  });
+
+  it('preserves V = 32 inside bold markers', () => {
+    expect(cleanMathText('**V = 32**')).toBe('V = 32');
+  });
+
+  it('returns empty string unchanged', () => {
+    expect(cleanMathText('')).toBe('');
+  });
+
+  it('leaves a plain number alone', () => {
+    expect(cleanMathText('0.5')).toBe('0.5');
+  });
+});
+
+// =============================================================================
+// parseMathExpression / tryParseEachSegment
+// =============================================================================
+
+describe('parseMathExpression', () => {
+  it('parses an integer', () => {
+    const result = parseMathExpression('42');
+    expect(result).toBeDefined();
+  });
+
+  it('parses a decimal', () => {
+    const result = parseMathExpression('0.5');
+    expect(result).toBeDefined();
+  });
+
+  it('parses a LaTeX \\frac', () => {
+    const result = parseMathExpression('\\frac{1}{2}');
+    expect(result).toBeDefined();
+  });
+
+  it('parses plain division 32/3', () => {
+    const result = parseMathExpression('32/3');
+    expect(result).toBeDefined();
+  });
+
+  it('parses cos(\\pi)', () => {
+    const result = parseMathExpression('\\cos(\\pi)');
+    expect(result).toBeDefined();
+  });
+
+  it('parses cos(4) (no backslash) after normalization', () => {
+    const result = parseMathExpression('cos(4)');
+    expect(result).toBeDefined();
+  });
+
+  it('strips "V ≈ " before parsing 5.09', () => {
+    const result = parseMathExpression('V ≈ 5.09');
+    expect(result).toBeDefined();
+  });
+
+  it('strips "a = " and parses 2', () => {
+    const result = parseMathExpression('a = 2');
+    expect(result).toBeDefined();
+  });
+
+  it('returns undefined for an empty string', () => {
+    expect(parseMathExpression('')).toBeUndefined();
+  });
+
+  it('rejects bare equality "1 = 2" as not a value', () => {
+    // The variable-assignment prefix-strip regex only fires when the LHS is an
+    // identifier. "1 = 2" survives normalization unchanged and parses as an
+    // Equal expression, which we treat as not-a-value.
+    expect(parseMathExpression('1 = 2')).toBeUndefined();
+  });
+});
+
+describe('tryParseEachSegment', () => {
+  it('returns the rightmost parseable segment of an equality chain', () => {
+    const result = tryParseEachSegment('a × b = 4 × 1 = 4');
+    expect(result).toBeDefined();
+  });
+
+  it('returns undefined for an empty string', () => {
+    expect(tryParseEachSegment('')).toBeUndefined();
+  });
+});
+
+// =============================================================================
+// extractMathAnswer
+// =============================================================================
+
+describe('extractMathAnswer', () => {
+  it('returns a plain number unchanged', () => {
+    expect(extractMathAnswer('0.5')).toBe('0.5');
+  });
+
+  it('returns the last non-trivial line', () => {
+    expect(extractMathAnswer('blah\nblah\n0.5')).toBe('0.5');
+  });
+
+  it('extracts a simple \\boxed{}', () => {
+    expect(extractMathAnswer('answer is $\\boxed{42}$')).toBe('42');
+  });
+
+  it('extracts a \\boxed{\\frac{...}}', () => {
+    expect(extractMathAnswer('\\boxed{\\frac{1}{2}}')).toBe('\\frac{1}{2}');
+  });
+
+  it('extracts a \\boxed{\\dfrac{...}} inside a $$ block', () => {
+    expect(extractMathAnswer('$$\\boxed{\\dfrac{1}{2}}$$')).toBe('\\dfrac{1}{2}');
+  });
+
+  it('extracts deeply nested \\boxed{\\dfrac{8\\pi(2\\sqrt{2}-1)}{3}}', () => {
+    const raw = '$$S(1) = \\boxed{\\dfrac{8\\pi(2\\sqrt{2}-1)}{3}}$$';
+    const result = extractMathAnswer(raw);
+    expect(result).toContain('\\dfrac');
+    expect(result).toContain('\\sqrt');
+  });
+
+  it('strips <think> blocks before extracting', () => {
+    expect(extractMathAnswer('<think>\nsteps\n</think>\n\n0.5')).toBe('0.5');
+  });
+
+  it('strips redacted thinking blocks before extracting', () => {
+    expect(extractMathAnswer('Thinking: \nSignature: ErEeClkIDRgCK...\n\n0.5')).toBe('0.5');
+  });
+
+  it('strips inline-math wrappers from a fraction', () => {
+    expect(extractMathAnswer('\\(\\frac{1}{6}\\)')).toBe('\\frac{1}{6}');
+  });
+
+  it('preserves negative sign on a fraction', () => {
+    expect(extractMathAnswer('\\(-\\frac{10}{27}\\)')).toBe('-\\frac{10}{27}');
+  });
+
+  it('strips bold markers around 15', () => {
+    expect(extractMathAnswer('**15**')).toBe('15');
+  });
+
+  it('returns the bold last line', () => {
+    expect(extractMathAnswer('some work\n**32**')).toBe('32');
+  });
+
+  it('keeps assignment "V = 32" inside bold markers', () => {
+    expect(extractMathAnswer('**V = 32**')).toBe('V = 32');
+  });
+
+  it('strips "Total: " label prefix', () => {
+    expect(extractMathAnswer('Total: 14')).toBe('14');
+  });
+
+  it('strips "Answer: " label prefix', () => {
+    expect(extractMathAnswer('Answer: 42')).toBe('42');
+  });
+
+  it('strips trailing prose after a comma', () => {
+    const result = extractMathAnswer('7+e^{-4}, attained at $(-2,3)$');
+    expect(result).toContain('e^{-4}');
+    expect(result).not.toContain('attained');
+  });
+
+  it('skips a trailing \\] line that follows a $$...$$ block', () => {
+    const raw = '$$\\frac{8\\pi}{3}$$\n\\]';
+    const result = extractMathAnswer(raw);
+    expect(result).not.toBe('\\]');
+  });
+
+  it('uses the display block when the surrounding line is truncated', () => {
+    const raw = 'Let me compute: $$a = 2$$ and continuing... (truncated';
+    expect(extractMathAnswer(raw)).toBe('a = 2');
+  });
+
+  it('strips units from inside \\boxed{}', () => {
+    expect(extractMathAnswer('\\boxed{10\\ \\text{m}}')).toBe('10');
+  });
+
+  it('returns 5.09 from "**V ≈ 5.09**"', () => {
+    expect(extractMathAnswer('**V ≈ 5.09**')).toContain('5.09');
+  });
+
+  it('returns empty string on empty input', () => {
+    expect(extractMathAnswer('')).toBe('');
+  });
+});
+
+// =============================================================================
+// isMathEquivalent (full pipeline)
+// =============================================================================
+
+describe('isMathEquivalent', () => {
+  describe('numeric equivalence', () => {
+    it('matches identical decimals', () => {
+      expect(isMathEquivalent('0.5', '0.5').pass).toBe(true);
+    });
+
+    it('matches a boxed fraction against a decimal', () => {
+      expect(isMathEquivalent('\\boxed{\\dfrac{1}{2}}', '0.5').pass).toBe(true);
+    });
+
+    it('matches plain fraction against $\\frac{32}{3}$', () => {
+      expect(isMathEquivalent('32/3', '$\\frac{32}{3}$').pass).toBe(true);
+    });
+
+    it('matches plain fraction with single-char denominator GT', () => {
+      expect(isMathEquivalent('work...\n32/3', '$\\frac{32}3$').pass).toBe(true);
+    });
+
+    it('accepts a numeric expected value', () => {
+      expect(isMathEquivalent('0.5', 0.5).pass).toBe(true);
+    });
+  });
+
+  describe('formatting wrappers', () => {
+    it('matches \\dfrac vs \\frac', () => {
+      expect(isMathEquivalent('\\dfrac{8\\pi}{3}', '$\\frac{8\\pi}{3}$').pass).toBe(true);
+    });
+
+    it('matches with inline-math wrapper on both sides', () => {
+      expect(isMathEquivalent('\\(\\frac{8\\pi}{3}\\)', '\\(\\frac{8\\pi}{3}\\)').pass).toBe(true);
+    });
+
+    it('matches a bold integer', () => {
+      expect(isMathEquivalent('**15**', '15').pass).toBe(true);
+    });
+
+    it('matches a bold last line after prose', () => {
+      expect(isMathEquivalent('computation...\n**15**', '15').pass).toBe(true);
+    });
+
+    it('matches a negative wrapped fraction', () => {
+      expect(isMathEquivalent('\\(-\\frac{10}{27}\\)', '\\(-\\frac{10}{27}\\)').pass).toBe(true);
+    });
+  });
+
+  describe('labels and suffixes', () => {
+    it('matches "Total: 14" against 14', () => {
+      expect(isMathEquivalent('Total: 14', '14').pass).toBe(true);
+    });
+
+    it('strips comma-suffixed prose before comparison', () => {
+      expect(
+        isMathEquivalent('7+e^{-4}, attained at $(-2,3)$ and $(2,-1)$', '$e^{-4} + 7$').pass,
+      ).toBe(true);
+    });
+  });
+
+  describe('trig', () => {
+    it('matches "24+6cos4" with backslash-less digit form', () => {
+      expect(isMathEquivalent('24+6cos4', '$24+6\\cos(4)$').pass).toBe(true);
+    });
+
+    it('matches "24 + 6cos(4)" with backslash-less paren form', () => {
+      expect(isMathEquivalent('24 + 6cos(4)', '$24+6\\cos(4)$').pass).toBe(true);
+    });
+
+    it('matches sin(0) against 0', () => {
+      expect(isMathEquivalent('sin(0)', '0').pass).toBe(true);
+    });
+
+    it('matches cos with space-separated digit', () => {
+      expect(isMathEquivalent('24 + 6cos 4', '$24+6\\cos(4)$').pass).toBe(true);
+    });
+  });
+
+  describe('nested boxed', () => {
+    it('matches deeply nested \\boxed{\\dfrac{...}}', () => {
+      const raw = '$$S = \\boxed{\\dfrac{8\\pi(2\\sqrt{2}-1)}{3}}$$';
+      expect(isMathEquivalent(raw, '$\\frac{8\\pi(2\\sqrt{2}-1)}{3}$').pass).toBe(true);
+    });
+  });
+
+  describe('units', () => {
+    it('matches a boxed value with units against a unitless GT', () => {
+      expect(isMathEquivalent('\\boxed{10\\ \\text{m}}', '$10$').pass).toBe(true);
+    });
+
+    it('matches a bold value with units against a unitless GT', () => {
+      expect(isMathEquivalent('**10 m**', '$10$').pass).toBe(true);
+    });
+  });
+
+  describe('approx', () => {
+    it('matches "**V ≈ 5.09**" against 5.09', () => {
+      expect(isMathEquivalent('**V ≈ 5.09**', '$5.09$').pass).toBe(true);
+    });
+
+    it('matches "\\boxed{V \\approx 5.09}" against 5.09', () => {
+      expect(isMathEquivalent('\\boxed{V \\approx 5.09}', '$5.09$').pass).toBe(true);
+    });
+
+    it('matches "$$\\boxed{V \\approx 5.09}$$" against 5.09', () => {
+      expect(isMathEquivalent('$$\\boxed{V \\approx 5.09}$$', '$5.09$').pass).toBe(true);
+    });
+  });
+
+  describe('truncated responses', () => {
+    it('uses the display block when the line is truncated', () => {
+      const raw = 'Let me compute carefully: $$a = 2$$ and continuing... (truncated';
+      expect(isMathEquivalent(raw, '$2$').pass).toBe(true);
+    });
+
+    it('uses the prose answer on the last line', () => {
+      expect(isMathEquivalent('After computing:\n0.9124', '0.9124').pass).toBe(true);
+    });
+  });
+
+  describe('LLM judge audit patterns', () => {
+    it('matches unicode √ form', () => {
+      expect(isMathEquivalent('20√57', '$20\\sqrt{57}$').pass).toBe(true);
+    });
+
+    it('matches unicode √ with unicode minus', () => {
+      expect(isMathEquivalent('−185√23 / 6', '$-\\frac{185\\sqrt{23}}{6}$').pass).toBe(true);
+    });
+
+    it('matches unicode minus in plain fraction', () => {
+      expect(isMathEquivalent('−1/4', '$-\\frac{1}{4}$').pass).toBe(true);
+    });
+
+    it('matches unicode minus against \\frac32 (single-char denom)', () => {
+      expect(isMathEquivalent('−3/2', '$-\\frac32$').pass).toBe(true);
+    });
+
+    it('matches "a × b = 4 × 1 = 4" via segment parsing', () => {
+      expect(isMathEquivalent('a × b = 4 × 1 = 4', '4').pass).toBe(true);
+    });
+
+    it('matches "230/530 = 23/53" via segment parsing', () => {
+      expect(isMathEquivalent('230/530 = 23/53', '$\\frac{23}{53}$').pass).toBe(true);
+    });
+
+    it('strips P(Safe|F) prefix before comparing', () => {
+      expect(isMathEquivalent('P(Safe|F) \\approx 0.0113', '0.0113').pass).toBe(true);
+    });
+
+    it('handles european decimal comma "2,00625"', () => {
+      expect(isMathEquivalent('2,00625', '2.00625').pass).toBe(true);
+    });
+
+    it('strips a leading ≈ symbol', () => {
+      expect(isMathEquivalent('≈ 33167.52', '33167.52').pass).toBe(true);
+    });
+
+    it('strips a "(i.e., ...)" parenthetical', () => {
+      expect(isMathEquivalent('−1/4 (i.e., −$0.25)', '$-\\frac{1}{4}$').pass).toBe(true);
+    });
+  });
+
+  describe('genuine non-equivalence (must stay false)', () => {
+    it('rejects 42 vs 43', () => {
+      expect(isMathEquivalent('42', '43').pass).toBe(false);
+    });
+
+    it('rejects pure prose with no answer against 42', () => {
+      expect(isMathEquivalent('some long prose with no answer', '42').pass).toBe(false);
+    });
+
+    it('rejects 1/6 vs 7/6', () => {
+      expect(isMathEquivalent('\\frac{1}{6}', '\\frac{7}{6}').pass).toBe(false);
+    });
+
+    it('rejects 0.86 vs 0.67', () => {
+      expect(isMathEquivalent('0.86', '0.67').pass).toBe(false);
+    });
+
+    it('rejects -3 vs -3/2 (judge FP regression)', () => {
+      expect(isMathEquivalent('-3', '$-\\frac32$').pass).toBe(false);
+    });
+
+    it('rejects 49/106 vs 23/53 (judge FP regression)', () => {
+      expect(isMathEquivalent('49/106', '$\\frac{23}{53}$').pass).toBe(false);
+    });
+
+    it('rejects extra π factor (judge FP regression)', () => {
+      expect(isMathEquivalent('\\dfrac{3260416\\,\\pi}{405}', '$\\frac{3260416}{405}$').pass).toBe(
+        false,
+      );
+    });
+
+    it('rejects 5π/3 vs -π/3 (mod-2π collapse FP regression)', () => {
+      expect(isMathEquivalent('\\dfrac{5\\pi}{3}', '-\\frac{\\pi}{3}').pass).toBe(false);
+    });
+  });
+});
+
+// =============================================================================
+// handleMathEquivalent (assertion handler)
+// =============================================================================
+
+function makeParams(overrides: {
+  renderedValue: AssertionParams['renderedValue'];
+  outputString: string;
+  inverse?: boolean;
+  type?: string;
+}): AssertionParams {
+  const { renderedValue, outputString, inverse = false, type = 'math-equivalent' } = overrides;
+  return {
+    assertion: { type: type as AssertionParams['assertion']['type'] },
+    baseType: 'math-equivalent' as AssertionParams['baseType'],
+    inverse,
+    output: outputString,
+    outputString,
+    renderedValue,
+    test: {},
+    providerResponse: { output: outputString, tokenUsage: {} },
+    assertionValueContext: {
+      prompt: '',
+      vars: {},
+      test: {},
+      logProbs: undefined,
+      provider: {} as AssertionParams['assertionValueContext']['provider'],
+      providerResponse: { output: outputString, tokenUsage: {} },
+    },
+  };
+}
+
+describe('handleMathEquivalent', () => {
+  it('passes when output matches the string expected value', () => {
+    const result = handleMathEquivalent(
+      makeParams({ renderedValue: '0.5', outputString: '\\boxed{\\frac{1}{2}}' }),
+    );
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe('Math equivalence assertion passed');
+  });
+
+  it('passes when output matches a numeric expected value', () => {
+    const result = handleMathEquivalent(
+      makeParams({ renderedValue: 0.5, outputString: '\\frac{1}{2}' }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it('fails when output does not match the expected value', () => {
+    const result = handleMathEquivalent(makeParams({ renderedValue: '0.5', outputString: '0.6' }));
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('not equivalent');
+  });
+
+  it('fails when output cannot be parsed as math', () => {
+    const result = handleMathEquivalent(
+      makeParams({ renderedValue: '42', outputString: 'no answer here' }),
+    );
+    expect(result.pass).toBe(false);
+  });
+
+  it('respects the inverse flag (not-math-equivalent)', () => {
+    const matched = handleMathEquivalent(
+      makeParams({
+        renderedValue: '0.5',
+        outputString: '0.6',
+        inverse: true,
+      }),
+    );
+    expect(matched.pass).toBe(true);
+
+    const failed = handleMathEquivalent(
+      makeParams({
+        renderedValue: '0.5',
+        outputString: '0.5',
+        inverse: true,
+      }),
+    );
+    expect(failed.pass).toBe(false);
+  });
+
+  it('throws when renderedValue is neither string nor number', () => {
+    expect(() =>
+      handleMathEquivalent(
+        makeParams({
+          renderedValue: { foo: 'bar' } as unknown as AssertionParams['renderedValue'],
+          outputString: '0.5',
+        }),
+      ),
+    ).toThrow('"math-equivalent" assertion type must have a string or number value');
+  });
+});
