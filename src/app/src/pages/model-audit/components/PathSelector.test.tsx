@@ -277,6 +277,19 @@ describe('PathSelector', () => {
     expect(screen.getByRole('tab', { name: 'Registry' })).toBeInTheDocument();
   });
 
+  it('avoids redundant native tooltips on source tabs', () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Local Files' })).not.toHaveAttribute('title');
+    expect(screen.getByRole('tab', { name: 'Cloud' })).not.toHaveAttribute('title');
+    expect(screen.getByRole('tab', { name: 'GitHub' })).not.toHaveAttribute('title');
+    expect(screen.getByRole('tab', { name: 'Registry' })).not.toHaveAttribute('title');
+  });
+
   it('stacks source tabs into two columns on narrow screens', () => {
     render(
       <TooltipProvider delayDuration={0}>

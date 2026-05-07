@@ -120,7 +120,10 @@ export default function AdvancedOptionsDialog({
           <DialogDescription>Configure additional options for your security scan</DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto py-4">
+        <div
+          data-testid="advanced-options-dialog-scroll-body"
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto py-4"
+        >
           {/* Blacklist Patterns */}
           <div className="space-y-3">
             <div>
@@ -302,7 +305,7 @@ export default function AdvancedOptionsDialog({
           </div>
         </div>
 
-        <DialogFooter className="shrink-0">
+        <DialogFooter data-testid="advanced-options-dialog-footer" className="shrink-0">
           <Button onClick={onClose} variant="outline">
             Cancel
           </Button>

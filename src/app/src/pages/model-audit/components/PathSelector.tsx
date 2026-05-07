@@ -229,12 +229,7 @@ export default function PathSelector({
     <div className="space-y-6">
       <Tabs defaultValue="local" className="w-full">
         <TabsList className="grid !h-auto w-full grid-cols-2 gap-1 sm:!h-10 sm:grid-cols-4 sm:gap-0">
-          <TabsTrigger
-            value="local"
-            aria-label="Local Files"
-            title="Local Files"
-            className="flex items-center gap-2"
-          >
+          <TabsTrigger value="local" aria-label="Local Files" className="flex items-center gap-2">
             <ComputerIcon className="size-4" />
             <span>Local Files</span>
           </TabsTrigger>
@@ -243,7 +238,6 @@ export default function PathSelector({
               <TabsTrigger
                 value="cloud"
                 aria-label="Cloud"
-                title="Cloud"
                 disabled
                 className="flex items-center gap-2 opacity-60"
               >
@@ -261,7 +255,6 @@ export default function PathSelector({
               <TabsTrigger
                 value="github"
                 aria-label="GitHub"
-                title="GitHub"
                 disabled
                 className="flex items-center gap-2 opacity-60"
               >
@@ -279,7 +272,6 @@ export default function PathSelector({
               <TabsTrigger
                 value="registry"
                 aria-label="Registry"
-                title="Registry"
                 disabled
                 className="flex items-center gap-2 opacity-60"
               >

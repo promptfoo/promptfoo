@@ -46,9 +46,8 @@ describe('AdvancedOptionsDialog', () => {
     );
 
     const dialog = screen.getByRole('dialog');
-    const scrollBody = screen.getByText('Blacklist Patterns').closest('div')
-      ?.parentElement?.parentElement;
-    const footer = screen.getByRole('button', { name: 'Save Options' }).parentElement;
+    const scrollBody = screen.getByTestId('advanced-options-dialog-scroll-body');
+    const footer = screen.getByTestId('advanced-options-dialog-footer');
 
     expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
     expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
