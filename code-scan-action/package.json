@@ -11,7 +11,7 @@
     "package": "npm run build && git add dist/",
     "test": "echo \"Action tests run via parent jest config\" && exit 0",
     "dev": "npm run build && act pull_request -W .github/workflows/test-scan.yml -e .github/workflows/test-event.json --container-architecture linux/amd64",
-    "tsc": "tsc --noEmit",
+    "tsc": "tsc --noEmit && tsc --noEmit --project tsconfig.tests.json",
     "tsc:watch": "tsc --noEmit --watch"
   },
   "engines": {

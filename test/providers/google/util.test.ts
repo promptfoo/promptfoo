@@ -20,11 +20,15 @@ import {
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
+  mergeGoogleCompletionOptions,
   normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
   resolveProjectId,
   sanitizeSchemaForGemini,
+  stripExecutableToolFileReferences,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
@@ -2710,8 +2714,8 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00155, 10);
     });
 
-    it('should calculate cost for gemini-flash-lite-latest using current 2.5 flash-lite alias pricing', () => {
-      // gemini-flash-lite-latest currently aliases gemini-2.5-flash-lite-preview-09-2025: input=0.1/1M, output=0.4/1M
+    it('should calculate cost for gemini-flash-lite-latest using flash-lite alias pricing', () => {
+      // gemini-flash-lite-latest tracks the current Flash-Lite tier: input=0.1/1M, output=0.4/1M
       const cost = calculateGoogleCost('gemini-flash-lite-latest', {}, 1000, 500);
       expect(cost).toBeCloseTo(0.0003, 10);
     });
@@ -2724,6 +2728,11 @@ describe('util', () => {
         'gemini-2.5-pro-preview-05-06',
         'gemini-2.5-pro-preview-06-05',
         'gemini-2.5-flash-preview-05-20',
+        'gemini-2.5-flash-preview-09-2025',
+        'gemini-2.5-flash-lite-preview-09-2025',
+        'gemini-2.0-pro',
+        'gemini-2.0-flash-exp',
+        'gemini-2.0-flash-thinking-exp',
         'gemini-2.0-flash-lite-preview-02-05',
         'gemini-robotics-er-1.5-preview',
       ];
@@ -2837,6 +2846,118 @@ describe('util', () => {
         { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
         { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
       ]);
+    });
+  });
+
+  describe('resolveGoogleToolConfig', () => {
+    it('any disable signal forces NONE, even when explicit toolConfig says AUTO', () => {
+      // Documents the safety bias: a "no tools" signal from any source wins.
+      // If this needs to flip, update the test with the new precedence rule.
+      const result = resolveGoogleToolConfig({
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        tool_choice: 'none',
+      });
+      expect(result).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        toolsDisabled: true,
+      });
+    });
+
+    it('preserves AUTO when no disable signal is present', () => {
+      const result = resolveGoogleToolConfig({
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+      });
+      expect(result).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        toolsDisabled: false,
+      });
+    });
+
+    it('falls back to tool_choice when explicit toolConfig has invalid mode', () => {
+      const result = resolveGoogleToolConfig({
+        toolConfig: { functionCallingConfig: { mode: 'BOGUS' as any } },
+        tool_choice: 'required',
+      });
+      expect(result).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        toolsDisabled: false,
+      });
+    });
+  });
+
+  describe('removeGoogleFunctionDeclarations', () => {
+    it('drops tools that only contain functionDeclarations', () => {
+      const tools = [{ functionDeclarations: [{ name: 'foo' }] }, { googleSearch: {} }] as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('drops empty functionDeclarations entries', () => {
+      const tools = [{ functionDeclarations: [] }] as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([]);
+    });
+
+    it('strips functionDeclarations from mixed-capability tool entries', () => {
+      const tools = [
+        {
+          functionDeclarations: [{ name: 'foo' }],
+          googleSearch: {},
+        },
+      ] as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('passes through non-function tools unchanged', () => {
+      const tools = [{ googleSearch: {} }, { codeExecution: {} }] as Tool[];
+      expect(removeGoogleFunctionDeclarations(tools)).toEqual([
+        { googleSearch: {} },
+        { codeExecution: {} },
+      ]);
+    });
+  });
+
+  describe('stripExecutableToolFileReferences', () => {
+    it('removes executable refs while preserving inline and data-file tools', () => {
+      expect(
+        stripExecutableToolFileReferences([
+          { googleSearch: {} },
+          'file://tools.js:getTools',
+          'file://tools.py:get_tools',
+          'file://tools.json',
+          'file://tools.yaml',
+          { codeExecution: {} },
+        ]),
+      ).toEqual([
+        { googleSearch: {} },
+        'file://tools.json',
+        'file://tools.yaml',
+        { codeExecution: {} },
+      ]);
+    });
+  });
+
+  describe('mergeGoogleCompletionOptions', () => {
+    it('treats prompt-level undefined as "not set" and preserves base policy', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+        },
+        { tool_choice: undefined } as any,
+      );
+      expect(merged.toolConfig).toEqual({ functionCallingConfig: { mode: 'AUTO' } });
+      expect(merged.tool_choice).toBeUndefined();
+    });
+
+    it('replaces all three policy fields when prompt sets any one explicitly', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+          tool_config: { function_calling_config: { mode: 'AUTO' } },
+        },
+        { tool_choice: 'none' },
+      );
+      expect(merged.tool_choice).toBe('none');
+      expect(merged.toolConfig).toBeUndefined();
+      expect(merged.tool_config).toBeUndefined();
     });
   });
 });

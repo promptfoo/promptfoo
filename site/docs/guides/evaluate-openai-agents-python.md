@@ -36,6 +36,7 @@ npx promptfoo@latest view
 
 - multi-turn execution over a persistent `SQLiteSession`
 - SDK 0.14 `SandboxAgent` execution over a staged Unix-local Python workspace
+- local-shell skill mounting with `ShellTool(environment={"type": "local", "skills": [...]})`
 - specialist handoffs between a triage agent, an FAQ agent, and a seat-booking agent
 - Promptfoo trace ingestion of the SDK's internal spans
 - assertions on tool usage, tool arguments, sandbox commands, agent spans, tool order, and overall task success
@@ -178,6 +179,60 @@ assert:
 ```
 
 Use `UnixLocalSandboxClient` for local development, `DockerSandboxClient` when you need container isolation, and hosted sandbox clients when your application already depends on managed execution. Keep credentials and secrets out of staged `Manifest` files unless the sandbox backend and trace redaction policy are appropriate for that data.
+
+## Skills
+
+The Python SDK exposes Agent Skills through shell environments rather than through Codex-style ambient discovery. For a local, reproducible eval, mount the skill on `ShellTool` explicitly. The bundled example also defines a small `SkillShellExecutor` that runs those local shell commands:
+
+```python
+from pathlib import Path
+
+from agents import Agent, ShellTool
+
+discount_review_skill = {
+    "name": "discount-review",
+    "description": "Inspect the discount policy fixture with the bundled checklist.",
+    "path": "/path/to/skills/discount-review",
+}
+
+agent = Agent(
+    name="Local Skill Analyst",
+    instructions="Use the discount-review skill for discount-policy review tasks.",
+    tools=[
+        ShellTool(
+            environment={
+                "type": "local",
+                "skills": [discount_review_skill],
+            },
+            executor=SkillShellExecutor(cwd=Path(__file__).parent),
+        )
+    ],
+)
+```
+
+The bundled `skill-workflow` example keeps the task small on purpose: it mounts a `discount-review` skill, asks the agent to inspect a local fixture repo, and has the skill run a helper script before answering.
+
+```yaml
+assert:
+  - type: trajectory:step-count
+    value:
+      type: command
+      pattern: '*discount-review/SKILL.md*'
+      min: 1
+  - type: trajectory:step-count
+    value:
+      type: command
+      pattern: '*analyze_discount_policy.py*'
+      min: 1
+  - type: contains
+    value: return discount_percent >= 20
+  - type: not-contains
+    value: 'stderr:'
+```
+
+Today, the Python SDK does not expose a first-class skill invocation event that Promptfoo can normalize into `skill-used`. For Python SDK skill evals, assert on the observable workflow instead: the skill file was read, the helper command ran cleanly, and the final answer reflects the skill's result. If your application already tracks selected skills, you can also return `metadata.skillCalls` from the Python provider yourself and use Promptfoo's [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion on top of that.
+
+Hosted shell follows the same eval idea, but the attachment shape changes from a local path to a hosted `skill_reference`. Keep local shell for examples you want users to run from a fresh clone; use hosted shell when your product already depends on uploaded, versioned skills.
 
 ## Experimental Codex Tool
 

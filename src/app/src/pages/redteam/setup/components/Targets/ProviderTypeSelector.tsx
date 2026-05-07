@@ -1046,7 +1046,7 @@ export default function ProviderTypeSelector({
   if (selectedOption && !isExpanded) {
     return (
       <div>
-        <div className="flex w-full items-center rounded-lg border-2 border-primary bg-primary/5 p-4">
+        <div className="flex w-full flex-col gap-3 rounded-lg border-2 border-primary bg-primary/5 p-4 sm:flex-row sm:items-center">
           <CheckCircle className="mr-4 size-5 shrink-0 text-primary" />
 
           <div className="min-w-0 flex-1">
@@ -1063,7 +1063,7 @@ export default function ProviderTypeSelector({
             </p>
           </div>
 
-          <div className="ml-4 flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center self-end sm:ml-4 sm:self-auto">
             {/* Documentation link */}
             {hasSpecificDocumentation(selectedOption.value) && (
               <Tooltip>
