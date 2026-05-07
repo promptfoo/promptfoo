@@ -159,6 +159,28 @@ describe('TargetTypeSelection', () => {
     expect(screen.getByRole('button', { name: /^Next$/i })).toBeDisabled();
   });
 
+  it('should not derive a selected provider type from the default incomplete target', () => {
+    const mockSetProviderType = vi.fn();
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        target: {
+          id: 'http',
+          label: '',
+          config: {},
+        },
+      },
+      updateConfig: mockUpdateConfig,
+      providerType: undefined,
+      setProviderType: mockSetProviderType,
+    });
+
+    renderComponent();
+
+    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Next$/i })).toBeDisabled();
+    expect(mockSetProviderType).not.toHaveBeenCalled();
+  });
+
   it('should update the selectedTarget and providerType when a new provider type is selected and record telemetry event', async () => {
     const user = userEvent.setup();
     const mockSetProviderType = vi.fn();
