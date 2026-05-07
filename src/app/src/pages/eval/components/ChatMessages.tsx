@@ -27,6 +27,11 @@ export type Message = LoadedMessage | LoadingMessage;
 const ChatMessage = ({ message, index }: { message: Message; index: number }) => {
   const isUser = message?.role === 'user';
   const isAssistant = message?.role === 'assistant';
+  const roleLabel = {
+    user: 'User',
+    assistant: 'Assistant',
+    system: 'System',
+  }[message.role];
 
   const bubbleClasses = cn(
     'p-3 max-w-[70%] overflow-hidden shadow-sm',
@@ -77,9 +82,9 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
         return (
           <div
             role="img"
-            aria-label={`${isUser ? 'User' : isAssistant ? 'Assistant' : 'System'} message image`}
+            aria-label={`${roleLabel} message image`}
             data-testid="image"
-            className="min-h-[180px] w-full bg-contain bg-left bg-no-repeat sm:min-h-[300px]"
+            className="min-h-[180px] w-[min(500px,70vw)] max-w-full bg-contain bg-left bg-no-repeat sm:min-h-[300px]"
             style={{ backgroundImage: `url(${imageSrc})` }}
           />
         );

@@ -171,7 +171,12 @@ describe('ChatMessages', () => {
 
     const imageElement = screen.getByRole('img', { name: 'Assistant message image' });
     expect(imageElement).toBeInTheDocument();
-    expect(imageElement).toHaveClass('w-full', 'min-h-[180px]', 'sm:min-h-[300px]');
+    expect(imageElement).toHaveClass(
+      'w-[min(500px,70vw)]',
+      'max-w-full',
+      'min-h-[180px]',
+      'sm:min-h-[300px]',
+    );
     expect(imageElement).not.toHaveClass('min-w-[500px]');
   });
 

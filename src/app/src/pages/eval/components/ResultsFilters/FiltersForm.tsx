@@ -583,7 +583,7 @@ export default function FiltersForm() {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[min(500px,calc(100vw-1rem))] p-3"
+        className="w-[min(500px,calc(100vw_-_1rem))] p-3"
         align="start"
         side="bottom"
         sideOffset={4}
