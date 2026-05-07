@@ -35,10 +35,7 @@ describe('materializeMcpValue', () => {
       tools: [searchCompaniesTool],
     });
 
-    expect(result).toEqual({
-      originalValue: value,
-      prompt: value,
-    });
+    expect(result).toBe(value);
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 
@@ -52,7 +49,7 @@ describe('materializeMcpValue', () => {
       tools: [searchCompaniesTool],
     });
 
-    expect(JSON.parse(result.prompt)).toEqual({
+    expect(JSON.parse(result)).toEqual({
       tool: 'search_companies',
       args: { query: 'cloud', limit: 1 },
     });
@@ -71,7 +68,7 @@ describe('materializeMcpValue', () => {
       tools: [searchCompaniesTool],
     });
 
-    expect(JSON.parse(result.prompt)).toEqual({
+    expect(JSON.parse(result)).toEqual({
       tool: 'search_companies',
       args: { query: 'clean energy', limit: 3 },
     });
@@ -93,7 +90,7 @@ describe('materializeMcpValue', () => {
       tools: [searchCompaniesTool],
     });
 
-    expect(JSON.parse(result.prompt)).toEqual({
+    expect(JSON.parse(result)).toEqual({
       tool: 'search_companies',
       args: {
         query: 'Find cloud companies.',

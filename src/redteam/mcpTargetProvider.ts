@@ -68,10 +68,10 @@ class RedteamMcpTargetProvider implements ApiProvider {
       const intentValue =
         context?.test?.metadata?.goal ?? context?.test?.metadata?.originalPrompt ?? prompt;
       const purpose = String(context?.test?.metadata?.purpose ?? '');
-      let materialized: Awaited<ReturnType<typeof materializeMcpValue>>;
+      let materializedPrompt: string;
 
       try {
-        materialized = await materializeMcpValue({
+        materializedPrompt = await materializeMcpValue({
           intentValue,
           purpose,
           tools,
@@ -85,7 +85,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
         );
 
         const materializerProvider = await redteamProviderManager.getProvider({ jsonOnly: true });
-        materialized = await materializeMcpValue({
+        materializedPrompt = await materializeMcpValue({
           intentValue,
           provider: materializerProvider,
           purpose,
@@ -99,12 +99,12 @@ class RedteamMcpTargetProvider implements ApiProvider {
             ...context,
             vars: {
               ...context.vars,
-              prompt: materialized.prompt,
+              prompt: materializedPrompt,
             },
           }
         : undefined;
 
-      return this.target.callApi(materialized.prompt, materializedContext, options);
+      return this.target.callApi(materializedPrompt, materializedContext, options);
     } catch (error) {
       return {
         error: `Failed to materialize MCP target prompt: ${

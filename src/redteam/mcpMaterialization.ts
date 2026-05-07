@@ -94,31 +94,8 @@ function getProviderOutputString(response: Awaited<ReturnType<ApiProvider['callA
   return response.output === undefined ? '' : String(response.output);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForRepairDelay(
-  delay: number | undefined,
-  nextRepairAt: { value: number },
-): Promise<void> {
-  if (!delay || delay <= 0) {
-    return;
-  }
-
-  const now = Date.now();
-  const waitMs = Math.max(0, nextRepairAt.value - now);
-  nextRepairAt.value = Math.max(now, nextRepairAt.value) + delay;
-
-  if (waitMs > 0) {
-    await sleep(waitMs);
-  }
-}
-
 async function repairMcpToolCallWithProvider({
   allowedToolNames,
-  delay,
-  nextRepairAt,
   purpose,
   provider,
   toolByName,
@@ -126,16 +103,12 @@ async function repairMcpToolCallWithProvider({
   value,
 }: {
   allowedToolNames: Set<string>;
-  delay?: number;
-  nextRepairAt: { value: number };
   purpose: string;
   provider: ApiProvider;
   toolByName: Map<string, MCPTool>;
   tools: MCPTool[];
   value: unknown;
 }): Promise<McpToolCall | undefined> {
-  await waitForRepairDelay(delay, nextRepairAt);
-
   let response: Awaited<ReturnType<ApiProvider['callApi']>>;
   try {
     response = await provider.callApi(
@@ -183,27 +156,20 @@ async function repairMcpToolCallWithProvider({
 }
 
 export async function materializeMcpValue({
-  delay,
   intentValue,
   purpose,
   provider,
   tools,
   value,
 }: {
-  delay?: number;
   intentValue?: unknown;
   purpose?: string;
   provider?: ApiProvider;
   tools: MCPTool[];
   value: unknown;
-}): Promise<{ originalValue: string; prompt: string }> {
+}): Promise<string> {
   if (tools.length === 0) {
-    const originalValue =
-      typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value);
-    return {
-      originalValue,
-      prompt: originalValue,
-    };
+    return typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value);
   }
 
   const allowedToolNames = new Set(tools.map((tool) => tool.name));
@@ -211,10 +177,7 @@ export async function materializeMcpValue({
   const existingToolCall = parseMcpToolCall(value, allowedToolNames);
 
   if (existingToolCall && validateMcpToolCall(existingToolCall, toolByName)) {
-    return {
-      originalValue: typeof value === 'string' ? value : JSON.stringify(value),
-      prompt: stringifyToolCall(existingToolCall),
-    };
+    return stringifyToolCall(existingToolCall);
   }
 
   const materializationIntentValue = intentValue ?? value;
@@ -228,8 +191,6 @@ export async function materializeMcpValue({
 
   const toolCall = await repairMcpToolCallWithProvider({
     allowedToolNames,
-    delay,
-    nextRepairAt: { value: Date.now() },
     provider,
     purpose: purpose ?? '',
     toolByName,
@@ -241,13 +202,5 @@ export async function materializeMcpValue({
     throw new Error(`Failed to materialize MCP value: ${JSON.stringify(value)}`);
   }
 
-  return {
-    originalValue:
-      typeof materializationIntentValue === 'string'
-        ? materializationIntentValue
-        : materializationIntentValue === undefined
-          ? ''
-          : JSON.stringify(materializationIntentValue),
-    prompt: stringifyToolCall(toolCall),
-  };
+  return stringifyToolCall(toolCall);
 }
