@@ -24,7 +24,8 @@ import {
 } from '../util/tokenUsageUtils';
 import type { Command } from 'commander';
 
-import type { EvaluateOptions, TokenUsage } from '../types/index';
+import type { TokenUsage } from '../types/index';
+import type { InternalEvaluateOptions } from '../types/internal';
 
 interface RetryCommandOptions {
   config?: string;
@@ -315,7 +316,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   }
 
   // Set up evaluation options
-  const evaluateOptions: EvaluateOptions = {
+  const evaluateOptions: InternalEvaluateOptions = {
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',

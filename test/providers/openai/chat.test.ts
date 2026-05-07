@@ -1897,6 +1897,20 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(body.max_tokens).toBe(2000);
     });
 
+    it('should forward prompt cache options', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          prompt_cache_key: 'shared-prefix',
+          prompt_cache_retention: 'in_memory',
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.prompt_cache_key).toBe('shared-prefix');
+      expect(body.prompt_cache_retention).toBe('in_memory');
+    });
+
     it('should not share config between provider instances', () => {
       const sharedConfig = {
         max_tokens: 16000,

@@ -48,7 +48,7 @@ steps:
     displayName: 'Install dependencies'
 
   - script: |
-      npx promptfoo eval
+      npx promptfoo eval -o promptfoo-results.json -o promptfoo-results.junit.xml
     displayName: 'Run promptfoo evaluations'
     env:
       OPENAI_API_KEY: $(OPENAI_API_KEY)
@@ -58,7 +58,7 @@ steps:
   - task: PublishTestResults@2
     inputs:
       testResultsFormat: 'JUnit'
-      testResultsFiles: 'promptfoo-results.xml'
+      testResultsFiles: 'promptfoo-results.junit.xml'
       mergeTestResults: true
       testRunTitle: 'Promptfoo Evaluation Results'
     condition: succeededOrFailed()
@@ -89,7 +89,7 @@ You can configure the pipeline to fail when promptfoo assertions don't pass by m
 
 ```yaml
 - script: |
-    npx promptfoo eval --fail-on-error
+    npx promptfoo eval --fail-on-error -o promptfoo-results.junit.xml
   displayName: 'Run promptfoo evaluations'
   env:
     OPENAI_API_KEY: $(OPENAI_API_KEY)

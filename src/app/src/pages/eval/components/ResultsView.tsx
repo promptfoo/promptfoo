@@ -65,7 +65,7 @@ interface ResultsChartsSectionProps {
   isRedteamEval: boolean;
   resultsChartsScores: number[];
   resultsChartsUnavailableReasons: string[];
-  children: (toggleButton: React.ReactNode) => React.ReactNode;
+  children: (toggleButton: React.ReactNode | null) => React.ReactNode;
 }
 
 interface AppliedFilterBadgesProps {
@@ -166,7 +166,7 @@ function AppliedFilterBadges({
   });
 }
 
-function ResultsChartsSection({
+export function ResultsChartsSection({
   canRenderResultsCharts,
   isRedteamEval,
   resultsChartsScores,
@@ -178,7 +178,7 @@ function ResultsChartsSection({
   );
 
   if (isRedteamEval) {
-    return null;
+    return <>{children(null)}</>;
   }
 
   const toggleButton = (

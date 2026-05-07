@@ -871,6 +871,24 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should resolve relative working_dir from cliState.basePath', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        cliState.basePath = '/test/basePath';
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { working_dir: './workspace' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const resolvedWorkingDir = path.resolve('/test/basePath', 'workspace');
+        expect(statSyncSpy).toHaveBeenCalledWith(resolvedWorkingDir);
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: resolvedWorkingDir,
+          skipGitRepoCheck: false,
+        });
+      });
+
       it('should error when working_dir does not exist', async () => {
         statSyncSpy.mockImplementation(function () {
           throw new Error('ENOENT: no such file or directory');
@@ -997,6 +1015,30 @@ describe('OpenAICodexSDKProvider', () => {
           workingDirectory: '/main/dir',
           skipGitRepoCheck: false,
           additionalDirectories: ['/extra/dir1', '/extra/dir2'],
+        });
+      });
+
+      it('should resolve relative additional_directories from cliState.basePath', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        cliState.basePath = '/test/basePath';
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            working_dir: './workspace',
+            additional_directories: ['./extra', '../shared'],
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: path.resolve('/test/basePath', 'workspace'),
+          skipGitRepoCheck: false,
+          additionalDirectories: [
+            path.resolve('/test/basePath', 'extra'),
+            path.resolve('/test/basePath', '../shared'),
+          ],
         });
       });
 

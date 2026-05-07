@@ -86,6 +86,18 @@ describe('ProviderTypeSelector', () => {
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
   });
 
+  it('stacks filters above search before the layout has room for a shared row', () => {
+    const mockSetProvider = vi.fn();
+
+    renderWithTooltipProvider(
+      <ProviderTypeSelector provider={{ id: '', config: {} }} setProvider={mockSetProvider} />,
+    );
+
+    const searchWrapper = screen.getByPlaceholderText('Search providers...').parentElement;
+    expect(searchWrapper?.parentElement).toHaveClass('flex-col', 'sm:flex-row');
+    expect(searchWrapper).toHaveClass('w-full', 'sm:w-64');
+  });
+
   it('should filter provider options by selected category when a category chip is toggled on', async () => {
     const user = userEvent.setup();
     const mockSetProvider = vi.fn();

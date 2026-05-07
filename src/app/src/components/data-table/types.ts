@@ -16,6 +16,8 @@ declare module '@tanstack/react-table' {
     filterOptions?: Array<{ label: string; value: string }>;
     /** Column alignment - affects both header and cell content. When 'right', sort icon appears on the left of the header label. */
     align?: 'left' | 'right';
+    /** Pin important columns to an edge while the table scrolls horizontally. */
+    sticky?: 'left' | 'right';
   }
 }
 
