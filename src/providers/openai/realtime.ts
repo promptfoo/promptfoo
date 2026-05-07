@@ -209,6 +209,30 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     };
   }
 
+  private async getRealtimeToolConfigWithTimeout(): Promise<Record<string, unknown>> {
+    if (!this.hasConfiguredTools()) {
+      return {};
+    }
+
+    const timeoutMs = this.config.websocketTimeout || 30000;
+    let timeout: NodeJS.Timeout | undefined;
+
+    try {
+      return await Promise.race([
+        this.getRealtimeToolConfig(),
+        new Promise<Record<string, unknown>>((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`Realtime tool configuration timed out after ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
   private getMaxResponseOutputTokens(): number | 'inf' {
     const value = this.config.max_response_output_tokens;
     if (value === 'inf') {
@@ -1548,7 +1572,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   ): Promise<void> {
     // Reset audio state at the start of each request
     this.resetAudioState();
-    const realtimeToolConfig = await this.getRealtimeToolConfig();
+    const realtimeToolConfig = await this.getRealtimeToolConfigWithTimeout();
 
     const startRequestTimeout = () =>
       setTimeout(() => {

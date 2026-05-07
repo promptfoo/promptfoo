@@ -1195,7 +1195,7 @@ describe('OpenAI Realtime Provider', () => {
           config: {
             modalities: ['text'],
             maintainContext: true,
-            websocketTimeout: 1000,
+            websocketTimeout: 2000,
             tools: [
               {
                 type: 'function',
@@ -1334,6 +1334,61 @@ describe('OpenAI Realtime Provider', () => {
         });
         await vi.advanceTimersByTimeAsync(1500);
 
+        expect(vi.getTimerCount()).toBe(0);
+        loadToolsSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should reject persistent requests when tool config loading times out', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const loadToolsSpy = vi
+          .spyOn(util, 'maybeLoadToolsFromExternalFile')
+          .mockReturnValue(new Promise<unknown[]>(() => undefined) as any);
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 1000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('Can you call me back later?', {
+          test: {
+            metadata: { conversationId: 'loan-application-flow' },
+          },
+        } as any);
+
+        await vi.advanceTimersByTimeAsync(1000);
+
+        await expect(responsePromise).resolves.toMatchObject({
+          error: expect.stringContaining('Realtime tool configuration timed out after 1000ms'),
+        });
+        expect(provider.persistentConnection!.send).not.toHaveBeenCalled();
         expect(vi.getTimerCount()).toBe(0);
         loadToolsSpy.mockRestore();
       } finally {
