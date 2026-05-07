@@ -11,8 +11,14 @@ export default function UpdateBanner() {
   const [copied, setCopied] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
   const dismissLabel = "Don't remind me of this version";
+  const shouldShowBanner = !loading && !error && !!versionInfo?.updateAvailable && !dismissed;
 
   useEffect(() => {
+    if (!shouldShowBanner) {
+      document.documentElement.style.removeProperty('--update-banner-height');
+      return;
+    }
+
     const element = bannerRef.current;
 
     if (!element) {
@@ -46,7 +52,7 @@ export default function UpdateBanner() {
       window.removeEventListener('resize', updateHeight);
       document.documentElement.style.removeProperty('--update-banner-height');
     };
-  }, []);
+  }, [shouldShowBanner]);
 
   useEffect(() => {
     if (copied) {
@@ -91,7 +97,7 @@ export default function UpdateBanner() {
   };
 
   // Don't show banner if loading, error, no update available, or dismissed
-  if (loading || error || !versionInfo?.updateAvailable || dismissed) {
+  if (!shouldShowBanner) {
     return null;
   }
 
