@@ -663,7 +663,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   type: 'response.create',
                 });
 
-                // Reset pending function calls - we've handled them
+                // Start a fresh turn for the model's follow-up response.
+                responseText = '';
+                responseError = '';
+                audioContent.length = 0;
+                audioFormat = 'wav';
+                hasAudioContent = false;
                 pendingFunctionCalls = [];
 
                 // Don't resolve the promise yet - wait for the final response
@@ -1343,7 +1348,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   type: 'response.create',
                 });
 
-                // Reset pending function calls - we've handled them
+                // Start a fresh turn for the model's follow-up response.
+                responseText = '';
+                responseError = '';
+                audioContent.length = 0;
+                audioFormat = 'wav';
+                hasAudioContent = false;
                 pendingFunctionCalls = [];
 
                 // Don't resolve the promise yet - wait for the final response
@@ -1839,6 +1849,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 type: 'response.create',
               });
               resetRequestTimeout();
+              responseText = '';
+              responseError = '';
+              textDone = false;
+              audioDone = true;
+              this.resetAudioState();
               pendingFunctionCalls = [];
               responseDone = false;
               return;

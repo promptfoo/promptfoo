@@ -927,6 +927,16 @@ describe('OpenAI Realtime Provider', () => {
         lastHandler(
           Buffer.from(
             JSON.stringify({
+              type: 'response.text.done',
+              text: 'Let me check that.',
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
               type: 'response.output_item.added',
               item: {
                 type: 'function_call',
@@ -1021,6 +1031,7 @@ describe('OpenAI Realtime Provider', () => {
       const response = await responsePromise;
 
       expect(response.output).toContain('We will call you back later.');
+      expect(response.output).not.toContain('Let me check that.');
       expect(response.metadata?.functionCallOccurred).toBe(true);
       expect(response.metadata?.functionCallResults).toEqual(['{"call_status":"callback"}']);
       expect(response.tokenUsage).toEqual({
