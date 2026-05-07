@@ -290,13 +290,32 @@ const config = {
 
 ### Function Calling Support
 
-The implementation supports the Realtime API's function calling capabilities:
+The provider supports the Realtime API's function calling capabilities:
 
 1. **Tool Definition**: You can define tools (functions) in the configuration
 2. **Function Arguments**: When the model decides to use a function, the implementation captures the arguments
 3. **Function Result Handling**: Results from function calls are sent back to the model for further processing
 
-In this example, we've configured a simple weather function to demonstrate the capability. In a real implementation, you would connect this to actual weather data.
+Realtime function tools use top-level `name`, `description`, and `parameters` fields:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-realtime-1.5
+    config:
+      tools:
+        - type: function
+          name: get_weather
+          description: Get the current weather for a location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+            required: ['location']
+      tool_choice: auto
+```
+
+If you reuse a Chat Completions-style tools file that wraps those fields under `function:`, promptfoo normalizes the function tool definitions before sending them to the Realtime API.
 
 #### Implementing a Custom Function Handler
 

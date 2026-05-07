@@ -1853,6 +1853,8 @@ providers:
       tool_choice: 'auto'
 ```
 
+Realtime function tools use top-level `name`, `description`, and `parameters` fields. If you reuse a Chat Completions-style tools file such as `type: function` plus a nested `function:` object, promptfoo normalizes those function tools before sending them to the Realtime API, so the same shared `tools.yaml` can work with both `openai:chat:*` and `openai:realtime:*` providers.
+
 ### Complete Example
 
 For a complete working example that demonstrates the Realtime API capabilities, see the [OpenAI Realtime API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime) or initialize it with:
@@ -1867,7 +1869,6 @@ This example includes:
 - Multi-turn conversations with persistent context
 - Conversation threading with separate conversation IDs
 - JavaScript prompt function for properly formatting messages
-- Function calling with the Realtime API
 - Detailed documentation on handling content types correctly
 
 ### Input and Message Format
