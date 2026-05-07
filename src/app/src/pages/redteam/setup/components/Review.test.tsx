@@ -325,6 +325,40 @@ describe('Review Component', () => {
       expect(descriptionField).toHaveValue('Test Configuration');
     });
 
+    it('labels summary removal actions', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            'sql-injection',
+            { id: 'policy', config: { policy: 'Keep customer data private' } },
+            { id: 'intent', config: { intent: 'Cancel my order' } },
+          ],
+          strategies: ['basic'],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', { name: 'Remove plugin sql-injection' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove strategy Basic' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Remove policy Custom Policy 1' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Remove intent Cancel my order' }),
+      ).toBeInTheDocument();
+    });
+
     it('renders the max chars per message field in Run Options and persists changes', async () => {
       renderWithProviders(
         <Review
