@@ -514,6 +514,22 @@ export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
       audioOutput: 64 / 1e6,
     },
   })),
+  // Pricing has not been published yet.
+  {
+    id: 'gpt-realtime-2',
+    type: 'chat',
+  },
+  // Deprecated preview snapshot that remains available until July 23, 2026.
+  {
+    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
   // gpt-realtime-mini models
   ...['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15', 'gpt-realtime-mini-2025-10-06'].map(
     (model) => ({
@@ -562,16 +578,6 @@ const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   },
   {
     id: 'gpt-4o-mini-realtime-preview',
-    type: 'chat',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
-    },
-  },
-  {
-    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
     type: 'chat',
     cost: {
       input: 0.6 / 1e6,

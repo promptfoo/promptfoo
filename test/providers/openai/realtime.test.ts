@@ -162,14 +162,26 @@ describe('OpenAI Realtime Provider', () => {
       const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
+        type: 'realtime',
         model: 'gpt-4o-realtime-preview',
-        modalities: ['text'],
-        voice: 'echo',
+        output_modalities: ['text'],
         instructions: 'Test instructions',
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        temperature: 0.7,
-        max_response_output_tokens: 100,
+        audio: {
+          input: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+          },
+          output: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+            voice: 'echo',
+          },
+        },
+        max_output_tokens: 100,
       });
     });
 
@@ -193,19 +205,67 @@ describe('OpenAI Realtime Provider', () => {
       const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
+        type: 'realtime',
         model: 'gpt-4o-realtime-preview',
-        modalities: ['text', 'audio'],
-        voice: 'alloy',
+        output_modalities: ['audio'],
         instructions: 'Test instructions',
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        input_audio_transcription: {
-          model: 'whisper-1',
-          language: 'en',
-          prompt: 'Transcribe the following audio',
+        audio: {
+          input: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+            transcription: {
+              model: 'whisper-1',
+              language: 'en',
+              prompt: 'Transcribe the following audio',
+            },
+          },
+          output: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+            voice: 'alloy',
+          },
         },
-        temperature: 0.8,
-        max_response_output_tokens: 'inf',
+        max_output_tokens: 'inf',
+      });
+    });
+
+    it('should pass through realtime 2 reasoning options and realtime whisper transcription config', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', {
+        config: {
+          input_audio_transcription: {
+            model: 'gpt-realtime-whisper',
+            language: 'en',
+            delay: 'low',
+          },
+          parallel_tool_calls: true,
+          reasoning: {
+            effort: 'high',
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body).toMatchObject({
+        type: 'realtime',
+        model: 'gpt-realtime-2',
+        audio: {
+          input: {
+            transcription: {
+              model: 'gpt-realtime-whisper',
+              language: 'en',
+              delay: 'low',
+            },
+          },
+        },
+        parallel_tool_calls: true,
+        reasoning: {
+          effort: 'high',
+        },
       });
     });
 
@@ -363,7 +423,7 @@ describe('OpenAI Realtime Provider', () => {
 
       const body = await provider.getRealtimeSessionBody();
 
-      expect(body.max_response_output_tokens).toBe(expected);
+      expect(body.max_output_tokens).toBe(expected);
     });
 
     it('should handle basic text response with persistent connection', async () => {
@@ -1646,6 +1706,33 @@ describe('OpenAI Realtime Provider', () => {
       );
     };
 
+    const simulateGaFlow = () => {
+      const messageHandlers = mockHandlers.message;
+      const lastHandler = messageHandlers[messageHandlers.length - 1];
+
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.added',
+            item: { id: 'msg_ga', role: 'user' },
+          }),
+        ),
+      );
+      lastHandler(
+        Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'r_ga' } })),
+      );
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.output_text.delta', delta: 'ok' })));
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'ok' })));
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+    };
+
     it('uses default OpenAI base for direct WebSocket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
       const promise = provider.directWebSocketRequest('hi');
@@ -1662,6 +1749,50 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
+    it('uses the GA realtime wire shape without the beta header', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          tools: [
+            {
+              type: 'function',
+              name: 'get_weather',
+              parameters: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+
+      await vi.waitFor(() => {
+        expect(mockWs.send).toHaveBeenCalled();
+      });
+
+      const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sessionUpdate.session).toMatchObject({
+        type: 'realtime',
+        model: 'gpt-realtime',
+        output_modalities: ['text'],
+        tools: [{ type: 'function', name: 'get_weather' }],
+      });
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers).not.toHaveProperty('OpenAI-Beta');
+
+      simulateGaFlow();
+      await expect(promise).resolves.toMatchObject({
+        output: 'ok',
+      });
+
+      const responseCreate = JSON.parse(mockWs.send.mock.calls[2][0]);
+      expect(responseCreate.response).toMatchObject({
+        output_modalities: ['text'],
+        tools: [{ type: 'function', name: 'get_weather' }],
+      });
+    });
+
     it('normalizes invalid max_response_output_tokens in session.update', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: { max_response_output_tokens: -1 },
@@ -1675,7 +1806,7 @@ describe('OpenAI Realtime Provider', () => {
       });
 
       const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
-      expect(sessionUpdate.session.max_response_output_tokens).toBe('inf');
+      expect(sessionUpdate.session.max_output_tokens).toBe('inf');
 
       const messageHandlers = mockHandlers.message;
       const lastHandler = messageHandlers[messageHandlers.length - 1];

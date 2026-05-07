@@ -1,6 +1,6 @@
 # openai-realtime (OpenAI Realtime API Example)
 
-This example demonstrates how to use promptfoo to test OpenAI's Realtime API capabilities. The Realtime API allows for real-time communication with `gpt-realtime` and `gpt-realtime-1.5` using WebSockets, supporting both text and audio inputs/outputs.
+This example demonstrates how to use promptfoo to test OpenAI's Realtime API capabilities. The Realtime API allows for real-time communication with `gpt-realtime-2`, `gpt-realtime-1.5`, and `gpt-realtime` using WebSockets, supporting both text and audio inputs/outputs.
 
 ## Quick Start
 
@@ -34,7 +34,6 @@ providers:
       # Custom hosted gateway
       apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
       modalities: ['text']
-      temperature: 0.7
 ```
 
 For local development:
@@ -286,7 +285,7 @@ const config = {
 };
 ```
 
-**Important Note**: The OpenAI Realtime API is in beta and the format requirements may change. The implementation in promptfoo follows the current requirements as of the latest API version.
+Promptfoo keeps the existing `modalities` config key for compatibility, but sends the current GA Realtime wire shape to OpenAI under the hood.
 
 ### Function Calling Support
 
@@ -359,6 +358,7 @@ The Realtime API supports both text and audio interactions. promptfoo now includ
 
 ### Supported Models and Features
 
+- **gpt-realtime-2**: Reasoning-capable realtime model with text and audio support
 - **gpt-realtime-1.5**: Flagship audio model for voice agents and customer support
 - **gpt-realtime**: General-availability realtime model with text and audio support
   - Supports new voices: `cedar` and `marin` (in addition to existing voices)

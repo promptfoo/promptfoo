@@ -206,6 +206,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 4 + 500 * 16) / 1e6, 6);
   });
 
+  it('should not infer pricing for gpt-realtime-2 before OpenAI publishes it', () => {
+    const cost = calculateOpenAICost('gpt-realtime-2', {}, 1000, 500);
+    expect(cost).toBeUndefined();
+  });
+
   it('should calculate cost correctly with audio tokens', () => {
     const cost = calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, 200, 100);
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 40 + 100 * 80) / 1e6, 6);
@@ -398,6 +403,12 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(false);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
+    expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
+    expect(
+      OPENAI_REALTIME_MODELS.some(
+        (model) => model.id === 'gpt-4o-mini-realtime-preview-2024-12-17',
+      ),
+    ).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview')).toBe(
       false,
     );

@@ -582,6 +582,18 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
+  it('should auto-route OpenAI realtime 2 shorthand to realtime', async () => {
+    const originalModelNames = (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES;
+    (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = ['gpt-realtime-2'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-realtime-2');
+      expect(OpenAiRealtimeProvider).toHaveBeenCalledWith('gpt-realtime-2', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = originalModelNames;
+    }
+  });
+
   it('should auto-route OpenAI GPT-5.4 nano shorthand to chat', async () => {
     const originalModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
     (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = ['gpt-5.4-nano'];

@@ -75,6 +75,7 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
     model?: string;
     language?: string;
     prompt?: string;
+    delay?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   } | null;
   output_audio_format?: 'pcm16' | 'g711_ulaw' | 'g711_alaw';
   turn_detection?: {
@@ -96,6 +97,10 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
     | 'cedar'
     | 'marin';
   max_response_output_tokens?: number | 'inf';
+  parallel_tool_calls?: boolean;
+  reasoning?: {
+    effort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  };
   websocketTimeout?: number; // Timeout for WebSocket connection in milliseconds
   tools?: any[]; // Array of function definitions
   tool_choice?:
@@ -233,6 +238,85 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
   }
 
+  private getRealtimeOutputModalities(): Array<'text' | 'audio'> {
+    const modalities = this.config.modalities || ['text', 'audio'];
+    return modalities.includes('audio') ? ['audio'] : ['text'];
+  }
+
+  private getRealtimeAudioFormat(format: 'pcm16' | 'g711_ulaw' | 'g711_alaw') {
+    switch (format) {
+      case 'g711_ulaw':
+        return { type: 'audio/pcmu' as const };
+      case 'g711_alaw':
+        return { type: 'audio/pcma' as const };
+      case 'pcm16':
+      default:
+        return { type: 'audio/pcm' as const, rate: 24000 as const };
+    }
+  }
+
+  private getRealtimeAudioConfig() {
+    return {
+      input: {
+        format: this.getRealtimeAudioFormat(this.config.input_audio_format || 'pcm16'),
+        ...(this.config.input_audio_transcription !== undefined && {
+          transcription: this.config.input_audio_transcription,
+        }),
+        ...(this.config.turn_detection !== undefined && {
+          turn_detection: this.config.turn_detection,
+        }),
+      },
+      output: {
+        format: this.getRealtimeAudioFormat(this.config.output_audio_format || 'pcm16'),
+        voice: this.config.voice || 'alloy',
+      },
+    };
+  }
+
+  private async getRealtimeSessionConfig(
+    realtimeToolConfig?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const toolConfig = realtimeToolConfig ?? (await this.getRealtimeToolConfig());
+
+    return {
+      type: 'realtime',
+      model: this.modelName,
+      output_modalities: this.getRealtimeOutputModalities(),
+      instructions: this.config.instructions || 'You are a helpful assistant.',
+      audio: this.getRealtimeAudioConfig(),
+      max_output_tokens: this.getMaxResponseOutputTokens(),
+      ...(this.config.parallel_tool_calls !== undefined && {
+        parallel_tool_calls: this.config.parallel_tool_calls,
+      }),
+      ...(this.config.reasoning !== undefined && {
+        reasoning: this.config.reasoning,
+      }),
+      ...toolConfig,
+    };
+  }
+
+  private async getRealtimeResponseConfig(
+    realtimeToolConfig?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
+    const toolConfig = realtimeToolConfig ?? (await this.getRealtimeToolConfig());
+
+    return {
+      output_modalities: this.getRealtimeOutputModalities(),
+      instructions: this.config.instructions || 'You are a helpful assistant.',
+      audio: {
+        output: this.getRealtimeAudioConfig().output,
+      },
+      max_output_tokens: this.getMaxResponseOutputTokens(),
+      ...(this.config.parallel_tool_calls !== undefined && {
+        parallel_tool_calls: this.config.parallel_tool_calls,
+      }),
+      ...(this.config.reasoning !== undefined && {
+        reasoning: this.config.reasoning,
+      }),
+      ...toolConfig,
+    };
+  }
+
   private getMaxResponseOutputTokens(): number | 'inf' {
     const value = this.config.max_response_output_tokens;
     if (value === 'inf') {
@@ -310,38 +394,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   async getRealtimeSessionBody() {
-    // Default values
-    const modalities = this.config.modalities || ['text', 'audio'];
-    const voice = this.config.voice || 'alloy';
-    const instructions = this.config.instructions || 'You are a helpful assistant.';
-    const inputAudioFormat = this.config.input_audio_format || 'pcm16';
-    const outputAudioFormat = this.config.output_audio_format || 'pcm16';
-    const temperature = this.config.temperature ?? 0.8;
-    const maxResponseOutputTokens = this.getMaxResponseOutputTokens();
-
-    const body: any = {
-      model: this.modelName,
-      modalities,
-      instructions,
-      voice,
-      input_audio_format: inputAudioFormat,
-      output_audio_format: outputAudioFormat,
-      temperature,
-      max_response_output_tokens: maxResponseOutputTokens,
-    };
-
-    // Add optional configurations
-    if (this.config.input_audio_transcription !== undefined) {
-      body.input_audio_transcription = this.config.input_audio_transcription;
-    }
-
-    if (this.config.turn_detection !== undefined) {
-      body.turn_detection = this.config.turn_detection;
-    }
-
-    Object.assign(body, await this.getRealtimeToolConfig());
-
-    return body;
+    return this.getRealtimeSessionConfig();
   }
 
   generateEventId(): string {
@@ -465,22 +518,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'conversation.item.created':
-              if (message.item.role === 'user') {
+            case 'conversation.item.added':
+            case 'conversation.item.done':
+              if (message.item.role === 'user' && message.item.id !== messageId) {
                 // User message was created, now create a response
                 messageId = message.item.id;
 
                 // Prepare response creation event with appropriate settings
                 const responseEvent: any = {
                   type: 'response.create',
-                  response: {
-                    modalities: this.config.modalities || ['text', 'audio'],
-                    instructions: this.config.instructions || 'You are a helpful assistant.',
-                    voice: this.config.voice || 'alloy',
-                    temperature: this.config.temperature ?? 0.8,
-                  },
+                  response: await this.getRealtimeResponseConfig(),
                 };
-
-                Object.assign(responseEvent.response, await this.getRealtimeToolConfig());
 
                 sendEvent(responseEvent);
               }
@@ -491,6 +539,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'response.text.delta':
+            case 'response.output_text.delta':
               // Accumulate text deltas
               responseText += message.delta;
               logger.debug(
@@ -499,6 +548,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'response.text.done':
+            case 'response.output_text.done':
               // Final text content
               if (message.text && message.text.length > 0) {
                 logger.debug(
@@ -527,6 +577,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             // Handle audio transcript events
             case 'response.audio_transcript.delta':
+            case 'response.output_audio_transcript.delta':
               // Accumulate audio transcript deltas - this is the text content
               responseText += message.delta;
               logger.debug(
@@ -535,6 +586,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'response.audio_transcript.done':
+            case 'response.output_audio_transcript.done':
               // Final audio transcript content
               if (message.text && message.text.length > 0) {
                 logger.debug(
@@ -548,6 +600,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             // Handle audio data events - store in metadata if needed
             case 'response.audio.delta':
+            case 'response.output_audio.delta':
               // Handle audio data (could store in metadata for playback if needed)
               // For gpt-realtime, audio data is in the 'delta' field, not 'audio' field
               const audioData = message.audio || message.delta;
@@ -575,6 +628,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'response.audio.done':
+            case 'response.output_audio.done':
               logger.debug('Audio data complete');
               // If audio format is specified in the message, capture it
               if (message.format) {
@@ -1034,7 +1088,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       const wsOptions = {
         headers: {
           Authorization: `Bearer ${this.getApiKey()}`,
-          'OpenAI-Beta': 'realtime=v1',
           'User-Agent': 'promptfoo Realtime API Client',
           Origin: this.getWebSocketOrigin(),
         },
@@ -1068,9 +1121,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
       let functionCallOccurred = false;
       const functionCallResults: string[] = [];
-      const realtimeToolConfigPromise = this.getRealtimeToolConfig();
-      void realtimeToolConfigPromise.catch(() => undefined);
-
       const sendEvent = (event: any) => {
         if (!event.event_id) {
           event.event_id = this.generateEventId();
@@ -1087,22 +1137,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           // First, update the session with our configuration
           sendEvent({
             type: 'session.update',
-            session: {
-              modalities: this.config.modalities || ['text', 'audio'],
-              instructions: this.config.instructions || 'You are a helpful assistant.',
-              voice: this.config.voice || 'alloy',
-              input_audio_format: this.config.input_audio_format || 'pcm16',
-              output_audio_format: this.config.output_audio_format || 'pcm16',
-              temperature: this.config.temperature ?? 0.8,
-              max_response_output_tokens: this.getMaxResponseOutputTokens(),
-              ...(this.config.input_audio_transcription !== undefined && {
-                input_audio_transcription: this.config.input_audio_transcription,
-              }),
-              ...(this.config.turn_detection !== undefined && {
-                turn_detection: this.config.turn_detection,
-              }),
-              ...(await realtimeToolConfigPromise),
-            },
+            session: await this.getRealtimeSessionConfig(),
           });
 
           // Then create a conversation item with the user's prompt
@@ -1150,22 +1185,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'conversation.item.created':
-              if (message.item.role === 'user') {
+            case 'conversation.item.added':
+            case 'conversation.item.done':
+              if (message.item.role === 'user' && message.item.id !== messageId) {
                 // User message was created, now create a response
                 messageId = message.item.id;
 
                 // Prepare response creation event with appropriate settings
                 const responseEvent: any = {
                   type: 'response.create',
-                  response: {
-                    modalities: this.config.modalities || ['text', 'audio'],
-                    instructions: this.config.instructions || 'You are a helpful assistant.',
-                    voice: this.config.voice || 'alloy',
-                    temperature: this.config.temperature ?? 0.8,
-                  },
+                  response: await this.getRealtimeResponseConfig(),
                 };
-
-                Object.assign(responseEvent.response, await realtimeToolConfigPromise);
 
                 sendEvent(responseEvent);
               }
@@ -1176,6 +1206,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'response.text.delta':
+            case 'response.output_text.delta':
               // Accumulate text deltas
               responseText += message.delta;
               logger.debug(
@@ -1184,6 +1215,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'response.text.done':
+            case 'response.output_text.done':
               // Final text content
               if (message.text && message.text.length > 0) {
                 logger.debug(
@@ -1212,6 +1244,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             // Handle audio transcript events
             case 'response.audio_transcript.delta':
+            case 'response.output_audio_transcript.delta':
               // Accumulate audio transcript deltas - this is the text content
               responseText += message.delta;
               logger.debug(
@@ -1220,6 +1253,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'response.audio_transcript.done':
+            case 'response.output_audio_transcript.done':
               // Final audio transcript content
               if (message.text && message.text.length > 0) {
                 logger.debug(
@@ -1233,6 +1267,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
             // Handle audio data events - store in metadata if needed
             case 'response.audio.delta':
+            case 'response.output_audio.delta':
               // Handle audio data (could store in metadata for playback if needed)
               // For gpt-realtime, audio data is in the 'delta' field, not 'audio' field
               const audioData = message.audio || message.delta;
@@ -1260,6 +1295,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               break;
 
             case 'response.audio.done':
+            case 'response.output_audio.done':
               logger.debug('Audio data complete');
               // If audio format is specified in the message, capture it
               if (message.format) {
@@ -1550,7 +1586,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         const wsOptions = {
           headers: {
             Authorization: `Bearer ${this.getApiKey()}`,
-            'OpenAI-Beta': 'realtime=v1',
             'User-Agent': 'promptfoo Realtime API Client',
             Origin: this.getWebSocketOrigin(),
           },
@@ -1726,20 +1761,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
         switch (message.type) {
           case 'conversation.item.created':
-            if (message.item.role === 'user') {
+          case 'conversation.item.added':
+          case 'conversation.item.done':
+            if (message.item.role === 'user' && message.item.id !== _messageId) {
               _messageId = message.item.id;
               this.previousItemId = _messageId;
 
               // Send response creation event immediately after user message
               sendEvent({
                 type: 'response.create',
-                response: {
-                  modalities: this.config.modalities || ['text', 'audio'],
-                  instructions: this.config.instructions || 'You are a helpful assistant.',
-                  voice: this.config.voice || 'alloy',
-                  temperature: this.config.temperature ?? 0.8,
-                  ...realtimeToolConfig,
-                },
+                response: await this.getRealtimeResponseConfig(realtimeToolConfig),
               });
             } else if (message.item.role === 'assistant') {
               this.assistantMessageIds.push(message.item.id);
@@ -1752,12 +1783,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             break;
 
           case 'response.text.delta':
+          case 'response.output_text.delta':
           case 'response.audio_transcript.delta':
+          case 'response.output_audio_transcript.delta':
             responseText += message.delta;
             break;
 
           case 'response.text.done':
+          case 'response.output_text.done':
           case 'response.audio_transcript.done':
+          case 'response.output_audio_transcript.done':
             textDone = true;
             if (message.text && message.text.length > 0) {
               responseText = message.text;
@@ -1766,6 +1801,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             break;
 
           case 'response.audio.delta':
+          case 'response.output_audio.delta':
             if (!this.isProcessingAudio) {
               this.isProcessingAudio = true;
               audioDone = false;
@@ -1776,9 +1812,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               this.currentAudioBuffer = [];
             }
 
-            if (message.audio && message.audio.length > 0) {
+            const audioData = message.audio || message.delta;
+            if (audioData && audioData.length > 0) {
               try {
-                const audioBuffer = Buffer.from(message.audio, 'base64');
+                const audioBuffer = Buffer.from(audioData, 'base64');
                 this.currentAudioBuffer.push(audioBuffer);
               } catch (error) {
                 logger.error(`Error processing audio data: ${error}`);
@@ -1787,6 +1824,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             break;
 
           case 'response.audio.done':
+          case 'response.output_audio.done':
             if (message.format) {
               this.currentAudioFormat = message.format;
             }
@@ -1907,22 +1945,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     sendEvent({
       type: 'session.update',
-      session: {
-        modalities: this.config.modalities || ['text', 'audio'],
-        instructions: this.config.instructions || 'You are a helpful assistant.',
-        voice: this.config.voice || 'alloy',
-        input_audio_format: this.config.input_audio_format || 'pcm16',
-        output_audio_format: this.config.output_audio_format || 'pcm16',
-        temperature: this.config.temperature ?? 0.8,
-        max_response_output_tokens: this.getMaxResponseOutputTokens(),
-        ...(this.config.input_audio_transcription !== undefined && {
-          input_audio_transcription: this.config.input_audio_transcription,
-        }),
-        ...(this.config.turn_detection !== undefined && {
-          turn_detection: this.config.turn_detection,
-        }),
-        ...realtimeToolConfig,
-      },
+      session: await this.getRealtimeSessionConfig(realtimeToolConfig),
     });
 
     // Create a conversation item with the user's prompt
