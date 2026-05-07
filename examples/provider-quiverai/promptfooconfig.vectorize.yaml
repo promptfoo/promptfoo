@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: QuiverAI vectorize — image-to-SVG comparison
+
+# The prompt is the image to vectorize (URL, data URL, or {url}/{base64} JSON).
+prompts:
+  - '{{image_url}}'
+
+providers:
+  # Arrow 1.1 — fast and cost-efficient for most logos and icons
+  - id: quiverai:vectorize:arrow-1.1
+    label: Arrow 1.1 (vectorize)
+    config:
+      auto_crop: true
+      target_size: 1024
+
+  # Arrow 1.1 Max — higher fidelity for dense or detailed inputs
+  - id: quiverai:vectorize:arrow-1.1-max
+    label: Arrow 1.1 Max (vectorize)
+    config:
+      auto_crop: true
+      target_size: 1024
+
+defaultTest:
+  options:
+    rubricPrompt: |
+      Evaluate this SVG vectorization for fidelity to the source image.
+      Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
+
+      SVG: {{ output }}
+      Criteria: {{ value }}
+
+tests:
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/a/a7/React-icon.svg/512px-React-icon.svg.png
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains the React atom logo with three orbital ellipses around a central nucleus
+        threshold: 0.4
+
+  - vars:
+      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png
+    assert:
+      - type: is-xml
+      - type: llm-rubric
+        value: Contains a glass dice shape preserving translucent shading
+        threshold: 0.3
