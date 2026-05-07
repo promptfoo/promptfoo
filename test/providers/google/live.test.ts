@@ -102,6 +102,11 @@ const simulateCompletionMessage = (mockWs: Mocked<WebSocket>) => {
   simulateMessage(mockWs, { serverContent: { turnComplete: true } });
 };
 
+const flushAsyncEvents = async () => {
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await Promise.resolve();
+};
+
 describe('GoogleLiveProvider', () => {
   let mockWs: Mocked<WebSocket>;
   let provider: GoogleLiveProvider;
@@ -597,6 +602,121 @@ describe('GoogleLiveProvider', () => {
 
     const response = await provider.callApi('test prompt');
     expect(response).toEqual({ error: 'WebSocket request timed out' });
+  });
+
+  it('should ignore tool call messages that arrive after the websocket has closed', async () => {
+    const lateCallback = vi.fn().mockResolvedValue({ ignored: true });
+
+    provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+      config: {
+        generationConfig: {
+          response_modalities: ['text'],
+        },
+        timeoutMs: 500,
+        apiKey: 'test-api-key',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'lateFunction',
+                description: 'A function call that arrives too late',
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: {
+          lateFunction: lateCallback,
+        },
+      },
+    });
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      setImmediate(() => {
+        mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+        simulateSetupMessage(mockWs);
+        setImmediate(() => {
+          mockWs.onclose?.({
+            wasClean: false,
+            code: 1006,
+            reason: 'closed before tool call',
+          } as WebSocket.CloseEvent);
+          simulateFunctionCallMessage(mockWs, [
+            { name: 'lateFunction', args: { value: 'late' }, id: 'function-call-late' },
+          ]);
+        });
+      });
+      return mockWs;
+    });
+
+    const response = await provider.callApi('test prompt');
+    await flushAsyncEvents();
+    await flushAsyncEvents();
+
+    expect(response.error).toContain('WebSocket connection closed unexpectedly');
+    expect(lateCallback).not.toHaveBeenCalled();
+
+    const toolResponses = mockWs.send.mock.calls
+      .map(([message]) => JSON.parse(message as string))
+      .filter((message) => message.tool_response);
+    expect(toolResponses).toHaveLength(0);
+  });
+
+  it('should not fetch state when final message parsing resumes after close', async () => {
+    const originalResponse = globalThis.Response;
+    const responseConstructor = vi.fn(function (body: unknown) {
+      return {
+        text: vi.fn(async () => {
+          const responseText = String(body);
+          if (responseText.includes('"turnComplete":true')) {
+            mockWs.onclose?.({
+              wasClean: false,
+              code: 1006,
+              reason: 'closed while parsing final message',
+            } as WebSocket.CloseEvent);
+          }
+          return responseText;
+        }),
+      };
+    }) as unknown as typeof Response;
+    vi.stubGlobal('Response', responseConstructor);
+
+    try {
+      provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
+        config: {
+          generationConfig: {
+            response_modalities: ['text'],
+          },
+          timeoutMs: 500,
+          apiKey: 'test-api-key',
+          functionToolStatefulApi: {
+            file: 'examples/google-live/counter_api.py',
+            url: 'http://127.0.0.1:5000',
+          },
+        },
+      });
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ counter: 5 }),
+      } as any);
+
+      vi.mocked(WebSocket).mockImplementation(function () {
+        setImmediate(() => {
+          mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
+          simulateSetupMessage(mockWs);
+          simulateCompletionMessage(mockWs);
+        });
+        return mockWs;
+      });
+
+      const response = await provider.callApi('test prompt');
+      await flushAsyncEvents();
+
+      expect(response.error).toContain('WebSocket connection closed unexpectedly');
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    } finally {
+      vi.stubGlobal('Response', originalResponse);
+    }
   });
 
   it('should throw an error if API key is not set', async () => {
