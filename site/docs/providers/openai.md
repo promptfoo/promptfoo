@@ -1870,6 +1870,7 @@ This example includes:
 - Basic single-turn interactions with the Realtime API
 - Multi-turn conversations with persistent context
 - Conversation threading with separate conversation IDs
+- Function tool configuration examples, with a custom `functionCallHandler` required to complete tool round trips
 - JavaScript prompt function for properly formatting messages
 - Detailed documentation on handling content types correctly
 

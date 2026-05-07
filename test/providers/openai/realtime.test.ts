@@ -943,6 +943,154 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
+    it('should reset the persistent request timeout before a tool follow-up response', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const functionCallHandler = vi.fn().mockResolvedValue('{"call_status":"callback"}');
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 1000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    call_status: { type: 'string' },
+                  },
+                },
+              },
+            ],
+            functionCallHandler,
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('Can you call me back later?', {
+          test: {
+            metadata: { conversationId: 'loan-application-flow' },
+          },
+        } as any);
+
+        await vi.waitFor(() => {
+          expect(mockHandlers.message.length).toBeGreaterThan(0);
+        });
+        const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
+
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'conversation.item.created',
+                item: { id: 'msg_1', role: 'user' },
+              }),
+            ),
+          ),
+        );
+
+        await vi.advanceTimersByTimeAsync(900);
+
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.output_item.added',
+                item: {
+                  type: 'function_call',
+                  call_id: 'call_1',
+                  name: 'end_of_dialog_tool',
+                  arguments: '{}',
+                },
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.function_call_arguments.done',
+                call_id: 'call_1',
+                arguments: '{"call_status":"callback"}',
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.done',
+                response: {
+                  usage: {
+                    total_tokens: 8,
+                    input_tokens: 5,
+                    output_tokens: 3,
+                  },
+                },
+              }),
+            ),
+          ),
+        );
+
+        await vi.advanceTimersByTimeAsync(200);
+
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.text.done',
+                text: 'We will call you back later.',
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.done',
+                response: {
+                  usage: {
+                    total_tokens: 11,
+                    input_tokens: 7,
+                    output_tokens: 4,
+                  },
+                },
+              }),
+            ),
+          ),
+        );
+
+        await expect(responsePromise).resolves.toMatchObject({
+          output: expect.stringContaining('We will call you back later.'),
+          metadata: {
+            functionCallOccurred: true,
+            functionCallResults: ['{"call_status":"callback"}'],
+          },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should reuse existing connection for subsequent requests', async () => {
       // Skip this test since it's difficult to mock properly and causes flakey results
       // The functionality is tested in other tests

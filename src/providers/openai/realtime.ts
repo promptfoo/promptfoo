@@ -1546,12 +1546,29 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     // Reset audio state at the start of each request
     this.resetAudioState();
 
-    // Set main request timeout
-    const requestTimeout = setTimeout(() => {
-      logger.error('WebSocket response timed out');
-      this.resetAudioState();
-      reject(new Error('WebSocket response timed out'));
-    }, this.config.websocketTimeout || 30000); // 30 second default timeout
+    const startRequestTimeout = () =>
+      setTimeout(() => {
+        logger.error('WebSocket response timed out');
+        this.resetAudioState();
+        reject(new Error('WebSocket response timed out'));
+      }, this.config.websocketTimeout || 30000);
+
+    // Treat the timeout as inactivity-based so follow-up tool turns get a fresh window.
+    let requestTimeout = startRequestTimeout();
+
+    const resetRequestTimeout = () => {
+      clearTimeout(requestTimeout);
+      requestTimeout = startRequestTimeout();
+    };
+
+    const clearRequestTimeout = () => {
+      clearTimeout(requestTimeout);
+    };
+
+    /*
+     * Keep a request-level timeout instead of per-message timers so cleanup remains simple while
+     * still allowing a tool call plus its follow-up response to take a full timeout window.
+     */
 
     // Accumulators for response text and errors
     let responseText = '';
@@ -1597,7 +1614,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         cleanupMessageHandler();
       }
 
-      clearTimeout(requestTimeout);
+      clearRequestTimeout();
 
       // Handle empty response cases
       if (responseText.length === 0) {
@@ -1667,6 +1684,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     const messageHandler = async (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString()) as WebSocketMessage;
+        resetRequestTimeout();
 
         switch (message.type) {
           case 'conversation.item.created':
@@ -1698,7 +1716,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           case 'response.text.delta':
           case 'response.audio_transcript.delta':
             responseText += message.delta;
-            clearTimeout(requestTimeout);
             break;
 
           case 'response.text.done':
@@ -1714,7 +1731,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             if (!this.isProcessingAudio) {
               this.isProcessingAudio = true;
               audioDone = false;
-              clearTimeout(requestTimeout);
             }
 
             if (message.item_id !== this.lastAudioItemId) {
@@ -1795,6 +1811,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               sendEvent({
                 type: 'response.create',
               });
+              resetRequestTimeout();
               pendingFunctionCalls = [];
               responseDone = false;
               return;
@@ -1811,14 +1828,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           case 'error':
             responseError = message.message || 'Unknown WebSocket error';
             logger.error(`WebSocket error: ${responseError}`);
-            clearTimeout(requestTimeout);
+            clearRequestTimeout();
             this.resetAudioState();
             reject(new Error(responseError));
             break;
         }
       } catch (error) {
         logger.error(`Error processing WebSocket message: ${error}`);
-        clearTimeout(requestTimeout);
+        clearRequestTimeout();
         this.resetAudioState();
         reject(new Error(`Error processing WebSocket message: ${error}`));
       }
