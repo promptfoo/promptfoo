@@ -377,7 +377,9 @@ function parseToolInput(input: unknown): Record<string, unknown> {
  * True when an MCP server config has at least one transport (command+args, path, or url).
  * Empty strings count as unset.
  */
-function isMCPServerConfigured(server: { command?: string; path?: string; url?: string } | undefined): boolean {
+function isMCPServerConfigured(
+  server: { command?: string; path?: string; url?: string } | undefined,
+): boolean {
   if (!server) {
     return false;
   }
@@ -795,9 +797,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // surfaced lazily when callApi/callApiStreaming awaits the promise.
       this.initializationPromise = this.initializeMCP().catch((err) => {
         this.mcpInitError = err instanceof Error ? err : new Error(String(err));
-        logger.error(
-          `[Bedrock Converse] MCP initialization failed: ${this.mcpInitError.message}`,
-        );
+        logger.error(`[Bedrock Converse] MCP initialization failed: ${this.mcpInitError.message}`);
       });
     }
   }
@@ -1394,9 +1394,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
           );
         }
       } catch (err) {
-        logger.error(
-          `[Bedrock Converse] MCP tool execution failed for ${toolBlock.name}: ${err}`,
-        );
+        logger.error(`[Bedrock Converse] MCP tool execution failed for ${toolBlock.name}: ${err}`);
         const msg = `MCP Tool Error (${toolBlock.name}): ${err instanceof Error ? err.message : String(err)}`;
         toolUseParts.push(msg);
         mcpErrors.push(msg);
