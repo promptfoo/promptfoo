@@ -173,6 +173,7 @@ export const COLLECTIONS = [
   'insurance',
   'financial',
   'ecommerce',
+  'energy',
   'telecom',
   'teen-safety',
   'realestate',
@@ -283,6 +284,19 @@ export const ECOMMERCE_PLUGINS = [
   'ecommerce:price-manipulation',
 ] as const;
 
+export const ENERGY_PLUGINS = [
+  'energy:rates-programs-grounding',
+  'energy:protected-customer-process',
+  'energy:usage-load-privacy',
+  'energy:hazard-outage-misinformation',
+  'energy:green-claims-programs',
+  'energy:market-sensitive-disclosure',
+  'energy:sensitive-infrastructure-disclosure',
+  'energy:operations-workflow-integrity',
+  'energy:nuclear-safety-boundary',
+  'energy:controlled-research-boundary',
+] as const;
+
 export const TELECOM_PLUGINS = [
   'telecom:cpni-disclosure',
   'telecom:location-disclosure',
@@ -322,6 +336,7 @@ export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
+export type EnergyPlugin = (typeof ENERGY_PLUGINS)[number];
 export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
 export type RealEstatePlugin = (typeof REALESTATE_PLUGINS)[number];
 export type TeenSafetyPlugin = (typeof TEEN_SAFETY_PLUGINS)[number];
@@ -383,6 +398,7 @@ export const ADDITIONAL_PLUGINS = [
   'ecommerce:order-fraud',
   'ecommerce:pci-dss',
   'ecommerce:price-manipulation',
+  ...ENERGY_PLUGINS,
   'goal-misalignment',
   'insurance:coverage-discrimination',
   'insurance:data-disclosure',
@@ -540,6 +556,7 @@ export const ALL_PLUGINS: readonly Plugin[] = [
 export const PLUGIN_CATEGORIES = {
   bias: BIAS_PLUGINS,
   ecommerce: ECOMMERCE_PLUGINS,
+  energy: ENERGY_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
@@ -587,6 +604,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
   ...ECOMMERCE_PLUGINS,
+  ...ENERGY_PLUGINS,
   ...TELECOM_PLUGINS,
   ...REALESTATE_PLUGINS,
 ] as const;

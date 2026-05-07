@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { getGraderById } from '../../../src/redteam/graders';
+import { EnergyControlledResearchBoundaryPluginGrader } from '../../../src/redteam/plugins/energy/controlledResearchBoundary';
+import { EnergyGreenClaimsProgramsPluginGrader } from '../../../src/redteam/plugins/energy/greenClaimsPrograms';
+import { EnergyHazardOutageMisinformationPluginGrader } from '../../../src/redteam/plugins/energy/hazardOutageMisinformation';
+import { EnergyMarketSensitiveDisclosurePluginGrader } from '../../../src/redteam/plugins/energy/marketSensitiveDisclosure';
+import { EnergyNuclearSafetyBoundaryPluginGrader } from '../../../src/redteam/plugins/energy/nuclearSafetyBoundary';
+import { EnergyOperationsWorkflowIntegrityPluginGrader } from '../../../src/redteam/plugins/energy/operationsWorkflowIntegrity';
+import { EnergyProtectedCustomerProcessPluginGrader } from '../../../src/redteam/plugins/energy/protectedCustomerProcess';
+import { EnergyRatesProgramsGroundingPluginGrader } from '../../../src/redteam/plugins/energy/ratesProgramsGrounding';
+import { EnergySensitiveInfrastructureDisclosurePluginGrader } from '../../../src/redteam/plugins/energy/sensitiveInfrastructureDisclosure';
+import { EnergyUsageLoadPrivacyPluginGrader } from '../../../src/redteam/plugins/energy/usageLoadPrivacy';
 import { FinancialCalculationErrorPluginGrader } from '../../../src/redteam/plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from '../../../src/redteam/plugins/financial/financialComplianceViolation';
 import { FinancialDataLeakagePluginGrader } from '../../../src/redteam/plugins/financial/financialDataLeakage';
@@ -40,6 +50,56 @@ type RenderingGrader = {
 };
 
 const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
+  [
+    'energy controlled research boundary',
+    'promptfoo:redteam:energy:controlled-research-boundary',
+    EnergyControlledResearchBoundaryPluginGrader,
+  ],
+  [
+    'energy green claims programs',
+    'promptfoo:redteam:energy:green-claims-programs',
+    EnergyGreenClaimsProgramsPluginGrader,
+  ],
+  [
+    'energy hazard outage misinformation',
+    'promptfoo:redteam:energy:hazard-outage-misinformation',
+    EnergyHazardOutageMisinformationPluginGrader,
+  ],
+  [
+    'energy market sensitive disclosure',
+    'promptfoo:redteam:energy:market-sensitive-disclosure',
+    EnergyMarketSensitiveDisclosurePluginGrader,
+  ],
+  [
+    'energy nuclear safety boundary',
+    'promptfoo:redteam:energy:nuclear-safety-boundary',
+    EnergyNuclearSafetyBoundaryPluginGrader,
+  ],
+  [
+    'energy operations workflow integrity',
+    'promptfoo:redteam:energy:operations-workflow-integrity',
+    EnergyOperationsWorkflowIntegrityPluginGrader,
+  ],
+  [
+    'energy protected customer process',
+    'promptfoo:redteam:energy:protected-customer-process',
+    EnergyProtectedCustomerProcessPluginGrader,
+  ],
+  [
+    'energy rates programs grounding',
+    'promptfoo:redteam:energy:rates-programs-grounding',
+    EnergyRatesProgramsGroundingPluginGrader,
+  ],
+  [
+    'energy sensitive infrastructure disclosure',
+    'promptfoo:redteam:energy:sensitive-infrastructure-disclosure',
+    EnergySensitiveInfrastructureDisclosurePluginGrader,
+  ],
+  [
+    'energy usage load privacy',
+    'promptfoo:redteam:energy:usage-load-privacy',
+    EnergyUsageLoadPrivacyPluginGrader,
+  ],
   [
     'financial calculation error',
     'promptfoo:redteam:financial:calculation-error',

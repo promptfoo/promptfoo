@@ -61,6 +61,7 @@ export type VulnerabilityType =
   | 'criminal'
   | 'custom'
   | 'ecommerce'
+  | 'energy'
   | 'financial'
   | 'harmful'
   | 'insurance'
@@ -703,6 +704,156 @@ export const PLUGINS = [
       chat: true,
     },
     vulnerabilityType: 'ecommerce',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether energy R&D assistants preserve controlled, export-restricted, proprietary, data-room, lab-safety, and advanced-energy research boundaries',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#controlled-research-boundary',
+    name: 'Energy Controlled Research Boundary',
+    pluginId: 'energy:controlled-research-boundary',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests for overstated renewable, carbon-free, REC, PPA, green tariff, emissions, offset, or clean-energy claims',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#green-claims-and-programs',
+    name: 'Energy Green Claims and Programs',
+    pluginId: 'energy:green-claims-programs',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether energy assistants avoid unsafe gas, downed-wire, wildfire, outage, restoration, public-safety shutoff, and emergency guidance',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#hazard-and-outage-misinformation',
+    name: 'Energy Hazard and Outage Misinformation',
+    pluginId: 'energy:hazard-outage-misinformation',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether energy assistants protect non-public generation, trading, PPA, interconnection, large-load, fuel, hedge, and planning information',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#market-sensitive-disclosure',
+    name: 'Energy Market-Sensitive Disclosure',
+    pluginId: 'energy:market-sensitive-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether nuclear energy assistants preserve procedure, work-control, safety, security, emergency, regulatory, and reporting boundaries',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#nuclear-safety-boundary',
+    name: 'Energy Nuclear Safety Boundary',
+    pluginId: 'energy:nuclear-safety-boundary',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether AI-mediated energy operations workflows preserve approvals, tickets, safety holds, audit trails, and tool-use boundaries',
+    label: 'security',
+    link: '/docs/red-team/plugins/energy/#operations-workflow-integrity',
+    name: 'Energy Operations Workflow Integrity',
+    pluginId: 'energy:operations-workflow-integrity',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether energy assistants preserve medical baseline, life-support, hardship, disconnection, assistance, and vulnerable-customer process boundaries',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#protected-customer-process',
+    name: 'Energy Protected Customer Process',
+    pluginId: 'energy:protected-customer-process',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
+      'Tests whether energy assistants ground tariff, rebate, bill, program, interconnection, large-load, capacity, and customer eligibility claims in approved sources',
+    label: 'compliance',
+    link: '/docs/red-team/plugins/energy/#rates-and-programs-grounding',
+    name: 'Energy Rates and Programs Grounding',
+    pluginId: 'energy:rates-programs-grounding',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether energy assistants protect actionable substation, feeder, pipeline, generation, control center, cyber, physical security, and critical-infrastructure details',
+    label: 'security',
+    link: '/docs/red-team/plugins/energy/#sensitive-infrastructure-disclosure',
+    name: 'Energy Sensitive Infrastructure Disclosure',
+    pluginId: 'energy:sensitive-infrastructure-disclosure',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests for unauthorized disclosure or inference from smart-meter, usage, load-profile, tenant, industrial, or data-center energy data',
+    label: 'privacy',
+    link: '/docs/red-team/plugins/energy/#usage-and-load-privacy',
+    name: 'Energy Usage and Load Privacy',
+    pluginId: 'energy:usage-load-privacy',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'energy',
   },
   {
     category: 'Brand',

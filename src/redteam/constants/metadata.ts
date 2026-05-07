@@ -103,6 +103,28 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for detection of fraudulent order patterns, unauthorized transactions, or payment manipulation attempts',
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
+  energy:
+    'Energy AI safety testing across rates, customer protection, usage privacy, outage safety, green claims, market disclosure, infrastructure, operations, nuclear, and controlled research boundaries',
+  'energy:rates-programs-grounding':
+    'Tests whether energy assistants ground tariff, rebate, bill, program, interconnection, large-load, capacity, and customer eligibility claims in approved sources',
+  'energy:protected-customer-process':
+    'Tests whether energy assistants preserve medical baseline, life-support, hardship, disconnection, assistance, and vulnerable-customer process boundaries',
+  'energy:usage-load-privacy':
+    'Tests for unauthorized disclosure or inference from smart-meter, usage, load-profile, tenant, industrial, or data-center energy data',
+  'energy:hazard-outage-misinformation':
+    'Tests whether energy assistants avoid unsafe gas, downed-wire, wildfire, outage, restoration, public-safety shutoff, and emergency guidance',
+  'energy:green-claims-programs':
+    'Tests for overstated renewable, carbon-free, REC, PPA, green tariff, emissions, offset, or clean-energy program claims',
+  'energy:market-sensitive-disclosure':
+    'Tests whether energy assistants protect non-public generation, trading, PPA, interconnection, large-load, fuel, hedge, and planning information',
+  'energy:sensitive-infrastructure-disclosure':
+    'Tests whether energy assistants protect actionable substation, feeder, pipeline, generation, control center, cyber, physical security, and critical-infrastructure details',
+  'energy:operations-workflow-integrity':
+    'Tests whether AI-mediated energy operations workflows preserve approvals, tickets, safety holds, audit trails, and tool-use boundaries',
+  'energy:nuclear-safety-boundary':
+    'Tests whether nuclear energy assistants preserve procedure, work-control, safety, security, emergency, regulatory, and reporting boundaries',
+  'energy:controlled-research-boundary':
+    'Tests whether energy R&D assistants preserve controlled, export-restricted, proprietary, data-room, lab-safety, and advanced-energy research boundaries',
   intent: 'Tests for manipulation of system behavior via specific prompts',
   jailbreak:
     '[DEPRECATED] Use jailbreak:meta instead. Single-shot optimization of safety bypass techniques.',
@@ -217,6 +239,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   financial: 'Financial AI safety testing across financial services vulnerabilities',
   ecommerce:
     'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
+  energy:
+    'Energy AI safety testing across rates, load privacy, outage safety, market disclosure, operations, infrastructure, nuclear, and research boundaries',
   telecom:
     'Telecommunications AI safety testing across CPNI protection, account security, and regulatory compliance vulnerabilities',
   'telecom:cpni-disclosure':
@@ -378,6 +402,17 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ecommerce:compliance-bypass': 'Compliance Bypass',
   'ecommerce:order-fraud': 'Order Fraud',
   'ecommerce:price-manipulation': 'Price Manipulation',
+  energy: 'Energy Safety Suite',
+  'energy:rates-programs-grounding': 'Rates and Programs Grounding',
+  'energy:protected-customer-process': 'Protected Customer Process',
+  'energy:usage-load-privacy': 'Usage and Load Privacy',
+  'energy:hazard-outage-misinformation': 'Hazard and Outage Misinformation',
+  'energy:green-claims-programs': 'Green Claims and Programs',
+  'energy:market-sensitive-disclosure': 'Market-Sensitive Disclosure',
+  'energy:sensitive-infrastructure-disclosure': 'Sensitive Infrastructure Disclosure',
+  'energy:operations-workflow-integrity': 'Operations Workflow Integrity',
+  'energy:nuclear-safety-boundary': 'Nuclear Safety Boundary',
+  'energy:controlled-research-boundary': 'Controlled Research Boundary',
   telecom: 'Telecommunications Safety Suite',
   'telecom:cpni-disclosure': 'CPNI Disclosure',
   'telecom:location-disclosure': 'Location Data Disclosure',
@@ -600,6 +635,17 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ecommerce:compliance-bypass': Severity.High,
   'ecommerce:order-fraud': Severity.High,
   'ecommerce:price-manipulation': Severity.High,
+  energy: Severity.Critical,
+  'energy:rates-programs-grounding': Severity.High,
+  'energy:protected-customer-process': Severity.Critical,
+  'energy:usage-load-privacy': Severity.Critical,
+  'energy:hazard-outage-misinformation': Severity.Critical,
+  'energy:green-claims-programs': Severity.High,
+  'energy:market-sensitive-disclosure': Severity.Critical,
+  'energy:sensitive-infrastructure-disclosure': Severity.Critical,
+  'energy:operations-workflow-integrity': Severity.Critical,
+  'energy:nuclear-safety-boundary': Severity.Critical,
+  'energy:controlled-research-boundary': Severity.Critical,
   telecom: Severity.Critical,
   'telecom:cpni-disclosure': Severity.Critical,
   'telecom:location-disclosure': Severity.Critical,
@@ -770,6 +816,16 @@ export const riskCategories: Record<string, Plugin[]> = {
     'ecommerce:compliance-bypass',
     'ecommerce:order-fraud',
     'ecommerce:price-manipulation',
+    'energy:rates-programs-grounding',
+    'energy:protected-customer-process',
+    'energy:usage-load-privacy',
+    'energy:hazard-outage-misinformation',
+    'energy:green-claims-programs',
+    'energy:market-sensitive-disclosure',
+    'energy:sensitive-infrastructure-disclosure',
+    'energy:operations-workflow-integrity',
+    'energy:nuclear-safety-boundary',
+    'energy:controlled-research-boundary',
     'financial:calculation-error',
     'financial:compliance-violation',
     'financial:confidential-disclosure',
@@ -889,6 +945,17 @@ export const categoryAliases: Record<Plugin, string> = {
   'ecommerce:order-fraud': 'EcommerceOrderFraud',
   'ecommerce:pci-dss': 'EcommercePciDss',
   'ecommerce:price-manipulation': 'EcommercePriceManipulation',
+  energy: 'EnergySafety',
+  'energy:rates-programs-grounding': 'EnergyRatesProgramsGrounding',
+  'energy:protected-customer-process': 'EnergyProtectedCustomerProcess',
+  'energy:usage-load-privacy': 'EnergyUsageLoadPrivacy',
+  'energy:hazard-outage-misinformation': 'EnergyHazardOutageMisinformation',
+  'energy:green-claims-programs': 'EnergyGreenClaimsPrograms',
+  'energy:market-sensitive-disclosure': 'EnergyMarketSensitiveDisclosure',
+  'energy:sensitive-infrastructure-disclosure': 'EnergySensitiveInfrastructureDisclosure',
+  'energy:operations-workflow-integrity': 'EnergyOperationsWorkflowIntegrity',
+  'energy:nuclear-safety-boundary': 'EnergyNuclearSafetyBoundary',
+  'energy:controlled-research-boundary': 'EnergyControlledResearchBoundary',
   'financial:calculation-error': 'FinancialCalculationError',
   'financial:compliance-violation': 'FinancialComplianceViolation',
   'financial:confidential-disclosure': 'FinancialConfidentialDisclosure',
@@ -1076,6 +1143,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Comprehensive financial AI safety testing for financial services vulnerabilities including calculation errors, compliance violations, hallucination, and data leakage',
   ecommerce:
     'Comprehensive e-commerce AI safety testing for payment security and transaction integrity vulnerabilities including PCI DSS compliance, fraud detection, and price manipulation',
+  energy:
+    'Comprehensive energy AI safety testing for promptable customer, outage, operations, market, infrastructure, nuclear, and research assistant vulnerabilities',
   telecom:
     'Comprehensive telecommunications AI safety testing across CPNI protection, account security, regulatory compliance (FCC, TCPA, CALEA), and telecom-specific fraud prevention',
   'telecom:cpni-disclosure':
@@ -1174,6 +1243,26 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for detection of fraudulent order patterns, unauthorized transactions, account takeover attempts, or payment manipulation in e-commerce checkout and order processing',
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount code abuse, inventory exploits, cart manipulation, unauthorized price modifications, or coupon stacking vulnerabilities',
+  'energy:rates-programs-grounding':
+    'Tests whether energy assistants invent or overstate tariff, rebate, bill, program, interconnection, large-load, capacity, or customer eligibility claims instead of grounding answers in approved sources',
+  'energy:protected-customer-process':
+    'Tests whether energy assistants mishandle medical baseline, life-support, hardship, disconnection, assistance, or vulnerable-customer workflows and disclosures',
+  'energy:usage-load-privacy':
+    'Tests whether energy assistants disclose or infer sensitive smart-meter, load-profile, occupancy, tenant, industrial, or data-center usage information without authorization',
+  'energy:hazard-outage-misinformation':
+    'Tests whether energy assistants provide unsafe gas, downed-wire, wildfire, outage, restoration, public-safety shutoff, or emergency guidance and claims',
+  'energy:green-claims-programs':
+    'Tests whether energy assistants overstate renewable, carbon-free, REC, PPA, green tariff, emissions, offset, or clean-energy program claims',
+  'energy:market-sensitive-disclosure':
+    'Tests whether energy assistants disclose non-public generation, trading, PPA, interconnection, large-load, fuel, hedge, or operational planning information',
+  'energy:sensitive-infrastructure-disclosure':
+    'Tests whether energy assistants reveal actionable substation, feeder, pipeline, generation, control center, cyber, physical security, or critical-infrastructure details',
+  'energy:operations-workflow-integrity':
+    'Tests whether energy assistants bypass approvals, tickets, safety holds, change controls, audit trails, tool-use boundaries, or large-load commitment workflows',
+  'energy:nuclear-safety-boundary':
+    'Tests whether nuclear energy assistants bypass procedure, work-control, safety, security, emergency, regulatory, reporting, or corrective-action boundaries',
+  'energy:controlled-research-boundary':
+    'Tests whether energy R&D assistants disclose controlled, export-restricted, proprietary, data-room, lab-safety, or advanced-energy research information',
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',

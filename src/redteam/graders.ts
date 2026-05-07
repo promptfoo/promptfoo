@@ -20,6 +20,16 @@ import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceCo
 import { EcommerceOrderFraudGrader } from './plugins/ecommerce/ecommerceOrderFraud';
 import { EcommercePciDssGrader } from './plugins/ecommerce/ecommercePciDss';
 import { EcommercePriceManipulationGrader } from './plugins/ecommerce/ecommercePriceManipulation';
+import { EnergyControlledResearchBoundaryPluginGrader } from './plugins/energy/controlledResearchBoundary';
+import { EnergyGreenClaimsProgramsPluginGrader } from './plugins/energy/greenClaimsPrograms';
+import { EnergyHazardOutageMisinformationPluginGrader } from './plugins/energy/hazardOutageMisinformation';
+import { EnergyMarketSensitiveDisclosurePluginGrader } from './plugins/energy/marketSensitiveDisclosure';
+import { EnergyNuclearSafetyBoundaryPluginGrader } from './plugins/energy/nuclearSafetyBoundary';
+import { EnergyOperationsWorkflowIntegrityPluginGrader } from './plugins/energy/operationsWorkflowIntegrity';
+import { EnergyProtectedCustomerProcessPluginGrader } from './plugins/energy/protectedCustomerProcess';
+import { EnergyRatesProgramsGroundingPluginGrader } from './plugins/energy/ratesProgramsGrounding';
+import { EnergySensitiveInfrastructureDisclosurePluginGrader } from './plugins/energy/sensitiveInfrastructureDisclosure';
+import { EnergyUsageLoadPrivacyPluginGrader } from './plugins/energy/usageLoadPrivacy';
 import { ExcessiveAgencyGrader } from './plugins/excessiveAgency';
 import { FinancialCalculationErrorPluginGrader } from './plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from './plugins/financial/financialComplianceViolation';
@@ -155,6 +165,25 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:ecommerce:order-fraud': new EcommerceOrderFraudGrader(),
   'promptfoo:redteam:ecommerce:pci-dss': new EcommercePciDssGrader(),
   'promptfoo:redteam:ecommerce:price-manipulation': new EcommercePriceManipulationGrader(),
+  'promptfoo:redteam:energy:rates-programs-grounding':
+    new EnergyRatesProgramsGroundingPluginGrader(),
+  'promptfoo:redteam:energy:protected-customer-process':
+    new EnergyProtectedCustomerProcessPluginGrader(),
+  'promptfoo:redteam:energy:usage-load-privacy': new EnergyUsageLoadPrivacyPluginGrader(),
+  'promptfoo:redteam:energy:hazard-outage-misinformation':
+    new EnergyHazardOutageMisinformationPluginGrader(),
+  'promptfoo:redteam:energy:green-claims-programs':
+    new EnergyGreenClaimsProgramsPluginGrader(),
+  'promptfoo:redteam:energy:market-sensitive-disclosure':
+    new EnergyMarketSensitiveDisclosurePluginGrader(),
+  'promptfoo:redteam:energy:sensitive-infrastructure-disclosure':
+    new EnergySensitiveInfrastructureDisclosurePluginGrader(),
+  'promptfoo:redteam:energy:operations-workflow-integrity':
+    new EnergyOperationsWorkflowIntegrityPluginGrader(),
+  'promptfoo:redteam:energy:nuclear-safety-boundary':
+    new EnergyNuclearSafetyBoundaryPluginGrader(),
+  'promptfoo:redteam:energy:controlled-research-boundary':
+    new EnergyControlledResearchBoundaryPluginGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
   'promptfoo:redteam:ferpa': new FerpaGrader(),
   'promptfoo:redteam:financial:calculation-error': new FinancialCalculationErrorPluginGrader(),

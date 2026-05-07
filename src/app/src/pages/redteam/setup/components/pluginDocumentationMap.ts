@@ -78,6 +78,17 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   religion: `${BASE_DOCS_URL}/religion/`,
 
   // Domain-Specific Risks
+  energy: `${BASE_DOCS_URL}/energy/`,
+  'energy:rates-programs-grounding': `${BASE_DOCS_URL}/energy/`,
+  'energy:protected-customer-process': `${BASE_DOCS_URL}/energy/`,
+  'energy:usage-load-privacy': `${BASE_DOCS_URL}/energy/`,
+  'energy:hazard-outage-misinformation': `${BASE_DOCS_URL}/energy/`,
+  'energy:green-claims-programs': `${BASE_DOCS_URL}/energy/`,
+  'energy:market-sensitive-disclosure': `${BASE_DOCS_URL}/energy/`,
+  'energy:sensitive-infrastructure-disclosure': `${BASE_DOCS_URL}/energy/`,
+  'energy:operations-workflow-integrity': `${BASE_DOCS_URL}/energy/`,
+  'energy:nuclear-safety-boundary': `${BASE_DOCS_URL}/energy/`,
+  'energy:controlled-research-boundary': `${BASE_DOCS_URL}/energy/`,
   'financial:calculation-error': `${BASE_DOCS_URL}/financial/`,
   'financial:compliance-violation': `${BASE_DOCS_URL}/financial/`,
   'financial:data-leakage': `${BASE_DOCS_URL}/financial/`,
