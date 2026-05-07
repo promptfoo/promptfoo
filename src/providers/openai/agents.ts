@@ -411,7 +411,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
           this.sessionInitialization = undefined;
           throw error;
         });
-      await this.sessionInitialization;
+      return await this.sessionInitialization;
     }
 
     return this.session;
