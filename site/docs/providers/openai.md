@@ -28,6 +28,7 @@ The OpenAI provider supports the following model formats:
 - `openai:moderation:<model name>` - uses moderation models (default: `omni-moderation-latest`)
 - `openai:image:<model name>` - uses image generation models
 - `openai:transcription:<model name>` - uses audio transcription models
+- `openai:realtime` - defaults to `gpt-realtime-1.5`
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
 - `openai:video:<model name>` - uses Sora video generation models
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
@@ -1607,16 +1608,20 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 
 ## Audio capabilities
 
-OpenAI models with audio support (like `gpt-audio-1.5`, `gpt-audio`, `gpt-audio-mini`, `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+OpenAI models with audio support (like `gpt-audio-1.5`, `gpt-audio`, and `gpt-audio-mini`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+
+Use these general-purpose audio models with `openai:chat:*`. Current OpenAI docs place `gpt-audio*` on the Chat Completions endpoint, and audio is not yet supported by the Responses API, so `openai:responses:gpt-audio*` is not a valid audio route.
+
+OpenAI removed the older `gpt-4o-audio-preview` model family from the API on May 7, 2026. Use the current `gpt-audio*` models below instead.
 
 **Available audio models:**
 
 - `gpt-audio-1.5` - Flagship audio model ($2.50/$10 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-audio` - General audio model ($2.50/$10 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-audio-2025-08-28` - Dated snapshot of `gpt-audio`
 - `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-audio-mini-2025-12-15` - Dated snapshot of `gpt-audio-mini`
-- `gpt-4o-audio-preview` - Preview audio model
-- `gpt-4o-mini-audio-preview` - Preview mini audio model
+- `gpt-audio-mini-2025-10-06` - Dated snapshot of `gpt-audio-mini`
 
 ### Using audio inputs
 
@@ -1651,7 +1656,7 @@ prompts:
     label: Audio Input
 
 providers:
-  - id: openai:chat:gpt-4o-audio-preview
+  - id: openai:chat:gpt-audio-1.5
     config:
       modalities: ['text'] # also supports 'audio'
 
@@ -1774,9 +1779,12 @@ The Realtime API allows for real-time communication with models like `gpt-realti
 
 - `gpt-realtime-1.5` - Flagship realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime` - General-availability realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
+- `gpt-realtime-2025-08-28` - Dated snapshot of `gpt-realtime`
 - `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-realtime-mini-2025-12-15`
-- `gpt-4o-realtime-preview-2024-12-17` and `gpt-4o-mini-realtime-preview-2024-12-17` - Legacy preview models
+- `gpt-realtime-mini-2025-10-06`
+
+OpenAI removed the older `gpt-4o-realtime-preview` model family from the API on May 7, 2026. Use the current `gpt-realtime*` models above instead.
 
 ### Using Realtime API
 
@@ -1812,7 +1820,7 @@ The Realtime API configuration supports these parameters in addition to standard
 | `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)                                 | 30000                  | Any number                                                          |
 | `max_response_output_tokens` | Maximum tokens in model response. Invalid Realtime values fall back to `'inf'`. | 'inf'                  | Integer from 1-4096 or 'inf'                                        |
 | `tools`                      | Array of tool definitions for function calling                                  | []                     | Array of tool objects                                               |
-| `tool_choice`                | Controls how tools are selected                                                 | 'auto'                 | 'none', 'auto', 'required', or object                               |
+| `tool_choice`                | Controls how tools are selected                                                 | 'auto'                 | 'none', 'auto', 'required', or forced-function object               |
 
 #### Custom endpoints and proxies (Realtime)
 
@@ -1835,6 +1843,8 @@ Environment variables `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL` also apply to 
 
 The Realtime API supports function calling via tools, similar to the Chat API. Here's an example configuration:
 
+Realtime tools can be supplied inline or loaded through the same `file://` tool references supported by the rest of the OpenAI provider. Promptfoo normalizes Chat-style function tools for Realtime and preserves forced-function intent for either `{ type: 'function', function: { name } }` or `{ type: 'function', name }` tool-choice objects.
+
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:realtime:gpt-realtime-1.5
@@ -1854,6 +1864,8 @@ providers:
 ```
 
 Realtime function tools use top-level `name`, `description`, and `parameters` fields. If you reuse a Chat Completions-style tools file such as `type: function` plus a nested `function:` object, promptfoo normalizes those function tools before sending them to the Realtime API, so the same shared `tools.yaml` can work with both `openai:chat:*` and `openai:realtime:*` providers.
+
+Promptfoo also preserves forced-function semantics for Realtime configs. When you set a specific Chat-style `tool_choice`, promptfoo narrows the Realtime payload to that function and sends a required tool choice so the selected function is actually invoked during the eval.
 
 When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to that handler. If the handler performs side effects, validate the function name and parse or validate the arguments before acting on them. For deterministic eval checks, use an [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertion when you need to enforce an exact schema match.
 

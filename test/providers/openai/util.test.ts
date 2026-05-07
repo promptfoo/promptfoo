@@ -6,6 +6,7 @@ import {
   formatOpenAiError,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
+  OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
@@ -391,6 +392,15 @@ describe('calculateOpenAICost', () => {
     ).toBe(true);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro')).toBe(false);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23')).toBe(false);
+  });
+
+  it('should exclude retired preview audio and realtime models from current routing registries', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(false);
+    expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
+    expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview')).toBe(
+      false,
+    );
   });
 
   it('should calculate cost correctly for gpt-5-nano', () => {

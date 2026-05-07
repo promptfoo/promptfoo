@@ -226,10 +226,7 @@ describe('OpenAI Realtime Provider', () => {
               },
             },
           ],
-          tool_choice: {
-            type: 'function',
-            function: { name: 'get_weather' },
-          },
+          tool_choice: 'auto',
         },
       });
 
@@ -248,10 +245,72 @@ describe('OpenAI Realtime Provider', () => {
           },
         },
       ]);
-      expect(body.tool_choice).toEqual({
-        type: 'function',
-        name: 'get_weather',
+      expect(body.tool_choice).toBe('auto');
+    });
+
+    it('should emulate forced Realtime tool choices with a required single-tool payload', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get the weather',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+            {
+              type: 'function',
+              function: {
+                name: 'get_time',
+                description: 'Get the time',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            function: { name: 'get_weather' },
+          },
+        },
       });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body.tools).toEqual([
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get the weather',
+          parameters: { type: 'object', properties: {} },
+        },
+      ]);
+      expect(body.tool_choice).toBe('required');
+    });
+
+    it('should accept top-level forced Realtime tool choices', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              name: 'get_weather',
+              description: 'Get the weather',
+              parameters: { type: 'object', properties: {} },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            name: 'get_weather',
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body.tools).toHaveLength(1);
+      expect(body.tool_choice).toBe('required');
     });
 
     it.each([
@@ -1313,6 +1372,64 @@ describe('OpenAI Realtime Provider', () => {
           encodeURIComponent('secret123'),
       );
       expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
+    });
+
+    it('normalizes response-level tools for client-secret requests', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get the weather',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            function: { name: 'get_weather' },
+          },
+        },
+      });
+      const promise = provider.webSocketRequest('secret123', 'hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+      await vi.waitFor(() => {
+        expect(
+          mockWs.send.mock.calls
+            .map(
+              ([payload]: [string]) =>
+                JSON.parse(payload) as {
+                  type: string;
+                  response?: { tools?: Record<string, unknown>[] };
+                },
+            )
+            .some((event: { type: string }) => event.type === 'response.create'),
+        ).toBe(true);
+      });
+
+      const sentEvents = mockWs.send.mock.calls.map(
+        ([payload]: [string]) =>
+          JSON.parse(payload) as { type: string; response?: { tools?: Record<string, unknown>[] } },
+      );
+      const responseCreate = sentEvents.find(
+        (event: { type: string }) => event.type === 'response.create',
+      );
+
+      expect(responseCreate.response.tools).toEqual([
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get the weather',
+          parameters: { type: 'object', properties: {} },
+        },
+      ]);
+      expect(responseCreate.response.tool_choice).toBe('required');
     });
   });
 });

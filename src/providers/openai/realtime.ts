@@ -98,7 +98,12 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
   max_response_output_tokens?: number | 'inf';
   websocketTimeout?: number; // Timeout for WebSocket connection in milliseconds
   tools?: any[]; // Array of function definitions
-  tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
+  tool_choice?:
+    | 'none'
+    | 'auto'
+    | 'required'
+    | { type: 'function'; function?: { name: string } }
+    | { type: 'function'; name: string };
   functionCallHandler?: (name: string, args: string) => Promise<string>; // Handler for function calls
   apiVersion?: string; // Optional API version
   maintainContext?: boolean;
@@ -169,18 +174,39 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     });
   }
 
-  private normalizeRealtimeToolChoice(): unknown {
+  private getForcedRealtimeToolName(): string | undefined {
     const toolChoice = this.config.tool_choice;
 
     if (
       toolChoice &&
       typeof toolChoice === 'object' &&
       toolChoice.type === 'function' &&
+      'function' in toolChoice &&
       toolChoice.function?.name
     ) {
+      return toolChoice.function.name;
+    }
+
+    if (
+      toolChoice &&
+      typeof toolChoice === 'object' &&
+      toolChoice.type === 'function' &&
+      typeof (toolChoice as Record<string, unknown>).name === 'string'
+    ) {
+      return (toolChoice as Record<string, string>).name;
+    }
+
+    return undefined;
+  }
+
+  private normalizeRealtimeToolChoice(): unknown {
+    const toolChoice = this.config.tool_choice;
+    const forcedToolName = this.getForcedRealtimeToolName();
+
+    if (forcedToolName) {
       return {
         type: 'function',
-        name: toolChoice.function.name,
+        name: forcedToolName,
       };
     }
 
@@ -194,6 +220,32 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
     const normalizedTools = this.normalizeRealtimeTools(loadedTools);
+    const forcedToolName = this.getForcedRealtimeToolName();
+
+    // The live Realtime API accepts forced function objects but does not currently
+    // force a function call. Restricting the available tool set and using
+    // `required` preserves the documented forced-function behavior for evals.
+    if (forcedToolName && Array.isArray(normalizedTools)) {
+      const forcedTools = normalizedTools.filter(
+        (tool) =>
+          tool &&
+          typeof tool === 'object' &&
+          (tool as Record<string, unknown>).type === 'function' &&
+          (tool as Record<string, unknown>).name === forcedToolName,
+      );
+
+      if (forcedTools.length === 0) {
+        throw new Error(
+          `Realtime tool_choice requested function "${forcedToolName}", but no matching tool was configured.`,
+        );
+      }
+
+      return {
+        tools: forcedTools,
+        tool_choice: 'required',
+      };
+    }
+
     const toolChoice = this.normalizeRealtimeToolChoice() ?? 'auto';
 
     return {
@@ -449,18 +501,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   },
                 };
 
-                // Add tools if configured
-                if (this.config.tools && this.config.tools.length > 0) {
-                  const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
-                  if (loadedTools !== undefined) {
-                    responseEvent.response.tools = loadedTools;
-                  }
-                  if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
-                    responseEvent.response.tool_choice = this.config.tool_choice;
-                  } else {
-                    responseEvent.response.tool_choice = 'auto';
-                  }
-                }
+                Object.assign(responseEvent.response, await this.getRealtimeToolConfig());
 
                 sendEvent(responseEvent);
               }
