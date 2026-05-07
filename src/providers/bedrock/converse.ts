@@ -813,10 +813,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * leak resources.
    */
   async cleanup(): Promise<void> {
-    if (!this.mcpClient && !this.initializationPromise) {
+    if (!this.mcpClient && this.initializationPromise == null) {
       return;
     }
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       try {
         await this.initializationPromise;
       } catch (err) {

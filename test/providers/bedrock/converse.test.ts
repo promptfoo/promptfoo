@@ -598,11 +598,12 @@ describe('AwsBedrockConverseProvider', () => {
       expect(mockSend).not.toHaveBeenCalled();
     });
 
-    it('should not surface unhandled rejection if provider is constructed but never invoked', async () => {
+    it('should not surface unhandled rejection from a failed MCP init', async () => {
       mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
-      // Constructing the provider returns synchronously; the failed init promise
-      // must have a sink-handler attached so Node does not log an
-      // UnhandledPromiseRejection or terminate strict-mode processes.
+      // Constructing the provider must not leak an UnhandledPromiseRejection;
+      // the constructor attaches a sink-handler that records the error so it
+      // can be reported lazily on the first callApi (which awaits the promise
+      // and observes the rejection through the recorded error field).
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
           region: 'us-east-1',
@@ -613,9 +614,9 @@ describe('AwsBedrockConverseProvider', () => {
         },
       });
 
-      // Wait for the init promise to settle without awaiting it directly.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      // Sanity: the recorded error is observable via callApi.
+      // callApi awaits initializationPromise internally, which forces the .catch
+      // handler in the constructor to run and populate mcpInitError. No manual
+      // microtask flush needed.
       const result = await provider.callApi('hi');
       expect(result.error).toContain('MCP initialization failed');
     });
@@ -802,9 +803,7 @@ describe('AwsBedrockConverseProvider', () => {
         '@aws-sdk/client-bedrock-runtime'
       )) as unknown as MockBedrockModule;
       const sentInput = ConverseCommand.mock.calls.at(-1)?.[0];
-      const toolNames = (sentInput?.toolConfig?.tools || []).map(
-        (t: any) => t.toolSpec?.name,
-      );
+      const toolNames = (sentInput?.toolConfig?.tools || []).map((t: any) => t.toolSpec?.name);
       expect(toolNames).toEqual(['list_resources']);
     });
 
