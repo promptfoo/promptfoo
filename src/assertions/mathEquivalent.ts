@@ -92,10 +92,12 @@ export function normalizeLatex(text: string): string {
   for (const fn of TRIG_FNS) {
     // fn( → \fn(
     s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\(`, 'g'), `\\${fn}(`);
-    // fn<digits> → \fn(<digits>)  e.g. cos4 → \cos(4)
-    s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}(\\d+)`, 'g'), `\\${fn}($1)`);
-    // fn<space><digits> → \fn(<digits>)
-    s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\s+(\\d+)`, 'g'), `\\${fn}($1)`);
+    // fn<digits>(end-of-token) → \fn(<digits>)  e.g. cos4 → \cos(4).
+    // The trailing (?!\w) guard prevents identifiers like `sqrt2var` or
+    // `sqrt2_x` from being silently rewritten to `\sqrt(2)var`.
+    s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}(\\d+)(?!\\w)`, 'g'), `\\${fn}($1)`);
+    // fn<space><digits>(end-of-token) → \fn(<digits>)
+    s = s.replace(new RegExp(`(?<!\\\\)(?<![a-zA-Z])${fn}\\s+(\\d+)(?!\\w)`, 'g'), `\\${fn}($1)`);
   }
 
   return s;
@@ -182,7 +184,7 @@ export function parseMathExpression(text: string): BoxedExpression | undefined {
   try {
     const ce = getEngine();
     const expr = ce.parse(normalized);
-    if (!expr.isValid || (expr.errors && expr.errors.length > 0)) {
+    if (!expr.isValid || (expr.errors?.length ?? 0) > 0) {
       return undefined;
     }
     if (isEqualityExpr(expr)) {
@@ -389,7 +391,7 @@ export function handleMathEquivalent({
     '"math-equivalent" assertion type must have a string or number value',
   );
 
-  const result = isMathEquivalent(outputString, renderedValue as string | number);
+  const result = isMathEquivalent(outputString, renderedValue);
   // Parse failure is not negatable: if we cannot parse, we cannot prove
   // equivalence OR non-equivalence. Surface the parse error verbatim so
   // not-math-equivalent does not silently accept garbage output.

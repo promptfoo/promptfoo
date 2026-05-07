@@ -3,7 +3,8 @@
  * normalization, cleaning, extraction, and parsing, plus end-to-end
  * equivalence checks against representative LLM-output shapes.
  */
-import { describe, expect, it } from 'vitest';
+import { ComputeEngine } from '@cortex-js/compute-engine';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   cleanMathText,
   extractMathAnswer,
@@ -116,6 +117,26 @@ describe('normalizeLatex', () => {
       const result = normalizeLatex('arctan(x)');
       expect(result).toContain('\\arctan');
       expect(result).not.toContain('arc\\tan');
+    });
+
+    it.each([
+      ['sqrt2var', 'sqrt2var'],
+      ['sqrt2_x', 'sqrt2_x'],
+      ['cos4abc', 'cos4abc'],
+      ['log10base', 'log10base'],
+    ])('does not split identifier-like trailing tokens (%s)', (input, expected) => {
+      // Adding a trailing-word-boundary guard ((?!\w)) prevents the trig
+      // regexes from rewriting identifiers like `sqrt2var` to `\sqrt(2)var`.
+      expect(normalizeLatex(input)).toBe(expected);
+    });
+
+    it.each([
+      ['sqrt2', '\\sqrt(2)'],
+      ['cos4', '\\cos(4)'],
+      ['cos 4', '\\cos(4)'],
+      ['sqrt 23', '\\sqrt(23)'],
+    ])('still rewrites the legitimate digit-suffixed shorthand (%s → %s)', (input, expected) => {
+      expect(normalizeLatex(input)).toBe(expected);
     });
   });
 
@@ -650,6 +671,41 @@ describe('isMathEquivalent', () => {
       const result = isMathEquivalent('0', val);
       expect(result.pass).toBe(false);
       expect(result.reason).toContain('finite');
+    });
+  });
+
+  describe('CortexJS fault tolerance (catch fences)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('returns undefined when ce.parse throws (parseMathExpression catch)', () => {
+      // Force the engine's parse to throw. The fence inside parseMathExpression
+      // must swallow the error and return undefined rather than propagating.
+      vi.spyOn(ComputeEngine.prototype, 'parse').mockImplementation(() => {
+        throw new Error('simulated CortexJS parse failure');
+      });
+      expect(parseMathExpression('42')).toBeUndefined();
+    });
+
+    it('reports a comparison failure when ce.box throws on Subtract (isMathEquivalent catch)', () => {
+      // Let the two parse calls and any internal box() calls succeed, then
+      // throw only on the explicit ce.box(['Subtract', ...]) we issue. This
+      // exercises the catch fence around the simplify/isEqual pipeline.
+      const originalBox = ComputeEngine.prototype.box;
+      vi.spyOn(ComputeEngine.prototype, 'box').mockImplementation(function (
+        this: ComputeEngine,
+        ...args: Parameters<typeof originalBox>
+      ) {
+        if (Array.isArray(args[0]) && args[0][0] === 'Subtract') {
+          throw new Error('simulated CortexJS box failure');
+        }
+        return originalBox.apply(this, args);
+      });
+      const result = isMathEquivalent('1', '1');
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Math equivalence comparison failed');
+      expect(result.reason).toContain('simulated CortexJS box failure');
     });
   });
 
