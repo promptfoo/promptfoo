@@ -21,6 +21,15 @@ import ThemeSelector from './ThemeSelector';
 
 const LEGACY_MODEL_AUDIT_HISTORY_ROUTE = `${MODEL_AUDIT_ROUTES.ROOT}/history`;
 
+function isModelAuditResultPath(pathname: string) {
+  return (
+    pathname === MODEL_AUDIT_ROUTES.ROOT ||
+    (pathname.startsWith(`${MODEL_AUDIT_ROUTES.ROOT}/`) &&
+      !pathname.startsWith(MODEL_AUDIT_ROUTES.SETUP) &&
+      !pathname.startsWith(LEGACY_MODEL_AUDIT_HISTORY_ROUTE))
+  );
+}
+
 interface NavLinkProps {
   href: string;
   label: string;
@@ -32,11 +41,7 @@ function NavLink({ href, label }: NavLinkProps) {
   // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
   let isActive: boolean;
   if (href === MODEL_AUDIT_ROUTES.ROOT) {
-    isActive =
-      location.pathname === MODEL_AUDIT_ROUTES.ROOT ||
-      (location.pathname.startsWith(`${MODEL_AUDIT_ROUTES.ROOT}/`) &&
-        !location.pathname.startsWith(MODEL_AUDIT_ROUTES.SETUP) &&
-        !location.pathname.startsWith(LEGACY_MODEL_AUDIT_HISTORY_ROUTE));
+    isActive = isModelAuditResultPath(location.pathname);
   } else {
     isActive = location.pathname.startsWith(href);
   }
@@ -68,14 +73,15 @@ interface NavDropdownProps {
   compactLabel?: string;
   items: MenuItem[];
   isActiveCheck: (pathname: string) => boolean;
+  className?: string;
 }
 
-function NavDropdown({ label, compactLabel, items, isActiveCheck }: NavDropdownProps) {
+function NavDropdown({ label, compactLabel, items, isActiveCheck, className }: NavDropdownProps) {
   const location = useLocation();
   const isActive = isActiveCheck(location.pathname);
 
   return (
-    <NavigationMenuItem>
+    <NavigationMenuItem className={className}>
       <NavigationMenuTrigger
         aria-label={label}
         className={cn(
@@ -165,6 +171,29 @@ const resultsMenuItems: MenuItem[] = [
   },
 ];
 
+const browseMenuItems: MenuItem[] = [
+  {
+    href: MODEL_AUDIT_ROUTES.ROOT,
+    label: 'Model Audit',
+    description: 'Review model audit runs',
+  },
+  {
+    href: ROUTES.PROMPTS,
+    label: 'Prompts',
+    description: 'Browse saved prompts',
+  },
+  {
+    href: ROUTES.DATASETS,
+    label: 'Datasets',
+    description: 'Browse saved datasets',
+  },
+  {
+    href: ROUTES.HISTORY,
+    label: 'History',
+    description: 'View evaluation history',
+  },
+];
+
 export default function Navigation() {
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
@@ -200,9 +229,19 @@ export default function Navigation() {
                     )
                   }
                 />
+                <NavDropdown
+                  label="Browse"
+                  items={browseMenuItems}
+                  className="hidden md:block lg:hidden"
+                  isActiveCheck={(pathname) =>
+                    [ROUTES.PROMPTS, ROUTES.DATASETS, ROUTES.HISTORY].some((route) =>
+                      pathname.startsWith(route),
+                    ) || isModelAuditResultPath(pathname)
+                  }
+                />
               </NavigationMenuList>
             </NavigationMenu>
-            <nav className="hidden items-center gap-1 min-[900px]:flex">
+            <nav className="hidden items-center gap-1 lg:flex">
               <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
               <NavLink href={ROUTES.PROMPTS} label="Prompts" />
               <NavLink href={ROUTES.DATASETS} label="Datasets" />
