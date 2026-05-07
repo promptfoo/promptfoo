@@ -31,7 +31,7 @@ defaultTest:
       Output JSON: {"reason": "<brief analysis>", "pass": true|false, "score": 0.0-1.0}
 
       SVG: {{ output }}
-      Criteria: {{ value }}
+      Criteria: {{ rubric }}
 
 tests:
   - vars:
