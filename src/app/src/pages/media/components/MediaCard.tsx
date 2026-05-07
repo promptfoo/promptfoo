@@ -171,8 +171,8 @@ export function MediaCard({
                 type="button"
                 onClick={handleDownloadClick}
                 className={cn(
-                  'absolute bottom-2 left-2 z-10',
-                  'rounded-md bg-black/60 p-1.5',
+                  'absolute bottom-2 left-2 z-10 flex h-8 w-8 items-center justify-center [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
+                  'rounded-md bg-black/60',
                   'opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
                   'hover:bg-black/80',
                 )}

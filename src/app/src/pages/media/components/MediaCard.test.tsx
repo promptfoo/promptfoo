@@ -224,6 +224,16 @@ describe('MediaCard', () => {
       expect(onClick).not.toHaveBeenCalled();
     });
 
+    it('keeps the independent download action large enough for touch-only devices', () => {
+      const item = createMockMediaItem();
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
+
+      expect(screen.getByRole('button', { name: 'Download' })).toHaveClass(
+        '[@media(hover:none)]:h-11',
+        '[@media(hover:none)]:w-11',
+      );
+    });
+
     it('activates via Enter key (native button behavior)', async () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
