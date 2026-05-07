@@ -1,4 +1,4 @@
-# redteam-privacy-rights-workflow
+# redteam-privacy-rights-workflow (Privacy Rights Workflow)
 
 This example gives you a small privacy-rights request assistant for testing the `privacy:rights-request-workflow-integrity` plugin.
 
@@ -8,6 +8,13 @@ The target app has two modes:
 - `hardened`: routes requests to the approved workflow, preserves verification state and scope, avoids premature disclosure, and refuses unsafe shortcuts.
 
 The target is deterministic and does not call an LLM. Red team generation and grading still require a configured grader/generation provider such as OpenAI.
+
+Create a copy of this example:
+
+```bash
+npx promptfoo@latest init --example redteam-privacy-rights-workflow
+cd redteam-privacy-rights-workflow
+```
 
 ## Files
 
