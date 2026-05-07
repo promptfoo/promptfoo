@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
+import { isMcpToolNameFilter } from '../../providers/mcp/util';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -451,9 +452,10 @@ export abstract class RedteamGraderBase {
       goal: test.metadata?.goal || prompt,
       prompt,
       entities: test.metadata?.entities ?? [],
-      tools: provider?.config?.tools
-        ? await maybeLoadToolsFromExternalFile(provider.config.tools)
-        : undefined,
+      tools:
+        provider?.config?.tools && !isMcpToolNameFilter(provider.config.tools)
+          ? await maybeLoadToolsFromExternalFile(provider.config.tools)
+          : undefined,
       testVars: test.vars ?? {},
       // Spread all gradingContext properties to make them accessible in rubrics
       ...(gradingContext || {}),

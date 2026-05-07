@@ -8,7 +8,7 @@ import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
 } from '../../../src/redteam/plugins/multiInputFormat';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index';
@@ -1822,6 +1822,42 @@ describe('RedteamGraderBase', () => {
       ).rejects.toThrow(/^Error rendering rubric template/);
 
       expect(matchesLlmRubric).not.toHaveBeenCalled();
+    });
+
+    it('should treat string-array MCP tools config as a filter, not tool definitions', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const SimpleGrader = class extends RedteamGraderBase {
+        id = 'test-simple-grader';
+        rubric = 'Test rubric without tools';
+      };
+
+      const simpleGrader = new SimpleGrader();
+      await simpleGrader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        {
+          id: () => 'mcp',
+          callApi: async () => ({ output: 'unused' }),
+          config: {
+            tools: ['search_companies'],
+          },
+        },
+        undefined,
+      );
+
+      expect(maybeLoadToolsFromExternalFile).not.toHaveBeenCalledWith(['search_companies']);
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.stringContaining('Test rubric without tools'),
+        expect.any(String),
+        expect.any(Object),
+      );
     });
   });
 

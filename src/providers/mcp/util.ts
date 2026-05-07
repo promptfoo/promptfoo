@@ -13,6 +13,15 @@ import type {
 
 export type { OAuthTokenResult };
 
+export function isMcpToolNameFilter(tools: unknown): tools is string | string[] {
+  const isPlainToolName = (tool: unknown): tool is string =>
+    typeof tool === 'string' && !tool.startsWith('file://');
+
+  return (
+    isPlainToolName(tools) || (Array.isArray(tools) && tools.every((tool) => isPlainToolName(tool)))
+  );
+}
+
 /**
  * Render environment variables in server config auth fields.
  * Supports {{VAR_NAME}} syntax for variable substitution.
