@@ -3,12 +3,8 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
-import {
-  calculateOpenAICost,
-  formatOpenAiError,
-  getTokenUsage,
-  OPENAI_COMPLETION_MODELS,
-} from './util';
+import { calculateOpenAIUsageCost } from './billing';
+import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -111,12 +107,10 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
-        cost: calculateOpenAICost(
-          this.modelName,
-          this.config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-        ),
+        cost: calculateOpenAIUsageCost(this.modelName, this.config, data.usage, {
+          cachedResponse: cached,
+          serviceTier: data.service_tier ?? this.config.service_tier,
+        }),
       };
     } catch (err) {
       return {

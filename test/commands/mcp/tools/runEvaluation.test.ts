@@ -17,7 +17,8 @@ vi.mock('../../../../src/util/config/default', () => ({
   }),
 }));
 
-vi.mock('../../../../src/util/config/load', () => ({
+vi.mock('../../../../src/util/config/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/util/config/load')>()),
   resolveConfigs: vi.fn().mockResolvedValue({
     config: {},
     testSuite: {
@@ -319,6 +320,38 @@ describe('runEvaluation tool', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('No providers matched filter');
+    });
+
+    it('should return an error when config resolution fails instead of terminating the host', async () => {
+      const { ConfigResolutionError, resolveConfigs } = await import(
+        '../../../../src/util/config/load'
+      );
+
+      vi.mocked(resolveConfigs).mockRejectedValueOnce(
+        new ConfigResolutionError('You must provide at least 1 prompt'),
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: 'anything',
+      });
+
+      expect(result.isError).toBe(true);
+      const logger = (await import('../../../../src/logger')).default;
+      expect(logger.error).toHaveBeenCalledWith(
+        'Evaluation execution failed: You must provide at least 1 prompt',
+      );
     });
   });
 });

@@ -1,11 +1,14 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useModelAuditConfigStore } from '../model-audit/stores';
 import ModelAuditResultLatestPage from './ModelAuditResultLatestPage';
 
 vi.mock('@app/utils/api');
+vi.mock('../model-audit/stores');
 
 // Mock the child components
 vi.mock('../model-audit/components/ResultsTab', () => ({
@@ -46,9 +49,14 @@ const createMockScan = (id: string, name: string) => ({
 
 describe('ModelAuditResultLatestPage', () => {
   const mockCallApi = vi.mocked(callApi);
+  const mockUseConfigStore = vi.mocked(useModelAuditConfigStore);
+  const mockStartNewScan = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseConfigStore.mockImplementation((selector: any) =>
+      selector({ startNewScan: mockStartNewScan }),
+    );
   });
 
   const renderComponent = () => {
@@ -117,6 +125,26 @@ describe('ModelAuditResultLatestPage', () => {
       // Button shows "History" not "View History" in normal state
       expect(screen.getByText('History')).toBeInTheDocument();
     });
+  });
+
+  it('should reset the draft before starting a new scan', async () => {
+    const user = userEvent.setup();
+    const mockScan = createMockScan('latest-scan', 'Test Scan');
+
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ scans: [mockScan], total: 1 }),
+    } as Response);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('New Scan')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText('New Scan'));
+
+    expect(mockStartNewScan).toHaveBeenCalledTimes(1);
   });
 
   it('should show error state on fetch failure', async () => {
