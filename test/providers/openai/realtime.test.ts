@@ -1245,7 +1245,8 @@ describe('OpenAI Realtime Provider', () => {
       try {
         const promise = provider.directWebSocketRequest('hi');
 
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await Promise.resolve();
+        await Promise.resolve();
         expect(unhandledRejections).toEqual([]);
 
         mockHandlers.open.forEach((handler) => handler());
