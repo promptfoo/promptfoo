@@ -317,6 +317,8 @@ providers:
 
 If you reuse a Chat Completions-style tools file that wraps those fields under `function:`, promptfoo normalizes the function tool definitions before sending them to the Realtime API.
 
+When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to your handler. Validate the function name and parse or validate the arguments before side effects in your application code.
+
 #### Implementing a Custom Function Handler
 
 To use function calling in your application, you would implement a function call handler. Here's an example of how you might implement a weather function handler in JavaScript:

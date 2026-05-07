@@ -1855,6 +1855,8 @@ providers:
 
 Realtime function tools use top-level `name`, `description`, and `parameters` fields. If you reuse a Chat Completions-style tools file such as `type: function` plus a nested `function:` object, promptfoo normalizes those function tools before sending them to the Realtime API, so the same shared `tools.yaml` can work with both `openai:chat:*` and `openai:realtime:*` providers.
 
+When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to that handler. If the handler performs side effects, validate the function name and parse or validate the arguments before acting on them. For deterministic eval checks, use an [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertion when you need to enforce an exact schema match.
+
 ### Complete Example
 
 For a complete working example that demonstrates the Realtime API capabilities, see the [OpenAI Realtime API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime) or initialize it with:
