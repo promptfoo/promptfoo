@@ -1820,6 +1820,7 @@ The Realtime API configuration supports these parameters in addition to standard
 | `instructions`               | System instructions for the model                                               | 'You are a helpful...' | Any text string                                                     |
 | `input_audio_format`         | Format of audio input                                                           | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'                                   |
 | `output_audio_format`        | Format of audio output                                                          | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'                                   |
+| `turn_detection`             | Input VAD configuration                                                         | None                   | `server_vad`, `semantic_vad`, or `null`                             |
 | `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)                                 | 30000                  | Any number                                                          |
 | `max_response_output_tokens` | Maximum tokens in model response. Invalid Realtime values fall back to `'inf'`. | 'inf'                  | Integer from 1-4096 or 'inf'                                        |
 | `input_audio_transcription`  | Optional transcription config for input audio                                   | None                   | Supports model-specific `language`, `prompt`, and `delay` fields    |
@@ -1905,7 +1906,7 @@ When using the Realtime API with promptfoo, you can specify the prompt in JSON f
     "role": "user",
     "content": [
       {
-        "type": "text",
+        "type": "input_text",
         "text": "{{question}}"
       }
     ]
@@ -1913,7 +1914,31 @@ When using the Realtime API with promptfoo, you can specify the prompt in JSON f
 ]
 ```
 
-The Realtime API supports the same multimedia formats as the Chat API, allowing you to include images and audio in your prompts.
+Promptfoo preserves the native Realtime user-content items accepted by OpenAI, including `input_text`, `input_audio`, and `input_image`:
+
+```json title="realtime-multimodal-input.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Describe these inputs."
+      },
+      {
+        "type": "input_audio",
+        "audio": "<base64-encoded audio>"
+      },
+      {
+        "type": "input_image",
+        "image_url": "data:image/jpeg;base64,..."
+      }
+    ]
+  }
+]
+```
+
+Use `input_image` only with Realtime models that support image input, such as the current `gpt-realtime*` family.
 
 ### Multi-Turn Conversations
 

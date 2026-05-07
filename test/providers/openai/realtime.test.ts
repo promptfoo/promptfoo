@@ -269,6 +269,34 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
+    it('should pass through semantic VAD configuration', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', {
+        config: {
+          turn_detection: {
+            type: 'semantic_vad',
+            eagerness: 'high',
+            create_response: true,
+            interrupt_response: false,
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body).toMatchObject({
+        audio: {
+          input: {
+            turn_detection: {
+              type: 'semantic_vad',
+              eagerness: 'high',
+              create_response: true,
+              interrupt_response: false,
+            },
+          },
+        },
+      });
+    });
+
     it('should preserve native Realtime tools and tool choices in session payloads', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: {
@@ -1791,6 +1819,111 @@ describe('OpenAI Realtime Provider', () => {
         output_modalities: ['text'],
         tools: [{ type: 'function', name: 'get_weather' }],
       });
+    });
+
+    it('rejects direct WebSocket requests if the socket closes before a tool follow-up completes', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          functionCallHandler: vi.fn().mockResolvedValue('{"ok":true}'),
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((handler) => handler());
+
+      const lastMessageHandler = mockHandlers.message[mockHandlers.message.length - 1];
+      await Promise.resolve(
+        lastMessageHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'conversation.item.created',
+              item: { id: 'msg_tool', role: 'user' },
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastMessageHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: {
+                type: 'function_call',
+                call_id: 'call_tool',
+                name: 'get_weather',
+                arguments: '{}',
+              },
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastMessageHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.function_call_arguments.done',
+              call_id: 'call_tool',
+              arguments: '{}',
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastMessageHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        ),
+      );
+
+      mockHandlers.close[mockHandlers.close.length - 1](1006, Buffer.from('aborted'));
+
+      await expect(promise).rejects.toThrow('WebSocket closed unexpectedly with code 1006');
+    });
+
+    it('preserves structured multimodal user content for direct WebSocket requests', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', {
+        config: {
+          modalities: ['text'],
+        },
+      });
+      const promise = provider.directWebSocketRequest(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'Describe these inputs.' },
+              { type: 'input_audio', audio: 'ZmFrZS1hdWRpbw==' },
+              { type: 'input_image', image_url: 'data:image/jpeg;base64,ZmFrZS1pbWFnZQ==' },
+            ],
+          },
+        ]),
+      );
+
+      mockHandlers.open.forEach((handler) => handler());
+
+      await vi.waitFor(() => {
+        expect(mockWs.send).toHaveBeenCalledTimes(2);
+      });
+
+      expect(JSON.parse(mockWs.send.mock.calls[1][0])).toMatchObject({
+        type: 'conversation.item.create',
+        item: {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'Describe these inputs.' },
+            { type: 'input_audio', audio: 'ZmFrZS1hdWRpbw==' },
+            { type: 'input_image', image_url: 'data:image/jpeg;base64,ZmFrZS1pbWFnZQ==' },
+          ],
+        },
+      });
+
+      simulateGaFlow();
+      await expect(promise).resolves.toMatchObject({ output: 'ok' });
     });
 
     it('normalizes invalid max_response_output_tokens in session.update', async () => {

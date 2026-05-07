@@ -1,6 +1,6 @@
 # openai-realtime (OpenAI Realtime API Example)
 
-This example demonstrates how to use promptfoo to test OpenAI's Realtime API capabilities. The Realtime API allows for real-time communication with `gpt-realtime-2`, `gpt-realtime-1.5`, and `gpt-realtime` using WebSockets, supporting both text and audio inputs/outputs.
+This example demonstrates how to use promptfoo to test OpenAI's Realtime API capabilities. The Realtime API allows for real-time communication with `gpt-realtime-2`, `gpt-realtime-1.5`, and `gpt-realtime` using WebSockets, supporting text, audio, and model-dependent image inputs plus text/audio outputs.
 
 ## Quick Start
 
@@ -284,6 +284,32 @@ const config = {
 };
 ```
 
+Structured Realtime prompts can also preserve the native multimodal user-content items documented by OpenAI:
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Describe these inputs."
+      },
+      {
+        "type": "input_audio",
+        "audio": "<base64-encoded audio>"
+      },
+      {
+        "type": "input_image",
+        "image_url": "data:image/jpeg;base64,..."
+      }
+    ]
+  }
+]
+```
+
+Use `input_image` only with Realtime models that support image input, such as the current `gpt-realtime*` family.
+
 Promptfoo keeps the existing `modalities` config key for compatibility, but sends the current GA Realtime wire shape to OpenAI under the hood.
 
 ### Function Calling Support
@@ -373,7 +399,7 @@ providers:
   - id: openai:realtime:gpt-realtime-1.5
     config:
       modalities: ['text', 'audio']
-      voice: 'cedar' # or 'marin', 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'
+      voice: 'cedar' # or 'marin', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'
       instructions: 'Please respond with audio.'
 ```
 
@@ -398,8 +424,8 @@ If you encounter a "WebSocket error: Unexpected server response: 403" error, thi
    - Try running the example from a different network (e.g., mobile hotspot)
    - Check if your company network blocks WebSocket connections
 
-2. **API Access**: Your OpenAI API key may not have access to the Realtime API beta.
-   - Verify that you have been granted access to the Realtime API beta
+2. **API Access**: Your OpenAI API key may not have access to the Realtime API.
+   - Verify that your project has access to the Realtime API
    - Check your OpenAI dashboard for any access restrictions
 
 3. **Rate Limits**: You may have hit rate limits or quotas for the Realtime API.

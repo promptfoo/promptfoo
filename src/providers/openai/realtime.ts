@@ -78,13 +78,23 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
     delay?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   } | null;
   output_audio_format?: 'pcm16' | 'g711_ulaw' | 'g711_alaw';
-  turn_detection?: {
-    type: 'server_vad';
-    threshold?: number;
-    prefix_padding_ms?: number;
-    silence_duration_ms?: number;
-    create_response?: boolean;
-  } | null;
+  turn_detection?:
+    | {
+        type: 'server_vad';
+        threshold?: number;
+        prefix_padding_ms?: number;
+        silence_duration_ms?: number;
+        create_response?: boolean;
+        interrupt_response?: boolean;
+        idle_timeout_ms?: number;
+      }
+    | {
+        type: 'semantic_vad';
+        eagerness?: 'low' | 'medium' | 'high' | 'auto';
+        create_response?: boolean;
+        interrupt_response?: boolean;
+      }
+    | null;
   voice?:
     | 'alloy'
     | 'ash'
@@ -128,6 +138,20 @@ interface RealtimeResponse {
   functionCallOccurred?: boolean;
   functionCallResults?: string[];
 }
+
+type RealtimeUserContent =
+  | {
+      type: 'input_text';
+      text: string;
+    }
+  | {
+      type: 'input_audio';
+      audio: string;
+    }
+  | {
+      type: 'input_image';
+      image_url: string;
+    };
 
 export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   static OPENAI_REALTIME_MODELS = OPENAI_REALTIME_MODELS;
@@ -273,6 +297,88 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     };
   }
 
+  private normalizeRealtimeUserContentItem(content: unknown): RealtimeUserContent | null {
+    if (!content || typeof content !== 'object') {
+      return null;
+    }
+
+    const candidate = content as Record<string, unknown>;
+
+    if (
+      (candidate.type === 'text' || candidate.type === 'input_text') &&
+      typeof candidate.text === 'string'
+    ) {
+      return {
+        type: 'input_text',
+        text: candidate.text,
+      };
+    }
+
+    if (candidate.type === 'input_audio' && typeof candidate.audio === 'string') {
+      return {
+        type: 'input_audio',
+        audio: candidate.audio,
+      };
+    }
+
+    if (candidate.type === 'input_image' && typeof candidate.image_url === 'string') {
+      return {
+        type: 'input_image',
+        image_url: candidate.image_url,
+      };
+    }
+
+    return null;
+  }
+
+  private getRealtimeUserContent(prompt: string): RealtimeUserContent[] {
+    try {
+      const parsedPrompt = JSON.parse(prompt);
+
+      if (Array.isArray(parsedPrompt) && parsedPrompt.length > 0) {
+        for (let i = parsedPrompt.length - 1; i >= 0; i--) {
+          const message = parsedPrompt[i];
+          if (!message || typeof message !== 'object' || message.role !== 'user') {
+            continue;
+          }
+
+          if (typeof message.content === 'string') {
+            return [{ type: 'input_text', text: message.content }];
+          }
+
+          if (Array.isArray(message.content)) {
+            const normalizedContent = message.content
+              .map((content: unknown) => this.normalizeRealtimeUserContentItem(content))
+              .filter(
+                (content: RealtimeUserContent | null): content is RealtimeUserContent =>
+                  content !== null,
+              );
+
+            if (normalizedContent.length > 0) {
+              return normalizedContent;
+            }
+          }
+        }
+      } else if (
+        parsedPrompt &&
+        typeof parsedPrompt === 'object' &&
+        typeof parsedPrompt.prompt === 'string'
+      ) {
+        return [{ type: 'input_text', text: parsedPrompt.prompt }];
+      }
+    } catch {
+      logger.debug('Using prompt as is - not a JSON structure');
+    }
+
+    return [{ type: 'input_text', text: prompt }];
+  }
+
+  private normalizeRealtimePromptContent(
+    prompt: string | RealtimeUserContent[],
+  ): RealtimeUserContent[] {
+    return typeof prompt === 'string' ? this.getRealtimeUserContent(prompt) : prompt;
+  }
+
   private async getRealtimeSessionConfig(
     realtimeToolConfig?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
@@ -401,8 +507,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     return `event_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
   }
 
-  async webSocketRequest(clientSecret: string, prompt: string): Promise<RealtimeResponse> {
+  async webSocketRequest(
+    clientSecret: string,
+    prompt: string | RealtimeUserContent[],
+  ): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
+      const promptContent = this.normalizeRealtimePromptContent(prompt);
       logger.debug(
         `Attempting to connect to OpenAI WebSocket with client secret: ${clientSecret.slice(0, 5)}...`,
       );
@@ -468,12 +578,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           item: {
             type: 'message',
             role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: prompt,
-              },
-            ],
+            content: promptContent,
           },
         });
       });
@@ -502,12 +607,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 item: {
                   type: 'message',
                   role: 'user',
-                  content: [
-                    {
-                      type: 'input_text',
-                      text: prompt,
-                    },
-                  ],
+                  content: promptContent,
                 },
               });
               break;
@@ -724,6 +824,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 audioFormat = 'wav';
                 hasAudioContent = false;
                 pendingFunctionCalls = [];
+                responseDone = false;
 
                 // Don't resolve the promise yet - wait for the final response
                 return;
@@ -927,54 +1028,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     try {
-      // Extract the message content for WebSocket communications
-      let promptText = prompt;
-
-      try {
-        // Check if the prompt is a JSON string
-        const parsedPrompt = JSON.parse(prompt);
-
-        // Handle array format (OpenAI chat format)
-        if (Array.isArray(parsedPrompt) && parsedPrompt.length > 0) {
-          // Find the last user message (following OpenAI's chat convention)
-          for (let i = parsedPrompt.length - 1; i >= 0; i--) {
-            const message = parsedPrompt[i];
-            if (message.role === 'user') {
-              // Handle both simple content string and array of content objects
-              if (typeof message.content === 'string') {
-                promptText = message.content;
-                break;
-              } else if (Array.isArray(message.content) && message.content.length > 0) {
-                // Find the first text content - check for both 'text' and 'input_text' for backward compatibility
-                const textContent = message.content.find(
-                  (content: any) =>
-                    (content.type === 'text' || content.type === 'input_text') &&
-                    typeof content.text === 'string',
-                );
-                if (textContent) {
-                  promptText = textContent.text;
-                  break;
-                }
-              }
-            }
-          }
-        } else if (parsedPrompt && typeof parsedPrompt === 'object' && parsedPrompt.prompt) {
-          // Handle {prompt: "..."} format that some templates might use
-          promptText = parsedPrompt.prompt;
-        }
-      } catch {
-        // Not JSON or couldn't extract - use as is
-        logger.debug('Using prompt as is - not a JSON structure');
-      }
+      const promptContent = this.getRealtimeUserContent(prompt);
 
       // Use a persistent connection if we should maintain conversation context
       let result;
       if (this.config.maintainContext === true) {
-        result = await this.persistentWebSocketRequest(promptText);
+        result = await this.persistentWebSocketRequest(promptContent);
       } else {
         // Connect directly to the WebSocket API using API key
         logger.debug(`Connecting directly to OpenAI Realtime API WebSocket with API key`);
-        result = await this.directWebSocketRequest(promptText);
+        result = await this.directWebSocketRequest(promptContent);
       }
 
       // Format the output - if function calls occurred, include that info
@@ -1067,7 +1130,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         Try:
         - Using a different network connection
         - Checking your OpenAI API key permissions
-        - Verifying you have access to the Realtime API beta`);
+        - Verifying you have access to the Realtime API`);
       }
       return {
         error: errorMessage,
@@ -1076,8 +1139,9 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
   }
 
-  async directWebSocketRequest(prompt: string): Promise<RealtimeResponse> {
+  async directWebSocketRequest(prompt: string | RealtimeUserContent[]): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
+      const promptContent = this.normalizeRealtimePromptContent(prompt);
       logger.debug(`Establishing direct WebSocket connection to OpenAI Realtime API`);
 
       // Construct URL with model parameter
@@ -1147,12 +1211,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             item: {
               type: 'message',
               role: 'user',
-              content: [
-                {
-                  type: 'input_text',
-                  text: prompt,
-                },
-              ],
+              content: promptContent,
             },
           });
         } catch (error) {
@@ -1391,6 +1450,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 audioFormat = 'wav';
                 hasAudioContent = false;
                 pendingFunctionCalls = [];
+                responseDone = false;
 
                 // Don't resolve the promise yet - wait for the final response
                 return;
@@ -1567,7 +1627,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   // New method for persistent connection
-  async persistentWebSocketRequest(prompt: string): Promise<RealtimeResponse> {
+  async persistentWebSocketRequest(
+    prompt: string | RealtimeUserContent[],
+  ): Promise<RealtimeResponse> {
+    const promptContent = this.normalizeRealtimePromptContent(prompt);
     return new Promise((resolve, reject) => {
       logger.debug(`Using persistent WebSocket connection to OpenAI Realtime API`);
 
@@ -1576,7 +1639,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       if (connection) {
         // Connection already exists, just set up message handlers
-        void this.setupMessageHandlers(prompt, resolve, reject).catch(reject);
+        void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
       } else {
         // Create new connection
         const wsUrl = this.getWebSocketUrl(this.modelName);
@@ -1598,7 +1661,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         // Handle connection establishment
         this.persistentConnection.once('open', () => {
           logger.debug('Persistent WebSocket connection established successfully');
-          void this.setupMessageHandlers(prompt, resolve, reject).catch(reject);
+          void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
         });
 
         this.persistentConnection.once('error', (err: Error) => {
@@ -1611,12 +1674,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   // Helper method to set up message handlers for persistent WebSocket
   private async setupMessageHandlers(
-    prompt: string,
+    prompt: string | RealtimeUserContent[],
     resolve: (value: RealtimeResponse) => void,
     reject: (reason: Error) => void,
   ): Promise<void> {
     // Reset audio state at the start of each request
     this.resetAudioState();
+    const promptContent = this.normalizeRealtimePromptContent(prompt);
     const realtimeToolConfig = await this.getRealtimeToolConfigWithTimeout();
 
     const startRequestTimeout = () =>
@@ -1955,12 +2019,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       item: {
         type: 'message',
         role: 'user',
-        content: [
-          {
-            type: 'input_text',
-            text: prompt,
-          },
-        ],
+        content: promptContent,
       },
     });
   }
