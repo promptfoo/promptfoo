@@ -1605,7 +1605,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     /*
      * Keep a request-level timeout instead of per-message timers so cleanup remains simple while
-     * still allowing a tool call plus its follow-up response to take a full timeout window.
+     * still allowing a tool call plus its follow-up response to take a full timeout window. Pause
+     * it while local handlers run because that time is not WebSocket inactivity.
      */
 
     // Accumulators for response text and errors
@@ -1820,6 +1821,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             }
 
             if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
+              clearRequestTimeout();
+
               for (const call of pendingFunctionCalls) {
                 try {
                   const result = await this.config.functionCallHandler(call.name, call.arguments);
