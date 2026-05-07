@@ -7,6 +7,37 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from '../util/utils';
 
+interface PullRequestPayload {
+  repository: {
+    full_name: string;
+  };
+  pull_request: {
+    number: number;
+    head: {
+      sha: string;
+      repo: {
+        full_name: string;
+      };
+    };
+    base: {
+      repo: {
+        full_name: string;
+      };
+    };
+  };
+}
+
+interface WorkflowDispatchPayload {
+  repository: {
+    full_name: string;
+  };
+  inputs: {
+    pr_number: string;
+  };
+}
+
+type MockGitHubPayload = PullRequestPayload | WorkflowDispatchPayload;
+
 const mocks = vi.hoisted(() => {
   const core = {
     getInput: vi.fn(),
@@ -47,7 +78,7 @@ const mocks = vi.hoisted(() => {
             },
           },
         },
-      },
+      } as MockGitHubPayload,
     },
     getOctokit: vi.fn(),
   };
@@ -243,6 +274,10 @@ function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecC
 }
 
 function setPullRequestRepos(headRepoFullName: string, baseRepoFullName = 'test-owner/test-repo') {
+  if (!('pull_request' in mocks.github.context.payload)) {
+    throw new Error('Expected a pull_request payload');
+  }
+
   mocks.github.context.payload.pull_request.head.repo.full_name = headRepoFullName;
   mocks.github.context.payload.pull_request.base.repo.full_name = baseRepoFullName;
 }

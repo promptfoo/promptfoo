@@ -471,11 +471,11 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
           {item.kind.charAt(0).toUpperCase() + item.kind.slice(1)} preview —{' '}
           {item.context.evalDescription || item.hash.slice(0, 8)}
         </DialogTitle>
-        <div className="flex flex-col md:flex-row h-full">
+        <div className="flex h-full min-w-0 w-full flex-col md:flex-row">
           {/* Media Preview */}
           <div className="relative flex-1 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black min-w-0 min-h-[40vh] md:min-h-0 overflow-hidden">
             {/* Close button - visible on dark background */}
-            <DialogClose className="absolute top-4 left-4 z-50 p-2 rounded-full bg-white/90 dark:bg-zinc-800/90 shadow-lg hover:bg-white dark:hover:bg-zinc-700 transition-all hover:scale-105">
+            <DialogClose className="absolute top-4 left-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700">
               <X className="h-5 w-5" />
               <span className="sr-only">Close</span>
             </DialogClose>
@@ -515,7 +515,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                   onClick={handleZoomOut}
                   disabled={zoomLevel <= MEDIA_MIN_ZOOM}
                   className={cn(
-                    'p-1.5 rounded transition-colors',
+                    'flex h-8 w-8 items-center justify-center rounded transition-colors [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
                     zoomLevel <= MEDIA_MIN_ZOOM
                       ? 'text-gray-500 cursor-not-allowed'
                       : 'text-white hover:bg-white/20',
@@ -534,7 +534,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                   onClick={handleZoomIn}
                   disabled={zoomLevel >= MEDIA_MAX_ZOOM}
                   className={cn(
-                    'p-1.5 rounded transition-colors',
+                    'flex h-8 w-8 items-center justify-center rounded transition-colors [@media(hover:none)]:h-11 [@media(hover:none)]:w-11',
                     zoomLevel >= MEDIA_MAX_ZOOM
                       ? 'text-gray-500 cursor-not-allowed'
                       : 'text-white hover:bg-white/20',
@@ -546,7 +546,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                 {zoomLevel !== MEDIA_MIN_ZOOM && (
                   <button
                     onClick={handleZoomReset}
-                    className="p-1.5 rounded text-white hover:bg-white/20 transition-colors ml-1"
+                    className="ml-1 flex h-8 w-8 items-center justify-center rounded text-white transition-colors hover:bg-white/20 [@media(hover:none)]:h-11 [@media(hover:none)]:w-11"
                     aria-label="Reset zoom"
                   >
                     <Minimize2 className="h-4 w-4" />
@@ -607,7 +607,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
             {hasPrevious && (
               <button
                 onClick={handlePrevious}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white/90 dark:bg-zinc-800/90 shadow-lg hover:bg-white dark:hover:bg-zinc-700 transition-all hover:scale-105"
+                className="absolute left-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
                 aria-label="Previous"
               >
                 <ChevronLeft className="h-5 w-5" />
@@ -616,7 +616,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
             {hasNext && (
               <button
                 onClick={handleNext}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-white/90 dark:bg-zinc-800/90 shadow-lg hover:bg-white dark:hover:bg-zinc-700 transition-all hover:scale-105"
+                className="absolute right-4 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow-lg transition-all hover:scale-105 hover:bg-white dark:bg-zinc-800/90 dark:hover:bg-zinc-700"
                 aria-label="Next"
               >
                 <ChevronRight className="h-5 w-5" />
@@ -632,7 +632,10 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
           </div>
 
           {/* Details Panel */}
-          <div className="w-full md:w-96 lg:w-[420px] border-t md:border-t-0 md:border-l border-border bg-muted/50 flex flex-col shrink-0 max-h-[50vh] md:max-h-none">
+          <div
+            data-testid="media-modal-details-panel"
+            className="flex max-h-[50vh] min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-border bg-muted/50 md:max-h-none md:w-96 md:border-t-0 md:border-l lg:w-[420px]"
+          >
             {/* Header with status and score */}
             <div className="p-4 border-b border-border bg-card">
               <div className="flex items-start gap-4">
@@ -704,7 +707,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
               {/* Prompt Section */}
               {item.context.prompt && (
                 <div className="min-w-0">
@@ -783,6 +786,28 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                 <span className="truncate">View in {item.context.evalDescription || 'Eval'}</span>
               </Link>
 
+              <div
+                data-testid="media-modal-mobile-actions"
+                className="flex items-center gap-2 pt-2 md:hidden"
+              >
+                <Button
+                  onClick={handleDownload}
+                  variant="outline"
+                  size="sm"
+                  className="h-11 gap-1.5"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download</span>
+                </Button>
+                <CopyButton
+                  value={permalinkUrl}
+                  className="h-11 w-11 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+                  iconSize="h-4 w-4"
+                  aria-label="Copy permalink"
+                  title="Copy permalink"
+                />
+              </div>
+
               {/* Details Toggle */}
               <div className="pt-2 border-t border-border/50">
                 <button
@@ -844,21 +869,27 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
             </div>
 
             {/* Footer */}
-            <div className="border-t border-border bg-card px-4 py-3 flex items-center justify-between gap-4">
+            <div
+              data-testid="media-modal-desktop-actions"
+              className="hidden shrink-0 items-center justify-between gap-4 border-t border-border bg-card px-4 py-3 md:flex"
+            >
               <div className="flex items-center gap-2">
                 <Button
                   onClick={handleDownload}
                   variant="outline"
                   size="sm"
-                  className="h-8 gap-1.5"
+                  aria-label="Download"
+                  title="Download"
+                  className="h-8 gap-1.5 [@media(hover:none)]:h-11"
                 >
                   <Download className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Download</span>
                 </Button>
                 <CopyButton
                   value={permalinkUrl}
-                  className="h-8 w-8 border border-input bg-background rounded-md hover:bg-accent hover:text-accent-foreground"
+                  className="h-8 w-8 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground [@media(hover:none)]:h-11 [@media(hover:none)]:w-11"
                   iconSize="h-4 w-4"
+                  aria-label="Copy permalink"
                   title="Copy permalink"
                 />
               </div>

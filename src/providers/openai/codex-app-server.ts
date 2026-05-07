@@ -19,6 +19,7 @@ import {
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { VERSION } from '../../version';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 
@@ -1338,7 +1339,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (!config.working_dir) {
       return process.cwd();
     }
-    return path.resolve(basePath, config.working_dir);
+    return resolveAgenticWorkingDir(config.working_dir, basePath) ?? process.cwd();
   }
 
   private resolveAdditionalDirectories(config: CodexAppServerConfig): string[] | undefined {

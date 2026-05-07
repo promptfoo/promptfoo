@@ -113,6 +113,7 @@ prompts:
 ```
 
 By default, when you specify a working directory, OpenCode SDK has access to these read-only tools: `read`, `grep`, `glob`, `list`.
+Relative `working_dir` values are resolved from the directory containing the config file.
 
 ### Structured Output
 

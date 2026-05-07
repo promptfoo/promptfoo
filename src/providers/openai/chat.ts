@@ -305,6 +305,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
       ...(this.modelName.includes('audio')
         ? {
