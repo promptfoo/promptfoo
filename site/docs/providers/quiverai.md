@@ -8,7 +8,7 @@ keywords: [quiverai, svg, vector graphics, arrow, image generation, vectorizatio
 
 # QuiverAI
 
-The [QuiverAI](https://quiver.ai) provider generates and vectorizes SVG graphics with the Arrow family of models. Output is raw SVG markup, which works with text-based assertions like `is-xml`, `contains`, and `llm-rubric`. Because the provider returns SVG markup as text rather than a stored media blob, these results appear in eval outputs and are not added to the Media Library automatically.
+The [QuiverAI](https://quiver.ai) provider generates and vectorizes SVG graphics with the Arrow family of models. Output is raw SVG markup, which works with text-based assertions like `is-xml`, `contains`, and `llm-rubric`. Promptfoo also indexes valid single-SVG outputs in the Media Library while preserving the original SVG text for assertions and exports.
 
 Two endpoints are supported:
 
