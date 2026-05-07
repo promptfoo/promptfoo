@@ -70,6 +70,16 @@ describe('normalizeLatex', () => {
     it('expands \\fracAB (two bare single chars) to \\frac{A}{B}', () => {
       expect(normalizeLatex('\\frac32')).toBe('\\frac{3}{2}');
     });
+
+    it('does not corrupt "\\frac{32} + 2" by capturing whitespace as a denominator', () => {
+      // Earlier versions captured the trailing space as the new denominator,
+      // producing "\\frac{32}{ }+ 2" which CortexJS could not parse.
+      expect(normalizeLatex('\\frac{32} + 2')).toBe('\\frac{32} + 2');
+    });
+
+    it('does not auto-brace a non-letter/digit/backslash denominator', () => {
+      expect(normalizeLatex('\\frac{32}+2')).toBe('\\frac{32}+2');
+    });
   });
 
   describe('trig backslash insertion', () => {
@@ -283,6 +293,29 @@ describe('parseMathExpression', () => {
     // identifier. "1 = 2" survives normalization unchanged and parses as an
     // Equal expression, which we treat as not-a-value.
     expect(parseMathExpression('1 = 2')).toBeUndefined();
+  });
+
+  describe('rejects pure prose to prevent letter-multiplication false positives', () => {
+    it.each([
+      ['apple'],
+      ['hello'],
+      ['no answer here'],
+      ['some long prose with no answer'],
+      ['the quick brown fox'],
+    ])('rejects %s', (input) => {
+      expect(parseMathExpression(input)).toBeUndefined();
+    });
+
+    it.each([
+      ['42'],
+      ['a+b'],
+      ['x^2'],
+      ['\\pi'],
+      ['xy'], // 2-letter implicit product is intentionally still allowed
+      ['\\frac{1}{2}'],
+    ])('still parses %s as math', (input) => {
+      expect(parseMathExpression(input)).toBeDefined();
+    });
   });
 });
 
@@ -592,6 +625,15 @@ describe('isMathEquivalent', () => {
     it('rejects 5π/3 vs -π/3 (mod-2π collapse FP regression)', () => {
       expect(isMathEquivalent('\\dfrac{5\\pi}{3}', '-\\frac{\\pi}{3}').pass).toBe(false);
     });
+
+    it('rejects identical English-word inputs as a defensive misuse guard', () => {
+      // Without the prose heuristic, both sides would parse to the same
+      // Multiply of letter symbols and report pass=true — silently accepting
+      // a misconfigured math-equivalent assertion.
+      const result = isMathEquivalent('apple', 'apple');
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Could not parse');
+    });
   });
 });
 
@@ -650,11 +692,12 @@ describe('handleMathEquivalent', () => {
     expect(result.reason).toContain('not equivalent');
   });
 
-  it('fails when output cannot be parsed as math', () => {
+  it('fails with a parse-failure reason when output is pure prose', () => {
     const result = handleMathEquivalent(
       makeParams({ renderedValue: '42', outputString: 'no answer here' }),
     );
     expect(result.pass).toBe(false);
+    expect(result.reason).toContain('Could not parse actual answer');
   });
 
   it('respects the inverse flag (not-math-equivalent)', () => {

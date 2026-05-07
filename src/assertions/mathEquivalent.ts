@@ -84,10 +84,12 @@ export function normalizeLatex(text: string): string {
   s = s.replace(/\\(?:dfrac|tfrac|cfrac)\b/g, '\\frac');
 
   // \fracAB (two bare single chars, no braces): \frac32 → \frac{3}{2}.
-  s = s.replace(/\\frac([^{\\])([^{\\])/g, '\\frac{$1}{$2}');
+  s = s.replace(/\\frac([A-Za-z0-9])([A-Za-z0-9])/g, '\\frac{$1}{$2}');
 
   // \frac{numerator}X (single non-brace denominator): \frac{32}3 → \frac{32}{3}.
-  s = s.replace(/(\\frac\{[^{}]*\})([^{])/g, (_m, p1, p2) => `${p1}{${p2}}`);
+  // Restrict X to letter/digit/backslash so we don't auto-brace whitespace or
+  // operators (which would corrupt e.g. "\frac{32} + 2" → "\frac{32}{ }+ 2").
+  s = s.replace(/(\\frac\{[^{}]*\})([A-Za-z0-9\\])/g, (_m, p1, p2) => `${p1}{${p2}}`);
 
   for (const fn of TRIG_FNS) {
     // fn( → \fn(
@@ -151,6 +153,23 @@ function isEqualityExpr(expr: BoxedExpression): boolean {
 }
 
 /**
+ * Heuristic: does the (already-normalized) text look like English prose rather
+ * than math? CortexJS will happily parse `apple` as `a*p*p*l*e` (an implicit
+ * product of single-letter symbols), which would let pathological configs like
+ * `value: 'apple'` silently match any output with the same letter multiset.
+ * Math expressions almost always contain at least one digit, operator, brace,
+ * or LaTeX command, so the absence of all of those is strong evidence we're
+ * looking at prose.
+ */
+function looksLikeProse(normalized: string): boolean {
+  if (/[0-9\\+\-*/^()={}√_]/.test(normalized)) {
+    return false;
+  }
+  const letters = normalized.match(/[A-Za-z]/g) ?? [];
+  return letters.length >= 3;
+}
+
+/**
  * Parse a candidate string into a CortexJS expression. Returns undefined when
  * the candidate fails to parse, parses to an equality (a = b) rather than a
  * value, or is empty after normalization.
@@ -158,6 +177,9 @@ function isEqualityExpr(expr: BoxedExpression): boolean {
 export function parseMathExpression(text: string): BoxedExpression | undefined {
   const normalized = normalizeLatex(text.trim());
   if (!normalized) {
+    return undefined;
+  }
+  if (looksLikeProse(normalized)) {
     return undefined;
   }
   try {

@@ -5,6 +5,7 @@
 # Temporary and generated files
 scratch
 .worktrees/
+wt/
 *.sw[op]
 *.log
 .DS_Store
