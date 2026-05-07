@@ -79,6 +79,10 @@ export function normalizeLatex(text: string): string {
   // to avoid mangling tuples like "23, 53" or coordinate pairs).
   s = s.replace(/(\d),(\d{2,})\b/g, '$1.$2');
 
+  // \dfrac / \tfrac / \cfrac variants → plain \frac for engines that don't
+  // recognize the display/text variants.
+  s = s.replace(/\\(?:dfrac|tfrac|cfrac)\b/g, '\\frac');
+
   // \fracAB (two bare single chars, no braces): \frac32 → \frac{3}{2}.
   s = s.replace(/\\frac([^{\\])([^{\\])/g, '\\frac{$1}{$2}');
 
