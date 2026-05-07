@@ -894,6 +894,10 @@ trip up `equals` and `contains`:
 - Equality chains (`230/530 = 23/53`) — the rightmost parseable segment wins
 - "Total: 14", "Answer: 42" label prefixes
 - `, attained at (-2,3)` and similar comma-suffixed prose after the answer
+- Prose-wrapped final answers: "The answer is 0.5", "Therefore the result is 42"
+  (the rightmost numeric/LaTeX token on a multi-word line wins)
+- A labelled final-line answer beats earlier display blocks:
+  `$$2$$\nAnswer: 3` is graded against `3`, not `2`
 
 Cases that intentionally do **not** pass:
 

@@ -447,6 +447,46 @@ describe('extractMathAnswer', () => {
   it('returns empty string on empty input', () => {
     expect(extractMathAnswer('')).toBe('');
   });
+
+  describe('prose-line answer extraction (rightmost numeric/LaTeX)', () => {
+    it.each([
+      ['The answer is 0.5', '0.5'],
+      ['Therefore the result is 42', '42'],
+      ['So the value is 7', '7'],
+      ['After simplification we get \\frac{1}{2}', '\\frac{1}{2}'],
+      ['the final value comes out to be 3.14159', '3.14159'],
+    ])('extracts %s → %s', (input, expected) => {
+      expect(extractMathAnswer(input)).toBe(expected);
+    });
+
+    it('does NOT touch a single-word labelled value (V = 32)', () => {
+      expect(extractMathAnswer('**V = 32**')).toBe('V = 32');
+    });
+
+    it('does NOT touch a step-counter style "Step 1" line (single prose word)', () => {
+      // "Step 1" has only one multi-letter alpha token, below the prose
+      // threshold — so we shouldn't strip it down to "1" and falsely match.
+      expect(extractMathAnswer('Step 1')).toBe('Step 1');
+    });
+  });
+
+  describe('final-answer line beats earlier display blocks', () => {
+    it('prefers "Answer: 3" on the last line over an earlier $$2$$', () => {
+      expect(extractMathAnswer('$$2$$\nAnswer: 3')).toBe('3');
+    });
+
+    it('prefers a final-line numeric over an earlier display block', () => {
+      expect(extractMathAnswer('Calculation: $$2 + 2$$\nFinal answer is 4')).toBe('4');
+    });
+
+    it('still uses the display block when the truncated text shares its line', () => {
+      // Display fence on the last raw line keeps the existing "display block
+      // wins for truncated prose" behavior.
+      expect(extractMathAnswer('Let me compute: $$a = 2$$ and continuing... (truncated')).toBe(
+        'a = 2',
+      );
+    });
+  });
 });
 
 // =============================================================================
@@ -645,6 +685,22 @@ describe('isMathEquivalent', () => {
 
     it('rejects 5π/3 vs -π/3 (mod-2π collapse FP regression)', () => {
       expect(isMathEquivalent('\\dfrac{5\\pi}{3}', '-\\frac{\\pi}{3}').pass).toBe(false);
+    });
+
+    it.each([
+      ['The answer is 0.5', '0.5'],
+      ['Therefore the result is 42', 42],
+      ['So the value is 7', '$7$'],
+      ['After simplification we get \\frac{1}{2}', '0.5'],
+    ])('matches prose-wrapped answer "%s" against %s', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
+    });
+
+    it('grades "$$2$$\\nAnswer: 3" against 3 (not 2)', () => {
+      // Earlier display blocks are intermediate work; the labelled final-line
+      // answer should win.
+      expect(isMathEquivalent('$$2$$\nAnswer: 3', '3').pass).toBe(true);
+      expect(isMathEquivalent('$$2$$\nAnswer: 3', '2').pass).toBe(false);
     });
 
     it('rejects identical English-word inputs as a defensive misuse guard', () => {

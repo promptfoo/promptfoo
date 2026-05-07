@@ -219,23 +219,81 @@ const TRIVIAL_LINE = /^[\\\]\[\)\(}\s]*$/;
 const BOXED_PATTERN = /\\boxed\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
 const DISPLAY_BLOCK_PATTERN = /\$\$([\s\S]*?)\$\$/g;
 
+/**
+ * Number of multi-letter alphabetic tokens that triggers prose-mode rightmost
+ * extraction. 2 catches "The answer is 0.5" without breaking single-label
+ * lines like "Step 1" or "V = 32" (which have at most one alpha word).
+ */
+const PROSE_WORD_THRESHOLD = 2;
+
 function findAllBoxed(text: string): string[] {
   return [...text.matchAll(BOXED_PATTERN)].map((m) => m[1]);
 }
 
-/**
- * Extract the mathematical answer from arbitrary model prose.
- */
-export function extractMathAnswer(text: string): string {
-  if (!text) {
-    return '';
-  }
+function filterNonTrivialLines(s: string): string[] {
+  return s
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !TRIVIAL_LINE.test(l));
+}
 
-  // Step 1: scan raw $$...$$ display blocks for \boxed{} or any parseable
-  // expression, scanning the LATEST block first.
-  const displayBlocks = [...text.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1]);
-  for (let i = displayBlocks.length - 1; i >= 0; i--) {
-    const block = displayBlocks[i];
+/**
+ * Heuristic: text reads like a sentence (≥2 multi-letter alphabetic tokens).
+ * "V = 32" / "Step 1" stay below the threshold and are left alone.
+ */
+function hasMultipleProseWords(text: string): boolean {
+  let count = 0;
+  for (const tok of text.split(/\s+/)) {
+    if (tok.length >= 2 && /^[A-Za-z]+$/.test(tok)) {
+      count++;
+      if (count >= PROSE_WORD_THRESHOLD) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Pull the rightmost token containing a digit or starting with a `\` LaTeX
+ * command. Used when the line reads as prose around a single math token,
+ * e.g. "Therefore the result is 42" → "42".
+ */
+function extractRightmostMathToken(text: string): string | undefined {
+  const tokens = text.split(/\s+/).filter(Boolean);
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const tok = tokens[i];
+    if (/\d/.test(tok) || tok.startsWith('\\')) {
+      return tok;
+    }
+  }
+  return undefined;
+}
+
+function extractFromLastLine(cleanedLines: string[]): string | undefined {
+  if (cleanedLines.length === 0) {
+    return undefined;
+  }
+  let candidate = cleanedLines[cleanedLines.length - 1];
+  candidate = candidate.replace(/^[A-Za-z][A-Za-z\s]*:\s*/, '');
+  candidate = candidate.replace(/,\s+(?=[A-Za-z]|\\\().*$/, '');
+  candidate = candidate.trim();
+  if (!candidate) {
+    return undefined;
+  }
+  if (hasMultipleProseWords(candidate)) {
+    const rightmost = extractRightmostMathToken(candidate);
+    if (rightmost) {
+      return rightmost;
+    }
+  }
+  return cleanMathText(candidate);
+}
+
+function extractFromDisplayBlocks(rawText: string): string | undefined {
+  const blocks = [...rawText.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1]);
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const block = blocks[i];
     const boxed = findAllBoxed(block);
     if (boxed.length > 0) {
       return cleanMathText(boxed[boxed.length - 1].trim());
@@ -245,33 +303,49 @@ export function extractMathAnswer(text: string): string {
       return candidate;
     }
   }
+  return undefined;
+}
 
-  // Step 2: clean the full text.
+/**
+ * Extract the mathematical answer from arbitrary model prose.
+ *
+ * Priority (highest first):
+ *  1. Last `\boxed{}` in the cleaned text.
+ *  2. Last non-trivial cleaned line, if its raw counterpart has no `$$` fence
+ *     — pulls the rightmost numeric/LaTeX token from prose like
+ *     "The answer is 0.5" or "$$intermediate$$\nAnswer: final".
+ *  3. Latest `$$...$$` display block (boxed inside, then parseable content).
+ *  4. Last cleaned line as-is.
+ */
+export function extractMathAnswer(text: string): string {
+  if (!text) {
+    return '';
+  }
+
   const cleaned = cleanMathText(text);
 
-  // Step 3: \boxed{} in cleaned text.
-  const boxedClean = findAllBoxed(cleaned);
-  if (boxedClean.length > 0) {
-    return cleanMathText(boxedClean[boxedClean.length - 1].trim());
+  const cleanedBoxed = findAllBoxed(cleaned);
+  if (cleanedBoxed.length > 0) {
+    return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
   }
 
-  // Step 4: last non-trivial line.
-  const lines = cleaned
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l && !TRIVIAL_LINE.test(l));
-  if (lines.length === 0) {
-    return cleaned;
+  const cleanedLines = filterNonTrivialLines(cleaned);
+  const rawLines = filterNonTrivialLines(text);
+  const lastRawHasDisplay = (rawLines[rawLines.length - 1] ?? '').includes('$$');
+
+  if (!lastRawHasDisplay) {
+    const lineAnswer = extractFromLastLine(cleanedLines);
+    if (lineAnswer) {
+      return lineAnswer;
+    }
   }
-  let last = lines[lines.length - 1];
 
-  // Strip "Word(s): " prefix.
-  last = last.replace(/^[A-Za-z][A-Za-z\s]*:\s*/, '');
+  const blockAnswer = extractFromDisplayBlocks(text);
+  if (blockAnswer) {
+    return blockAnswer;
+  }
 
-  // Strip ", trailing prose..." after the answer.
-  last = last.replace(/,\s+(?=[A-Za-z]|\\\().*$/, '');
-
-  return cleanMathText(last.trim());
+  return extractFromLastLine(cleanedLines) ?? cleaned;
 }
 
 export type MathEquivalentResult = {
