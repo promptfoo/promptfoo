@@ -55,6 +55,9 @@ const FoundationModelConfiguration = ({
   );
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
+  const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
+    isBedrock && Boolean(selectedTarget.config?.region || selectedTarget.config?.profile),
+  );
 
   useEffect(() => {
     setModelId(isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '');
@@ -372,6 +375,62 @@ const FoundationModelConfiguration = ({
                   </div>
                 ),
               )}
+            </div>
+          </SetupSection>
+        )}
+
+        {isBedrock && (
+          <SetupSection
+            title="Bedrock Settings"
+            description="AWS region and credential profile (required for non-default-region deployments)"
+            isExpanded={isBedrockSettingsOpen}
+            onExpandedChange={setIsBedrockSettingsOpen}
+            className="mt-4"
+          >
+            <div className="grid gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="bedrock-region">AWS Region</Label>
+                <Input
+                  id="bedrock-region"
+                  value={selectedTarget.config?.region ?? ''}
+                  onChange={(e) => updateCustomTarget('region', e.target.value || undefined)}
+                  placeholder="us-east-1"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Defaults to <code>us-east-1</code> if unset. Set this when using inference
+                  profiles or models pinned to a specific region.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bedrock-profile">AWS Profile</Label>
+                <Input
+                  id="bedrock-profile"
+                  value={selectedTarget.config?.profile ?? ''}
+                  onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
+                  placeholder="default"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional - SSO profile name from <code>~/.aws/config</code>. Falls back to the
+                  default credential chain when unset.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bedrock-inference-model-type">Inference Model Type</Label>
+                <Input
+                  id="bedrock-inference-model-type"
+                  value={selectedTarget.config?.inferenceModelType ?? ''}
+                  onChange={(e) =>
+                    updateCustomTarget('inferenceModelType', e.target.value || undefined)
+                  }
+                  placeholder="claude, nova, llama, mistral, ..."
+                />
+                <p className="text-sm text-muted-foreground">
+                  Required when the model ID is an Application Inference Profile ARN. Otherwise
+                  inferred from the model ID.
+                </p>
+              </div>
             </div>
           </SetupSection>
         )}

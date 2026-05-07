@@ -807,6 +807,149 @@ describe('AwsBedrockConverseProvider', () => {
       expect(toolNames).toEqual(['list_resources']);
     });
 
+    it('should dedupe MCP tool names exposed by multiple servers', async () => {
+      // Two MCP servers expose the same tool name; without dedup, Bedrock
+      // rejects the duplicate with ValidationException, breaking the eval.
+      mcpMocks.mockGetAllTools.mockReturnValueOnce([
+        {
+          name: 'shared_tool',
+          description: 'from server-a',
+          inputSchema: { type: 'object' },
+        },
+        {
+          name: 'shared_tool',
+          description: 'from server-b (duplicate)',
+          inputSchema: { type: 'object' },
+        },
+      ]);
+
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            servers: [
+              { name: 'server-a', command: 'npx', args: ['a'] },
+              { name: 'server-b', command: 'npx', args: ['b'] },
+            ],
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('ok'));
+      await provider.callApi('hi');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const sentInput = ConverseCommand.mock.calls.at(-1)?.[0];
+      const toolNames = (sentInput?.toolConfig?.tools || []).map((t: any) => t.toolSpec?.name);
+      expect(toolNames).toEqual(['shared_tool']);
+    });
+
+    it('should run MCP and functionToolCallbacks for different tools in the same response', async () => {
+      // The response contains TWO tool_use blocks: one for an MCP tool and one
+      // for a local function callback. Both should execute and their outputs
+      // should be combined.
+      const localCallback = vi.fn().mockResolvedValue('local result');
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+          functionToolCallbacks: {
+            calculator: localCallback,
+          },
+          tools: [
+            {
+              toolSpec: {
+                name: 'calculator',
+                description: 'calc',
+                inputSchema: { json: { type: 'object' } },
+              },
+            },
+          ],
+        },
+      });
+
+      mockSend.mockResolvedValueOnce({
+        $metadata: {},
+        output: {
+          message: {
+            role: 'assistant',
+            content: [
+              {
+                toolUse: { toolUseId: 't1', name: 'list_resources', input: {} },
+              },
+              {
+                toolUse: { toolUseId: 't2', name: 'calculator', input: { expression: '2+2' } },
+              },
+            ],
+          },
+        },
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        stopReason: 'tool_use',
+      });
+
+      const result = await provider.callApi('use both tools');
+
+      expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {});
+      expect(localCallback).toHaveBeenCalledWith('{"expression":"2+2"}');
+      // Both outputs are present in the combined response.
+      expect(result.output).toContain('MCP Tool Result (list_resources)');
+      expect(result.output).toContain('local result');
+    });
+
+    it('should register with providerRegistry before awaiting MCP init', async () => {
+      // When MCP init fails for one of multiple servers, registration must
+      // happen first so the evaluator's shutdownAll() can still call cleanup
+      // on the partially-initialized client.
+      mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      // Wait for the init promise to settle. We can observe that registration
+      // happened by triggering shutdownAll(): the resulting cleanup() call
+      // should invoke mockCleanup even though init rejected.
+      const { providerRegistry } = await import('../../../src/providers/providerRegistry');
+      await provider.callApi('hi'); // forces awaiting initializationPromise
+      await providerRegistry.shutdownAll();
+      expect(mcpMocks.mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should still serve toolChoice=none requests when MCP init failed', async () => {
+      // A failed MCP init should not block requests where the test case has
+      // explicitly opted out of tools.
+      mcpMocks.mockInitialize.mockRejectedValueOnce(new Error('handshake failed'));
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('regular text'));
+
+      const result = await provider.callApi('hi', {
+        prompt: { config: { tool_choice: 'none' as any }, raw: 'hi', label: 'l' },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('regular text');
+    });
+
     it('should not invoke MCP when toolChoice is none (non-streaming)', async () => {
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
