@@ -897,7 +897,8 @@ trip up `equals` and `contains`:
   the immediate left context, so algebraic expressions like `x + m` and an
   expected `2*m` are left intact.
 - Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
-- Approximation symbols (`≈`, `\approx`) treated as equality
+- Approximation symbols (`≈`, `\approx`) treated as equality, including in
+  chain form (`1/2 ≈ 0.5` is graded against `0.5`)
 - Equality chains (`230/530 = 23/53`) — the rightmost parseable segment wins
 - "Total: 14", "Answer: 42" label prefixes
 - `, attained at (-2,3)` and similar comma-suffixed prose after the answer

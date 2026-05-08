@@ -633,6 +633,19 @@ describe('extractMathAnswer', () => {
     });
   });
 
+  describe('approximation chains (≈, \\approx) split like equality chains', () => {
+    it.each([
+      ['1/2 ≈ 0.5', '0.5'],
+      ['1/2 \\approx 0.5', '0.5'],
+      ['$$1/2 \\approx 0.5$$', '0.5'],
+    ])('grades approximate final answer "%s" against %s', (actual, expected) => {
+      // tryParseEachSegment used to only split on literal `=` and missed
+      // ≈/\\approx, so a pure-math line using ≈ was rejected as an
+      // equality even though the docs say ≈ is treated as `=`.
+      expect(isMathEquivalent(actual, expected).pass).toBe(true);
+    });
+  });
+
   describe('prose-only last lines fall back to earlier answers', () => {
     it('falls back to the earlier display block when the last line is pure prose', () => {
       // Pre-fix: returned "This is the final result" and CE then failed

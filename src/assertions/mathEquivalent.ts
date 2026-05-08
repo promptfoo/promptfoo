@@ -223,11 +223,12 @@ export function parseMathExpression(text: string): BoxedExpression | undefined {
 }
 
 /**
- * For "A = B = C" chains, try parsing each segment right-to-left and return
- * the first that succeeds.
+ * For "A = B = C" chains (including approximation chains "A ≈ B" and
+ * "A \approx B" — the docs treat ≈/\approx as equality), try parsing each
+ * segment right-to-left and return the first that succeeds.
  */
 export function tryParseEachSegment(text: string): BoxedExpression | undefined {
-  const segments = text.split('=').map((s) => s.trim());
+  const segments = text.split(/=|\u2248|\\approx\b/).map((s) => s.trim());
   for (let i = segments.length - 1; i >= 0; i--) {
     const seg = segments[i];
     if (!seg) {
