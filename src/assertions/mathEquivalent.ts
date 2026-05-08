@@ -459,10 +459,14 @@ export async function extractMathAnswer(text: string): Promise<string> {
   const visibleLines = filterNonTrivialLines(visible);
   const lastVisible = visibleLines[visibleLines.length - 1] ?? '';
 
-  // Boxed *on the last visible line* is the real final answer — bypass
-  // every other path. Intermediate boxed work earlier in the response
-  // intentionally falls through to the final-line / display-block check.
-  if (/\\boxed\{/.test(lastVisible)) {
+  // Boxed *on the last visible line* is normally the real final answer —
+  // but if the same line ALSO has a labelled answer AFTER the boxed
+  // ("work \boxed{2}, final answer: 3"), the boxed is intermediate work
+  // and the labelled answer wins. Detect that and fall through to
+  // extractFromLastLine in that case.
+  const boxedFollowedByLabel =
+    /\\boxed\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}.*?\s[A-Za-z][A-Za-z\s]*:\s*\S/.test(lastVisible);
+  if (/\\boxed\{/.test(lastVisible) && !boxedFollowedByLabel) {
     const cleanedBoxed = findAllBoxed(cleaned);
     if (cleanedBoxed.length > 0) {
       return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());

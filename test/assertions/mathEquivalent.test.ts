@@ -662,6 +662,21 @@ describe('extractMathAnswer', async () => {
       expect((await isMathEquivalent('$$2$$ Answer: 3', 3)).pass).toBe(true);
       expect((await isMathEquivalent('$$2$$ Answer: 3', 2)).pass).toBe(false);
     });
+
+    it.each([
+      ['work \\boxed{2}, final answer: 3', '3'],
+      ['intermediate \\boxed{5}, total: 10', '10'],
+    ])('prefers a labelled answer after a same-line \\boxed intermediate (%s → %s)', async (input, expected) => {
+      // Pre-fix: \\boxed-on-the-last-line short-circuited extraction to
+      // the boxed value, even when a later labelled answer on the same
+      // line was the actual final.
+      expect(await extractMathAnswer(input)).toBe(expected);
+    });
+
+    it('grades work \\boxed{2}, final answer: 3 against 3, not 2', async () => {
+      expect((await isMathEquivalent('work \\boxed{2}, final answer: 3', 3)).pass).toBe(true);
+      expect((await isMathEquivalent('work \\boxed{2}, final answer: 3', 2)).pass).toBe(false);
+    });
   });
 
   describe('approximation chains (≈, \\approx) split like equality chains', async () => {
