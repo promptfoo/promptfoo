@@ -592,6 +592,18 @@ describe('extractMathAnswer', () => {
       expect(extractMathAnswer(input)).toBe(expected);
     });
 
+    it.each([
+      ['The answer is 2 × 3', '2 × 3'],
+      ['Therefore 6 ÷ 2', '6 ÷ 2'],
+      ['So the result is 5 − 1', '5 − 1'],
+      ['Final answer 2 · 3', '2 · 3'],
+    ])('includes Unicode math operators (×, ÷, −, ·) when extracting prose answers (%s → %s)', (input, expected) => {
+      // Prior to the fix, isMathShapedToken treated `×` / `÷` / `−` / `·`
+      // as non-math tokens, so prose lines containing them stopped early
+      // and returned only the rightmost numeric token.
+      expect(extractMathAnswer(input)).toBe(expected);
+    });
+
     it('does NOT touch a single-word labelled value (V = 32)', () => {
       expect(extractMathAnswer('**V = 32**')).toBe('V = 32');
     });
@@ -927,6 +939,15 @@ describe('isMathEquivalent', () => {
       ['And so the answer is -1 / 4', '-0.25'],
     ])('grades prose-wrapped contiguous math expression "%s" against %s', (actual, expected) => {
       expect(isMathEquivalent(actual, expected).pass).toBe(true);
+    });
+
+    it.each([
+      ['The answer is 2 × 3', 6],
+      ['Therefore 6 ÷ 2', 3],
+      ['So the result is 5 − 1', 4],
+      ['Final answer 2 · 3', 6],
+    ])('grades prose answers with Unicode math operators "%s" against %s', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
     });
 
     it.each([

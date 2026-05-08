@@ -55,7 +55,8 @@ export function normalizeLatex(text: string): string {
 
   // Unicode → ASCII / LaTeX equivalents.
   s = s.replace(/\u2212/g, '-'); // − → -
-  s = s.replace(/\u00d7/g, '*'); // × → *
+  s = s.replace(/[\u00d7\u00b7]/g, '*'); // ×, · → *
+  s = s.replace(/\u00f7/g, '/'); // ÷ → /
   s = s.replace(/√(\d+)/g, '\\sqrt{$1}');
   s = s.replace(/√\{/g, '\\sqrt{');
   s = s.replace(/√/g, '\\sqrt');
@@ -244,13 +245,6 @@ const TRIVIAL_LINE = /^[\\\]\[\)\(}\s]*$/;
 const BOXED_PATTERN = /\\boxed\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
 const DISPLAY_BLOCK_PATTERN = /\$\$([\s\S]*?)\$\$/g;
 
-/**
- * Number of multi-letter alphabetic tokens that triggers prose-mode rightmost
- * extraction. 2 catches "The answer is 0.5" without breaking single-label
- * lines like "Step 1" or "V = 32" (which have at most one alpha word).
- */
-const PROSE_WORD_THRESHOLD = 2;
-
 function findAllBoxed(text: string): string[] {
   return [...text.matchAll(BOXED_PATTERN)].map((m) => m[1]);
 }
@@ -266,22 +260,21 @@ function filterNonTrivialLines(s: string): string[] {
  * Heuristic: text reads like a sentence (≥2 multi-letter alphabetic tokens).
  * "V = 32" / "Step 1" stay below the threshold and are left alone.
  */
-function hasMultipleProseWords(text: string): boolean {
+function countProseWords(text: string): number {
   let count = 0;
   for (const tok of text.split(/\s+/)) {
     if (tok.length >= 2 && /^[A-Za-z]+$/.test(tok)) {
       count++;
-      if (count >= PROSE_WORD_THRESHOLD) {
-        return true;
-      }
     }
   }
-  return false;
+  return count;
 }
 
 /**
  * A token is "math-shaped" if it contains a digit, starts with a `\` LaTeX
- * command, is a single ASCII letter (variable), or is pure operator/bracket.
+ * command, is a single ASCII letter (variable), or is pure operator/bracket
+ * (including the common Unicode math operators ×, ÷, −, · that
+ * `normalizeLatex` would otherwise have collapsed to ASCII before parsing).
  * Used to gather the contiguous trailing math expression in a prose line.
  */
 function isMathShapedToken(tok: string): boolean {
@@ -297,7 +290,7 @@ function isMathShapedToken(tok: string): boolean {
   if (/^[A-Za-z]$/.test(tok)) {
     return true;
   }
-  return /^[+\-*/^=<>(){}[\]_~|]+$/.test(tok);
+  return /^[+\-*/^=<>(){}[\]_~|\u00b1\u00b7\u00d7\u00f7\u2212]+$/.test(tok);
 }
 
 /**
@@ -342,9 +335,16 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   if (!candidate) {
     return undefined;
   }
-  if (hasMultipleProseWords(candidate)) {
+  // Pull a trailing math suffix out of prose. Two-or-more prose words ("the
+  // answer is 42") are unambiguously prose and any non-empty math suffix wins.
+  // A single prose word is ambiguous: "Step 1" is a step counter we must
+  // leave alone, while "Therefore 6 ÷ 2" is a real prose-wrapped expression.
+  // Disambiguate by requiring the extracted suffix to span 2+ tokens
+  // (whitespace inside it) so we keep the "Step 1" semantics intact.
+  const proseCount = countProseWords(candidate);
+  if (proseCount >= 1) {
     const rightmost = extractRightmostMathExpression(candidate);
-    if (rightmost) {
+    if (rightmost && (proseCount >= 2 || /\s/.test(rightmost))) {
       return rightmost;
     }
   }

@@ -885,7 +885,7 @@ trip up `equals` and `contains`:
 - Display math `$$ ... $$` and `\[ ... \]`, inline math `\( ... \)` and `$ ... $`
 - Markdown bold `**...**` and italic `*...*`
 - `<think>...</think>` blocks and Anthropic-style redacted thinking blocks
-- Unicode minus `−`, multiplication `×`, and root `√`
+- Unicode minus `−`, multiplication `×` and `·`, division `÷`, and root `√`
 - `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom),
   `\frac{1}\pi` (backslash-command denominator)
 - European decimal commas (`2,00625` → `2.00625`) and US thousands
@@ -902,9 +902,10 @@ trip up `equals` and `contains`:
 - "Total: 14", "Answer: 42" label prefixes
 - `, attained at (-2,3)` and similar comma-suffixed prose after the answer
 - Prose-wrapped final answers: "The answer is 0.5", "Therefore the result is 42",
-  "The answer is 1 / 2", "The answer is x + 1" (the contiguous trailing math
-  expression on a multi-word line wins; trailing sentence punctuation
-  `. , ; : ! ?` is stripped from the extracted tokens)
+  "The answer is 1 / 2", "The answer is x + 1", "Therefore 6 ÷ 2" (the
+  contiguous trailing math expression on a prose line wins, including Unicode
+  operators `×`, `÷`, `−`, `·`; trailing sentence punctuation `. , ; : ! ?`
+  is stripped from the extracted tokens)
 - A labelled final-line answer beats earlier display blocks:
   `$$2$$\nAnswer: 3` is graded against `3`, not `2`
 - `*` and `**` between digits/letters stay as multiplication operators
