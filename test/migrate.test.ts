@@ -9,6 +9,7 @@ const TEST_INSTALLED_BETTER_SQLITE3_ABI = '115';
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
 const mockGetDb = vi.fn().mockReturnValue(mockDb);
+const mockCloseDbIfOpen = vi.fn();
 const mockGetDirectory = vi.fn();
 const mockLogger = {
   debug: vi.fn(),
@@ -18,6 +19,7 @@ const mockLogger = {
 };
 
 vi.mock('../src/database/index', () => ({
+  closeDbIfOpen: mockCloseDbIfOpen,
   getDb: mockGetDb,
 }));
 
@@ -224,6 +226,53 @@ describe('migrate', () => {
       await runDbMigrations();
 
       expect(mockMigrate).toHaveBeenCalledWith(specificDb, expect.any(Object));
+    });
+  });
+
+  describe('runDbMigrationsFromCli', () => {
+    let originalExitCode: number | string | null | undefined;
+
+    beforeEach(() => {
+      originalExitCode = process.exitCode;
+      process.exitCode = undefined;
+      mockGetDirectory.mockReturnValue('/project/src');
+    });
+
+    afterEach(() => {
+      process.exitCode = originalExitCode;
+    });
+
+    it('should set exitCode to 0 after successful direct execution', async () => {
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+      const { runDbMigrationsFromCli } = await import('../src/migrate');
+
+      try {
+        await runDbMigrationsFromCli();
+
+        expect(process.exitCode).toBe(0);
+        expect(mockCloseDbIfOpen).toHaveBeenCalledTimes(1);
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
+    });
+
+    it('should set exitCode to 1 after failed direct execution', async () => {
+      mockGetDb.mockImplementation(() => {
+        throw new Error('Database connection failed');
+      });
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+      const { runDbMigrationsFromCli } = await import('../src/migrate');
+
+      try {
+        await runDbMigrationsFromCli();
+
+        expect(process.exitCode).toBe(1);
+        expect(mockCloseDbIfOpen).toHaveBeenCalledTimes(1);
+        expect(exitSpy).not.toHaveBeenCalled();
+      } finally {
+        exitSpy.mockRestore();
+      }
     });
   });
 });

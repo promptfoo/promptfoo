@@ -124,7 +124,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--no-write`                         | Do not write results to promptfoo directory                                                              |
 | `--resume [evalId]`                  | Resume a paused/incomplete eval. If `evalId` is omitted, resumes latest                                  |
 | `--retry-errors`                     | Retry all ERROR results from the latest eval                                                             |
-| `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml)                                     |
+| `-o, --output <paths...>`            | Path(s) to output file (csv, txt, json, jsonl, yaml, yml, html, xml, junit.xml)                          |
 | `-p, --prompts <paths...>`           | Paths to prompt files (.txt)                                                                             |
 | `--prompt-prefix <path>`             | Prefix prepended to every prompt                                                                         |
 | `--prompt-suffix <path>`             | Suffix appended to every prompt                                                                          |
@@ -141,6 +141,8 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                          |
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                   |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                             |
+
+For export examples and format-specific guidance, see [output formats](/docs/configuration/outputs).
 
 Use `--filter-range` to shard or rerun a stable slice of test cases by index. The first test has index `0`, the `start` index is included, and the `end` index is excluded:
 

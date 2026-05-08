@@ -56,7 +56,7 @@ export class MCPProvider implements ApiProvider {
   }
 
   async callApi(
-    _prompt: string,
+    prompt: string,
     context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
@@ -67,7 +67,8 @@ export class MCPProvider implements ApiProvider {
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
       try {
-        toolCallData = JSON.parse(context?.vars.prompt as string);
+        const rawToolCall = context?.vars?.prompt ?? prompt;
+        toolCallData = JSON.parse(String(rawToolCall));
       } catch {
         return {
           error:
