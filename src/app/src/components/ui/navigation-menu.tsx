@@ -93,25 +93,6 @@ function NavigationMenuContent({
 
 const NavigationMenuLink = NavigationMenuPrimitive.Link;
 
-function NavigationMenuViewport({
-  className,
-  ref,
-  ...props
-}: React.ComponentProps<typeof NavigationMenuPrimitive.Viewport>) {
-  return (
-    <div className={cn('absolute left-0 top-full flex justify-center')}>
-      <NavigationMenuPrimitive.Viewport
-        className={cn(
-          'origin-top-center relative mt-1.5 h-[var(--radix-navigation-menu-viewport-height)] w-full overflow-hidden rounded-lg bg-card text-card-foreground shadow-lg ring-1 ring-black/5 dark:ring-white/10 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 md:w-[var(--radix-navigation-menu-viewport-width)]',
-          className,
-        )}
-        ref={ref}
-        {...props}
-      />
-    </div>
-  );
-}
-
 function NavigationMenuIndicator({
   className,
   ref,
@@ -139,6 +120,5 @@ export {
   NavigationMenuLink,
   NavigationMenuList,
   NavigationMenuTrigger,
-  NavigationMenuViewport,
   navigationMenuTriggerStyle,
 };
