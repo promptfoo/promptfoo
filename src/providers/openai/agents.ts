@@ -245,11 +245,11 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
    * Extract token usage from agent result
    */
   private extractTokenUsage(result: any): NonNullable<ProviderResponse['tokenUsage']> {
-    if (!result.usage) {
+    const usage = result.runContext?.usage ?? result.state?.usage ?? result.usage;
+    if (!usage) {
       return {};
     }
 
-    const usage = result.usage;
     const inputDetails = summarizeUsageDetails(usage.inputTokensDetails);
     const outputDetails = summarizeUsageDetails(usage.outputTokensDetails);
     const cachedInputTokens =

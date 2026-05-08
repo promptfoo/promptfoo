@@ -455,19 +455,21 @@ describe('OpenAiAgentsProvider', () => {
   it('preserves extended SDK usage details from modern Agents SDK runs', async () => {
     mockRun.mockResolvedValue({
       finalOutput: 'Agent answer',
-      usage: {
-        requests: 2,
-        inputTokens: 11,
-        outputTokens: 7,
-        totalTokens: 18,
-        inputTokensDetails: [{ cached_tokens: 3 }],
-        outputTokensDetails: [
-          {
-            reasoning_tokens: 2,
-            accepted_prediction_tokens: 1,
-            rejected_prediction_tokens: 4,
-          },
-        ],
+      runContext: {
+        usage: {
+          requests: 2,
+          inputTokens: 11,
+          outputTokens: 7,
+          totalTokens: 18,
+          inputTokensDetails: [{ cached_tokens: 3 }],
+          outputTokensDetails: [
+            {
+              reasoning_tokens: 2,
+              accepted_prediction_tokens: 1,
+              rejected_prediction_tokens: 4,
+            },
+          ],
+        },
       },
       newItems: [],
     });
