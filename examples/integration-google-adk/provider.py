@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -34,8 +35,15 @@ DEFAULT_USER_ID = "promptfoo-user"
 DEFAULT_OTLP_ENDPOINT = "http://localhost:4318"
 
 _logger = logging.getLogger(__name__)
-_configured_tracer_provider: TracerProvider | None = None
-_configured_otlp_endpoint: str | None = None
+
+
+@dataclass
+class _TracerProviderState:
+    provider: TracerProvider | None = None
+    otlp_endpoint: str | None = None
+
+
+_tracer_provider_state = _TracerProviderState()
 
 
 def _build_steps(prompt: str, vars_dict: dict[str, Any]) -> list[str]:
@@ -85,16 +93,14 @@ def _ensure_tracer_provider(otlp_endpoint: str) -> TracerProvider:
     to be exported twice).
     """
 
-    global _configured_tracer_provider, _configured_otlp_endpoint
-
-    if _configured_tracer_provider is not None:
-        if _configured_otlp_endpoint != otlp_endpoint:
+    if _tracer_provider_state.provider is not None:
+        if _tracer_provider_state.otlp_endpoint != otlp_endpoint:
             _logger.warning(
                 "TracerProvider already configured for %s; ignoring request to switch to %s",
-                _configured_otlp_endpoint,
+                _tracer_provider_state.otlp_endpoint,
                 otlp_endpoint,
             )
-        return _configured_tracer_provider
+        return _tracer_provider_state.provider
 
     exporter = OTLPSpanExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/traces")
     provider = TracerProvider(
@@ -103,8 +109,8 @@ def _ensure_tracer_provider(otlp_endpoint: str) -> TracerProvider:
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
 
-    _configured_tracer_provider = provider
-    _configured_otlp_endpoint = otlp_endpoint
+    _tracer_provider_state.provider = provider
+    _tracer_provider_state.otlp_endpoint = otlp_endpoint
     return provider
 
 

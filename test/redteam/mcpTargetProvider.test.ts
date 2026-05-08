@@ -209,47 +209,78 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(target.calls).toHaveLength(0);
   });
 
-  it('returns a materialization error when inference provider call fails', async () => {
+  it('returns a materialization error when inference provider calls fail', async () => {
     providerManagerMocks.getProvider.mockResolvedValueOnce({
       id: () => 'openai:test',
       callApi: async () => {
-        throw new Error('materialization failed');
+        throw new Error('Repair provider failed');
       },
     });
 
-    const target = new FakeMcpProvider([
-      {
-        name: 'list_industries',
-        description: 'List industries.',
-        inputSchema: { type: 'object', properties: {} },
-      },
-      searchCompaniesTool,
-    ]);
+    const target = new FakeMcpProvider([searchCompaniesTool]);
     const wrapped = maybeWrapMcpProviderForRedteam(target, {
       metadata: {
-        pluginId: 'sql-injection',
+        pluginId: 'harmful:hate',
         purpose: 'Search companies',
       },
     });
 
-    const response = await wrapped.callApi('Search for clean energy companies.', {
-      prompt: {
-        raw: '{{prompt}}',
-        label: 'prompt',
-      },
-      vars: { prompt: 'Search for clean energy companies.' },
-      test: {
-        metadata: {
-          pluginId: 'sql-injection',
-          purpose: 'Search companies',
+    await expect(
+      wrapped.callApi('Find clean energy companies.', {
+        prompt: {
+          raw: '{{prompt}}',
+          label: 'prompt',
         },
-      },
-    } as unknown as CallApiContextParams);
-
-    expect(response.error).toContain('Failed to materialize MCP target prompt');
+        vars: { prompt: 'Find clean energy companies.' },
+        test: {
+          metadata: {
+            pluginId: 'harmful:hate',
+            purpose: 'Search companies',
+          },
+        },
+      } as unknown as CallApiContextParams),
+    ).resolves.toEqual({
+      error: expect.stringContaining('Failed to materialize MCP target prompt'),
+    });
     expect(target.calls).toHaveLength(0);
   });
 
+  it('returns a materialization error when the wrapped provider call fails', async () => {
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => ({
+        output:
+          '{"tool":"search_companies","args":{"query":"Find clean energy companies.","limit":10}}',
+      }),
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    vi.spyOn(target, 'callApi').mockRejectedValueOnce(new Error('Target provider failed'));
+    const wrapped = maybeWrapMcpProviderForRedteam(target, {
+      metadata: {
+        pluginId: 'harmful:hate',
+        purpose: 'Search companies',
+      },
+    });
+
+    await expect(
+      wrapped.callApi('Find clean energy companies.', {
+        prompt: {
+          raw: '{{prompt}}',
+          label: 'prompt',
+        },
+        vars: { prompt: 'Find clean energy companies.' },
+        test: {
+          metadata: {
+            pluginId: 'harmful:hate',
+            purpose: 'Search companies',
+          },
+        },
+      } as unknown as CallApiContextParams),
+    ).resolves.toEqual({
+      error: expect.stringContaining('Target provider failed'),
+    });
+  });
   it('does not wrap non-redteam MCP calls', () => {
     const target = new FakeMcpProvider([searchCompaniesTool]);
 

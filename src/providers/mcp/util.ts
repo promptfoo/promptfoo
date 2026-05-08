@@ -65,8 +65,8 @@ const tokenEndpointCache = new Map<string, string>();
 
 function isValidTokenEndpoint(tokenEndpoint: string): boolean {
   try {
-    const parsed = new URL(tokenEndpoint);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    const parsedUrl = new URL(tokenEndpoint);
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
   } catch {
     return false;
   }
@@ -120,12 +120,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
         return metadata.token_endpoint;
       }
 
-      if (metadata.token_endpoint) {
-        logger.debug(`[MCP Auth] Ignoring invalid token_endpoint in metadata from ${discoveryUrl}`);
-        continue;
-      }
-
-      logger.debug(`[MCP Auth] No token_endpoint in metadata from ${discoveryUrl}`);
+      logger.debug(`[MCP Auth] No valid token_endpoint in metadata from ${discoveryUrl}`);
     } catch (error) {
       logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
     }

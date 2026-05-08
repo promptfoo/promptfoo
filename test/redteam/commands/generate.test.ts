@@ -3293,7 +3293,7 @@ describe('redteam generate command with target option', () => {
   it.each([
     ['undefined', undefined],
     ['null', null],
-  ])('should handle backwards compatibility when targets is %s', async (_label, targets) => {
+  ])('should handle backwards compatibility with %s targets', async (_label, targets) => {
     const mockConfig = {
       prompts: ['Test prompt'],
       vars: {},
@@ -3303,10 +3303,9 @@ describe('redteam generate command with target option', () => {
         plugins: ['harmful:hate'] as any,
         strategies: [],
       },
-    } as any;
-    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+    };
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig as any);
 
-    // Mock fs to handle the temp file write
     vi.mocked(fs.existsSync).mockImplementation(function () {
       return false;
     });
@@ -3322,8 +3321,6 @@ describe('redteam generate command with target option', () => {
 
     const configUUID = '12345678-1234-1234-1234-123456789012';
     const targetUUID = '87654321-4321-4321-4321-210987654321';
-
-    // Find the generate command
     const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
 
     await generateCommand!.parseAsync([
