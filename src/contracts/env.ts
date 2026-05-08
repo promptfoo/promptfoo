@@ -129,13 +129,10 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-// Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
-// while maintaining type safety for known env vars.
-//
-// NOTE: the runtime schema is a strict `z.object` and will strip unknown keys at
-// parse time. The type widens with `Record<string, string | undefined>` so that
-// downstream code can read arbitrary keys without a cast; callers that rely on
-// preserving unknown keys should pass them in via the unparsed source object,
-// not the schema-parsed result.
+// The runtime schema silently strips unknown keys at parse time (zod's default
+// `z.object` mode). The type widens with `Record<string, string | undefined>`
+// so downstream code can read arbitrary template variables (e.g.,
+// `{{ env.MY_CUSTOM_VAR }}`) without a cast; callers that need to preserve
+// unknown keys must read them off the unparsed source object.
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
   Record<string, string | undefined>;

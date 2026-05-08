@@ -1,11 +1,6 @@
 import type { VarValue } from './shared';
 
-/**
- * Minimal provider surface visible to prompt functions. The full `ApiProvider`
- * interface in `src/types/providers.ts` extends this; declaring the minimum
- * here keeps the contracts layer free of an upward dependency on the provider
- * layer while guaranteeing the two declarations cannot drift.
- */
+/** Minimum provider surface a prompt function may receive. */
 export interface MinimalApiProvider {
   id: () => string;
   callApi: (prompt: string, context?: any, options?: any) => Promise<any>;

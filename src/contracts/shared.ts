@@ -11,8 +11,6 @@ export const CompletionTokenDetailsSchema = z.object({
 
 export type CompletionTokenDetails = z.infer<typeof CompletionTokenDetailsSchema>;
 
-// Core token-usage fields shared by both the top-level usage and the nested
-// assertion usage. Kept private; consumers depend on `BaseTokenUsageSchema`.
 const TokenUsageCoreSchema = z.object({
   prompt: z.number().optional(),
   completion: z.number().optional(),
@@ -22,11 +20,7 @@ const TokenUsageCoreSchema = z.object({
   completionDetails: CompletionTokenDetailsSchema.optional(),
 });
 
-/**
- * Base schema for token usage statistics with all fields optional. The
- * `assertions` field mirrors the top-level core fields for model-graded
- * assertion accounting.
- */
+/** Token usage statistics. The optional `assertions` mirrors the top-level fields for model-graded assertion accounting. */
 export const BaseTokenUsageSchema = TokenUsageCoreSchema.extend({
   assertions: TokenUsageCoreSchema.optional(),
 });

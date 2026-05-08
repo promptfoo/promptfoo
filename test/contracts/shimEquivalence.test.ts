@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import * as contractsEnv from '../../src/contracts/env';
 import * as contractsPrompts from '../../src/contracts/prompts';
 import * as contractsShared from '../../src/contracts/shared';
@@ -14,10 +13,9 @@ import * as legacyValidatorPrompts from '../../src/validators/prompts';
 import * as legacyValidatorShared from '../../src/validators/shared';
 
 /**
- * The legacy `src/types/**` and `src/validators/**` paths are now `export *`
- * shims around the new `src/contracts/**` modules. This test asserts the
- * legacy paths re-export the *same* runtime values (referential equality)
- * so a future refactor can't accidentally fork the public surface.
+ * The legacy `src/types/**` and `src/validators/**` paths re-export the
+ * `src/contracts/**` modules. Assert referential equality so a future refactor
+ * can't accidentally fork the public surface.
  */
 describe('legacy shim equivalence', () => {
   const pairs: Array<[string, Record<string, unknown>, Record<string, unknown>]> = [
@@ -29,15 +27,13 @@ describe('legacy shim equivalence', () => {
     ['validators/shared', legacyValidatorShared, contractsValidatorShared],
   ];
 
-  for (const [name, legacy, contracts] of pairs) {
-    it(`${name}: legacy module re-exports identical runtime symbols`, () => {
-      const legacyKeys = Object.keys(legacy).sort();
-      const contractsKeys = Object.keys(contracts).sort();
-      expect(legacyKeys).toEqual(contractsKeys);
+  it.each(pairs)('%s: legacy module re-exports identical runtime symbols', (_, legacy, contracts) => {
+    const legacyKeys = Object.keys(legacy).sort();
+    const contractsKeys = Object.keys(contracts).sort();
+    expect(legacyKeys).toEqual(contractsKeys);
 
-      for (const key of legacyKeys) {
-        expect(legacy[key]).toBe(contracts[key]);
-      }
-    });
-  }
+    for (const key of legacyKeys) {
+      expect(legacy[key]).toBe(contracts[key]);
+    }
+  });
 });

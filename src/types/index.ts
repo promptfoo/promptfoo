@@ -1,5 +1,3 @@
-// Transitional mixed surface: the first leaf-safe contracts now live in `contracts/`,
-// but runtime-facing config schemas and types are still interleaved here.
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
 import { BaseTokenUsageSchema } from '../contracts/shared';
@@ -38,7 +36,6 @@ import type {
   ProviderResponse,
   ProvidersConfig,
 } from './providers';
-
 import type { TraceData } from './tracing';
 
 /**
