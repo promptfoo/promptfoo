@@ -325,16 +325,16 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   const evaluationId =
     typeof traceLinkage?.evaluationId === 'string' ? traceLinkage.evaluationId : undefined;
 
-  if (!traceLinkage || (!traceId && !evaluationId)) {
+  // No trace linkage to surface — return metadata untouched.
+  if (!traceId && !evaluationId) {
     return { traceId, evaluationId, metadata: metadataRecord };
   }
 
   const { traceLinkage: _traceLinkage, ...remainingPromptfooMetadata } = promptfooMetadata ?? {};
   const surfacedMetadata = { ...metadataRecord };
+  delete surfacedMetadata.__promptfoo;
   if (Object.keys(remainingPromptfooMetadata).length > 0) {
     surfacedMetadata.__promptfoo = remainingPromptfooMetadata;
-  } else {
-    delete surfacedMetadata.__promptfoo;
   }
 
   return { traceId, evaluationId, metadata: surfacedMetadata };
@@ -653,8 +653,13 @@ export default class EvalResult {
 
   async save() {
     const db = getDb();
+    // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
+    // testCase metadata in the constructor, and trace linkage travels inside the metadata
+    // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
+    // explicitly keeps the write payload aligned with the schema.
+    const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
-      ...this,
+      ...rest,
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
     };
     //check if this exists in the db

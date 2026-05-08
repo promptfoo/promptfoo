@@ -1103,6 +1103,45 @@ describe('evaluator', () => {
 
       expect(keys).toEqual([]);
     });
+
+    it('hides the reserved __promptfoo namespace from key listings', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const db = getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
+          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+      );
+
+      const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);
+      expect(keys).toContain('userKey');
+      expect(keys).not.toContain('__promptfoo');
+    });
+  });
+
+  describe('EvalQueries.getMetadataValuesFromEval', () => {
+    it('refuses to return values under the reserved __promptfoo namespace', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const db = getDb();
+      await db.run(
+        `INSERT INTO eval_results (
+          id, eval_id, prompt_idx, test_idx, test_case, prompt, provider,
+          success, score, metadata
+        ) VALUES
+        ('promptfoo-val-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
+          '{"__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+      );
+
+      expect(EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo')).toEqual([]);
+      expect(EvalQueries.getMetadataValuesFromEval(eval_.id, '__promptfoo.traceLinkage')).toEqual(
+        [],
+      );
+    });
   });
 
   describe('queryTestIndices', () => {

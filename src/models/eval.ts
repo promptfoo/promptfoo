@@ -261,7 +261,9 @@ export class EvalQueries {
         LIMIT 1000
       `;
       const results = await db.all<MetadataKeyResult>(query);
-      return results.map((r) => r.key);
+      // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+      // it through the metadata-keys API — pair this with the value-side filter below.
+      return results.map((r) => r.key).filter((key) => key !== '__promptfoo');
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(

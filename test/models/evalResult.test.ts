@@ -201,6 +201,26 @@ describe('EvalResult', () => {
         evaluationId: 'wins-over-user',
         metadata: { userKey: 'kept' },
       });
+      // The read-side strip happens on findById, not just construction.
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+      expect(retrieved?.toEvaluateResult().metadata).toEqual({ userKey: 'kept' });
+    });
+
+    it('round-trips evaluationId without traceId (malformed traceparent path)', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-only-id', {
+        ...mockEvaluateResult,
+        evaluationId: 'eval-only',
+        metadata: { source: 'eval-only-test' },
+      });
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        evaluationId: 'eval-only',
+        metadata: { source: 'eval-only-test' },
+      });
+      expect(retrieved?.toEvaluateResult().traceId).toBeUndefined();
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
     });
 
     it('preserves user metadata alongside persisted trace linkage', async () => {
