@@ -27,16 +27,15 @@ describe('legacy shim equivalence', () => {
     ['validators/shared', legacyValidatorShared, contractsValidatorShared],
   ];
 
-  it.each(pairs)(
-    '%s: legacy module re-exports identical runtime symbols',
-    (_, legacy, contracts) => {
-      const legacyKeys = Object.keys(legacy).sort();
-      const contractsKeys = Object.keys(contracts).sort();
-      expect(legacyKeys).toEqual(contractsKeys);
+  it.each(
+    pairs,
+  )('%s: legacy module re-exports identical runtime symbols', (_, legacy, contracts) => {
+    const legacyKeys = Object.keys(legacy).sort();
+    const contractsKeys = Object.keys(contracts).sort();
+    expect(legacyKeys).toEqual(contractsKeys);
 
-      for (const key of legacyKeys) {
-        expect(legacy[key]).toBe(contracts[key]);
-      }
-    },
-  );
+    for (const key of legacyKeys) {
+      expect(legacy[key]).toBe(contracts[key]);
+    }
+  });
 });
