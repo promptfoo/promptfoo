@@ -209,6 +209,42 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(target.calls).toHaveLength(0);
   });
 
+  it('returns a materialization error when inference provider calls fail', async () => {
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => {
+        throw new Error('Repair provider failed');
+      },
+    });
+
+    const target = new FakeMcpProvider([searchCompaniesTool]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, {
+      metadata: {
+        pluginId: 'harmful:hate',
+        purpose: 'Search companies',
+      },
+    });
+
+    await expect(
+      wrapped.callApi('Find clean energy companies.', {
+        prompt: {
+          raw: '{{prompt}}',
+          label: 'prompt',
+        },
+        vars: { prompt: 'Find clean energy companies.' },
+        test: {
+          metadata: {
+            pluginId: 'harmful:hate',
+            purpose: 'Search companies',
+          },
+        },
+      } as unknown as CallApiContextParams),
+    ).resolves.toEqual({
+      error: expect.stringContaining('Failed to materialize MCP target prompt'),
+    });
+    expect(target.calls).toHaveLength(0);
+  });
+
   it('returns a materialization error when the wrapped provider call fails', async () => {
     providerManagerMocks.getProvider.mockResolvedValueOnce({
       id: () => 'openai:test',
