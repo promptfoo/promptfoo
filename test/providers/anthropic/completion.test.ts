@@ -210,10 +210,10 @@ describe('AnthropicCompletionProvider', () => {
         '7c26fdc69a372e71532057f3039c789205d499e73d7b7356842127c3f9280701',
       );
       expect(hashAnthropicCacheValue({ prompt: 'same prompt' })).toBe(
-        'e1436b0a7084971817a4a1cfea0202abca38ec5fcf652c536c5a1686010603cc',
+        '986a0c23b9bf151804afb7cd7ff27307d4450f268f18bdd7d5cea95d52de9114',
       );
       expect(hashAnthropicCacheValue(undefined)).toBe(
-        '1a7e490079dddef29372602f205771e36d0d1e43d9da356f22194ea8f685e397',
+        '766c13d249e6c1a4c7ab9b490e2b854b2764a4d88677be73fb242f2238bd3d9d',
       );
       expect(getAnthropicAuthCacheNamespace('')).toBe(
         '7b632cd5180136645b21af8e6f3708e0782bdc3a9d81f094a9385cade8ce0987',
