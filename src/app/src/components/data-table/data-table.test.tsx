@@ -128,6 +128,15 @@ describe('DataTable', () => {
     expect(valueInput).toHaveClass('min-w-[150px]');
   });
 
+  it('keeps toolbar controls easier to tap on narrow screens', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Test Item 1' }];
+
+    render(<DataTable columns={columns} data={data} showToolbar />);
+
+    expect(screen.getByText('Columns').closest('button')).toHaveClass('h-11', 'sm:h-8');
+    expect(screen.getByText('Filters').closest('button')).toHaveClass('h-11', 'sm:h-8');
+  });
+
   it('should render table with data when data is provided', () => {
     const data: TestRow[] = [
       { id: '1', name: 'Test Item 1' },

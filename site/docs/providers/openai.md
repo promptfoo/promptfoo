@@ -28,6 +28,7 @@ The OpenAI provider supports the following model formats:
 - `openai:moderation:<model name>` - uses moderation models (default: `omni-moderation-latest`)
 - `openai:image:<model name>` - uses image generation models
 - `openai:transcription:<model name>` - uses audio transcription models
+- `openai:realtime` - defaults to `gpt-realtime-1.5`
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
 - `openai:video:<model name>` - uses Sora video generation models
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
@@ -1607,16 +1608,20 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
 
 ## Audio capabilities
 
-OpenAI models with audio support (like `gpt-audio-1.5`, `gpt-audio`, `gpt-audio-mini`, `gpt-4o-audio-preview` and `gpt-4o-mini-audio-preview`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+OpenAI models with audio support (like `gpt-audio-1.5`, `gpt-audio`, and `gpt-audio-mini`) can process audio inputs and generate audio outputs. This enables testing speech-to-text, text-to-speech, and speech-to-speech capabilities.
+
+Use these general-purpose audio models with `openai:chat:*`. Current OpenAI docs place `gpt-audio*` on the Chat Completions endpoint, and audio is not yet supported by the Responses API, so `openai:responses:gpt-audio*` is not a valid audio route.
+
+OpenAI deprecated the older `gpt-4o-audio-preview` model family in favor of the current `gpt-audio*` models below. Prefer the current models for new evals; some dated preview snapshots remain available only during their published deprecation windows.
 
 **Available audio models:**
 
 - `gpt-audio-1.5` - Flagship audio model ($2.50/$10 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-audio` - General audio model ($2.50/$10 per 1M text tokens, $40/$80 per 1M audio tokens)
+- `gpt-audio-2025-08-28` - Dated snapshot of `gpt-audio`
 - `gpt-audio-mini` - Cost-efficient audio model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-audio-mini-2025-12-15` - Dated snapshot of `gpt-audio-mini`
-- `gpt-4o-audio-preview` - Preview audio model
-- `gpt-4o-mini-audio-preview` - Preview mini audio model
+- `gpt-audio-mini-2025-10-06` - Dated snapshot of `gpt-audio-mini`
 
 ### Using audio inputs
 
@@ -1651,7 +1656,7 @@ prompts:
     label: Audio Input
 
 providers:
-  - id: openai:chat:gpt-4o-audio-preview
+  - id: openai:chat:gpt-audio-1.5
     config:
       modalities: ['text'] # also supports 'audio'
 
@@ -1738,6 +1743,8 @@ tests:
 
 Supported audio formats include MP3, MP4, MPEG, MPGA, M4A, WAV, and WEBM.
 
+`gpt-realtime-whisper` is available through the native Realtime transcription-session API rather than the `/audio/transcriptions` endpoint used by `openai:transcription:*`. For conversational Realtime evals, use it as `input_audio_transcription.model` instead.
+
 #### Diarization example
 
 The diarization model identifies different speakers in the audio:
@@ -1768,15 +1775,20 @@ npx promptfoo@latest init --example openai-audio-transcription
 
 ## Realtime API Models
 
-The Realtime API allows for real-time communication with models like `gpt-realtime-1.5` and `gpt-realtime` using WebSockets, supporting both text and audio inputs/outputs with streaming responses.
+The Realtime API allows for real-time communication with models like `gpt-realtime-2`, `gpt-realtime-1.5`, and `gpt-realtime` using WebSockets, supporting both text and audio inputs/outputs with streaming responses.
 
 ### Supported Realtime Models
 
+- `gpt-realtime-2` - Reasoning-capable realtime model (pricing not yet published)
 - `gpt-realtime-1.5` - Flagship realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime` - General-availability realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
+- `gpt-realtime-2025-08-28` - Dated snapshot of `gpt-realtime`
 - `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-realtime-mini-2025-12-15`
-- `gpt-4o-realtime-preview-2024-12-17` and `gpt-4o-mini-realtime-preview-2024-12-17` - Legacy preview models
+- `gpt-realtime-mini-2025-10-06`
+- `gpt-4o-mini-realtime-preview-2024-12-17` - Deprecated preview snapshot still available until its published shutdown date
+
+Prefer the current `gpt-realtime*` models for new evals. OpenAI removed several older preview aliases on May 7, 2026, while the dated `gpt-4o-mini-realtime-preview-2024-12-17` snapshot remains available until its published July 23, 2026 shutdown date.
 
 ### Using Realtime API
 
@@ -1789,7 +1801,6 @@ providers:
       modalities: ['text', 'audio']
       voice: 'alloy'
       instructions: 'You are a helpful assistant.'
-      temperature: 0.7
       websocketTimeout: 60000 # 60 seconds
       # Optional: point to custom/proxy endpoints; WS URL is derived automatically
       # https:// → wss://, http:// → ws://
@@ -1804,15 +1815,23 @@ The Realtime API configuration supports these parameters in addition to standard
 
 | Parameter                    | Description                                                                     | Default                | Options                                                             |
 | ---------------------------- | ------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------- |
-| `modalities`                 | Types of content the model can process and generate                             | ['text', 'audio']      | 'text', 'audio'                                                     |
+| `modalities`                 | Promptfoo shorthand for requested output mode                                   | ['text', 'audio']      | 'text', 'audio'                                                     |
 | `voice`                      | Voice for audio generation                                                      | 'alloy'                | alloy, ash, ballad, coral, echo, sage, shimmer, verse, cedar, marin |
 | `instructions`               | System instructions for the model                                               | 'You are a helpful...' | Any text string                                                     |
 | `input_audio_format`         | Format of audio input                                                           | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'                                   |
 | `output_audio_format`        | Format of audio output                                                          | 'pcm16'                | 'pcm16', 'g711_ulaw', 'g711_alaw'                                   |
+| `turn_detection`             | Input VAD configuration                                                         | None                   | `server_vad`, `semantic_vad`, or `null`                             |
 | `websocketTimeout`           | Timeout for WebSocket connection (milliseconds)                                 | 30000                  | Any number                                                          |
 | `max_response_output_tokens` | Maximum tokens in model response. Invalid Realtime values fall back to `'inf'`. | 'inf'                  | Integer from 1-4096 or 'inf'                                        |
+| `input_audio_transcription`  | Optional transcription config for input audio                                   | None                   | Supports model-specific `language`, `prompt`, and `delay` fields    |
+| `parallel_tool_calls`        | Allow parallel tool calls on supported Realtime models                          | None                   | Boolean                                                             |
+| `reasoning`                  | Reasoning config for `gpt-realtime-2`                                           | None                   | `{ effort: 'minimal' \| 'low' \| 'medium' \| 'high' \| 'xhigh' }`   |
 | `tools`                      | Array of tool definitions for function calling                                  | []                     | Array of tool objects                                               |
-| `tool_choice`                | Controls how tools are selected                                                 | 'auto'                 | 'none', 'auto', 'required', or object                               |
+| `tool_choice`                | Controls how tools are selected                                                 | 'auto'                 | Follow the OpenAI Realtime API schema                               |
+
+Promptfoo accepts the configuration names above for backward compatibility, then sends the current GA Realtime wire shape to OpenAI: `type: 'realtime'`, native `output_modalities`, nested `audio.input` / `audio.output`, and the documented top-level tool fields.
+
+`gpt-realtime-whisper` can be used as `input_audio_transcription.model` inside a conversational Realtime session. Its `delay` field is supported there; `prompt` is not supported for that model. OpenAI also exposes `gpt-realtime-translate` through a separate Realtime translation-session API; that is a different endpoint from the conversational `openai:realtime:*` provider documented here.
 
 #### Custom endpoints and proxies (Realtime)
 
@@ -1826,7 +1845,6 @@ providers:
     config:
       apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
       modalities: ['text']
-      temperature: 0.7
 ```
 
 Environment variables `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL` also apply to Realtime WebSocket connections.
@@ -1834,6 +1852,8 @@ Environment variables `OPENAI_API_BASE_URL` and `OPENAI_BASE_URL` also apply to 
 ### Function Calling with Realtime API
 
 The Realtime API supports function calling via tools, similar to the Chat API. Here's an example configuration:
+
+Realtime tools can be supplied inline or loaded through the same `file://` tool references supported by the rest of the OpenAI provider. The native Realtime format matches the OpenAI docs: function tools use top-level fields, and `tool_choice` is passed through in the Realtime shape you provide.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -1853,6 +1873,12 @@ providers:
       tool_choice: 'auto'
 ```
 
+Realtime function tools use top-level `name`, `description`, and `parameters` fields, exactly as shown in the [OpenAI Realtime function-calling guide](https://developers.openai.com/api/docs/guides/realtime-conversations#configure-callable-functions). Native Realtime `tool_choice` values are sent unchanged.
+
+For compatibility with shared Chat Completions configs, promptfoo also accepts nested Chat-style function tool objects such as `type: function` plus `function: { ... }` and converts only those legacy shapes into the native Realtime format before sending them.
+
+When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to that handler. If the handler performs side effects, validate the function name and parse or validate the arguments before acting on them. For deterministic eval checks, use an [`is-valid-openai-tools-call`](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call) assertion when you need to enforce an exact schema match.
+
 ### Complete Example
 
 For a complete working example that demonstrates the Realtime API capabilities, see the [OpenAI Realtime API example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-realtime) or initialize it with:
@@ -1866,8 +1892,8 @@ This example includes:
 - Basic single-turn interactions with the Realtime API
 - Multi-turn conversations with persistent context
 - Conversation threading with separate conversation IDs
+- Function tool configuration examples, with a custom `functionCallHandler` required to complete tool round trips
 - JavaScript prompt function for properly formatting messages
-- Function calling with the Realtime API
 - Detailed documentation on handling content types correctly
 
 ### Input and Message Format
@@ -1880,7 +1906,7 @@ When using the Realtime API with promptfoo, you can specify the prompt in JSON f
     "role": "user",
     "content": [
       {
-        "type": "text",
+        "type": "input_text",
         "text": "{{question}}"
       }
     ]
@@ -1888,7 +1914,31 @@ When using the Realtime API with promptfoo, you can specify the prompt in JSON f
 ]
 ```
 
-The Realtime API supports the same multimedia formats as the Chat API, allowing you to include images and audio in your prompts.
+Promptfoo preserves the native Realtime user-content items accepted by OpenAI, including `input_text`, `input_audio`, and `input_image`:
+
+```json title="realtime-multimodal-input.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Describe these inputs."
+      },
+      {
+        "type": "input_audio",
+        "audio": "<base64-encoded audio>"
+      },
+      {
+        "type": "input_image",
+        "image_url": "data:image/jpeg;base64,..."
+      }
+    ]
+  }
+]
+```
+
+Use `input_image` only with Realtime models that support image input, such as the current `gpt-realtime*` family.
 
 ### Multi-Turn Conversations
 

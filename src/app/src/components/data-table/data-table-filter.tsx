@@ -925,7 +925,7 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="relative">
+        <Button variant="outline" size="sm" className="relative h-11 sm:h-8">
           <Filter className="mr-2 size-4" />
           Filters
           {activeFilterCount > 0 && (

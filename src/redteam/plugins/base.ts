@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
+import { isMcpToolNameFilter } from '../../providers/mcp/util';
 import { loadTools } from '../../providers/openai/agents-loader';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -448,11 +449,13 @@ export abstract class RedteamGraderBase {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
 
     const providerId = provider?.id?.();
-    const tools = provider?.config?.tools
-      ? providerId?.startsWith('openai:agents:')
-        ? await loadTools(provider.config.tools)
-        : await maybeLoadToolsFromExternalFile(provider.config.tools)
-      : undefined;
+    const providerTools = provider?.config?.tools;
+    const tools =
+      providerTools && !isMcpToolNameFilter(providerTools)
+        ? providerId?.startsWith('openai:agents:')
+          ? await loadTools(providerTools)
+          : await maybeLoadToolsFromExternalFile(providerTools)
+        : undefined;
 
     const vars = {
       ...test.metadata,

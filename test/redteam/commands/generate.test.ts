@@ -277,7 +277,7 @@ describe('doGenerateRedteam', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset mock implementations that persist across tests (clearAllMocks only clears call history)
-    vi.mocked(extractMcpToolsInfo).mockReset();
+    vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
     vi.mocked(checkEmailStatusAndMaybeExit).mockReset().mockResolvedValue('ok');
     vi.mocked(promptForEmailUnverified)
       .mockReset()
@@ -524,7 +524,6 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should use purpose when no config is provided', async () => {
-    // Mock extractMcpToolsInfo to return empty string for this test
     vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
 
     const options: RedteamCliGenerateOptions = {
@@ -1200,8 +1199,9 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should enhance purpose with MCP tools information when available', async () => {
-    const mcpToolsInfo = 'MCP Tools: tool1, tool2';
-    vi.mocked(extractMcpToolsInfo).mockResolvedValue(mcpToolsInfo);
+    vi.mocked(extractMcpToolsInfo).mockResolvedValue(
+      '\nAvailable MCP tools:\n{"name":"search_companies","description":"Search companies.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}}}}',
+    );
 
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
@@ -1237,7 +1237,7 @@ describe('doGenerateRedteam', () => {
 
     expect(synthesize).toHaveBeenCalledWith(
       expect.objectContaining({
-        purpose: expect.stringContaining(mcpToolsInfo),
+        purpose: expect.stringContaining('"name":"search_companies"'),
         testGenerationInstructions: expect.stringContaining(
           'Generate every test case prompt as a json string',
         ),
@@ -1647,7 +1647,7 @@ describe('doGenerateRedteam', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
-      vi.mocked(extractMcpToolsInfo).mockReset();
+      vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
       vi.mocked(getCustomPolicies).mockReset();
       vi.mocked(resolveTeamId).mockReset();
       vi.mocked(resolveTeamId).mockResolvedValue({ id: 'resolved-team-id', name: 'Resolved Team' });
