@@ -353,6 +353,13 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   // become "0.5." and fail to parse — only the prose-extraction branch did
   // this previously, so labelled non-prose lines slipped through.
   candidate = candidate.replace(/[.,;:!?]+$/, '');
+  // If the last line is pure prose with no math content (e.g. a closing
+  // sentence like "This is the final result."), bail so the caller can
+  // fall back to display-block extraction or earlier candidates instead
+  // of committing the prose string as the answer.
+  if (looksLikeProse(candidate)) {
+    return undefined;
+  }
   return cleanMathText(candidate);
 }
 

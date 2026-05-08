@@ -908,6 +908,9 @@ trip up `equals` and `contains`:
   is stripped from the extracted tokens)
 - A labelled final-line answer beats earlier display blocks:
   `$$2$$\nAnswer: 3` is graded against `3`, not `2`
+- A pure-prose final line ("This is the final result.", "Done.") is
+  ignored — extraction falls back to the previous display block, so a
+  correct `$$\frac{1}{2}$$` answer still grades against `0.5`
 - `*` and `**` between digits/letters stay as multiplication operators
   (`2*3*4 = 24`), not stripped as Markdown emphasis
 - Display math inside `<think>...</think>` (or redacted-thinking blocks) is

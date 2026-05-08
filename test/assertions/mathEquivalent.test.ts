@@ -633,6 +633,24 @@ describe('extractMathAnswer', () => {
     });
   });
 
+  describe('prose-only last lines fall back to earlier answers', () => {
+    it('falls back to the earlier display block when the last line is pure prose', () => {
+      // Pre-fix: returned "This is the final result" and CE then failed
+      // to parse, so a correct $$\frac{1}{2}$$ answer was reported as wrong.
+      expect(extractMathAnswer('$$\\frac{1}{2}$$\nThis is the final result.')).toBe('\\frac{1}{2}');
+    });
+
+    it('falls back to the earlier display block when the last line is "Done."', () => {
+      expect(extractMathAnswer('$$42$$\nDone.')).toBe('42');
+    });
+
+    it('still grades $$\\frac{1}{2}$$ + prose trailer against 0.5', () => {
+      expect(isMathEquivalent('$$\\frac{1}{2}$$\nThis is the final result.', '0.5').pass).toBe(
+        true,
+      );
+    });
+  });
+
   describe('hidden-thinking display blocks must not leak through', () => {
     it('ignores $$...$$ inside <think> blocks', () => {
       expect(extractMathAnswer('<think>$$2$$</think>\nFinal answer: 3')).toBe('3');
