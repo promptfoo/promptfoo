@@ -276,7 +276,11 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
 // (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
-// log so the rare collision is visible.
+// log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
+// `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
+const PROMPTFOO_METADATA_KEY = '__promptfoo';
+const TRACE_LINKAGE_KEY = 'traceLinkage';
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -293,21 +297,20 @@ function persistTraceMetadata(
   }
 
   const metadataRecord = metadata ?? {};
-  const promptfooMetadata = asRecord(metadataRecord.__promptfoo);
-  if (metadataRecord.__promptfoo !== undefined && promptfooMetadata === undefined) {
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
     logger.warn(
-      '[EvalResult] Overwriting non-object metadata.__promptfoo with internal trace linkage; the key is reserved for promptfoo internals.',
+      `[EvalResult] Overwriting non-object metadata.${PROMPTFOO_METADATA_KEY} with internal trace linkage; the key is reserved for promptfoo internals.`,
     );
   }
 
+  // `traceId`/`evaluationId` are only persisted when truthy — JSON.stringify strips
+  // undefined values, and `surfaceTraceMetadata` requires `typeof === 'string'` on read.
   return {
     ...metadataRecord,
-    __promptfoo: {
+    [PROMPTFOO_METADATA_KEY]: {
       ...(promptfooMetadata ?? {}),
-      traceLinkage: {
-        ...(traceId ? { traceId } : {}),
-        ...(evaluationId ? { evaluationId } : {}),
-      },
+      [TRACE_LINKAGE_KEY]: { traceId, evaluationId },
     },
   };
 }
@@ -318,8 +321,8 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   metadata: Record<string, unknown>;
 } {
   const metadataRecord = metadata ?? {};
-  const promptfooMetadata = asRecord(metadataRecord.__promptfoo);
-  const traceLinkage = asRecord(promptfooMetadata?.traceLinkage);
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  const traceLinkage = asRecord(promptfooMetadata?.[TRACE_LINKAGE_KEY]);
 
   const traceId = typeof traceLinkage?.traceId === 'string' ? traceLinkage.traceId : undefined;
   const evaluationId =
@@ -330,11 +333,12 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
     return { traceId, evaluationId, metadata: metadataRecord };
   }
 
-  const { traceLinkage: _traceLinkage, ...remainingPromptfooMetadata } = promptfooMetadata ?? {};
+  const { [TRACE_LINKAGE_KEY]: _traceLinkage, ...remainingPromptfooMetadata } =
+    promptfooMetadata ?? {};
   const surfacedMetadata = { ...metadataRecord };
-  delete surfacedMetadata.__promptfoo;
+  delete surfacedMetadata[PROMPTFOO_METADATA_KEY];
   if (Object.keys(remainingPromptfooMetadata).length > 0) {
-    surfacedMetadata.__promptfoo = remainingPromptfooMetadata;
+    surfacedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
   }
 
   return { traceId, evaluationId, metadata: surfacedMetadata };
@@ -640,10 +644,11 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    const surfacedTraceMetadata = surfaceTraceMetadata(opts.metadata);
-    this.metadata = surfacedTraceMetadata.metadata;
-    this.traceId = surfacedTraceMetadata.traceId;
-    this.evaluationId = surfacedTraceMetadata.evaluationId;
+    ({
+      metadata: this.metadata,
+      traceId: this.traceId,
+      evaluationId: this.evaluationId,
+    } = surfaceTraceMetadata(opts.metadata));
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
