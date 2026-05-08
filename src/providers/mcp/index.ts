@@ -24,7 +24,11 @@ export class MCPProvider implements ApiProvider {
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise: Promise<void>;
   private transformResponse: Promise<
-    (result: unknown, content: string, context: MCPTransformResponseContext) => ProviderResponse
+    (
+      result: unknown,
+      content: string,
+      context: MCPTransformResponseContext,
+    ) => Promise<ProviderResponse>
   >;
 
   constructor(options: MCPProviderOptions = {}) {
@@ -189,7 +193,7 @@ export class MCPProvider implements ApiProvider {
     result: Awaited<ReturnType<MCPClient['callTool']>>,
     context: MCPTransformResponseContext,
   ): Promise<ProviderResponse> {
-    const transformedResponse = (await this.transformResponse)(
+    const transformedResponse = await (await this.transformResponse)(
       result.raw ?? result,
       result.content,
       context,
@@ -199,12 +203,12 @@ export class MCPProvider implements ApiProvider {
       ...transformedResponse,
       raw: transformedResponse.raw ?? result.raw ?? result,
       metadata: {
+        ...transformedResponse.metadata,
         toolName: context.toolName,
         toolArgs: context.toolArgs,
         ...(context.originalPayload === undefined
           ? {}
           : { originalPayload: context.originalPayload }),
-        ...transformedResponse.metadata,
       },
     };
   }

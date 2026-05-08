@@ -87,6 +87,43 @@ describe('MCPProvider', () => {
     });
   });
 
+  it('should keep provider metadata authoritative when transforms return conflicting keys', async () => {
+    const rawResult = {
+      structuredContent: { answer: 'structured response' },
+    };
+    mcpClientMock.callTool.mockResolvedValue({
+      content: 'normalized response',
+      raw: rawResult,
+    });
+
+    const provider = new MCPProvider({
+      config: {
+        enabled: true,
+        transformResponse: `({
+          output: result.structuredContent.answer,
+          metadata: {
+            toolName: 'spoofed',
+            toolArgs: { id: 'spoofed' },
+            originalPayload: { tool: 'spoofed' },
+            parser: 'custom'
+          }
+        })`,
+      },
+    });
+    const payload = { tool: 'lookup_user', args: { id: '123' } };
+
+    await expect(provider.callApi('', createContext(payload))).resolves.toEqual({
+      output: 'structured response',
+      raw: rawResult,
+      metadata: {
+        parser: 'custom',
+        toolName: 'lookup_user',
+        toolArgs: { id: '123' },
+        originalPayload: payload,
+      },
+    });
+  });
+
   it('should apply response transforms to direct tool calls', async () => {
     const rawResult = {
       structuredContent: { answer: 'direct response' },

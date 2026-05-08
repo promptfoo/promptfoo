@@ -14,7 +14,6 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
-import { isJavascriptFile } from '../util/fileExtensions';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
@@ -46,7 +45,7 @@ import {
   transformToolChoice,
   transformTools,
 } from './shared';
-import { loadTransformModule } from './transformUtils';
+import { loadTransformModule, parseFileTransformReference } from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';
 
@@ -1004,14 +1003,7 @@ export async function createSessionParser(
     return (response) => parser(response);
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
+    const { filename, functionName } = parseFileTransformReference(parser);
     const requiredModule = await importModule(
       path.resolve(cliState.basePath || '', filename),
       functionName,
@@ -1264,14 +1256,7 @@ export async function createValidateStatus(
 
   if (typeof validator === 'string') {
     if (validator.startsWith('file://')) {
-      let filename = validator.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
-      }
+      const { filename, functionName } = parseFileTransformReference(validator);
       try {
         const requiredModule = await importModule(
           path.resolve(cliState.basePath || '', filename),

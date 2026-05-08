@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { safeJsonStringify } from '../../util/json';
 import { getProcessShim } from '../../util/processShim';
+import { normalizeResponseTransformResult } from '../transformResult';
 
 import type { ProviderResponse } from '../../types/index';
 
@@ -12,19 +13,20 @@ export interface MCPTransformResponseContext {
 
 export function createTransformResponse(
   parser: string | Function | undefined,
-): (result: unknown, content: string, context: MCPTransformResponseContext) => ProviderResponse {
+): (
+  result: unknown,
+  content: string,
+  context: MCPTransformResponseContext,
+) => Promise<ProviderResponse> {
   if (!parser) {
-    return (_result, content) => ({ output: content });
+    return async (_result, content) => ({ output: content });
   }
 
   if (typeof parser === 'function') {
-    return (result, content, context) => {
+    return async (result, content, context) => {
       try {
-        const response = parser(result, content, context);
-        if (typeof response === 'object') {
-          return response as ProviderResponse;
-        }
-        return { output: response };
+        const response = await parser(result, content, context);
+        return normalizeResponseTransformResult(response);
       } catch (error) {
         logger.error(
           `[MCP Provider] Error in response transform function: ${String(error)}. Result: ${safeJsonStringify(result)}. Content: ${content}. Context: ${safeJsonStringify(context)}.`,
@@ -41,10 +43,11 @@ export function createTransformResponse(
   }
 
   if (typeof parser === 'string') {
-    return (result, content, context) => {
+    return async (result, content, context) => {
       try {
         const trimmedParser = parser.trim();
-        const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
+        const isFunctionExpression =
+          /^(async\s+)?(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedParser);
         const transformFn = new Function(
           'result',
           'content',
@@ -54,12 +57,8 @@ export function createTransformResponse(
             ? `try { return (${trimmedParser})(result, content, context); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + content + ' : ' + JSON.stringify(result) + ' : ' + JSON.stringify(context)); }`
             : `try { return (${trimmedParser}); } catch(e) { throw new Error('Transform failed: ' + e.message + ' : ' + content + ' : ' + JSON.stringify(result) + ' : ' + JSON.stringify(context)); }`,
         );
-        const response = transformFn(result, content, context, getProcessShim());
-
-        if (typeof response === 'string') {
-          return { output: response };
-        }
-        return response as ProviderResponse;
+        const response = await transformFn(result, content, context, getProcessShim());
+        return normalizeResponseTransformResult(response);
       } catch (error) {
         logger.error(
           `[MCP Provider] Error in response transform: ${String(error)}. Result: ${safeJsonStringify(result)}. Content: ${content}. Context: ${safeJsonStringify(context)}.`,

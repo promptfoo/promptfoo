@@ -50,6 +50,12 @@ describe('createTransformResponse', () => {
     expect(result.output).toBe('parsed');
   });
 
+  it('should wrap numeric string parser results as provider output', async () => {
+    const parser = await createTransformResponse('42');
+    const result = parser({}, '');
+    expect(result).toEqual({ output: 42 });
+  });
+
   it('should handle arrow function expression', async () => {
     const parser = await createTransformResponse('(json) => json.data');
     const result = parser({ data: 'value' }, '');

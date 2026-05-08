@@ -129,6 +129,7 @@ export default function parseMcpResponse(result, content) {
 
 The `get_user_profile` test proves the parser is reading structured MCP output by asserting on
 `Ada Lovelace is active`, which is not present in the tool's text content.
+Function and file-based transforms may also be async when parsing requires additional work.
 
 Relative file reads in `example-server.js` are resolved from the example directory, so the bundled
 tests behave the same whether you run them from the copied example folder or from the promptfoo repo

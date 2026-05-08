@@ -2,6 +2,7 @@ import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 import { sanitizeObject } from '../util/sanitizer';
+import { normalizeResponseTransformResult } from './transformResult';
 
 import type { FetchWithCacheResult } from '../cache';
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
@@ -25,11 +26,7 @@ export async function createTransformResponse(
     return (data, text, context) => {
       try {
         const result = parser(data, text, context);
-        if (typeof result === 'object') {
-          return result;
-        } else {
-          return { output: result };
-        }
+        return normalizeResponseTransformResult(result);
       } catch (err) {
         logger.error(
           `[Http Provider] Error in response transform function: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,
@@ -67,10 +64,7 @@ export async function createTransformResponse(
           resp = transformFn(data || null, text, undefined, processShim);
         }
 
-        if (typeof resp === 'string') {
-          return { output: resp };
-        }
-        return resp;
+        return normalizeResponseTransformResult(resp);
       } catch (err) {
         logger.error(
           `[Http Provider] Error in response transform: ${String(err)}. Data: ${safeJsonStringify(data)}. Text: ${text}. Context: ${safeJsonStringify(context)}.`,

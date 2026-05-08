@@ -315,6 +315,8 @@ module.exports = (result, content, context) => ({
 
 Return a primitive value to set `output`, or return a full `ProviderResponse` object when you need
 fields such as `metadata`, `guardrails`, or `sessionId`.
+Function and file-based transforms may be async; Promptfoo awaits them before evaluating the tool
+result.
 
 ### Timeout Configuration
 

@@ -8,20 +8,24 @@ describe('MCP createTransformResponse', () => {
     originalPayload: { tool: 'lookup_user', args: { id: '123' } },
   };
 
-  it('should return normalized content when no transform is configured', () => {
+  it('should return normalized content when no transform is configured', async () => {
     const transform = createTransformResponse(undefined);
 
-    expect(transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context)).toEqual({
+    await expect(
+      transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context),
+    ).resolves.toEqual({
       output: 'fallback text',
     });
   });
 
-  it('should expose raw result, normalized content, and context to string transforms', () => {
+  it('should expose raw result, normalized content, and context to string transforms', async () => {
     const transform = createTransformResponse(
       '({ output: result.structuredContent.name, metadata: { tool: context.toolName, content } })',
     );
 
-    expect(transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context)).toEqual({
+    await expect(
+      transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context),
+    ).resolves.toEqual({
       output: 'Ada',
       metadata: {
         tool: 'lookup_user',
@@ -30,11 +34,53 @@ describe('MCP createTransformResponse', () => {
     });
   });
 
-  it('should wrap primitive function results as provider output', () => {
+  it('should wrap primitive function results as provider output', async () => {
     const transform = createTransformResponse((result: any) => result.structuredContent.name);
 
-    expect(transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context)).toEqual({
+    await expect(
+      transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context),
+    ).resolves.toEqual({
       output: 'Ada',
+    });
+  });
+
+  it('should wrap primitive string-expression results as provider output', async () => {
+    const transform = createTransformResponse('42');
+
+    await expect(transform({}, 'fallback text', context)).resolves.toEqual({
+      output: 42,
+    });
+  });
+
+  it('should await async function results before normalizing them', async () => {
+    const transform = createTransformResponse(async (result: any) => result.structuredContent.name);
+
+    await expect(
+      transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context),
+    ).resolves.toEqual({
+      output: 'Ada',
+    });
+  });
+
+  it('should await async string function expressions before normalizing them', async () => {
+    const transform = createTransformResponse(
+      'async (result) => result.structuredContent.name',
+    );
+
+    await expect(
+      transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context),
+    ).resolves.toEqual({
+      output: 'Ada',
+    });
+  });
+
+  it('should wrap object results without provider response fields as output', async () => {
+    const transform = createTransformResponse('({ answer: result.structuredContent.name })');
+
+    await expect(
+      transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context),
+    ).resolves.toEqual({
+      output: { answer: 'Ada' },
     });
   });
 
@@ -50,10 +96,10 @@ describe('MCP createTransformResponse', () => {
     );
   });
 
-  it('should wrap errors from string transforms', () => {
+  it('should wrap errors from string transforms', async () => {
     const transform = createTransformResponse('result.missing.value');
 
-    expect(() => transform({}, 'fallback text', context)).toThrow(
+    await expect(transform({}, 'fallback text', context)).rejects.toThrow(
       /Failed to transform MCP response/,
     );
   });
