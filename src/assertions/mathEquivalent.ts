@@ -543,9 +543,22 @@ export async function extractMathAnswer(text: string): Promise<string> {
   // the mid-line label rule in extractFromLastLine. extractFromLastLine
   // already returns undefined for pure prose, so the display-block scan
   // below still wins for prose-only trailers.
-  const lineAnswer = extractFromLastLine(cleanedLines);
-  if (lineAnswer) {
-    return lineAnswer;
+  //
+  // Exception: when the last visible line has 2+ display fences AND no
+  // labelled suffix ("$$2$$ $$3$$" or "work $$2$$ $$3$$"), the cleaned
+  // line collapses to a fence-stripped concat ("2 3") and
+  // extractFromLastLine would commit it as the answer. Skip ahead to
+  // display-block extraction so the documented "latest display block
+  // wins" semantics apply.
+  const fenceCount =
+    (lastVisible.match(/\$\$/g)?.length ?? 0) / 2 + (lastVisible.match(/\\\[/g)?.length ?? 0);
+  const hasLabelledSuffix = /\s[A-Za-z][A-Za-z\s]*:\s*\S/.test(lastVisible);
+  const skipLastLine = fenceCount >= 2 && !hasLabelledSuffix;
+  if (!skipLastLine) {
+    const lineAnswer = extractFromLastLine(cleanedLines);
+    if (lineAnswer) {
+      return lineAnswer;
+    }
   }
 
   const blockAnswer = await extractFromDisplayBlocks(visible);

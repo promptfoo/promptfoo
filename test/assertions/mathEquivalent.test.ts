@@ -694,6 +694,19 @@ describe('extractMathAnswer', async () => {
       expect((await isMathEquivalent('work \\boxed{2}, final answer: 3', 3)).pass).toBe(true);
       expect((await isMathEquivalent('work \\boxed{2}, final answer: 3', 2)).pass).toBe(false);
     });
+
+    it.each([
+      ['$$2$$ $$3$$', '3'],
+      ['work $$2$$ $$3$$', '3'],
+      ['\\[2\\] \\[3\\]', '3'],
+      ['$$2$$ \\[3\\]', '3'],
+    ])('falls through to the rightmost display block on multi-fence finals (%s → %s)', async (input, expected) => {
+      // Pre-fix: cleanMathText stripped the fences so the last line became
+      // "2 3" / "work 2 3", and extractFromLastLine pulled the rightmost
+      // contiguous math suffix ("2 3") instead of letting the display-block
+      // scanner pick the documented latest block ("3").
+      expect(await extractMathAnswer(input)).toBe(expected);
+    });
   });
 
   describe('approximation chains (≈, \\approx) split like equality chains', async () => {
