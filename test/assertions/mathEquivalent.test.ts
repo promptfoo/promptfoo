@@ -593,6 +593,17 @@ describe('extractMathAnswer', async () => {
     });
 
     it.each([
+      ['The answer is x+y', 'x+y'],
+      ['Therefore the result is 2x+3y', '2x+3y'],
+      ['So the value is a-b*c', 'a-b*c'],
+    ])('extracts compact symbolic prose tokens (no spaces around operators) (%s → %s)', async (input, expected) => {
+      // Pre-fix: isMathShapedToken treated `x+y` (letters mixed with
+      // operators, no digit and not single-letter) as non-math, so the
+      // whole sentence was sent to the parser and rejected as prose.
+      expect(await extractMathAnswer(input)).toBe(expected);
+    });
+
+    it.each([
       ['The answer is 2 × 3', '2 × 3'],
       ['Therefore 6 ÷ 2', '6 ÷ 2'],
       ['So the result is 5 − 1', '5 − 1'],
@@ -669,6 +680,9 @@ describe('extractMathAnswer', async () => {
       // Nested-brace boxed (3 levels of {}) — the previous flat regex
       // missed these because it only tolerated one level of nesting.
       ['work \\boxed{\\frac{1}{\\sqrt{2}}}, final answer: 3', '3'],
+      // Uncolonized prose final after a boxed intermediate.
+      ['work \\boxed{2}, final answer is 3', '3'],
+      ['intermediate \\boxed{5}, total comes to 10', '10'],
     ])('prefers a labelled answer after a same-line \\boxed intermediate (%s → %s)', async (input, expected) => {
       // Pre-fix: \\boxed-on-the-last-line short-circuited extraction to
       // the boxed value, even when a later labelled answer on the same

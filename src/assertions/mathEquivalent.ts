@@ -287,10 +287,12 @@ function countProseWords(text: string): number {
 
 /**
  * A token is "math-shaped" if it contains a digit, starts with a `\` LaTeX
- * command, is a single ASCII letter (variable), or is pure operator/bracket
+ * command, is a single ASCII letter (variable), is pure operator/bracket
  * (including the common Unicode math operators ×, ÷, −, · that
- * `normalizeLatex` would otherwise have collapsed to ASCII before parsing).
- * Used to gather the contiguous trailing math expression in a prose line.
+ * `normalizeLatex` would otherwise have collapsed to ASCII before parsing),
+ * OR is a compact symbolic expression — alphanumerics interleaved with
+ * math operators ("x+y", "2x+3y", "a-b*c"). Used to gather the contiguous
+ * trailing math expression in a prose line.
  */
 function isMathShapedToken(tok: string): boolean {
   if (!tok) {
@@ -305,7 +307,16 @@ function isMathShapedToken(tok: string): boolean {
   if (/^[A-Za-z]$/.test(tok)) {
     return true;
   }
-  return /^[+\-*/^=<>(){}[\]_~|\u00b1\u00b7\u00d7\u00f7\u2212]+$/.test(tok);
+  if (/^[+\-*/^=<>(){}[\]_~|\u00b1\u00b7\u00d7\u00f7\u2212]+$/.test(tok)) {
+    return true;
+  }
+  // Compact symbolic token: only math characters AND at least one operator.
+  // Catches "x+y", "2x+3y", "a^2", "f(x)+1" while rejecting pure-letter
+  // prose tokens like "abc".
+  return (
+    /^[A-Za-z0-9.+\-*/^=<>()_\u00b1\u00b7\u00d7\u00f7\u2212]+$/.test(tok) &&
+    /[+\-*/^=<>\u00b1\u00b7\u00d7\u00f7\u2212]/.test(tok)
+  );
 }
 
 /**
@@ -416,15 +427,16 @@ async function extractFromDisplayBlocks(text: string): Promise<string | undefine
 }
 
 /**
- * Brace-balanced check: does `line` contain a labelled-answer pattern
- * ("<word(s)>: <math>") AFTER the close of the last `\boxed{...}` on the
- * line? Used to demote a boxed intermediate when the same line also has a
- * later labelled final answer (e.g. "work \boxed{...}, final answer: 3").
+ * Brace-balanced scan: return everything on `line` AFTER the close of the
+ * last `\boxed{...}`, with a leading "," / whitespace sequence stripped.
+ * Returns undefined when the line has no boxed or no remainder.
  *
- * Brace-balanced because boxed contents can carry arbitrarily nested
- * braces (`\boxed{\frac{1}{\sqrt{2}}}`) that defeat a flat regex.
+ * Used to demote a boxed intermediate when the same line ALSO has a later
+ * final answer ("work \boxed{2}, final answer: 3" or "...final answer is
+ * 3"). A flat regex can't reliably find the close because boxed contents
+ * may carry arbitrarily nested braces (`\boxed{\frac{1}{\sqrt{2}}}`).
  */
-function hasLabelAfterLastBoxed(line: string): boolean {
+function remainderAfterLastBoxed(line: string): string | undefined {
   const PREFIX = '\\boxed{';
   let lastBoxedClose = -1;
   for (let i = 0; i < line.length; i++) {
@@ -446,9 +458,10 @@ function hasLabelAfterLastBoxed(line: string): boolean {
     }
   }
   if (lastBoxedClose < 0) {
-    return false;
+    return undefined;
   }
-  return /\s[A-Za-z][A-Za-z\s]*:\s*\S/.test(line.slice(lastBoxedClose));
+  const tail = line.slice(lastBoxedClose).replace(/^[,\s]+/, '');
+  return tail || undefined;
 }
 
 /**
@@ -495,12 +508,28 @@ export async function extractMathAnswer(text: string): Promise<string> {
   const visibleLines = filterNonTrivialLines(visible);
   const lastVisible = visibleLines[visibleLines.length - 1] ?? '';
 
-  // Boxed *on the last visible line* is normally the real final answer —
-  // but if the same line ALSO has a labelled answer AFTER the boxed
-  // ("work \boxed{2}, final answer: 3"), the boxed is intermediate work
-  // and the labelled answer wins. Detect that and fall through to
-  // extractFromLastLine in that case.
-  if (/\\boxed\{/.test(lastVisible) && !hasLabelAfterLastBoxed(lastVisible)) {
+  // Boxed *on the last visible line* is normally the real final answer.
+  // But if there's content after the last `\boxed{...}` on the same line
+  // ("work \boxed{2}, final answer: 3" or "...final answer is 3"), the
+  // boxed is intermediate work and we should try to extract a labelled /
+  // prose final from that suffix. Brace-balanced because boxed contents
+  // may carry arbitrary nesting ("\boxed{\frac{1}{\sqrt{2}}}").
+  if (/\\boxed\{/.test(lastVisible)) {
+    const remainder = remainderAfterLastBoxed(lastVisible);
+    // Strip any closing display fence ("$$" / "\]") and trailing punctuation
+    // so we don't treat an empty or fence-only suffix as a final answer.
+    const trimmed = remainder
+      ?.replace(/\$+\s*$/, '')
+      .replace(/\\\]\s*$/, '')
+      .replace(/[.,;:!?\s]+$/, '')
+      .trim();
+    if (trimmed) {
+      const fromTail = extractFromLastLine([cleanMathText(trimmed)]);
+      if (fromTail) {
+        return fromTail;
+      }
+    }
+    // No usable suffix → the boxed itself IS the answer.
     const cleanedBoxed = findAllBoxed(cleaned);
     if (cleanedBoxed.length > 0) {
       return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
