@@ -40,15 +40,16 @@ When using the GitHub App:
 
 Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can be used as action inputs:
 
-| Input              | Description                                                      | Default                     |
-| ------------------ | ---------------------------------------------------------------- | --------------------------- |
-| `api-host`         | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
-| `min-severity`     | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
-| `minimum-severity` | Alias for `min-severity`                                         | `medium`                    |
-| `config-path`      | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
-| `guidance`         | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
-| `guidance-file`    | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
-| `enable-fork-prs`  | Enable scanning PRs from forked repositories                     | `false`                     |
+| Input               | Description                                                      | Default                     |
+| ------------------- | ---------------------------------------------------------------- | --------------------------- |
+| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
+| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
+| `minimum-severity`  | Alias for `min-severity`                                         | `medium`                    |
+| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
+| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
+| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
+| `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                     |
+| `sarif-output-path` | Optional path to write SARIF 2.1.0 results for GitHub upload     | None                        |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
 
@@ -128,6 +129,45 @@ guidance: |
   Treat any PII exposure as high severity.
 ```
 
+## GitHub Code Scanning Alerts
+
+The action can write SARIF 2.1.0 results that GitHub turns into code scanning alerts in the repository Security tab. Set `sarif-output-path`, then upload the file with GitHub's SARIF upload action.
+
+```yaml
+name: Promptfoo Code Scan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Promptfoo Code Scan
+        uses: promptfoo/code-scan-action@v1
+        with:
+          sarif-output-path: promptfoo-code-scan.sarif
+
+      - name: Upload Promptfoo SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: promptfoo-code-scan.sarif
+          category: promptfoo-code-scan
+```
+
+GitHub requires `security-events: write` for SARIF upload. In private repositories, GitHub's upload flow may also require `actions: read` in addition to `contents: read`.
+
 ## Manual Installation
 
 You can also install the action manually without the GitHub App. When using manual installation:
@@ -154,6 +194,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      security-events: write
 
     steps:
       - name: Checkout code
@@ -168,7 +209,14 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           min-severity: medium # or any other severity threshold: low, medium, high, critical
+          sarif-output-path: promptfoo-code-scan.sarif
           # ... other configuration options...
+
+      - name: Upload Promptfoo SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: promptfoo-code-scan.sarif
+          category: promptfoo-code-scan
 ```
 
 ## See Also

@@ -5,10 +5,12 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
+import { createSarifLog } from '../../src/codeScan/scanner/sarif';
 import { prepareComments } from '../../src/codeScan/util/github';
 import {
   CodeScanSeverity,
@@ -30,6 +32,7 @@ interface ActionInputs {
   guidanceFile: string;
   githubToken: string;
   enableForkPrs: boolean;
+  sarifOutputPath: string;
 }
 
 interface PullRequestForkPayload {
@@ -58,6 +61,7 @@ function getActionInputs(): ActionInputs {
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
     enableForkPrs: core.getBooleanInput('enable-fork-prs'),
+    sarifOutputPath: core.getInput('sarif-output-path'),
   };
 }
 
@@ -251,6 +255,21 @@ function parseScanOutput(scanOutput: string): ScanResponse {
   } catch (error) {
     throw new Error(`Failed to parse CLI output as JSON: ${formatError(error)}`);
   }
+}
+
+function writeSarifFile(scanResponse: ScanResponse, sarifOutputPath: string): void {
+  if (!sarifOutputPath) {
+    return;
+  }
+
+  const directory = path.dirname(sarifOutputPath);
+  if (directory && directory !== '.') {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+
+  fs.writeFileSync(sarifOutputPath, `${JSON.stringify(createSarifLog(scanResponse), null, 2)}\n`);
+  core.setOutput('sarif-path', sarifOutputPath);
+  core.info(`📝 Wrote SARIF results to: ${sarifOutputPath}`);
 }
 
 async function runPromptfooScan(cliArgs: string[]): Promise<ScanResponse | undefined> {
@@ -499,6 +518,7 @@ async function runCodeScan(): Promise<void> {
       return;
     }
 
+    writeSarifFile(scanResponse, inputs.sarifOutputPath);
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
   } finally {

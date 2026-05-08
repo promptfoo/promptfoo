@@ -75,7 +75,7 @@ describe('Scanner - No Files to Scan', () => {
   });
 });
 
-describe('Scanner JSON Output', () => {
+describe('Scanner machine-readable output', () => {
   beforeEach(() => {
     vi.resetModules();
   });
@@ -152,10 +152,14 @@ describe('Scanner JSON Output', () => {
       registerCleanupHandlers: vi.fn(),
     }));
 
-    vi.doMock('../../src/codeScan/scanner/output', () => ({
-      createSpinner: vi.fn().mockReturnValue(undefined),
-      displayScanResults: vi.fn(),
-    }));
+    vi.doMock('../../src/codeScan/scanner/output', async () => {
+      const actual = await vi.importActual('../../src/codeScan/scanner/output');
+      return {
+        ...actual,
+        createSpinner: vi.fn().mockReturnValue(undefined),
+        displayScanResults: vi.fn(),
+      };
+    });
 
     // Import after mocks are set up
     const { executeScan } = await import('../../src/codeScan/scanner/index');
@@ -184,6 +188,112 @@ describe('Scanner JSON Output', () => {
       success: true,
       comments: [],
       review: 'No files to scan',
+    });
+  });
+
+  it('should output valid SARIF when no files to scan with --sarif flag', async () => {
+    vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
+      processDiff: vi.fn().mockResolvedValue([]),
+    }));
+
+    vi.doMock('../../src/codeScan/git/diff', () => ({
+      validateOnBranch: vi.fn().mockResolvedValue('main'),
+    }));
+
+    vi.doMock('../../src/codeScan/config/loader', () => ({
+      loadConfigOrDefault: vi.fn().mockResolvedValue({
+        minimumSeverity: 'medium',
+        diffsOnly: true,
+      }),
+      mergeConfigWithOptions: vi.fn().mockImplementation((config, options) => ({
+        ...config,
+        diffsOnly: options.diffsOnly ?? config.diffsOnly,
+      })),
+      resolveGuidance: vi.fn().mockResolvedValue(undefined),
+      resolveApiHost: vi.fn().mockReturnValue('https://api.example.com'),
+    }));
+
+    vi.doMock('simple-git', () => ({
+      default: vi.fn(() => ({
+        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
+        revparse: vi.fn().mockResolvedValue('abc123'),
+      })),
+    }));
+
+    vi.doMock('../../src/util/agent/agentClient', () => ({
+      createAgentClient: vi.fn().mockResolvedValue({
+        sessionId: 'test-session-id',
+        start: vi.fn(),
+        cancel: vi.fn(),
+        onComplete: vi.fn(),
+        onError: vi.fn(),
+        on: vi.fn(),
+        emit: vi.fn(),
+        disconnect: vi.fn(),
+        socket: { emit: vi.fn(), on: vi.fn(), off: vi.fn(), disconnect: vi.fn() },
+      }),
+    }));
+
+    vi.doMock('../../src/codeScan/util/auth', () => ({
+      resolveAuthCredentials: vi.fn().mockResolvedValue({ apiKey: 'test-key' }),
+    }));
+
+    vi.doMock('../../src/cliState', () => ({
+      default: {
+        postActionCallback: null,
+      },
+    }));
+
+    vi.doMock('../../src/logger', () => ({
+      default: {
+        info: vi.fn(),
+        debug: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+      },
+      getLogLevel: vi.fn().mockReturnValue('info'),
+    }));
+
+    vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
+      registerCleanupHandlers: vi.fn(),
+    }));
+
+    vi.doMock('../../src/codeScan/scanner/output', async () => {
+      const actual = await vi.importActual('../../src/codeScan/scanner/output');
+      return {
+        ...actual,
+        createSpinner: vi.fn().mockReturnValue(undefined),
+        displayScanResults: vi.fn(),
+      };
+    });
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
+
+    await executeScan('/test/repo', { sarif: true, diffsOnly: true });
+
+    const infoCalls = (logger.info as any).mock.calls;
+    const sarifCall = infoCalls.find((call: string[]) => {
+      try {
+        return JSON.parse(call[0]).version === '2.1.0';
+      } catch {
+        return false;
+      }
+    });
+
+    expect(sarifCall).toBeDefined();
+    expect(JSON.parse(sarifCall[0])).toMatchObject({
+      version: '2.1.0',
+      runs: [
+        {
+          results: [],
+          properties: {
+            promptfoo: {
+              review: 'No files to scan',
+            },
+          },
+        },
+      ],
     });
   });
 });

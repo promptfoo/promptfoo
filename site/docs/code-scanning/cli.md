@@ -55,6 +55,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
 | `--diffs-only`                    | Scan only PR diffs, don't explore full repo                                                         | false                                                |
 | `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                |
+| `--sarif`                         | Output results as SARIF 2.1.0 for GitHub Code Scanning upload                                       | false                                                |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                 |
 
 ### Examples
@@ -90,6 +91,14 @@ promptfoo code-scans run --json
 ```
 
 See [JSON Output Schema](#json-output-schema) for the response format.
+
+**Get SARIF output:**
+
+```bash
+promptfoo code-scans run --sarif > promptfoo-code-scan.sarif
+```
+
+Upload the SARIF file to GitHub to show findings in repository code scanning alerts and the Security tab.
 
 ## Configuration File
 
@@ -226,6 +235,23 @@ When using `--json`, the scan outputs a JSON object to stdout with the following
     }
   ]
 }
+```
+
+## SARIF Output
+
+When using `--sarif`, the scan writes [SARIF 2.1.0](https://docs.github.com/en/code-security/concepts/code-scanning/sarif-files) to stdout. Findings with file locations become SARIF results, severity is mapped for GitHub Code Scanning, and suggested fixes are included in the SARIF metadata when available.
+
+Use GitHub's SARIF upload flow to publish the results:
+
+```yaml
+- name: Run Promptfoo Code Scan
+  run: promptfoo code-scans run --sarif > promptfoo-code-scan.sarif
+
+- name: Upload Promptfoo SARIF
+  uses: github/codeql-action/upload-sarif@v4
+  with:
+    sarif_file: promptfoo-code-scan.sarif
+    category: promptfoo-code-scan
 ```
 
 ## See Also

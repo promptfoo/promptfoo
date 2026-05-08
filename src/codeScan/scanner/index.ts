@@ -24,7 +24,12 @@ import { setupMcpBridge } from '../mcp/index';
 import { resolveAuthCredentials } from '../util/auth';
 import { parseGitHubPr } from '../util/github';
 import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
-import { createSpinner, displayScanResults } from './output';
+import {
+  createSpinner,
+  displayScanResults,
+  formatMachineReadableScanResults,
+  resolveOutputFormat,
+} from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
 
 import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
@@ -43,6 +48,7 @@ export interface ScanOptions {
   base?: string;
   compare?: string;
   json?: boolean;
+  sarif?: boolean;
   githubPr?: string;
   minimumSeverity?: string;
   minSeverity?: string;
@@ -72,6 +78,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   let sessionId: string | undefined = undefined;
 
   const startTime = Date.now();
+  const outputFormat = resolveOutputFormat(options);
 
   // Load and merge configuration
   const baseConfig: Config = loadConfigOrDefault(options.config);
@@ -84,7 +91,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   const absoluteRepoPath = path.resolve(repoPath);
 
   // Display startup messages (skip in JSON mode to keep stdout clean for parsing)
-  if (!options.json) {
+  if (outputFormat === 'pretty') {
     logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
     logger.info(`  Minimum severity: ${config.minimumSeverity}`);
     if (config.diffsOnly) {
@@ -114,7 +121,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   // Initialize spinner (hide in JSON mode, but still show logger.info status)
   const isWebUI = Boolean(cliState.webUI);
   const spinner = createSpinner({
-    json: options.json || false,
+    format: outputFormat,
     isWebUI,
     logLevel: getLogLevel(),
   });
@@ -213,9 +220,9 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       const msg = 'No files to scan';
 
       // In JSON mode, output a proper JSON response for programmatic consumption
-      if (options.json) {
+      if (outputFormat !== 'pretty') {
         const response: ScanResponse = { success: true, comments: [], review: msg };
-        logger.info(JSON.stringify(response, null, 2));
+        logger.info(formatMachineReadableScanResults(response, outputFormat));
       } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
@@ -278,7 +285,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     // Display results
     displayScanResults(scanResponse, duration, {
-      json: options.json || false,
+      format: outputFormat,
       githubPr: options.githubPr,
     });
   } catch (error) {
