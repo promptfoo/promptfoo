@@ -912,6 +912,14 @@ trip up `equals` and `contains`:
 - A pure-prose final line ("This is the final result.", "Done.") is
   ignored — extraction falls back to the previous display block, so a
   correct `$$\frac{1}{2}$$` answer still grades against `0.5`
+
+The CortexJS Compute Engine is loaded lazily via dynamic `import()` so
+the published CommonJS entrypoint (`require('promptfoo')`) keeps loading
+without paying the engine cost or pulling in an ESM-only dependency at
+module-load time. The `math-equivalent` assertion is therefore async
+under the hood — the assertion handler is `async` and existing config
+files need no changes.
+
 - `*` and `**` between digits/letters stay as multiplication operators
   (`2*3*4 = 24`), not stripped as Markdown emphasis
 - Display math inside `<think>...</think>` (or redacted-thinking blocks) is

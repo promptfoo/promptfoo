@@ -13,8 +13,13 @@
  * See site/docs/configuration/expected-outputs/deterministic.md#math-equivalent.
  */
 
-import { type BoxedExpression, ComputeEngine } from '@cortex-js/compute-engine';
 import invariant from '../util/invariant';
+// Type-only import — the CortexJS Compute Engine package is "type": "module"
+// (ESM-only) and `require('@cortex-js/compute-engine')` on the published CJS
+// entrypoint returns an empty namespace, so the actual runtime value must be
+// pulled in via a dynamic `import()` inside `getEngine()` below. Keeping
+// types static lets the rest of the module stay strongly typed.
+import type { BoxedExpression, ComputeEngine } from '@cortex-js/compute-engine';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -38,13 +43,19 @@ const TRIG_FNS = [
   'sqrt',
 ];
 
-let _engine: ComputeEngine | undefined;
+let _enginePromise: Promise<ComputeEngine> | undefined;
 
-function getEngine(): ComputeEngine {
-  if (!_engine) {
-    _engine = new ComputeEngine();
+/**
+ * Lazily load `@cortex-js/compute-engine` via dynamic `import()`. Static
+ * `import` on the value would be emitted as `require()` in the CJS bundle
+ * and break before any caller ever reaches `math-equivalent`, because the
+ * package is ESM-only.
+ */
+async function getEngine(): Promise<ComputeEngine> {
+  if (!_enginePromise) {
+    _enginePromise = import('@cortex-js/compute-engine').then((m) => new m.ComputeEngine());
   }
-  return _engine;
+  return _enginePromise;
 }
 
 /**
@@ -198,8 +209,11 @@ function looksLikeProse(normalized: string): boolean {
  * Parse a candidate string into a CortexJS expression. Returns undefined when
  * the candidate fails to parse, parses to an equality (a = b) rather than a
  * value, or is empty after normalization.
+ *
+ * Async because the underlying CortexJS Compute Engine is loaded lazily via
+ * dynamic `import()` (see `getEngine`).
  */
-export function parseMathExpression(text: string): BoxedExpression | undefined {
+export async function parseMathExpression(text: string): Promise<BoxedExpression | undefined> {
   const normalized = normalizeLatex(text.trim());
   if (!normalized) {
     return undefined;
@@ -208,7 +222,7 @@ export function parseMathExpression(text: string): BoxedExpression | undefined {
     return undefined;
   }
   try {
-    const ce = getEngine();
+    const ce = await getEngine();
     const expr = ce.parse(normalized);
     if (!expr.isValid || (expr.errors?.length ?? 0) > 0) {
       return undefined;
@@ -227,14 +241,14 @@ export function parseMathExpression(text: string): BoxedExpression | undefined {
  * "A \approx B" — the docs treat ≈/\approx as equality), try parsing each
  * segment right-to-left and return the first that succeeds.
  */
-export function tryParseEachSegment(text: string): BoxedExpression | undefined {
+export async function tryParseEachSegment(text: string): Promise<BoxedExpression | undefined> {
   const segments = text.split(/=|\u2248|\\approx\b/).map((s) => s.trim());
   for (let i = segments.length - 1; i >= 0; i--) {
     const seg = segments[i];
     if (!seg) {
       continue;
     }
-    const result = parseMathExpression(seg);
+    const result = await parseMathExpression(seg);
     if (result) {
       return result;
     }
@@ -373,7 +387,7 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   return cleanMathText(candidate);
 }
 
-function extractFromDisplayBlocks(text: string): string | undefined {
+async function extractFromDisplayBlocks(text: string): Promise<string | undefined> {
   // DISPLAY_BLOCK_PATTERN is `$$...$$` OR `\[...\]`; pick whichever capture
   // group fired so both forms feed the fallback equivalently.
   const blocks = [...text.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1] ?? m[2] ?? '');
@@ -384,13 +398,17 @@ function extractFromDisplayBlocks(text: string): string | undefined {
       return cleanMathText(boxed[boxed.length - 1].trim());
     }
     const candidate = cleanMathText(block.trim());
+    if (!candidate) {
+      continue;
+    }
     // Accept the block if it parses on its own OR if any segment of an
     // equality / approximation chain inside it parses (e.g. "230/530 =
     // 23/53"). Without the segment fallback, equality chains in display
     // blocks were silently discarded and tryParseEachSegment later saw
     // the chain polluted by trailing prose ("23/53\nDone."), letting it
     // pick the wrong (left) segment.
-    if (candidate && (parseMathExpression(candidate) ?? tryParseEachSegment(candidate))) {
+    const expr = (await parseMathExpression(candidate)) ?? (await tryParseEachSegment(candidate));
+    if (expr) {
       return candidate;
     }
   }
@@ -425,7 +443,7 @@ function stripThinkingBlocks(text: string): string {
  *     work when (2) and (3) didn't yield anything.
  *  5. Last cleaned line as-is.
  */
-export function extractMathAnswer(text: string): string {
+export async function extractMathAnswer(text: string): Promise<string> {
   if (!text) {
     return '';
   }
@@ -463,7 +481,7 @@ export function extractMathAnswer(text: string): string {
     return lineAnswer;
   }
 
-  const blockAnswer = extractFromDisplayBlocks(visible);
+  const blockAnswer = await extractFromDisplayBlocks(visible);
   if (blockAnswer) {
     return blockAnswer;
   }
@@ -503,11 +521,14 @@ export type MathEquivalentResult = {
 
 /**
  * Determine whether `llmOutput` is mathematically equivalent to `expected`.
+ *
+ * Async because the underlying CortexJS Compute Engine is loaded lazily via
+ * dynamic `import()` — see `getEngine`.
  */
-export function isMathEquivalent(
+export async function isMathEquivalent(
   llmOutput: string,
   expected: string | number,
-): MathEquivalentResult {
+): Promise<MathEquivalentResult> {
   if (typeof expected === 'number' && !Number.isFinite(expected)) {
     return {
       pass: false,
@@ -520,11 +541,13 @@ export function isMathEquivalent(
     };
   }
 
-  const actualAnswer = extractMathAnswer(llmOutput);
-  const expectedAnswer = extractMathAnswer(String(expected));
+  const actualAnswer = await extractMathAnswer(llmOutput);
+  const expectedAnswer = await extractMathAnswer(String(expected));
 
-  const expr1 = parseMathExpression(actualAnswer) ?? tryParseEachSegment(actualAnswer);
-  const expr2 = parseMathExpression(expectedAnswer) ?? tryParseEachSegment(expectedAnswer);
+  const expr1 =
+    (await parseMathExpression(actualAnswer)) ?? (await tryParseEachSegment(actualAnswer));
+  const expr2 =
+    (await parseMathExpression(expectedAnswer)) ?? (await tryParseEachSegment(expectedAnswer));
 
   if (!expr1 || !expr2) {
     return {
@@ -539,7 +562,7 @@ export function isMathEquivalent(
   }
 
   try {
-    const ce = getEngine();
+    const ce = await getEngine();
     const diff = ce.box(['Subtract', expr1, expr2]).simplify();
     const pass = Boolean(diff.isEqual(0));
     return {
@@ -589,7 +612,7 @@ function buildHandlerReason(pass: boolean, inverse: boolean, result: MathEquival
   return result.reason;
 }
 
-export function handleMathEquivalent({
+export async function handleMathEquivalent({
   assertion,
   renderedValue,
   outputString,
@@ -597,13 +620,13 @@ export function handleMathEquivalent({
 }: Pick<
   AssertionParams,
   'assertion' | 'renderedValue' | 'outputString' | 'inverse'
->): GradingResult {
+>): Promise<GradingResult> {
   invariant(
     typeof renderedValue === 'string' || typeof renderedValue === 'number',
     '"math-equivalent" assertion type must have a string or number value',
   );
 
-  const result = isMathEquivalent(outputString, renderedValue);
+  const result = await isMathEquivalent(outputString, renderedValue);
   // Parse failure is not negatable: if we cannot parse, we cannot prove
   // equivalence OR non-equivalence. Surface the parse error verbatim so
   // not-math-equivalent does not silently accept garbage output.
