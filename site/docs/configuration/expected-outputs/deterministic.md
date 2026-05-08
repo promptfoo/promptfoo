@@ -888,7 +888,8 @@ trip up `equals` and `contains`:
 - Unicode minus `−`, multiplication `×`, and root `√`
 - `\dfrac` vs `\frac`, `\fracAB` shorthand, `\frac{32}3` (single-char denom),
   `\frac{1}\pi` (backslash-command denominator)
-- European decimal commas (`2,00625` → `2.00625`)
+- European decimal commas (`2,00625` → `2.00625`) and US thousands
+  separators (`1,234,567` → `1234567`)
 - Trailing units (`m`, `km`, `cm`, `mm`, `s`, `ms`, `kg`, `g`, `rad`, `deg`, `°`)
 - Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
 - Approximation symbols (`≈`, `\approx`) treated as equality
@@ -896,7 +897,8 @@ trip up `equals` and `contains`:
 - "Total: 14", "Answer: 42" label prefixes
 - `, attained at (-2,3)` and similar comma-suffixed prose after the answer
 - Prose-wrapped final answers: "The answer is 0.5", "Therefore the result is 42"
-  (the rightmost numeric/LaTeX token on a multi-word line wins)
+  (the rightmost numeric/LaTeX token on a multi-word line wins; trailing
+  sentence punctuation `. , ; : ! ?` is stripped from the extracted token)
 - A labelled final-line answer beats earlier display blocks:
   `$$2$$\nAnswer: 3` is graded against `3`, not `2`
 - `*` and `**` between digits/letters stay as multiplication operators

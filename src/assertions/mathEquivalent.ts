@@ -73,6 +73,11 @@ export function normalizeLatex(text: string): string {
   // Strip "Var = ", "x_0 = ", "P(Safe|F) = " prefixes.
   s = s.trim().replace(/^[A-Za-z_]\w*(?:\([^)]*\))?\s*=\s*/, '');
 
+  // US thousands separators: collapse "1,000" / "1,234,567" before the
+  // European-decimal rewrite — otherwise "1,000" becomes "1.000" = 1 and
+  // silently passes against the wrong expected value.
+  s = s.replace(/\b\d{1,3}(?:,\d{3})+\b/g, (m) => m.replace(/,/g, ''));
+
   // European decimal comma: "2,00625" → "2.00625" (only when 2+ digits follow,
   // to avoid mangling tuples like "23, 53" or coordinate pairs).
   s = s.replace(/(\d),(\d{2,})\b/g, '$1.$2');
@@ -265,12 +270,17 @@ function hasMultipleProseWords(text: string): boolean {
 /**
  * Pull the rightmost token containing a digit or starting with a `\` LaTeX
  * command. Used when the line reads as prose around a single math token,
- * e.g. "Therefore the result is 42" → "42".
+ * e.g. "Therefore the result is 42" → "42". Strips terminal sentence
+ * punctuation (`.`, `,`, `;`, `:`, `!`, `?`) so "The answer is 0.5." hands
+ * "0.5" — not "0.5." — to the parser.
  */
 function extractRightmostMathToken(text: string): string | undefined {
   const tokens = text.split(/\s+/).filter(Boolean);
   for (let i = tokens.length - 1; i >= 0; i--) {
-    const tok = tokens[i];
+    const tok = tokens[i].replace(/[.,;:!?]+$/, '');
+    if (!tok) {
+      continue;
+    }
     if (/\d/.test(tok) || tok.startsWith('\\')) {
       return tok;
     }

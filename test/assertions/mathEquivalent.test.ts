@@ -171,6 +171,29 @@ describe('normalizeLatex', () => {
     });
   });
 
+  describe('thousands separators vs european decimal commas', () => {
+    it.each([
+      ['1,000', '1000'],
+      ['1,234', '1234'],
+      ['1,234,567', '1234567'],
+      ['12,345', '12345'],
+      ['100,000,000', '100000000'],
+    ])('strips US thousands separators ("%s" → "%s")', (input, expected) => {
+      expect(normalizeLatex(input)).toBe(expected);
+    });
+
+    it.each([
+      ['2,00625', '2.00625'],
+      ['3,14159', '3.14159'],
+    ])('still rewrites European decimal commas ("%s" → "%s")', (input, expected) => {
+      expect(normalizeLatex(input)).toBe(expected);
+    });
+
+    it('leaves coordinate-style "(2,3)" alone', () => {
+      expect(normalizeLatex('(2,3)')).toBe('(2,3)');
+    });
+  });
+
   describe('european decimal comma', () => {
     it('converts "2,00625" to "2.00625"', () => {
       expect(normalizeLatex('2,00625')).toBe('2.00625');
@@ -488,6 +511,16 @@ describe('extractMathAnswer', () => {
       expect(extractMathAnswer(input)).toBe(expected);
     });
 
+    it.each([
+      ['The answer is 0.5.', '0.5'],
+      ['The answer is 42.', '42'],
+      ['Therefore the result is 7!', '7'],
+      ['So the value comes out to 3.14159.', '3.14159'],
+      ['After simplification we get \\frac{1}{2}.', '\\frac{1}{2}'],
+    ])('strips terminal sentence punctuation (%s → %s)', (input, expected) => {
+      expect(extractMathAnswer(input)).toBe(expected);
+    });
+
     it('does NOT touch a single-word labelled value (V = 32)', () => {
       expect(extractMathAnswer('**V = 32**')).toBe('V = 32');
     });
@@ -763,6 +796,29 @@ describe('isMathEquivalent', () => {
       ['<think>$$2$$</think>\n0.5', '0.5'],
     ])('ignores hidden display math inside <think> ("%s" vs %s)', (actual, expected) => {
       expect(isMathEquivalent(actual, expected).pass).toBe(true);
+    });
+
+    it.each([
+      ['1,000', '1000'],
+      ['1,234', 1234],
+      ['1,234,567', '1234567'],
+      ['12,345', 12345],
+    ])('grades thousands-grouped integer "%s" against %s', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
+    });
+
+    it('does NOT silently equate 1,000 with 1', () => {
+      // The decimal-comma rewrite previously turned "1,000" into "1.000"=1,
+      // making "1,000" spuriously equivalent to 1.
+      expect(isMathEquivalent('1,000', '1').pass).toBe(false);
+    });
+
+    it.each([
+      ['The answer is 0.5.', '0.5'],
+      ['Therefore the result is 7!', 7],
+      ['So the answer comes out to 3.14159.', '3.14159'],
+    ])('grades sentence-terminated prose "%s" against %s', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
     });
 
     it('grades hidden-think display math against the WRONG value as false', () => {
