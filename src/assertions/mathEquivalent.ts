@@ -375,7 +375,13 @@ function extractFromDisplayBlocks(text: string): string | undefined {
       return cleanMathText(boxed[boxed.length - 1].trim());
     }
     const candidate = cleanMathText(block.trim());
-    if (candidate && parseMathExpression(candidate)) {
+    // Accept the block if it parses on its own OR if any segment of an
+    // equality / approximation chain inside it parses (e.g. "230/530 =
+    // 23/53"). Without the segment fallback, equality chains in display
+    // blocks were silently discarded and tryParseEachSegment later saw
+    // the chain polluted by trailing prose ("23/53\nDone."), letting it
+    // pick the wrong (left) segment.
+    if (candidate && (parseMathExpression(candidate) ?? tryParseEachSegment(candidate))) {
       return candidate;
     }
   }

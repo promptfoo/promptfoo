@@ -690,6 +690,25 @@ describe('extractMathAnswer', () => {
         true,
       );
     });
+
+    it('keeps an equality-chain display block (e.g. $$x = 2$$) on prose-only trailers', () => {
+      // Pre-fix: when the display-block scanner discarded the equality, the
+      // fallback later sliced the combined `cleaned` text on '=' and could
+      // return the left segment ('x') instead of the documented rightmost
+      // answer.
+      expect(extractMathAnswer('$$x = 2$$\nDone.')).toBe('x = 2');
+      expect(isMathEquivalent('$$x = 2$$\nDone.', 2).pass).toBe(true);
+    });
+
+    it('keeps a numeric equality-chain display block (e.g. $$230/530 = 23/53$$) on prose-only trailers', () => {
+      // Numeric chains have no `var =` prefix to fall back on, so this
+      // exercises the segment-fallback path in extractFromDisplayBlocks.
+      // The extracted text must be the equality chain ALONE — without the
+      // prose trailer — so tryParseEachSegment can split it cleanly
+      // instead of seeing '23/53\nDone.' as the right segment.
+      expect(extractMathAnswer('$$230/530 = 23/53$$\nDone.')).toBe('230/530 = 23/53');
+      expect(isMathEquivalent('$$230/530 = 23/53$$\nDone.', '23/53').pass).toBe(true);
+    });
   });
 
   describe('hidden-thinking display blocks must not leak through', () => {
