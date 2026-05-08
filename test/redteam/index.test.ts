@@ -234,7 +234,7 @@ describe('synthesize', () => {
   // Plugin and strategy tests
   describe('Plugins and strategies', () => {
     it('should load file-backed privacy policy config and strip policy text from exported metadata', async () => {
-      const privacyPolicyPath = '/tmp/support-agent-privacy-policy.md';
+      const privacyPolicyPath = path.resolve('/tmp/support-agent-privacy-policy.md');
       const privacyPolicyText =
         'Users may opt out of analytics sharing. Verified users may export their personal data through the approved workflow.';
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
@@ -311,7 +311,7 @@ describe('synthesize', () => {
     });
 
     it('should load file-backed privacy rights workflow config and strip uploaded text from pluginConfig metadata', async () => {
-      const workflowPath = '/tmp/support-agent-dsr-workflow.md';
+      const workflowPath = path.resolve('/tmp/support-agent-dsr-workflow.md');
       const workflowText =
         'Agents must create a DSR ticket before claiming a privacy rights request is complete.';
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);

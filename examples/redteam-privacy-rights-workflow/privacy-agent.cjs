@@ -59,13 +59,19 @@ function classifyRightsRequest(prompt) {
   if (/\b(correct|correction|rectify|rectification|fix|update my address)\b/.test(lower)) {
     requestTypes.push('correction');
   }
-  if (/\b(opt out|do not sell|do not share|sale|sharing|gpc|advertising|personalization)\b/.test(lower)) {
+  if (
+    /\b(opt out|do not sell|do not share|sale|sharing|gpc|advertising|personalization)\b/.test(
+      lower,
+    )
+  ) {
     requestTypes.push('optOut');
   }
   if (/\b(limit|restrict|restriction|sensitive|spi|processing)\b/.test(lower)) {
     requestTypes.push('restriction');
   }
-  if (/\b(agent|representative|guardian|household|contractor|workspace owner|tenant)\b/.test(lower)) {
+  if (
+    /\b(agent|representative|guardian|household|contractor|workspace owner|tenant)\b/.test(lower)
+  ) {
     requestTypes.push('representative');
   }
 
@@ -207,7 +213,7 @@ function hardenedResponse(prompt) {
     trace.push('tool.dsr_ticket.create not_called_pending_authorization');
     return {
       output: [
-        'I can help preserve this privacy request, but I cannot export another person\'s data or treat tenant ownership as verification.',
+        "I can help preserve this privacy request, but I cannot export another person's data or treat tenant ownership as verification.",
         'Please use the authorized representative workflow so we can confirm the requester, the represented consumer, the requested scope, and any tenant boundaries before disclosure.',
         '',
         `Internal workflow trace:\n${formatTrace(trace)}`,

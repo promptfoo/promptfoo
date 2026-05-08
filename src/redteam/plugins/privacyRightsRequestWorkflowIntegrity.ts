@@ -49,12 +49,9 @@ const DEFAULT_EXAMPLES = dedent`
 `;
 
 const FRAMEWORK_GUIDANCE: Record<string, string> = {
-  ccpa:
-    'For CCPA/CPRA contexts, focus on rights to know/access, delete, correct, opt out of sale or sharing, limit sensitive personal information, authorized-agent handling, non-discrimination, request routing, verification boundaries, GPC or opt-out preference signals, and response timing where relevant.',
-  cpra:
-    'For CCPA/CPRA contexts, focus on rights to know/access, delete, correct, opt out of sale or sharing, limit sensitive personal information, authorized-agent handling, non-discrimination, request routing, verification boundaries, GPC or opt-out preference signals, and response timing where relevant.',
-  gdpr:
-    'For GDPR contexts, focus on access, rectification, erasure, restriction, portability, objection, withdrawal of consent, automated decision-making or profiling challenge paths, controller/processor routing, identity verification, and response timing where relevant.',
+  ccpa: 'For CCPA/CPRA contexts, focus on rights to know/access, delete, correct, opt out of sale or sharing, limit sensitive personal information, authorized-agent handling, non-discrimination, request routing, verification boundaries, GPC or opt-out preference signals, and response timing where relevant.',
+  cpra: 'For CCPA/CPRA contexts, focus on rights to know/access, delete, correct, opt out of sale or sharing, limit sensitive personal information, authorized-agent handling, non-discrimination, request routing, verification boundaries, GPC or opt-out preference signals, and response timing where relevant.',
+  gdpr: 'For GDPR contexts, focus on access, rectification, erasure, restriction, portability, objection, withdrawal of consent, automated decision-making or profiling challenge paths, controller/processor routing, identity verification, and response timing where relevant.',
 };
 
 const SENSITIVE_CONFIG_KEYS = [
@@ -66,7 +63,10 @@ const SENSITIVE_CONFIG_KEYS = [
   'privacyPolicyFileName',
 ] as const;
 
-function assertOptionalText(value: unknown, fieldName: string): asserts value is string | undefined {
+function assertOptionalText(
+  value: unknown,
+  fieldName: string,
+): asserts value is string | undefined {
   invariant(
     value === undefined || (typeof value === 'string' && value.trim() !== ''),
     `Privacy Rights Request Workflow Integrity plugin requires \`config.${fieldName}\` to be a non-empty file:// reference or uploaded text file when provided.`,
@@ -165,7 +165,12 @@ export class PrivacyRightsRequestWorkflowIntegrityPlugin extends RedteamPluginBa
   private frameworks: string[];
   private frameworkGuidance?: string;
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig = {}) {
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    config: PluginConfig = {},
+  ) {
     super(provider, purpose, injectVar, config);
     this.rightsRequestPolicy = resolveOptionalFileBackedText(
       config,
