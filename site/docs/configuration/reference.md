@@ -1261,6 +1261,10 @@ interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  // Trace linkage (only set when tracing is enabled for this row).
+  // Pass `evaluationId` to GET /api/traces/evaluation/:evaluationId to fetch all traces for the eval.
+  evaluationId?: string;
+  traceId?: string;
 }
 ```
 
