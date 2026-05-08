@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { OPENAI_REALTIME_MODELS } from './util';
+import { NON_CONVERSATIONAL_REALTIME_MODELS, OPENAI_REALTIME_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -15,6 +15,26 @@ import type {
 import type { OpenAiCompletionOptions } from './types';
 
 const MAX_RESPONSE_OUTPUT_TOKENS_MAX = 4096;
+
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_TOOL_ITERATIONS = 8;
+// Generic, redacted error string sent back to the model when functionCallHandler
+// throws. We do NOT use String(err) — Node Error objects often contain absolute
+// paths, connection strings, and stack snippets that would otherwise be fed back
+// into the model context and surfaced in eval output.
+const REDACTED_TOOL_ERROR_OUTPUT = JSON.stringify({ error: 'Tool execution failed' });
+
+const REALTIME_PRICING_WARNED = new Set<string>();
+function warnUnpricedRealtimeModelOnce(modelName: string): void {
+  if (REALTIME_PRICING_WARNED.has(modelName)) {
+    return;
+  }
+  REALTIME_PRICING_WARNED.add(modelName);
+  logger.warn(
+    `OpenAI Realtime model "${modelName}" has no published pricing. Cost will be reported as undefined rather than $0.00. ` +
+      'Update OPENAI_REALTIME_MODELS once pricing is announced.',
+  );
+}
 
 /**
  * Convert PCM16 audio data to WAV format for browser playback
@@ -120,6 +140,8 @@ export interface OpenAiRealtimeOptions extends OpenAiCompletionOptions {
     | { type: 'function'; function?: { name: string } }
     | { type: 'function'; name: string };
   functionCallHandler?: (name: string, args: string) => Promise<string>; // Handler for function calls
+  toolCallTimeout?: number; // Per-call timeout for functionCallHandler in ms (default 30000)
+  maxToolIterations?: number; // Max tool→follow-up rounds in a single turn (default 8)
   apiVersion?: string; // Optional API version
   maintainContext?: boolean;
 }
@@ -165,6 +187,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   previousItemId: string | null = null;
   assistantMessageIds: string[] = []; // Track assistant message IDs
   private activeTimeouts: Set<NodeJS.Timeout> = new Set();
+
+  // Resolves when persistentConnection reaches readyState OPEN. Concurrent
+  // callers wait on this promise rather than racing each other to send on a
+  // socket whose state is still CONNECTING.
+  private connectionReady: Promise<void> | null = null;
+  // Per-provider serialization queue. Concurrent calls on the same provider
+  // instance share one socket; the OpenAI Realtime wire shape is not designed
+  // to multiplex unrelated turns over a single connection (events for one
+  // turn would interleave with another's). Chain turns through this promise.
+  private inflightTurn: Promise<unknown> = Promise.resolve();
 
   // Add audio state management
   private lastAudioItemId: string | null = null;
@@ -448,6 +480,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
+    if (NON_CONVERSATIONAL_REALTIME_MODELS.includes(modelName)) {
+      throw new Error(
+        `OpenAI ${modelName} is not a conversational Realtime model and cannot be used as ` +
+          `openai:realtime:${modelName}. ` +
+          (modelName === 'gpt-realtime-whisper'
+            ? 'Pass it as input_audio_transcription.model inside a conversational session instead.'
+            : 'It uses a separate Realtime session endpoint not yet supported by promptfoo.'),
+      );
+    }
     if (!OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelName)) {
       logger.debug(`Using unknown OpenAI realtime model: ${modelName}`);
     }
@@ -457,6 +498,124 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     // Enable maintainContext by default
     if (this.config.maintainContext === undefined) {
       this.config.maintainContext = true;
+    }
+  }
+
+  // Resolve a tool-iteration cap with a sane default and clamp on absurd values.
+  private getMaxToolIterations(): number {
+    const value = this.config.maxToolIterations;
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 64) {
+      return Math.floor(value);
+    }
+    return DEFAULT_MAX_TOOL_ITERATIONS;
+  }
+
+  // Resolve per-call tool timeout. Falls back to websocketTimeout, then a hard default.
+  private getToolCallTimeoutMs(): number {
+    const explicit = this.config.toolCallTimeout;
+    if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit > 0) {
+      return explicit;
+    }
+    return this.config.websocketTimeout || DEFAULT_TOOL_CALL_TIMEOUT_MS;
+  }
+
+  // Lazily resolve the tool config (which may load external files) at most
+  // once per request, reused across session.update + every response.create.
+  // Filled on first await so the WebSocket constructor + handler registration
+  // stays synchronous (preserves the unit-test contract that relies on
+  // `mockHandlers.open` being attached before the test fires `open`).
+  private makeRequestToolConfigCache(): () => Promise<Record<string, unknown>> {
+    let cached: Record<string, unknown> | null = null;
+    return async () => {
+      if (cached === null) {
+        cached = await this.getRealtimeToolConfig();
+      }
+      return cached;
+    };
+  }
+
+  // The error thrown when a tool→follow-up loop exceeds the configured cap.
+  // Centralized so the message stays consistent across all three socket paths.
+  private toolIterationCapError(max: number): Error {
+    return new Error(
+      `Realtime tool-call loop exceeded maxToolIterations=${max}; ` +
+        'increase config.maxToolIterations if your evaluation legitimately requires deeper chains.',
+    );
+  }
+
+  /**
+   * Execute one tool→follow-up round: invoke the user's handler for each
+   * pending call (with timeout + return-type validation), forward each result
+   * back to the model as `function_call_output`, and on handler error send a
+   * redacted generic payload (NOT String(err) — would leak host-side stack
+   * snippets and absolute paths into the model context).
+   *
+   * The iteration cap and per-path cleanup (clearTimeout, ws.close,
+   * resetRequestTimeout) stay at the call sites because their wiring differs.
+   */
+  private async runToolCallRound(
+    pendingFunctionCalls: ReadonlyArray<{ id: string; name: string; arguments: string }>,
+    sendEvent: (event: Record<string, unknown>) => string,
+  ): Promise<string[]> {
+    const results: string[] = [];
+    for (const call of pendingFunctionCalls) {
+      try {
+        const result = await this.runFunctionCallHandlerWithTimeout(call.name, call.arguments);
+        results.push(result);
+        sendEvent({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: call.id,
+            output: result,
+          },
+        });
+      } catch (err) {
+        logger.error(`Realtime functionCallHandler "${call.name}" failed: ${String(err)}`);
+        sendEvent({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: call.id,
+            output: REDACTED_TOOL_ERROR_OUTPUT,
+          },
+        });
+      }
+    }
+    return results;
+  }
+
+  /**
+   * Run the user's functionCallHandler with a per-call timeout and return-type
+   * validation. Throws on timeout, on non-string return, or on user errors —
+   * letting the calling site translate the failure into a redacted
+   * function_call_output without leaking host-side error details to the model.
+   */
+  private async runFunctionCallHandlerWithTimeout(name: string, args: string): Promise<string> {
+    const handler = this.config.functionCallHandler;
+    if (!handler) {
+      throw new Error('functionCallHandler is not configured');
+    }
+    const timeoutMs = this.getToolCallTimeoutMs();
+    let to: NodeJS.Timeout | undefined;
+    try {
+      const result = await Promise.race<string>([
+        Promise.resolve(handler(name, args)) as Promise<string>,
+        new Promise<string>((_, reject) => {
+          to = setTimeout(
+            () => reject(new Error(`functionCallHandler "${name}" timed out after ${timeoutMs}ms`)),
+            timeoutMs,
+          );
+        }),
+      ]);
+      if (typeof result !== 'string') {
+        throw new Error(`functionCallHandler "${name}" must return a string, got ${typeof result}`);
+      }
+      return result;
+    } finally {
+      if (to) {
+        clearTimeout(to);
+      }
     }
   }
 
@@ -513,6 +672,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   ): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
       const promptContent = this.normalizeRealtimePromptContent(prompt);
+      const getCachedToolConfig = this.makeRequestToolConfigCache();
       logger.debug(
         `Attempting to connect to OpenAI WebSocket with client secret: ${clientSecret.slice(0, 5)}...`,
       );
@@ -557,6 +717,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
       let functionCallOccurred = false;
       const functionCallResults: string[] = [];
+      let toolIterations = 0;
+      const maxToolIterations = this.getMaxToolIterations();
 
       const sendEvent = (event: any) => {
         if (!event.event_id) {
@@ -627,7 +789,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Prepare response creation event with appropriate settings
                 const responseEvent: any = {
                   type: 'response.create',
-                  response: await this.getRealtimeResponseConfig(),
+                  response: await this.getRealtimeResponseConfig(await getCachedToolConfig()),
                 };
 
                 sendEvent(responseEvent);
@@ -783,34 +945,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               // If there are pending function calls, process them
               if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
-                for (const call of pendingFunctionCalls) {
-                  try {
-                    // Execute the function handler
-                    const result = await this.config.functionCallHandler(call.name, call.arguments);
-                    functionCallResults.push(result);
-
-                    // Send the function call result back to the model
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.id,
-                        output: result,
-                      },
-                    });
-                  } catch (err) {
-                    logger.error(`Error executing function ${call.name}: ${err}`);
-                    // Send an error result back to the model
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.id,
-                        output: JSON.stringify({ error: String(err) }),
-                      },
-                    });
-                  }
+                if (toolIterations >= maxToolIterations) {
+                  clearTimeout(timeout);
+                  ws.close();
+                  reject(this.toolIterationCapError(maxToolIterations));
+                  return;
                 }
+                toolIterations++;
+                const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
+                functionCallResults.push(...roundResults);
 
                 // Request a new response from the model using the function results
                 sendEvent({
@@ -861,11 +1004,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   }
                 }
 
-                // If still empty, add a placeholder message to indicate the issue
-                if (responseText.length === 0) {
-                  responseText = '[No response received from API]';
-                  logger.debug('Using placeholder message for empty response');
-                }
+                // Leave responseText empty — callApi() converts an empty
+                // response (with no audio or function-call results) into an
+                // error so the caller's assertion fails with diagnostic text
+                // rather than a placeholder masquerading as success.
               }
 
               ws.close();
@@ -1040,27 +1182,39 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         result = await this.directWebSocketRequest(promptContent);
       }
 
-      // Format the output - if function calls occurred, include that info
       let finalOutput = result.output;
+      const hasAudio = Boolean(result.metadata?.audio);
+      const hasFunctionResults = Boolean(
+        result.functionCallOccurred &&
+          result.functionCallResults &&
+          result.functionCallResults.length > 0,
+      );
 
-      // Log the output we received for debugging
       logger.debug(`Final output from API: "${finalOutput}" (length: ${finalOutput.length})`);
 
-      if (finalOutput.length === 0) {
-        // Log at debug level instead of warn to prevent user-visible warnings
-        logger.debug(
-          'Received empty response from Realtime API - possible issue with transcript accumulation. Check modalities configuration.',
-        );
-
-        // Set a fallback message to help users, but keep it shorter
-        finalOutput = '[No response received from API]';
+      // An empty response with no audio and no function-call results is a real
+      // failure (wire-shape regression, unhandled tool call, etc.) — surface it
+      // as a ProviderResponse error so assertions fail with a useful message
+      // instead of silently passing/failing against a placeholder string.
+      if (finalOutput.length === 0 && !hasAudio && !hasFunctionResults) {
+        const hint = result.functionCallOccurred
+          ? 'A function_call was emitted by the model but no functionCallHandler was configured to respond.'
+          : 'No text, audio, or function-call output was returned. This often indicates a wire-shape mismatch with the Realtime API.';
+        return {
+          error: `OpenAI Realtime returned an empty response. ${hint}`,
+          metadata: {
+            ...(result.metadata ?? {}),
+            functionCallOccurred: result.functionCallOccurred,
+          },
+          tokenUsage: result.tokenUsage,
+        };
       }
 
-      if (
-        result.functionCallOccurred &&
-        result.functionCallResults &&
-        result.functionCallResults.length > 0
-      ) {
+      if (finalOutput.length === 0 && hasAudio) {
+        finalOutput = '[Audio response received]';
+      }
+
+      if (hasFunctionResults) {
         finalOutput += '\n\n[Function calls were made during processing]';
       }
 
@@ -1091,22 +1245,32 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         );
       }
 
+      const cost = calculateOpenAIUsageCost(
+        this.modelName,
+        this.config,
+        result.metadata?.usage ?? {
+          prompt_tokens: result.tokenUsage?.prompt,
+          completion_tokens: result.tokenUsage?.completion,
+          total_tokens: result.tokenUsage?.total,
+        },
+        {
+          cachedResponse: result.cached,
+        },
+      );
+      // Realtime models without published pricing return undefined here. Warn
+      // once per process so users don't silently see $0.00 in their reports.
+      if (cost === undefined) {
+        const modelInfo = OPENAI_REALTIME_MODELS.find((m) => m.id === this.modelName);
+        if (modelInfo && !modelInfo.cost) {
+          warnUnpricedRealtimeModelOnce(this.modelName);
+        }
+      }
+
       return {
         output: finalOutput,
         tokenUsage: result.tokenUsage,
         cached: result.cached,
-        cost: calculateOpenAIUsageCost(
-          this.modelName,
-          this.config,
-          result.metadata?.usage ?? {
-            prompt_tokens: result.tokenUsage?.prompt,
-            completion_tokens: result.tokenUsage?.completion,
-            total_tokens: result.tokenUsage?.total,
-          },
-          {
-            cachedResponse: result.cached,
-          },
-        ),
+        cost,
         metadata,
         // Add audio at top level if available (EvalOutputCell expects this)
         ...(metadata.audio && {
@@ -1141,6 +1305,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   async directWebSocketRequest(prompt: string | RealtimeUserContent[]): Promise<RealtimeResponse> {
     return new Promise((resolve, reject) => {
+      const getCachedToolConfig = this.makeRequestToolConfigCache();
       const promptContent = this.normalizeRealtimePromptContent(prompt);
       logger.debug(`Establishing direct WebSocket connection to OpenAI Realtime API`);
 
@@ -1185,6 +1350,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
       let functionCallOccurred = false;
       const functionCallResults: string[] = [];
+      let toolIterations = 0;
+      const maxToolIterations = this.getMaxToolIterations();
       const sendEvent = (event: any) => {
         if (!event.event_id) {
           event.event_id = this.generateEventId();
@@ -1201,7 +1368,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           // First, update the session with our configuration
           sendEvent({
             type: 'session.update',
-            session: await this.getRealtimeSessionConfig(),
+            session: await this.getRealtimeSessionConfig(await getCachedToolConfig()),
           });
 
           // Then create a conversation item with the user's prompt
@@ -1253,7 +1420,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 // Prepare response creation event with appropriate settings
                 const responseEvent: any = {
                   type: 'response.create',
-                  response: await this.getRealtimeResponseConfig(),
+                  response: await this.getRealtimeResponseConfig(await getCachedToolConfig()),
                 };
 
                 sendEvent(responseEvent);
@@ -1409,34 +1576,15 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
               // If there are pending function calls, process them
               if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
-                for (const call of pendingFunctionCalls) {
-                  try {
-                    // Execute the function handler
-                    const result = await this.config.functionCallHandler(call.name, call.arguments);
-                    functionCallResults.push(result);
-
-                    // Send the function call result back to the model
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.id,
-                        output: result,
-                      },
-                    });
-                  } catch (err) {
-                    logger.error(`Error executing function ${call.name}: ${err}`);
-                    // Send an error result back to the model
-                    sendEvent({
-                      type: 'conversation.item.create',
-                      item: {
-                        type: 'function_call_output',
-                        call_id: call.id,
-                        output: JSON.stringify({ error: String(err) }),
-                      },
-                    });
-                  }
+                if (toolIterations >= maxToolIterations) {
+                  clearTimeout(timeout);
+                  ws.close();
+                  reject(this.toolIterationCapError(maxToolIterations));
+                  return;
                 }
+                toolIterations++;
+                const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
+                functionCallResults.push(...roundResults);
 
                 // Request a new response from the model using the function results
                 sendEvent({
@@ -1487,11 +1635,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   }
                 }
 
-                // If still empty, add a placeholder message to indicate the issue
-                if (responseText.length === 0) {
-                  responseText = '[No response received from API]';
-                  logger.debug('Using placeholder message for empty response');
-                }
+                // Leave responseText empty — callApi() converts an empty
+                // response (with no audio or function-call results) into an
+                // error so the caller's assertion fails with diagnostic text
+                // rather than a placeholder masquerading as success.
               }
 
               ws.close();
@@ -1626,50 +1773,94 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     });
   }
 
-  // New method for persistent connection
+  /**
+   * Open the persistent socket and resolve only once it has reached readyState OPEN.
+   * Concurrent callers share the same Promise so they all wait for the same socket
+   * to be ready before any of them send events.
+   *
+   * On error/close before OPEN, both the socket and the cached promise are torn
+   * down so the next request creates a fresh connection.
+   */
+  private openPersistentConnection(): Promise<void> {
+    if (this.connectionReady != null) {
+      return this.connectionReady;
+    }
+
+    // A pre-existing connection (e.g., one already opened by an earlier
+    // request, or a mock injected by a unit test) is treated as ready. The
+    // sendEvent guard inside setupMessageHandlers is the runtime safety net.
+    if (this.persistentConnection != null) {
+      this.connectionReady = Promise.resolve();
+      return this.connectionReady;
+    }
+
+    const wsUrl = this.getWebSocketUrl(this.modelName);
+    logger.debug(`Opening persistent WebSocket: ${wsUrl}`);
+
+    const wsOptions = {
+      headers: {
+        Authorization: `Bearer ${this.getApiKey()}`,
+        'User-Agent': 'promptfoo Realtime API Client',
+        Origin: this.getWebSocketOrigin(),
+      },
+      handshakeTimeout: 10000,
+      perMessageDeflate: false,
+    };
+
+    const ws = new WebSocket(wsUrl, wsOptions);
+    this.persistentConnection = ws;
+
+    this.connectionReady = new Promise<void>((resolve, reject) => {
+      const onOpen = () => {
+        ws.removeListener('error', onErrorBeforeOpen);
+        logger.debug('Persistent WebSocket reached OPEN');
+        resolve();
+      };
+      const onErrorBeforeOpen = (err: Error) => {
+        ws.removeListener('open', onOpen);
+        logger.error(`Persistent WebSocket failed before OPEN: ${err}`);
+        if (this.persistentConnection === ws) {
+          this.persistentConnection = null;
+        }
+        this.connectionReady = null;
+        reject(err);
+      };
+      ws.once('open', onOpen);
+      ws.once('error', onErrorBeforeOpen);
+    });
+
+    return this.connectionReady;
+  }
+
+  /**
+   * Persistent-connection turn entry point.
+   *
+   * Two correctness guarantees that the previous implementation lacked:
+   *  1. Wait for the shared socket to reach readyState OPEN before sending —
+   *     concurrent callers no longer race past a CONNECTING socket and trigger
+   *     "WebSocket is not open: readyState 0".
+   *  2. Serialize turns through `inflightTurn` so unrelated tests sharing one
+   *     provider instance don't interleave their session.update / response.create
+   *     events on the same wire. Failed turns don't block the queue.
+   */
   async persistentWebSocketRequest(
     prompt: string | RealtimeUserContent[],
   ): Promise<RealtimeResponse> {
     const promptContent = this.normalizeRealtimePromptContent(prompt);
-    return new Promise((resolve, reject) => {
-      logger.debug(`Using persistent WebSocket connection to OpenAI Realtime API`);
-
-      // Create a new connection if needed or use existing
-      const connection = this.persistentConnection;
-
-      if (connection) {
-        // Connection already exists, just set up message handlers
-        void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
-      } else {
-        // Create new connection
-        const wsUrl = this.getWebSocketUrl(this.modelName);
-        logger.debug(`Connecting to WebSocket URL: ${wsUrl}`);
-
-        // Add WebSocket options with required headers
-        const wsOptions = {
-          headers: {
-            Authorization: `Bearer ${this.getApiKey()}`,
-            'User-Agent': 'promptfoo Realtime API Client',
-            Origin: this.getWebSocketOrigin(),
-          },
-          handshakeTimeout: 10000,
-          perMessageDeflate: false,
-        };
-
-        this.persistentConnection = new WebSocket(wsUrl, wsOptions);
-
-        // Handle connection establishment
-        this.persistentConnection.once('open', () => {
-          logger.debug('Persistent WebSocket connection established successfully');
-          void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
-        });
-
-        this.persistentConnection.once('error', (err: Error) => {
-          logger.error(`WebSocket connection error: ${err}`);
-          reject(err);
-        });
+    const previous = this.inflightTurn;
+    const turn = (async () => {
+      try {
+        await previous;
+      } catch {
+        // Prior turn errors don't poison the queue.
       }
-    });
+      await this.openPersistentConnection();
+      return new Promise<RealtimeResponse>((resolve, reject) => {
+        void this.setupMessageHandlers(promptContent, resolve, reject).catch(reject);
+      });
+    })();
+    this.inflightTurn = turn.catch(() => undefined);
+    return turn;
   }
 
   // Helper method to set up message handlers for persistent WebSocket
@@ -1681,6 +1872,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     // Reset audio state at the start of each request
     this.resetAudioState();
     const promptContent = this.normalizeRealtimePromptContent(prompt);
+    // Snapshot before the await so a concurrent turn cannot mutate it under us.
+    const previousItemIdAtTurnStart = this.previousItemId;
     const realtimeToolConfig = await this.getRealtimeToolConfigWithTimeout();
 
     const startRequestTimeout = () =>
@@ -1728,6 +1921,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     let functionCallOccurred = false;
     const functionCallResults: string[] = [];
     let pendingFunctionCalls: { id: string; name: string; arguments: string }[] = [];
+    let toolIterations = 0;
+    const maxToolIterations = this.getMaxToolIterations();
 
     const sendEvent = (event: any) => {
       if (!event.event_id) {
@@ -1735,9 +1930,24 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       }
 
       const connection = this.persistentConnection;
-      if (connection) {
-        connection.send(JSON.stringify(event));
+      if (!connection) {
+        throw new Error(
+          `Cannot send Realtime event ${event.type}: persistent WebSocket is not set.`,
+        );
       }
+      // Defense-in-depth against the concurrency race: real ws sockets expose
+      // readyState; the production code path goes through openPersistentConnection
+      // which only resolves on OPEN, but if anything sneaks past (or the socket
+      // closed after open), surface a clear error rather than letting the ws
+      // module emit "WebSocket is not open: readyState 0". Mocked sockets in
+      // unit tests omit readyState, so skip the check there.
+      if (typeof connection.readyState === 'number' && connection.readyState !== WebSocket.OPEN) {
+        throw new Error(
+          `Cannot send Realtime event ${event.type}: WebSocket not OPEN ` +
+            `(readyState=${connection.readyState}).`,
+        );
+      }
+      connection.send(JSON.stringify(event));
 
       return event.event_id;
     };
@@ -1753,14 +1963,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       clearRequestTimeout();
 
-      // Handle empty response cases
+      // Leave responseText empty when no text and no audio. callApi() converts
+      // the empty result into a ProviderResponse error rather than letting a
+      // placeholder string pass for a successful turn.
       if (responseText.length === 0) {
-        logger.warn('Empty response text detected');
-        if (this.currentAudioBuffer.length > 0) {
-          responseText = '[Audio response received]';
-        } else {
-          responseText = '[No response received from API]';
-        }
+        logger.debug('Empty Realtime response text — letting callApi() surface as error');
       }
 
       // Prepare final response with audio if available
@@ -1923,32 +2130,17 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             }
 
             if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
-              clearRequestTimeout();
-
-              for (const call of pendingFunctionCalls) {
-                try {
-                  const result = await this.config.functionCallHandler(call.name, call.arguments);
-                  functionCallResults.push(result);
-                  sendEvent({
-                    type: 'conversation.item.create',
-                    item: {
-                      type: 'function_call_output',
-                      call_id: call.id,
-                      output: result,
-                    },
-                  });
-                } catch (error) {
-                  logger.error(`Error executing function ${call.name}: ${error}`);
-                  sendEvent({
-                    type: 'conversation.item.create',
-                    item: {
-                      type: 'function_call_output',
-                      call_id: call.id,
-                      output: JSON.stringify({ error: String(error) }),
-                    },
-                  });
-                }
+              if (toolIterations >= maxToolIterations) {
+                clearRequestTimeout();
+                reject(this.toolIterationCapError(maxToolIterations));
+                return;
               }
+              toolIterations++;
+              // Pause the inactivity timeout while user code runs — handler
+              // execution time is not WebSocket inactivity.
+              clearRequestTimeout();
+              const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
+              functionCallResults.push(...roundResults);
 
               sendEvent({
                 type: 'response.create',
@@ -1964,16 +2156,22 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
               return;
             }
 
-            // Mark both as done if we get response.done without any audio processing
+            // If response.done arrives with no audio in flight, finish the turn.
+            // Only force-mark textDone when no deltas were ever observed — when
+            // we did see deltas, the explicit *.done event will (or already did)
+            // arrive separately and chopping mid-stream would silently truncate
+            // the transcript.
             if (!this.isProcessingAudio) {
               audioDone = true;
-              textDone = true;
+              if (!textDone && responseText.length === 0) {
+                textDone = true;
+              }
             }
             checkAndResolve();
             break;
 
           case 'error':
-            responseError = message.message || 'Unknown WebSocket error';
+            responseError = message.error?.message || message.message || 'Unknown WebSocket error';
             logger.error(`WebSocket error: ${responseError}`);
             clearRequestTimeout();
             this.resetAudioState();
@@ -2012,10 +2210,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       session: await this.getRealtimeSessionConfig(realtimeToolConfig),
     });
 
-    // Create a conversation item with the user's prompt
+    // Create a conversation item with the user's prompt. Use the snapshot
+    // taken before any await so a concurrent turn cannot mutate the anchor.
     sendEvent({
       type: 'conversation.item.create',
-      previous_item_id: this.previousItemId,
+      previous_item_id: previousItemIdAtTurnStart,
       item: {
         type: 'message',
         role: 'user',
