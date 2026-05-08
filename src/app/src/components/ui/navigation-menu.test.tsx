@@ -76,6 +76,54 @@ describe('NavigationMenu', () => {
     expect(await screen.findByRole('link', { name: 'Product 1' })).toBeInTheDocument();
   });
 
+  it('expands menu content on trigger hover', async () => {
+    const user = userEvent.setup();
+    render(
+      <NavigationMenu>
+        <NavigationMenuList>
+          <NavigationMenuItem>
+            <NavigationMenuTrigger>Products</NavigationMenuTrigger>
+            <NavigationMenuContent>
+              <NavigationMenuLink href="/product1">Product 1</NavigationMenuLink>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>,
+    );
+
+    await user.hover(screen.getByText('Products'));
+
+    expect(await screen.findByRole('link', { name: 'Product 1' })).toBeInTheDocument();
+  });
+
+  it('anchors dropdown content to the owning item instead of a shared viewport', async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <NavigationMenu>
+        <NavigationMenuList>
+          <NavigationMenuItem>
+            <NavigationMenuTrigger>Products</NavigationMenuTrigger>
+            <NavigationMenuContent>
+              <NavigationMenuLink href="/product1">Product 1</NavigationMenuLink>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>,
+    );
+
+    await user.click(screen.getByText('Products'));
+
+    expect(screen.getByText('Products').closest('li')).toHaveClass('relative');
+    expect(screen.getByRole('link', { name: 'Product 1' }).parentElement).toHaveClass(
+      'absolute',
+      'left-0',
+      'top-full',
+    );
+    expect(
+      container.querySelector('[data-radix-navigation-menu-viewport]'),
+    ).not.toBeInTheDocument();
+  });
+
   it('applies custom className to menu', () => {
     render(
       <NavigationMenu className="custom-nav">
