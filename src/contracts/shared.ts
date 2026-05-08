@@ -11,49 +11,33 @@ export const CompletionTokenDetailsSchema = z.object({
 
 export type CompletionTokenDetails = z.infer<typeof CompletionTokenDetailsSchema>;
 
-/**
- * Base schema for token usage statistics with all fields optional
- */
-export const BaseTokenUsageSchema = z.object({
-  // Core token counts
+// Core token-usage fields shared by both the top-level usage and the nested
+// assertion usage. Kept private; consumers depend on `BaseTokenUsageSchema`.
+const TokenUsageCoreSchema = z.object({
   prompt: z.number().optional(),
   completion: z.number().optional(),
   cached: z.number().optional(),
   total: z.number().optional(),
-
-  // Request metadata
   numRequests: z.number().optional(),
-
-  // Detailed completion information
   completionDetails: CompletionTokenDetailsSchema.optional(),
-
-  // Assertion token usage (model-graded assertions)
-  assertions: z
-    .object({
-      total: z.number().optional(),
-      prompt: z.number().optional(),
-      completion: z.number().optional(),
-      cached: z.number().optional(),
-      numRequests: z.number().optional(),
-      completionDetails: CompletionTokenDetailsSchema.optional(),
-    })
-    .optional(),
 });
 
-// TypeScript types derived from schemas
-export type BaseTokenUsage = z.infer<typeof BaseTokenUsageSchema>;
+/**
+ * Base schema for token usage statistics with all fields optional. The
+ * `assertions` field mirrors the top-level core fields for model-graded
+ * assertion accounting.
+ */
+export const BaseTokenUsageSchema = TokenUsageCoreSchema.extend({
+  assertions: TokenUsageCoreSchema.optional(),
+});
+
 export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 
-// biome-ignore lint/suspicious/noExplicitAny: preserves the legacy public filter contract
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 
 // VarValue represents the type of values that can be stored in Vars
 // Includes primitives (string, number, boolean), objects, and arrays
 export type VarValue = string | number | boolean | object | unknown[];
-
-const InputVariableNameSchema = z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
-  error: 'Input variable names must be valid identifiers (start with letter or underscore)',
-});
 
 export const InputTypeValues = ['text', 'pdf', 'docx', 'image'] as const;
 export const InputTypeSchema = z.enum(InputTypeValues);
@@ -162,12 +146,18 @@ export function normalizeInputs(
 }
 
 export function getInputDescription(input: InputDefinition): string {
-  return normalizeInputDefinition(input).description;
+  return typeof input === 'string' ? input : input.description;
 }
 
 export function getInputType(input: InputDefinition): InputType {
-  return normalizeInputDefinition(input).type;
+  return typeof input === 'string' ? 'text' : (input.type ?? 'text');
 }
+
+const NON_TEXT_INPUT_FORMAT_LABELS: Record<Exclude<InputType, 'text'>, string> = {
+  pdf: 'PDF document',
+  docx: 'DOCX document',
+  image: 'image',
+};
 
 export function buildInputPromptDescription(input: InputDefinition): string {
   const normalized = normalizeInputDefinition(input);
@@ -179,15 +169,13 @@ export function buildInputPromptDescription(input: InputDefinition): string {
     return `${normalized.description}${benignGuidance}`;
   }
 
-  const formatLabel =
-    normalized.type === 'pdf'
-      ? 'PDF document'
-      : normalized.type === 'docx'
-        ? 'DOCX document'
-        : 'image';
-
+  const formatLabel = NON_TEXT_INPUT_FORMAT_LABELS[normalized.type];
   return `${normalized.description} (format: ${formatLabel}; provide the text or instructions that should be embedded in the file)${benignGuidance}`;
 }
+
+const InputVariableNameSchema = z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
+  error: 'Input variable names must be valid identifiers (start with letter or underscore)',
+});
 
 // Inputs schema for multi-variable test case generation.
 // Keys are variable names, values are descriptions or typed definitions for what the variable should contain.

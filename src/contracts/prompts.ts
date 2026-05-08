@@ -1,14 +1,17 @@
 import type { VarValue } from './shared';
 
-// Declared to avoid circular dependency with providers.ts
-declare interface ApiProvider {
+/**
+ * Minimal provider surface visible to prompt functions. The full `ApiProvider`
+ * interface in `src/types/providers.ts` extends this; declaring the minimum
+ * here keeps the contracts layer free of an upward dependency on the provider
+ * layer while guaranteeing the two declarations cannot drift.
+ */
+export interface MinimalApiProvider {
   id: () => string;
-  // biome-ignore lint/suspicious/noExplicitAny: preserves the legacy public prompt contract
   callApi: (prompt: string, context?: any, options?: any) => Promise<any>;
   label?: string;
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: preserves the legacy public prompt contract
 export type PromptContent = string | any;
 
 export interface PromptConfig {
@@ -18,7 +21,6 @@ export interface PromptConfig {
 
 export interface PromptFunctionContext {
   vars: Record<string, VarValue>;
-  // biome-ignore lint/suspicious/noExplicitAny: preserves the legacy public prompt contract
   config: Record<string, any>;
   provider: {
     id: string;
@@ -36,15 +38,13 @@ export interface PromptFunctionContext {
  */
 export interface PromptFunctionResult {
   prompt: PromptContent;
-  // biome-ignore lint/suspicious/noExplicitAny: preserves the legacy public prompt contract
   config?: Record<string, any>;
 }
 
 export interface PromptFunction {
   (context: {
-    // biome-ignore lint/suspicious/noExplicitAny: preserves the legacy public prompt contract
     vars: Record<string, string | any>;
-    provider?: ApiProvider;
+    provider?: MinimalApiProvider;
   }): Promise<PromptContent | PromptFunctionResult>;
 }
 
@@ -59,6 +59,5 @@ export interface Prompt {
   function?: PromptFunction;
 
   // These config options are merged into the provider config.
-  // biome-ignore lint/suspicious/noExplicitAny: preserves the legacy public prompt contract
   config?: any;
 }

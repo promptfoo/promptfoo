@@ -130,6 +130,12 @@ export const ProviderEnvOverridesSchema = z.object({
 });
 
 // Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
-// while maintaining type safety for known env vars
+// while maintaining type safety for known env vars.
+//
+// NOTE: the runtime schema is a strict `z.object` and will strip unknown keys at
+// parse time. The type widens with `Record<string, string | undefined>` so that
+// downstream code can read arbitrary keys without a cast; callers that rely on
+// preserving unknown keys should pass them in via the unparsed source object,
+// not the schema-parsed result.
 export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
   Record<string, string | undefined>;

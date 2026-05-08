@@ -4,7 +4,7 @@ import type { TransformFunction } from '../transform';
 
 export const NunjucksFilterMapSchema = z.record(
   z.string(),
-  z.custom<(...args: unknown[]) => string>((v) => typeof v === 'function'),
+  z.custom<(...args: any[]) => string>((v) => typeof v === 'function'),
 );
 
 /**

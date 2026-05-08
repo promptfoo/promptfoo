@@ -39,8 +39,6 @@ import type {
   ProvidersConfig,
 } from './providers';
 
-export type { VarValue } from '../contracts/shared';
-
 import type { TraceData } from './tracing';
 
 /**
