@@ -129,8 +129,13 @@ export function cleanMathText(text: string): string {
   // Trailing backslash-space sequences left over from \text removal.
   s = s.trim().replace(/\\+\s*$/, '');
 
-  // Trailing common units.
-  s = s.trim().replace(/\s+(?:m|km|cm|mm|s|ms|kg|g|rad|deg)\s*$/, '');
+  // Trailing common units. Use a digit-or-whitespace lookbehind instead of
+  // requiring whitespace so attached forms like "10kg" / "5m" / "45deg" are
+  // stripped too. The lookbehind still preserves identifiers like "Vm" (prev
+  // char is a letter, not digit/space) and the trailing `\s*$` keeps suffixes
+  // like "5kgsmth" or "50sec" intact (the unit must reach end-of-string).
+  // Longer alternatives come first so e.g. "100ms" matches "ms", not "m".
+  s = s.trim().replace(/(?<=[\d\s])(?:rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/, '');
   s = s.trim().replace(/\s*°\s*$/, '');
 
   // Display math fences.
@@ -305,6 +310,11 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
       return rightmost;
     }
   }
+  // Strip terminal sentence punctuation from non-prose candidates too. Without
+  // this, a labelled answer like "Answer: 0.5." (after the prefix strip) would
+  // become "0.5." and fail to parse — only the prose-extraction branch did
+  // this previously, so labelled non-prose lines slipped through.
+  candidate = candidate.replace(/[.,;:!?]+$/, '');
   return cleanMathText(candidate);
 }
 

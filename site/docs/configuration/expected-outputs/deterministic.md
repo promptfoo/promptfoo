@@ -890,7 +890,8 @@ trip up `equals` and `contains`:
   `\frac{1}\pi` (backslash-command denominator)
 - European decimal commas (`2,00625` → `2.00625`) and US thousands
   separators (`1,234,567` → `1234567`)
-- Trailing units (`m`, `km`, `cm`, `mm`, `s`, `ms`, `kg`, `g`, `rad`, `deg`, `°`)
+- Trailing units (`m`, `km`, `cm`, `mm`, `s`, `ms`, `kg`, `g`, `rad`, `deg`, `°`),
+  whether whitespace-separated (`10 kg`) or directly attached (`10kg`, `45deg`)
 - Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
 - Approximation symbols (`≈`, `\approx`) treated as equality
 - Equality chains (`230/530 = 23/53`) — the rightmost parseable segment wins

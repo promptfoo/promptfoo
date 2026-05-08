@@ -257,6 +257,26 @@ describe('cleanMathText', () => {
     expect(cleanMathText(input)).toBe(expected);
   });
 
+  it.each([
+    ['10kg', '10'],
+    ['5m', '5'],
+    ['45deg', '45'],
+    ['100ms', '100'],
+    ['5.2km', '5.2'],
+    ['100mm', '100'],
+    ['9.81rad', '9.81'],
+  ])('strips trailing unit attached to the number "%s" → "%s"', (input, expected) => {
+    expect(cleanMathText(input)).toBe(expected);
+  });
+
+  it.each([
+    ['Vm', 'Vm'],
+    ['5kgsmth', '5kgsmth'],
+    ['50sec', '50sec'],
+  ])('does not strip an identifier whose suffix happens to contain a unit (%s)', (input, expected) => {
+    expect(cleanMathText(input)).toBe(expected);
+  });
+
   it('strips display math $$...$$', () => {
     expect(cleanMathText('$$\\frac{1}{2}$$')).toBe('\\frac{1}{2}');
   });
@@ -518,6 +538,15 @@ describe('extractMathAnswer', () => {
       ['So the value comes out to 3.14159.', '3.14159'],
       ['After simplification we get \\frac{1}{2}.', '\\frac{1}{2}'],
     ])('strips terminal sentence punctuation (%s → %s)', (input, expected) => {
+      expect(extractMathAnswer(input)).toBe(expected);
+    });
+
+    it.each([
+      ['Answer: 0.5.', '0.5'],
+      ['Final answer: 42.', '42'],
+      ['Total: 14!', '14'],
+      ['Result: 3.14159.', '3.14159'],
+    ])('strips terminal sentence punctuation from labelled (non-prose) answers (%s → %s)', (input, expected) => {
       expect(extractMathAnswer(input)).toBe(expected);
     });
 
@@ -818,6 +847,23 @@ describe('isMathEquivalent', () => {
       ['Therefore the result is 7!', 7],
       ['So the answer comes out to 3.14159.', '3.14159'],
     ])('grades sentence-terminated prose "%s" against %s', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
+    });
+
+    it.each([
+      ['Answer: 0.5.', '0.5'],
+      ['Final answer: 42.', 42],
+      ['Total: 14.', '14'],
+    ])('grades labelled sentence-terminated answers "%s" against %s', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
+    });
+
+    it.each([
+      ['10kg', 10],
+      ['5m', '5'],
+      ['45deg', 45],
+      ['100ms', '100'],
+    ])('grades unit-attached numeric answers "%s" against %s', (actual, expected) => {
       expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
     });
 
