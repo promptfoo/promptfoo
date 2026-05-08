@@ -666,6 +666,9 @@ describe('extractMathAnswer', async () => {
     it.each([
       ['work \\boxed{2}, final answer: 3', '3'],
       ['intermediate \\boxed{5}, total: 10', '10'],
+      // Nested-brace boxed (3 levels of {}) — the previous flat regex
+      // missed these because it only tolerated one level of nesting.
+      ['work \\boxed{\\frac{1}{\\sqrt{2}}}, final answer: 3', '3'],
     ])('prefers a labelled answer after a same-line \\boxed intermediate (%s → %s)', async (input, expected) => {
       // Pre-fix: \\boxed-on-the-last-line short-circuited extraction to
       // the boxed value, even when a later labelled answer on the same

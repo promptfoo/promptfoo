@@ -416,6 +416,42 @@ async function extractFromDisplayBlocks(text: string): Promise<string | undefine
 }
 
 /**
+ * Brace-balanced check: does `line` contain a labelled-answer pattern
+ * ("<word(s)>: <math>") AFTER the close of the last `\boxed{...}` on the
+ * line? Used to demote a boxed intermediate when the same line also has a
+ * later labelled final answer (e.g. "work \boxed{...}, final answer: 3").
+ *
+ * Brace-balanced because boxed contents can carry arbitrarily nested
+ * braces (`\boxed{\frac{1}{\sqrt{2}}}`) that defeat a flat regex.
+ */
+function hasLabelAfterLastBoxed(line: string): boolean {
+  const PREFIX = '\\boxed{';
+  let lastBoxedClose = -1;
+  for (let i = 0; i < line.length; i++) {
+    if (line.startsWith(PREFIX, i)) {
+      let depth = 1;
+      let j = i + PREFIX.length;
+      while (j < line.length && depth > 0) {
+        if (line[j] === '{') {
+          depth++;
+        } else if (line[j] === '}') {
+          depth--;
+        }
+        j++;
+      }
+      if (depth === 0) {
+        lastBoxedClose = j;
+        i = j - 1;
+      }
+    }
+  }
+  if (lastBoxedClose < 0) {
+    return false;
+  }
+  return /\s[A-Za-z][A-Za-z\s]*:\s*\S/.test(line.slice(lastBoxedClose));
+}
+
+/**
  * Strip hidden-reasoning blocks before scanning for display math or computing
  * line positions. `<think>$$2$$</think>\nAnswer: 3` must not bubble the hidden
  * `$$2$$` up as the answer; the docs promise that thinking blocks are ignored.
@@ -464,9 +500,7 @@ export async function extractMathAnswer(text: string): Promise<string> {
   // ("work \boxed{2}, final answer: 3"), the boxed is intermediate work
   // and the labelled answer wins. Detect that and fall through to
   // extractFromLastLine in that case.
-  const boxedFollowedByLabel =
-    /\\boxed\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}.*?\s[A-Za-z][A-Za-z\s]*:\s*\S/.test(lastVisible);
-  if (/\\boxed\{/.test(lastVisible) && !boxedFollowedByLabel) {
+  if (/\\boxed\{/.test(lastVisible) && !hasLabelAfterLastBoxed(lastVisible)) {
     const cleanedBoxed = findAllBoxed(cleaned);
     if (cleanedBoxed.length > 0) {
       return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
