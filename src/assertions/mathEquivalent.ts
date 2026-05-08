@@ -129,13 +129,12 @@ export function cleanMathText(text: string): string {
   // Trailing backslash-space sequences left over from \text removal.
   s = s.trim().replace(/\\+\s*$/, '');
 
-  // Trailing common units. Use a digit-or-whitespace lookbehind instead of
-  // requiring whitespace so attached forms like "10kg" / "5m" / "45deg" are
-  // stripped too. The lookbehind still preserves identifiers like "Vm" (prev
-  // char is a letter, not digit/space) and the trailing `\s*$` keeps suffixes
-  // like "5kgsmth" or "50sec" intact (the unit must reach end-of-string).
-  // Longer alternatives come first so e.g. "100ms" matches "ms", not "m".
-  s = s.trim().replace(/(?<=[\d\s])(?:rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/, '');
+  // Trailing common units. Anchor the strip so a NUMBER must be the
+  // immediate left context of the unit — preserves both attached forms like
+  // "10kg" / "45deg" and whitespace-separated "10 m", while leaving algebraic
+  // expressions intact ("x + m" stays "x + m", an expected "2*m" stays
+  // "2*m"). Longer alternatives first so "100ms" matches "ms", not "m".
+  s = s.trim().replace(/(^|\s)(-?\d+(?:\.\d+)?)\s*(?:rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/, '$1$2');
   s = s.trim().replace(/\s*°\s*$/, '');
 
   // Display math fences.
@@ -273,24 +272,55 @@ function hasMultipleProseWords(text: string): boolean {
 }
 
 /**
- * Pull the rightmost token containing a digit or starting with a `\` LaTeX
- * command. Used when the line reads as prose around a single math token,
- * e.g. "Therefore the result is 42" → "42". Strips terminal sentence
- * punctuation (`.`, `,`, `;`, `:`, `!`, `?`) so "The answer is 0.5." hands
- * "0.5" — not "0.5." — to the parser.
+ * A token is "math-shaped" if it contains a digit, starts with a `\` LaTeX
+ * command, is a single ASCII letter (variable), or is pure operator/bracket.
+ * Used to gather the contiguous trailing math expression in a prose line.
  */
-function extractRightmostMathToken(text: string): string | undefined {
+function isMathShapedToken(tok: string): boolean {
+  if (!tok) {
+    return false;
+  }
+  if (/\d/.test(tok)) {
+    return true;
+  }
+  if (tok.startsWith('\\')) {
+    return true;
+  }
+  if (/^[A-Za-z]$/.test(tok)) {
+    return true;
+  }
+  return /^[+\-*/^=<>(){}[\]_~|]+$/.test(tok);
+}
+
+/**
+ * Walk a prose line from the right and return the contiguous trailing math
+ * expression (sequence of math-shaped tokens, joined by spaces). Multi-letter
+ * prose words (`is`, `the`, `Therefore`) terminate the run; multi-letter
+ * non-math tokens at the very end are skipped while we look for the math
+ * suffix. Strips trailing sentence punctuation (`.,;:!?`) per token so
+ * "The answer is 0.5." hands "0.5" — not "0.5." — to the parser.
+ *
+ * "The answer is 1 / 2"   → "1 / 2"
+ * "The answer is x + 1"   → "x + 1"
+ * "Therefore … 42"        → "42"
+ */
+function extractRightmostMathExpression(text: string): string | undefined {
   const tokens = text.split(/\s+/).filter(Boolean);
+  const collected: string[] = [];
   for (let i = tokens.length - 1; i >= 0; i--) {
-    const tok = tokens[i].replace(/[.,;:!?]+$/, '');
-    if (!tok) {
+    const stripped = tokens[i].replace(/[.,;:!?]+$/, '');
+    if (!stripped) {
       continue;
     }
-    if (/\d/.test(tok) || tok.startsWith('\\')) {
-      return tok;
+    if (isMathShapedToken(stripped)) {
+      collected.unshift(stripped);
+      continue;
+    }
+    if (collected.length > 0) {
+      break;
     }
   }
-  return undefined;
+  return collected.length > 0 ? collected.join(' ') : undefined;
 }
 
 function extractFromLastLine(cleanedLines: string[]): string | undefined {
@@ -305,7 +335,7 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
     return undefined;
   }
   if (hasMultipleProseWords(candidate)) {
-    const rightmost = extractRightmostMathToken(candidate);
+    const rightmost = extractRightmostMathExpression(candidate);
     if (rightmost) {
       return rightmost;
     }

@@ -277,6 +277,19 @@ describe('cleanMathText', () => {
     expect(cleanMathText(input)).toBe(expected);
   });
 
+  it.each([
+    ['x + m', 'x + m'],
+    ['x + y * m', 'x + y * m'],
+    ['a - b - g', 'a - b - g'],
+    ['p + q * s', 'p + q * s'],
+    ['2*m + 3*s', '2*m + 3*s'],
+  ])('does not strip single-letter unit when used as a variable in an algebraic expression (%s)', (input, expected) => {
+    // Earlier versions stripped any `\s+m\s*$` (and later, any
+    // digit-or-space lookbehind), which corrupted "x + m" to "x +".
+    // Only strip when a number is the immediate left context of the unit.
+    expect(cleanMathText(input)).toBe(expected);
+  });
+
   it('strips display math $$...$$', () => {
     expect(cleanMathText('$$\\frac{1}{2}$$')).toBe('\\frac{1}{2}');
   });
@@ -547,6 +560,19 @@ describe('extractMathAnswer', () => {
       ['Total: 14!', '14'],
       ['Result: 3.14159.', '3.14159'],
     ])('strips terminal sentence punctuation from labelled (non-prose) answers (%s → %s)', (input, expected) => {
+      expect(extractMathAnswer(input)).toBe(expected);
+    });
+
+    it.each([
+      ['The answer is 1 / 2', '1 / 2'],
+      ['The answer is x + 1', 'x + 1'],
+      ['Therefore the result is x + y - 3', 'x + y - 3'],
+      ['So the value comes out to 1 + 2 + 3', '1 + 2 + 3'],
+      ['And so the answer is -1 / 4', '-1 / 4'],
+    ])('extracts the contiguous trailing math expression from prose (%s → %s)', (input, expected) => {
+      // Earlier versions returned only the rightmost token (e.g. "2" for
+      // "1 / 2"), turning correct fractional/algebraic answers into
+      // failures and even passing the wrong value.
       expect(extractMathAnswer(input)).toBe(expected);
     });
 
@@ -865,6 +891,30 @@ describe('isMathEquivalent', () => {
       ['100ms', '100'],
     ])('grades unit-attached numeric answers "%s" against %s', (actual, expected) => {
       expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
+    });
+
+    it.each([
+      ['The answer is 1 / 2', '0.5'],
+      ['The answer is 1 / 2', '\\frac{1}{2}'],
+      ['The answer is x + 1', 'x + 1'],
+      ['Therefore the result is x + y - 3', 'x + y - 3'],
+      ['So the value comes out to 1 + 2 + 3', '6'],
+      ['And so the answer is -1 / 4', '-0.25'],
+    ])('grades prose-wrapped contiguous math expression "%s" against %s', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected).pass).toBe(true);
+    });
+
+    it.each([
+      ['x + m', 'x + m'],
+      ['a - b - g', 'a - b - g'],
+      ['p + q * s', 'p*s + q*s'], // mathematically not equal, but parse should NOT corrupt either side
+    ])('does not corrupt algebraic expressions ending in a unit-letter (%s)', (actual, expected) => {
+      // Confirm the expression parses both ways without unit-stripping
+      // mangling either side. The (%s)/(%s) pair may or may not be
+      // equivalent; we just check we don't get a parseFailed reason
+      // pointing at a corrupted "x +" candidate.
+      const result = isMathEquivalent(actual, expected);
+      expect(result.parseFailed ?? false).toBe(false);
     });
 
     it('grades hidden-think display math against the WRONG value as false', () => {
