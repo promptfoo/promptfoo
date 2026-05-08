@@ -41,7 +41,7 @@ npx promptfoo@latest redteam run
 
 ## Prerequisites
 
-- Node.js 20+ installed in your CI environment
+- Node.js 20.20+ or 22.22+ installed in your CI environment
 - LLM provider API keys (stored as secure environment variables)
 - A promptfoo configuration file (`promptfooconfig.yaml`)
 - (Optional) Docker for containerized environments
@@ -77,11 +77,11 @@ npx promptfoo@latest eval -o results.json
 # HTML for human-readable reports
 npx promptfoo@latest eval -o report.html
 
-# XML for enterprise tools
-npx promptfoo@latest eval -o results.xml
+# JUnit XML for native CI test-report viewers
+npx promptfoo@latest eval -o results.junit.xml
 
 # Multiple formats
-npx promptfoo@latest eval -o results.json -o report.html
+npx promptfoo@latest eval -o results.json -o report.html -o results.junit.xml
 ```
 
 Learn more about [output formats and processing](/docs/configuration/outputs).
@@ -211,7 +211,9 @@ evaluate:
       npx promptfoo@latest eval \
         -c promptfooconfig.yaml \
         --share \
-        -o output.json
+        -o output.json \
+        -o report.html \
+        -o output.junit.xml
   variables:
     OPENAI_API_KEY: ${OPENAI_API_KEY}
     PROMPTFOO_CACHE_PATH: .cache/promptfoo
@@ -221,7 +223,7 @@ evaluate:
       - .cache/promptfoo
   artifacts:
     reports:
-      junit: output.xml
+      junit: output.junit.xml
     paths:
       - output.json
       - report.html

@@ -3,12 +3,12 @@ import { normalizeResponseTransformResult } from '../../src/providers/transformR
 
 describe('normalizeResponseTransformResult', () => {
   it('should preserve provider responses', () => {
-    expect(normalizeResponseTransformResult({ output: 'ok', metadata: { source: 'test' } })).toEqual(
-      {
-        output: 'ok',
-        metadata: { source: 'test' },
-      },
-    );
+    expect(
+      normalizeResponseTransformResult({ output: 'ok', metadata: { source: 'test' } }),
+    ).toEqual({
+      output: 'ok',
+      metadata: { source: 'test' },
+    });
   });
 
   it('should wrap non-response values as output', () => {

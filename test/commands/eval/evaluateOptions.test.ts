@@ -489,6 +489,69 @@ describe('evaluateOptions behavior', () => {
       expect(options.generateSuggestions).toBe(true);
     });
 
+    it('should preserve evaluateOptions.suggestionsCount from config defaults', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-suggestions-count.yaml', {
+        evaluateOptions: {
+          generateSuggestions: true,
+          suggestionsCount: 2,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+      });
+
+      expect(options.generateSuggestions).toBe(true);
+      expect(options.suggestionsCount).toBe(2);
+    });
+
+    it('should respect commandLineOptions.suggestionsCount from config defaults', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-suggestions-count.yaml', {
+        commandLineOptions: {
+          generateSuggestions: true,
+          suggestionsCount: 3,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+      });
+
+      expect(options.generateSuggestions).toBe(true);
+      expect(options.suggestionsCount).toBe(3);
+    });
+
+    it('should let commandLineOptions.suggestionsCount override evaluateOptions defaults', async () => {
+      const tempConfig = writeTempConfig(
+        tmpDir,
+        'test-commandline-suggestions-count-overrides-evaluate-default.yaml',
+        {
+          evaluateOptions: {
+            generateSuggestions: true,
+          },
+          commandLineOptions: {
+            suggestionsCount: 4,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      );
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+      });
+
+      expect(options.generateSuggestions).toBe(true);
+      expect(options.suggestionsCount).toBe(4);
+    });
+
     it('should persist CLI filterRange without applying it twice for regular test suites', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-range.yaml', {
         providers: ['echo'],
@@ -652,6 +715,49 @@ describe('evaluateOptions behavior', () => {
       }
     });
 
+    it.each([
+      ['commandLineOptions', { commandLineOptions: { filterRange: '1:2' } }],
+      ['evaluateOptions', { evaluateOptions: { filterRange: '1:2' } }],
+    ])('should restore legacy %s.filterRange when resuming evals without persisted runtime options', async (_source, legacyConfig) => {
+      const resumeEval = new Eval(
+        {
+          ...legacyConfig,
+          providers: ['echo'],
+          prompts: ['Hello {{name}}'],
+          tests: [
+            { vars: { name: 'Alice' } },
+            { vars: { name: 'Bob' } },
+            { vars: { name: 'Carol' } },
+          ],
+        },
+        {
+          id: 'eval-resume-without-filter-range',
+          persisted: true,
+        },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval(
+          {
+            table: false,
+            resume: 'eval-resume-without-filter-range',
+          } as any,
+          {},
+          undefined,
+          {
+            filterRange: '0:1',
+          },
+        );
+
+        expect(evaluateMock).toHaveBeenCalled();
+        const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+        expect(options.filterRange).toBe('1:2');
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
     it('should warn and ignore CLI --filter-range when resuming with a different persisted range', async () => {
       const resumeEval = new Eval(
         {
@@ -712,10 +818,107 @@ describe('evaluateOptions behavior', () => {
 
       const options = await runEvalAndGetOptions({
         config: [tempConfig],
-        generateSuggestions: true, // CLI override
+        suggestPrompts: 3, // CLI override
+      } as Partial<CommandLineOptions & Command>);
+
+      expect(options.generateSuggestions).toBe(true);
+      expect(options.suggestionsCount).toBe(3);
+    });
+
+    it('should let an explicit generateSuggestions=false override commandLineOptions config', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-generate-suggestions-disabled.yaml', {
+        commandLineOptions: {
+          generateSuggestions: true,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+        generateSuggestions: false,
+      });
+
+      expect(options.generateSuggestions).toBe(false);
+      expect(options.suggestionsCount).toBeUndefined();
+    });
+
+    it('should let an explicit generateSuggestions=false override evaluateOptions config', async () => {
+      const tempConfig = writeTempConfig(
+        tmpDir,
+        'test-generate-suggestions-disabled-evaluate.yaml',
+        {
+          evaluateOptions: {
+            generateSuggestions: true,
+            suggestionsCount: 4,
+          },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      );
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+        generateSuggestions: false,
+      });
+
+      expect(options.generateSuggestions).toBe(false);
+      expect(options.suggestionsCount).toBe(4);
+    });
+
+    it('should let commandLineOptions.generateSuggestions=false override evaluateOptions.generateSuggestions=true', async () => {
+      const tempConfig = writeTempConfig(
+        tmpDir,
+        'test-cli-options-disable-overrides-evaluate.yaml',
+        {
+          commandLineOptions: { generateSuggestions: false },
+          evaluateOptions: { generateSuggestions: true, suggestionsCount: 4 },
+          providers: [{ id: 'openai:gpt-4o-mini' }],
+          prompts: ['Test prompt'],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      );
+
+      const options = await runEvalAndGetOptions({ config: [tempConfig] });
+
+      expect(options.generateSuggestions).toBe(false);
+      expect(options.suggestionsCount).toBe(4);
+    });
+
+    it('should honor cmdObj.suggestionsCount from non-Commander callers', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-cmdobj-suggestions-count.yaml', {
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+        generateSuggestions: true,
+        suggestionsCount: 7,
       });
 
       expect(options.generateSuggestions).toBe(true);
+      expect(options.suggestionsCount).toBe(7);
+    });
+
+    it('should let --suggest-prompts override an explicit generateSuggestions=false', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-suggest-prompts-overrides-disable.yaml', {
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+        generateSuggestions: false,
+        suggestPrompts: 5,
+      } as Partial<CommandLineOptions & Command>);
+
+      expect(options.generateSuggestions).toBe(true);
+      expect(options.suggestionsCount).toBe(5);
     });
 
     it('should respect commandLineOptions.table from config', async () => {

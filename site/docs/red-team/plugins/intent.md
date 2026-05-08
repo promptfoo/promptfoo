@@ -166,5 +166,4 @@ Separate materially different goals into separate intents. Use multi-step sequen
 - [Policy Plugin](policy.md), which tests whether the target follows custom rules
 - [Jailbreak Strategies](/docs/red-team/strategies/)
 - [Harmful Content](harmful.md)
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

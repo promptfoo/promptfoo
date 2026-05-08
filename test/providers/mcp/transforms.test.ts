@@ -63,9 +63,7 @@ describe('MCP createTransformResponse', () => {
   });
 
   it('should await async string function expressions before normalizing them', async () => {
-    const transform = createTransformResponse(
-      'async (result) => result.structuredContent.name',
-    );
+    const transform = createTransformResponse('async (result) => result.structuredContent.name');
 
     await expect(
       transform({ structuredContent: { name: 'Ada' } }, 'fallback text', context),

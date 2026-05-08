@@ -4,6 +4,7 @@ import {
   buildOpenClawProviderOptions,
   DEFAULT_GATEWAY_HOST,
   DEFAULT_GATEWAY_PORT,
+  resolveOpenClawBillingModelName,
 } from './shared';
 
 import type { ProviderOptions } from '../../types/providers';
@@ -42,5 +43,9 @@ export class OpenClawEmbeddingProvider extends OpenAiEmbeddingProvider {
   // Prevent fallback to OPENAI_API_HOST / OPENAI_BASE_URL.
   getApiUrl(): string {
     return this.config.apiBaseUrl || this.getApiUrlDefault();
+  }
+
+  protected getBillingModelName(): string {
+    return resolveOpenClawBillingModelName(this.config) || this.modelName;
   }
 }

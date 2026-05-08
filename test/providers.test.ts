@@ -10,6 +10,7 @@ import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
+import { OpenAiRealtimeProvider } from '../src/providers/openai/realtime';
 import { OpenAiResponsesProvider } from '../src/providers/openai/responses';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
@@ -26,6 +27,7 @@ vi.mock('../src/util/fetch/index.ts');
 vi.mock('../src/providers/http');
 vi.mock('../src/providers/openai/chat');
 vi.mock('../src/providers/openai/embedding');
+vi.mock('../src/providers/openai/realtime');
 vi.mock('../src/providers/openai/responses');
 vi.mock('../src/providers/pythonCompletion');
 vi.mock('../src/providers/scriptCompletion');
@@ -555,6 +557,40 @@ describe('loadApiProvider', () => {
       expect(provider).toBeDefined();
     } finally {
       (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalModelNames;
+    }
+  });
+
+  it('should auto-route OpenAI audio shorthand to chat', async () => {
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalResponsesModelNames = (OpenAiResponsesProvider as any)
+      .OPENAI_RESPONSES_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = ['gpt-audio'];
+    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = [];
+    try {
+      const provider = await loadApiProvider('openai:gpt-audio');
+      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-audio', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
+    }
+  });
+
+  it('should default OpenAI realtime to a current model', async () => {
+    const provider = await loadApiProvider('openai:realtime');
+    expect(OpenAiRealtimeProvider).toHaveBeenCalledWith('gpt-realtime-1.5', expect.any(Object));
+    expect(provider).toBeDefined();
+  });
+
+  it('should auto-route OpenAI realtime 2 shorthand to realtime', async () => {
+    const originalModelNames = (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES;
+    (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = ['gpt-realtime-2'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-realtime-2');
+      expect(OpenAiRealtimeProvider).toHaveBeenCalledWith('gpt-realtime-2', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiRealtimeProvider as any).OPENAI_REALTIME_MODEL_NAMES = originalModelNames;
     }
   });
 

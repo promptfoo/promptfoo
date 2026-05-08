@@ -1,15 +1,20 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 
+const execFileAsync = promisify(execFile);
+
 const repoRoot = path.resolve(__dirname, '../..');
 const pluginRoot = path.join(repoRoot, 'plugins', 'promptfoo');
 const existingClaudePluginRoot = path.join(repoRoot, 'plugins', 'promptfoo-evals');
+const repoClaudeSkillsRoot = path.join(repoRoot, '.claude', 'skills');
+const repoCodexSkillsRoot = path.join(repoRoot, '.agents', 'skills');
 const evalsSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-evals');
 const providerSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-provider-setup');
 const redteamSetupSkillRoot = path.join(pluginRoot, 'skills', 'promptfoo-redteam-setup');
@@ -1908,8 +1913,13 @@ describe('promptfoo Codex plugin package', () => {
       }
     > = {
       'promptfoo-evals': {
-        positives: ['eval configs', 'test cases', 'assertions', 'non-redteam'],
-        negatives: ['Do not use', 'provider connection', 'redteam plugin/strategy setup'],
+        positives: ['non-redteam promptfoo eval suites', 'test cases', 'assertions'],
+        negatives: [
+          'Do not use',
+          'connecting a new target/provider',
+          'smoke-testing an endpoint',
+          'redteam plugin/strategy setup',
+        ],
       },
       'promptfoo-provider-setup': {
         positives: ['providers or redteam targets', 'live HTTP', 'static-code-derived'],
@@ -1975,7 +1985,7 @@ describe('promptfoo Codex plugin package', () => {
 
     expect(docs).toContain('Via Claude Code marketplace');
     expect(docs).toContain('Via Codex plugin bundle');
-    expect(docs).toContain('repo-local Codex usage');
+    expect(docs).toContain('preferred Codex');
     expect(docs).toContain('intentionally no meta selector skill');
     expect(docs).toContain("routes from each skill's");
     expect(docs).toContain('Python providers are first-class');
@@ -2035,6 +2045,47 @@ describe('promptfoo Codex plugin package', () => {
     }
     expect(codexSkill).toContain('If the provider does not work yet, switch to');
     expect(codexReference).toContain('promptfoo-provider-setup');
+  });
+
+  it('keeps the repo-local and published portable eval skill copies byte-for-byte aligned', () => {
+    for (const relativePath of ['SKILL.md', path.join('references', 'cheatsheet.md')]) {
+      const repoLocalFile = readText(
+        path.join(repoClaudeSkillsRoot, 'promptfoo-evals', relativePath),
+      );
+      const publishedFile = readText(
+        path.join(existingClaudePluginRoot, 'skills', 'promptfoo-evals', relativePath),
+      );
+
+      expect(repoLocalFile).toBe(publishedFile);
+    }
+  });
+
+  it('keeps every repo-local Claude skill discoverable through canonical SKILL.md casing', () => {
+    const repoLocalSkillDirs = fs
+      .readdirSync(repoClaudeSkillsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+
+    expect(repoLocalSkillDirs).toEqual(
+      expect.arrayContaining(['promptfoo-evals', 'redteam-plugin-development', 'search-params']),
+    );
+
+    for (const skillDir of repoLocalSkillDirs) {
+      const skillRoot = path.join(repoClaudeSkillsRoot, skillDir);
+      const entries = fs.readdirSync(skillRoot);
+      expect(entries).toContain('SKILL.md');
+      expect(entries).not.toContain('skill.md');
+    }
+  });
+
+  it('keeps shared repo-local contributor skills aligned between Claude and Codex', () => {
+    for (const skillDir of ['redteam-plugin-development', 'search-params']) {
+      const claudeSkill = readText(path.join(repoClaudeSkillsRoot, skillDir, 'SKILL.md'));
+      const codexSkill = readText(path.join(repoCodexSkillsRoot, skillDir, 'SKILL.md'));
+
+      expect(codexSkill).toBe(claudeSkill);
+    }
   });
 
   it('keeps every agents/openai.yaml aligned with UI metadata constraints', () => {
@@ -2183,7 +2234,7 @@ describe('promptfoo Codex plugin package', () => {
     }
   });
 
-  it('keeps Python file providers executable and on the promptfoo function contract', () => {
+  it('keeps Python file providers executable and on the promptfoo function contract', async () => {
     const configPaths = listFiles(fixtureRoot, (filePath) =>
       ['promptfooconfig.yaml', 'redteam.yaml'].includes(path.basename(filePath)),
     );
@@ -2219,22 +2270,29 @@ describe('promptfoo Codex plugin package', () => {
       'redteam-setup-static-code-python/target.py:invoice_redteam_target',
     ]);
 
-    for (const { absolutePath, context, functionName, reference } of pythonReferences.values()) {
-      const script = readText(absolutePath);
-      expect(script, `${context}: ${reference}`).toContain(`def ${functionName}(`);
+    const pythonEnv = { ...process.env, OAIPKG_DISABLE_META_MISSING: '1' };
+    await Promise.all(
+      [...pythonReferences.values()].map(
+        async ({ absolutePath, context, functionName, reference }) => {
+          const script = readText(absolutePath);
+          expect(script, `${context}: ${reference}`).toContain(`def ${functionName}(`);
 
-      const output = execFileSync(fixturePythonExecutable, [absolutePath], {
-        cwd: path.dirname(absolutePath),
-        encoding: 'utf8',
-        env: { ...process.env, OAIPKG_DISABLE_META_MISSING: '1' },
-      });
-      const parsed = JSON.parse(output) as ProviderResult;
-      expect(typeof parsed.output, `${absolutePath} should print JSON with output`).toBe('string');
-      expect(
-        String(parsed.output).length,
-        `${absolutePath} output should be non-empty`,
-      ).toBeGreaterThan(0);
-    }
+          const { stdout } = await execFileAsync(fixturePythonExecutable, [absolutePath], {
+            cwd: path.dirname(absolutePath),
+            encoding: 'utf8',
+            env: pythonEnv,
+          });
+          const parsed = JSON.parse(stdout) as ProviderResult;
+          expect(typeof parsed.output, `${absolutePath} should print JSON with output`).toBe(
+            'string',
+          );
+          expect(
+            String(parsed.output).length,
+            `${absolutePath} output should be non-empty`,
+          ).toBeGreaterThan(0);
+        },
+      ),
+    );
   });
 
   it('keeps packaged configs and fixtures free of literal secrets', () => {
@@ -2547,11 +2605,13 @@ describe('promptfoo-evals skill', () => {
     const skill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
 
     expect(skill).toMatch(/^---\nname: promptfoo-evals\n/);
-    expect(skill).toContain('prompts, providers, vars, test cases, assertions');
+    expect(skill).toContain('after the target');
+    expect(skill).toContain('or provider already works');
+    expect(skill).toContain('prompts, vars, test cases, assertions');
     expect(skill).toContain('model-graded rubrics');
-    expect(skill).toContain('non-redteam evaluation suites');
-    expect(skill).toContain('Do not use for initial');
-    expect(skill).toContain('provider connection work');
+    expect(skill).toContain('non-redteam promptfoo eval suites');
+    expect(skill).toContain('connecting a new target/provider');
+    expect(skill).toContain('smoke-testing');
     expect(skill).toContain('redteam plugin/strategy setup');
   });
 
@@ -4822,6 +4882,8 @@ describe('promptfoo-redteam-setup skill', () => {
     expect(skill).toContain('Write the target and purpose');
     expect(skill).toContain('Choose a small plugin set');
     expect(skill).toContain('Choose strategies conservatively');
+    expect(skill).toContain('Use `jailbreak:meta` for the default first setup/generation pass.');
+    expect(skill).toContain('Use `jailbreak:hydra` instead when the target is stateful');
     expect(skill).toContain('search route handlers, API clients, tests');
     expect(skill).toContain('object IDs imply `bola`');
     expect(skill).toContain("Promptfoo's default redteam generation");
@@ -4877,6 +4939,9 @@ describe('promptfoo-redteam-setup skill', () => {
 
     expect(reference).toContain('Single-input HTTP policy scan');
     expect(reference).toContain('Multi-input authorization scan');
+    expect(reference).toContain('Multi-input is not the same as multi-turn.');
+    expect(reference).toContain('jailbreak:meta');
+    expect(reference).toContain('jailbreak:hydra');
     expect(reference).toContain('provider: file://./redteam-generator.mjs');
     expect(reference).toContain('file://./redteam-generator.py');
     expect(reference).toContain('call_api(prompt, options, context)');
@@ -4942,6 +5007,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'id: policy',
         'frameworks:',
         'strategies:',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4953,6 +5019,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'trip_id:',
         'redteam-generator.mjs',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4966,6 +5033,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.mjs',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4978,6 +5046,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.mjs',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
     {
@@ -4992,6 +5061,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'redteam-generator.py',
         'id: policy',
         'id: rbac',
+        'jailbreak:meta',
       ],
     },
   ])('ships a validatable $dir redteam setup fixture', ({ dir, snippets }) => {
@@ -5215,6 +5285,7 @@ describe('promptfoo-redteam-setup skill', () => {
       { id: 'rbac', numTests: 1 },
       { id: 'bola', numTests: 1 },
     ]);
+    expect(generated.redteam.strategies).toEqual(['jailbreak:meta']);
     const [policyPlugin] = generated.redteam.plugins as unknown[];
     expectRecord(policyPlugin, 'Generated OpenAPI redteam policy plugin');
     expectRecord(policyPlugin.config, 'Generated OpenAPI redteam policy config');

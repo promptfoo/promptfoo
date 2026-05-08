@@ -60,18 +60,26 @@ vi.mock('fs', () => ({
   mkdirSync: vi.fn(),
 }));
 
-vi.mock('fs/promises', () => ({
-  // Delegate to fs.readFileSync mock for shared test data
-  readFile: vi.fn((...args: unknown[]) => {
-    try {
-      return Promise.resolve(mockReadFileSync(...args));
-    } catch (error) {
-      return Promise.reject(error);
-    }
-  }),
-  writeFile: vi.fn(),
-  mkdir: vi.fn(),
-}));
+vi.mock('fs/promises', () => {
+  const promisesFs = {
+    // Delegate to fs.readFileSync mock for shared test data
+    readFile: vi.fn((...args: unknown[]) => {
+      try {
+        return Promise.resolve(mockReadFileSync(...args));
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }),
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+    access: vi.fn().mockResolvedValue(undefined),
+  };
+
+  return {
+    ...promisesFs,
+    default: promisesFs,
+  };
+});
 
 vi.mock('../../src/database', () => ({
   getDb: vi.fn(),
