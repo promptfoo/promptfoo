@@ -645,6 +645,23 @@ describe('extractMathAnswer', () => {
         'a = 2',
       );
     });
+
+    it.each([
+      ['$$2$$ Answer: 3', '3'],
+      ['$$5+5$$ Total: 10', '10'],
+      ['work $$2$$, final answer: 3', '3'],
+    ])('prefers a labelled answer after a same-line display fence (%s → %s)', (input, expected) => {
+      // Pre-fix: fence-on-the-last-line skipped extractFromLastLine and the
+      // display-block scanner returned the intermediate fenced value
+      // ("2", "5+5"), ignoring the labelled final answer that came
+      // after the fence on the same line.
+      expect(extractMathAnswer(input)).toBe(expected);
+    });
+
+    it('grades $$2$$ Answer: 3 against 3, not the intermediate 2', () => {
+      expect(isMathEquivalent('$$2$$ Answer: 3', 3).pass).toBe(true);
+      expect(isMathEquivalent('$$2$$ Answer: 3', 2).pass).toBe(false);
+    });
   });
 
   describe('approximation chains (≈, \\approx) split like equality chains', () => {

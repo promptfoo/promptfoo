@@ -331,6 +331,15 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   }
   let candidate = cleanedLines[cleanedLines.length - 1];
   candidate = candidate.replace(/^[A-Za-z][A-Za-z\s]*:\s*/, '');
+  // Mid-line label after a stripped display fence ("$$2$$ Answer: 3" cleans
+  // to "2 Answer: 3" — the labelled answer is the real one). Take the
+  // rightmost "<Word(s)>: <rest>" suffix when one exists. The leading `\s`
+  // anchor keeps this from re-firing on a label that's already at the
+  // start (handled above) and avoids matching `f(x):...` style colons.
+  const labelMatch = candidate.match(/\s([A-Za-z][A-Za-z\s]*):\s*(\S.*)$/);
+  if (labelMatch) {
+    candidate = labelMatch[2].trim();
+  }
   candidate = candidate.replace(/,\s+(?=[A-Za-z]|\\\().*$/, '');
   candidate = candidate.trim();
   if (!candidate) {
@@ -442,16 +451,16 @@ export function extractMathAnswer(text: string): string {
     }
   }
 
-  // A bare display fence on the last visible line means the cleaned final
-  // line is just the unwrapped expression — let the display-block scanner
-  // handle it (so e.g. `\boxed{...}` inside a fence is preferred).
-  const lastVisibleHasFence = /\$\$|\\\[|\\\]/.test(lastVisible);
-
-  if (!lastVisibleHasFence) {
-    const lineAnswer = extractFromLastLine(cleanedLines);
-    if (lineAnswer) {
-      return lineAnswer;
-    }
+  // Always try the cleaned final line first, even when the last visible
+  // line itself has a display fence. The cleaned line has the fence
+  // stripped, so labelled finals on the same line as a fence (e.g.
+  // "$$2$$ Answer: 3" → cleans to "2 Answer: 3") still get extracted via
+  // the mid-line label rule in extractFromLastLine. extractFromLastLine
+  // already returns undefined for pure prose, so the display-block scan
+  // below still wins for prose-only trailers.
+  const lineAnswer = extractFromLastLine(cleanedLines);
+  if (lineAnswer) {
+    return lineAnswer;
   }
 
   const blockAnswer = extractFromDisplayBlocks(visible);
@@ -468,7 +477,7 @@ export function extractMathAnswer(text: string): string {
     return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
   }
 
-  return extractFromLastLine(cleanedLines) ?? cleaned;
+  return cleaned;
 }
 
 export type MathEquivalentResult = {
