@@ -390,7 +390,11 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
-  /** Evaluation ID this result belongs to. Used to look up traces via the trace API. */
+  /**
+   * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
+   * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
+   * Absent when tracing is disabled — its presence implies a trace context exists.
+   */
   evaluationId?: string;
   /** W3C trace ID generated for this row when tracing is enabled. */
   traceId?: string;

@@ -274,6 +274,15 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
+// `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
+// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
+// log so the rare collision is visible.
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function persistTraceMetadata(
   metadata: EvaluateResult['metadata'],
   traceId: EvaluateResult['traceId'],
@@ -284,17 +293,17 @@ function persistTraceMetadata(
   }
 
   const metadataRecord = metadata ?? {};
-  const promptfooMetadata =
-    metadataRecord.__promptfoo &&
-    typeof metadataRecord.__promptfoo === 'object' &&
-    !Array.isArray(metadataRecord.__promptfoo)
-      ? (metadataRecord.__promptfoo as Record<string, unknown>)
-      : {};
+  const promptfooMetadata = asRecord(metadataRecord.__promptfoo);
+  if (metadataRecord.__promptfoo !== undefined && promptfooMetadata === undefined) {
+    logger.warn(
+      '[EvalResult] Overwriting non-object metadata.__promptfoo with internal trace linkage; the key is reserved for promptfoo internals.',
+    );
+  }
 
   return {
     ...metadataRecord,
     __promptfoo: {
-      ...promptfooMetadata,
+      ...(promptfooMetadata ?? {}),
       traceLinkage: {
         ...(traceId ? { traceId } : {}),
         ...(evaluationId ? { evaluationId } : {}),
@@ -309,18 +318,8 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   metadata: Record<string, unknown>;
 } {
   const metadataRecord = metadata ?? {};
-  const promptfooMetadata =
-    metadataRecord.__promptfoo &&
-    typeof metadataRecord.__promptfoo === 'object' &&
-    !Array.isArray(metadataRecord.__promptfoo)
-      ? (metadataRecord.__promptfoo as Record<string, unknown>)
-      : undefined;
-  const traceLinkage =
-    promptfooMetadata?.traceLinkage &&
-    typeof promptfooMetadata.traceLinkage === 'object' &&
-    !Array.isArray(promptfooMetadata.traceLinkage)
-      ? (promptfooMetadata.traceLinkage as Record<string, unknown>)
-      : undefined;
+  const promptfooMetadata = asRecord(metadataRecord.__promptfoo);
+  const traceLinkage = asRecord(promptfooMetadata?.traceLinkage);
 
   const traceId = typeof traceLinkage?.traceId === 'string' ? traceLinkage.traceId : undefined;
   const evaluationId =
@@ -441,9 +440,12 @@ export default class EvalResult {
       for (const result of processedResults) {
         // See `createFromEvaluateResult` for why `testCase` and `prompt` go
         // through the credential-redacting sanitizer while the other fields
-        // stay on the lighter `sanitizeForDb`.
+        // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
+        // via `persistTraceMetadata`; strip the top-level fields so the DB write
+        // only carries known-schema columns.
+        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
         const sanitizedResult = {
-          ...result,
+          ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
           prompt: sanitizeForDbWithSecrets(result.prompt),
           response: sanitizeResponseForDb(sanitizeForDb(result.response)),

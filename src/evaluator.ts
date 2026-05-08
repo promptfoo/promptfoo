@@ -972,7 +972,9 @@ function createEvaluateResult({
   vars: Vars;
 }): EvaluateResult {
   const traceId = getTraceId(traceContext);
-  const evaluationId = traceContext?.evaluationId ?? evalId;
+  // Only set evaluationId when a trace context exists. Pairing it with traceId keeps
+  // the field's presence as a "this row was traced" signal for downstream consumers.
+  const evaluationId = traceContext ? (traceContext.evaluationId ?? evalId) : undefined;
   const ret: EvaluateResult = {
     ...setup,
     prompt: { ...rendered.setup.prompt, raw: rendered.renderedPrompt },
@@ -1250,8 +1252,15 @@ function getTraceId(
   if (!traceContext?.traceparent) {
     return undefined;
   }
+  // W3C traceparent: `version-traceId-spanId-flags` (4 dash-separated parts).
   const parts = traceContext.traceparent.split('-');
-  return parts.length >= 3 ? parts[1] : undefined;
+  if (parts.length !== 4) {
+    logger.warn(
+      `[Evaluator] Malformed traceparent (expected 4 parts, got ${parts.length}); dropping trace linkage on this row.`,
+    );
+    return undefined;
+  }
+  return parts[1];
 }
 
 /**

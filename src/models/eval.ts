@@ -283,6 +283,11 @@ export class EvalQueries {
     if (!trimmedKey) {
       return [];
     }
+    // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+    // it through the metadata-values API even though it lives in the same JSON column.
+    if (trimmedKey === '__promptfoo' || trimmedKey.startsWith('__promptfoo.')) {
+      return [];
+    }
 
     try {
       const escapedKey = escapeJsonPathKey(trimmedKey);

@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
@@ -178,6 +179,27 @@ describe('EvalResult', () => {
         traceId: 'single-trace-id',
         evaluationId: 'single-evaluation-id',
         metadata: { source: 'single' },
+      });
+    });
+
+    it('warns and overwrites when user metadata.__promptfoo is non-object', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const result = await EvalResult.createFromEvaluateResult('test-eval-non-object-promptfoo', {
+        ...mockEvaluateResult,
+        traceId: 'wins-over-user',
+        evaluationId: 'wins-over-user',
+        metadata: { userKey: 'kept', __promptfoo: 'unexpected-string' as any },
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('non-object metadata.__promptfoo'),
+      );
+      // Trace linkage takes precedence; non-object value is overwritten (not preserved).
+      expect(result.toEvaluateResult()).toMatchObject({
+        traceId: 'wins-over-user',
+        evaluationId: 'wins-over-user',
+        metadata: { userKey: 'kept' },
       });
     });
 
@@ -884,6 +906,81 @@ describe('EvalResult', () => {
 
       const retrieved = await EvalResult.findById(result.id);
       expect(retrieved?.score).toBe(0.5);
+    });
+
+    it('preserves trace linkage when save() updates an existing row', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-save-trace', {
+        ...mockEvaluateResult,
+        traceId: 'persisted-trace-id',
+        evaluationId: 'persisted-evaluation-id',
+        metadata: { source: 'pre-save' },
+      });
+
+      result.score = 0.42;
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        score: 0.42,
+        traceId: 'persisted-trace-id',
+        evaluationId: 'persisted-evaluation-id',
+        metadata: { source: 'pre-save' },
+      });
+      expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
+    });
+
+    it('persists trace linkage mutated after construction', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-mutate-trace', {
+        ...mockEvaluateResult,
+        traceId: 'initial-trace',
+        evaluationId: 'initial-evaluation',
+      });
+
+      result.traceId = 'updated-trace';
+      result.evaluationId = 'updated-evaluation';
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.traceId).toBe('updated-trace');
+      expect(retrieved?.evaluationId).toBe('updated-evaluation');
+    });
+
+    it('clears trace linkage when both fields are unset before save()', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-clear-trace', {
+        ...mockEvaluateResult,
+        traceId: 'about-to-clear',
+        evaluationId: 'about-to-clear',
+        metadata: { source: 'clear-test' },
+      });
+
+      result.traceId = undefined;
+      result.evaluationId = undefined;
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.traceId).toBeUndefined();
+      expect(retrieved?.evaluationId).toBeUndefined();
+      expect(retrieved?.metadata).toEqual({ source: 'clear-test' });
+    });
+
+    it('save() is idempotent when called multiple times without changes', async () => {
+      const result = await EvalResult.createFromEvaluateResult('test-eval-idempotent', {
+        ...mockEvaluateResult,
+        traceId: 'idempotent-trace',
+        evaluationId: 'idempotent-evaluation',
+        metadata: { source: 'idempotent' },
+      });
+
+      await result.save();
+      await result.save();
+      await result.save();
+
+      const retrieved = await EvalResult.findById(result.id);
+      expect(retrieved?.toEvaluateResult()).toMatchObject({
+        traceId: 'idempotent-trace',
+        evaluationId: 'idempotent-evaluation',
+        metadata: { source: 'idempotent' },
+      });
     });
   });
 
