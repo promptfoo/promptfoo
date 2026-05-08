@@ -290,6 +290,22 @@ describe('cleanMathText', () => {
     expect(cleanMathText(input)).toBe(expected);
   });
 
+  it.each([
+    ['1/2 m', '1/2'],
+    ['1/2m', '1/2'],
+    ['1.5/2.5 kg', '1.5/2.5'],
+    ['\\frac{1}{2} kg', '\\frac{1}{2}'],
+    ['\\frac{1}{2}m', '\\frac{1}{2}'],
+    ['\\frac{8\\pi}{3} m', '\\frac{8\\pi}{3}'],
+    ['\\dfrac{1}{2} m', '\\dfrac{1}{2}'],
+    ['\\sqrt{2} m', '\\sqrt{2}'],
+  ])('strips trailing unit after a fractional/LaTeX answer (%s → %s)', (input, expected) => {
+    // The unit cleanup previously only matched a plain integer/decimal as
+    // the left context, so "1/2 m" or "\\frac{1}{2} kg" left the unit in
+    // place and CE then parsed it as a symbolic factor (e.g. `m`).
+    expect(cleanMathText(input)).toBe(expected);
+  });
+
   it('strips display math $$...$$', () => {
     expect(cleanMathText('$$\\frac{1}{2}$$')).toBe('\\frac{1}{2}');
   });
@@ -890,6 +906,15 @@ describe('isMathEquivalent', () => {
       ['45deg', 45],
       ['100ms', '100'],
     ])('grades unit-attached numeric answers "%s" against %s', (actual, expected) => {
+      expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
+    });
+
+    it.each([
+      ['1/2 m', '0.5'],
+      ['\\frac{1}{2} kg', 0.5],
+      ['\\frac{1}{2}m', '0.5'],
+      ['\\sqrt{2} m', '\\sqrt{2}'],
+    ])('grades fractional / LaTeX answers with trailing units "%s" against %s', (actual, expected) => {
       expect(isMathEquivalent(actual, expected as string | number).pass).toBe(true);
     });
 

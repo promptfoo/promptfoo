@@ -891,9 +891,11 @@ trip up `equals` and `contains`:
 - European decimal commas (`2,00625` → `2.00625`) and US thousands
   separators (`1,234,567` → `1234567`)
 - Trailing units (`m`, `km`, `cm`, `mm`, `s`, `ms`, `kg`, `g`, `rad`, `deg`, `°`),
-  whether whitespace-separated (`10 kg`) or directly attached (`10kg`, `45deg`).
-  Units are only stripped when a number is the immediate left context, so
-  algebraic expressions like `x + m` and an expected `2*m` are left intact.
+  whether whitespace-separated (`10 kg`), directly attached (`10kg`, `45deg`),
+  or following a fraction / LaTeX command (`1/2 m`, `\frac{1}{2} kg`,
+  `\sqrt{2} m`). Units are only stripped when a self-contained math value is
+  the immediate left context, so algebraic expressions like `x + m` and an
+  expected `2*m` are left intact.
 - Variable-assignment prefixes (`V = 5.09`, `x_0 = 3`, `P(Safe|F) = 0.0113`)
 - Approximation symbols (`≈`, `\approx`) treated as equality
 - Equality chains (`230/530 = 23/53`) — the rightmost parseable segment wins

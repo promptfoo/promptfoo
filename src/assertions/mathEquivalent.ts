@@ -129,12 +129,20 @@ export function cleanMathText(text: string): string {
   // Trailing backslash-space sequences left over from \text removal.
   s = s.trim().replace(/\\+\s*$/, '');
 
-  // Trailing common units. Anchor the strip so a NUMBER must be the
-  // immediate left context of the unit — preserves both attached forms like
-  // "10kg" / "45deg" and whitespace-separated "10 m", while leaving algebraic
-  // expressions intact ("x + m" stays "x + m", an expected "2*m" stays
-  // "2*m"). Longer alternatives first so "100ms" matches "ms", not "m".
-  s = s.trim().replace(/(^|\s)(-?\d+(?:\.\d+)?)\s*(?:rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/, '$1$2');
+  // Trailing common units. Anchor the strip so a SELF-CONTAINED math value
+  // must be the immediate left context of the unit — a number, a numeric
+  // fraction (`1/2`, `1.5/2.5`), or a LaTeX command with its braces
+  // (`\frac{1}{2}`, `\dfrac{8\pi}{3}`, `\sqrt{2}`). This preserves both
+  // attached forms ("10kg") and whitespace-separated ("10 m", "1/2 m",
+  // "\frac{1}{2} kg"), while leaving algebraic expressions intact
+  // ("x + m" stays "x + m", an expected "2*m" stays "2*m"). Longer unit
+  // alternatives come first so "100ms" matches "ms", not "m".
+  s = s
+    .trim()
+    .replace(
+      /(^|\s)((?:-?\d+(?:\.\d+)?(?:\/\d+(?:\.\d+)?)?)|\\[A-Za-z]+(?:\{[^{}]*\}){1,2})\s*(?:rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/,
+      '$1$2',
+    );
   s = s.trim().replace(/\s*°\s*$/, '');
 
   // Display math fences.
