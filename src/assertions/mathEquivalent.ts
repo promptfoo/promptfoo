@@ -244,7 +244,7 @@ export function tryParseEachSegment(text: string): BoxedExpression | undefined {
 
 const TRIVIAL_LINE = /^[\\\]\[\)\(}\s]*$/;
 const BOXED_PATTERN = /\\boxed\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}/g;
-const DISPLAY_BLOCK_PATTERN = /\$\$([\s\S]*?)\$\$/g;
+const DISPLAY_BLOCK_PATTERN = /\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]/g;
 
 function findAllBoxed(text: string): string[] {
   return [...text.matchAll(BOXED_PATTERN)].map((m) => m[1]);
@@ -365,7 +365,9 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
 }
 
 function extractFromDisplayBlocks(text: string): string | undefined {
-  const blocks = [...text.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1]);
+  // DISPLAY_BLOCK_PATTERN is `$$...$$` OR `\[...\]`; pick whichever capture
+  // group fired so both forms feed the fallback equivalently.
+  const blocks = [...text.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1] ?? m[2] ?? '');
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
     const boxed = findAllBoxed(block);
@@ -395,13 +397,18 @@ function stripThinkingBlocks(text: string): string {
  * Extract the mathematical answer from arbitrary model prose.
  *
  * Priority (highest first):
- *  1. Last `\boxed{}` in the cleaned text.
- *  2. Last non-trivial cleaned line, if its raw counterpart has no `$$` fence
- *     — pulls the rightmost numeric/LaTeX token from prose like
- *     "The answer is 0.5" or "$$intermediate$$\nAnswer: final".
- *  3. Latest `$$...$$` display block (boxed inside, then parseable content),
- *     scanned over the visible text only (thinking blocks excluded).
- *  4. Last cleaned line as-is.
+ *  1. `\boxed{}` on the last visible line — that's the actual final answer.
+ *  2. Last non-trivial cleaned line, if its raw counterpart has no `$$` /
+ *     `\[ \]` / `\boxed` fence — pulls the rightmost numeric/LaTeX token
+ *     from prose like "The answer is 0.5" or "$$intermediate$$\nAnswer:
+ *     final". Intermediate `\boxed` work is demoted by this step so the
+ *     real final-line answer wins.
+ *  3. Latest display block (`$$...$$` or `\[...\]`, boxed inside first,
+ *     then parseable content), scanned over the visible text only
+ *     (thinking blocks excluded).
+ *  4. Last `\boxed{}` anywhere in the cleaned text — fallback for shown
+ *     work when (2) and (3) didn't yield anything.
+ *  5. Last cleaned line as-is.
  */
 export function extractMathAnswer(text: string): string {
   if (!text) {
@@ -410,21 +417,31 @@ export function extractMathAnswer(text: string): string {
 
   const cleaned = cleanMathText(text);
 
-  const cleanedBoxed = findAllBoxed(cleaned);
-  if (cleanedBoxed.length > 0) {
-    return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
-  }
-
-  // Use the thinking-stripped text as the source of truth for both display
-  // block scanning and "is the last raw line a fence?" detection so hidden
+  // Use the thinking-stripped text as the source of truth for display-block
+  // scanning and "is the last raw line a fence?" detection so hidden
   // reasoning never leaks into the extracted answer.
   const visible = stripThinkingBlocks(text);
 
   const cleanedLines = filterNonTrivialLines(cleaned);
   const visibleLines = filterNonTrivialLines(visible);
-  const lastVisibleHasDisplay = (visibleLines[visibleLines.length - 1] ?? '').includes('$$');
+  const lastVisible = visibleLines[visibleLines.length - 1] ?? '';
 
-  if (!lastVisibleHasDisplay) {
+  // Boxed *on the last visible line* is the real final answer — bypass
+  // every other path. Intermediate boxed work earlier in the response
+  // intentionally falls through to the final-line / display-block check.
+  if (/\\boxed\{/.test(lastVisible)) {
+    const cleanedBoxed = findAllBoxed(cleaned);
+    if (cleanedBoxed.length > 0) {
+      return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
+    }
+  }
+
+  // A bare display fence on the last visible line means the cleaned final
+  // line is just the unwrapped expression — let the display-block scanner
+  // handle it (so e.g. `\boxed{...}` inside a fence is preferred).
+  const lastVisibleHasFence = /\$\$|\\\[|\\\]/.test(lastVisible);
+
+  if (!lastVisibleHasFence) {
     const lineAnswer = extractFromLastLine(cleanedLines);
     if (lineAnswer) {
       return lineAnswer;
@@ -434,6 +451,15 @@ export function extractMathAnswer(text: string): string {
   const blockAnswer = extractFromDisplayBlocks(visible);
   if (blockAnswer) {
     return blockAnswer;
+  }
+
+  // Final fallback: any boxed anywhere in the cleaned text (e.g. when the
+  // last visible line was prose with no math and the display-block scan
+  // also failed). This preserves the legacy "last \\boxed wins" behavior
+  // for shown work.
+  const cleanedBoxed = findAllBoxed(cleaned);
+  if (cleanedBoxed.length > 0) {
+    return cleanMathText(cleanedBoxed[cleanedBoxed.length - 1].trim());
   }
 
   return extractFromLastLine(cleanedLines) ?? cleaned;

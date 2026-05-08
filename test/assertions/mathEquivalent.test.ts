@@ -620,6 +620,20 @@ describe('extractMathAnswer', () => {
       expect(extractMathAnswer('$$2$$\nAnswer: 3')).toBe('3');
     });
 
+    it('prefers "Answer: 3" on the last line over an earlier intermediate \\boxed{2}', () => {
+      // Pre-fix: findAllBoxed ran before the final-line check, so an
+      // intermediate boxed step (e.g. shown work) silently beat the actual
+      // final answer.
+      expect(extractMathAnswer('$$\\boxed{2}$$\nAnswer: 3')).toBe('3');
+    });
+
+    it('still uses \\boxed{42} when the last visible line itself is the boxed answer', () => {
+      // The "boxed-on-the-last-line" case must keep working; only
+      // intermediate boxed work should be skipped in favor of a later
+      // final-answer line.
+      expect(extractMathAnswer('Step 1: foo\nStep 2: bar\n$$\\boxed{42}$$')).toBe('42');
+    });
+
     it('prefers a final-line numeric over an earlier display block', () => {
       expect(extractMathAnswer('Calculation: $$2 + 2$$\nFinal answer is 4')).toBe('4');
     });
@@ -655,6 +669,20 @@ describe('extractMathAnswer', () => {
 
     it('falls back to the earlier display block when the last line is "Done."', () => {
       expect(extractMathAnswer('$$42$$\nDone.')).toBe('42');
+    });
+
+    it('falls back to an earlier \\[ ... \\] display block when the last line is prose', () => {
+      // \\[ ... \\] is documented as tolerated display math; falling back to
+      // it on a prose-only trailer must work the same as $$...$$.
+      expect(extractMathAnswer('\\[\\frac{1}{2}\\]\nThis is the final result.')).toBe(
+        '\\frac{1}{2}',
+      );
+    });
+
+    it('grades \\[\\frac{1}{2}\\] + prose trailer against 0.5', () => {
+      expect(isMathEquivalent('\\[\\frac{1}{2}\\]\nThis is the final result.', '0.5').pass).toBe(
+        true,
+      );
     });
 
     it('still grades $$\\frac{1}{2}$$ + prose trailer against 0.5', () => {
