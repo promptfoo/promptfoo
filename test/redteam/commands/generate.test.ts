@@ -3290,6 +3290,62 @@ describe('redteam generate command with target option', () => {
     ]);
   });
 
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+  ])('should handle backwards compatibility when targets is %s', async (_label, targets) => {
+    const mockConfig = {
+      prompts: ['Test prompt'],
+      vars: {},
+      providers: [{ id: 'test-provider' }],
+      targets,
+      redteam: {
+        plugins: ['harmful:hate'] as any,
+        strategies: [],
+      },
+    } as any;
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+
+    // Mock fs to handle the temp file write
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    const configUUID = '12345678-1234-1234-1234-123456789012';
+    const targetUUID = '87654321-4321-4321-4321-210987654321';
+
+    // Find the generate command
+    const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
+
+    await generateCommand!.parseAsync([
+      'node',
+      'test',
+      '--config',
+      configUUID,
+      '--target',
+      targetUUID,
+      '--output',
+      'test-output.yaml',
+    ]);
+
+    expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
+    expect(mockConfig.targets).toEqual([
+      {
+        id: `promptfoo://provider/${targetUUID}`,
+        config: {},
+      },
+    ]);
+  });
+
   it('should throw error when target is not a UUID but config is', async () => {
     const configUUID = '12345678-1234-1234-1234-123456789012';
     const invalidTarget = 'not-a-uuid';

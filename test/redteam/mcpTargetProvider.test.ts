@@ -209,6 +209,47 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     expect(target.calls).toHaveLength(0);
   });
 
+  it('returns a materialization error when inference provider call fails', async () => {
+    providerManagerMocks.getProvider.mockResolvedValueOnce({
+      id: () => 'openai:test',
+      callApi: async () => {
+        throw new Error('materialization failed');
+      },
+    });
+
+    const target = new FakeMcpProvider([
+      {
+        name: 'list_industries',
+        description: 'List industries.',
+        inputSchema: { type: 'object', properties: {} },
+      },
+      searchCompaniesTool,
+    ]);
+    const wrapped = maybeWrapMcpProviderForRedteam(target, {
+      metadata: {
+        pluginId: 'sql-injection',
+        purpose: 'Search companies',
+      },
+    });
+
+    const response = await wrapped.callApi('Search for clean energy companies.', {
+      prompt: {
+        raw: '{{prompt}}',
+        label: 'prompt',
+      },
+      vars: { prompt: 'Search for clean energy companies.' },
+      test: {
+        metadata: {
+          pluginId: 'sql-injection',
+          purpose: 'Search companies',
+        },
+      },
+    } as unknown as CallApiContextParams);
+
+    expect(response.error).toContain('Failed to materialize MCP target prompt');
+    expect(target.calls).toHaveLength(0);
+  });
+
   it('does not wrap non-redteam MCP calls', () => {
     const target = new FakeMcpProvider([searchCompaniesTool]);
 

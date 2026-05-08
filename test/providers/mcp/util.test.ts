@@ -234,6 +234,43 @@ describe('discoverTokenEndpoint', () => {
     );
   });
 
+  it('should continue discovery when metadata has an empty token_endpoint', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: '' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://auth.example.com/oauth/token' }),
+    });
+
+    const result = await discoverTokenEndpoint('https://empty-token.example.com/realms/test');
+    expect(result).toBe('https://auth.example.com/oauth/token');
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      'https://empty-token.example.com/realms/test/.well-known/oauth-authorization-server',
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://empty-token.example.com/.well-known/oauth-authorization-server/realms/test',
+    );
+  });
+
+  it('should continue discovery when metadata has a malformed token_endpoint', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'not-a-url' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://auth.example.com/oauth/token' }),
+    });
+
+    const result = await discoverTokenEndpoint('https://malformed-token.example.com/realms/test');
+    expect(result).toBe('https://auth.example.com/oauth/token');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('should succeed with path-appended discovery (Keycloak style)', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

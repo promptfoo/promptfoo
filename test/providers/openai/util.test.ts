@@ -615,7 +615,7 @@ describe('calculateOpenAICost', () => {
   it('should use custom audioCost from config when provided', () => {
     const audioCost = 0.05; // per 1M tokens
 
-    const promiseTokens = 1000;
+    const promptTokens = 1000;
     const completionTokens = 500;
     const audioPromptTokens = 200;
     const audioCompletionTokens = 100;
@@ -632,7 +632,7 @@ describe('calculateOpenAICost', () => {
       return;
     }
 
-    const baseInputCost = model.cost.input * promiseTokens;
+    const baseInputCost = model.cost.input * promptTokens;
     const baseOutputCost = model.cost.output * completionTokens;
 
     const audioInputCostCustom = audioCost * audioPromptTokens;
@@ -644,7 +644,7 @@ describe('calculateOpenAICost', () => {
     const cost = calculateOpenAICost(
       'gpt-4o-audio-preview',
       { audioCost },
-      promiseTokens,
+      promptTokens,
       completionTokens,
       audioPromptTokens,
       audioCompletionTokens,
