@@ -7,11 +7,13 @@ import {
   type Plugin,
 } from '../../redteam/constants';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { mergeProviderTokenUsage } from '../../redteam/strategies/util';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
 
 import type { ConversationMessage } from '../../redteam/types';
+import type { TokenUsage } from '../../types/shared';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -240,6 +242,18 @@ function getStringMetadataValue(
   return typeof value === 'string' ? value : undefined;
 }
 
+function getNestedTokenUsage(
+  metadata: Record<string, unknown>,
+  key: 'goat' | 'hydra' | 'mischievousUser',
+): TokenUsage | undefined {
+  const nestedMetadata = metadata[key];
+  if (!nestedMetadata || typeof nestedMetadata !== 'object') {
+    return undefined;
+  }
+
+  return (nestedMetadata as { tokenUsage?: TokenUsage }).tokenUsage;
+}
+
 async function handleGoatStrategy(
   ctx: MultiTurnHandlerContext,
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
@@ -291,10 +305,16 @@ async function handleGoatStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
-      providerTokenUsage: data?.tokenUsage,
+      providerTokenUsage: mergeProviderTokenUsage(
+        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
+        data?.tokenUsage,
+      ),
       goat: {
         message: attackerMessage,
-        tokenUsage: data?.tokenUsage,
+        tokenUsage: mergeProviderTokenUsage(
+          getNestedTokenUsage(ctx.baseMetadata, 'goat'),
+          data?.tokenUsage,
+        ),
       },
     },
   };
@@ -356,9 +376,15 @@ async function handleMischievousUserStrategy(
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
       instructions,
-      providerTokenUsage: data?.tokenUsage,
+      providerTokenUsage: mergeProviderTokenUsage(
+        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
+        data?.tokenUsage,
+      ),
       mischievousUser: {
-        tokenUsage: data?.tokenUsage,
+        tokenUsage: mergeProviderTokenUsage(
+          getNestedTokenUsage(ctx.baseMetadata, 'mischievousUser'),
+          data?.tokenUsage,
+        ),
       },
     },
   };
@@ -470,12 +496,18 @@ async function handleHydraStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
-      providerTokenUsage: data?.tokenUsage,
+      providerTokenUsage: mergeProviderTokenUsage(
+        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
+        data?.tokenUsage,
+      ),
       hydra: {
         testRunId: hydraTestRunId,
         scanId: hydraScanId,
         stateful,
-        tokenUsage: data?.tokenUsage,
+        tokenUsage: mergeProviderTokenUsage(
+          getNestedTokenUsage(ctx.baseMetadata, 'hydra'),
+          data?.tokenUsage,
+        ),
       },
     },
   };
@@ -566,7 +598,10 @@ async function handleCrescendoLikeStrategy(
       goal: ctx.effectiveGoal,
       rationaleBehindJailbreak: parsedResult?.rationaleBehindJailbreak,
       lastResponseSummary: parsedResult?.lastResponseSummary,
-      providerTokenUsage: data?.tokenUsage,
+      providerTokenUsage: mergeProviderTokenUsage(
+        ctx.baseMetadata['providerTokenUsage'] as TokenUsage | undefined,
+        data?.tokenUsage,
+      ),
     },
   };
 }

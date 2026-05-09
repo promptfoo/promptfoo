@@ -43,7 +43,10 @@ function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
   return fetchWithRetries;
 }
 
-async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['strategyId']) {
+async function generatePromptForStrategy(
+  strategyId: MultiTurnPromptParams['strategyId'],
+  baseMetadata: Record<string, unknown> = { pluginConfig: {} },
+) {
   const { generateMultiTurnPrompt } = await import(
     '../../../src/server/services/redteamTestCaseGenerationService'
   );
@@ -55,7 +58,7 @@ async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['stra
     history: [],
     turn: 0,
     maxTurns: 5,
-    baseMetadata: { pluginConfig: {} },
+    baseMetadata,
     generatedPrompt: 'initial prompt',
     purpose: 'test purpose',
   });
@@ -173,6 +176,89 @@ describe('redteamTestCaseGenerationService', () => {
       const result = await generatePromptForStrategy(strategyId);
 
       expect(result.metadata.providerTokenUsage).toEqual(responseBody.tokenUsage);
+    });
+
+    it.each([
+      {
+        strategyId: 'goat' as const,
+        responseBody: {
+          message: { content: 'goat prompt' },
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        },
+        nestedKey: 'goat' as const,
+      },
+      {
+        strategyId: 'jailbreak:hydra' as const,
+        responseBody: {
+          result: { prompt: 'hydra prompt' },
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        },
+        nestedKey: 'hydra' as const,
+      },
+      {
+        strategyId: 'mischievous-user' as const,
+        responseBody: {
+          result: 'mischievous prompt',
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+        nestedKey: 'mischievousUser' as const,
+      },
+    ])('should accumulate prior $strategyId generation usage across turns', async ({
+      strategyId,
+      responseBody,
+      nestedKey,
+    }) => {
+      mockRemoteGeneration(responseBody);
+
+      const result = await generatePromptForStrategy(strategyId, {
+        pluginConfig: {},
+        providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        [nestedKey]: {
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+        },
+      });
+
+      expect(result.metadata.providerTokenUsage).toEqual({
+        total: responseBody.tokenUsage.total + 5,
+        prompt: responseBody.tokenUsage.prompt + 3,
+        completion: responseBody.tokenUsage.completion + 2,
+        cached: 0,
+        numRequests: 2,
+      });
+      expect((result.metadata[nestedKey] as { tokenUsage: unknown }).tokenUsage).toEqual({
+        total: responseBody.tokenUsage.total + 5,
+        prompt: responseBody.tokenUsage.prompt + 3,
+        completion: responseBody.tokenUsage.completion + 2,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
+    it.each([
+      'crescendo',
+      'custom',
+    ] as const)('should accumulate prior %s generation usage across turns', async (strategyId) => {
+      mockRemoteGeneration({
+        result: {
+          generatedQuestion: 'test question',
+          lastResponseSummary: 'summary',
+          rationaleBehindJailbreak: 'rationale',
+        },
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      });
+
+      const result = await generatePromptForStrategy(strategyId, {
+        pluginConfig: {},
+        providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+      });
+
+      expect(result.metadata.providerTokenUsage).toEqual({
+        total: 24,
+        prompt: 15,
+        completion: 9,
+        cached: 0,
+        numRequests: 2,
+      });
     });
   });
 });
