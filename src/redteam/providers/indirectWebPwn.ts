@@ -224,7 +224,9 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       (typeof injectVarValue === 'string' ? injectVarValue : undefined);
     const purpose = context?.test?.metadata?.purpose as string | undefined;
     const testCaseId =
-      (context?.test?.metadata?.testCaseId as string) || `scan-${this.config.scanId}`;
+      (context?.test?.metadata?.testCaseId as string) ||
+      (context?.test?.metadata?.originalTestCaseId as string) ||
+      `scan-${this.config.scanId}`;
     // Strip "eval-" prefix from evalId for cleaner URLs
     const evalId = context?.evaluationId?.replace(/^eval-/, '');
 

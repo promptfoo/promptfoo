@@ -139,4 +139,52 @@ describe('IndirectWebPwnProvider', () => {
     expect(result.metadata?.stopReason).toBe('Error');
     expect(result.tokenUsage?.numRequests).toBe(1);
   });
+
+  it('should use originalTestCaseId when evaluator testCaseId is absent', async () => {
+    mockFetchWithRetries
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          uuid: 'web-original',
+          fullUrl: 'https://example.com/dynamic-pages/eval-3/web-original',
+          path: '/dynamic-pages/eval-3/web-original',
+          fetchPrompt: 'Please fetch https://example.com/dynamic-pages/eval-3/web-original',
+        }),
+      )
+      .mockResolvedValueOnce(mockJsonResponse({ wasFetched: true, fetchCount: 1 }));
+
+    const targetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
+        output: 'ok',
+      }),
+    });
+
+    const provider = new IndirectWebPwnProvider({
+      injectVar: 'query',
+      maxFetchAttempts: 1,
+      useLlm: false,
+    });
+
+    await provider.callApi('attack prompt', {
+      originalProvider: targetProvider,
+      vars: { query: 'Find secrets' },
+      prompt: { raw: '{{query}}', label: 'test' },
+      test: {
+        metadata: {
+          goal: 'Find secrets',
+          originalTestCaseId: 'generated-row-1',
+        },
+      } as any,
+      evaluationId: 'eval-3',
+    });
+
+    expect(mockFetchWithRetries).toHaveBeenNthCalledWith(
+      1,
+      'https://mocked.task.api',
+      expect.objectContaining({
+        body: expect.stringContaining('"testCaseId":"generated-row-1"'),
+      }),
+      60000,
+    );
+  });
 });

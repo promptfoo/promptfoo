@@ -368,8 +368,12 @@ function transformForStandaloneMode(
   const strategyId = 'indirect-web-pwn';
   const scanId = randomUUID();
 
-  return testCases.map((testCase) => {
+  return testCases.map((testCase, index) => {
     const originalText = String(testCase.vars?.[injectVar] ?? '');
+    const originalTestCaseId =
+      (testCase.metadata?.testCaseId as string | undefined) ||
+      (testCase.metadata?.originalTestCaseId as string | undefined) ||
+      `indirect-web-pwn-${scanId}-${index}`;
     return {
       ...testCase,
       // Add display variables for the UI Variables column
@@ -393,6 +397,7 @@ function transformForStandaloneMode(
         ...testCase.metadata,
         strategyId,
         originalText,
+        originalTestCaseId,
       },
     };
   });
