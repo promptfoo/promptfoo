@@ -13,6 +13,7 @@ import {
 } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { TokenUsage } from '../../types/shared';
 
 async function generateCitations(
   testCases: TestCase[],
@@ -59,6 +60,7 @@ async function generateCitations(
             content: string;
           };
         };
+        tokenUsage?: TokenUsage;
       }
 
       const { data } = await fetchWithCache<CitationGenerationResponse>(
@@ -119,6 +121,7 @@ async function generateCitations(
           citation: data.result.citation,
           strategyId: 'citation',
           originalText,
+          ...(data.tokenUsage ? { providerTokenUsage: data.tokenUsage } : {}),
         },
       };
 

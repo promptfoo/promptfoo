@@ -90,8 +90,15 @@ describe('mathPrompt', () => {
 
       const result = await encodeMathPrompt('test text', 'set theory');
 
-      expect(result).toContain('encoded math text');
-      expect(result).toContain('Also provide a complete translation');
+      expect(result.encodedPrompt).toContain('encoded math text');
+      expect(result.encodedPrompt).toContain('Also provide a complete translation');
+      expect(result.tokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 1,
+      });
     });
 
     it('should handle JSON parsing errors', async () => {
@@ -140,6 +147,13 @@ describe('mathPrompt', () => {
       });
 
       expect(result).toHaveLength(customConcepts.length);
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        numRequests: 1,
+      });
     });
 
     it('should validate mathConcepts config', async () => {

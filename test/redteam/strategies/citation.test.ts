@@ -72,6 +72,7 @@ describe('citation strategy', () => {
             content: 'Smith, J. (2024). Test Article. Journal of Testing, 1(1), 1-10.',
           },
         },
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
       },
       cached: false,
       status: 200,
@@ -87,6 +88,12 @@ describe('citation strategy', () => {
     expect(result[0]?.metadata?.citation).toEqual({
       type: 'Journal Article',
       content: 'Smith, J. (2024). Test Article. Journal of Testing, 1(1), 1-10.',
+    });
+    expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+      total: 17,
+      prompt: 10,
+      completion: 7,
+      numRequests: 1,
     });
     expect(result[0]?.assert?.[0].metric).toBe('test-metric/Citation');
 
