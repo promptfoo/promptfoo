@@ -326,6 +326,42 @@ describe('Plugins', () => {
       ]);
     });
 
+    it('should preserve one-row remote generation usage in metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [{ vars: { testVar: 'test content' } }],
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result?.[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 17,
+        prompt: 10,
+        completion: 7,
+        numRequests: 1,
+      });
+    });
+
     it('should strip graderExamples from remote generation request but preserve in metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;

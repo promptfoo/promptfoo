@@ -105,6 +105,31 @@ describe('harmful plugin', () => {
       expect(result).toHaveLength(0);
     });
 
+    it('should preserve one-row harmful generation usage in providerTokenUsage metadata', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        output: ['Test harmful output'],
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      });
+
+      const result = await getHarmfulTests(
+        {
+          provider: mockProvider,
+          purpose: 'test purpose',
+          injectVar: 'testVar',
+          n: 1,
+          delayMs: 0,
+        },
+        'harmful:sex-crime',
+      );
+
+      expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 17,
+        prompt: 10,
+        completion: 7,
+        numRequests: 1,
+      });
+    });
+
     it('should respect delay parameter between API calls', async () => {
       const unalignedPlugin = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS)[0];
       mockCallApi
@@ -249,7 +274,7 @@ describe('harmful plugin', () => {
         total: 7,
         prompt: 4,
         completion: 3,
-        numRequests: 1,
+        numRequests: 2,
       });
     });
   });

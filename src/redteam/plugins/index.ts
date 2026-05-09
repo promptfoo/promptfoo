@@ -400,6 +400,18 @@ async function fetchRemoteTestCases(
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
+    if (n === 1 && ret.length === 1 && data.tokenUsage) {
+      const [testCase] = ret;
+      return [
+        {
+          ...testCase,
+          metadata: {
+            ...(testCase.metadata ?? {}),
+            providerTokenUsage: data.tokenUsage,
+          },
+        },
+      ];
+    }
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
