@@ -5382,3 +5382,78 @@ The holdout decomposition is especially clean:
 3. If that diagnosis can be automated, we may be able to turn the current manual
    repairs into a self-improving attack-generation planner rather than a hand-built
    collection of exceptions.
+
+## Iteration 63 - 2026-05-09
+
+### Goal
+
+Start replacing manual residual diagnosis with measurable geometry:
+
+> After the global router misses, can we distinguish “needs a specialist” from
+> “needs more local support” without hand-inspecting the prompts?
+
+### Experiment
+
+1. Added `diagnoseRepairResidualFamilies.ts`.
+2. Reused:
+   - the saved `role-mechanism` semantic draws from iteration 53
+   - the global holdout misses from iteration 62
+3. For each missed holdout row, measured:
+   - nearest same-plugin **conflicting-winner** similarity
+   - nearest same-plugin **same-winner** similarity
+   - same-plugin support count above a semantic threshold
+   - training support count above that threshold
+4. Applied a deliberately simple triage rule:
+   - if conflicting-winner similarity is high, call it `local-ambiguity`
+   - else if nearby training support is absent, call it `sparse-support`
+5. Reflected once during the run:
+   - a strict `0.8` ambiguity cutoff left one legal-counsel draw unclassified
+   - lowering the cutoff to `0.75` and aggregating repeated semantic draws gave a
+     more stable result
+
+### Results
+
+The geometry-only triage separates the two known residual families cleanly:
+
+| Residual task                  | Aggregate diagnosis | Mean conflicting-winner similarity | Mean same-plugin support count | Mean training support count |
+| ------------------------------ | ------------------- | ---------------------------------: | -----------------------------: | --------------------------: |
+| `prompt-extraction-novelty-v3` | `local-ambiguity`   |                            `0.923` |                            `2` |                         `1` |
+| `bola-coverage-v2`             | `sparse-support`    |                            `0.318` |                            `0` |                         `0` |
+
+The per-draw picture is also intuitive:
+
+1. `prompt-extraction-novelty-v3`
+   - nearest conflicting winner is always `prompt-extraction-coverage-v2`
+   - similarity ranges from `0.769` to `1.000`
+2. `bola-coverage-v2`
+   - nearest conflicting winner is `bola-coverage-v1`
+   - similarity stays low: `0.267` to `0.375`
+   - no nearby same-plugin training support is present at all
+
+### Reflection
+
+1. This is a small but real shift from manual explanation to automatic diagnosis:
+   - the system can now see the difference between the two residual types using
+     benchmark geometry alone
+2. The useful unit is not one stochastic semantic draw:
+   - repeated draws plus aggregation are noticeably more robust
+3. The signal matches the successful repairs from iterations 57 and 61:
+   - `local-ambiguity` -> specialist learner
+   - `sparse-support` -> support augmentation
+4. The caveat is still large:
+   - this was proven on exactly two global-router misses
+   - it is a promising diagnostic probe, not yet a general residual classifier
+5. The next experiment should wire diagnosis into action selection:
+   - let the system choose which repair family to invoke
+   - then compare automatic repair selection against the hand-built hybrid
+
+### New Hypotheses
+
+1. A diagnosis-driven router can recover the hybrid result automatically if:
+   - `local-ambiguity` dispatches to the legal-counsel expert
+   - `sparse-support` dispatches to support augmentation
+2. Aggregated geometry across repeated semantic draws may be a better control
+   signal than any single semantic sample.
+3. The real long-run target may be a two-stage planner:
+   - diagnose the residual family
+   - generate the minimum repair artifact needed for that family
