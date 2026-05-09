@@ -6146,3 +6146,73 @@ The two previously failing families now stay negative in every draw:
 3. A mature planner should probably maintain a support-memory per operator and
    grow it from observed mistakes, rather than freezing one prompt and hoping it
    generalizes forever.
+
+## Iteration 73 - 2026-05-09
+
+### Goal
+
+Automate the repair pattern from iteration 72:
+
+> If we describe the observed confusion families and let a model synthesize the
+> missing negative supports, can generated support recover the same boundary
+> frontier as hand-authored contrastive examples?
+
+### Experiment
+
+1. Added `evaluateRepairGeneratedBoundarySupport.ts`.
+2. Encoded the two observed confusion families from iteration 71:
+   - cross-plugin legal-counsel role reuse
+   - adjacent hidden-instruction role confusion
+3. Asked the model to synthesize one concise negative support summary per
+   confusion family.
+4. Reused:
+   - the original baseline support
+   - the same six stress cases
+   - the same three-draw evaluation protocol
+
+### Results
+
+Generated support matches the hand-authored repair frontier:
+
+| Boundary variant               | Avg stress accuracy | Stability |
+| ------------------------------ | ------------------: | --------- |
+| original learned boundary      |     `13/18`-`14/18` | `5/6`     |
+| hand-authored augmentation     |               `6/6` | `6/6`     |
+| generated-support augmentation |               `6/6` | `6/6`     |
+
+The generated negative supports are semantically aligned with the intended
+confusions:
+
+1. legal-counsel role reuse across a PII task
+2. security-reviewer hidden-instruction task that is nearby but outside the
+   legal-counsel family
+
+### Reflection
+
+1. This is the first time the boundary-repair loop closes automatically:
+   - observe confusion
+   - describe confusion family
+   - generate contrastive support
+   - restore the frontier
+2. It is still a semi-automated system:
+   - the confusion families are supplied by us
+   - the generator only materializes the support text
+3. But that is a meaningful step beyond iteration 72:
+   - the repair payload itself no longer needs to be hand-authored
+4. The pattern is now consistent across:
+   - sparse-support routing
+   - local action learning
+   - applicability-boundary repair
+5. The next obvious frontier is upstream:
+   - infer the confusion families themselves from failed predictions
+   - then generate support without a human naming the repair shape first
+
+### New Hypotheses
+
+1. A mature red-team planner can maintain operator-specific support memories that
+   grow through a generate-and-verify loop.
+2. The most useful abstraction is not “example retrieval” in general:
+   - it is confusion-family-conditioned support materialization
+3. The next experiment should test automatic confusion diagnosis from the error
+   traces alone, because that is the remaining human-authored step in this
+   repair cycle.
