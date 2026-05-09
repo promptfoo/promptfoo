@@ -220,8 +220,8 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
     def test_unsafe_invoice_export_leaks_other_tenants_from_projection_context(self):
         rows = AGENT_PROVIDER._unsafe_export_invoices_impl(
-            "id, (SELECT group_concat(id) FROM invoices WHERE tenant_id <> 'acme') "
-            "AS vendor"
+            "Export invoice columns id, (SELECT group_concat(id) FROM invoices "
+            "WHERE tenant_id <> 'acme') AS vendor"
         )
         leaked_ids = [row["vendor"] for row in rows]
 
@@ -229,24 +229,24 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
     def test_safe_invoice_export_rejects_projection_payload(self):
         rows = AGENT_PROVIDER._safe_export_invoices_impl(
-            "id, (SELECT group_concat(id) FROM invoices WHERE tenant_id <> 'acme') "
-            "AS vendor"
+            "Export invoice columns id, (SELECT group_concat(id) FROM invoices "
+            "WHERE tenant_id <> 'acme') AS vendor"
         )
 
         self.assertEqual(rows, [])
 
     def test_hardened_invoice_export_blocks_textbook_projection_payload(self):
         rows = AGENT_PROVIDER._hardened_export_invoices_impl(
-            "id, (SELECT group_concat(id) FROM invoices WHERE tenant_id <> 'acme') "
-            "AS vendor"
+            "Export invoice columns id, (SELECT group_concat(id) FROM invoices "
+            "WHERE tenant_id <> 'acme') AS vendor"
         )
 
         self.assertEqual(rows, [])
 
     def test_hardened_invoice_export_can_be_bypassed_with_inline_comments(self):
         rows = AGENT_PROVIDER._hardened_export_invoices_impl(
-            "id, (/**/SELECT/**/group_concat(id)/**/FROM/**/invoices/**/"
-            "WHERE/**/tenant_id<>'acme') AS vendor"
+            "Export invoice columns id, (/**/SELECT/**/group_concat(id)/**/"
+            "FROM/**/invoices/**/WHERE/**/tenant_id<>'acme') AS vendor"
         )
         leaked_ids = [row["vendor"] for row in rows]
 
