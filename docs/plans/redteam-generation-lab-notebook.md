@@ -7368,3 +7368,75 @@ All three are:
 3. The next experiment should measure retained-frontier growth over more batches
    and test whether simple novelty rules prevent duplicate hard cases from
    dominating memory.
+
+## Iteration 89 - 2026-05-09
+
+### Goal
+
+Stress the retained frontier over more batches and add a first-pass novelty rule:
+
+> If we keep only semantically new discriminative cases across several batches,
+> does the retained frontier keep growing without filling up with duplicates?
+
+### Experiment
+
+1. Extended `evaluateRepairRetainedTransferFrontier.ts`.
+2. Increased the retention run from `3` batches to `5`.
+3. Added:
+   - batch-level retrying after a transient upstream `502` killed the first run
+   - lexical novelty filtering with Jaccard threshold `0.8`
+   - retained-frontier novelty diagnostics
+4. Retained only discriminative cases that were below the lexical similarity
+   threshold against prior retained cases.
+
+### Results
+
+Retention clearly scales beyond the first lucky batch:
+
+| Batch | Attempts | Batch discriminative cases | Novel retained cases | Duplicate retained cases | Retained frontier size |
+| ----: | -------: | -------------------------: | -------------------: | -----------------------: | ---------------------: |
+|   `1` |      `1` |                        `9` |                  `9` |                      `0` |                    `9` |
+|   `2` |      `1` |                        `2` |                  `2` |                      `0` |                   `11` |
+|   `3` |      `1` |                        `0` |                  `0` |                      `0` |                   `11` |
+|   `4` |      `1` |                        `7` |                  `7` |                      `0` |                   `18` |
+|   `5` |      `1` |                        `0` |                  `0` |                      `0` |                   `18` |
+
+The final retained frontier contains:
+
+1. `18` discriminative cases
+2. `10` ordinary-bundle failures
+3. `8` critic-gated failures
+
+But the novelty rule did **not** work as intended:
+
+1. every discriminative case was considered lexically novel
+2. obvious same-neighborhood positives still accumulated
+3. the retained set's highest pairwise lexical similarity was only `0.30`
+
+### Reflection
+
+1. Retained frontier memory is now unquestionably useful:
+   - hard cases survive later easy batches
+   - method-specific losses accumulate instead of being forgotten
+2. The batch-level retry wrapper is necessary operational plumbing:
+   - one transient upstream failure should not erase a long benchmark run
+3. The important negative result is the novelty metric:
+   - bag-of-words Jaccard is far too weak for this semantic neighborhood
+   - near-duplicate adversarial cases can easily look lexically distant
+4. This is another place where a 2023-style generator mindset breaks:
+   - "many different strings" is not the same as "many different attacks"
+5. The next retained-memory layer needs semantic novelty:
+   - embeddings
+   - judge-based equivalence
+   - or attack-axis signatures
+
+### New Hypotheses
+
+1. Semantic novelty, not lexical novelty, is the right deduplication target for
+   retained red-team frontiers.
+2. Retained memory should preserve both:
+   - attack diversity
+   - method-specific coverage
+3. The next experiment should replace lexical Jaccard with embedding-based
+   nearest-neighbor novelty and test whether the retained frontier shrinks while
+   preserving disagreement coverage.
