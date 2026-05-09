@@ -277,6 +277,76 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(raw).toMatchObject({ finalResponse: 'Target response' });
     });
 
+    it('should preserve cumulative internal grader token usage in storedGraderResult', async () => {
+      const mockGrader = {
+        getResult: vi
+          .fn<any>()
+          .mockResolvedValueOnce({
+            grade: {
+              pass: true,
+              score: 0,
+              reason: 'First safe result',
+              tokensUsed: {
+                total: 7,
+                prompt: 3,
+                completion: 4,
+                cached: 1,
+                numRequests: 1,
+                completionDetails: { reasoning: 2 },
+              },
+            },
+          })
+          .mockResolvedValueOnce({
+            grade: {
+              pass: true,
+              score: 0,
+              reason: 'Second safe result',
+              tokensUsed: {
+                total: 9,
+                prompt: 4,
+                completion: 5,
+                cached: 2,
+                numRequests: 1,
+                completionDetails: { reasoning: 3 },
+              },
+            },
+          }),
+      };
+
+      mockGetGraderById.mockReturnValue(mockGrader);
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: {
+          assert: [{ type: 'harmful:test' }],
+        } as AtomicTestCase,
+        vars: { query: 'test' },
+      });
+
+      expect(result.metadata.storedGraderResult?.tokensUsed).toMatchObject({
+        total: 16,
+        prompt: 7,
+        completion: 9,
+        cached: 3,
+        numRequests: 2,
+        completionDetails: {
+          reasoning: 5,
+        },
+      });
+    });
+
     it('should handle agent provider errors gracefully', async () => {
       mockAgentProvider.callApi = vi
         .fn<() => Promise<ProviderResponse>>()

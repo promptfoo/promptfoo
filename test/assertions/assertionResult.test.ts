@@ -104,6 +104,61 @@ describe('AssertionsResult', () => {
     });
   });
 
+  it('preserves nested completion details when aggregating assertion tokens', async () => {
+    assertionsResult.addResult({
+      index: 0,
+      result: {
+        ...succeedingResult,
+        tokensUsed: {
+          ...succeedingResult.tokensUsed,
+          numRequests: 1,
+          completionDetails: {
+            reasoning: 2,
+            acceptedPrediction: 1,
+            rejectedPrediction: 1,
+            cacheReadInputTokens: 3,
+            cacheCreationInputTokens: 4,
+          },
+        },
+      },
+    });
+
+    assertionsResult.addResult({
+      index: 1,
+      result: {
+        ...succeedingResult,
+        tokensUsed: {
+          ...succeedingResult.tokensUsed,
+          numRequests: 2,
+          completionDetails: {
+            reasoning: 3,
+            acceptedPrediction: 2,
+            rejectedPrediction: 1,
+            cacheReadInputTokens: 4,
+            cacheCreationInputTokens: 5,
+          },
+        },
+      },
+    });
+
+    await expect(assertionsResult.testResult()).resolves.toMatchObject({
+      tokensUsed: {
+        total: 2,
+        prompt: 4,
+        completion: 6,
+        cached: 0,
+        numRequests: 3,
+        completionDetails: {
+          reasoning: 5,
+          acceptedPrediction: 3,
+          rejectedPrediction: 2,
+          cacheReadInputTokens: 7,
+          cacheCreationInputTokens: 9,
+        },
+      },
+    });
+  });
+
   it('respects succeeding threshold', async () => {
     const threshold = 0.5;
 

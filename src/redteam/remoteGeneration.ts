@@ -163,11 +163,9 @@ export function getRemoteGenerationUrlForUnaligned(): string {
   if (envUrl) {
     return envUrl;
   }
-  // If logged into cloud use that url + /task
-  const cloudConfig = new CloudConfig();
-  if (cloudConfig.isEnabled()) {
-    return cloudConfig.getApiHost() + '/api/v1/task/harmful';
-  }
-  // otherwise use the default
-  return 'https://api.promptfoo.app/api/v1/task/harmful';
+
+  return (
+    buildRemoteUrl('/api/v1/task/harmful', 'https://api.promptfoo.app/api/v1/task/harmful') ??
+    'https://api.promptfoo.app/api/v1/task/harmful'
+  );
 }

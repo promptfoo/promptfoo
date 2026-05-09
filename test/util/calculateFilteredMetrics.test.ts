@@ -207,6 +207,101 @@ describe('calculateFilteredMetrics', () => {
         numRequests: 0,
       });
     });
+
+    it('should preserve nested usage details and explicit request counts', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { test: 'value' } },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { test: 'value' },
+        response: {
+          output: 'test output',
+          tokenUsage: {
+            total: 10,
+            prompt: 4,
+            completion: 6,
+            cached: 1,
+            numRequests: 3,
+            completionDetails: {
+              reasoning: 2,
+              acceptedPrediction: 1,
+              rejectedPrediction: 1,
+              cacheReadInputTokens: 3,
+              cacheCreationInputTokens: 4,
+            },
+          },
+        },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          tokensUsed: {
+            total: 7,
+            prompt: 3,
+            completion: 4,
+            cached: 1,
+            numRequests: 2,
+            completionDetails: {
+              reasoning: 1,
+              acceptedPrediction: 1,
+              rejectedPrediction: 0,
+              cacheReadInputTokens: 2,
+              cacheCreationInputTokens: 3,
+            },
+          },
+        },
+        namedScores: {},
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].tokenUsage).toEqual({
+        total: 10,
+        prompt: 4,
+        completion: 6,
+        cached: 1,
+        numRequests: 3,
+        completionDetails: {
+          reasoning: 2,
+          acceptedPrediction: 1,
+          rejectedPrediction: 1,
+          cacheReadInputTokens: 3,
+          cacheCreationInputTokens: 4,
+        },
+        assertions: {
+          total: 7,
+          prompt: 3,
+          completion: 4,
+          cached: 1,
+          numRequests: 2,
+          completionDetails: {
+            reasoning: 1,
+            acceptedPrediction: 1,
+            rejectedPrediction: 0,
+            cacheReadInputTokens: 2,
+            cacheCreationInputTokens: 3,
+          },
+        },
+      });
+    });
   });
 
   describe('named scores aggregation', () => {

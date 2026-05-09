@@ -39,6 +39,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  mergeStoredGraderResultTokenUsage,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -598,7 +599,8 @@ export async function runMetaAgentRedteam({
           ...grade,
           assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
-        storedGraderResult = graderResult;
+        storedGraderResult = mergeStoredGraderResultTokenUsage(graderResult, storedGraderResult);
+        graderResult = storedGraderResult;
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,

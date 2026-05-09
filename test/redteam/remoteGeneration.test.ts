@@ -477,6 +477,14 @@ describe('getRemoteGenerationUrlForUnaligned', () => {
     expect(getRemoteGenerationUrlForUnaligned()).toBe('https://cloud.api.com/api/v1/task/harmful');
   });
 
+  it('should derive the harmful endpoint from a self-hosted remote generation URL', () => {
+    vi.mocked(getEnvString).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'http://localhost:3201/api/v1/task' : '';
+    });
+
+    expect(getRemoteGenerationUrlForUnaligned()).toBe('http://localhost:3201/api/v1/task/harmful');
+  });
+
   it('should return default harmful URL when cloud is disabled', () => {
     vi.mocked(getEnvString).mockImplementation(function () {
       return '';

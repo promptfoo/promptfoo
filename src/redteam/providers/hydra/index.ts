@@ -46,6 +46,7 @@ import {
   isConversationEndedResponse,
   isValidChatMessageArray,
   type Message,
+  mergeStoredGraderResultTokenUsage,
   type TargetResponse,
   type TurnBacktrackingStopReason,
 } from '../shared';
@@ -880,11 +881,14 @@ export class HydraProvider implements ApiProvider {
             undefined, // skipRefusalCheck
             gradingContext,
           );
-          graderResult = grade;
-          storedGraderResult = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          storedGraderResult = mergeStoredGraderResultTokenUsage(
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            storedGraderResult,
+          );
+          graderResult = storedGraderResult;
 
           logger.debug('[Hydra] Grader result', {
             turn,

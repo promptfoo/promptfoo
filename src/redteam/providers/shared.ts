@@ -15,6 +15,7 @@ import {
   type CallApiContextParams,
   type CallApiOptionsParams,
   type EvaluateResult,
+  type GradingResult,
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
@@ -27,6 +28,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -79,6 +81,24 @@ export function setRedteamProviderLoader(loader: RedteamProviderLoader): () => v
 
 export function resetRedteamProviderLoader(): void {
   redteamProviderLoader = defaultRedteamProviderLoader;
+}
+
+export function mergeStoredGraderResultTokenUsage(
+  latestResult: GradingResult,
+  previousResult?: GradingResult,
+): GradingResult {
+  if (!latestResult.tokensUsed && !previousResult?.tokensUsed) {
+    return latestResult;
+  }
+
+  const tokensUsed = createEmptyTokenUsage();
+  accumulateTokenUsage(tokensUsed, previousResult?.tokensUsed);
+  accumulateTokenUsage(tokensUsed, latestResult.tokensUsed);
+
+  return {
+    ...latestResult,
+    tokensUsed,
+  };
 }
 
 async function loadRedteamProvider({

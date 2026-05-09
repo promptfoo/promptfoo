@@ -160,8 +160,7 @@ export function accumulateAssertionTokenUsage(
   target.prompt = addNumbers(target.prompt, update.prompt);
   target.completion = addNumbers(target.completion, update.completion);
   target.cached = addNumbers(target.cached, update.cached);
-  // Note: We don't accumulate numRequests from the update for assertions
-  // to maintain separation between provider and assertion request counts
+  target.numRequests = addNumbers(target.numRequests, update.numRequests);
 
   // Handle completion details
   if (update.completionDetails) {

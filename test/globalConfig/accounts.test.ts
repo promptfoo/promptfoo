@@ -699,6 +699,32 @@ describe('accounts', () => {
       });
     });
 
+    it('should use the configured cloud host when one is already authenticated', async () => {
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(getEnvString).mockReturnValue(undefined);
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+        cloud: {
+          apiKey: 'worker-token',
+          apiHost: 'http://127.0.0.1:3201',
+        },
+      });
+      vi.mocked(fetchWithTimeout).mockResolvedValue(
+        new Response(JSON.stringify({ status: 'ok' }), {
+          status: 200,
+          statusText: 'OK',
+        }),
+      );
+
+      await checkEmailStatus();
+
+      expect(fetchWithTimeout).toHaveBeenCalledWith(
+        'http://127.0.0.1:3201/api/users/status?email=test%40example.com',
+        undefined,
+        500,
+      );
+    });
+
     describe('with validate option', () => {
       beforeEach(() => {
         vi.mocked(isCI).mockReturnValue(false);
