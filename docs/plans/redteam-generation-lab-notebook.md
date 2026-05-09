@@ -1414,3 +1414,89 @@ The second repair did **not** beat the incumbent `maxTactics` portfolio:
    - sample many candidate repairs
    - filter to clean same-slot replacements
    - rank by residual policy gap
+
+## Iteration 20 - 2026-05-09
+
+### Goal
+
+Quantify the portfolio-compatibility distinction we just uncovered:
+
+> Can we separate clean same-slot substitutes from candidates that only look
+> good in isolation but destabilize the target portfolio?
+
+### Experiment
+
+Extended `candidateDiagnostics` with:
+
+1. `displacedSlotCount`
+2. `sameTacticReplacement`
+3. `compatibility.grade`
+
+Grades:
+
+1. `clean-same-slot`
+2. `clean-different-slot`
+3. `multi-slot`
+
+### Results
+
+The compatibility grade cleanly separated the three repair candidates:
+
+| Candidate       | Grade             | Displaced slots | Same-tactic replacement |
+| --------------- | ----------------- | --------------: | ----------------------- |
+| `access-review` | `multi-slot`      |               3 | `false`                 |
+| `vendor-ticket` | `clean-same-slot` |               1 | `true`                  |
+| `privilege-log` | `multi-slot`      |               3 | `false`                 |
+
+The best `maxTactics` repair candidate is therefore still `vendor-ticket`,
+despite the fact that `privilege-log` is more useful for `maxNovelty`.
+
+### Reflection
+
+1. This is an important separator.
+2. It gives us a candidate-level rule that matches the research intuition:
+   - for targeted repair, **compatibility outranks raw novelty**
+3. The `vendor-ticket` repair is the only candidate that:
+   - preserves the intended tactic
+   - replaces only the intended slot
+   - nearly closes the target-policy gap
+4. The `privilege-log` repair remains valuable, but for a different policy.
+5. We now have enough instrumentation to imagine a first automated selection
+   strategy:
+   - filter `clean-same-slot`
+   - sort by blocking-metric delta
+   - keep multi-slot candidates for alternative policies such as `maxNovelty`
+
+### Twenty-Iteration Status
+
+At the end of iteration 20:
+
+1. We built a reproducible benchmark harness over multiple plugin families.
+2. We showed that baseline row count hides severe portfolio narrowness.
+3. We introduced plugin-specific multi-axis scoring, exact frontier analysis,
+   and named policy outputs.
+4. We added deterministic repair, policy disagreement, frontier-gap diagnosis,
+   and candidate-level counterfactual analysis.
+5. We learned that:
+   - free-form novelty is insufficient
+   - target-policy gaps matter
+   - portfolio compatibility matters independently of candidate novelty
+6. The research loop is now structurally close to an agentic optimization
+   system:
+   - diagnose
+   - propose
+   - evaluate
+   - explain
+   - refine
+
+### New Hypotheses
+
+1. The next useful implementation is a small candidate selector that chooses the
+   best repair from a set using:
+   - compatibility grade
+   - residual target-policy gap
+2. After that, we can stop hand-picking among repairs and begin testing actual
+   proposer loops.
+3. The same selector concept should generalize to future agentic attack
+   dimensions where replacing one slot cleanly may matter more than making one
+   isolated prompt sound novel.

@@ -48,6 +48,11 @@ type CandidateDiagnostic = {
   candidateIndex: number;
   candidatePrompt: string;
   comparedPolicy: string;
+  compatibility: {
+    displacedSlotCount: number;
+    grade: 'clean-same-slot' | 'clean-different-slot' | 'multi-slot';
+    sameTacticReplacement: boolean;
+  };
   deltaVsWinner: Record<string, number>;
   displacedWinnerIndices: number[];
   pairwiseSimilarityToWinner: Array<{
@@ -224,6 +229,15 @@ function diagnoseCandidateAgainstPolicy(
     winnerIndex,
     winnerPrompt: pool[winnerIndex].prompt,
   }));
+  const sameTacticReplacement =
+    displacedWinnerIndices.length === 1 &&
+    pool[displacedWinnerIndices[0]].tactic === pool[candidateIndex].tactic;
+  const compatibilityGrade =
+    displacedWinnerIndices.length === 1
+      ? sameTacticReplacement
+        ? 'clean-same-slot'
+        : 'clean-different-slot'
+      : 'multi-slot';
 
   return {
     bestContainingCandidate: {
@@ -234,6 +248,11 @@ function diagnoseCandidateAgainstPolicy(
     candidateIndex,
     candidatePrompt: pool[candidateIndex].prompt,
     comparedPolicy,
+    compatibility: {
+      displacedSlotCount: displacedWinnerIndices.length,
+      grade: compatibilityGrade,
+      sameTacticReplacement,
+    },
     deltaVsWinner,
     displacedWinnerIndices,
     pairwiseSimilarityToWinner,
