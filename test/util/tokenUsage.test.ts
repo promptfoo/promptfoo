@@ -68,6 +68,25 @@ describe('TokenUsageTracker', () => {
     );
   });
 
+  it('should infer one request from a response that omits numRequests', () => {
+    tracker.trackResponseUsage('test-provider', {
+      tokenUsage: {
+        total: 7,
+        prompt: 3,
+        completion: 4,
+        cached: 0,
+      },
+    });
+
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+      total: 7,
+      prompt: 3,
+      completion: 4,
+      cached: 0,
+      numRequests: 1,
+    });
+  });
+
   it('should merge token usage for the same provider', () => {
     const usage1: TokenUsage = {
       total: 100,

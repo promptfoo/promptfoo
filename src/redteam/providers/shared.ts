@@ -705,7 +705,7 @@ export async function tryUnblocking({
       vars: {},
     });
 
-    TokenUsageTracker.getInstance().trackUsage(unblockingProvider.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(unblockingProvider.id(), response);
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);

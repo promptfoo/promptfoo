@@ -322,7 +322,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
       ]),
     );
 
-    TokenUsageTracker.getInstance().trackUsage(redTeamProvider.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(redTeamProvider.id(), response);
 
     if (response.error) {
       throw new Error(`Failed to generate voice prompt: ${response.error}`);
@@ -418,7 +418,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
       ]),
     );
 
-    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(scoringProvider.id(), evalResponse);
 
     if (evalResponse.error) {
       logger.warn(`[VoiceCrescendo] Evaluation error: ${evalResponse.error}`);

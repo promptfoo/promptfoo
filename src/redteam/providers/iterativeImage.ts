@@ -309,7 +309,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+      TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
       accumulateResponseTokenUsage(totalTokenUsage, redteamResp, { countAsRequest: false });
 
       if (redteamResp.error) {
@@ -507,7 +507,7 @@ async function runRedteamConversation({
         await sleep(redteamProvider.delay);
       }
 
-      TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), judgeResp.tokenUsage);
+      TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), judgeResp);
       accumulateResponseTokenUsage(totalTokenUsage, judgeResp, { countAsRequest: false });
 
       let score: number;

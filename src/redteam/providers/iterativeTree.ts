@@ -205,7 +205,7 @@ export async function evaluateResponse(
     },
     vars: {},
   });
-  TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(provider.id(), judgeResp);
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
@@ -305,7 +305,7 @@ export async function getNewPrompt(
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
-  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
 
   let retObj: { improvement: string; prompt: string };
   if (typeof redteamResp.output === 'string') {
