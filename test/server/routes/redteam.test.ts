@@ -639,6 +639,44 @@ describe('Redteam Routes', () => {
           numRequests: 1,
         });
       });
+
+      it('should preserve remote generation usage carried by plugin errors', async () => {
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockRejectedValue(
+            Object.assign(new Error('remote generation failed'), {
+              tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+            }),
+          ),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(500);
+        expect(response.body.tokenUsage).toEqual({
+          total: 19,
+          prompt: 12,
+          completion: 7,
+          numRequests: 1,
+        });
+      });
     });
 
     describe('multi-turn generation failures', () => {

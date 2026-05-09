@@ -133,7 +133,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         },
       });
     } catch (error) {
-      const tokenUsage = trackedRedteamProvider.getTokenUsage();
+      const tokenUsage = trackedRedteamProvider.getTokenUsage() || getErrorTokenUsage(error);
       logger.error('Error generating test case', { error });
       res.status(500).json({
         error: 'Failed to generate test case',

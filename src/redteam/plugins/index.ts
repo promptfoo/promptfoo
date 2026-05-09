@@ -75,13 +75,29 @@ import { VLGuardPlugin } from './vlguard';
 import { VLSUPlugin } from './vlsu';
 import { XSTestPlugin } from './xstest';
 
-import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
+import type {
+  ApiProvider,
+  PluginActionParams,
+  PluginConfig,
+  TestCase,
+  TokenUsage,
+} from '../../types/index';
 import type { HarmPlugin } from '../constants';
 
 export interface PluginFactory {
   key: string;
   validate?: (config: PluginConfig) => void;
   action: (params: PluginActionParams) => Promise<TestCase[]>;
+}
+
+class RemotePluginGenerationError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'RemotePluginGenerationError';
+  }
 }
 
 type PluginClass<T extends PluginConfig> = new (
@@ -378,6 +394,7 @@ async function fetchRemoteTestCases(
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
+    tokenUsage?: TokenUsage;
   }
 
   try {
@@ -394,12 +411,24 @@ async function fetchRemoteTestCases(
     );
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
+      if (data?.tokenUsage) {
+        throw new RemotePluginGenerationError(
+          `Remote generation failed for ${key}`,
+          data.tokenUsage,
+        );
+      }
       return [];
     }
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
+    if (n === 1 && ret.length === 0 && data.tokenUsage) {
+      throw new RemotePluginGenerationError(
+        `Remote generation returned no test cases for ${key}`,
+        data.tokenUsage,
+      );
+    }
     if (n === 1 && ret.length === 1 && data.tokenUsage) {
       const [testCase] = ret;
       return [
@@ -416,6 +445,9 @@ async function fetchRemoteTestCases(
     return ret;
   } catch (err) {
     logger.error(`Error generating test cases for ${key}: ${err}`);
+    if (err instanceof RemotePluginGenerationError) {
+      throw err;
+    }
     return [];
   }
 }

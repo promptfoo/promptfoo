@@ -362,6 +362,41 @@ describe('Plugins', () => {
       });
     });
 
+    it('should preserve one-row remote generation usage when no cases are returned', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [],
+          tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {},
+          delayMs: 0,
+        }),
+      ).rejects.toMatchObject({
+        message: 'Remote generation returned no test cases for ssrf',
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      });
+    });
+
     it('should strip graderExamples from remote generation request but preserve in metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
