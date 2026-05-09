@@ -214,6 +214,44 @@ describe('mathPrompt', () => {
       });
     });
 
+    it('should preserve one-row remote failure usage before local fallback', async () => {
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          error: 'remote parse failed',
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        },
+      } as any);
+
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+        }),
+      });
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
+
+      const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
+        mathConcepts: ['topology'],
+      });
+
+      expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+        total: 17,
+        prompt: 9,
+        completion: 8,
+        cached: 0,
+        numRequests: 2,
+      });
+    });
+
     it('should validate mathConcepts config', async () => {
       await expect(addMathPrompt([], 'prompt', { mathConcepts: 'invalid' })).rejects.toThrow(
         'MathPrompt strategy: `mathConcepts` must be an array of strings',
