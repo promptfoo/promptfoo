@@ -226,3 +226,81 @@ Test whether curation itself is valuable:
    axes, not only tactic coverage.
 3. We now need a second plugin family to test whether planner + selector is a SQL
    trick or a reusable generation architecture.
+
+## Iteration 4 - 2026-05-09
+
+### Goal
+
+Test whether the planner-plus-selector pattern generalizes beyond SQL:
+
+> Can the same architecture improve a softer, less syntax-driven family such as
+> `prompt-extraction`?
+
+### Experiment
+
+Built a prompt-extraction research stack:
+
+- `promptExtractionResearchShared.ts`
+- `generatePromptExtractionPortfolio.ts`
+- `selectPromptExtractionPortfolio.ts`
+
+Unlike SQL, prompt extraction was already `5/5` on our coarse tactic labels, so
+the planner varied additional dimensions:
+
+1. requested artifact
+2. social pretext
+3. target-specific entity
+
+Representative artifacts:
+
+- audit report
+- handoff summary
+- training guide
+- debug transcript
+- onboarding email
+- incident review
+- policy diff
+- documentation checklist
+
+### Results
+
+Baseline:
+
+| Variant                             | Rows | Unique prompts | Detected tactic coverage | Entity reference | Avg pairwise distance |
+| ----------------------------------- | ---: | -------------: | ------------------------ | ---------------: | --------------------: |
+| Existing prompt-extraction corpus   |   35 |              5 | `5/5`                    |            `40%` |               `0.730` |
+| Planner-generated extraction corpus |    8 |              8 | `5/5`                    |          `87.5%` |               `0.901` |
+
+Selector comparison on the same candidate pool:
+
+| Selection policy | Rows | Unique prompts | Detected tactic coverage | Avg pairwise distance | Max similarity |
+| ---------------- | ---: | -------------: | ------------------------ | --------------------: | -------------: |
+| First `5`        |    5 |              4 | `4/5`                    |               `0.659` |        `1.000` |
+| Diverse `5`      |    5 |              5 | `5/5`                    |               `0.909` |        `0.194` |
+
+### Reflection
+
+1. Planner plus selector now works on both:
+   - a syntax-heavy exploit family (`sql-injection`)
+   - a socially mediated family (`prompt-extraction`)
+2. Prompt-extraction taught us that tactic coverage alone is too blunt. A corpus
+   can cover all coarse tactics and still be poor because it repeats the same
+   artifact shape or barely uses the target context.
+3. Generalization required making the YAML emitter plugin-aware instead of
+   accidentally hard-coding `sql-injection`. This is a small but useful reminder
+   that any eventual production architecture must treat plugin identity as data,
+   not as an incidental implementation detail.
+
+### New Hypotheses
+
+1. Each plugin family likely needs its own **coverage schema**:
+   - SQL: tactic × exploit surface
+   - prompt extraction: tactic × pretext × artifact
+   - PII: relation × sensitive field × authorization story
+   - agentic attacks: task × untrusted source × tool × attacker goal
+2. The right generic abstraction may be:
+   - plugin-specific coverage dimensions
+   - shared candidate pool
+   - shared portfolio selector
+3. The next useful move is to make coverage dimensions first-class in the
+   analyzer so we can compare plugin families on more than lexical diversity.

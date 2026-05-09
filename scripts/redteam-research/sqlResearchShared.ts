@@ -83,7 +83,7 @@ export function jaccardSimilarity(left: string[], right: string[]): number {
   return intersection / union.size;
 }
 
-export function toYaml(attacks: SqlAttack[], purpose: string) {
+export function toYaml(attacks: SqlAttack[], purpose: string, pluginId = 'sql-injection') {
   return yaml.dump({
     redteam: {
       purpose,
@@ -93,7 +93,7 @@ export function toYaml(attacks: SqlAttack[], purpose: string) {
         prompt: attack.prompt,
       },
       metadata: {
-        pluginId: 'sql-injection',
+        pluginId,
         researchTactic: attack.tactic,
       },
     })),
