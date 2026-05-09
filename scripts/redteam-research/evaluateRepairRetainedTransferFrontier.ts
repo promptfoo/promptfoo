@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
+import { loadApiProvider } from '../../src/providers';
+
 type FrontierCandidatePrediction = {
   criticPrediction: boolean;
   expectedShouldUseLocalExpert: boolean;
@@ -28,8 +30,10 @@ type ActiveTransferRun = {
 };
 
 const batchCount = 5;
+const embeddingNoveltyThreshold = 0.75;
+const embeddingThresholdSweep = [0.7, 0.75, 0.8, 0.85, 0.9];
 const maxBatchAttempts = 3;
-const noveltyThreshold = 0.8;
+const lexicalNoveltyThreshold = 0.8;
 
 function summarizePredictions(predictions: FrontierCandidatePrediction[]) {
   return {
@@ -70,6 +74,15 @@ function buildNoveltyText(candidate: ActiveTransferRun['frontierCandidates'][num
   return `${candidate.signature.summary}\n${candidate.candidatePrompt}`;
 }
 
+function cosineSimilarity(left: number[], right: number[]): number {
+  const numerator = left.reduce((sum, value, index) => sum + value * right[index], 0);
+  const leftMagnitude = Math.sqrt(left.reduce((sum, value) => sum + value ** 2, 0));
+  const rightMagnitude = Math.sqrt(right.reduce((sum, value) => sum + value ** 2, 0));
+  return leftMagnitude === 0 || rightMagnitude === 0
+    ? 0
+    : numerator / (leftMagnitude * rightMagnitude);
+}
+
 function summarizeRetainedNovelty(candidates: ActiveTransferRun['frontierCandidates'][number][]) {
   let maxPairwiseSimilarity = 0;
   let mostSimilarPair:
@@ -100,6 +113,51 @@ function summarizeRetainedNovelty(candidates: ActiveTransferRun['frontierCandida
   };
 }
 
+function summarizeEmbeddingNovelty(embeddings: number[][]) {
+  let maxPairwiseSimilarity = 0;
+  for (let leftIndex = 0; leftIndex < embeddings.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < embeddings.length; rightIndex += 1) {
+      maxPairwiseSimilarity = Math.max(
+        maxPairwiseSimilarity,
+        cosineSimilarity(embeddings[leftIndex], embeddings[rightIndex]),
+      );
+    }
+  }
+  return {
+    maxPairwiseSimilarity,
+  };
+}
+
+function summarizeEmbeddingThresholdSweep({
+  embeddings,
+  predictions,
+}: {
+  embeddings: number[][];
+  predictions: FrontierCandidatePrediction[];
+}) {
+  return embeddingThresholdSweep.map((threshold) => {
+    const retainedIndexes: number[] = [];
+    for (let candidateIndex = 0; candidateIndex < embeddings.length; candidateIndex += 1) {
+      const mostSimilarRetainedCase = retainedIndexes.reduce(
+        (maximumSimilarity, retainedIndex) =>
+          Math.max(
+            maximumSimilarity,
+            cosineSimilarity(embeddings[candidateIndex], embeddings[retainedIndex]),
+          ),
+        0,
+      );
+      if (mostSimilarRetainedCase < threshold) {
+        retainedIndexes.push(candidateIndex);
+      }
+    }
+    const retainedPredictions = retainedIndexes.map((index) => predictions[index]);
+    return {
+      retainedSummary: summarizePredictions(retainedPredictions),
+      threshold,
+    };
+  });
+}
+
 function runActiveTransferFrontier(): { attempts: number; result: ActiveTransferRun } {
   let lastError: unknown;
   for (let attempts = 1; attempts <= maxBatchAttempts; attempts += 1) {
@@ -126,8 +184,16 @@ function runActiveTransferFrontier(): { attempts: number; result: ActiveTransfer
 }
 
 async function main() {
+  const [embeddingProviderId = 'openai:embedding:text-embedding-3-large'] = process.argv.slice(2);
+  const embeddingProvider = await loadApiProvider(embeddingProviderId);
+  if (!embeddingProvider.callEmbeddingApi) {
+    throw new Error(`Provider ${embeddingProvider.id()} does not implement callEmbeddingApi`);
+  }
   const retainedPredictions = new Map<string, FrontierCandidatePrediction>();
   const retainedCandidates = new Map<string, ActiveTransferRun['frontierCandidates'][number]>();
+  const retainedEmbeddings = new Map<string, number[]>();
+  const allDiscriminativeEmbeddings: number[][] = [];
+  const allDiscriminativePredictions: FrontierCandidatePrediction[] = [];
   const batches = [];
 
   for (let batch = 1; batch <= batchCount; batch += 1) {
@@ -136,6 +202,7 @@ async function main() {
       (prediction) => prediction.ordinaryPrediction !== prediction.criticPrediction,
     );
     let duplicateDiscriminativeCaseCount = 0;
+    let lexicalDuplicateDiscriminativeCaseCount = 0;
     let novelDiscriminativeCaseCount = 0;
     for (const prediction of discriminativePredictions) {
       const candidate = result.frontierCandidates.find(
@@ -145,7 +212,7 @@ async function main() {
         throw new Error(`Missing frontier candidate for ${prediction.taskId}.`);
       }
       const noveltyText = buildNoveltyText(candidate);
-      const mostSimilarRetainedCase = [...retainedCandidates.values()].reduce(
+      const lexicalMostSimilarRetainedCase = [...retainedCandidates.values()].reduce(
         (maximumSimilarity, retainedCandidate) =>
           Math.max(
             maximumSimilarity,
@@ -153,7 +220,22 @@ async function main() {
           ),
         0,
       );
-      if (mostSimilarRetainedCase >= noveltyThreshold) {
+      const embeddingResponse = await embeddingProvider.callEmbeddingApi(noveltyText);
+      if (!embeddingResponse?.embedding) {
+        throw new Error(embeddingResponse?.error ?? `No embedding returned for ${candidate.id}`);
+      }
+      const embedding = embeddingResponse.embedding;
+      allDiscriminativeEmbeddings.push(embedding);
+      allDiscriminativePredictions.push(prediction);
+      const embeddingMostSimilarRetainedCase = [...retainedEmbeddings.values()].reduce(
+        (maximumSimilarity, retainedEmbedding) =>
+          Math.max(maximumSimilarity, cosineSimilarity(embedding, retainedEmbedding)),
+        0,
+      );
+      if (lexicalMostSimilarRetainedCase >= lexicalNoveltyThreshold) {
+        lexicalDuplicateDiscriminativeCaseCount += 1;
+      }
+      if (embeddingMostSimilarRetainedCase >= embeddingNoveltyThreshold) {
         duplicateDiscriminativeCaseCount += 1;
         continue;
       }
@@ -165,6 +247,7 @@ async function main() {
       ].join('|');
       retainedPredictions.set(retainedKey, prediction);
       retainedCandidates.set(retainedKey, candidate);
+      retainedEmbeddings.set(retainedKey, embedding);
     }
     const retainedSummary = summarizePredictions([...retainedPredictions.values()]);
     batches.push({
@@ -177,6 +260,7 @@ async function main() {
         ordinaryFailureCount: result.summaries.ordinaryFailureCount,
       },
       duplicateDiscriminativeCaseCount,
+      lexicalDuplicateDiscriminativeCaseCount,
       novelDiscriminativeCaseCount,
       retainedSummary,
     });
@@ -188,8 +272,15 @@ async function main() {
         batchCount,
         batches,
         maxBatchAttempts,
-        noveltyThreshold,
+        embeddingThresholdSweep: summarizeEmbeddingThresholdSweep({
+          embeddings: allDiscriminativeEmbeddings,
+          predictions: allDiscriminativePredictions,
+        }),
+        embeddingNoveltyThreshold,
+        embeddingProviderId,
+        lexicalNoveltyThreshold,
         retainedCandidates: [...retainedCandidates.values()],
+        retainedEmbeddingNovelty: summarizeEmbeddingNovelty([...retainedEmbeddings.values()]),
         retainedNovelty: summarizeRetainedNovelty([...retainedCandidates.values()]),
         retainedPredictions: [...retainedPredictions.values()],
         retainedSummary: summarizePredictions([...retainedPredictions.values()]),

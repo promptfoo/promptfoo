@@ -7440,3 +7440,80 @@ But the novelty rule did **not** work as intended:
 3. The next experiment should replace lexical Jaccard with embedding-based
    nearest-neighbor novelty and test whether the retained frontier shrinks while
    preserving disagreement coverage.
+
+## Iteration 90 - 2026-05-09
+
+### Goal
+
+Replace the failed lexical novelty rule with semantic novelty and answer a more
+careful question:
+
+> Can embedding-based deduplication compress retained hard-memory cases without
+> erasing disagreement coverage between the ordinary and critic-gated methods?
+
+### Experiment
+
+1. Extended `evaluateRepairRetainedTransferFrontier.ts`.
+2. Added `openai:embedding:text-embedding-3-large` similarity over each retained
+   candidate's attack summary plus prompt text.
+3. Kept lexical Jaccard in the output only as a diagnostic baseline.
+4. Added a semantic-threshold sweep over `0.70`, `0.75`, `0.80`, `0.85`, and
+   `0.90`.
+5. Calibrated the live retention gate to `0.75` after the first probe showed
+   that `0.90` was far too permissive for this neighborhood.
+
+### Results
+
+The raw five-batch stream again produced `23` discriminative cases:
+
+1. `20` ordinary-bundle failures
+2. `3` critic-gated failures
+
+Lexical novelty still detected no duplicates at all:
+
+1. lexical gate threshold: `0.80`
+2. retained lexical max-pair similarity: `0.35`
+
+The embedding view exposed much more neighborhood structure:
+
+1. semantic max-pair similarity: `0.78`
+2. threshold `0.90`: retained all `23` cases
+3. threshold `0.80`: retained all `23` cases
+4. threshold `0.75`: retained `18` cases
+   - `15` ordinary-bundle failures
+   - `3` critic-gated failures
+5. threshold `0.70`: retained `16` cases
+   - `13` ordinary-bundle failures
+   - `3` critic-gated failures
+
+The calibrated `0.75` retention gate therefore removed `5` semantically nearby
+cases while preserving both disagreement directions.
+
+### Reflection
+
+1. Semantic novelty is materially better than lexical novelty here:
+   - bag-of-words distance said everything was new
+   - embeddings revealed a real near-neighbor cluster
+2. Thresholds need to be calibrated against coverage, not chosen by instinct:
+   - `0.90` looked sensible before measurement
+   - in practice it did no useful work on this frontier
+3. Coverage preservation matters more than compression alone:
+   - the attractive property of the `0.75` gate is not just `23 -> 18`
+   - it is that all `3` critic-gated failures survive the reduction
+4. The benchmark is starting to look less like a flat sample bag and more like a
+   retained, semantically pruned attack memory.
+5. A second full rerun later stalled in remote generation before emitting a
+   result:
+   - the complete first stream plus post-hoc threshold sweep were enough for
+     this iteration
+   - but long benchmark runs now clearly need bounded remote-work timeouts
+     instead of relying on retries alone
+
+### New Hypotheses
+
+1. Retained-frontier deduplication should be semantic by default.
+2. Retention should become coverage-aware:
+   - preserve method-specific failure directions first
+   - then prune near-neighbor surplus within each region
+3. The next experiment should compare naive greedy semantic pruning against a
+   coverage-constrained selector that explicitly protects minority failure modes.
