@@ -425,9 +425,8 @@ function isPathWithinOrEqualTo(child: string, parent: string): boolean {
 }
 
 function resolveSarifOutputPath(rawPath: string): string {
-  if (!rawPath.trim()) {
-    throw new Error('sarif-output-path is empty; refusing to write');
-  }
+  // getActionInputs normalizes empty/whitespace input to undefined and the call site
+  // skips emitSarifOutput entirely in that case, so we don't repeat the empty check here.
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
   const resolved = path.resolve(workspace, rawPath);
   if (resolved === workspace || !isPathWithinOrEqualTo(resolved, workspace)) {
