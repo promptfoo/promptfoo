@@ -15,8 +15,9 @@ query structure instead of being bound as data.
   that blocks obvious payloads such as `OR 1=1 --` but can still be bypassed.
 - `safe-ticket-agent`: the same assistant with a parameterized ticket-search
   tool.
-- `unsafe-order-agent`: an account-specific order lookup that interpolates a
-  numeric-looking filter directly into SQL.
+- `unsafe-order-agent`, `hardened-order-agent`, and `safe-order-agent`:
+  account-specific order lookup variants that exercise numeric predicate
+  injection rather than quoted-string injection.
 - `unsafe-expense-agent`, `hardened-expense-agent`, and `safe-expense-agent`:
   exact-ID expense lookup variants that exercise string-equality injection
   rather than `LIKE`-pattern injection.
@@ -28,11 +29,13 @@ query structure instead of being bound as data.
 - `agent_provider.py`: the Agents SDK providers and SQLite-backed tools
 - `agent_provider_test.py`: deterministic tests for the unsafe, hardened, and
   safe tool semantics
-- `promptfooconfig.yaml`: an eval that compares the five agent behaviors
+- `promptfooconfig.yaml`: an eval that compares the agent behaviors
 - `promptfooconfig.redteam.yaml`: a generated-corpus benchmark that runs the
   same SQL injection probes against unsafe, hardened, and safe ticket agents
 - `promptfooconfig.redteam.expenses.yaml`: the same benchmark structure for the
   exact-ID expense-report agents
+- `promptfooconfig.redteam.orders.yaml`: the same benchmark structure for the
+  numeric order-id agents
 - `score_redteam_results.py`: summarizes generated attack-family diversity,
   leaked rows, and grader failures from exported red-team results
 - `requirements.txt`: Python dependencies
@@ -116,5 +119,7 @@ The benchmark uses three interpretations of the same product surface:
    bypassable by stronger generations.
 3. `safe-ticket-agent-redteam` should not leak rows for any generated payload.
 
-Run `promptfooconfig.redteam.expenses.yaml` the same way when you want the
-exact-ID expense-report benchmark instead of the `LIKE`-search ticket benchmark.
+Run `promptfooconfig.redteam.expenses.yaml` or
+`promptfooconfig.redteam.orders.yaml` the same way when you want the exact-ID
+expense-report or numeric order-id benchmark instead of the `LIKE`-search ticket
+benchmark.

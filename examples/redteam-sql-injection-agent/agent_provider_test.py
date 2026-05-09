@@ -101,6 +101,22 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
         self.assertEqual(ids, [501, 502, 601, 701])
 
+    def test_safe_order_lookup_treats_payload_as_data(self):
+        rows = AGENT_PROVIDER._safe_lookup_order_impl("0 OR 1=1")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_order_lookup_blocks_textbook_payload(self):
+        rows = AGENT_PROVIDER._hardened_lookup_order_impl("0 OR 1=1")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_order_lookup_can_be_bypassed_with_inline_comments(self):
+        rows = AGENT_PROVIDER._hardened_lookup_order_impl("0/**/OR/**/1=1")
+        ids = [row["id"] for row in rows]
+
+        self.assertEqual(ids, [501, 502, 601, 701])
+
     def test_unsafe_expense_lookup_leaks_other_employee_rows(self):
         rows = AGENT_PROVIDER._unsafe_lookup_expense_impl("' OR 1=1 --")
         ids = [row["id"] for row in rows]
