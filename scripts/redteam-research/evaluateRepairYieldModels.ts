@@ -6,13 +6,16 @@ import {
   type PromptProfile,
 } from './buildRepairOutcomeTable';
 import { buildValidatedRepairTaskBenchmark } from './generateRepairTaskBenchmark';
+import { jaccardSimilarity, tokenize } from './sqlResearchShared';
 
 type ModelName =
+  | 'candidate-text-1nn-yield'
   | 'family-mean-yield'
   | 'global-mean-yield'
   | 'metric-family-router'
   | 'plugin-mean-yield'
-  | 'ridge-yield';
+  | 'ridge-yield'
+  | 'semantic-context-1nn-yield';
 type Prediction = {
   actualWinner: PromptProfile;
   predictedProfile: PromptProfile;
@@ -80,6 +83,34 @@ function predictByGroupedMean(
   const matchingRows = trainingRows.filter((row) => groupOf(row) === groupOf(targetRow));
   const rowsForPrediction = matchingRows.length > 0 ? matchingRows : trainingRows;
   return selectHighestYieldProfile(averageYields(rowsForPrediction));
+}
+
+function candidatePromptText(row: ObservedOutcomeRow): string {
+  return row.task.candidatePrompt;
+}
+
+function semanticContextText(row: ObservedOutcomeRow): string {
+  return [
+    row.task.plugin,
+    row.task.features.blockedMetric ?? 'none',
+    row.task.targetTactic,
+    row.task.candidatePrompt,
+    ...row.task.collisionPrompts,
+  ].join(' ');
+}
+
+function predictByNearestNeighbor(
+  trainingRows: ObservedOutcomeRow[],
+  targetRow: ObservedOutcomeRow,
+  textOf: (row: ObservedOutcomeRow) => string,
+): PromptProfile {
+  const targetTokens = tokenize(textOf(targetRow));
+  const [nearestNeighbor] = [...trainingRows].sort((left, right) => {
+    const rightSimilarity = jaccardSimilarity(tokenize(textOf(right)), targetTokens);
+    const leftSimilarity = jaccardSimilarity(tokenize(textOf(left)), targetTokens);
+    return rightSimilarity - leftSimilarity;
+  });
+  return selectHighestYieldProfile(getTop3Yields(nearestNeighbor));
 }
 
 function featureVector(row: ObservedOutcomeRow): number[] {
@@ -200,6 +231,8 @@ function predict(
   targetRow: ObservedOutcomeRow,
 ): PromptProfile {
   switch (model) {
+    case 'candidate-text-1nn-yield':
+      return predictByNearestNeighbor(trainingRows, targetRow, candidatePromptText);
     case 'family-mean-yield':
       return predictByGroupedMean(
         trainingRows,
@@ -214,6 +247,8 @@ function predict(
       return predictByGroupedMean(trainingRows, targetRow, (row) => row.task.plugin);
     case 'ridge-yield':
       return predictWithRidge(trainingRows, targetRow);
+    case 'semantic-context-1nn-yield':
+      return predictByNearestNeighbor(trainingRows, targetRow, semanticContextText);
   }
 }
 
@@ -225,6 +260,8 @@ function evaluateModels(
     (
       [
         'metric-family-router',
+        'candidate-text-1nn-yield',
+        'semantic-context-1nn-yield',
         'global-mean-yield',
         'family-mean-yield',
         'plugin-mean-yield',
@@ -253,6 +290,8 @@ function evaluateLeaveOneOut(rows: ObservedOutcomeRow[]) {
     (
       [
         'metric-family-router',
+        'candidate-text-1nn-yield',
+        'semantic-context-1nn-yield',
         'global-mean-yield',
         'family-mean-yield',
         'plugin-mean-yield',

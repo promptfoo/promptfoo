@@ -3285,3 +3285,99 @@ Current best evidence:
 3. The real target may be pairwise profile ranking rather than absolute yield
    regression, because the current task is “which proposer should I try first?”
    more than “what exact yield will I get?”
+
+## Iteration 41 - 2026-05-09
+
+### Goal
+
+Test the lightest plausible semantic signal before reaching for embeddings:
+
+> If we let nearby **task text** transfer proposer yields, does that help more
+> than repair geometry alone?
+
+### Experiment
+
+1. Extended benchmark tasks with:
+   - `candidatePrompt`
+   - the two highest-collision winner prompts
+2. Added two lexical nearest-neighbor baselines to
+   `evaluateRepairYieldModels.ts`:
+   - `candidate-text-1nn-yield`
+   - `semantic-context-1nn-yield`
+3. `candidate-text-1nn-yield` compares only the repair prompt text.
+4. `semantic-context-1nn-yield` compares:
+   - plugin
+   - blocked metric
+   - target tactic
+   - candidate prompt
+   - top collision prompts
+5. Re-ran the same train -> holdout and leave-one-out evaluations.
+
+### Results
+
+Holdout accuracy:
+
+| Model                   | Accuracy |
+| ----------------------- | -------: |
+| metric-family router    |    `1/4` |
+| candidate text `1-NN`   |    `1/4` |
+| semantic context `1-NN` |    `2/4` |
+| global mean yield       |    `1/4` |
+| family mean yield       |    `1/4` |
+| plugin mean yield       |    `2/4` |
+| ridge yield regression  |    `0/4` |
+
+Holdout average regret:
+
+| Model                   | Avg regret |
+| ----------------------- | ---------: |
+| metric-family router    |  `0.00557` |
+| candidate text `1-NN`   |  `0.00440` |
+| semantic context `1-NN` |  `0.00236` |
+| global mean yield       |  `0.00440` |
+| family mean yield       |  `0.00557` |
+| plugin mean yield       |  `0.00236` |
+| ridge yield regression  |  `0.00587` |
+
+Leave-one-out accuracy:
+
+| Model                   | Accuracy |
+| ----------------------- | -------: |
+| metric-family router    |   `7/10` |
+| candidate text `1-NN`   |   `0/10` |
+| semantic context `1-NN` |   `4/10` |
+| global mean yield       |   `3/10` |
+| family mean yield       |   `7/10` |
+| plugin mean yield       |   `6/10` |
+| ridge yield regression  |   `2/10` |
+
+### Reflection
+
+1. Candidate text alone does not help:
+   - `1/4` holdout accuracy
+   - `0/10` leave-one-out accuracy
+2. Adding local task context helps, but only up to the old plugin baseline:
+   - `semantic-context-1nn-yield` reaches `2/4`
+   - exactly tied with `plugin-mean-yield`
+3. That means lexical overlap is not yet adding genuinely new signal beyond
+   domain identity:
+   - plugin name
+   - blocked metric
+   - target tactic
+     carry most of what this tiny text baseline can exploit
+4. The leave-one-out result is actively weak:
+   - `4/10`
+   - much worse than the `7/10` family router
+5. The semantic hypothesis remains plausible, but this particular
+   representation is not good enough:
+   - we need stronger semantic abstractions than token overlap
+   - or many more neighboring tasks before lexical `1-NN` becomes reliable
+
+### New Hypotheses
+
+1. Embeddings or LLM-authored task summaries are still plausible next steps,
+   precisely because lexical overlap failed to add much beyond plugin identity.
+2. We should keep the current lexical `1-NN` as a cheap negative-control floor
+   before introducing embedding APIs or learned rerankers.
+3. The next experiment should test a richer semantic representation on the same
+   frozen split, not another lexical variant.

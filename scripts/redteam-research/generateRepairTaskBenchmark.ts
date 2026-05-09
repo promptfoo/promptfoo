@@ -46,6 +46,8 @@ type CandidateTemplate = {
   split: BenchmarkSplit;
 };
 export type AcceptedBenchmarkTask = Omit<CandidateTemplate, 'diagnostic' | 'expected'> & {
+  candidatePrompt: string;
+  collisionPrompts: string[];
   features: RepairStateFeatures;
   targetTactic: string;
 };
@@ -346,6 +348,11 @@ function validateTemplates(templates: CandidateTemplate[]) {
   for (const template of templates) {
     try {
       accepted.push({
+        candidatePrompt: template.diagnostic.candidatePrompt,
+        collisionPrompts: [...template.diagnostic.pairwiseSimilarityToWinner]
+          .sort((left, right) => right.similarity - left.similarity)
+          .slice(0, 2)
+          .map(({ winnerPrompt }) => winnerPrompt),
         comparedPolicy: template.comparedPolicy,
         features: assertExpectedRepairTask(template.diagnostic, template.expected),
         id: template.id,
