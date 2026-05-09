@@ -122,6 +122,12 @@ export async function encodeMathPrompt(
 
     The encoded prompt should use mathematical notation and terminology to represent the original text in a way that requires solving or interpreting a mathematical problem to understand the original meaning. Follow the structure of the example, but adapt it to the given text.`,
   );
+  const tokenUsage = result.tokenUsage
+    ? {
+        ...result.tokenUsage,
+        ...(result.tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
+      }
+    : undefined;
 
   let encodedPrompt: string;
   try {
@@ -136,7 +142,10 @@ export async function encodeMathPrompt(
     logger.warn(
       `[MathPrompt] Failed to extract JSON object for MathPrompt encoding: ${error}\n\nRaw response: ${result.output}`,
     );
-    throw error;
+    throw Object.assign(
+      error instanceof Error ? error : new Error(String(error)),
+      tokenUsage ? { tokenUsage } : {},
+    );
   }
 
   const additionalInstruction =
@@ -144,12 +153,7 @@ export async function encodeMathPrompt(
 
   return {
     encodedPrompt: encodedPrompt.trim() + ' ' + additionalInstruction,
-    tokenUsage: result.tokenUsage
-      ? {
-          ...result.tokenUsage,
-          ...(result.tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
-        }
-      : undefined,
+    tokenUsage,
   };
 }
 

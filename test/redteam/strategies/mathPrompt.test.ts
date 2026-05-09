@@ -113,6 +113,22 @@ describe('mathPrompt', () => {
         'Expected a JSON object',
       );
     });
+
+    it('should preserve helper usage on JSON parsing errors', async () => {
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
+          output: 'invalid json',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      });
+
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+
+      await expect(encodeMathPrompt('test text', 'set theory')).rejects.toMatchObject({
+        tokenUsage: { total: 10, prompt: 5, completion: 5, numRequests: 1 },
+      });
+    });
   });
 
   describe('addMathPrompt', () => {
