@@ -594,10 +594,12 @@ function renderTokenMetrics({
   metrics,
   filteredMetrics,
   testCount,
+  isRedteam,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
   testCount?: PromptSummaryMetric;
+  isRedteam: boolean;
 }): React.ReactNode[] {
   if (!metrics?.tokenUsage?.total) {
     return [];
@@ -611,13 +613,23 @@ function renderTokenMetrics({
 
   return [
     <div key="total-tokens">
-      <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
+      <strong>{isRedteam ? 'Non-grading Tokens:' : 'Total Tokens:'}</strong>{' '}
+      {formatMetricValue(totalTokens)}
       {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
     </div>,
     <div key="avg-tokens">
-      <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
+      <strong>{isRedteam ? 'Avg Non-grading Tokens:' : 'Avg Tokens:'}</strong>{' '}
+      {formatMetricValue(totalAverage)}
       {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
     </div>,
+    ...(isRedteam && metrics.tokenUsage.assertions?.total
+      ? [
+          <div key="grading-tokens">
+            <strong>Grading Tokens:</strong>{' '}
+            {formatMetricValue(metrics.tokenUsage.assertions.total)}
+          </div>,
+        ]
+      : []),
   ];
 }
 
@@ -659,7 +671,13 @@ function renderLatencyMetric({
   );
 }
 
-function renderTokensPerSecondMetric(metrics: PromptMetrics['total']): React.ReactNode {
+function renderTokensPerSecondMetric({
+  metrics,
+  isRedteam,
+}: {
+  metrics: PromptMetrics['total'];
+  isRedteam: boolean;
+}): React.ReactNode {
   if (!metrics?.totalLatencyMs || !metrics.tokenUsage?.completion) {
     return null;
   }
@@ -671,7 +689,8 @@ function renderTokensPerSecondMetric(metrics: PromptMetrics['total']): React.Rea
 
   return (
     <div>
-      <strong>Tokens/Sec:</strong> {formatMetricValue(tokPerSec)}
+      <strong>{isRedteam ? 'Non-grading Tokens/Sec:' : 'Tokens/Sec:'}</strong>{' '}
+      {formatMetricValue(tokPerSec)}
     </div>
   );
 }
@@ -925,13 +944,14 @@ function renderPromptMetricDetails({
         metrics,
         filteredMetrics,
         testCount: testCounts[idx],
+        isRedteam,
       })}
       {renderLatencyMetric({
         metrics,
         filteredMetrics,
         testCount: testCounts[idx],
       })}
-      {renderTokensPerSecondMetric(metrics)}
+      {renderTokensPerSecondMetric({ metrics, isRedteam })}
     </div>
   );
 }

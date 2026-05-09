@@ -47,6 +47,7 @@ const defaultResultsViewSettings = {
 
 const defaultTableStoreState = {
   shouldHighlightSearchText: false,
+  config: undefined as { redteam?: Record<string, unknown> } | undefined,
 };
 
 const mockResultsViewSettings = {
@@ -963,6 +964,27 @@ describe('EvalOutputCell', () => {
     const cachedSuffix = screen.getByText('(cached)');
     expect(cachedSuffix).toBeInTheDocument();
     expect(cachedSuffix).toHaveClass('italic');
+  });
+
+  it('labels red-team token stats explicitly', () => {
+    mockTableStoreState.config = { redteam: {} };
+
+    const propsWithStandardTokens: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        tokenUsage: {
+          prompt: 11,
+          completion: 22,
+          total: 33,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithStandardTokens} />);
+
+    expect(screen.getByText('Non-grading tokens:')).toBeInTheDocument();
+    expect(screen.getByText('Non-grading tokens/sec:')).toBeInTheDocument();
   });
 
   it('renders JSON diffs with added and removed fragments when showDiffs is enabled', () => {

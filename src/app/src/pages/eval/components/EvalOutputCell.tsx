@@ -881,12 +881,14 @@ function renderCommentNode({
 
 function renderCellDetail({
   showStats,
+  isRedteam,
   tokenUsageDisplay,
   latencyDisplay,
   tokPerSecDisplay,
   costDisplay,
 }: {
   showStats: boolean;
+  isRedteam: boolean;
   tokenUsageDisplay?: React.ReactNode;
   latencyDisplay?: React.ReactNode;
   tokPerSecDisplay?: React.ReactNode;
@@ -900,7 +902,7 @@ function renderCellDetail({
     <div className="cell-detail">
       {tokenUsageDisplay && (
         <div className="stat-item">
-          <strong>Tokens:</strong> {tokenUsageDisplay}
+          <strong>{isRedteam ? 'Non-grading tokens:' : 'Tokens:'}</strong> {tokenUsageDisplay}
         </div>
       )}
       {latencyDisplay && (
@@ -910,7 +912,8 @@ function renderCellDetail({
       )}
       {tokPerSecDisplay && (
         <div className="stat-item">
-          <strong>Tokens/Sec:</strong> {tokPerSecDisplay}
+          <strong>{isRedteam ? 'Non-grading tokens/sec:' : 'Tokens/Sec:'}</strong>{' '}
+          {tokPerSecDisplay}
         </div>
       )}
       {costDisplay && (
@@ -1286,7 +1289,8 @@ function EvalOutputCell({
     maxImageHeight,
   } = useResultsViewSettingsStore();
 
-  const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
+  const { shouldHighlightSearchText, addFilter, resetFilters, config } = useTableStore();
+  const isRedteam = config?.redteam !== undefined;
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
@@ -1584,6 +1588,7 @@ function EvalOutputCell({
       })}
       {renderCellDetail({
         showStats,
+        isRedteam,
         tokenUsageDisplay,
         latencyDisplay,
         tokPerSecDisplay,
