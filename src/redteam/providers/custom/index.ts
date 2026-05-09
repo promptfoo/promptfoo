@@ -763,7 +763,11 @@ export class CustomProvider implements ApiProvider {
       await sleep(redTeamingChat.delay);
     }
     if (response.error) {
-      throw new Error(`Error from redteam provider: ${response.error}`);
+      logger.debug('[Custom] Redteam provider returned an error', { response });
+      return {
+        generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
+      };
     }
     if (!response.output) {
       logger.debug('[Custom] No output from redteam provider', { response });
@@ -1014,28 +1018,39 @@ export class CustomProvider implements ApiProvider {
       await sleep(scoringProvider.delay);
     }
     if (refusalResponse.error) {
-      throw new Error(`Error from redteam (refusal) provider: ${refusalResponse.error}`);
+      logger.warn('[Custom] Refusal score provider returned an error', {
+        error: refusalResponse.error,
+      });
+      return [false, `Refusal check error: ${refusalResponse.error}`, refusalResponse.tokenUsage];
     }
 
     logger.debug(`[Custom] Refusal score response: ${refusalResponse.output}`);
 
-    const parsed =
-      typeof refusalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            metadata: number;
-            rationale: string;
-          }>(refusalResponse.output)
-        : refusalResponse.output;
+    try {
+      const parsed =
+        typeof refusalResponse.output === 'string'
+          ? extractFirstJsonObject<{
+              value: boolean;
+              metadata: number;
+              rationale: string;
+            }>(refusalResponse.output)
+          : refusalResponse.output;
 
-    logger.debug('[Custom] Refusal score parsed response', { parsed });
-    invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
-    invariant(
-      typeof parsed.metadata === 'number',
-      'Expected refusal grader metadata to be a number',
-    );
+      logger.debug('[Custom] Refusal score parsed response', { parsed });
+      invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
+      invariant(
+        typeof parsed.metadata === 'number',
+        'Expected refusal grader metadata to be a number',
+      );
 
-    return [parsed.value, parsed.rationale, refusalResponse.tokenUsage];
+      return [parsed.value, parsed.rationale, refusalResponse.tokenUsage];
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      logger.warn('[Custom] Failed to parse refusal score response', { error });
+      return [false, 'Failed to parse refusal score response', refusalResponse.tokenUsage];
+    }
   }
 
   private async getEvalScore(
@@ -1075,32 +1090,59 @@ export class CustomProvider implements ApiProvider {
       await sleep(scoringProvider.delay);
     }
     if (evalResponse.error) {
-      throw new Error(`Error from redteam (eval) provider: ${evalResponse.error}`);
+      logger.warn('[Custom] Eval score provider returned an error', {
+        error: evalResponse.error,
+      });
+      return [
+        {
+          value: false,
+          description: 'Evaluation error',
+          rationale: `Evaluation error: ${evalResponse.error}`,
+          metadata: 0,
+        },
+        evalResponse.tokenUsage,
+      ];
     }
 
     logger.debug(`[Custom] Eval score response: ${evalResponse.output}`);
 
-    const parsed =
-      typeof evalResponse.output === 'string'
-        ? extractFirstJsonObject<{
-            value: boolean;
-            description: string;
-            rationale: string;
-            metadata: number;
-          }>(evalResponse.output)
-        : evalResponse.output;
+    try {
+      const parsed =
+        typeof evalResponse.output === 'string'
+          ? extractFirstJsonObject<{
+              value: boolean;
+              description: string;
+              rationale: string;
+              metadata: number;
+            }>(evalResponse.output)
+          : evalResponse.output;
 
-    logger.debug('[Custom] Eval score parsed response', { parsed });
-    invariant(
-      typeof parsed.value === 'boolean',
-      `Expected eval grader value to be a boolean: ${parsed}`,
-    );
-    invariant(
-      typeof parsed.metadata === 'number',
-      `Expected eval grader metadata to be a number: ${parsed}`,
-    );
+      logger.debug('[Custom] Eval score parsed response', { parsed });
+      invariant(
+        typeof parsed.value === 'boolean',
+        `Expected eval grader value to be a boolean: ${parsed}`,
+      );
+      invariant(
+        typeof parsed.metadata === 'number',
+        `Expected eval grader metadata to be a number: ${parsed}`,
+      );
 
-    return [parsed, evalResponse.tokenUsage];
+      return [parsed, evalResponse.tokenUsage];
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      logger.warn('[Custom] Failed to parse eval score response', { error });
+      return [
+        {
+          value: false,
+          description: 'Failed to parse evaluation response',
+          rationale: 'Failed to parse evaluation response',
+          metadata: 0,
+        },
+        evalResponse.tokenUsage,
+      ];
+    }
   }
 
   private async backtrackMemory(conversationId: string): Promise<string> {

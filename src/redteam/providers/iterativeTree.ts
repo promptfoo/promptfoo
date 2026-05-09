@@ -181,7 +181,7 @@ export async function evaluateResponse(
   targetResponse: string,
   previousBestResponse: string,
   containsPenalizedPhrase: boolean,
-): Promise<{ score: number; explanation: string; tokenUsage?: TokenUsage }> {
+): Promise<{ score: number; explanation: string; tokenUsage?: TokenUsage; error?: string }> {
   const judgeBody = JSON.stringify([
     {
       role: 'system',
@@ -212,7 +212,12 @@ export async function evaluateResponse(
   }
   logger.debug('[IterativeTree] Judge response', { response: judgeResp });
   if (judgeResp.error) {
-    throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
+    return {
+      score: 1,
+      explanation: 'Judge provider error',
+      tokenUsage: judgeResp.tokenUsage,
+      error: judgeResp.error,
+    };
   }
   try {
     const parsed =
@@ -280,6 +285,7 @@ export async function getNewPrompt(
   materializedVars?: Record<string, string>;
   prompt: string;
   tokenUsage?: TokenUsage;
+  error?: string;
 }> {
   const redteamBody = JSON.stringify(redteamHistory);
   const redteamResp = await redteamProvider.callApi(redteamBody, {
@@ -302,10 +308,18 @@ export async function getNewPrompt(
     await sleep(redteamProvider.delay);
   }
   logger.debug('[IterativeTree] Redteam response', { response: redteamResp });
-  if (redteamResp.error) {
-    throw new Error(`Error from redteam provider: ${redteamResp.error}`);
-  }
   TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
+  if (redteamResp.error) {
+    return {
+      improvement: 'provider error - skipping turn',
+      inputMaterialization: redteamResp.inputMaterialization,
+      materializationHandled: redteamResp.materializationHandled,
+      materializedVars: redteamResp.materializedVars,
+      prompt: '',
+      tokenUsage: redteamResp.tokenUsage,
+      error: redteamResp.error,
+    };
+  }
 
   let retObj: { improvement: string; prompt: string };
   if (typeof redteamResp.output === 'string') {
@@ -638,6 +652,7 @@ async function runRedteamConversation({
         const iterationVars = iterationContext?.vars || {};
 
         let {
+          error: redteamError,
           improvement,
           inputMaterialization,
           materializationHandled,
@@ -671,6 +686,12 @@ async function runRedteamConversation({
             countAsRequest: false,
           },
         );
+        if (redteamError) {
+          logger.info(
+            `[IterativeTree] Redteam helper error at depth ${depth}, attempt ${attempts}: ${redteamError}`,
+          );
+          continue;
+        }
 
         // Extract JSON from <Prompt> tags if present (multi-input mode)
         const extractedPrompt = extractPromptFromTags(newInjectVar);
@@ -839,6 +860,7 @@ async function runRedteamConversation({
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 
         const {
+          error: judgeError,
           score,
           explanation,
           tokenUsage: judgeTokenUsage,
@@ -856,6 +878,12 @@ async function runRedteamConversation({
             countAsRequest: false,
           },
         );
+        if (judgeError) {
+          logger.info(
+            `[IterativeTree] Judge helper error at depth ${depth}, attempt ${attempts}: ${judgeError}`,
+          );
+          continue;
+        }
 
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
@@ -1227,9 +1255,7 @@ async function runRedteamConversation({
     context,
     options,
   );
-  if (finalTargetResponse.tokenUsage) {
-    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
-  }
+  accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
   logger.debug(
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,

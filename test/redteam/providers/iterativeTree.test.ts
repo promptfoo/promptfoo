@@ -434,6 +434,26 @@ describe('RedteamIterativeProvider', () => {
       expect(result.explanation).toBe('Failed to parse judge response');
     });
 
+    it('should preserve judge usage when the judge provider returns an error', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        error: 'judge failed',
+        tokenUsage: { total: 30, prompt: 12, completion: 18, numRequests: 1 },
+      });
+
+      const result = await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Response',
+        'Best',
+        false,
+      );
+
+      expect(result).toMatchObject({
+        error: 'judge failed',
+        tokenUsage: { total: 30, prompt: 12, completion: 18, numRequests: 1 },
+      });
+    });
+
     it('should handle non-AbortError parse failures gracefully in getNewPrompt', async () => {
       // Return unparseable output - should skip turn gracefully
       mockRedteamProvider.callApi.mockResolvedValue({
@@ -445,6 +465,21 @@ describe('RedteamIterativeProvider', () => {
       // Should return skip marker instead of throwing
       expect(result.improvement).toBe('parse failure – skipping turn');
       expect(result.prompt).toBe('');
+    });
+
+    it('should preserve attacker usage when the redteam provider returns an error', async () => {
+      mockRedteamProvider.callApi.mockResolvedValue({
+        error: 'attacker failed',
+        tokenUsage: { total: 40, prompt: 16, completion: 24, numRequests: 1 },
+      });
+
+      const result = await getNewPrompt(mockRedteamProvider, []);
+
+      expect(result).toMatchObject({
+        error: 'attacker failed',
+        prompt: '',
+        tokenUsage: { total: 40, prompt: 16, completion: 24, numRequests: 1 },
+      });
     });
   });
 
@@ -1334,6 +1369,17 @@ describe('Token Counting', () => {
 
     // Mirrors the iterative-tree error branch behavior where we now accumulate before continue.
     accumulateResponseTokenUsage(totalTokenUsage, errorResponse);
+
+    expect(totalTokenUsage.numRequests).toBe(1);
+  });
+
+  it('should count final target requests even when the response omits token usage', () => {
+    const totalTokenUsage = createEmptyTokenUsage();
+    const finalTargetResponse = {
+      output: 'final response without usage',
+    };
+
+    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
     expect(totalTokenUsage.numRequests).toBe(1);
   });
