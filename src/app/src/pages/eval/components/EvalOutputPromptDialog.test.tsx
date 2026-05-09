@@ -7,7 +7,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import type { AssertionType, GradingResult } from '@promptfoo/types';
+import type { AssertionType, AtomicTestCase, GradingResult } from '@promptfoo/types';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -566,6 +566,29 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     user = userEvent.setup();
+  });
+
+  it('surfaces test-case metadata such as generation token usage', async () => {
+    const testCase = {
+      metadata: {
+        providerTokenUsage: {
+          total: 12,
+          prompt: 8,
+          completion: 4,
+          cached: 0,
+          numRequests: 1,
+        },
+      },
+    } as AtomicTestCase;
+
+    renderWithProviders(
+      <EvalOutputPromptDialog {...defaultProps} metadata={{}} testCase={testCase} />,
+    );
+    await act(async () => {
+      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
+    });
+
+    expect(screen.getByText('providerTokenUsage')).toBeInTheDocument();
   });
 
   it('expands metadata value on single click', async () => {

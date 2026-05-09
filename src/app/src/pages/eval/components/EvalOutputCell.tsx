@@ -1227,6 +1227,7 @@ function renderOutputActions({
               gradingResults={getDialogGradingResults(output)}
               output={text}
               metadata={output.metadata}
+              testCase={output.testCase}
               providerPrompt={getActualPrompt(output.response, { formatted: true })}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
