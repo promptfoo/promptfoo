@@ -106,6 +106,13 @@ export abstract class RedteamPluginBase {
   }
 
   /**
+   * Allows plugins with stricter validation to spend more attempts filling the requested corpus.
+   */
+  protected getMaxConsecutiveGenerationRetries(): number {
+    return 2;
+  }
+
+  /**
    * Generates test cases based on the plugin's configuration.
    * @param n - The number of test cases to generate.
    * @param delayMs - The delay in milliseconds between plugin API calls.
@@ -271,6 +278,7 @@ export abstract class RedteamPluginBase {
     const allPrompts = await retryWithDeduplication(
       generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
       n,
+      this.getMaxConsecutiveGenerationRetries(),
     );
     const prompts = sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
