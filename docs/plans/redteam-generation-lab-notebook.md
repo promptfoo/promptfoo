@@ -5126,3 +5126,104 @@ That means:
    other residual family:
    - `bola-coverage-v2`
      because it may reveal whether specialist failures share a broader pattern.
+
+## Iteration 60 - 2026-05-09
+
+### Goal
+
+Pause the legal-counsel mapping thread and inspect the last remaining holdout
+miss:
+
+> Is `bola-coverage-v2` another hidden semantic collision, or a different kind
+> of residual error?
+
+### Experiment
+
+1. Added `diagnoseRepairBolaResidual.ts`.
+2. Reused the saved `role-mechanism` draws from iteration 53.
+3. Compared `bola-coverage-v1` against `bola-coverage-v2` on:
+   - candidate-prompt token overlap
+   - semantic label-set similarity
+   - semantic slot agreement
+   - semantic-summary similarity
+   - observed yield deltas by proposer profile
+
+### Results
+
+BOLA is **not** another hidden mixed-winner collision:
+
+| Measure                     | Average |
+| --------------------------- | ------: |
+| candidate-prompt similarity | `0.265` |
+| semantic label similarity   | `0.315` |
+| semantic slot agreement     | `0.476` |
+| semantic summary similarity | `0.227` |
+
+The prompts are materially different:
+
+1. `bola-coverage-v1`
+   - coverage **summary**
+   - for a policy
+   - winner: `thin`
+2. `bola-coverage-v2`
+   - coverage **record**
+   - plus balance details for a named individual
+   - winner: `balanced`
+
+The observed yield shift is real:
+
+| Profile    | `v2 - v1` yield delta |
+| ---------- | --------------------: |
+| `balanced` |             `+0.0257` |
+| `thin`     |             `-0.0373` |
+
+Yet the global `role-mechanism` router still predicts `thin` for
+`bola-coverage-v2` on every draw.
+
+### Reflection
+
+1. This is a different failure mode from the legal-counsel pair:
+   - legal-counsel was a **local ambiguity**
+   - BOLA is a **sparse-support problem**
+2. The semantic model already separates the two BOLA tasks reasonably well.
+3. The router still fails because the training set has only one nearby BOLA
+   coverage exemplar:
+   - a thin-winning summary request
+4. When the holdout moves to a record-level retrieval with named-user details,
+   nearest-neighbor routing has no comparable balanced-winning local support.
+5. The right next move is probably not another label:
+   - it is to add or synthesize local BOLA support that spans
+     summary-versus-record retrieval modes
+
+### Five-Iteration Checkpoint: 56-60
+
+1. **What improved**
+   - local specialist routing can lift holdout accuracy from `2/4` to `3/4`
+   - a learned packaging classifier recovers the useful legal-counsel structure
+2. **What failed**
+   - direct local profile selection
+   - contrastive profile reranking with the current tiny supervision set
+3. **What we learned**
+   - structure learning is easier than policy learning
+   - legal-counsel needs a hierarchical specialist
+   - BOLA is a different residual: sparse support, not hidden semantic collapse
+4. **Current best architecture**
+   - global semantic router
+   - specialist detector
+   - local structural classifier
+   - calibrated mapping layer trained with more local examples
+5. **Near-term research agenda**
+   - add counterfactual legal-counsel examples to learn the packaging-to-profile
+     map
+   - add BOLA support that covers summary-versus-record retrieval modes
+   - then re-measure whether the remaining errors disappear without broadening
+     the global ontology further
+
+### New Hypotheses
+
+1. BOLA routing will improve more from local support augmentation than from a new
+   semantic slot.
+2. Legal-counsel mapping will improve more from counterfactual examples than
+   from prompt-engineering the reranker again.
+3. The global representation frontier may now be mature enough that future gains
+   mostly come from **data shaping** rather than ontology search.
