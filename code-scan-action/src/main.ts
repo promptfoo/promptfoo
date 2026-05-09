@@ -407,10 +407,13 @@ async function postFallbackComments(
 }
 
 function resolveSarifOutputPath(rawPath: string): string {
+  if (!rawPath.trim()) {
+    throw new Error('sarif-output-path is empty; refusing to write');
+  }
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
   const resolved = path.resolve(workspace, rawPath);
   const workspaceWithSep = workspace.endsWith(path.sep) ? workspace : workspace + path.sep;
-  if (resolved !== workspace && !resolved.startsWith(workspaceWithSep)) {
+  if (resolved === workspace || !resolved.startsWith(workspaceWithSep)) {
     throw new Error(
       `sarif-output-path "${rawPath}" resolves outside GITHUB_WORKSPACE; refusing to write`,
     );
@@ -420,14 +423,21 @@ function resolveSarifOutputPath(rawPath: string): string {
 
 function writeSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
   // SARIF output is supplementary — never sink an otherwise-successful scan over a write failure.
+  let resolved: string;
   try {
-    const resolved = resolveSarifOutputPath(rawPath);
+    resolved = resolveSarifOutputPath(rawPath);
+  } catch (error) {
+    core.warning(formatError(error));
+    return;
+  }
+
+  try {
     fs.mkdirSync(path.dirname(resolved), { recursive: true });
     fs.writeFileSync(resolved, JSON.stringify(scanResponseToSarif(scanResponse), null, 2));
     core.setOutput('sarif-path', resolved);
     core.info(`📝 Wrote SARIF output to ${resolved}`);
   } catch (error) {
-    core.warning(`Failed to write SARIF output to "${rawPath}": ${formatError(error)}`);
+    core.warning(`Failed to write SARIF output to "${resolved}": ${formatError(error)}`);
   }
 }
 

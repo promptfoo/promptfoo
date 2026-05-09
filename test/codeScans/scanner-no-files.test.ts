@@ -140,33 +140,28 @@ describe('Scanner machine-readable output', () => {
     vi.restoreAllMocks();
   });
 
-  it('emits a synthetic empty JSON response when no files are available with --json', async () => {
-    mockNoFilesScanner();
+  it.each([
+    ['--json', { json: true, diffsOnly: true }, CodeScanOutputFormat.JSON],
+    [
+      '--format sarif',
+      { format: CodeScanOutputFormat.SARIF, diffsOnly: true },
+      CodeScanOutputFormat.SARIF,
+    ],
+  ])(
+    'emits an empty machine-readable response when no files are available with %s',
+    async (_label, options, expectedFormat) => {
+      mockNoFilesScanner();
 
-    const { executeScan } = await import('../../src/codeScan/scanner/index');
-    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+      const { executeScan } = await import('../../src/codeScan/scanner/index');
+      const { displayScanResults } = await import('../../src/codeScan/scanner/output');
 
-    await executeScan('/test/repo', { json: true, diffsOnly: true });
+      await executeScan('/test/repo', options);
 
-    expect(displayScanResults).toHaveBeenCalledWith(
-      { success: true, comments: [], review: 'No files to scan' },
-      expect.any(Number),
-      { format: CodeScanOutputFormat.JSON, githubPr: undefined },
-    );
-  });
-
-  it('emits a synthetic empty SARIF response when no files are available with --format sarif', async () => {
-    mockNoFilesScanner();
-
-    const { executeScan } = await import('../../src/codeScan/scanner/index');
-    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
-
-    await executeScan('/test/repo', { format: 'sarif', diffsOnly: true });
-
-    expect(displayScanResults).toHaveBeenCalledWith(
-      { success: true, comments: [], review: 'No files to scan' },
-      expect.any(Number),
-      { format: CodeScanOutputFormat.SARIF, githubPr: undefined },
-    );
-  });
+      expect(displayScanResults).toHaveBeenCalledWith(
+        { success: true, comments: [], review: 'No files to scan' },
+        expect.any(Number),
+        { format: expectedFormat, githubPr: undefined },
+      );
+    },
+  );
 });
