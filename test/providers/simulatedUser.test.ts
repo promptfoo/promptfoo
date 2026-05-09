@@ -1107,6 +1107,28 @@ describe('SimulatedUser', () => {
   });
 
   describe('error handling', () => {
+    it('should preserve simulated-user usage when the user provider returns an error', async () => {
+      mockUserProviderCallApi.mockResolvedValueOnce({
+        error: 'remote generation failed',
+        tokenUsage: { total: 15, prompt: 10, completion: 5 },
+      });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('remote generation failed');
+      expect(result.tokenUsage).toMatchObject({
+        total: 15,
+        prompt: 10,
+        completion: 5,
+        numRequests: 1,
+      });
+      expect(originalProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('should return error when agent provider returns error in main loop', async () => {
       const errorProvider = createMockProvider({
         id: 'error-agent',

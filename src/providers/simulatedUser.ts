@@ -200,6 +200,7 @@ export class SimulatedUser implements ApiProvider {
       return {
         messages,
         error: response.error,
+        tokenUsage: response.tokenUsage,
       };
     }
 
@@ -318,6 +319,12 @@ export class SimulatedUser implements ApiProvider {
 
       // NOTE: Simulated-user provider acts as a judge to determine whether the instruction goal is satisfied.
       const userResult = await this.sendMessageToUser(messages, userProvider);
+      const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
+      accumulateResponseTokenUsage(
+        tokenUsage,
+        { tokenUsage: userTokenUsage },
+        { countAsRequest: this.shouldCountUserProviderRequests() },
+      );
 
       // Check for errors from remote generation disable
       if (userResult.error) {
@@ -327,12 +334,6 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
-      accumulateResponseTokenUsage(
-        tokenUsage,
-        { tokenUsage: userTokenUsage },
-        { countAsRequest: this.shouldCountUserProviderRequests() },
-      );
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
       // Check whether the judge has determined that the instruction goal is satisfied.

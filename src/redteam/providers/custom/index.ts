@@ -398,10 +398,6 @@ export class CustomProvider implements ApiProvider {
             options,
           );
 
-        if (!attackPrompt) {
-          logger.debug('[Custom] failed to generate a question. Will skip turn and try again');
-          continue;
-        }
         accumulateResponseTokenUsage(
           totalTokenUsage,
           { tokenUsage: attackTokenUsage },
@@ -409,6 +405,11 @@ export class CustomProvider implements ApiProvider {
             countAsRequest: false,
           },
         );
+
+        if (!attackPrompt) {
+          logger.debug('[Custom] failed to generate a question. Will skip turn and try again');
+          continue;
+        }
 
         logger.debug(`[Custom] Generated attack prompt: ${attackPrompt}`);
 
@@ -768,7 +769,7 @@ export class CustomProvider implements ApiProvider {
       logger.debug('[Custom] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
-        tokenUsage: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
 

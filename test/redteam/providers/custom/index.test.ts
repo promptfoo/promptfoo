@@ -1199,6 +1199,35 @@ describe('CustomProvider', () => {
     });
   });
 
+  it('should preserve attacker usage when prompt generation returns no output', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+
+    const result = await testProvider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 50,
+      prompt: 25,
+      completion: 25,
+      numRequests: 0,
+    });
+    expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should include modifiers in system prompt from test metadata', async () => {
     const prompt = 'test prompt';
     const context = {

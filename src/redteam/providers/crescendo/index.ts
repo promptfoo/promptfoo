@@ -431,10 +431,6 @@ export class CrescendoProvider implements ApiProvider {
           options,
         );
 
-        if (!attackPrompt) {
-          logger.debug('[Crescendo] failed to generate a question. Will skip turn and try again');
-          continue;
-        }
         accumulateResponseTokenUsage(
           totalTokenUsage,
           { tokenUsage: attackTokenUsage },
@@ -442,6 +438,11 @@ export class CrescendoProvider implements ApiProvider {
             countAsRequest: false,
           },
         );
+
+        if (!attackPrompt) {
+          logger.debug('[Crescendo] failed to generate a question. Will skip turn and try again');
+          continue;
+        }
 
         logger.debug(`[Crescendo] Generated attack prompt: ${attackPrompt}`);
 
@@ -909,12 +910,14 @@ export class CrescendoProvider implements ApiProvider {
       logger.debug('[Crescendo] Attack model refused to generate prompt', { response });
       return {
         generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
     if (!response.output) {
       logger.debug('[Crescendo] No output from redteam provider', { response });
       return {
         generatedQuestion: undefined,
+        tokenUsage: response.tokenUsage,
       };
     }
 

@@ -120,6 +120,39 @@ describe('GeminiImageProvider', () => {
     ]);
   });
 
+  it('should count cached responses as one logical request', async () => {
+    const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
+
+    mockFetchWithCache.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'cached response' }],
+            },
+            finishReason: 'STOP',
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 4,
+          candidatesTokenCount: 6,
+          totalTokenCount: 10,
+        },
+      },
+      cached: true,
+      statusText: 'OK',
+    });
+
+    const result = await provider.callApi('Generate a picture of a cat');
+
+    expect(result.tokenUsage).toEqual({
+      cached: 10,
+      total: 10,
+      numRequests: 1,
+    });
+  });
+
   it('should return error when both project ID and API key are missing', async () => {
     mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
     mockProcessEnv({ GOOGLE_API_KEY: undefined });

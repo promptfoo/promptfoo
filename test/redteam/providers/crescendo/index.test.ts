@@ -1772,6 +1772,35 @@ describe('CrescendoProvider', () => {
       });
     });
 
+    it('should preserve attacker usage when prompt generation is refused', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: 'I cannot help with that request',
+        isRefusal: true,
+        tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1, cached: 0 },
+      });
+
+      const result = await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      });
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 50,
+        prompt: 25,
+        completion: 25,
+        numRequests: 0,
+        cached: 0,
+      });
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('should track token usage from scoring provider calls', async () => {
       const provider = new CrescendoProvider({
         injectVar: 'objective',
