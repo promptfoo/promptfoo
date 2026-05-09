@@ -6292,3 +6292,75 @@ recovered the full `6/6` frontier.
      set, not just by whether they sound reasonable.
 3. The next experiment should rank multiple candidate diagnoses against nearby
    positives and negatives before generating support from the best one.
+
+## Iteration 75 - 2026-05-09
+
+### Goal
+
+Add selection pressure to automatic diagnosis:
+
+> If we sample several candidate explanations for each failed boundary case and
+> score them against the whole local contrast set, can we choose the diagnosis
+> that yields stable repair instead of trusting the first plausible story?
+
+### Experiment
+
+1. Added `evaluateRepairRankedBoundaryDiagnoses.ts`.
+2. For each failed boundary case:
+   - sampled three diagnosis candidates
+   - generated one negative support example from each candidate
+   - scored the resulting single-patch classifier over the full six-case stress
+     slice
+3. Selected the highest-scoring diagnosis per failure family.
+4. Combined the selected supports and reran the repaired boundary over three
+   fresh draws.
+
+### Results
+
+Per-failure ranking improves diagnosis selection, but it is still not reliably
+composition-safe:
+
+| Boundary variant               | Avg stress accuracy | Stability   |
+| ------------------------------ | ------------------: | ----------- |
+| diagnosed-support augmentation |     `16/18`-`18/18` | `5/6`-`6/6` |
+| ranked-diagnosis augmentation  |     `16/18`-`18/18` | `4/6`-`6/6` |
+
+On the first run, ranking recovered `6/6`; on a fresh rerun, the selected
+diagnosis set regressed to `16/18` with interference on:
+
+1. `security-reviewer-summary-negative-v1`
+2. `vendor-support-report-negative-v1`
+
+### Reflection
+
+1. This is still the diagnosis evaluator the previous turn was asking for:
+   - propose several local explanations
+   - materialize each one
+   - rank by downstream discriminative value
+2. But the rerun exposes the hidden assumption:
+   - the best diagnosis for each failure independently
+   - is not always the best set of diagnoses jointly
+3. The repair loop now has three separable learned subproblems:
+   - diagnose
+   - materialize support
+   - select by verified effect
+4. Selection changes the epistemology of the system:
+   - we no longer need to believe the prettiest explanation
+   - we need the explanation that survives the local benchmark
+5. This is much closer to a modern red-team generation architecture than the
+   2023 few-shot style:
+   - it maintains hypotheses
+   - tests them
+   - and updates memory from empirical lift
+6. The next frontier is composition:
+   - search over repair sets jointly
+   - then admit only support bundles that preserve the full local frontier
+
+### New Hypotheses
+
+1. Diagnosis quality should be judged by downstream repair utility, not language
+   plausibility.
+2. Candidate generation plus verification is necessary but not sufficient when
+   multiple patches interact.
+3. The next experiment should rank repair bundles jointly over the shared
+   boundary memory instead of selecting one diagnosis per failure in isolation.
