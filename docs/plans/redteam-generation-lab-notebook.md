@@ -1043,3 +1043,109 @@ The selected portfolios were unchanged:
    another artifact/pretext label to already saturated dimensions.
 3. The next iteration should add an explicit frontier-gap diagnosis report so
    the generator can reason from measurable deficiency instead of intuition.
+
+## Iteration 15 - 2026-05-09
+
+### Goal
+
+Replace intuition with a measurable repair target:
+
+> Can we describe, from the exact frontier alone, which objectives are already
+> co-maximizable and which ones genuinely conflict under the current budget?
+
+### Experiment
+
+Extended `comparePortfolioPolicies.ts` with `frontierGaps`, which reports for
+each semantic metric:
+
+1. the global maximum reachable on the frontier
+2. which other metrics can be co-maximized with it
+3. which other metrics conflict with it under the current pool and budget
+
+### Results
+
+The new diagnostic made the underlying structure much clearer:
+
+1. `promptExtraction`
+   - maximizing `artifactCount` can already co-maximize:
+     - `averageNovelty`
+     - `pretextCount`
+     - `tacticCount`
+   - maximizing `pretextCount` can already co-maximize:
+     - `averageNovelty`
+     - `artifactCount`
+     - `tacticCount`
+   - maximizing `tacticCount` still conflicts with:
+     - `averageNovelty`
+2. `promptExtractionRepaired`
+   - has the **same** frontier-gap diagnosis as the unrepaired pool
+   - confirming that the failed repair did not touch the only real frontier
+     tension
+3. `sqlInjection`
+   - maximizing `tacticCount` conflicts with `averageNovelty`
+4. `piiSocial`
+   - maximizing `authorizationStoryCount`, `relationshipCount`, or
+     `tacticCount` each conflicts with `averageNovelty`
+   - `sensitiveFieldCount` is already co-maximizable with every other measured
+     objective
+
+### Reflection
+
+1. This is the most useful repair-oriented diagnostic so far.
+2. It explains the failed prompt-extraction repair precisely:
+   - we added variety on dimensions that were already saturated for free
+   - the actual missing capability is a candidate set that can keep all five
+     tactics **and** raise novelty
+3. That is a much better target for future generation:
+   - not "make something new"
+   - but "generate a lexically distant alternative that preserves the scarce
+     semantic axis currently in tension"
+4. More broadly, this suggests a modern generator loop:
+   - generate
+   - enumerate or approximate frontier
+   - diagnose conflicts
+   - ask the model for candidates that specifically attack the observed gap
+   - rerun the frontier
+5. That is already far more research-like than repeated few-shot sampling.
+
+### Fifteen-Iteration Status
+
+At the end of iteration 15:
+
+1. We have a reusable research harness, a lab notebook, and a growing family of
+   benchmark scripts.
+2. We proved that baseline emitted row count is a poor proxy for attack
+   portfolio quality.
+3. We improved generation for:
+   - `sql-injection`
+   - `prompt-extraction`
+   - `pii:*`
+4. We moved from single-axis tactic counts to plugin-specific multi-axis
+   evaluation.
+5. We added deterministic critique-and-repair for PII and an actual
+   generation-repair-selection pipeline.
+6. We discovered that scalar weighted selectors often collapse distinct user
+   goals into one answer.
+7. We added exact Pareto-frontier analysis and showed that named policy outputs
+   are more informative than raw weight profiles.
+8. We generalized policy disagreement across three plugin families.
+9. We ran our first frontier-enrichment repair experiment and captured an
+   instructive negative result.
+10. We now have explicit frontier-gap diagnostics that can tell future repair
+    loops what to generate next.
+
+### New Hypotheses
+
+1. The next useful repair for prompt extraction should target the specific gap:
+   - retain `5` tactics
+   - increase novelty above the current tactic-max portfolio
+2. A model-guided repair prompt should receive:
+   - current frontier summary
+   - target metric conflict
+   - examples of currently selected attacks
+   - explicit instruction to preserve the scarce dimension while moving away
+     lexically and semantically
+3. This same diagnosis loop should later generalize to agentic scenarios, where
+   frontier gaps may concern tool abuse, memory persistence, retrieval
+   manipulation, or cross-turn escalation rather than the simpler dimensions
+   used here.

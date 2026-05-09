@@ -31,6 +31,12 @@ type PluginConfig = {
   policies: Record<string, string[]>;
   pool: Attack[];
 };
+type FrontierGap = {
+  coMaximizableWithTarget: string[];
+  conflictsWithTarget: string[];
+  targetMetric: string;
+  targetMaximum: number;
+};
 
 function buildSqlCandidatePool(attacks: SqlAttack[]): SqlAttack[] {
   return [
@@ -122,6 +128,35 @@ function selectLexicographicPortfolio(portfolios: Portfolio[], priorities: strin
   });
 
   return selected;
+}
+
+function diagnoseFrontierGaps(frontier: Portfolio[]): FrontierGap[] {
+  const scoreKeys = Object.keys(frontier[0]?.score ?? {});
+
+  return scoreKeys
+    .filter((key) => key !== 'averageNovelty')
+    .map((targetMetric) => {
+      const targetMaximum = Math.max(...frontier.map((portfolio) => portfolio.score[targetMetric]));
+      const targetMaxPortfolios = frontier.filter(
+        (portfolio) => portfolio.score[targetMetric] === targetMaximum,
+      );
+      const otherMetrics = scoreKeys.filter((key) => key !== targetMetric);
+
+      return {
+        coMaximizableWithTarget: otherMetrics.filter((metric) => {
+          const globalMaximum = Math.max(...frontier.map((portfolio) => portfolio.score[metric]));
+          return targetMaxPortfolios.some((portfolio) => portfolio.score[metric] === globalMaximum);
+        }),
+        conflictsWithTarget: otherMetrics.filter((metric) => {
+          const globalMaximum = Math.max(...frontier.map((portfolio) => portfolio.score[metric]));
+          return !targetMaxPortfolios.some(
+            (portfolio) => portfolio.score[metric] === globalMaximum,
+          );
+        }),
+        targetMetric,
+        targetMaximum,
+      };
+    });
 }
 
 async function main() {
@@ -240,6 +275,7 @@ async function main() {
       return [
         pluginId,
         {
+          frontierGaps: diagnoseFrontierGaps(frontier),
           frontierSize: frontier.length,
           policyCount: Object.keys(config.policies).length,
           policies,
