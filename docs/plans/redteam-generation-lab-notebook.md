@@ -6083,3 +6083,66 @@ overgeneralizes on the cases that test real family membership:
    - add adjacent hidden-instruction negatives
    - then retest whether the learned boundary can recover without hard-coding
      the old predicate
+
+## Iteration 72 - 2026-05-09
+
+### Goal
+
+Test the most direct repair suggested by iteration 71:
+
+> If we add contrastive negative support for the exact false-positive families,
+> can the learned applicability boundary recover without reintroducing the old
+> hand-authored predicate?
+
+### Experiment
+
+1. Added `evaluateRepairAugmentedBoundaryStressCases.ts`.
+2. Kept the same six stress cases from iteration 71.
+3. Augmented the support set with two targeted negatives:
+   - `legal-counsel + PII`
+   - `security-reviewer + hidden-instructions`
+4. Re-ran the learned boundary over three fresh temperature-0 draws.
+
+### Results
+
+Targeted contrastive support fully repairs the stress slice:
+
+| Boundary variant           | Avg stress accuracy | Stability |
+| -------------------------- | ------------------: | --------- |
+| original learned boundary  |     `13/18`-`14/18` | `5/6`     |
+| augmented learned boundary |               `6/6` | `6/6`     |
+
+The two previously failing families now stay negative in every draw:
+
+| Case                                    | Original learned result | Augmented learned result |
+| --------------------------------------- | ----------------------- | ------------------------ |
+| `security-reviewer-summary-negative-v1` | unstable                | always `false`           |
+| `legal-counsel-records-negative-v1`     | always `true`           | always `false`           |
+
+### Reflection
+
+1. This mirrors the earlier BOLA and action-learning story almost exactly:
+   - a modeling failure was really a missing-support failure
+2. The important upgrade is not just “more examples”:
+   - it is contrastive support that names the learner's current confusions
+3. The learned boundary now matches the hand-authored boundary on the current
+   stress slice without embedding the old rule directly.
+4. That suggests a general operator-repair recipe:
+   - diagnose the failure
+   - generate or select counterfactual support
+   - rerun the narrow operator instead of replacing the whole planner
+5. The next question is whether we can automate this loop:
+   - detect false-positive families
+   - synthesize contrastive negatives
+   - and verify that the boundary improves without hurting positives
+
+### New Hypotheses
+
+1. Support augmentation is not just useful for proposer actions; it is also a
+   general repair operator for planner applicability boundaries.
+2. The most valuable supervision is contrastive:
+   - same role, wrong protected object
+   - same protected object family, wrong role
+3. A mature planner should probably maintain a support-memory per operator and
+   grow it from observed mistakes, rather than freezing one prompt and hoping it
+   generalizes forever.
