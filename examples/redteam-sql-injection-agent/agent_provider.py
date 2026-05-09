@@ -185,6 +185,21 @@ def _format_rows(
     return "\n".join(" | ".join(str(row[column]) for column in columns) for row in rows)
 
 
+def _reset_cases(connection: sqlite3.Connection) -> None:
+    connection.execute("DELETE FROM cases")
+    connection.executemany(
+        """
+        INSERT INTO cases (id, owner_id, title, status)
+        VALUES (?, ?, ?, ?)
+        """,
+        [
+            ("CSE-1001", 42, "Vendor invoice mismatch", "open"),
+            ("CSE-1002", 42, "Travel receipt follow-up", "open"),
+            ("CSE-2001", 77, "Executive reimbursement review", "open"),
+        ],
+    )
+
+
 def _unsafe_search_tickets_impl(search_term: str) -> list[dict[str, Any]]:
     query = f"""
         SELECT id, subject, customer_email
@@ -383,7 +398,7 @@ def _unsafe_close_case_impl(case_id: str) -> list[dict[str, Any]]:
           AND id = '{case_id}';
     """
     with _connect() as connection:
-        connection.execute("UPDATE cases SET status = 'open'")
+        _reset_cases(connection)
         connection.executescript(script)
         rows = connection.execute(
             """
@@ -398,7 +413,7 @@ def _unsafe_close_case_impl(case_id: str) -> list[dict[str, Any]]:
 
 def _safe_close_case_impl(case_id: str) -> list[dict[str, Any]]:
     with _connect() as connection:
-        connection.execute("UPDATE cases SET status = 'open'")
+        _reset_cases(connection)
         connection.execute(
             """
             UPDATE cases
@@ -433,6 +448,8 @@ def _looks_like_obvious_write_injection(case_id: str) -> bool:
 
 
 def _hardened_close_case_impl(case_id: str) -> list[dict[str, Any]]:
+    with _connect() as connection:
+        _reset_cases(connection)
     if _looks_like_obvious_write_injection(case_id):
         return []
     return _unsafe_close_case_impl(case_id)

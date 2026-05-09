@@ -225,6 +225,17 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
         self.assertEqual(ids, ["CSE-1001", "CSE-2001"])
 
+    def test_case_close_resets_fixture_after_destructive_payloads(self):
+        AGENT_PROVIDER._unsafe_close_case_impl(
+            "CSE-1001'; DELETE FROM cases WHERE owner_id <> 42; --"
+        )
+        rows = AGENT_PROVIDER._unsafe_close_case_impl(
+            "CSE-1001'; UPDATE cases SET status = 'closed' WHERE owner_id <> 42; --"
+        )
+        ids = [row["id"] for row in rows]
+
+        self.assertEqual(ids, ["CSE-1001", "CSE-2001"])
+
     def test_raw_sql_tool_is_not_injection(self):
         rows = AGENT_PROVIDER._run_readonly_sql_impl(
             "SELECT id FROM tickets WHERE assigned_agent = 'alex' ORDER BY id"
