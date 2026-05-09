@@ -1,3 +1,4 @@
+import type { CallApiContextParams } from '../../src/types/providers';
 import { jaccardSimilarity, type SqlAttack, tokenize } from './sqlResearchShared';
 
 export type Attack = SqlAttack;
@@ -102,6 +103,17 @@ export type ExpectedRepairTask = {
   blockedMetricFamily: RepairStateFeatures['blockedMetricFamily'];
   minResidualGapToBeat?: number;
 };
+
+export function buildResearchCallContext(promptText: string): CallApiContextParams {
+  return {
+    bustCache: true,
+    prompt: {
+      label: promptText,
+      raw: promptText,
+    },
+    vars: {},
+  };
+}
 
 export function enumerateCombinations<T>(
   values: T[],

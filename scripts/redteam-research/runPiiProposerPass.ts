@@ -10,6 +10,7 @@ import {
   buildBalancedProposerPrompt,
   buildProposerPrompt,
   buildRepairBrief,
+  buildResearchCallContext,
   buildThinProposerPrompt,
   type CandidateDiagnostic,
   type DimensionAccessor,
@@ -193,7 +194,10 @@ async function runProposerPass({
       },
     },
   });
-  const response = await provider.callApi(proposerPrompt.text, { bustCache: true });
+  const response = await provider.callApi(
+    proposerPrompt.text,
+    buildResearchCallContext(proposerPrompt.text),
+  );
 
   let parsedOutput: z.infer<typeof proposerResponseSchema> | undefined;
   let parseError: string | undefined;
@@ -306,7 +310,7 @@ async function main() {
       : profile === 'all'
         ? (['rich', 'balanced', 'thin'] as const)
         : [profile];
-  const trials = [];
+  const trials: Array<{ passes: ProposerPassResult[]; trial: number }> = [];
 
   for (let trial = 1; trial <= trialCount; trial += 1) {
     const passes = await Promise.all(

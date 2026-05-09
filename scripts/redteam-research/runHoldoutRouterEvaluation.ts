@@ -1,33 +1,32 @@
 import { z } from 'zod';
-
 import { loadApiProvider } from '../../src/providers';
 import {
+  type BolaAttack,
+  buildBolaCandidatePool,
+  buildBolaPortfolio,
+  loadBolaContext,
+} from './bolaResearchShared';
+import {
+  analyzePortfolioPool,
+  assertExpectedRepairTask,
   buildBalancedProposerPrompt,
   buildProposerPrompt,
   buildRepairBrief,
+  buildResearchCallContext,
   buildThinProposerPrompt,
-  diagnoseCandidateAgainstPolicy,
-  selectBestRepairCandidate,
-  analyzePortfolioPool,
-  assertExpectedRepairTask,
   type CandidateDiagnostic,
   type DimensionAccessor,
+  diagnoseCandidateAgainstPolicy,
   type ExpectedRepairTask,
   type PolicySelection,
   type ProposerPrompt,
 } from './portfolioResearchShared';
 import {
-  buildBolaCandidatePool,
-  buildBolaPortfolio,
-  loadBolaContext,
-  type BolaAttack,
-} from './bolaResearchShared';
-import {
   buildPromptExtractionCandidatePool,
   buildPromptExtractionPortfolio,
   loadPromptExtractionContext,
-  repairPromptExtractionTacticNoveltyGapV2,
   type PromptExtractionAttack,
+  repairPromptExtractionTacticNoveltyGapV2,
 } from './promptExtractionResearchShared';
 import {
   buildSqlAttackPortfolio,
@@ -37,6 +36,7 @@ import {
 } from './sqlResearchShared';
 
 type PromptProfile = 'balanced' | 'rich' | 'thin';
+type HoldoutAttack = BolaAttack | PromptExtractionAttack | SqlAttack;
 type HoldoutTask<TAttack extends SqlAttack> = {
   candidate: TAttack;
   dimensions: DimensionAccessor[];
@@ -230,13 +230,7 @@ function buildBolaResponseFormat(targetTactic: string) {
 function diagnoseAddedCandidate<TAttack extends SqlAttack>(task: HoldoutTask<TAttack>) {
   const pool = [...task.pool, task.candidate];
   const { policies, portfolios } = analyzePortfolioPool(pool, task.dimensions, task.policies);
-  return diagnoseCandidateAgainstPolicy(
-    portfolios,
-    policies,
-    pool.length - 1,
-    task.policy,
-    pool,
-  );
+  return diagnoseCandidateAgainstPolicy(portfolios, policies, pool.length - 1, task.policy, pool);
 }
 
 function evaluateGeneratedCandidate<TAttack extends SqlAttack>({
@@ -290,7 +284,10 @@ async function runProposerPass<TAttack extends SqlAttack>({
       },
     },
   });
-  const response = await provider.callApi(proposerPrompt.text, { bustCache: true });
+  const response = await provider.callApi(
+    proposerPrompt.text,
+    buildResearchCallContext(proposerPrompt.text),
+  );
 
   let parsedOutput: unknown;
   let parseError: string | undefined;
@@ -329,8 +326,9 @@ async function runProposerPass<TAttack extends SqlAttack>({
     jsonValid: parsedOutput !== undefined,
     parseError,
     profile,
-    tacticPreservationCount: candidates.filter((candidate) => candidate.tactic === brief.targetTactic)
-      .length,
+    tacticPreservationCount: candidates.filter(
+      (candidate) => candidate.tactic === brief.targetTactic,
+    ).length,
     topKAverageNoveltyYield: {
       top1: frontierImprovingNoveltyDeltas.slice(0, 1).reduce((sum, value) => sum + value, 0),
       top2: frontierImprovingNoveltyDeltas.slice(0, 2).reduce((sum, value) => sum + value, 0),
@@ -339,7 +337,7 @@ async function runProposerPass<TAttack extends SqlAttack>({
   };
 }
 
-async function buildHoldoutTasks(inputPath: string): Promise<Array<HoldoutTask<any>>> {
+async function buildHoldoutTasks(inputPath: string): Promise<Array<HoldoutTask<HoldoutAttack>>> {
   const promptExtractionContext = await loadPromptExtractionContext(inputPath);
   const promptExtractionBasePool = buildPromptExtractionCandidatePool(
     buildPromptExtractionPortfolio(promptExtractionContext.entities),
@@ -505,7 +503,7 @@ async function main() {
       rich: buildProposerPrompt(brief),
       thin: buildThinProposerPrompt(brief),
     };
-    const trials = [];
+    const trials: Array<{ passes: ProposerPassResult[]; trial: number }> = [];
 
     for (let trial = 1; trial <= trialCount; trial += 1) {
       const passes = await Promise.all(
@@ -525,9 +523,7 @@ async function main() {
     }
     const profileSummaries = Object.fromEntries(
       profiles.map((profile) => {
-        const passes = trials.map(({ passes }) =>
-          passes.find((pass) => pass.profile === profile),
-        );
+        const passes = trials.map(({ passes }) => passes.find((pass) => pass.profile === profile));
         const completedPasses = passes.filter(
           (pass): pass is ProposerPassResult => pass !== undefined,
         );
@@ -535,15 +531,11 @@ async function main() {
           profile,
           {
             averageBestNoveltyDelta:
-              completedPasses.reduce(
-                (sum, pass) => sum + (pass.bestAverageNoveltyDelta ?? 0),
-                0,
-              ) / completedPasses.length,
+              completedPasses.reduce((sum, pass) => sum + (pass.bestAverageNoveltyDelta ?? 0), 0) /
+              completedPasses.length,
             averageTop3NoveltyYield:
-              completedPasses.reduce(
-                (sum, pass) => sum + pass.topKAverageNoveltyYield.top3,
-                0,
-              ) / completedPasses.length,
+              completedPasses.reduce((sum, pass) => sum + pass.topKAverageNoveltyYield.top3, 0) /
+              completedPasses.length,
             frontierImprovingCandidateCount: completedPasses.reduce(
               (sum, pass) => sum + pass.frontierImprovingCount,
               0,
@@ -587,8 +579,7 @@ async function main() {
       {
         results,
         summary: {
-          holdoutAccuracy:
-            results.filter((result) => result.routerCorrect).length / results.length,
+          holdoutAccuracy: results.filter((result) => result.routerCorrect).length / results.length,
           routerRows: results.map((result) => ({
             actualWinner: result.observedWinner,
             correct: result.routerCorrect,

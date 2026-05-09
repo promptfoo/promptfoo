@@ -1,8 +1,10 @@
+import { pathToFileURL } from 'node:url';
+
 import {
+  type BolaAttack,
   buildBolaCandidatePool,
   buildBolaPortfolio,
   loadBolaContext,
-  type BolaAttack,
 } from './bolaResearchShared';
 import {
   buildAdversarialPiiCandidatePool,
@@ -12,9 +14,9 @@ import {
 import {
   analyzePortfolioPool,
   assertExpectedRepairTask,
-  diagnoseCandidateAgainstPolicy,
   type CandidateDiagnostic,
   type DimensionAccessor,
+  diagnoseCandidateAgainstPolicy,
   type ExpectedRepairTask,
   type RepairStateFeatures,
 } from './portfolioResearchShared';
@@ -34,7 +36,7 @@ import {
   type SqlAttack,
 } from './sqlResearchShared';
 
-type BenchmarkSplit = 'holdout' | 'train';
+export type BenchmarkSplit = 'holdout' | 'train';
 type CandidateTemplate = {
   comparedPolicy: string;
   diagnostic: CandidateDiagnostic;
@@ -43,12 +45,19 @@ type CandidateTemplate = {
   plugin: string;
   split: BenchmarkSplit;
 };
-type AcceptedBenchmarkTask = Omit<CandidateTemplate, 'diagnostic' | 'expected'> & {
+export type AcceptedBenchmarkTask = Omit<CandidateTemplate, 'diagnostic' | 'expected'> & {
   features: RepairStateFeatures;
   targetTactic: string;
 };
-type RejectedBenchmarkTask = Pick<CandidateTemplate, 'id' | 'plugin' | 'split'> & {
+export type RejectedBenchmarkTask = Pick<CandidateTemplate, 'id' | 'plugin' | 'split'> & {
   error: string;
+};
+export type BenchmarkSummary = {
+  acceptedBySplitAndFamily: Record<BenchmarkSplit, Record<string, number>>;
+  acceptedCount: number;
+  holdoutCount: number;
+  rejectedCount: number;
+  trainCount: number;
 };
 
 const PROMPT_EXTRACTION_DIMENSIONS: DimensionAccessor[] = [
@@ -357,14 +366,7 @@ function validateTemplates(templates: CandidateTemplate[]) {
   return { accepted, rejected };
 }
 
-async function main() {
-  const [inputPath] = process.argv.slice(2);
-  if (!inputPath) {
-    throw new Error(
-      'Usage: tsx scripts/redteam-research/generateRepairTaskBenchmark.ts <redteam.yaml>',
-    );
-  }
-
+export async function buildValidatedRepairTaskBenchmark(inputPath: string) {
   const promptExtractionContext = await loadPromptExtractionContext(inputPath);
   const promptExtractionBasePool = buildPromptExtractionCandidatePool(
     buildPromptExtractionPortfolio(promptExtractionContext.entities),
@@ -387,11 +389,19 @@ async function main() {
     ...buildSqlNoveltyTemplates(sqlBasePool),
     ...buildBolaCoverageTemplates(bolaBasePool),
   ];
-  const { accepted, rejected } = validateTemplates(templates);
-  const acceptedBySplitAndFamily = Object.fromEntries(
-    (['train', 'holdout'] as const).map((split) => [
-      split,
-      accepted
+  return validateTemplates(templates);
+}
+
+export function summarizeValidatedRepairTaskBenchmark(
+  accepted: AcceptedBenchmarkTask[],
+  rejected: RejectedBenchmarkTask[],
+): BenchmarkSummary {
+  const acceptedBySplitAndFamily = (['train', 'holdout'] as const).reduce<
+    Record<BenchmarkSplit, Record<string, number>>
+  >(
+    (countsBySplit, split) => ({
+      ...countsBySplit,
+      [split]: accepted
         .filter((task) => task.split === split)
         .reduce<Record<string, number>>((counts, task) => {
           const family = task.features.blockedMetricFamily;
@@ -400,21 +410,34 @@ async function main() {
             [family]: (counts[family] ?? 0) + 1,
           };
         }, {}),
-    ]),
+    }),
+    { holdout: {}, train: {} },
   );
+
+  return {
+    acceptedBySplitAndFamily,
+    acceptedCount: accepted.length,
+    holdoutCount: accepted.filter((task) => task.split === 'holdout').length,
+    rejectedCount: rejected.length,
+    trainCount: accepted.filter((task) => task.split === 'train').length,
+  };
+}
+
+async function main() {
+  const [inputPath] = process.argv.slice(2);
+  if (!inputPath) {
+    throw new Error(
+      'Usage: tsx scripts/redteam-research/generateRepairTaskBenchmark.ts <redteam.yaml>',
+    );
+  }
+  const { accepted, rejected } = await buildValidatedRepairTaskBenchmark(inputPath);
 
   console.log(
     JSON.stringify(
       {
         accepted,
         rejected,
-        summary: {
-          acceptedCount: accepted.length,
-          acceptedBySplitAndFamily,
-          holdoutCount: accepted.filter((task) => task.split === 'holdout').length,
-          rejectedCount: rejected.length,
-          trainCount: accepted.filter((task) => task.split === 'train').length,
-        },
+        summary: summarizeValidatedRepairTaskBenchmark(accepted, rejected),
       },
       null,
       2,
@@ -422,4 +445,6 @@ async function main() {
   );
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

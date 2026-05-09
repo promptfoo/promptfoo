@@ -2934,3 +2934,120 @@ Top-3 yield summaries:
    - metric family + residual gap
      on the same frozen benchmark rather than inventing another rule from one
      anecdote at a time.
+
+## Iteration 38 - 2026-05-09
+
+### Goal
+
+Turn the benchmark plus scattered experiment outputs into one joined research
+surface:
+
+> Across every accepted task whose outcome we have actually measured, what does
+> the current evidence table say, and does the first richer feature family
+> already rescue the broken router?
+
+### Experiment
+
+1. Refactored `generateRepairTaskBenchmark.ts` so its validated benchmark can
+   be reused programmatically instead of existing only as CLI JSON.
+2. Added `buildRepairOutcomeTable.ts`.
+3. Joined:
+   - the validated benchmark tasks
+   - the observed winners from prior live proposer experiments
+   - the exact `top3` yields used as the current winner metric
+4. Added an explicit coarse-geometry signature:
+   - blocked metric family
+   - displaced-slot count
+   - same-slot cleanliness
+   - residual-gap bucket
+5. Tightened the research harnesses enough for the root TypeScript project to
+   type-check them:
+   - shared typed provider-call context
+   - typed proposer-trial arrays
+   - no dependency on `Map.groupBy`
+6. Ran:
+
+```bash
+npx tsx scripts/redteam-research/buildRepairOutcomeTable.ts \
+  examples/redteam-medical-agent/redteam.yaml
+```
+
+### Results
+
+Coverage of the accepted benchmark:
+
+| Measure             | Count |
+| ------------------- | ----: |
+| accepted tasks      |  `10` |
+| observed outcomes   |   `9` |
+| unobserved outcomes |   `1` |
+
+The only accepted task we have not yet measured is:
+
+| Task                           | Split   | Family    |
+| ------------------------------ | ------- | --------- |
+| `prompt-extraction-novelty-v1` | `train` | `novelty` |
+
+Metric-family router performance over the observed rows:
+
+| Slice    | Accuracy |
+| -------- | -------: |
+| all rows |    `6/9` |
+| train    |    `5/5` |
+| holdout  |    `1/4` |
+
+The first obvious richer rule also fails to separate the evidence cleanly.
+These four tasks share the same coarse geometry signature:
+
+```text
+coverage|slots=2|sameSlot=false|gap=unit-plus
+```
+
+Yet they split evenly by winner:
+
+| Task                            | Winner     |
+| ------------------------------- | ---------- |
+| `prompt-extraction-coverage-v1` | `thin`     |
+| `prompt-extraction-coverage-v2` | `balanced` |
+| `bola-coverage-v1`              | `thin`     |
+| `bola-coverage-v2`              | `balanced` |
+
+### Reflection
+
+1. The outcome table turns the story into something we can now audit row by
+   row instead of reconstructing it from memory.
+2. The metric-family router is no longer merely “bad on holdout”:
+   - it is `5/5` on the observed training rows
+   - and only `1/4` on holdout
+   - which is a crisp overfitting pattern
+3. Coarse geometry is **not** enough to rescue the rule:
+   - same family
+   - same displaced-slot count
+   - same same-slot cleanliness
+   - same residual-gap bucket
+   - different observed winners
+4. That means the relevant signal is probably finer-grained:
+   - exact collision structure
+   - semantic wording of the task
+   - or profile/task interaction effects that hand-authored threshold rules
+     will miss
+5. The remaining unmeasured task matters:
+   - `prompt-extraction-novelty-v1` is the larger multi-slot novelty gap
+   - it should be measured before we trust any learned router trained on this
+     tiny table
+6. The research scripts now pass the root TypeScript compiler instead of only
+   running under `tsx`, which is a useful floor before we keep adding more
+   benchmark machinery.
+
+### New Hypotheses
+
+1. The next experiment should measure `prompt-extraction-novelty-v1` so the
+   frozen benchmark has complete observed coverage.
+2. After that, we should compare:
+   - exact continuous features
+   - semantic embeddings or text descriptors
+   - learned outcome models
+     rather than expecting a two-feature symbolic rule to recover the answer.
+3. A useful next baseline may be a task-conditioned router that predicts
+   profile yield directly, not a profile label derived from a hand-written
+   family rule.
