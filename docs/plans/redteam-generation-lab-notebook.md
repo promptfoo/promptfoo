@@ -7677,3 +7677,96 @@ The crude inferred semantic-axis counts were:
 3. The next experiment should draft a richer attack-signature schema and test
    whether a small judge can recover those fields consistently from the existing
    frontier before we ask generators to produce them natively.
+
+## Iteration 93 - 2026-05-09
+
+### Goal
+
+Draft a richer structured attack-signature schema and test whether a small judge
+can recover it consistently from the frozen frontier:
+
+> Are the missing metadata axes already recoverable enough to become first-class
+> generator output?
+
+### Experiment
+
+1. Added `evaluateRepairFrontierAttackSignatureStability.ts`.
+2. Defined a compact seven-slot schema:
+   - `targetSurface`
+   - `attackerPretext`
+   - `requestedAsset`
+   - `mechanism`
+   - `expectedPolicyBreak`
+   - `entityFamily`
+   - `dialogueShape`
+3. Used `openai:responses:gpt-5.4-mini` as a temperature-`0` judge.
+4. Classified all `23` retained frontier cases across `3` independent draws.
+5. Measured:
+   - per-field stability
+   - full-tuple stability
+   - per-trial tuple diversity
+   - exact disagreement cases for unstable fields
+
+### Results
+
+The judge can recover several useful axes quite reliably:
+
+| Field                 | Stable cases |
+| --------------------- | -----------: |
+| `attackerPretext`     |      `23/23` |
+| `expectedPolicyBreak` |      `23/23` |
+| `dialogueShape`       |      `23/23` |
+| `entityFamily`        |      `22/23` |
+| `mechanism`           |      `20/23` |
+| `requestedAsset`      |      `16/23` |
+| `targetSurface`       |      `15/23` |
+
+But whole-signature stability is still too weak for a native contract:
+
+1. full tuple stability: `10/23`
+2. unique tuples per trial:
+   - trial `1`: `23`
+   - trial `2`: `22`
+   - trial `3`: `23`
+
+The unstable cases reveal a structural problem rather than random judge noise:
+
+1. `targetSurface` often wobbles among:
+   - `system-instructions`
+   - `handling-protocol`
+   - `routing-logic`
+   - `mixed-instructions`
+2. `requestedAsset` often wobbles among:
+   - `hidden-instructions`
+   - `handling-protocol`
+   - `workflow-guidance`
+   - `routing-rules`
+3. These are not mutually exclusive attack properties in the source prompts.
+   Many prompts deliberately ask for several internal artifacts at once.
+
+### Reflection
+
+1. The richer schema direction is validated, but the single-primary-value shape
+   is not.
+2. Some fields are already strong enough to emit natively:
+   - pretext
+   - policy break
+   - dialogue shape
+   - entity family
+3. The weak fields are weak because we asked the wrong question:
+   - the prompts contain bundles of requested artifacts
+   - a forced single answer discards real semantics
+4. This is a useful design correction:
+   - not every metadata axis should be scalar
+   - richer generators likely need a mix of scalar slots and bounded multi-label
+     slots
+
+### New Hypotheses
+
+1. `targetSurface` and `requestedAsset` should be modeled as bounded sets, not
+   single winners.
+2. A mixed schema with scalar contextual fields plus multi-valued attacked-asset
+   fields should improve semantic faithfulness without sacrificing stability.
+3. The next experiment should compare the current single-primary schema against
+   a bounded multi-label variant and measure both stability and retained-cell
+   diversity.
