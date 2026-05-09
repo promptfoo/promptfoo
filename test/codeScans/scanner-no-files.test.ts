@@ -74,25 +74,14 @@ describe('Scanner - No Files to Scan', () => {
   });
 });
 
-describe('Scanner JSON Output', () => {
-  beforeEach(() => {
-    vi.resetModules();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('should delegate valid JSON output when no files are available with --json', async () => {
-    // Set up mocks before importing executeScan
+describe('Scanner machine-readable output', () => {
+  function mockNoFilesScanner() {
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: vi.fn().mockResolvedValue([]),
     }));
-
     vi.doMock('../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
     }));
-
     vi.doMock('../../src/codeScan/config/loader', () => ({
       loadConfigOrDefault: vi.fn().mockResolvedValue({
         minimumSeverity: 'medium',
@@ -105,14 +94,12 @@ describe('Scanner JSON Output', () => {
       resolveGuidance: vi.fn().mockResolvedValue(undefined),
       resolveApiHost: vi.fn().mockReturnValue('https://api.example.com'),
     }));
-
     vi.doMock('simple-git', () => ({
       default: vi.fn(() => ({
         branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
         revparse: vi.fn().mockResolvedValue('abc123'),
       })),
     }));
-
     vi.doMock('../../src/util/agent/agentClient', () => ({
       createAgentClient: vi.fn().mockResolvedValue({
         sessionId: 'test-session-id',
@@ -126,53 +113,60 @@ describe('Scanner JSON Output', () => {
         socket: { emit: vi.fn(), on: vi.fn(), off: vi.fn(), disconnect: vi.fn() },
       }),
     }));
-
     vi.doMock('../../src/codeScan/util/auth', () => ({
       resolveAuthCredentials: vi.fn().mockResolvedValue({ apiKey: 'test-key' }),
     }));
-
     vi.doMock('../../src/cliState', () => ({
-      default: {
-        postActionCallback: null,
-      },
+      default: { postActionCallback: null },
     }));
-
     vi.doMock('../../src/logger', () => ({
-      default: {
-        info: vi.fn(),
-        debug: vi.fn(),
-        error: vi.fn(),
-        warn: vi.fn(),
-      },
+      default: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
       getLogLevel: vi.fn().mockReturnValue('info'),
     }));
-
     vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
       registerCleanupHandlers: vi.fn(),
     }));
-
     vi.doMock('../../src/codeScan/scanner/output', () => ({
       createSpinner: vi.fn().mockReturnValue(undefined),
       displayScanResults: vi.fn(),
     }));
+  }
 
-    // Import after mocks are set up
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('emits a synthetic empty JSON response when no files are available with --json', async () => {
+    mockNoFilesScanner();
+
     const { executeScan } = await import('../../src/codeScan/scanner/index');
     const { displayScanResults } = await import('../../src/codeScan/scanner/output');
 
     await executeScan('/test/repo', { json: true, diffsOnly: true });
 
     expect(displayScanResults).toHaveBeenCalledWith(
-      {
-        success: true,
-        comments: [],
-        review: 'No files to scan',
-      },
+      { success: true, comments: [], review: 'No files to scan' },
       expect.any(Number),
-      {
-        format: CodeScanOutputFormat.JSON,
-        githubPr: undefined,
-      },
+      { format: CodeScanOutputFormat.JSON, githubPr: undefined },
+    );
+  });
+
+  it('emits a synthetic empty SARIF response when no files are available with --format sarif', async () => {
+    mockNoFilesScanner();
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+
+    await executeScan('/test/repo', { format: 'sarif', diffsOnly: true });
+
+    expect(displayScanResults).toHaveBeenCalledWith(
+      { success: true, comments: [], review: 'No files to scan' },
+      expect.any(Number),
+      { format: CodeScanOutputFormat.SARIF, githubPr: undefined },
     );
   });
 });

@@ -91,9 +91,122 @@ describe('scanResponseToSarif', () => {
         },
       ],
     });
-    expect(sarif.runs[0].results[0].partialFingerprints.primaryLocationLineHash).toMatch(
+    expect(sarif.runs[0].results[0].partialFingerprints.promptfooFindingHash).toMatch(
       /^[a-f0-9]{64}$/,
     );
+  });
+
+  it('omits endLine when the comment range is inverted (startLine > line)', () => {
+    const response: ScanResponse = {
+      success: true,
+      comments: [
+        {
+          file: 'src/inverted.ts',
+          startLine: 100,
+          line: 42,
+          finding: 'Inverted region from upstream data.',
+          severity: CodeScanSeverity.HIGH,
+        },
+      ],
+    };
+
+    const region = scanResponseToSarif(response).runs[0].results[0].locations?.[0].physicalLocation
+      .region;
+
+    expect(region).toEqual({ startLine: 100 });
+  });
+
+  it('keeps fingerprints stable when line numbers shift or wording is rephrased slightly', () => {
+    const base: ScanResponse = {
+      success: true,
+      comments: [
+        {
+          file: 'src/handler.ts',
+          startLine: 10,
+          line: 12,
+          finding: 'User input reaches the model prompt without sanitization.',
+          severity: CodeScanSeverity.CRITICAL,
+        },
+      ],
+    };
+
+    const lineShifted: ScanResponse = {
+      ...base,
+      comments: [{ ...base.comments[0], startLine: 88, line: 90 }],
+    };
+
+    const minorRewording: ScanResponse = {
+      ...base,
+      comments: [
+        {
+          ...base.comments[0],
+          finding: '  User input reaches the model prompt without sanitization.\n',
+        },
+      ],
+    };
+
+    const baseHash =
+      scanResponseToSarif(base).runs[0].results[0].partialFingerprints.promptfooFindingHash;
+    const shiftedHash =
+      scanResponseToSarif(lineShifted).runs[0].results[0].partialFingerprints
+        .promptfooFindingHash;
+    const reworded =
+      scanResponseToSarif(minorRewording).runs[0].results[0].partialFingerprints
+        .promptfooFindingHash;
+
+    expect(shiftedHash).toBe(baseHash);
+    expect(reworded).toBe(baseHash);
+  });
+
+  it('produces distinct fingerprints for different files or severities', () => {
+    const response: ScanResponse = {
+      success: true,
+      comments: [
+        {
+          file: 'src/a.ts',
+          line: 5,
+          finding: 'Same finding text.',
+          severity: CodeScanSeverity.HIGH,
+        },
+        {
+          file: 'src/b.ts',
+          line: 5,
+          finding: 'Same finding text.',
+          severity: CodeScanSeverity.HIGH,
+        },
+        {
+          file: 'src/a.ts',
+          line: 5,
+          finding: 'Same finding text.',
+          severity: CodeScanSeverity.LOW,
+        },
+      ],
+    };
+
+    const hashes = scanResponseToSarif(response).runs[0].results.map(
+      (result) => result.partialFingerprints.promptfooFindingHash,
+    );
+
+    expect(new Set(hashes).size).toBe(3);
+  });
+
+  it('normalizes Windows-style backslash separators in artifact URIs', () => {
+    const response: ScanResponse = {
+      success: true,
+      comments: [
+        {
+          file: 'src\\windows path\\file.ts',
+          line: 7,
+          finding: 'Windows path leak.',
+          severity: CodeScanSeverity.LOW,
+        },
+      ],
+    };
+
+    expect(
+      scanResponseToSarif(response).runs[0].results[0].locations?.[0].physicalLocation
+        .artifactLocation.uri,
+    ).toBe('src/windows%20path/file.ts');
   });
 
   it('omits non-finding comments and preserves general findings without locations', () => {

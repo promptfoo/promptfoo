@@ -96,6 +96,7 @@ const mocks = vi.hoisted(() => {
   const fs = {
     unlinkSync: vi.fn(),
     writeFileSync: vi.fn(),
+    mkdirSync: vi.fn(),
   };
 
   return {
@@ -128,6 +129,7 @@ vi.mock('fs', async () => {
     ...actual,
     unlinkSync: mocks.fs.unlinkSync,
     writeFileSync: mocks.fs.writeFileSync,
+    mkdirSync: mocks.fs.mkdirSync,
   };
 });
 
@@ -429,7 +431,7 @@ describe('code-scan-action main', () => {
   });
 
   describe('SARIF output', () => {
-    it('writes SARIF output and exposes the generated path when configured', async () => {
+    function mockSarifInput(rawPath: string) {
       mocks.core.getInput.mockImplementation((name: string) => {
         if (name === 'github-token') {
           return 'fake-token';
@@ -438,26 +440,67 @@ describe('code-scan-action main', () => {
           return 'medium';
         }
         if (name === 'sarif-output-path') {
-          return 'promptfoo-code-scan.sarif';
+          return rawPath;
         }
         return '';
       });
+    }
+
+    it('resolves the path against GITHUB_WORKSPACE, creates parent dirs, and exposes the resolved path', async () => {
+      mockSarifInput('reports/promptfoo-code-scan.sarif');
 
       await import('../../code-scan-action/src/main');
 
+      const expectedPath = '/test/workspace/reports/promptfoo-code-scan.sarif';
+      const expectedDir = '/test/workspace/reports';
+
       await vi.waitFor(() => {
-        expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(
-          'promptfoo-code-scan.sarif',
-          expect.any(String),
-        );
+        expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(expectedPath, expect.any(String));
       });
 
+      expect(mocks.fs.mkdirSync).toHaveBeenCalledWith(expectedDir, { recursive: true });
       const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
       expect(JSON.parse(sarifJson as string)).toMatchObject({
         $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
         version: '2.1.0',
       });
-      expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', 'promptfoo-code-scan.sarif');
+      expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', expectedPath);
+      expect(mocks.core.warning).not.toHaveBeenCalled();
+    });
+
+    it('refuses to write when sarif-output-path escapes GITHUB_WORKSPACE', async () => {
+      mockSarifInput('../escape.sarif');
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.warning).toHaveBeenCalledWith(
+          expect.stringContaining('resolves outside GITHUB_WORKSPACE'),
+        );
+      });
+
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.fs.mkdirSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('warns and continues when the SARIF write fails', async () => {
+      mockSarifInput('promptfoo-code-scan.sarif');
+      mocks.fs.writeFileSync.mockImplementationOnce(() => {
+        throw new Error('disk full');
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.warning).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to write SARIF output'),
+        );
+      });
+
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
   });
 });

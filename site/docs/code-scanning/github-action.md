@@ -42,7 +42,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 
 | Input               | Description                                                      | Default                     |
 | ------------------- | ---------------------------------------------------------------- | --------------------------- |
-| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
+| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app` |
 | `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
 | `minimum-severity`  | Alias for `min-severity`                                         | `medium`                    |
 | `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |

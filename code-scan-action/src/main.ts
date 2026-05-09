@@ -5,6 +5,7 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
@@ -405,6 +406,31 @@ async function postFallbackComments(
   }
 }
 
+function resolveSarifOutputPath(rawPath: string): string {
+  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+  const resolved = path.resolve(workspace, rawPath);
+  const workspaceWithSep = workspace.endsWith(path.sep) ? workspace : workspace + path.sep;
+  if (resolved !== workspace && !resolved.startsWith(workspaceWithSep)) {
+    throw new Error(
+      `sarif-output-path "${rawPath}" resolves outside GITHUB_WORKSPACE; refusing to write`,
+    );
+  }
+  return resolved;
+}
+
+function writeSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
+  // SARIF output is supplementary — never sink an otherwise-successful scan over a write failure.
+  try {
+    const resolved = resolveSarifOutputPath(rawPath);
+    fs.mkdirSync(path.dirname(resolved), { recursive: true });
+    fs.writeFileSync(resolved, JSON.stringify(scanResponseToSarif(scanResponse), null, 2));
+    core.setOutput('sarif-path', resolved);
+    core.info(`📝 Wrote SARIF output to ${resolved}`);
+  } catch (error) {
+    core.warning(`Failed to write SARIF output to "${rawPath}": ${formatError(error)}`);
+  }
+}
+
 async function handleScanResponse(
   scanResponse: ScanResponse,
   inputs: ActionInputs,
@@ -414,12 +440,7 @@ async function handleScanResponse(
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
   if (inputs.sarifOutputPath) {
-    fs.writeFileSync(
-      inputs.sarifOutputPath,
-      JSON.stringify(scanResponseToSarif(scanResponse), null, 2),
-    );
-    core.setOutput('sarif-path', inputs.sarifOutputPath);
-    core.info(`📝 Wrote SARIF output to ${inputs.sarifOutputPath}`);
+    writeSarifOutput(scanResponse, inputs.sarifOutputPath);
   }
 
   if ((comments.length > 0 || review) && commentsPosted === false) {
