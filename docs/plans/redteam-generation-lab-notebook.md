@@ -3895,3 +3895,115 @@ But that stability came with a clear loss of resolution:
 3. The right target is not maximal semantic detail:
    - it is the smallest deterministic representation that still preserves
      winner-relevant differences.
+
+## Iteration 47 - 2026-05-09
+
+### Goal
+
+Test one concrete way to add back resolution without abandoning the constrained
+approach:
+
+> Does a specific requester-role axis separate the collapsed tasks while keeping
+> the representation stable enough to use?
+
+### Experiment
+
+1. Added `evaluateRepairRoleAwareConstrainedSemanticSignatureStability.ts`.
+2. Kept the five constrained slots from iteration 46 and added a sixth enum
+   slot for requester role:
+   - `security-reviewer`
+   - `vendor-support`
+   - `legal-counsel`
+   - `insurer`
+   - `auditor`
+   - `billing`
+   - `records-custodian`
+3. Updated weighted slot similarity so future schemas can carry more than five
+   labels without producing invalid weights.
+4. Re-ran the same:
+   - frozen benchmark
+   - three live draws
+   - route-stability evaluation
+5. Ran:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/evaluateRepairRoleAwareConstrainedSemanticSignatureStability.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  3
+```
+
+### Results
+
+Requester role restored meaningful resolution:
+
+| Representation              | Unique tuples |
+| --------------------------- | ------------: |
+| 5-slot constrained ontology |           `7` |
+| 6-slot role-aware ontology  |        `9-10` |
+
+It also separated most of the former prompt-extraction collapse:
+
+1. `security-reviewer`
+2. `vendor-support`
+3. `legal-counsel`
+
+instead of forcing all of those prompts through one broad
+`authority-pretext` bucket.
+
+The stability/accuracy tradeoff now looks better balanced:
+
+| Representation              | Label-set Jaccard | Slot agreement | Stable holdout label accuracy |
+| --------------------------- | ----------------: | -------------: | ----------------------------: |
+| free-form labels            |           `0.133` |        `0.213` |                      unstable |
+| 5-slot constrained ontology |           `0.884` |        `0.927` |                         `1/4` |
+| 6-slot role-aware ontology  |           `0.756` |        `0.839` |                         `2/4` |
+
+Role-aware holdout results:
+
+| Model                | Accuracy across draws | Route changes |
+| -------------------- | --------------------: | ------------: |
+| label `1-NN`         |         `2/4,2/4,2/4` |         `0/4` |
+| slot + plugin `1-NN` |         `2/4,2/4,2/4` |         `0/4` |
+| slot match `1-NN`    |         `2/4,2/4,1/4` |         `1/4` |
+| weighted slot `1-NN` |         `2/4,2/4,1/4` |         `1/4` |
+
+The weakest stability point is now `prompt-extraction-coverage-v1`:
+
+1. label-set similarity: `0.467`
+2. slot agreement: `0.556`
+
+### Reflection
+
+1. Iteration 47 validates the core design direction:
+   - richer canonical semantics can recover useful distinctions
+   - without reverting all the way to free-form drift
+2. The requester-role axis is not merely cosmetic:
+   - it raises unique tuple count
+   - improves stable label routing from `1/4` to `2/4`
+   - and preserves deterministic holdout behavior for the best label model
+3. The role-aware schema is still imperfect:
+   - it is less stable than the five-slot ontology
+   - and one prompt-extraction coverage task still wobbles substantially
+4. The new evidence suggests the right engineering target is a **small ontology
+   search problem**:
+   - add candidate axes
+   - score both stability and winner resolution
+   - keep only axes that improve the frontier
+5. We now have a concrete notion of Pareto improvement for representations:
+   - tuple count / collision reduction
+   - repeated-draw stability
+   - downstream routing quality
+
+### New Hypotheses
+
+1. The next iteration should turn representation design into a measurable search
+   problem rather than hand-tuning one axis at a time.
+2. Candidate axes worth testing next include:
+   - requester role
+   - requested artifact
+   - repair objective / blocked metric family
+3. The best representation may be hybrid:
+   - some slots model-generated but constrained
+   - some slots copied deterministically from already-known benchmark fields

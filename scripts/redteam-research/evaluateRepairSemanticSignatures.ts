@@ -156,7 +156,7 @@ function slotMatchSimilarity(left: SemanticSignature, right: SemanticSignature):
 function weightedSlotSimilarity(left: SemanticSignature, right: SemanticSignature): number {
   const weights = [1.5, 1.5, 1, 1, 1];
   return left.labels.reduce(
-    (score, label, index) => score + (label === right.labels[index] ? weights[index] : 0),
+    (score, label, index) => score + (label === right.labels[index] ? (weights[index] ?? 1) : 0),
     0,
   );
 }
