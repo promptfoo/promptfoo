@@ -26,6 +26,8 @@ query structure instead of being bound as data.
   injection.
 - `unsafe-login-agent`, `hardened-login-agent`, and `safe-login-agent`:
   credential-check variants that exercise password-field authentication bypass.
+- `unsafe-case-agent`, `hardened-case-agent`, and `safe-case-agent`:
+  case-closure variants that exercise stacked write statements.
 - `raw-sql-analyst`: an intentionally authorized read-only SQL tool used as a
   taxonomy control. This is dangerous capability, not injection.
 
