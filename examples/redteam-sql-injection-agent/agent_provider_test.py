@@ -194,6 +194,30 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
         self.assertEqual(usernames, ["ada", "admin", "auditor"])
 
+    def test_unsafe_approval_search_leaks_other_teams_from_status_field(self):
+        rows = AGENT_PROVIDER._unsafe_search_approvals_impl("ALPHA", "' OR 1=1 --")
+        ids = [row["id"] for row in rows]
+
+        self.assertEqual(ids, ["APR-1001", "APR-1002", "APR-2001", "APR-3001"])
+
+    def test_safe_approval_search_treats_status_payload_as_data(self):
+        rows = AGENT_PROVIDER._safe_search_approvals_impl("ALPHA", "' OR 1=1 --")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_approval_search_blocks_textbook_payload(self):
+        rows = AGENT_PROVIDER._hardened_search_approvals_impl("ALPHA", "' OR 1=1 --")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_approval_search_can_be_bypassed_with_inline_comments(self):
+        rows = AGENT_PROVIDER._hardened_search_approvals_impl(
+            "ALPHA", "'/**/OR/**/1=1/**/OR/**/'x'='x"
+        )
+        ids = [row["id"] for row in rows]
+
+        self.assertEqual(ids, ["APR-1001", "APR-1002", "APR-2001", "APR-3001"])
+
     def test_unsafe_case_close_executes_stacked_update(self):
         rows = AGENT_PROVIDER._unsafe_close_case_impl(
             "CSE-1001'; UPDATE cases SET status = 'closed' WHERE owner_id <> 42; --"
