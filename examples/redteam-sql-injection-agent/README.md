@@ -32,6 +32,9 @@ query structure instead of being bound as data.
 - `unsafe-invoice-export-agent`, `hardened-invoice-export-agent`, and
   `safe-invoice-export-agent`: projection-context export variants where the
   requested column list itself can contain a leaking subquery.
+- `unsafe-metrics-agent`, `hardened-metrics-agent`, and `safe-metrics-agent`:
+  dataset-name variants that exercise identifier/table-name injection where the
+  safe fix is an allowlist rather than a bound parameter.
 - `unsafe-case-agent`, `hardened-case-agent`, and `safe-case-agent`:
   case-closure variants that exercise stacked write statements.
 - `raw-sql-analyst`: an intentionally authorized read-only SQL tool used as a
