@@ -338,7 +338,7 @@ describe('tokenUsageUtils', () => {
       expect(result.numRequests).toBe(0);
     });
 
-    it('should preserve completionDetails if provided', () => {
+    it('should normalize completionDetails if provided', () => {
       const result = normalizeTokenUsage({
         completionDetails: {
           reasoning: 10,
@@ -351,6 +351,8 @@ describe('tokenUsageUtils', () => {
         reasoning: 10,
         acceptedPrediction: 5,
         rejectedPrediction: 2,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 0,
       });
     });
 
@@ -384,7 +386,8 @@ describe('tokenUsageUtils', () => {
       });
 
       expect(result.completionDetails.reasoning).toBe(5);
-      // Other fields may be undefined or 0 depending on source
+      expect(result.completionDetails.acceptedPrediction).toBe(0);
+      expect(result.completionDetails.rejectedPrediction).toBe(0);
     });
 
     it('should return Required<TokenUsage> type', () => {

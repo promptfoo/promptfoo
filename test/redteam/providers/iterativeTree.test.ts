@@ -31,6 +31,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
+  ProviderResponse,
 } from '../../../src/types/index';
 
 vi.mock('../../../src/providers/openai');
@@ -1375,7 +1376,7 @@ describe('Token Counting', () => {
 
   it('should count final target requests even when the response omits token usage', () => {
     const totalTokenUsage = createEmptyTokenUsage();
-    const finalTargetResponse = {
+    const finalTargetResponse: ProviderResponse = {
       output: 'final response without usage',
     };
 

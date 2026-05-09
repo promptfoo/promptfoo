@@ -1418,7 +1418,6 @@ export async function synthesize({
               plugin.id,
               policy,
             );
-            testCase.metadata ??= {};
             (testCase.metadata as any).goal = extractedGoal.goal;
             if (extractedGoal.tokenUsage) {
               (testCase.metadata as any).providerTokenUsage = mergeProviderTokenUsage(
@@ -1555,7 +1554,6 @@ export async function synthesize({
               plugin.id,
               policy,
             );
-            testCase.metadata ??= {};
             (testCase.metadata as any).goal = extractedGoal.goal;
             if (extractedGoal.tokenUsage) {
               (testCase.metadata as any).providerTokenUsage = mergeProviderTokenUsage(

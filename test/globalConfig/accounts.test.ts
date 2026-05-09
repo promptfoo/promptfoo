@@ -701,7 +701,7 @@ describe('accounts', () => {
 
     it('should use the configured cloud host when one is already authenticated', async () => {
       vi.mocked(isCI).mockReturnValue(false);
-      vi.mocked(getEnvString).mockReturnValue(undefined);
+      vi.mocked(getEnvString).mockReturnValue('');
       vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
         cloud: {

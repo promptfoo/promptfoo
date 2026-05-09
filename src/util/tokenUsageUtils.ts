@@ -1,5 +1,15 @@
 import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
 
+export type NormalizedTokenUsage = Omit<Required<TokenUsage>, 'assertions' | 'completionDetails'> & {
+  completionDetails: Required<CompletionTokenDetails>;
+  assertions: Omit<
+    Required<NonNullable<TokenUsage['assertions']>>,
+    'completionDetails'
+  > & {
+    completionDetails: Required<CompletionTokenDetails>;
+  };
+};
+
 /**
  * Helper to create empty completion details
  */
@@ -16,7 +26,7 @@ export function createEmptyCompletionDetails(): Required<CompletionTokenDetails>
 /**
  * Create an empty assertions token usage object.
  */
-export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
+export function createEmptyAssertions(): NormalizedTokenUsage['assertions'] {
   return {
     total: 0,
     prompt: 0,
@@ -30,7 +40,7 @@ export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
 /**
  * Create an empty token usage object with all fields initialized to zero.
  */
-export function createEmptyTokenUsage(): Required<TokenUsage> {
+export function createEmptyTokenUsage(): NormalizedTokenUsage {
   return {
     prompt: 0,
     completion: 0,
@@ -213,14 +223,24 @@ export function accumulateResponseTokenUsage(
  */
 export function normalizeTokenUsage(
   tokenUsage: Partial<TokenUsage> | undefined,
-): Required<TokenUsage> {
+): NormalizedTokenUsage {
   return {
     total: tokenUsage?.total || 0,
     prompt: tokenUsage?.prompt || 0,
     completion: tokenUsage?.completion || 0,
     cached: tokenUsage?.cached || 0,
     numRequests: tokenUsage?.numRequests || 0,
-    completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
-    assertions: tokenUsage?.assertions || createEmptyAssertions(),
+    completionDetails: {
+      ...createEmptyCompletionDetails(),
+      ...tokenUsage?.completionDetails,
+    },
+    assertions: {
+      ...createEmptyAssertions(),
+      ...tokenUsage?.assertions,
+      completionDetails: {
+        ...createEmptyCompletionDetails(),
+        ...tokenUsage?.assertions?.completionDetails,
+      },
+    },
   };
 }

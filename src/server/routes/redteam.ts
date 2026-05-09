@@ -15,7 +15,7 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remot
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import { TestCaseWithPlugin } from '../../types';
+import { TestCase, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
@@ -78,6 +78,16 @@ function mergeTokenUsage(...usages: Array<TokenUsage | undefined>): TokenUsage |
   return totalTokenUsage;
 }
 
+function withPluginMetadata(testCase: TestCase, pluginId: string): TestCaseWithPlugin {
+  return {
+    ...testCase,
+    metadata: {
+      ...(testCase.metadata ?? {}),
+      pluginId: testCase.metadata?.pluginId ?? pluginId,
+    },
+  };
+}
+
 /**
  * Generates a test case for a given plugin/strategy combination.
  */
@@ -137,7 +147,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
 
     let testCases: TestCaseWithPlugin[];
     try {
-      testCases = await pluginFactory.action({
+      const generatedTestCases = await pluginFactory.action({
         provider: trackedRedteamProvider.provider,
         purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
         injectVar,
@@ -149,6 +159,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           __nonce: Math.floor(Math.random() * 1000000), // Use a nonce to prevent caching
         },
       });
+      testCases = generatedTestCases.map((testCase) => withPluginMetadata(testCase, plugin.id));
     } catch (error) {
       const tokenUsage = trackedRedteamProvider.getTokenUsage() || getErrorTokenUsage(error);
       logger.error('Error generating test case', { error });
@@ -193,14 +204,16 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
 
         const strategyTestCases = await strategyFactory.action(
-          testCases as TestCaseWithPlugin[],
+          testCases,
           injectVar,
           strategy.config || {},
           strategy.id,
         );
 
         if (strategyTestCases && strategyTestCases.length > 0) {
-          finalTestCases = strategyTestCases;
+          finalTestCases = strategyTestCases.map((testCase) =>
+            withPluginMetadata(testCase, plugin.id),
+          );
         }
       } catch (error) {
         logger.error(`Error applying strategy ${strategy.id}`, { error });

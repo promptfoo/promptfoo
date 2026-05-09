@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  McpMaterializationError,
-  materializeMcpValue,
-  materializeTrackedMcpValue,
-} from '../../src/redteam/mcpMaterialization';
+import { materializeMcpValue, materializeTrackedMcpValue } from '../../src/redteam/mcpMaterialization';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
 import type { ApiProvider } from '../../src/types/index';
@@ -294,7 +290,7 @@ describe('materializeMcpValue', () => {
         value: 'Find clean energy companies.',
         tools: [searchCompaniesTool],
       }),
-    ).rejects.toMatchObject<McpMaterializationError>({
+    ).rejects.toMatchObject({
       message: 'Failed to materialize MCP value: "Find clean energy companies."',
       tokenUsage: {
         prompt: 8,

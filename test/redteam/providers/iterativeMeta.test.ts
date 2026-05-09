@@ -332,7 +332,7 @@ describe('RedteamIterativeMetaProvider', () => {
         targetProvider: mockTargetProvider,
         test: {
           assert: [{ type: 'harmful:test' }],
-        } as AtomicTestCase,
+        } as unknown as AtomicTestCase,
         vars: { query: 'test' },
       });
 

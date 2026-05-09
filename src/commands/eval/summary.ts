@@ -40,7 +40,7 @@ export interface EvalSummaryParams {
   /** Maximum concurrent API calls during evaluation */
   maxConcurrency: number;
   /** Token usage tracker for provider-level breakdown */
-  tracker: TokenUsageTracker;
+  tracker?: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
 }
@@ -166,7 +166,7 @@ function buildUsageDetails(usage: TokenUsageBreakdown, total: number): string[] 
 function getTokenUsageLines(
   tokenUsage: TokenUsage,
   isRedteam: boolean,
-  tracker: TokenUsageTracker,
+  tracker: TokenUsageTracker | undefined,
 ): string[] {
   const hasEvalTokens =
     (tokenUsage.total || 0) > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0;
@@ -202,7 +202,7 @@ function getTokenUsageLines(
 
   if (hasProbeCount) {
     lines.push(
-      `  ${chalk.gray('Probes:')} ${chalk.white(tokenUsage.numRequests.toLocaleString())}`,
+      `  ${chalk.gray('Probes:')} ${chalk.white(evalTokens.numRequests.toLocaleString())}`,
     );
   }
 
@@ -228,7 +228,11 @@ function getTokenUsageLines(
   return lines;
 }
 
-function getProviderUsageLines(tracker: TokenUsageTracker): string[] {
+function getProviderUsageLines(tracker: TokenUsageTracker | undefined): string[] {
+  if (!tracker) {
+    return [];
+  }
+
   const providerIds = tracker.getProviderIds();
   if (providerIds.length <= 1) {
     return [];
