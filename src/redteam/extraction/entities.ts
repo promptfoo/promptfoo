@@ -4,10 +4,15 @@ import { shouldGenerateRemote } from '../remoteGeneration';
 import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
 
 import type { ApiProvider } from '../../types/index';
+import type { ExtractionOptions } from './purpose';
 import type { RedTeamTask } from './util';
 
-export async function extractEntities(provider: ApiProvider, prompts: string[]): Promise<string[]> {
-  if (shouldGenerateRemote()) {
+export async function extractEntities(
+  provider: ApiProvider,
+  prompts: string[],
+  options?: ExtractionOptions,
+): Promise<string[]> {
+  if (!options?.forceLocal && shouldGenerateRemote()) {
     try {
       const result = await fetchRemoteGeneration('entities' as RedTeamTask, prompts);
       return result as string[];

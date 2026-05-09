@@ -106,6 +106,32 @@ describe('System Purpose Extractor', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('should use local extraction when local credentials are available', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: 'sk-local',
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false',
+    });
+
+    const result = await extractSystemPurpose(provider, ['prompt']);
+
+    expect(result).toBe('Extracted system purpose');
+    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt'));
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should honor an explicit local-extraction override', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: undefined,
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false',
+    });
+
+    const result = await extractSystemPurpose(provider, ['prompt'], { forceLocal: true });
+
+    expect(result).toBe('Extracted system purpose');
+    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt'));
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('should extract system purpose when returned without xml tags', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
     vi.mocked(provider.callApi).mockResolvedValue({ output: 'Extracted system purpose' });

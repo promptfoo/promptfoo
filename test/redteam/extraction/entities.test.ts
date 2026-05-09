@@ -119,6 +119,19 @@ describe('Entities Extractor', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('should honor an explicit local-extraction override', async () => {
+    mockProcessEnv({
+      OPENAI_API_KEY: undefined,
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false',
+    });
+
+    const result = await extractEntities(provider, ['prompt'], { forceLocal: true });
+
+    expect(result).toEqual(['Apple', 'Google']);
+    expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt'));
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('should log debug message when no entities are found', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
     vi.mocked(provider.callApi).mockResolvedValue({ output: 'No entities found' });

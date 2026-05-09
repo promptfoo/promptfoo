@@ -20,7 +20,7 @@ import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
-import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
 import {
   ConfigPermissionError,
@@ -372,6 +372,65 @@ describe('doGenerateRedteam', () => {
       'output.yaml',
       expect.any(Array),
     );
+  });
+
+  it('should skip email validation when generation stays local', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
+    vi.mocked(configModule.combineConfigs).mockResolvedValue([
+      {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+        tests: [],
+      },
+    ] as any);
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam({
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    });
+
+    expect(promptForEmailUnverified).not.toHaveBeenCalled();
+    expect(checkEmailStatusAndMaybeExit).not.toHaveBeenCalled();
+  });
+
+  it('should validate email when generation uses remote helpers', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(configModule.combineConfigs).mockResolvedValue([
+      {
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        providers: [],
+        tests: [],
+      },
+    ] as any);
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    await doGenerateRedteam({
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    });
+
+    expect(promptForEmailUnverified).toHaveBeenCalledTimes(1);
+    expect(checkEmailStatusAndMaybeExit).toHaveBeenCalledTimes(1);
   });
 
   it('should write to config file when write option is true', async () => {
@@ -3437,6 +3496,7 @@ describe('redteam generate command with target option', () => {
   });
 
   it('should not log an unexpected error for recoverable email validation failures', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
     vi.mocked(checkEmailStatusAndMaybeExit).mockImplementationOnce(async () => {
       const message = 'Please verify your email address and try again.';
       logger.error(message);

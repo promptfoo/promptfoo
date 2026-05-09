@@ -56,7 +56,7 @@ import {
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
-import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
+import { shouldGenerateRemote } from '../remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
@@ -313,8 +313,8 @@ async function doGenerateRedteamInternal(
     return null;
   }
 
-  // Validate email for remote generation
-  if (!neverGenerateRemote()) {
+  // Validate email only when this run will actually use remote generation.
+  if (shouldGenerateRemote()) {
     let hasValidEmail = false;
     while (!hasValidEmail) {
       const { emailNeedsValidation } = await promptForEmailUnverified();
