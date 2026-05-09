@@ -1961,3 +1961,86 @@ candidates.
    dropping some local-repair constraints that may over-anchor generation.
 4. We should test an intermediate proposer packet next, rather than treating
    “rich” and “thin” as the only two points in the design space.
+
+## Iteration 27 - 2026-05-09
+
+### Goal
+
+Test an intermediate proposer packet:
+
+> Can we preserve the useful global objective guidance from the rich prompt
+> while dropping the local repair anchors that may suppress larger jumps?
+
+### Experiment
+
+1. Added `buildBalancedProposerPrompt()`, which keeps:
+   - target policy
+   - target tactic
+   - blocked metric
+   - residual gap to beat
+2. It deliberately removes:
+   - incumbent prompt text
+   - lexical collision examples
+   - explicit `clean-same-slot` preference
+3. Extended the proposer runner with:
+   - `balanced`
+   - `all`
+     profile modes
+4. Ran a three-profile stochastic comparison:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/runPromptExtractionProposerPass.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  all \
+  3 \
+  0.7
+```
+
+### Results
+
+| Prompt profile | Trials | Frontier-improving trials | Frontier-improving candidates | Avg best novelty delta | Min best delta | Max best delta |
+| -------------- | -----: | ------------------------: | ----------------------------: | ---------------------: | -------------: | -------------: |
+| `rich`         |    `3` |                       `3` |                           `8` |             `+0.00910` |     `+0.00466` |     `+0.01340` |
+| `balanced`     |    `3` |                       `3` |                           `6` |             `+0.01338` |     `+0.00788` |     `+0.02078` |
+| `thin`         |    `3` |                       `2` |                           `6` |             `+0.00635` |     `-0.00522` |     `+0.01256` |
+
+Per-trial best novelty deltas:
+
+| Trial | `rich`     | `balanced` | `thin`     |
+| ----: | ---------- | ---------- | ---------- |
+|   `1` | `+0.01340` | `+0.00788` | `+0.01256` |
+|   `2` | `+0.00466` | `+0.01146` | `-0.00522` |
+|   `3` | `+0.00925` | `+0.02078` | `+0.01172` |
+
+All three profiles preserved `role-pretext` perfectly across all candidates.
+
+### Reflection
+
+1. The intermediate packet is the best current compromise:
+   - `balanced` had the strongest average best gain
+   - `rich` still had the broadest yield of improving candidates
+   - `thin` was the least reliable profile in this sample
+2. This supports the iteration-26 hypothesis that the local-repair framing in the
+   fully rich packet may over-anchor the generator.
+3. The result suggests a real design axis:
+   - global objective guidance improves reliability
+   - local replacement details improve breadth
+   - removing some local anchors may improve peak gain
+4. A production generator probably wants configurable proposer profiles rather
+   than one universal handoff shape.
+
+### New Hypotheses
+
+1. `balanced` should become the default candidate for a best-gain-oriented
+   proposer, while `rich` remains useful when portfolio breadth matters more.
+2. The next useful metric is top-k yield, not just:
+   - total improving candidates
+   - single best candidate
+3. We should compare profile performance on a harder plugin/frontier next, to
+   see whether this ordering survives outside prompt extraction.
+4. A future mixed strategy may sample:
+   - some `rich` candidates for breadth
+   - some `balanced` candidates for larger leaps
+     within the same generation budget.

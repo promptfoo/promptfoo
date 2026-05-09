@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { loadApiProvider } from '../../src/providers';
 import {
   analyzePortfolioPool,
+  buildBalancedProposerPrompt,
   buildProposerPrompt,
   buildRepairBrief,
   buildThinProposerPrompt,
@@ -48,7 +49,7 @@ const proposerResponseSchema = z.object({
     .max(5),
 });
 
-type PromptProfile = 'both' | 'rich' | 'thin';
+type PromptProfile = 'all' | 'balanced' | 'both' | 'rich' | 'thin';
 type ProposerPassResult = {
   bestAverageNoveltyDelta?: number;
   bestGeneratedRepair?: ReturnType<typeof selectBestRepairCandidate>;
@@ -59,7 +60,7 @@ type ProposerPassResult = {
   generatedDiagnostics: CandidateDiagnostic[];
   jsonValid: boolean;
   parseError?: string;
-  profile: Exclude<PromptProfile, 'both'>;
+  profile: Exclude<PromptProfile, 'all' | 'both'>;
   tacticPreservationCount: number;
 };
 
@@ -154,7 +155,7 @@ async function runProposerPass({
   baselinePolicies: ReturnType<typeof analyzePortfolioPool>['policies'];
   proposerPrompt: ProposerPrompt;
   providerId: string;
-  profile: Exclude<PromptProfile, 'both'>;
+  profile: Exclude<PromptProfile, 'all' | 'both'>;
   temperature: number;
   targetTactic: string;
 }): Promise<ProposerPassResult> {
@@ -252,10 +253,10 @@ async function main() {
   ] = process.argv.slice(2);
   if (!inputPath) {
     throw new Error(
-      'Usage: tsx scripts/redteam-research/runPromptExtractionProposerPass.ts <redteam.yaml> [providerId] [rich|thin|both] [trialCount] [temperature]',
+      'Usage: tsx scripts/redteam-research/runPromptExtractionProposerPass.ts <redteam.yaml> [providerId] [rich|balanced|thin|both|all] [trialCount] [temperature]',
     );
   }
-  if (!['rich', 'thin', 'both'].includes(profileArg)) {
+  if (!['rich', 'balanced', 'thin', 'both', 'all'].includes(profileArg)) {
     throw new Error(`Unknown proposer profile: ${profileArg}`);
   }
   const trialCount = Number.parseInt(trialCountArg, 10);
@@ -286,10 +287,16 @@ async function main() {
 
   const repairBrief = buildRepairBrief(selectedManualDiagnostic);
   const prompts = {
+    balanced: buildBalancedProposerPrompt(repairBrief),
     rich: buildProposerPrompt(repairBrief),
     thin: buildThinProposerPrompt(repairBrief),
   };
-  const requestedProfiles = profile === 'both' ? (['rich', 'thin'] as const) : [profile];
+  const requestedProfiles =
+    profile === 'both'
+      ? (['rich', 'thin'] as const)
+      : profile === 'all'
+        ? (['rich', 'balanced', 'thin'] as const)
+        : [profile];
   const trials = [];
 
   for (let trial = 1; trial <= trialCount; trial += 1) {
