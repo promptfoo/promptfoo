@@ -3478,3 +3478,96 @@ Example generated signatures:
    - semantic representation for task similarity
    - plus a cheap plugin prior
    - rather than either geometry-only or semantics-only routing.
+
+## Iteration 43 - 2026-05-09
+
+### Goal
+
+Test whether dense embeddings are a better semantic space than the structured
+labels from iteration 42:
+
+> If we embed the same outcome-blind task context and route by cosine nearest
+> neighbor, do we preserve the holdout gain while improving robustness?
+
+### Experiment
+
+1. Added `evaluateRepairEmbeddingNeighbors.ts`.
+2. Reused the existing repo-native embedding path:
+   - provider: `openai:embedding:text-embedding-3-large`
+   - no bespoke HTTP client
+3. Embedded the same outcome-blind semantic context used in the lexical
+   experiment:
+   - plugin
+   - blocked metric
+   - target tactic
+   - candidate prompt
+   - top collision prompts
+4. Routed with cosine nearest neighbor over the embedding vectors.
+5. Evaluated on the same:
+   - frozen holdout split
+   - leave-one-out pass over all observed tasks
+6. Ran:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/evaluateRepairEmbeddingNeighbors.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:embedding:text-embedding-3-large
+```
+
+### Results
+
+Embedding dimensionality:
+
+| Provider                                  | Dimensions |
+| ----------------------------------------- | ---------: |
+| `openai:embedding:text-embedding-3-large` |     `3072` |
+
+| Evaluation    | Accuracy | Avg regret |
+| ------------- | -------: | ---------: |
+| holdout       |    `2/4` |  `0.00236` |
+| leave-one-out |   `3/10` |  `0.01009` |
+
+Holdout predictions:
+
+| Task                            | Predicted  | Actual     |
+| ------------------------------- | ---------- | ---------- |
+| `prompt-extraction-novelty-v3`  | `balanced` | `thin`     |
+| `prompt-extraction-coverage-v2` | `balanced` | `balanced` |
+| `sql-novelty-v2`                | `balanced` | `balanced` |
+| `bola-coverage-v2`              | `thin`     | `balanced` |
+
+### Reflection
+
+1. Dense embeddings do **not** preserve the label-signature gain:
+   - embeddings reach only `2/4` holdout
+   - structured labels from iteration 42 reached `3/4`
+2. Embeddings tie the older richer lexical/context baselines rather than
+   beating them:
+   - same `2/4` holdout accuracy
+   - same `0.00236` holdout regret
+3. The leave-one-out result also stays weak:
+   - `3/10`
+4. This suggests the useful part of iteration 42 may not be “semantic space” in
+   general:
+   - it may be the **task decomposition** imposed by the label schema
+   - boundary
+   - goal
+   - action
+   - social frame
+   - resource
+5. The next research direction should likely keep that decomposition and test
+   ways of comparing or combining labels, rather than assuming generic
+   embeddings will discover the same structure automatically.
+
+### New Hypotheses
+
+1. Structured semantic factorization is more useful here than generic
+   embedding similarity.
+2. A hybrid model over individual semantic slots may outperform whole-text
+   nearest neighbors.
+3. The next experiment should compare:
+   - slot-wise label overlap
+   - weighted label overlap
+   - perhaps label + plugin priors
+     before moving to a more complex learned model.
