@@ -1500,3 +1500,67 @@ At the end of iteration 20:
 3. The same selector concept should generalize to future agentic attack
    dimensions where replacing one slot cleanly may matter more than making one
    isolated prompt sound novel.
+
+## Iteration 21 - 2026-05-09
+
+### Goal
+
+Turn the diagnostics into the first automated repair choice:
+
+> If several repaired candidates are available, can we automatically choose the
+> best target-policy repair by preferring compatibility first and residual gap
+> second?
+
+### Experiment
+
+Added `selectBestRepairCandidate()`, which ranks repaired candidates by:
+
+1. compatibility grade
+2. residual blocking-metric gap
+3. stable candidate index as a final tie-breaker
+
+### Results
+
+The selector chose:
+
+1. `vendor-ticket`
+2. compatibility:
+   - `clean-same-slot`
+   - `1` displaced slot
+   - same-tactic replacement `true`
+3. residual blocking-metric gap:
+   - `averageNovelty: -0.009`
+
+That matches the best human interpretation from iterations 17-20.
+
+### Reflection
+
+1. This is the first automated decision layer in the loop.
+2. The selector correctly prefers the repair candidate that is:
+   - most compatible with the target policy
+   - closest to crossing the current frontier boundary
+3. It rejects:
+   - `access-review` because it is `multi-slot`
+   - `privilege-log` because it is also `multi-slot`, even though it improves a
+     different policy
+4. We now have the skeleton of a usable candidate pipeline:
+   - proposer emits several repairs
+   - evaluator computes diagnostics
+   - selector chooses the best next attempt for the chosen policy
+5. That means the next missing piece is no longer selection. It is actual
+   proposal generation at scale.
+
+### New Hypotheses
+
+1. The next useful experiment is to generate many repair candidates
+   automatically and run this selector over them.
+2. Before invoking a model, we can probably prototype the proposer interface
+   with a structured spec that includes:
+   - target tactic
+   - blocked metric
+   - displaced slot
+   - top lexical collisions to avoid
+3. Once the proposer is model-backed, we can measure:
+   - how often it emits `clean-same-slot` repairs
+   - how many iterations are needed to cross the incumbent frontier
+   - whether proposal diversity improves with richer feedback packets

@@ -65,6 +65,12 @@ type CandidateDiagnostic = {
     score: Record<string, number>;
   };
 };
+type SelectedRepairCandidate = {
+  candidateIndex: number;
+  candidatePrompt: string;
+  compatibility: CandidateDiagnostic['compatibility'];
+  residualBlockingMetricGap: number;
+};
 
 function buildSqlCandidatePool(attacks: SqlAttack[]): SqlAttack[] {
   return [
@@ -263,6 +269,39 @@ function diagnoseCandidateAgainstPolicy(
   };
 }
 
+function selectBestRepairCandidate(diagnostics: CandidateDiagnostic[]): SelectedRepairCandidate {
+  const compatibilityRank = {
+    'clean-same-slot': 0,
+    'clean-different-slot': 1,
+    'multi-slot': 2,
+  } satisfies Record<CandidateDiagnostic['compatibility']['grade'], number>;
+  const [selected] = [...diagnostics].sort((left, right) => {
+    const compatibilityDelta =
+      compatibilityRank[left.compatibility.grade] - compatibilityRank[right.compatibility.grade];
+    if (compatibilityDelta !== 0) {
+      return compatibilityDelta;
+    }
+
+    const leftGap = left.blockingMetric ? left.deltaVsWinner[left.blockingMetric] : 0;
+    const rightGap = right.blockingMetric ? right.deltaVsWinner[right.blockingMetric] : 0;
+    if (leftGap !== rightGap) {
+      return rightGap - leftGap;
+    }
+
+    return left.candidateIndex - right.candidateIndex;
+  });
+  const residualBlockingMetricGap = selected.blockingMetric
+    ? selected.deltaVsWinner[selected.blockingMetric]
+    : 0;
+
+  return {
+    candidateIndex: selected.candidateIndex,
+    candidatePrompt: selected.candidatePrompt,
+    compatibility: selected.compatibility,
+    residualBlockingMetricGap,
+  };
+}
+
 async function main() {
   const [inputPath] = process.argv.slice(2);
   if (!inputPath) {
@@ -439,8 +478,16 @@ async function main() {
       ];
     }),
   );
+  const promptExtractionRepairCandidates = [
+    ...results.promptExtractionRepaired.candidateDiagnostics,
+    ...results.promptExtractionGapTargeted.candidateDiagnostics,
+    ...results.promptExtractionGapTargetedV2.candidateDiagnostics,
+  ];
+  const selectedPromptExtractionRepair = selectBestRepairCandidate(
+    promptExtractionRepairCandidates,
+  );
 
-  console.log(JSON.stringify({ results }, null, 2));
+  console.log(JSON.stringify({ results, selectedPromptExtractionRepair }, null, 2));
 }
 
 await main();
