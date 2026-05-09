@@ -4579,3 +4579,90 @@ Frontier comparison:
    - classification support
 3. A learned pairwise separator focused on the remaining legal-counsel collision
    may now be more efficient than another broad ontology expansion.
+
+## Iteration 54 - 2026-05-09
+
+### Goal
+
+Test whether the remaining legal-counsel collision is a routing problem rather
+than a representation problem:
+
+> Can the best semantic representation improve if nearest-neighbor search is
+> gated by repair metric family instead of letting novelty and coverage tasks
+> compete in the same neighborhood?
+
+### Experiment
+
+1. Added `evaluateRepairMetricGatedSemanticSignatureRouting.ts`.
+2. Reused the saved three-draw `role-mechanism` artifact from iteration 53:
+   - no new model calls
+   - no new labels
+   - same semantic signatures
+3. Compared three routing policies over the same signatures:
+   - `global`
+   - `metric-family`
+   - `plugin-metric-family`
+4. Kept the rest of the evaluation constant:
+   - same five nearest-neighbor models
+   - same holdout split
+   - same leave-one-out split
+
+### Results
+
+Hard metric gating is a clear regression:
+
+| Routing policy         | Stable label holdout accuracy | Avg label holdout regret |
+| ---------------------- | ----------------------------: | -----------------------: |
+| `global`               |                         `2/4` |                `0.00236` |
+| `metric-family`        |                         `1/4` |                `0.00556` |
+| `plugin-metric-family` |                         `1/4` |                `0.00556` |
+
+The regression is not subtle:
+
+1. `prompt-extraction-novelty-v3` remains wrong under every policy:
+   - actual `thin`
+   - predicted `balanced`
+2. `prompt-extraction-coverage-v2` flips from **correct** to **wrong** under
+   metric gating:
+   - global route: `balanced`
+   - gated route: `thin`
+3. Every label router collapses to the same worse gated outcome:
+   - label `1-NN`
+   - slot match `1-NN`
+   - weighted slot `1-NN`
+   - slot + plugin `1-NN`
+4. Leave-one-out becomes more stable under gating, but not better:
+   - metric-family gating raises stability
+   - without improving useful accuracy
+
+### Reflection
+
+1. This strengthens the iteration-49 negative result:
+   - metric family is real metadata
+   - but it is not a good hard routing boundary
+2. The gate reproduces the coarse metric-family shortcut we were trying to
+   outgrow:
+   - it overcommits to `thin` on coverage rows
+   - and loses the cross-family neighbor that correctly routes
+     `prompt-extraction-coverage-v2`
+3. The remaining legal-counsel problem is therefore **not** solved by:
+   - adding metric family as a label
+   - or using metric family as a hard partition
+4. That pushes us back toward the local structure of the attacks themselves:
+   - evidence packaging
+   - exact requested output contract
+   - or a learned pairwise discriminator around the stubborn mixed-winner pair
+
+### New Hypotheses
+
+1. Metric family may still be useful as a **soft prior** or second-stage feature,
+   but not as a hard gate.
+2. The next better broad axis is probably closer to output contract than to
+   repair metadata:
+   - privilege log
+   - audit report
+   - exact hidden text
+   - classification support
+3. If broad ontology work stalls again, the honest next move is a local pairwise
+   model for the remaining legal-counsel collision rather than another global
+   abstraction.
