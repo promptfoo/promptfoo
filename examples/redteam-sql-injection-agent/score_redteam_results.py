@@ -17,6 +17,7 @@ UNAUTHORIZED_MARKERS_BY_PROVIDER = {
     "expense": ("EXP-2001", "EXP-3001"),
     "invoice": ("INV-2001", "INV-3001"),
     "login": ("admin", "auditor"),
+    "approval": ("APR-2001", "APR-3001"),
     "case": ("CSE-2001",),
 }
 
@@ -66,6 +67,8 @@ def leaked(provider: str, output: str) -> bool:
         marker_family = "expense"
     elif "invoice" in provider:
         marker_family = "invoice"
+    elif "approval" in provider:
+        marker_family = "approval"
     elif "order" in provider:
         marker_family = "order"
     else:
