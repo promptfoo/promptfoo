@@ -9,6 +9,7 @@ import {
   type PromptExtractionAttack,
   repairPromptExtractionPolicyDisagreement,
   repairPromptExtractionTacticNoveltyGap,
+  repairPromptExtractionTacticNoveltyGapV2,
 } from './promptExtractionResearchShared';
 import {
   buildSqlAttackPortfolio,
@@ -336,6 +337,23 @@ async function main() {
         entities,
       ),
     },
+    promptExtractionGapTargetedV2: {
+      dimensions: [
+        { key: 'artifact', valueOf: (attack) => (attack as PromptExtractionAttack).artifact },
+        { key: 'pretext', valueOf: (attack) => (attack as PromptExtractionAttack).pretext },
+        { key: 'tactic', valueOf: (attack) => attack.tactic },
+      ],
+      policies: {
+        maxArtifacts: ['artifactCount', 'pretextCount', 'tacticCount', 'averageNovelty'],
+        maxNovelty: ['averageNovelty', 'artifactCount', 'pretextCount', 'tacticCount'],
+        maxPretexts: ['pretextCount', 'artifactCount', 'tacticCount', 'averageNovelty'],
+        maxTactics: ['tacticCount', 'artifactCount', 'pretextCount', 'averageNovelty'],
+      },
+      pool: repairPromptExtractionTacticNoveltyGapV2(
+        buildPromptExtractionCandidatePool(buildPromptExtractionPortfolio(entities)),
+        entities,
+      ),
+    },
     sqlInjection: {
       dimensions: [{ key: 'tactic', valueOf: (attack) => attack.tactic }],
       policies: {
@@ -373,7 +391,9 @@ async function main() {
         Object.values(policies).map((policy) => policy.indices.join(',')),
       ).size;
       const candidateDiagnostics =
-        pluginId === 'promptExtractionRepaired' || pluginId === 'promptExtractionGapTargeted'
+        pluginId === 'promptExtractionRepaired' ||
+        pluginId === 'promptExtractionGapTargeted' ||
+        pluginId === 'promptExtractionGapTargetedV2'
           ? [
               diagnoseCandidateAgainstPolicy(
                 portfolios,

@@ -1345,3 +1345,72 @@ about:
    - explicit negative lexical guidance
 3. This feedback package is now rich enough to hand to an actual generator
    model rather than continuing to do all candidate authoring manually.
+
+## Iteration 19 - 2026-05-09
+
+### Goal
+
+Use the richer feedback package to produce a stronger repair:
+
+> Can a second `role-pretext` candidate that avoids both debugging language and
+> policy-diff language finally beat the incumbent `maxTactics` portfolio?
+
+### Experiment
+
+Added:
+
+1. `repairPromptExtractionTacticNoveltyGapV2()`
+2. a `privilege-log` / `legal-discovery` candidate
+3. a new `promptExtractionGapTargetedV2` comparison arm
+
+### Results
+
+The second repair did **not** beat the incumbent `maxTactics` portfolio:
+
+1. best candidate-containing `maxTactics` portfolio:
+   - novelty `0.898`
+   - delta versus incumbent:
+     - `averageNovelty: -0.013`
+2. it displaced winner indices `[5, 6, 8]`
+3. it greatly reduced overlap with the displaced `role-pretext` slot:
+   - similarity to index `5`: `0.041`
+4. however, it still had meaningful overlap with:
+   - index `8` (`policy-diff`): `0.130`
+   - index `0` (`audit-report`): `0.116`
+   - index `4` (`training-guide`): `0.111`
+5. it did improve a **different** policy outcome:
+   - `maxNovelty` rose from `0.924` to `0.926`
+
+### Reflection
+
+1. The richer feedback helped on the specific overlap it targeted, but not on
+   the actual target policy.
+2. This candidate is more novel in the abstract, yet less useful for
+   `maxTactics` because it causes a broader three-slot restructuring rather than
+   a clean one-slot replacement.
+3. That exposes a new distinction:
+   - **candidate novelty**
+   - **portfolio compatibility**
+4. The legal-discovery candidate appears to be a good `maxNovelty` candidate but
+   a poor `maxTactics` repair.
+5. This means future generation prompts need policy-specific guidance, not just
+   generic "be different" guidance. For `maxTactics`, we should prefer
+   candidates that:
+   - preserve the target tactic
+   - improve novelty
+   - displace only the intended slot
+   - do not force collateral replacement of otherwise strong neighbors
+
+### New Hypotheses
+
+1. The next diagnostic should quantify **portfolio compatibility** directly,
+   including:
+   - how many incumbent slots a candidate displaces
+   - whether it is a clean same-tactic substitute
+2. For target-policy repair, one useful objective may be:
+   - minimize displaced-slot count first
+   - then maximize the blocking metric improvement
+3. This suggests a candidate selector for generation itself:
+   - sample many candidate repairs
+   - filter to clean same-slot replacements
+   - rank by residual policy gap
