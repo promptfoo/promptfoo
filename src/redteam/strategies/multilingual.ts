@@ -17,6 +17,11 @@ import { mergeProviderTokenUsage } from './util';
 import type { TestCase } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 
+type MultilingualResult = {
+  result: TestCase[];
+  tokenUsage?: TokenUsage;
+};
+
 /**
  * ⚠️ DEPRECATED: This strategy is deprecated and will be removed in a future version.
  *
@@ -121,11 +126,22 @@ function getRemoteChunkSize(config: Record<string, any> = {}): number {
   return 8; // Default: 8 test cases per chunk (24 translations with 3 languages)
 }
 
+function hasRecordedTokenUsage(tokenUsage: TokenUsage | undefined): tokenUsage is TokenUsage {
+  return Boolean(
+    tokenUsage &&
+      ((tokenUsage.total ?? 0) > 0 ||
+        (tokenUsage.prompt ?? 0) > 0 ||
+        (tokenUsage.completion ?? 0) > 0 ||
+        (tokenUsage.cached ?? 0) > 0 ||
+        (tokenUsage.numRequests ?? 0) > 0),
+  );
+}
+
 async function processRemoteChunk(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
-): Promise<TestCase[]> {
+): Promise<MultilingualResult> {
   const payload = {
     task: 'multilingual',
     testCases,
@@ -152,7 +168,10 @@ async function processRemoteChunk(
       `Unexpected remote response: status=${status} ${statusText}, body=${truncateForLog(data)}`,
     );
   }
-  return result as TestCase[];
+  return {
+    result: result as TestCase[],
+    ...(hasRecordedTokenUsage(data?.tokenUsage) ? { tokenUsage: data.tokenUsage } : {}),
+  };
 }
 
 /**
@@ -167,7 +186,7 @@ async function generateMultilingual(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
-): Promise<TestCase[]> {
+): Promise<MultilingualResult> {
   try {
     const chunkSize = getRemoteChunkSize(config);
     const maxConcurrency = getConcurrencyLimit(config);
@@ -183,6 +202,8 @@ async function generateMultilingual(
     }
 
     const allResults: TestCase[] = [];
+    const totalTokenUsage = createEmptyTokenUsage();
+    let hasTokenUsage = false;
     let processedChunks = 0;
     let timeoutCount = 0;
 
@@ -204,7 +225,12 @@ async function generateMultilingual(
       const chunk = chunkObj.data;
       const chunkNum = chunkObj.chunkNum;
       try {
-        const chunkResults = await processRemoteChunk(chunk, injectVar, config);
+        const chunkResponse = await processRemoteChunk(chunk, injectVar, config);
+        const chunkResults = chunkResponse.result;
+        if (chunkResponse.tokenUsage) {
+          hasTokenUsage = true;
+          accumulateResponseTokenUsage(totalTokenUsage, { tokenUsage: chunkResponse.tokenUsage });
+        }
 
         const languages: string[] =
           Array.isArray(config.languages) && config.languages.length > 0
@@ -238,8 +264,14 @@ async function generateMultilingual(
           // Try individual test cases from failed chunk silently
           for (const testCase of chunk) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
-              allResults.push(...individualResults);
+              const individualResponse = await processRemoteChunk([testCase], injectVar, config);
+              allResults.push(...individualResponse.result);
+              if (individualResponse.tokenUsage) {
+                hasTokenUsage = true;
+                accumulateResponseTokenUsage(totalTokenUsage, {
+                  tokenUsage: individualResponse.tokenUsage,
+                });
+              }
             } catch (error) {
               logger.debug(`Individual test case failed in chunk ${chunkNum}: ${error}`);
             }
@@ -257,8 +289,14 @@ async function generateMultilingual(
 
           for (const testCase of missingTestCases) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
-              allResults.push(...individualResults);
+              const individualResponse = await processRemoteChunk([testCase], injectVar, config);
+              allResults.push(...individualResponse.result);
+              if (individualResponse.tokenUsage) {
+                hasTokenUsage = true;
+                accumulateResponseTokenUsage(totalTokenUsage, {
+                  tokenUsage: individualResponse.tokenUsage,
+                });
+              }
             } catch (error) {
               logger.debug(`Individual retry failed for test case in chunk ${chunkNum}: ${error}`);
             }
@@ -282,8 +320,14 @@ async function generateMultilingual(
         if (chunk.length > 1) {
           for (const testCase of chunk) {
             try {
-              const individualResults = await processRemoteChunk([testCase], injectVar, config);
-              allResults.push(...individualResults);
+              const individualResponse = await processRemoteChunk([testCase], injectVar, config);
+              allResults.push(...individualResponse.result);
+              if (individualResponse.tokenUsage) {
+                hasTokenUsage = true;
+                accumulateResponseTokenUsage(totalTokenUsage, {
+                  tokenUsage: individualResponse.tokenUsage,
+                });
+              }
             } catch (individualError) {
               logger.debug(`Individual test case failed: ${individualError}`);
             }
@@ -329,10 +373,13 @@ async function generateMultilingual(
       );
     }
 
-    return deduplicatedResults;
+    return {
+      result: deduplicatedResults,
+      ...(hasTokenUsage ? { tokenUsage: totalTokenUsage } : {}),
+    };
   } catch (error) {
     logger.debug(`Remote multilingual generation failed: ${error}`);
-    return [];
+    return { result: [] };
   }
 }
 
@@ -539,6 +586,14 @@ export async function addMultilingual(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
+  return (await addMultilingualWithMetadata(testCases, injectVar, config)).result;
+}
+
+export async function addMultilingualWithMetadata(
+  testCases: TestCase[],
+  injectVar: string,
+  config: Record<string, any>,
+): Promise<MultilingualResult> {
   // Deprecation warning - this strategy will be removed in a future version
   logger.debug(
     '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
@@ -554,15 +609,26 @@ export async function addMultilingual(
     logger.debug(
       `Multilingual strategy: ${testCases.length} tests already generated with language support`,
     );
-    return testCases;
+    return { result: testCases };
   }
 
   // Fallback: No language modifiers found - use old translation logic
   // This maintains backward compatibility for users who specify language differently
+  const totalTokenUsage = createEmptyTokenUsage();
+  let hasTokenUsage = false;
   if (shouldGenerateRemote()) {
-    const multilingualTestCases = await generateMultilingual(testCases, injectVar, config);
-    if (multilingualTestCases.length > 0) {
-      return multilingualTestCases;
+    const multilingualResult = await generateMultilingual(testCases, injectVar, config);
+    if (multilingualResult.tokenUsage) {
+      hasTokenUsage = true;
+      accumulateResponseTokenUsage(totalTokenUsage, {
+        tokenUsage: multilingualResult.tokenUsage,
+      });
+    }
+    if (multilingualResult.result.length > 0) {
+      return {
+        result: multilingualResult.result,
+        ...(hasTokenUsage ? { tokenUsage: totalTokenUsage } : {}),
+      };
     }
     logger.debug(`Remote multilingual generation returned 0 results, falling back to local`);
   }
@@ -603,6 +669,10 @@ export async function addMultilingual(
 
     // Use adaptive batching - pass the configured batch size as initial size
     const { translations, tokenUsage } = await translateBatch(originalText, languages, batchSize);
+    if (hasRecordedTokenUsage(tokenUsage)) {
+      hasTokenUsage = true;
+      accumulateResponseTokenUsage(totalTokenUsage, { tokenUsage });
+    }
     const canAttachTranslationUsage =
       languages.length === 1 && Object.keys(translations).length === 1;
 
@@ -675,5 +745,8 @@ export async function addMultilingual(
     `Multilingual strategy: ${translatedTestCases.length} test cases generated from ${testCases.length} inputs`,
   );
 
-  return translatedTestCases;
+  return {
+    result: translatedTestCases,
+    ...(hasTokenUsage ? { tokenUsage: totalTokenUsage } : {}),
+  };
 }
