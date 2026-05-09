@@ -15,7 +15,11 @@ import type { TokenUsage } from '../../types/shared';
 import type { TestCaseWithPlugin } from '../../types';
 // Import type only to avoid circular dependency - actual Strategies loaded dynamically
 import type { Strategy } from '../strategies/types';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+  normalizeTokenUsage,
+} from '../../util/tokenUsageUtils';
 
 // Re-export MediaData for backward compatibility
 export type { MediaData };
@@ -72,6 +76,84 @@ function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
   }
 
   return (error as { tokenUsage?: TokenUsage }).tokenUsage;
+}
+
+function subtractTokenUsage(
+  current: TokenUsage | undefined,
+  previous: TokenUsage | undefined,
+): TokenUsage | undefined {
+  if (!current) {
+    return undefined;
+  }
+
+  const currentUsage = normalizeTokenUsage(current);
+  const previousUsage = normalizeTokenUsage(previous);
+  const subtract = (a: number, b: number) => Math.max(0, a - b);
+
+  return {
+    total: subtract(currentUsage.total, previousUsage.total),
+    prompt: subtract(currentUsage.prompt, previousUsage.prompt),
+    completion: subtract(currentUsage.completion, previousUsage.completion),
+    cached: subtract(currentUsage.cached, previousUsage.cached),
+    numRequests: subtract(currentUsage.numRequests, previousUsage.numRequests),
+    completionDetails: {
+      reasoning: subtract(
+        currentUsage.completionDetails.reasoning,
+        previousUsage.completionDetails.reasoning,
+      ),
+      acceptedPrediction: subtract(
+        currentUsage.completionDetails.acceptedPrediction,
+        previousUsage.completionDetails.acceptedPrediction,
+      ),
+      rejectedPrediction: subtract(
+        currentUsage.completionDetails.rejectedPrediction,
+        previousUsage.completionDetails.rejectedPrediction,
+      ),
+      cacheReadInputTokens: subtract(
+        currentUsage.completionDetails.cacheReadInputTokens,
+        previousUsage.completionDetails.cacheReadInputTokens,
+      ),
+      cacheCreationInputTokens: subtract(
+        currentUsage.completionDetails.cacheCreationInputTokens,
+        previousUsage.completionDetails.cacheCreationInputTokens,
+      ),
+    },
+    assertions: {
+      total: subtract(currentUsage.assertions.total, previousUsage.assertions.total),
+      prompt: subtract(currentUsage.assertions.prompt, previousUsage.assertions.prompt),
+      completion: subtract(
+        currentUsage.assertions.completion,
+        previousUsage.assertions.completion,
+      ),
+      cached: subtract(currentUsage.assertions.cached, previousUsage.assertions.cached),
+      numRequests: subtract(
+        currentUsage.assertions.numRequests,
+        previousUsage.assertions.numRequests,
+      ),
+      completionDetails: {
+        reasoning: subtract(
+          currentUsage.assertions.completionDetails.reasoning,
+          previousUsage.assertions.completionDetails.reasoning,
+        ),
+        acceptedPrediction: subtract(
+          currentUsage.assertions.completionDetails.acceptedPrediction,
+          previousUsage.assertions.completionDetails.acceptedPrediction,
+        ),
+        rejectedPrediction: subtract(
+          currentUsage.assertions.completionDetails.rejectedPrediction,
+          previousUsage.assertions.completionDetails.rejectedPrediction,
+        ),
+        cacheReadInputTokens: subtract(
+          currentUsage.assertions.completionDetails.cacheReadInputTokens,
+          previousUsage.assertions.completionDetails.cacheReadInputTokens,
+        ),
+        cacheCreationInputTokens: subtract(
+          currentUsage.assertions.completionDetails.cacheCreationInputTokens,
+          previousUsage.assertions.completionDetails.cacheCreationInputTokens,
+        ),
+      },
+    },
+  };
 }
 
 /**
@@ -160,6 +242,9 @@ export async function applyRuntimeTransforms(
     }
 
     try {
+      const previousProviderTokenUsage = testCase.metadata?.providerTokenUsage as
+        | TokenUsage
+        | undefined;
       // Call existing strategy action - this REUSES all existing implementation
       // The strategy expects an array of test cases and returns transformed test cases
       const result = await strategy.action([testCase], injectVar, layerConfig);
@@ -172,11 +257,20 @@ export async function applyRuntimeTransforms(
         const transformTokenUsage = transformedMetadata[
           RUNTIME_TRANSFORM_TOKEN_USAGE_KEY
         ] as TokenUsage | undefined;
+        const providerTokenUsageDelta = subtractTokenUsage(
+          transformedMetadata.providerTokenUsage as TokenUsage | undefined,
+          previousProviderTokenUsage,
+        );
         delete transformedMetadata[RUNTIME_TRANSFORM_TOKEN_USAGE_KEY];
 
         accumulateResponseTokenUsage(
           totalTokenUsage,
           { tokenUsage: transformTokenUsage },
+          { countAsRequest: false },
+        );
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: providerTokenUsageDelta },
           { countAsRequest: false },
         );
 

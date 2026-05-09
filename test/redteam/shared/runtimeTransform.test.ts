@@ -153,6 +153,63 @@ describe('runtimeTransform', () => {
       expect(result.metadata).not.toHaveProperty(RUNTIME_TRANSFORM_TOKEN_USAGE_KEY);
     });
 
+    it('should preserve incremental providerTokenUsage from successful layers', async () => {
+      const firstTokenLayer: Strategy = {
+        id: 'first-token-layer',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((tc) => ({
+            ...tc,
+            metadata: {
+              ...tc.metadata,
+              providerTokenUsage: {
+                total: 5,
+                prompt: 3,
+                completion: 2,
+                numRequests: 1,
+              },
+            },
+          })),
+        ),
+      };
+      const secondTokenLayer: Strategy = {
+        id: 'second-token-layer',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((tc) => ({
+            ...tc,
+            metadata: {
+              ...tc.metadata,
+              providerTokenUsage: {
+                total: 12,
+                prompt: 7,
+                completion: 5,
+                numRequests: 2,
+              },
+            },
+          })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['first-token-layer', 'second-token-layer'],
+        [firstTokenLayer, secondTokenLayer],
+      );
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        numRequests: 0,
+      });
+      expect(result.metadata?.providerTokenUsage).toMatchObject({
+        total: 12,
+        prompt: 7,
+        completion: 5,
+        numRequests: 2,
+      });
+    });
+
     it('should extract audio data from data URL', async () => {
       const result = await applyRuntimeTransforms('hello', 'input', ['audio'], mockStrategies);
 
