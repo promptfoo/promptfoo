@@ -254,9 +254,12 @@ describe('runtimeTransform', () => {
       };
 
       const strategies = [...mockStrategies, inspectingStrategy];
-      await applyRuntimeTransforms('hello', 'input', ['inspect'], strategies);
+      await applyRuntimeTransforms('hello', 'input', ['inspect'], strategies, {
+        originalTestCaseId: 'layer-row-1',
+      });
 
       expect(capturedTestCase?.metadata?.pluginId).toBe('runtime-transform');
+      expect(capturedTestCase?.metadata?.originalTestCaseId).toBe('layer-row-1');
     });
 
     it('should handle different inject variable names', async () => {

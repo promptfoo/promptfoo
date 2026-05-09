@@ -1498,5 +1498,67 @@ describe('CustomProvider', () => {
       expect(result.metadata?.redteamHistory).toBeDefined();
       expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
     });
+
+    it('should pass runtime transform context for layered helpers', async () => {
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'transformed prompt',
+        originalPrompt: 'test question',
+      });
+
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Test strategy',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+        _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+      });
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+      });
+      mockScoringProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          value: true,
+          metadata: 100,
+          rationale: 'Success',
+        }),
+      });
+
+      await provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        evaluationId: 'eval-123',
+        testCaseId: 'tc-456',
+        test: {
+          metadata: {
+            goal: 'goal',
+            purpose: 'purpose',
+            originalTestCaseId: 'layer-row-1',
+          },
+        } as any,
+      });
+
+      expect(mockApplyRuntimeTransforms).toHaveBeenCalledWith(
+        'test question',
+        'objective',
+        [{ id: 'indirect-web-pwn' }],
+        expect.any(Array),
+        {
+          evaluationId: 'eval-123',
+          testCaseId: 'tc-456',
+          originalTestCaseId: 'layer-row-1',
+          purpose: 'purpose',
+          goal: 'goal',
+        },
+      );
+    });
   });
 });

@@ -1130,7 +1130,9 @@ export class CrescendoProvider implements ApiProvider {
         Strategies,
         {
           evaluationId: context?.evaluationId,
-          testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+          testCaseId:
+            context?.testCaseId || (context?.test?.metadata?.testCaseId as string | undefined),
+          originalTestCaseId: context?.test?.metadata?.originalTestCaseId as string | undefined,
           purpose: context?.test?.metadata?.purpose as string | undefined,
           goal: context?.test?.metadata?.goal as string | undefined,
         },

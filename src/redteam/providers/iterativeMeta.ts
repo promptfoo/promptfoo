@@ -308,6 +308,7 @@ export async function runMetaAgentRedteam({
       const transformContext: RuntimeTransformContext = {
         evaluationId: context?.evaluationId,
         testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
+        originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,
         purpose: test?.metadata?.purpose as string | undefined,
         goal: test?.metadata?.goal as string | undefined,
       };

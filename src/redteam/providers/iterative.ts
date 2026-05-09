@@ -352,7 +352,8 @@ export async function runRedteamConversation({
         Strategies,
         {
           evaluationId: context?.evaluationId,
-          testCaseId: test?.metadata?.testCaseId as string | undefined,
+          testCaseId: context?.testCaseId || (test?.metadata?.testCaseId as string | undefined),
+          originalTestCaseId: test?.metadata?.originalTestCaseId as string | undefined,
           purpose: test?.metadata?.purpose as string | undefined,
           goal: test?.metadata?.goal as string | undefined,
         },

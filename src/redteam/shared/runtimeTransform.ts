@@ -58,6 +58,8 @@ export interface RuntimeTransformContext {
   evaluationId?: string;
   /** The test case ID */
   testCaseId?: string;
+  /** Stable generated-row ID when no evaluator test case ID is available */
+  originalTestCaseId?: string;
   /** The purpose/objective of the test */
   purpose?: string;
   /** The goal/target of the attack */
@@ -119,6 +121,7 @@ export async function applyRuntimeTransforms(
       // Pass through context for server-side tracking
       evaluationId: context?.evaluationId,
       testCaseId: context?.testCaseId,
+      originalTestCaseId: context?.originalTestCaseId,
       purpose: context?.purpose,
       goal: context?.goal,
     },
