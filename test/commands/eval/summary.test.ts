@@ -272,6 +272,62 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('Grading: 500 (200 prompt, 300 completion)');
     });
 
+    it('should preserve zero probe counts for red team summaries', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-redteam-zero-probes',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          total: 10,
+          prompt: 6,
+          completion: 4,
+          numRequests: 0,
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      };
+
+      const lines = generateEvalSummary(params);
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Probes: 0');
+    });
+
+    it('should display probe counts even when no token totals are available', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-redteam-probes-only',
+        isRedteam: true,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: {
+          numRequests: 2,
+        },
+        successes: 1,
+        failures: 0,
+        errors: 0,
+        duration: 1000,
+        maxConcurrency: 1,
+        tracker: mockTracker,
+      };
+
+      const lines = generateEvalSummary(params);
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('Probes: 2');
+      expect(output).not.toContain('Total Tokens:');
+    });
+
     it('should show 100% cached correctly', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-cached',
