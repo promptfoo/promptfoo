@@ -882,14 +882,18 @@ function renderCommentNode({
 function renderCellDetail({
   showStats,
   isRedteam,
+  probeCount,
   tokenUsageDisplay,
+  gradingTokenUsageDisplay,
   latencyDisplay,
   tokPerSecDisplay,
   costDisplay,
 }: {
   showStats: boolean;
   isRedteam: boolean;
+  probeCount?: number;
   tokenUsageDisplay?: React.ReactNode;
+  gradingTokenUsageDisplay?: React.ReactNode;
   latencyDisplay?: React.ReactNode;
   tokPerSecDisplay?: React.ReactNode;
   costDisplay?: React.ReactNode;
@@ -900,9 +904,19 @@ function renderCellDetail({
 
   return (
     <div className="cell-detail">
+      {isRedteam && (
+        <div className="stat-item">
+          <strong>Probes:</strong> {probeCount ?? 1}
+        </div>
+      )}
       {tokenUsageDisplay && (
         <div className="stat-item">
           <strong>{isRedteam ? 'Non-grading tokens:' : 'Tokens:'}</strong> {tokenUsageDisplay}
+        </div>
+      )}
+      {gradingTokenUsageDisplay && (
+        <div className="stat-item">
+          <strong>Grading tokens:</strong> {gradingTokenUsageDisplay}
         </div>
       )}
       {latencyDisplay && (
@@ -1529,6 +1543,10 @@ function EvalOutputCell({
   // Check for token usage in both output.tokenUsage and output.response?.tokenUsage.
   const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
   const tokenUsageDisplay = formatTokenUsageDisplay(tokenUsage);
+  const gradingTokenUsage = output.gradingResult?.tokensUsed ?? tokenUsage?.assertions;
+  const gradingTokenUsageDisplay = gradingTokenUsage?.total ? (
+    <span>{WHOLE_NUMBER_FORMATTER.format(gradingTokenUsage.total)}</span>
+  ) : undefined;
   const tokPerSecDisplay = getTokensPerSecondDisplay({
     tokenUsage,
     latencyMs: output.latencyMs,
@@ -1589,7 +1607,9 @@ function EvalOutputCell({
       {renderCellDetail({
         showStats,
         isRedteam,
+        probeCount: tokenUsage?.numRequests,
         tokenUsageDisplay,
+        gradingTokenUsageDisplay,
         latencyDisplay,
         tokPerSecDisplay,
         costDisplay,

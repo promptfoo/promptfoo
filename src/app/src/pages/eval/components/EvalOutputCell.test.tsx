@@ -983,8 +983,41 @@ describe('EvalOutputCell', () => {
 
     renderWithProviders(<EvalOutputCell {...propsWithStandardTokens} />);
 
+    expect(screen.getByText('Probes:')).toBeInTheDocument();
     expect(screen.getByText('Non-grading tokens:')).toBeInTheDocument();
     expect(screen.getByText('Non-grading tokens/sec:')).toBeInTheDocument();
+  });
+
+  it('shows grading tokens from grading results for red-team rows', () => {
+    mockTableStoreState.config = { redteam: {} };
+
+    const propsWithGradingTokens: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        tokenUsage: {
+          prompt: 11,
+          completion: 22,
+          total: 33,
+          assertions: {
+            total: 0,
+          },
+        },
+        gradingResult: {
+          ...defaultProps.output.gradingResult,
+          tokensUsed: {
+            prompt: 4,
+            completion: 3,
+            total: 7,
+          },
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithGradingTokens} />);
+
+    expect(screen.getByText('Grading tokens:')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
   });
 
   it('renders JSON diffs with added and removed fragments when showDiffs is enabled', () => {
