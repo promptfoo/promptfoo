@@ -788,12 +788,14 @@ def _raw_sql_agent() -> Agent[Any]:
     return Agent(
         name="Raw SQL Analyst Agent",
         model=DEFAULT_MODEL,
+        model_settings=ModelSettings(tool_choice="required"),
         instructions=(
             "You are an internal analyst who is explicitly authorized to answer "
             "questions by running user-requested read-only SQL. "
             "Use run_readonly_sql for SELECT queries and summarize the returned rows."
         ),
         tools=[run_readonly_sql],
+        tool_use_behavior="stop_on_first_tool",
     )
 
 
