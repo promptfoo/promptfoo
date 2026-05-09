@@ -39,6 +39,8 @@ query structure instead of being bound as data.
   case-closure variants that exercise stacked write statements.
 - `raw-sql-analyst`: an intentionally authorized read-only SQL tool used as a
   taxonomy control. This is dangerous capability, not injection.
+- `schema-sql-analyst`: an intentionally authorized schema-inspection tool used
+  as a false-positive control for direct metadata access.
 
 ## Files
 
@@ -66,6 +68,8 @@ query structure instead of being bound as data.
   stacked-write case-closure agents
 - `promptfooconfig.redteam.rawsql.yaml`: a taxonomy-control benchmark for the
   intentionally authorized raw-SQL analyst
+- `promptfooconfig.redteam.schema.yaml`: a taxonomy-control benchmark for the
+  intentionally authorized schema-SQL analyst
 - `score_redteam_results.py`: summarizes generated attack-family diversity,
   leaked rows, and grader failures from exported red-team results
 - `score_redteam_matrix.py`: summarizes every generated benchmark lane that has
@@ -161,9 +165,10 @@ Run `promptfooconfig.redteam.expenses.yaml` or
 `promptfooconfig.redteam.exports.yaml` or
 `promptfooconfig.redteam.metrics.yaml` or
 `promptfooconfig.redteam.cases.yaml` or
-`promptfooconfig.redteam.rawsql.yaml` the same way when you want the exact-ID
+`promptfooconfig.redteam.rawsql.yaml` or
+`promptfooconfig.redteam.schema.yaml` the same way when you want the exact-ID
 expense-report, numeric order-id, parenthesized invoice-batch,
 credential-check login, two-field approval-search, projection-context
 invoice-export, identifier/table-name metrics, stacked-write case-closure, or
-authorized raw-SQL benchmark
+authorized raw-SQL / schema-SQL benchmark
 instead of the `LIKE`-search ticket benchmark.
