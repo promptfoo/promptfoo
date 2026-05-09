@@ -9,6 +9,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -128,6 +129,8 @@ export abstract class RedteamPluginBase {
      * In multi-input mode, returns Record<string, string>[]
      */
     let retryInstructions: string | undefined;
+    const generationTokenUsage = createEmptyTokenUsage();
+    let hasGenerationTokenUsage = false;
     const generatePrompts = async (
       currentPrompts: { __prompt: string }[] | Record<string, string>[],
     ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
@@ -150,7 +153,10 @@ export abstract class RedteamPluginBase {
       ]
         .filter(Boolean)
         .join('\n\n');
-      const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
+      const response = await this.provider.callApi(finalTemplate);
+      accumulateResponseTokenUsage(generationTokenUsage, response);
+      hasGenerationTokenUsage = true;
+      const { output: generatedPrompts, error } = response;
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
         await sleep(delayMs);
@@ -237,13 +243,31 @@ export abstract class RedteamPluginBase {
       n,
     );
     const prompts = sampleArray(allPrompts, n);
+    const oneRowGenerationTokenUsage =
+      n === 1 && allPrompts.length === 1 && prompts.length === 1 && hasGenerationTokenUsage
+        ? generationTokenUsage
+        : undefined;
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
 
     if (prompts.length !== n) {
       logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
     }
 
-    return this.promptsToTestCases(prompts as { __prompt: string }[]);
+    const testCases = await this.promptsToTestCases(prompts as { __prompt: string }[]);
+    if (!oneRowGenerationTokenUsage || testCases.length !== 1) {
+      return testCases;
+    }
+
+    return testCases.map((testCase) => ({
+      ...testCase,
+      metadata: {
+        ...testCase.metadata,
+        providerTokenUsage: mergeProviderTokenUsage(
+          testCase.metadata?.providerTokenUsage,
+          oneRowGenerationTokenUsage,
+        ),
+      },
+    }));
   }
 
   /**

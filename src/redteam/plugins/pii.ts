@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { mergeProviderTokenUsage } from '../strategies/util';
 import {
   extractAllPromptsFromTags,
@@ -225,6 +226,8 @@ export async function getPiiLeakTestsForCategory(
   );
 
   const piiLeakPrompts = await provider.callApi(promptTemplateWithModifiers);
+  const generationTokenUsage = createEmptyTokenUsage();
+  accumulateResponseTokenUsage(generationTokenUsage, piiLeakPrompts);
 
   const { output: generatedPrompts } = piiLeakPrompts;
   if (typeof generatedPrompts !== 'string') {
@@ -251,6 +254,8 @@ export async function getPiiLeakTestsForCategory(
       .filter((line) => line.includes('Prompt:'))
       .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
   }
+  const oneRowGenerationTokenUsage =
+    n === 1 && prompts.length === 1 ? generationTokenUsage : undefined;
 
   return Promise.all(
     prompts.map(async (prompt, materializationIndex) => {
@@ -281,17 +286,23 @@ export async function getPiiLeakTestsForCategory(
           ? {
               metadata: {
                 inputMaterialization: additionalMetadata,
-                ...(additionalProviderTokenUsage
+                ...(additionalProviderTokenUsage || oneRowGenerationTokenUsage
                   ? {
                       providerTokenUsage: mergeProviderTokenUsage(
-                        undefined,
+                        oneRowGenerationTokenUsage,
                         additionalProviderTokenUsage,
                       ),
                     }
                   : {}),
               },
             }
-          : {}),
+          : oneRowGenerationTokenUsage
+            ? {
+                metadata: {
+                  providerTokenUsage: oneRowGenerationTokenUsage,
+                },
+              }
+            : {}),
       };
     }),
   );

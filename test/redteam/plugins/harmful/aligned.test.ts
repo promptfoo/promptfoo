@@ -164,7 +164,23 @@ describe('AlignedHarmfulPlugin', () => {
       expect(testCases).toHaveLength(0);
     });
 
-    it('should preserve DOCX materialization usage in providerTokenUsage metadata', async () => {
+    it('should preserve one-row generation usage in providerTokenUsage metadata', async () => {
+      mockProvider.callApi.mockResolvedValue({
+        output: 'Prompt: Generated exact test',
+        tokenUsage: { total: 9, prompt: 5, completion: 4 },
+      });
+
+      const testCases = await plugin.generateTests(1);
+
+      expect(testCases[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 9,
+        prompt: 5,
+        completion: 4,
+        numRequests: 1,
+      });
+    });
+
+    it('should merge one-row generation and DOCX materialization usage in providerTokenUsage metadata', async () => {
       const configuredPlugin = new AlignedHarmfulPlugin(
         mockProvider,
         'test purpose',
@@ -208,7 +224,7 @@ describe('AlignedHarmfulPlugin', () => {
         total: 7,
         prompt: 4,
         completion: 3,
-        numRequests: 1,
+        numRequests: 2,
       });
     });
   });

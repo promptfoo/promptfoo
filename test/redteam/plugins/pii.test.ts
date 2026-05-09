@@ -176,7 +176,29 @@ describe('getPiiLeakTestsForCategory', () => {
     expect(result[0]!.vars!.prompt).toBe('Test prompt');
   });
 
-  it('should preserve DOCX materialization usage in providerTokenUsage metadata', async () => {
+  it('should preserve one-row generation usage in providerTokenUsage metadata', async () => {
+    mockProvider.callApi.mockResolvedValue({
+      output: 'Prompt: Test prompt',
+      tokenUsage: { total: 9, prompt: 5, completion: 4 },
+    });
+
+    const result = await getPiiLeakTestsForCategory(
+      {
+        ...params,
+        n: 1,
+      },
+      'pii:direct',
+    );
+
+    expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+      total: 9,
+      prompt: 5,
+      completion: 4,
+      numRequests: 1,
+    });
+  });
+
+  it('should merge one-row generation and DOCX materialization usage in providerTokenUsage metadata', async () => {
     mockProvider.callApi.mockImplementation(async (prompt: string) => {
       if (prompt.includes('You are preparing a realistic DOCX document')) {
         return {
@@ -220,7 +242,7 @@ describe('getPiiLeakTestsForCategory', () => {
       total: 7,
       prompt: 4,
       completion: 3,
-      numRequests: 1,
+      numRequests: 2,
     });
   });
 });

@@ -528,7 +528,7 @@ describe('RedteamPluginBase', () => {
       expect(messages).toContain('Test message');
     });
 
-    it('should preserve DOCX materialization usage in providerTokenUsage metadata', async () => {
+    it('should merge one-row generation and DOCX materialization usage in providerTokenUsage metadata', async () => {
       const docxProvider = createMockProvider({
         callApi: async (prompt: string) => {
           if (prompt.includes('You are preparing a realistic DOCX document')) {
@@ -565,11 +565,45 @@ describe('RedteamPluginBase', () => {
       const tests = await plugin.generateTests(1);
 
       expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
-        total: 7,
-        prompt: 4,
-        completion: 3,
+        total: 17,
+        prompt: 9,
+        completion: 8,
+        numRequests: 2,
+      });
+    });
+
+    it('should preserve one-row generation usage in providerTokenUsage metadata', async () => {
+      const oneRowProvider = createMockProvider({
+        response: createProviderResponse({
+          output: 'Prompt: one exact prompt',
+          tokenUsage: { total: 9, prompt: 5, completion: 4 },
+        }),
+      });
+      const oneRowPlugin = new TestPlugin(oneRowProvider, 'test purpose', 'testVar', {});
+
+      const tests = await oneRowPlugin.generateTests(1);
+
+      expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 9,
+        prompt: 5,
+        completion: 4,
         numRequests: 1,
       });
+    });
+
+    it('should not duplicate shared generation usage across sampled rows', async () => {
+      const fanOutProvider = createMockProvider({
+        response: createProviderResponse({
+          output: 'Prompt: first prompt\nPrompt: second prompt',
+          tokenUsage: { total: 12, prompt: 7, completion: 5, numRequests: 1 },
+        }),
+      });
+      const fanOutPlugin = new TestPlugin(fanOutProvider, 'test purpose', 'testVar', {});
+
+      const tests = await fanOutPlugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(tests[0]?.metadata).not.toHaveProperty('providerTokenUsage');
     });
 
     it('should handle parsing failures gracefully in multi-input mode', async () => {
