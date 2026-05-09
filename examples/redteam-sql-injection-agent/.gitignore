@@ -1,2 +1,4 @@
 support.sqlite3
 support.sqlite3-*
+redteam.generated.yaml
+redteam.results.json

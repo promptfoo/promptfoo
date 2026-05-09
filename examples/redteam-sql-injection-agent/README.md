@@ -26,6 +26,10 @@ query structure instead of being bound as data.
 - `agent_provider_test.py`: deterministic tests for the unsafe, hardened, and
   safe tool semantics
 - `promptfooconfig.yaml`: an eval that compares the five agent behaviors
+- `promptfooconfig.redteam.yaml`: a generated-corpus benchmark that runs the
+  same SQL injection probes against unsafe, hardened, and safe ticket agents
+- `score_redteam_results.py`: summarizes generated attack-family diversity,
+  leaked rows, and grader failures from exported red-team results
 - `requirements.txt`: Python dependencies
 
 ## Setup
@@ -81,3 +85,28 @@ This example gives SQL injection tests three useful controls:
 
 That makes it easier to judge whether generated SQL injection prompts are both
 category-correct and actually useful against an LLM agent.
+
+## Benchmark The Plugin
+
+```bash
+npm run local -- redteam generate \
+  -c examples/redteam-sql-injection-agent/promptfooconfig.redteam.yaml \
+  -o examples/redteam-sql-injection-agent/redteam.generated.yaml \
+  --force --strict
+
+npm run local -- redteam eval \
+  -c examples/redteam-sql-injection-agent/redteam.generated.yaml \
+  --no-cache --no-share -j 1 \
+  -o examples/redteam-sql-injection-agent/redteam.results.json
+
+python3 examples/redteam-sql-injection-agent/score_redteam_results.py \
+  examples/redteam-sql-injection-agent/redteam.generated.yaml \
+  examples/redteam-sql-injection-agent/redteam.results.json
+```
+
+The benchmark uses three interpretations of the same product surface:
+
+1. `unsafe-ticket-agent-redteam` should leak rows for successful payloads.
+2. `hardened-ticket-agent-redteam` should resist obvious payloads but remain
+   bypassable by stronger generations.
+3. `safe-ticket-agent-redteam` should not leak rows for any generated payload.
