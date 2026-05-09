@@ -6896,3 +6896,76 @@ The key change is semantic balance:
    - nearby safe behaviors that repairs must not erase
 3. The next experiment should sample several contrastive hinge pairs and rank
    them against the whole mixed frontier before selecting the one to admit.
+
+## Iteration 83 - 2026-05-09
+
+### Goal
+
+Add selection pressure inside the contrastive proposer itself:
+
+> If one contrastive hinge pair is already helpful, does sampling a larger hinge
+> set and ranking it on the full mixed frontier remove the last contract-twin
+> wobble?
+
+### Experiment
+
+1. Extended `evaluateRepairContrastiveHingeSupport.ts`.
+2. Kept the mixed sixteen-case frontier fixed.
+3. Compared three candidate pools:
+   - **negative-only**: twenty-seven bundles
+   - **contrastive-hinge**: three hinge-pair draws, twenty-seven bundles
+   - **ranked-contrastive-hinge**: six hinge-pair draws, fifty-four bundles
+4. Replayed the best selected bundle from each pool three times on the mixed
+   frontier.
+
+### Results
+
+Ranking more hinge pairs did **not** produce a stable one-pass improvement.
+Instead it widened the variance across fresh draws:
+
+| Candidate pool           | Perfect bundles | Fresh mixed replay average | Replay stability |
+| ------------------------ | --------------: | -------------------------: | ---------------: |
+| negative-only, run 1     |             `7` |                    `48/48` |          `16/16` |
+| contrastive-hinge, run 1 |             `7` |                    `48/48` |          `16/16` |
+| ranked-hinge, run 1      |             `5` |                    `41/48` |          `11/16` |
+| negative-only, run 2     |             `1` |                    `46/48` |          `15/16` |
+| contrastive-hinge, run 2 |             `9` |                    `47/48` |          `15/16` |
+| ranked-hinge, run 2      |            `43` |                    `48/48` |          `16/16` |
+
+The larger hinge pool exposed a different failure mode than expected:
+
+1. in one draw, more candidates introduced bad but perfect-looking bundles and
+   the one-pass selector admitted one that replayed poorly
+2. in the rerun, the same oversampling regime surfaced many genuinely robust
+   bundles and selected a clean one
+3. this is stronger evidence that the selector is under-instrumented than that
+   oversampling is inherently good or bad
+
+### Reflection
+
+1. Contrastive proposal shape was the important leap in iteration 82.
+2. Simple oversampling does not reliably solve the residual miss:
+   - the hinge pair family is broader
+   - but the acceptance objective still cannot separate the truly robust pair on
+     a single draw
+3. This points back toward verifier design, but with a narrower target:
+   - we need a candidate evaluator focused on the contract-twin residual
+   - not a wholesale redesign of the frontier
+4. We also need replicated evaluation for the proposer itself:
+   - a pool can look clearly harmful in one draw
+   - then clearly useful in the next
+5. A modern generator likely needs proposer-specific diagnostics:
+   - which paired support variants collapse nearby negatives
+   - which preserve the positive anchor
+6. The next frontier is a contrastive-pair critic plus replicated selection
+   evaluation, not just a larger sample bag.
+
+### New Hypotheses
+
+1. Once the proposer shape is right, ranking quality matters more than raw sample
+   count.
+2. Contrastive hinge pairs need their own evaluator over the local twin family.
+3. Single-draw proposer comparisons are too noisy; future experiments should
+   report replicated distributions, not just one selected bundle.
+4. The next experiment should score each hinge pair directly against the report
+   and contract twin set before combining it with the other support examples.

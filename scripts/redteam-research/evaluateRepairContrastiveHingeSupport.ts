@@ -57,6 +57,7 @@ type ReplaySummary = {
 };
 
 const candidateCount = 3;
+const rankedHingeCandidateCount = 6;
 const replayCount = 3;
 const boundaryResponseSchema = z.object({
   shouldUseLocalExpert: z.boolean(),
@@ -746,8 +747,7 @@ async function scoreBundle(
 
 function cartesianProduct<T>(groups: T[][]): T[][] {
   return groups.reduce<T[][]>(
-    (accumulator, group) =>
-      accumulator.flatMap((prefix) => group.map((item) => [...prefix, item])),
+    (accumulator, group) => accumulator.flatMap((prefix) => group.map((item) => [...prefix, item])),
     [[]],
   );
 }
@@ -775,7 +775,9 @@ async function replaySelectedBundle(
   providerId: string,
 ): Promise<ReplaySummary> {
   const replays = await Promise.all(
-    Array.from({ length: replayCount }, () => evaluateSupportPortfolio(bundle.candidates, providerId)),
+    Array.from({ length: replayCount }, () =>
+      evaluateSupportPortfolio(bundle.candidates, providerId),
+    ),
   );
   const predictionMap = new Map<string, Set<boolean>>();
   for (const replay of replays) {
@@ -814,7 +816,9 @@ async function main() {
   );
   const negativeOnlyCandidateGroups = await Promise.all(
     diagnosisGroups.map((group) =>
-      Promise.all(group.map((candidate) => generateNegativeSupportForDiagnosis(candidate, providerId))),
+      Promise.all(
+        group.map((candidate) => generateNegativeSupportForDiagnosis(candidate, providerId)),
+      ),
     ),
   );
   const sharedDiagnosisGroups = await Promise.all(
@@ -828,14 +832,25 @@ async function main() {
   );
   const sharedCandidateGroups = await Promise.all(
     sharedDiagnosisGroups.map((group) =>
-      Promise.all(group.map((candidate) => generateNegativeSupportForDiagnosis(candidate, providerId))),
+      Promise.all(
+        group.map((candidate) => generateNegativeSupportForDiagnosis(candidate, providerId)),
+      ),
     ),
   );
   const contrastiveHingeGroup = await Promise.all(
     Array.from({ length: candidateCount }, () => generateContrastiveHingeSupport(providerId)),
   );
+  const rankedContrastiveHingeGroup = await Promise.all(
+    Array.from({ length: rankedHingeCandidateCount }, () =>
+      generateContrastiveHingeSupport(providerId),
+    ),
+  );
   const [negativeOnlyBundles, contrastiveBundles] = await Promise.all([
-    Promise.all(cartesianProduct(negativeOnlyCandidateGroups).map((bundle) => scoreBundle(bundle, providerId))),
+    Promise.all(
+      cartesianProduct(negativeOnlyCandidateGroups).map((bundle) =>
+        scoreBundle(bundle, providerId),
+      ),
+    ),
     Promise.all(
       cartesianProduct([...sharedCandidateGroups, contrastiveHingeGroup]).map((bundle) =>
         scoreBundle(bundle, providerId),
@@ -848,9 +863,18 @@ async function main() {
   const selectedContrastiveBundle = [...contrastiveBundles].sort(
     (left, right) => right.score - left.score,
   )[0];
-  const [negativeOnlyReplay, contrastiveReplay] = await Promise.all([
+  const rankedContrastiveBundles = await Promise.all(
+    cartesianProduct([...sharedCandidateGroups, rankedContrastiveHingeGroup]).map((bundle) =>
+      scoreBundle(bundle, providerId),
+    ),
+  );
+  const selectedRankedContrastiveBundle = [...rankedContrastiveBundles].sort(
+    (left, right) => right.score - left.score,
+  )[0];
+  const [negativeOnlyReplay, contrastiveReplay, rankedContrastiveReplay] = await Promise.all([
     replaySelectedBundle(selectedNegativeOnlyBundle, providerId),
     replaySelectedBundle(selectedContrastiveBundle, providerId),
+    replaySelectedBundle(selectedRankedContrastiveBundle, providerId),
   ]);
 
   console.log(
@@ -860,6 +884,7 @@ async function main() {
         candidateCount,
         mixedStressCases,
         providerId,
+        rankedHingeCandidateCount,
         replayCount,
         summaries: {
           contrastiveHingePool: {
@@ -873,6 +898,13 @@ async function main() {
             perfectBundleCount: negativeOnlyBundles.filter((bundle) => bundle.score === 1).length,
             replay: negativeOnlyReplay,
             selectedBundle: summarizeBundle(selectedNegativeOnlyBundle),
+          },
+          rankedContrastiveHingePool: {
+            bundleCount: rankedContrastiveBundles.length,
+            perfectBundleCount: rankedContrastiveBundles.filter((bundle) => bundle.score === 1)
+              .length,
+            replay: rankedContrastiveReplay,
+            selectedBundle: summarizeBundle(selectedRankedContrastiveBundle),
           },
         },
       },
