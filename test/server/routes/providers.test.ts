@@ -613,6 +613,7 @@ describe('Providers Routes', () => {
             arguments: [{ name: 'id', description: 'Account id', type: 'string' }],
           },
         ],
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
       };
 
       mockedNeverGenerateRemote.mockReturnValue(false);

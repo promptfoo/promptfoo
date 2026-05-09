@@ -246,6 +246,65 @@ describe('doTargetPurposeDiscovery', () => {
     });
   });
 
+  it('should preserve target and remote task usage in discovery results', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: {
+          currentQuestionIndex: 0,
+          answers: [],
+        },
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Test purpose',
+          limitations: 'Test limitations',
+          tools: [],
+          user: 'Test user',
+        },
+        state: {
+          currentQuestionIndex: 1,
+          answers: ['I am a test assistant'],
+        },
+        tokenUsage: { total: 7, prompt: 4, completion: 3 },
+      },
+    ];
+
+    mockedFetchWithProxy.mockImplementation(function () {
+      return Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+
+    const target = createMockProvider({
+      id: 'test',
+      response: {
+        output: 'I am a test assistant',
+        tokenUsage: { total: 11, prompt: 6, completion: 5 },
+      },
+    });
+
+    const discoveredPurpose = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(discoveredPurpose).toMatchObject({
+      purpose: 'Test purpose',
+      limitations: 'Test limitations',
+      user: 'Test user',
+      tokenUsage: {
+        total: 23,
+        prompt: 13,
+        completion: 10,
+        numRequests: 3,
+      },
+    });
+  });
+
   it('should normalize string "null" values from server response', async () => {
     const mockResponses = [
       {

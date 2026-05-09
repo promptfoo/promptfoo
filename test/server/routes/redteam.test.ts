@@ -528,6 +528,60 @@ describe('Redteam Routes', () => {
         });
       });
 
+      it('should preserve shared generation usage on batch preview responses', async () => {
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'test-provider',
+          callApi: vi.fn().mockResolvedValue({
+            output: 'generated',
+            tokenUsage: { total: 21, prompt: 13, completion: 8, numRequests: 1 },
+          }),
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('prompt');
+            return [
+              { vars: { query: 'test case one' }, metadata: { pluginId: 'harmful:hate' } },
+              { vars: { query: 'test case two' }, metadata: { pluginId: 'harmful:hate' } },
+            ];
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+            count: 2,
+          });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toMatchObject({
+          count: 2,
+          tokenUsage: {
+            total: 21,
+            prompt: 13,
+            completion: 8,
+            numRequests: 1,
+          },
+        });
+        expect(response.body.testCases).toHaveLength(2);
+        expect(response.body.testCases[0].metadata.providerTokenUsage).toBeUndefined();
+        expect(response.body.testCases[1].metadata.providerTokenUsage).toBeUndefined();
+      });
+
       it('should preserve generation usage when no preview cases are produced', async () => {
         mockedRedteamProviderManager.getProvider.mockResolvedValue({
           id: () => 'test-provider',

@@ -18,9 +18,11 @@ import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
+import type { TokenUsage } from '../../types/shared';
 
 // ========================================================
 // Schemas
@@ -57,6 +59,7 @@ const TargetPurposeDiscoveryResultSchema = z.object({
       })
       .nullable(),
   ),
+  tokenUsage: z.custom<TokenUsage>().optional(),
 });
 
 export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
@@ -65,6 +68,7 @@ export const TargetPurposeDiscoveryTaskResponseSchema = z.object({
   purpose: TargetPurposeDiscoveryResultSchema.optional(),
   state: TargetPurposeDiscoveryStateSchema,
   error: z.string().optional(),
+  tokenUsage: z.custom<TokenUsage>().optional(),
 });
 
 export const ArgsSchema = z
@@ -124,6 +128,7 @@ export function normalizeTargetPurposeDiscoveryResult(
     limitations: isNullLike(result.limitations) ? null : result.limitations,
     user: isNullLike(result.user) ? null : result.user,
     tools: cleanTools(result.tools),
+    ...(result.tokenUsage ? { tokenUsage: result.tokenUsage } : {}),
   };
 }
 
@@ -213,6 +218,15 @@ export async function doTargetPurposeDiscovery(
     currentQuestionIndex: 0,
     answers: [],
   });
+  const tokenUsage = createEmptyTokenUsage();
+  let hasTokenUsage = false;
+  const trackTokenUsage = (response: { tokenUsage?: Partial<TokenUsage> } | undefined) => {
+    if (!response?.tokenUsage) {
+      return;
+    }
+    accumulateResponseTokenUsage(tokenUsage, response);
+    hasTokenUsage = true;
+  };
   let turn = 0;
 
   while (!done && turn < MAX_TURN_COUNT) {
@@ -255,6 +269,7 @@ export async function doTargetPurposeDiscovery(
       question = data.question;
       discoveryResult = data.purpose;
       state = data.state;
+      trackTokenUsage(data);
 
       if (data.error) {
         const errorMessage = `Error from remote server: ${data.error}`;
@@ -274,6 +289,7 @@ export async function doTargetPurposeDiscovery(
           vars: { sessionId },
           bustCache: true,
         });
+        trackTokenUsage(targetResponse);
 
         if (targetResponse.error) {
           const errorMessage = `Error from target: ${targetResponse.error}`;
@@ -316,7 +332,15 @@ export async function doTargetPurposeDiscovery(
     pbar?.stop();
   }
 
-  return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
+  if (!discoveryResult) {
+    return undefined;
+  }
+
+  const normalizedResult = normalizeTargetPurposeDiscoveryResult(discoveryResult);
+  return {
+    ...normalizedResult,
+    ...(hasTokenUsage ? { tokenUsage } : {}),
+  };
 }
 
 // ========================================================

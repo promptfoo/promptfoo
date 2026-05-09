@@ -283,11 +283,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
         return { prompt, context, metadata };
       });
+      const tokenUsage = trackedRedteamProvider.getTokenUsage();
 
       res.json(
         RedteamSchemas.GenerateTest.Response.parse({
           testCases: batchResults,
           count: batchResults.length,
+          ...(tokenUsage ? { tokenUsage } : {}),
         }),
       );
       return;

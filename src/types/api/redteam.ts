@@ -5,6 +5,7 @@ import {
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
+import { BaseTokenUsageSchema } from '../shared';
 import { MessageResponseSchema } from './common';
 
 import type { Plugin, Strategy } from '../../redteam/constants';
@@ -51,6 +52,7 @@ export const TestCaseGenerationResponseSchema = z.union([
   z.object({
     testCases: z.array(GeneratedTestCaseResponseSchema),
     count: z.number().int().nonnegative(),
+    tokenUsage: BaseTokenUsageSchema.optional(),
   }),
 ]);
 
