@@ -5846,3 +5846,80 @@ The learned action model now predicts the right pair in every draw:
 3. The planner should probably have a second materialization operator:
    - `generate-support-for-local-action-learning`
    - not just `generate-support-for-nearest-neighbor-routing`
+
+## Iteration 69 - 2026-05-09
+
+### Goal
+
+Close the planner loop one step further:
+
+> If we replace the remaining hand-authored legal-counsel action rule with the
+> support-augmented learned action module from iteration 68, does the automatic
+> residual planner still reach the same frontier as the manual hybrid?
+
+### Experiment
+
+1. Added `evaluateRepairLearnedPlannerComposition.ts`.
+2. Kept fixed:
+   - the geometry-based residual diagnoses from iteration 63
+   - the generated BOLA support exemplar from iteration 65
+   - the learned legal-counsel packaging labels from iteration 57
+3. Replaced the planner's final hand-authored action choice with the learned
+   legal-counsel action predictions from iteration 68.
+4. Compared:
+   - `global`
+   - `manual-hybrid`
+   - `automatic-planner`
+   - `learned-planner`
+
+### Results
+
+The learned planner preserves the full repaired frontier:
+
+| Router            | Stable label holdout accuracy | Avg label holdout regret |
+| ----------------- | ----------------------------: | -----------------------: |
+| global            |                         `2/4` |                `0.00236` |
+| manual hybrid     |                         `4/4` |                `0.00000` |
+| automatic planner |                         `4/4` |                `0.00000` |
+| learned planner   |                         `4/4` |                `0.00000` |
+
+The learned action module stays stable in all three draws:
+
+| Task                            | Learned profile | Actual winner |
+| ------------------------------- | --------------- | ------------- |
+| `prompt-extraction-novelty-v3`  | `thin`          | `thin`        |
+| `prompt-extraction-coverage-v2` | `balanced`      | `balanced`    |
+
+### Reflection
+
+1. The planner can now keep the `4/4` frontier without a hand-authored
+   legal-counsel action map.
+2. The repaired system is becoming compositional:
+   - diagnose the residual family
+   - materialize the right local support when needed
+   - invoke a learned specialist action when needed
+3. The remaining hand-authored pieces are now narrower and more structural:
+   - the legal-counsel activation boundary
+   - the diagnosis thresholds
+   - the handcrafted synthetic support seeds used to train the local action
+     learner
+4. That is a better place to be than a monolithic global nearest-neighbor model:
+   - fewer assumptions live in the prediction rule itself
+   - the important question becomes whether we can learn or search the remaining
+     planner structure
+5. The next useful move is to attack the planner's remaining fixed structure:
+   - learn the local-specialist activation boundary
+   - or generate the legal-counsel counterfactual supports instead of authoring
+     them by hand
+
+### New Hypotheses
+
+1. A high-quality red-team proposer should be a planner over repair operators,
+   not one fixed proposer distribution.
+2. Learned local actions plus generated sparse-support examples may generalize
+   better than global profile selection because they preserve the reason a case
+   failed.
+3. The next major frontier is meta-learning the planner policy itself:
+   - when to call a local expert
+   - when to materialize support
+   - and when the base proposer is already sufficient
