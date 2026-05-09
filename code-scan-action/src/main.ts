@@ -406,14 +406,24 @@ async function postFallbackComments(
   }
 }
 
+function isPathWithinOrEqualTo(child: string, parent: string): boolean {
+  // macOS APFS and Windows NTFS are case-insensitive by default; comparing case-sensitively here
+  // would reject legitimate paths whose casing differs from GITHUB_WORKSPACE.
+  const isCaseInsensitive = process.platform === 'darwin' || process.platform === 'win32';
+  const normalize = (p: string) => (isCaseInsensitive ? p.toLowerCase() : p);
+  const c = normalize(child);
+  const p = normalize(parent);
+  const pWithSep = p.endsWith(path.sep) ? p : p + path.sep;
+  return c === p || c.startsWith(pWithSep);
+}
+
 function resolveSarifOutputPath(rawPath: string): string {
   if (!rawPath.trim()) {
     throw new Error('sarif-output-path is empty; refusing to write');
   }
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
   const resolved = path.resolve(workspace, rawPath);
-  const workspaceWithSep = workspace.endsWith(path.sep) ? workspace : workspace + path.sep;
-  if (resolved === workspace || !resolved.startsWith(workspaceWithSep)) {
+  if (resolved === workspace || !isPathWithinOrEqualTo(resolved, workspace)) {
     throw new Error(
       `sarif-output-path "${rawPath}" resolves outside GITHUB_WORKSPACE; refusing to write`,
     );
@@ -421,7 +431,27 @@ function resolveSarifOutputPath(rawPath: string): string {
   return resolved;
 }
 
-function writeSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
+function serializeSarif(scanResponse: ScanResponse): string {
+  return JSON.stringify(scanResponseToSarif(scanResponse), null, 2);
+}
+
+function writeSarifFile(resolved: string, body: string): void {
+  const parent = path.dirname(resolved);
+  fs.mkdirSync(parent, { recursive: true });
+  // path.resolve does not follow symlinks. After mkdir we can canonicalize the parent
+  // and re-check containment so a symlink inside the workspace can't redirect the write.
+  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+  const realParent = fs.realpathSync(parent);
+  const realWorkspace = fs.realpathSync(workspace);
+  if (!isPathWithinOrEqualTo(realParent, realWorkspace)) {
+    throw new Error(
+      `sarif-output-path "${resolved}" resolves outside GITHUB_WORKSPACE via symlink; refusing to write`,
+    );
+  }
+  fs.writeFileSync(resolved, body);
+}
+
+function emitSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
   // SARIF output is supplementary — never sink an otherwise-successful scan over a write failure.
   let resolved: string;
   try {
@@ -432,8 +462,7 @@ function writeSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
   }
 
   try {
-    fs.mkdirSync(path.dirname(resolved), { recursive: true });
-    fs.writeFileSync(resolved, JSON.stringify(scanResponseToSarif(scanResponse), null, 2));
+    writeSarifFile(resolved, serializeSarif(scanResponse));
     core.setOutput('sarif-path', resolved);
     core.info(`📝 Wrote SARIF output to ${resolved}`);
   } catch (error) {
@@ -450,7 +479,7 @@ async function handleScanResponse(
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
   if (inputs.sarifOutputPath) {
-    writeSarifOutput(scanResponse, inputs.sarifOutputPath);
+    emitSarifOutput(scanResponse, inputs.sarifOutputPath);
   }
 
   if ((comments.length > 0 || review) && commentsPosted === false) {

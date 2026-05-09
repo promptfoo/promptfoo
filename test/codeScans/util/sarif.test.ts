@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { scanResponseToSarif } from '../../../src/codeScan/util/sarif';
-import { CodeScanSeverity, type ScanResponse } from '../../../src/types/codeScan';
+import { type Comment, CodeScanSeverity, type ScanResponse } from '../../../src/types/codeScan';
+
+function makeFindingResponse(overrides: Partial<Comment> = {}): ScanResponse {
+  return {
+    success: true,
+    comments: [
+      {
+        file: 'src/handler.ts',
+        startLine: 10,
+        line: 12,
+        finding: 'User input reaches the model prompt without sanitization.',
+        severity: CodeScanSeverity.CRITICAL,
+        ...overrides,
+      },
+    ],
+  };
+}
+
+function fingerprintOf(response: ScanResponse): string {
+  return scanResponseToSarif(response).runs[0].results[0].partialFingerprints.promptfooFindingHash;
+}
 
 describe('scanResponseToSarif', () => {
   it('maps reportable findings into GitHub-compatible SARIF results', () => {
@@ -117,44 +137,15 @@ describe('scanResponseToSarif', () => {
   });
 
   it('keeps fingerprints stable when line numbers shift or wording is rephrased slightly', () => {
-    const base: ScanResponse = {
-      success: true,
-      comments: [
-        {
-          file: 'src/handler.ts',
-          startLine: 10,
-          line: 12,
-          finding: 'User input reaches the model prompt without sanitization.',
-          severity: CodeScanSeverity.CRITICAL,
-        },
-      ],
-    };
+    const baseHash = fingerprintOf(makeFindingResponse());
+    const shifted = fingerprintOf(makeFindingResponse({ startLine: 88, line: 90 }));
+    const reworded = fingerprintOf(
+      makeFindingResponse({
+        finding: '  User input reaches the model prompt without sanitization.\n',
+      }),
+    );
 
-    const lineShifted: ScanResponse = {
-      ...base,
-      comments: [{ ...base.comments[0], startLine: 88, line: 90 }],
-    };
-
-    const minorRewording: ScanResponse = {
-      ...base,
-      comments: [
-        {
-          ...base.comments[0],
-          finding: '  User input reaches the model prompt without sanitization.\n',
-        },
-      ],
-    };
-
-    const baseHash =
-      scanResponseToSarif(base).runs[0].results[0].partialFingerprints.promptfooFindingHash;
-    const shiftedHash =
-      scanResponseToSarif(lineShifted).runs[0].results[0].partialFingerprints
-        .promptfooFindingHash;
-    const reworded =
-      scanResponseToSarif(minorRewording).runs[0].results[0].partialFingerprints
-        .promptfooFindingHash;
-
-    expect(shiftedHash).toBe(baseHash);
+    expect(shifted).toBe(baseHash);
     expect(reworded).toBe(baseHash);
   });
 
