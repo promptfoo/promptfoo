@@ -11,7 +11,12 @@ import { buildValidatedRepairTaskBenchmark } from './generateRepairTaskBenchmark
 import { buildResearchCallContext } from './portfolioResearchShared';
 import { jaccardSimilarity, tokenize } from './sqlResearchShared';
 
-type SignatureModel = 'label-1nn-yield' | 'summary-1nn-yield';
+type SignatureModel =
+  | 'label-1nn-yield'
+  | 'slot-match-1nn-yield'
+  | 'slot-plugin-1nn-yield'
+  | 'summary-1nn-yield'
+  | 'weighted-slot-1nn-yield';
 type SignaturePrediction = {
   actualWinner: PromptProfile;
   predictedProfile: PromptProfile;
@@ -135,22 +140,62 @@ function signatureText(signature: SemanticSignature, model: SignatureModel): str
   return model === 'label-1nn-yield' ? signature.labels.join(' ') : signature.summary;
 }
 
+function slotMatchSimilarity(left: SemanticSignature, right: SemanticSignature): number {
+  return left.labels.reduce(
+    (score, label, index) => score + (label === right.labels[index] ? 1 : 0),
+    0,
+  );
+}
+
+function weightedSlotSimilarity(left: SemanticSignature, right: SemanticSignature): number {
+  const weights = [1.5, 1.5, 1, 1, 1];
+  return left.labels.reduce(
+    (score, label, index) => score + (label === right.labels[index] ? weights[index] : 0),
+    0,
+  );
+}
+
+function signatureSimilarity(
+  leftRow: ObservedOutcomeRow,
+  rightRow: ObservedOutcomeRow,
+  signatures: Record<string, SemanticSignature>,
+  model: SignatureModel,
+): number {
+  const leftSignature = signatures[leftRow.task.id];
+  const rightSignature = signatures[rightRow.task.id];
+
+  switch (model) {
+    case 'label-1nn-yield':
+      return jaccardSimilarity(
+        tokenize(signatureText(leftSignature, model)),
+        tokenize(signatureText(rightSignature, model)),
+      );
+    case 'slot-match-1nn-yield':
+      return slotMatchSimilarity(leftSignature, rightSignature);
+    case 'slot-plugin-1nn-yield':
+      return (
+        slotMatchSimilarity(leftSignature, rightSignature) +
+        (leftRow.task.plugin === rightRow.task.plugin ? 1 : 0)
+      );
+    case 'summary-1nn-yield':
+      return jaccardSimilarity(
+        tokenize(signatureText(leftSignature, model)),
+        tokenize(signatureText(rightSignature, model)),
+      );
+    case 'weighted-slot-1nn-yield':
+      return weightedSlotSimilarity(leftSignature, rightSignature);
+  }
+}
+
 function predictByNearestSignature(
   trainingRows: ObservedOutcomeRow[],
   targetRow: ObservedOutcomeRow,
   signatures: Record<string, SemanticSignature>,
   model: SignatureModel,
 ): PromptProfile {
-  const targetTokens = tokenize(signatureText(signatures[targetRow.task.id], model));
   const [nearestNeighbor] = [...trainingRows].sort((left, right) => {
-    const rightSimilarity = jaccardSimilarity(
-      tokenize(signatureText(signatures[right.task.id], model)),
-      targetTokens,
-    );
-    const leftSimilarity = jaccardSimilarity(
-      tokenize(signatureText(signatures[left.task.id], model)),
-      targetTokens,
-    );
+    const rightSimilarity = signatureSimilarity(right, targetRow, signatures, model);
+    const leftSimilarity = signatureSimilarity(left, targetRow, signatures, model);
     return rightSimilarity - leftSimilarity;
   });
   return selectHighestYieldProfile(getTop3Yields(nearestNeighbor));
@@ -162,7 +207,15 @@ function evaluateModels(
   signatures: Record<string, SemanticSignature>,
 ): Record<SignatureModel, SignatureEvaluationSummary> {
   return Object.fromEntries(
-    (['label-1nn-yield', 'summary-1nn-yield'] as const).map((model) => [
+    (
+      [
+        'label-1nn-yield',
+        'slot-match-1nn-yield',
+        'weighted-slot-1nn-yield',
+        'slot-plugin-1nn-yield',
+        'summary-1nn-yield',
+      ] as const
+    ).map((model) => [
       model,
       summarizePredictions(
         evaluationRows.map((row) => {
@@ -190,7 +243,15 @@ function evaluateLeaveOneOut(
   signatures: Record<string, SemanticSignature>,
 ): Record<SignatureModel, SignatureEvaluationSummary> {
   return Object.fromEntries(
-    (['label-1nn-yield', 'summary-1nn-yield'] as const).map((model) => [
+    (
+      [
+        'label-1nn-yield',
+        'slot-match-1nn-yield',
+        'weighted-slot-1nn-yield',
+        'slot-plugin-1nn-yield',
+        'summary-1nn-yield',
+      ] as const
+    ).map((model) => [
       model,
       summarizePredictions(
         rows.map((row) => {

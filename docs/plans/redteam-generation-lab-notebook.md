@@ -3571,3 +3571,94 @@ Holdout predictions:
    - weighted label overlap
    - perhaps label + plugin priors
      before moving to a more complex learned model.
+
+## Iteration 44 - 2026-05-09
+
+### Goal
+
+Test whether the apparent value of structured labels comes from:
+
+> the **slot decomposition itself**, rather than just the fact that labels were
+> shorter than free-form text.
+
+### Experiment
+
+1. Extended `evaluateRepairSemanticSignatures.ts` with three slot-aware models:
+   - `slot-match-1nn-yield`
+   - `weighted-slot-1nn-yield`
+   - `slot-plugin-1nn-yield`
+2. Re-ran the live signature generation pass rather than reusing the prior JSON,
+   so the comparison used one internally consistent set of signatures.
+3. Compared against the existing:
+   - `label-1nn-yield`
+   - `summary-1nn-yield`
+4. Used the same:
+   - frozen holdout split
+   - leave-one-out evaluation
+
+### Results
+
+Holdout accuracy:
+
+| Model                | Accuracy |
+| -------------------- | -------: |
+| label `1-NN`         |    `2/4` |
+| slot match `1-NN`    |    `2/4` |
+| weighted slot `1-NN` |    `2/4` |
+| slot + plugin `1-NN` |    `1/4` |
+| summary `1-NN`       |    `3/4` |
+
+Holdout average regret:
+
+| Model                | Avg regret |
+| -------------------- | ---------: |
+| label `1-NN`         |  `0.00236` |
+| slot match `1-NN`    |  `0.00438` |
+| weighted slot `1-NN` |  `0.00438` |
+| slot + plugin `1-NN` |  `0.00556` |
+| summary `1-NN`       |  `0.00117` |
+
+Leave-one-out accuracy:
+
+| Model                | Accuracy |
+| -------------------- | -------: |
+| label `1-NN`         |   `4/10` |
+| slot match `1-NN`    |   `5/10` |
+| weighted slot `1-NN` |   `5/10` |
+| slot + plugin `1-NN` |   `4/10` |
+| summary `1-NN`       |   `6/10` |
+
+### Reflection
+
+1. Slot-aware similarity did **not** improve on whole-label overlap:
+   - exact slot match and weighted slot match both stay at `2/4`
+   - adding a plugin bonus makes holdout performance worse
+2. The larger finding is that the live-generated signatures are themselves not
+   stable enough yet:
+   - iteration 42:
+     - labels `3/4`
+     - summaries `2/4`
+   - iteration 44:
+     - labels `2/4`
+     - summaries `3/4`
+3. The label and summary abstractions are useful, but the evaluator is now
+   measuring two things at once:
+   - routing quality
+   - signature-generation variance
+4. That variance is already large enough to change which model looks best.
+5. This is a valuable correction:
+   - before optimizing the router further
+   - we need to freeze, ensemble, or otherwise measure the semantic
+     representation itself.
+
+### New Hypotheses
+
+1. Signature-generation variance is now the main confounder in the semantic
+   experiments.
+2. The next experiment should run repeated semantic-signature generations and
+   quantify:
+   - label stability
+   - summary stability
+   - downstream route stability
+3. We should not claim a semantic model is better until it survives repeated
+   signature generations, not just one favorable draw.
