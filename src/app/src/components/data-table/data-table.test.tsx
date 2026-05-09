@@ -754,6 +754,53 @@ describe('DataTable', () => {
       expect(await within(toolbarDialog).findByText('Status')).toBeInTheDocument();
       expect(await within(toolbarDialog).findByText(/beta/i)).toBeInTheDocument();
     });
+
+    it('keeps externally-added static filter rows usable on narrow popovers', async () => {
+      const user = userEvent.setup();
+      const onColumnFiltersChange = vi.fn();
+      const { rerender } = render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={onColumnFiltersChange}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Filters/ }));
+
+      rerender(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[
+            { id: 'status', value: { operator: 'equals', value: 'beta' } },
+            { id: 'status', value: { operator: 'is any of', value: ['alpha', 'beta', 'gamma'] } },
+            { id: 'name', value: { operator: 'contains', value: 'Row' } },
+          ]}
+          onColumnFiltersChange={onColumnFiltersChange}
+        />,
+      );
+
+      const staticFilterRows = await screen.findAllByTestId('data-table-static-filter-row');
+      expect(staticFilterRows).toHaveLength(3);
+
+      for (const staticFilterRow of staticFilterRows) {
+        expect(staticFilterRow).toHaveClass('flex-wrap');
+      }
+
+      expect(within(staticFilterRows[0]).getByText(/beta/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
+      expect(within(staticFilterRows[1]).getByText(/3 selected/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
+      expect(within(staticFilterRows[2]).getByText(/contains Row/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
+    });
   });
 
   describe('row selection', () => {

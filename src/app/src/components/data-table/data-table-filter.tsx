@@ -1065,11 +1065,15 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
                   ),
               )
               .map((filter) => (
-                <div key={`column-${filter.id}`} className="flex items-center gap-1.5">
+                <div
+                  key={`column-${filter.id}`}
+                  data-testid="data-table-static-filter-row"
+                  className="flex flex-wrap items-center gap-1.5"
+                >
                   <div className="h-8 w-[110px] px-3 py-1.5 text-xs rounded-md border border-input bg-background shrink-0">
                     <span className="truncate">{filter.columnHeader}</span>
                   </div>
-                  <div className="flex min-h-8 h-8 flex-1 items-center border rounded-md bg-gray-100/50 dark:bg-gray-800/50 px-3 text-sm">
+                  <div className="flex min-h-8 h-8 min-w-[150px] flex-1 items-center border rounded-md bg-gray-100/50 dark:bg-gray-800/50 px-3 text-sm">
                     {filter.isSelectFilter ? (
                       <span className="truncate">
                         {`${filter.operator} ${
