@@ -5,9 +5,27 @@ import { VERSION } from '../../version';
 const SARIF_SCHEMA_URL = 'https://json.schemastore.org/sarif-2.1.0.json';
 const SARIF_VERSION = '2.1.0';
 const GENERIC_RULE_ID = 'promptfoo/code-scan-finding';
+const RULE_HELP_TEXT =
+  'Review the finding and suggested fix, then validate the affected code path before merging.';
 // Cap fingerprint input so minor rephrasing of long findings still hashes to the same id
 // while staying long enough to distinguish unrelated findings on the same file/severity.
 const FINGERPRINT_FINDING_MAX_CHARS = 160;
+
+type SarifRule = SarifLog['runs'][number]['tool']['driver']['rules'][number];
+
+const SARIF_RULE: SarifRule = {
+  id: GENERIC_RULE_ID,
+  name: 'Promptfoo Code Scan Finding',
+  shortDescription: {
+    text: 'Potential LLM security issue identified by Promptfoo Code Scan.',
+  },
+  fullDescription: {
+    text: 'Promptfoo Code Scan reviews code changes for LLM-related security risks such as prompt injection, unsafe tool use, and sensitive data exposure.',
+  },
+  defaultConfiguration: { level: 'warning' },
+  help: { text: RULE_HELP_TEXT, markdown: RULE_HELP_TEXT },
+  properties: { tags: ['security', 'llm-security'], precision: 'medium' },
+};
 
 interface SarifArtifactLocation {
   uri: string;
@@ -169,30 +187,7 @@ export function scanResponseToSarif(response: ScanResponse): SarifLog {
           driver: {
             name: 'Promptfoo Code Scan',
             semanticVersion: VERSION,
-            rules: [
-              {
-                id: GENERIC_RULE_ID,
-                name: 'Promptfoo Code Scan Finding',
-                shortDescription: {
-                  text: 'Potential LLM security issue identified by Promptfoo Code Scan.',
-                },
-                fullDescription: {
-                  text: 'Promptfoo Code Scan reviews code changes for LLM-related security risks such as prompt injection, unsafe tool use, and sensitive data exposure.',
-                },
-                defaultConfiguration: {
-                  level: 'warning',
-                },
-                help: {
-                  text: 'Review the finding and suggested fix, then validate the affected code path before merging.',
-                  markdown:
-                    'Review the finding and suggested fix, then validate the affected code path before merging.',
-                },
-                properties: {
-                  tags: ['security', 'llm-security'],
-                  precision: 'medium',
-                },
-              },
-            ],
+            rules: [SARIF_RULE],
           },
         },
         results: response.comments.filter(isReportableFinding).map(toSarifResult),

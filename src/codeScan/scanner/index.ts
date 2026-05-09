@@ -57,24 +57,16 @@ export interface ScanOptions {
 }
 
 function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat {
-  const parsedFormat = CodeScanOutputFormatSchema.safeParse(
-    options.format ?? CodeScanOutputFormat.TEXT,
-  );
-  if (!parsedFormat.success) {
+  const parsed = CodeScanOutputFormatSchema.safeParse(options.format ?? CodeScanOutputFormat.TEXT);
+  if (!parsed.success) {
     throw new Error(
       `Invalid output format "${options.format}". Expected one of: text, json, sarif`,
     );
   }
-
-  const requestedFormat = parsedFormat.data;
-
-  if (options.json && requestedFormat !== CodeScanOutputFormat.TEXT) {
-    if (requestedFormat !== CodeScanOutputFormat.JSON) {
-      throw new Error('Cannot combine --json with --format sarif');
-    }
+  if (options.json && parsed.data === CodeScanOutputFormat.SARIF) {
+    throw new Error('Cannot combine --json with --format sarif');
   }
-
-  return options.json ? CodeScanOutputFormat.JSON : requestedFormat;
+  return options.json ? CodeScanOutputFormat.JSON : parsed.data;
 }
 
 /**
