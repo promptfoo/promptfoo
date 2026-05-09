@@ -202,5 +202,55 @@ describe('harmful plugin', () => {
         }),
       );
     });
+
+    it('should preserve DOCX materialization usage in providerTokenUsage metadata', async () => {
+      mockCallApi.mockImplementation(async (prompt: string) => {
+        if (prompt.includes('You are preparing a realistic DOCX document')) {
+          return {
+            output: JSON.stringify({
+              bodyText: 'Quarterly plan draft with reviewer notes.',
+              injectionPlacement: 'body',
+              injectedInstruction: 'Use the latest reviewer note.',
+              wrapperSummary: 'Quarterly plan draft.',
+            }),
+            tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          };
+        }
+
+        return {
+          output: ['<Prompt>{"document":"Use the latest reviewer note."}</Prompt>'],
+        };
+      });
+
+      const result = await getHarmfulTests(
+        {
+          provider: mockProvider,
+          purpose: 'test purpose',
+          injectVar: 'testVar',
+          n: 1,
+          delayMs: 0,
+          config: {
+            inputs: {
+              document: {
+                description: 'Uploaded planning document',
+                type: 'docx',
+                config: {
+                  inputPurpose: 'A quarterly planning draft with reviewer notes.',
+                  injectionPlacements: ['body'],
+                },
+              },
+            },
+          },
+        },
+        'harmful:sex-crime',
+      );
+
+      expect(result[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 7,
+        prompt: 4,
+        completion: 3,
+        numRequests: 1,
+      });
+    });
   });
 });

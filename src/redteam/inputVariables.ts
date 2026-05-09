@@ -11,7 +11,11 @@ import {
   type Inputs,
   normalizeInputDefinition,
 } from '../types/shared';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 
 import type { ApiProvider, TokenUsage } from '../types/index';
 
@@ -732,12 +736,8 @@ export async function materializeInputValueWithMetadata(
       buildDocxWrapperPrompt(value, definition, context, injectionPlacement),
     );
     output = response.output;
-    tokenUsage = response.tokenUsage
-      ? {
-          ...response.tokenUsage,
-          ...(response.tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
-        }
-      : undefined;
+    tokenUsage = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(tokenUsage, response);
   } catch (error) {
     logger.debug('[inputVariables] Failed to generate DOCX wrapper, using fallback render plan', {
       error,

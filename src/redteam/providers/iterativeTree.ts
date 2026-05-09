@@ -789,14 +789,20 @@ async function runRedteamConversation({
             try {
               // Use the original newInjectVar (before escaping) for parsing
               const parsed = JSON.parse(newInjectVar);
-              const { vars: localMaterializedVars } =
-                await extractMaterializedVariablesFromJsonWithMetadata(parsed, inputs, {
+              const localMaterializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
+                parsed,
+                inputs,
+                {
                   materializationIndex: attempts - 1,
                   pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
                   provider: redteamProvider,
                   purpose: test?.metadata?.purpose as string | undefined,
-                });
-              Object.assign(updatedVars, localMaterializedVars);
+                },
+              );
+              accumulateResponseTokenUsage(totalTokenUsage, localMaterializedVars, {
+                countAsRequest: false,
+              });
+              Object.assign(updatedVars, localMaterializedVars.vars);
             } catch {
               // If parsing fails, it's plain text - keep original vars
             }
@@ -1224,7 +1230,7 @@ async function runRedteamConversation({
           );
         }
       } else {
-        const { vars: materializedVars } = await extractMaterializedVariablesFromJsonWithMetadata(
+        const materializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
           parsed,
           inputs,
           {
@@ -1234,7 +1240,10 @@ async function runRedteamConversation({
             purpose: test?.metadata?.purpose as string | undefined,
           },
         );
-        Object.assign(finalUpdatedVars, materializedVars);
+        accumulateResponseTokenUsage(totalTokenUsage, materializedVars, {
+          countAsRequest: false,
+        });
+        Object.assign(finalUpdatedVars, materializedVars.vars);
       }
     } catch {
       // If parsing fails, it's plain text - keep original vars

@@ -977,6 +977,12 @@ describe('synthesize', () => {
           wrapperSummary,
         },
       });
+      expect(strategyTestCase?.metadata?.providerTokenUsage).toMatchObject({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        numRequests: 1,
+      });
     });
 
     it('should preserve existing DOCX materialization when strategies leave the multi-input prompt unchanged', async () => {

@@ -16,6 +16,7 @@ import {
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
+import { mergeProviderTokenUsage } from '../strategies/util';
 import {
   extractInputVarsFromPrompt,
   getShortPluginId,
@@ -288,6 +289,14 @@ export abstract class RedteamPluginBase {
               pluginConfig: this.config,
               ...(materializedInputVars?.metadata
                 ? { inputMaterialization: materializedInputVars.metadata }
+                : {}),
+              ...(materializedInputVars?.tokenUsage
+                ? {
+                    providerTokenUsage: mergeProviderTokenUsage(
+                      undefined,
+                      materializedInputVars.tokenUsage,
+                    ),
+                  }
                 : {}),
               // Include extracted input vars in metadata for multi-turn strategies
               ...(inputVars ? { inputVars } : {}),

@@ -484,6 +484,47 @@ describe('inputVariables', () => {
     expect(wrapperPrompt).toContain('actual runtime context');
   });
 
+  it('counts one DOCX wrapper request when the provider omits token usage', async () => {
+    const provider = {
+      callApi: async () => ({
+        output: JSON.stringify({
+          bodyText: 'Support workflow draft with review steps.',
+          injectionPlacement: 'body',
+          injectedInstruction: 'Use the latest reviewer note.',
+          wrapperSummary: 'Support workflow draft.',
+        }),
+      }),
+      id: () => 'test-provider',
+    } as any;
+
+    const result = await materializeInputVariablesWithMetadata(
+      {
+        document: 'Use the latest reviewer note.',
+      },
+      {
+        document: {
+          description: 'Uploaded support workflow document',
+          type: 'docx',
+          config: {
+            inputPurpose: 'A neutral internal support workflow draft with reviewer notes.',
+            injectionPlacements: ['body'],
+          },
+        },
+      },
+      {
+        provider,
+      },
+    );
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      cached: 0,
+      numRequests: 1,
+    });
+  });
+
   it('materializes image inputs as SVG data URIs', () => {
     const value = materializeInputValue('Dangerous text', {
       description: 'Screenshot',

@@ -528,6 +528,50 @@ describe('RedteamPluginBase', () => {
       expect(messages).toContain('Test message');
     });
 
+    it('should preserve DOCX materialization usage in providerTokenUsage metadata', async () => {
+      const docxProvider = createMockProvider({
+        callApi: async (prompt: string) => {
+          if (prompt.includes('You are preparing a realistic DOCX document')) {
+            return createProviderResponse({
+              output: JSON.stringify({
+                bodyText: 'Quarterly plan draft with reviewer notes.',
+                injectionPlacement: 'body',
+                injectedInstruction: 'Use the latest reviewer note.',
+                wrapperSummary: 'Quarterly plan draft.',
+              }),
+              tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            });
+          }
+
+          return createProviderResponse({
+            output: '<Prompt>{"document":"Use the latest reviewer note."}</Prompt>',
+          });
+        },
+      });
+
+      const plugin = new TestPlugin(docxProvider, 'test purpose', MULTI_INPUT_VAR, {
+        inputs: {
+          document: {
+            description: 'Uploaded planning document',
+            type: 'docx',
+            config: {
+              inputPurpose: 'A quarterly planning draft with reviewer notes.',
+              injectionPlacements: ['body'],
+            },
+          },
+        },
+      });
+
+      const tests = await plugin.generateTests(1);
+
+      expect(tests[0]?.metadata?.providerTokenUsage).toMatchObject({
+        total: 7,
+        prompt: 4,
+        completion: 3,
+        numRequests: 1,
+      });
+    });
+
     it('should handle parsing failures gracefully in multi-input mode', async () => {
       const badProvider = createMockProvider({
         response: createProviderResponse({

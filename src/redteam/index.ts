@@ -48,7 +48,7 @@ import {
 } from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
-import { pluginMatchesStrategyTargets } from './strategies/util';
+import { mergeProviderTokenUsage, pluginMatchesStrategyTargets } from './strategies/util';
 import {
   extractGoalFromPrompt,
   extractMaterializedVariablesFromJsonWithMetadata,
@@ -56,7 +56,7 @@ import {
 } from './util';
 
 import type { ApiProvider, TestCase, TestCaseWithPlugin } from '../types/index';
-import type { Inputs } from '../types/shared';
+import type { Inputs, TokenUsage } from '../types/shared';
 import type {
   FailedPluginInfo,
   Policy,
@@ -112,6 +112,7 @@ async function rematerializeStrategyInputVars(
   materializationIndex: number,
 ): Promise<{
   inputMaterialization: Record<string, unknown> | undefined;
+  providerTokenUsage: TokenUsage | undefined;
   vars: TestCase['vars'];
 }> {
   const inputs = testCase.metadata?.pluginConfig?.inputs as Inputs | undefined;
@@ -124,6 +125,7 @@ async function rematerializeStrategyInputVars(
   if (!inputs || Object.keys(inputs).length === 0 || !currentInjectVar) {
     return {
       inputMaterialization,
+      providerTokenUsage: testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
       vars: testCase.vars,
     };
   }
@@ -140,6 +142,7 @@ async function rematerializeStrategyInputVars(
   if (alreadyMaterialized && !promptChangedSinceMaterialization) {
     return {
       inputMaterialization,
+      providerTokenUsage: testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
       vars: testCase.vars,
     };
   }
@@ -164,6 +167,10 @@ async function rematerializeStrategyInputVars(
             ...materializedVars.metadata,
           }
         : inputMaterialization,
+      providerTokenUsage: mergeProviderTokenUsage(
+        testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
+        materializedVars.tokenUsage,
+      ),
       vars: {
         ...testCase.vars,
         ...materializedVars.vars,
@@ -172,6 +179,7 @@ async function rematerializeStrategyInputVars(
   } catch {
     return {
       inputMaterialization,
+      providerTokenUsage: testCase.metadata?.providerTokenUsage as TokenUsage | undefined,
       vars: testCase.vars,
     };
   }
@@ -644,13 +652,14 @@ async function applyStrategies(
     newTestCases.push(
       ...(await Promise.all(
         resultTestCases.map(async (t, materializationIndex) => {
-          const { inputMaterialization, vars } = await rematerializeStrategyInputVars(
-            t,
-            injectVar,
-            provider,
-            purpose,
-            materializationIndex,
-          );
+          const { inputMaterialization, providerTokenUsage, vars } =
+            await rematerializeStrategyInputVars(
+              t,
+              injectVar,
+              provider,
+              purpose,
+              materializationIndex,
+            );
           const strategyConfig = {
             ...(strategy.config || {}),
             ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
@@ -672,6 +681,9 @@ async function applyStrategies(
               }),
               ...(inputMaterialization && {
                 inputMaterialization,
+              }),
+              ...(providerTokenUsage && {
+                providerTokenUsage,
               }),
               ...(Object.keys(strategyConfig).length > 0 && {
                 strategyConfig,
