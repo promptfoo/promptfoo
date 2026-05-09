@@ -4866,3 +4866,94 @@ Leave-one-out also improves:
      may generalize better than another broad ontology slot.
 3. The BOLA holdout miss is probably a separate specialist family and should not
    be conflated with the prompt-extraction ambiguity.
+
+## Iteration 57 - 2026-05-09
+
+### Goal
+
+Replace the hand-authored legal-counsel packaging probe with a learned local
+judgment:
+
+> Can a model recover the same legal-counsel distinction without relying on exact
+> string checks for `privilege log` and `audit report`?
+
+### Experiment
+
+1. Added `evaluateRepairSemanticLearnedLocalExpertRouting.ts`.
+2. Reused the saved `role-mechanism` draws from iteration 53.
+3. Kept the same global router and the same legal-counsel activation boundary.
+4. Replaced the hard-coded packaging rule with a model-generated packaging
+   classification:
+   - `verbatim-disclosure`
+   - `compiled-report`
+   - `attachment`
+   - `summary`
+   - `record-export`
+   - `scope-change`
+   - `other`
+5. Mapped only the two specialist classes to proposer choices:
+   - `verbatim-disclosure` -> `thin`
+   - `compiled-report` -> `balanced`
+
+### Results
+
+The learned specialist exactly matches the oracle probe on the legal-counsel
+family:
+
+| Task                            | Packaging across all 3 draws |
+| ------------------------------- | ---------------------------: |
+| `prompt-extraction-novelty-v3`  |        `verbatim-disclosure` |
+| `prompt-extraction-coverage-v2` |            `compiled-report` |
+
+Routing result:
+
+| Router                                | Stable label holdout accuracy | Avg label holdout regret |
+| ------------------------------------- | ----------------------------: | -----------------------: |
+| global `role-mechanism`               |                         `2/4` |                `0.00236` |
+| learned local packaging expert hybrid |                         `3/4` |                `0.00119` |
+
+The learned hybrid reproduces the oracle repair exactly:
+
+1. fixes `prompt-extraction-novelty-v3`
+2. keeps `prompt-extraction-coverage-v2` correct
+3. keeps `sql-novelty-v2` correct
+4. leaves only `bola-coverage-v2` wrong
+
+Leave-one-out also matches the oracle-style improvement pattern:
+
+| Router                                | Best stable label LOO accuracy |
+| ------------------------------------- | -----------------------------: |
+| global `role-mechanism`               |                         `3/10` |
+| learned local packaging expert hybrid |                         `5/10` |
+
+### Reflection
+
+1. This is the strongest evidence so far for a mixture-of-experts architecture:
+   - broad semantic router globally
+   - learned specialists only where the residual errors cluster
+2. The model recovered the useful abstraction:
+   - not just the literal words
+   - but the packaging distinction the last few iterations were circling
+3. The caveat is important:
+   - the packaging **classifier** is learned
+   - the mapping from packaging class to proposer profile is still hand-authored
+4. That means the next real test is not another ontology expansion:
+   - it is whether we can learn the local mapping from examples
+   - or rank candidate proposer profiles directly inside the specialist
+5. The second remaining family is now isolated cleanly:
+   - `bola-coverage-v2`
+   - likely deserving its own specialist analysis rather than being forced into
+     the prompt-extraction story
+
+### New Hypotheses
+
+1. A contrastive local reranker can learn the proposer choice directly from:
+   - task prompt
+   - nearby examples
+   - and evidence-packaging cues
+     without a hand-authored class-to-profile mapping.
+2. The legal-counsel specialist may generalize to future report-versus-disclose
+   families if trained on packaging abstractions rather than artifact names.
+3. The next separate residual family to analyze is BOLA:
+   - likely because ownership framing and object specificity interact
+   - in a way the current global semantic labels still miss.
