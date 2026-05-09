@@ -178,7 +178,12 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       const result = await provider.callApi('test prompt', context);
 
       expect(result.error).toContain('Invalid response from server');
-      expect(result.tokenUsage).toEqual({ prompt: 6, completion: 4, total: 10, numRequests: 1 });
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 6,
+        completion: 4,
+        total: 10,
+        numRequests: 0,
+      });
       expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
     });
 

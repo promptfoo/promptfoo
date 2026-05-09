@@ -89,11 +89,13 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
 
     const data = await response.json();
     if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
+      const totalTokenUsage = createEmptyTokenUsage();
+      accumulateResponseTokenUsage(totalTokenUsage, data, { countAsRequest: false });
       return {
         error: `[AuthoritativeMarkupInjection] Invalid response from server: ${safeJsonStringify(
           data,
         )}`,
-        tokenUsage: data?.tokenUsage,
+        tokenUsage: totalTokenUsage,
       };
     }
 
