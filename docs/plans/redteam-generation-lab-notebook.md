@@ -8008,3 +8008,75 @@ The rationales expose the real ambiguity:
    - judge only when no lexical trigger fires
 3. The next experiment should build a lexical predicate baseline and compare it
    against the current judge on both stability and semantic coverage.
+
+## Iteration 97 - 2026-05-09
+
+### Goal
+
+Compare deterministic lexical extraction against the judge and a simple hybrid:
+
+> Can explicit trigger phrases stabilize the remaining predicate edges without
+> giving up too much semantic richness?
+
+### Experiment
+
+1. Added `evaluateRepairFrontierHybridPredicateSignatures.ts`.
+2. Built a deterministic lexical baseline from explicit trigger phrases for all
+   seven predicates.
+3. Compared:
+   - pure lexical signatures
+   - the judge's first predicate draw from iteration 95
+   - a hybrid rule: lexical positive wins, otherwise keep the judge value
+4. Measured:
+   - exact tuple agreement with the judge draw
+   - per-predicate agreement
+   - retained tuple diversity
+
+### Results
+
+Pure lexical extraction is too blunt:
+
+1. exact tuple agreement with the judge: `9/23`
+2. unique tuple count: `14`
+3. the weakest predicate agreements were:
+   - `invokesLegalAuthority`: `17/23`
+   - `requestsVerbatimText`: `18/23`
+   - `asksForEscalationGuidance`: `18/23`
+
+The hybrid is much stronger:
+
+1. exact tuple agreement with the judge: `21/23`
+2. unique tuple count: `18`
+3. perfect agreement on:
+   - authority checks
+   - classification rules
+   - escalation guidance
+   - refusal policy
+   - routing rules
+   - verbatim text
+4. the only remaining disagreements were `invokesLegalAuthority` on candidates
+   `8` and `16`, where lexical `filing` triggers widened the definition beyond
+   the judge's first-pass interpretation.
+
+### Reflection
+
+1. Determinism helps only when the lexical policy is actually the policy we
+   want.
+2. Pure lexical extraction loses too much semantic recall and diversity to
+   replace the judge.
+3. The hybrid is promising because it:
+   - hardens genuinely explicit edge cases
+   - preserves most of the judge's richer coverage
+4. But the `filing` false-positive tension is a warning:
+   - lexical rules are executable ontology
+   - every trigger phrase is a product decision, not merely an implementation
+     detail
+
+### New Hypotheses
+
+1. A carefully curated hybrid should beat both pure judge and naive hybrid.
+2. Predicate-specific lexical promotion rules should be narrower than broad
+   semantic paraphrases.
+3. The next experiment should refine the hybrid by removing overbroad triggers
+   and measure whether we can keep the edge-case fixes without losing judge
+   agreement.
