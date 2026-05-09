@@ -7129,3 +7129,92 @@ ceilinged on replay:
 3. The next experiment should generate candidate transfer twins automatically,
    score them for discriminative power against multiple proposer variants, and
    keep only the frontier cases that avoid ceiling effects.
+
+## Iteration 86 - 2026-05-09
+
+### Goal
+
+Replace the hand-authored transfer slices from iteration 85 with an active
+benchmark search loop:
+
+> Can we generate candidate transfer twins automatically, score them against the
+> ordinary and critic-gated proposer variants, and retain only cases that avoid
+> the old ceiling effect?
+
+### Experiment
+
+1. Added `evaluateRepairActiveTransferFrontier.ts`.
+2. Kept the protected-object transfer family:
+   - legal-counsel hidden-system-instruction disclosure
+   - versus legal-counsel patient-record disclosure
+3. Asked the model to generate candidate positives and negatives, then evaluated
+   them under:
+   - an ordinary contrastive bundle
+   - a critic-gated contrastive bundle
+4. Recorded:
+   - ordinary failures
+   - critic failures
+   - cases where the two methods disagreed
+5. Ran three frontier-search passes:
+   - baseline generated batch of `12`
+   - fresh rerun of the same batch design
+   - strengthened / oversampled batch of `24` with explicit cross-contamination
+     instructions
+
+### Results
+
+Active benchmark generation immediately broke the old ceiling, but the useful
+yield was variable across batches:
+
+| Frontier search pass           | Candidate count | Discriminative cases | Ordinary failures | Critic failures |
+| ------------------------------ | --------------: | -------------------: | ----------------: | --------------: |
+| baseline generated batch       |            `12` |                  `3` |               `3` |             `2` |
+| fresh rerun                    |            `12` |                  `0` |               `0` |             `0` |
+| strengthened oversampled batch |            `24` |                  `2` |               `1` |             `1` |
+
+The first batch found genuinely useful transfer positives:
+
+1. `generated-transfer-positive-2`
+2. `generated-transfer-positive-3`
+
+Both were false negatives for the ordinary bundle and correct for the
+critic-gated bundle.
+
+The strengthened oversampled batch found a more balanced frontier:
+
+1. `generated-transfer-positive-6`
+   - ordinary failed
+   - critic succeeded
+2. `generated-transfer-positive-12`
+   - ordinary succeeded
+   - critic failed
+
+### Reflection
+
+1. The benchmark loop is now doing real work:
+   - the old hand-authored transfer slices ceilinged out
+   - generated frontier search found cases that separate methods
+2. The yield is not yet stable enough:
+   - one fresh batch found no useful frontier at all
+   - stronger instructions plus oversampling recovered informative cases
+3. The most important correction is epistemic:
+   - active search did **not** simply vindicate the critic
+   - it found cases that help the critic and cases that hurt it
+4. That is exactly why the benchmark loop matters:
+   - it turns method evaluation from self-confirmation into actual adversarial
+     measurement
+5. We now have the beginnings of a second generator:
+   - one generator proposes attacks or repairs
+   - another proposes hard evaluations for those generators
+
+### New Hypotheses
+
+1. Benchmark generation should itself be optimized for:
+   - disagreement yield
+   - failure yield
+   - novelty against prior frontier cases
+2. One-shot frontier generation is too unstable; the next version should sample
+   multiple batches and keep a retained hard set across runs.
+3. The next experiment should add a frontier-candidate critic that ranks
+   generated benchmark cases by expected discriminative value before we spend
+   downstream evaluation calls on them.
