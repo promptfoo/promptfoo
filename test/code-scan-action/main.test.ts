@@ -494,9 +494,7 @@ describe('code-scan-action main', () => {
       await triggerSarifAction('escape/result.sarif');
 
       await vi.waitFor(() => {
-        expect(mocks.core.warning).toHaveBeenCalledWith(
-          expect.stringContaining('via symlink'),
-        );
+        expect(mocks.core.warning).toHaveBeenCalledWith(expect.stringContaining('via symlink'));
       });
 
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();

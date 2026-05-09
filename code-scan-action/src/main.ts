@@ -406,9 +406,14 @@ async function postFallbackComments(
   }
 }
 
+// The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
+// importing it transitively pulls src/logger.ts (and the winston stack) into this bundle,
+// adding ~800KB to every action download. The inline check below covers the same threat
+// model — path-traversal via `..` plus symlink escape via post-mkdir realpath — without
+// the bundle cost.
 function isPathWithinOrEqualTo(child: string, parent: string): boolean {
-  // macOS APFS and Windows NTFS are case-insensitive by default; comparing case-sensitively here
-  // would reject legitimate paths whose casing differs from GITHUB_WORKSPACE.
+  // macOS APFS and Windows NTFS are case-insensitive by default; comparing case-sensitively
+  // here would falsely reject paths whose casing differs from GITHUB_WORKSPACE.
   const isCaseInsensitive = process.platform === 'darwin' || process.platform === 'win32';
   const normalize = (p: string) => (isCaseInsensitive ? p.toLowerCase() : p);
   const c = normalize(child);
