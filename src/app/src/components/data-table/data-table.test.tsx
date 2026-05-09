@@ -126,6 +126,12 @@ describe('DataTable', () => {
 
     expect(filterRow).toHaveClass('flex-wrap');
     expect(valueInput).toHaveClass('min-w-[150px]');
+    expect(within(filterRow).getByRole('combobox', { name: 'Column for filter 1' })).toBeVisible();
+    expect(
+      within(filterRow).getByRole('combobox', { name: 'Operator for ID filter' }),
+    ).toBeVisible();
+    expect(within(filterRow).getByRole('textbox', { name: 'Value for ID filter' })).toBeVisible();
+    expect(within(filterRow).getByRole('button', { name: 'Remove filter for ID' })).toBeVisible();
   });
 
   it('keeps toolbar controls easier to tap on narrow screens', () => {
@@ -135,6 +141,40 @@ describe('DataTable', () => {
 
     expect(screen.getByText('Columns').closest('button')).toHaveClass('h-11', 'sm:h-8');
     expect(screen.getByText('Filters').closest('button')).toHaveClass('h-11', 'sm:h-8');
+  });
+
+  it('exposes toolbar multi-select filters as labeled checkbox controls', async () => {
+    const user = userEvent.setup();
+
+    render(<DataTable columns={headerFilterColumns} data={headerFilterRows} showToolbar />);
+
+    await user.click(screen.getByText('Filters'));
+    const filterRow = screen.getByTestId('data-table-filter-row');
+
+    await user.click(within(filterRow).getByRole('combobox', { name: 'Column for filter 1' }));
+    await user.click(await screen.findByRole('option', { name: 'Status' }));
+
+    await user.click(
+      within(filterRow).getByRole('combobox', { name: 'Operator for Status filter' }),
+    );
+    await user.click(await screen.findByRole('option', { name: 'is any of' }));
+
+    await user.click(
+      within(filterRow).getByRole('button', {
+        name: 'Value for Status filter: No values selected',
+      }),
+    );
+    const alphaOption = screen.getByRole('checkbox', { name: 'Alpha' });
+    expect(alphaOption).not.toBeChecked();
+
+    alphaOption.focus();
+    await user.keyboard('[Space]');
+    expect(alphaOption).toBeChecked();
+    expect(
+      within(filterRow).getByRole('button', {
+        name: 'Value for Status filter: 1 selected: Alpha',
+      }),
+    ).toBeVisible();
   });
 
   it('should render table with data when data is provided', () => {
@@ -667,7 +707,13 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={data} />);
 
       const popover = await openHeaderFilterPopover('Name', user);
-      await user.type(within(popover).getByPlaceholderText('Value...'), 'Alpha');
+      expect(
+        within(popover).getByRole('combobox', { name: 'Operator for Name filter' }),
+      ).toBeVisible();
+      await user.type(
+        within(popover).getByRole('textbox', { name: 'Value for Name filter' }),
+        'Alpha',
+      );
 
       await waitFor(() => expect(screen.queryByText('Row Two')).not.toBeInTheDocument());
       expect(screen.getByText('Alpha Row')).toBeInTheDocument();
@@ -680,8 +726,9 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
       const popover = await openHeaderFilterPopover('Status');
-      const comboboxes = within(popover).getAllByRole('combobox');
-      const valueSelect = comboboxes[1];
+      const valueSelect = within(popover).getByRole('combobox', {
+        name: 'Value for Status filter',
+      });
 
       await user.click(valueSelect);
       await user.click(await screen.findByRole('option', { name: 'Beta' }));
@@ -699,13 +746,29 @@ describe('DataTable', () => {
 
       const popover = await openHeaderFilterPopover('Status');
 
-      const operatorSelect = within(popover).getAllByRole('combobox')[0];
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Status filter',
+      });
       await user.click(operatorSelect);
       await user.click(await screen.findByRole('option', { name: 'is any of' }));
 
-      await user.click(within(popover).getByRole('button', { name: 'Select values...' }));
-      await user.click(within(popover).getByText('Alpha'));
-      await user.click(within(popover).getByText('Beta'));
+      await user.click(
+        within(popover).getByRole('button', {
+          name: 'Value for Status filter: No values selected',
+        }),
+      );
+      const alphaOption = within(popover).getByRole('checkbox', { name: 'Alpha' });
+      expect(alphaOption).not.toBeChecked();
+      alphaOption.focus();
+      await user.keyboard('[Space]');
+      expect(alphaOption).toBeChecked();
+      expect(within(popover).getByRole('checkbox', { name: 'Alpha' })).toBeInTheDocument();
+      expect(
+        within(popover).getByRole('button', {
+          name: 'Value for Status filter: 1 selected: Alpha',
+        }),
+      ).toBeVisible();
+      await user.click(within(popover).getByRole('checkbox', { name: 'Beta' }));
 
       await waitFor(() => expect(screen.queryByText('Row Three')).not.toBeInTheDocument());
       expect(screen.getByText('Row One')).toBeInTheDocument();
@@ -718,8 +781,12 @@ describe('DataTable', () => {
       render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
       const popover = await openHeaderFilterPopover('Name', user);
-      const operatorSelect = within(popover).getByRole('combobox');
-      const valueInput = within(popover).getByPlaceholderText('Value...');
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Name filter',
+      });
+      const valueInput = within(popover).getByRole('textbox', {
+        name: 'Value for Name filter',
+      });
 
       expect(operatorSelect).toBeInTheDocument();
       expect(valueInput).toBeInTheDocument();
@@ -753,6 +820,9 @@ describe('DataTable', () => {
       expect(toolbarDialog).toHaveClass('w-[min(520px,calc(100vw-1rem))]');
       expect(await within(toolbarDialog).findByText('Status')).toBeInTheDocument();
       expect(await within(toolbarDialog).findByText(/beta/i)).toBeInTheDocument();
+      expect(
+        within(toolbarDialog).getByRole('button', { name: 'Remove filter for Status' }),
+      ).toBeVisible();
     });
 
     it('keeps externally-added static filter rows usable on narrow popovers', async () => {
