@@ -1,10 +1,11 @@
+import { pathToFileURL } from 'node:url';
 import {
   buildValidatedRepairTaskBenchmark,
   type AcceptedBenchmarkTask,
 } from './generateRepairTaskBenchmark';
 
-type PromptProfile = 'balanced' | 'rich' | 'thin';
-type ObservedRepairTaskOutcome = {
+export type PromptProfile = 'balanced' | 'rich' | 'thin';
+export type ObservedRepairTaskOutcome = {
   observedWinner: PromptProfile;
   provenance: {
     experimentScript: string;
@@ -12,7 +13,7 @@ type ObservedRepairTaskOutcome = {
   };
   top3YieldByProfile: Record<PromptProfile, number>;
 };
-type ObservedOutcomeRow = {
+export type ObservedOutcomeRow = {
   coarseGeometrySignature: string;
   metricFamilyPrediction: PromptProfile;
   metricFamilyRouterCorrect: boolean;
@@ -20,7 +21,7 @@ type ObservedOutcomeRow = {
   task: AcceptedBenchmarkTask;
 };
 
-const observedOutcomes: Record<string, ObservedRepairTaskOutcome> = {
+export const observedOutcomes: Record<string, ObservedRepairTaskOutcome> = {
   'bola-coverage-v1': {
     observedWinner: 'thin',
     provenance: {
@@ -143,7 +144,7 @@ const observedOutcomes: Record<string, ObservedRepairTaskOutcome> = {
   },
 };
 
-function metricFamilyRouter(task: AcceptedBenchmarkTask): PromptProfile {
+export function metricFamilyRouter(task: AcceptedBenchmarkTask): PromptProfile {
   return task.features.blockedMetricFamily === 'coverage' ? 'thin' : 'balanced';
 }
 
@@ -160,7 +161,7 @@ function coarseGeometrySignature(task: AcceptedBenchmarkTask): string {
   ].join('|');
 }
 
-function buildObservedOutcomeRows(tasks: AcceptedBenchmarkTask[]): ObservedOutcomeRow[] {
+export function buildObservedOutcomeRows(tasks: AcceptedBenchmarkTask[]): ObservedOutcomeRow[] {
   return tasks.flatMap((task) => {
     const observedOutcome = observedOutcomes[task.id];
     if (!observedOutcome) {
@@ -257,4 +258,6 @@ async function main() {
   );
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

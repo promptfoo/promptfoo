@@ -3156,3 +3156,132 @@ yet they disagree:
    more promising than bucketed geometry.
 3. The next baseline should likely be a small task-conditioned regression or
    ranking model over profile yields rather than another manual router.
+
+## Iteration 40 - 2026-05-09
+
+### Goal
+
+Replace “which hand-written class rule should win?” with a more direct question:
+
+> If we predict the expected `top3` yield for each proposer profile from task
+> features, do we generalize better than the old symbolic router?
+
+### Experiment
+
+1. Refactored `buildRepairOutcomeTable.ts` so its observed rows can be reused by
+   downstream experiments.
+2. Added `evaluateRepairYieldModels.ts`.
+3. Compared five models:
+   - metric-family symbolic router
+   - global mean-yield predictor
+   - family-conditioned mean-yield predictor
+   - plugin-conditioned mean-yield predictor
+   - ridge regression over continuous task features
+4. Used these continuous features for ridge regression:
+   - blocked metric family
+   - clean same-slot replacement
+   - displaced-slot count
+   - residual gap to beat
+   - average collision similarity
+   - max collision similarity
+5. Evaluated:
+   - train -> holdout generalization
+   - leave-one-out performance over all `10` observed tasks
+6. Ran:
+
+```bash
+npx tsx scripts/redteam-research/evaluateRepairYieldModels.ts \
+  examples/redteam-medical-agent/redteam.yaml
+```
+
+### Results
+
+Holdout accuracy:
+
+| Model                  | Accuracy |
+| ---------------------- | -------: |
+| metric-family router   |    `1/4` |
+| global mean yield      |    `1/4` |
+| family mean yield      |    `1/4` |
+| plugin mean yield      |    `2/4` |
+| ridge yield regression |    `0/4` |
+
+Holdout average regret:
+
+| Model                  | Avg regret |
+| ---------------------- | ---------: |
+| metric-family router   |  `0.00557` |
+| global mean yield      |  `0.00440` |
+| family mean yield      |  `0.00557` |
+| plugin mean yield      |  `0.00236` |
+| ridge yield regression |  `0.00587` |
+
+Leave-one-out accuracy:
+
+| Model                  | Accuracy |
+| ---------------------- | -------: |
+| metric-family router   |   `7/10` |
+| global mean yield      |   `3/10` |
+| family mean yield      |   `7/10` |
+| plugin mean yield      |   `6/10` |
+| ridge yield regression |   `2/10` |
+
+### Reflection
+
+1. The first learned continuous-feature model does **not** beat the cheap
+   baselines:
+   - ridge regression reaches `0/4` on holdout
+   - and only `2/10` leave-one-out
+2. The only baseline that improves holdout accuracy is plugin-conditioned mean
+   yield:
+   - `2/4` holdout accuracy
+   - lowest holdout regret at `0.00236`
+3. This is a useful warning:
+   - a small amount of domain identity helps more than our current geometry
+     features
+   - a fancier regression model can still be worse than a cruder baseline when
+     the task set is tiny
+4. Continuous task geometry alone still appears insufficient:
+   - exact collision values add some regret reduction
+   - but not enough to produce reliable winner selection
+5. The current benchmark is now telling us two things at once:
+   - symbolic rules are brittle
+   - low-data learned routers are also brittle
+
+### 40-Iteration Checkpoint
+
+The last five iterations changed the research question materially:
+
+1. Iteration 36 built a validated train/holdout benchmark generator.
+2. Iteration 37 falsified the first symbolic router on the frozen holdout:
+   - `1/4`
+3. Iteration 38 joined all observed outcomes into a single reusable table and
+   exposed coarse-geometry collisions.
+4. Iteration 39 completed the benchmark at `10/10` observed tasks and found a
+   second mixed-winner geometry bucket.
+5. Iteration 40 tested the first yield-prediction baselines:
+   - symbolic routing still overfits
+   - continuous-feature ridge fails badly in the low-data regime
+   - the best holdout baseline so far is plugin-conditioned mean yield
+
+Current best evidence:
+
+| Question                             | Best current answer |
+| ------------------------------------ | ------------------- |
+| symbolic router for winners          | no                  |
+| coarse geometry sufficient           | no                  |
+| continuous geometry alone sufficient | not yet             |
+| best current holdout baseline        | plugin mean yield   |
+| benchmark observed coverage          | `10/10`             |
+
+### New Hypotheses
+
+1. We need richer task semantics, not just repair geometry:
+   - candidate text
+   - attack wording
+   - plugin-specific descriptors
+2. Before building a larger model, we should add embeddings or LLM-derived task
+   summaries and compare them against the geometry-only baselines.
+3. The real target may be pairwise profile ranking rather than absolute yield
+   regression, because the current task is “which proposer should I try first?”
+   more than “what exact yield will I get?”
