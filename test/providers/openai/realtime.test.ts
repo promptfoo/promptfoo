@@ -2154,12 +2154,12 @@ describe('OpenAI Realtime Provider', () => {
       provider.cleanup();
     });
 
-    it('reopens the persistent socket after a mid-turn disconnect rather than skipping reconnection', async () => {
-      // Regression: after a socket dies, connectionReady stayed cached as a
+    it("reopens the persistent socket after cleanup() so a re-used provider isn't poisoned", async () => {
+      // Regression: after a teardown, connectionReady stayed cached as a
       // resolved promise even though persistentConnection was nulled. Subsequent
       // turns then took the openPersistentConnection() fast path and failed in
       // sendEvent with "persistent WebSocket is not set", making the provider
-      // permanently unusable for maintain-context flows after one drop.
+      // permanently unusable for maintain-context flows after the first drop.
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: { modalities: ['text'], maintainContext: true },
       });
@@ -2244,6 +2244,54 @@ describe('OpenAI Realtime Provider', () => {
       expect(r2.output).toBe('second');
 
       provider.cleanup();
+    });
+
+    it('rejects the in-flight turn and tears down state when the socket closes mid-turn', async () => {
+      // Regression: setupMessageHandlers had no 'close' listener, so an
+      // unexpected disconnect during a turn would let the caller's promise
+      // dangle until the request timeout fired and would also leave
+      // connectionReady cached so subsequent turns skipped reconnection.
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+
+      const firstWs = {
+        on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+        readyState: 1,
+      } as unknown as WebSocket;
+      provider.persistentConnection = firstWs;
+
+      const ctx = { test: { metadata: { conversationId: 'mid-turn-close' } } } as any;
+      const turnPromise = provider.callApi('mid-turn close please', ctx);
+      await flushMicrotasks();
+
+      // Send a partial-turn signal so the handler is mid-stream when close fires.
+      const messageHandler = mockHandlers.message[mockHandlers.message.length - 1];
+      messageHandler(
+        Buffer.from(
+          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+        ),
+      );
+
+      // Fire the mid-turn 'close' on the same socket. The setupMessageHandlers
+      // close listener must (a) reject the in-flight turn, (b) clear cached
+      // lifecycle state. Pre-fix this listener didn't exist.
+      const closeHandlers = mockHandlers.close;
+      expect(closeHandlers.length).toBeGreaterThan(0);
+      // The setupMessageHandlers listener is registered AFTER any
+      // before-OPEN listeners; pick the last one to fire it.
+      const midTurnClose = closeHandlers[closeHandlers.length - 1];
+      midTurnClose(1011, Buffer.from('server policy violation'));
+
+      const result = await turnPromise;
+      expect(result.error).toMatch(/closed mid-turn|code=1011/i);
+      // tearDown must run so the next turn reconnects.
+      expect(provider.persistentConnection).toBeNull();
+      expect((provider as any).connectionReady).toBeNull();
     });
 
     it('rejects connectionReady and clears state when the socket closes before OPEN', async () => {

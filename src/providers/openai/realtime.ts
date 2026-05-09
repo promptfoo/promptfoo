@@ -24,6 +24,14 @@ const DEFAULT_MAX_TOOL_ITERATIONS = 8;
 // into the model context and surfaced in eval output.
 const REDACTED_TOOL_ERROR_OUTPUT = JSON.stringify({ error: 'Tool execution failed' });
 
+// Build a "(code=N, reason=R)" suffix for WebSocket close-event messages so the
+// log line and the rejection Error agree on wording without duplicating the
+// template at every call site.
+function formatCloseMessage(prefix: string, code: number, reason: Buffer | undefined): string {
+  const reasonText = reason?.toString() ?? '';
+  return `${prefix} (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`;
+}
+
 const REALTIME_PRICING_WARNED = new Set<string>();
 function warnUnpricedRealtimeModelOnce(modelName: string): void {
   if (REALTIME_PRICING_WARNED.has(modelName)) {
@@ -1908,18 +1916,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       const onCloseBeforeOpen = (code: number, reason: Buffer) => {
         ws.removeListener('open', onOpen);
         ws.removeListener('error', onErrorBeforeOpen);
-        const reasonText = reason?.toString() ?? '';
-        logger.error(
-          `Persistent WebSocket closed before OPEN (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`,
-        );
+        const message = formatCloseMessage('Persistent WebSocket closed before OPEN', code, reason);
+        logger.error(message);
         if (this.persistentConnection === ws) {
           this.tearDownPersistentConnection(`close before OPEN: code=${code}`);
         }
-        reject(
-          new Error(
-            `Persistent WebSocket closed before OPEN (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`,
-          ),
-        );
+        reject(new Error(message));
       };
       ws.once('open', onOpen);
       ws.once('error', onErrorBeforeOpen);
@@ -2279,6 +2281,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         logger.error(`Error processing WebSocket message: ${error}`);
         clearRequestTimeout();
         this.resetAudioState();
+        // Detach our message/error/close listeners — the turn is failing and
+        // we don't want a subsequent socket event to fire stale handlers
+        // against an already-rejected promise (no harm functionally, but it
+        // would re-trigger tearDown logic and produce confusing logs).
+        if (cleanupMessageHandler) {
+          cleanupMessageHandler();
+        }
         reject(new Error(`Error processing WebSocket message: ${error}`));
       }
     };
@@ -2301,20 +2310,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // fires; worse, connectionReady stays cached and subsequent turns
       // would skip reconnection.
       const onSocketClose = (code: number, reason: Buffer) => {
-        const reasonText = reason?.toString() ?? '';
-        logger.debug(
-          `Persistent WebSocket closed mid-turn (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`,
-        );
+        const message = formatCloseMessage('Persistent WebSocket closed mid-turn', code, reason);
+        logger.debug(message);
         clearTimeout(requestTimeout);
         this.resetAudioState();
         if (this.persistentConnection === conn) {
           this.tearDownPersistentConnection(`socket close mid-turn: code=${code}`);
         }
-        reject(
-          new Error(
-            `Persistent WebSocket closed mid-turn (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`,
-          ),
-        );
+        reject(new Error(message));
       };
       conn.once('error', onSocketError);
       conn.once('close', onSocketClose);
