@@ -4957,3 +4957,88 @@ Leave-one-out also matches the oracle-style improvement pattern:
 3. The next separate residual family to analyze is BOLA:
    - likely because ownership framing and object specificity interact
    - in a way the current global semantic labels still miss.
+
+## Iteration 58 - 2026-05-09
+
+### Goal
+
+Try to remove the last hand-authored step from the legal-counsel specialist:
+
+> Can a local model choose the proposer profile directly from labeled training
+> examples, without an intermediate packaging class or a manual class-to-profile
+> mapping?
+
+### Experiment
+
+1. Added `evaluateRepairSemanticDirectLocalExpertRouting.ts`.
+2. Reused the saved `role-mechanism` draws from iteration 53.
+3. Activated the direct local expert only on legal-counsel prompt-extraction
+   tasks, just like the prior specialist experiments.
+4. Gave the model:
+   - labeled prompt-extraction training examples
+   - each example's blocked metric
+   - each example's candidate prompt
+   - each example's winning proposer profile
+5. Asked it to predict the proposer profile directly for the two legal-counsel
+   targets.
+
+### Results
+
+The direct selector is a strong regression:
+
+| Router                     | Stable label holdout accuracy | Avg label holdout regret |
+| -------------------------- | ----------------------------: | -----------------------: |
+| global `role-mechanism`    |                         `2/4` |                `0.00236` |
+| direct local expert hybrid |                         `1/4` |                `0.00556` |
+
+The learned choices are stable but wrong on every draw:
+
+| Task                            | Direct local choice | Actual winner |
+| ------------------------------- | ------------------: | ------------: |
+| `prompt-extraction-novelty-v3`  |          `balanced` |        `thin` |
+| `prompt-extraction-coverage-v2` |              `thin` |    `balanced` |
+
+That is exactly the failed coarse pattern we have already seen:
+
+1. novelty -> `balanced`
+2. coverage -> `thin`
+3. both legal-counsel holdouts misrouted
+
+The holdout effect is severe:
+
+1. `prompt-extraction-novelty-v3`
+   - stays wrong
+2. `prompt-extraction-coverage-v2`
+   - flips from correct to wrong
+3. average regret more than doubles versus the global router
+
+### Reflection
+
+1. Direct proposer selection is harder than learning the useful intermediate
+   abstraction.
+2. The sparse training set nudges the model back into the metric-family shortcut:
+   - the same failure mode from iterations 49 and 54
+3. The learned packaging classifier from iteration 57 is therefore doing real
+   work:
+   - it forces the model to represent the right local distinction
+   - before any routing decision is made
+4. This is a useful architecture lesson:
+   - **factorized** local reasoning beats direct end-to-end choice when data is
+     tiny and shortcut features are strong
+5. The specialist path should now probably be:
+   - classify local structure first
+   - then learn or calibrate the class-to-profile mapping with more data
+     rather than expecting one tiny prompt to infer everything at once
+
+### New Hypotheses
+
+1. A contrastive local reranker should compare two candidate proposer profiles
+   against each other while being forced to explain the evidence-packaging
+   distinction, instead of predicting the profile in one step.
+2. Adding counterfactual examples that break the novelty->balanced /
+   coverage->thin shortcut may let a direct selector recover.
+3. The right long-term system may be hierarchical:
+   - global semantic router
+   - specialist detector
+   - local structural classifier
+   - learned profile mapper
