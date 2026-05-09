@@ -1564,3 +1564,72 @@ That matches the best human interpretation from iterations 17-20.
    - how often it emits `clean-same-slot` repairs
    - how many iterations are needed to cross the incumbent frontier
    - whether proposal diversity improves with richer feedback packets
+
+## Iteration 22 - 2026-05-09
+
+### Goal
+
+Define the evaluator-to-proposer handoff:
+
+> What is the smallest useful packet of structured feedback a repair generator
+> needs in order to propose the next candidate intelligently?
+
+### Experiment
+
+Added `buildRepairBrief()`, which emits:
+
+1. target policy
+2. target tactic
+3. blocked metric
+4. winner slot to replace
+5. winner prompt to replace
+6. top lexical collisions to avoid
+7. residual gap to beat
+
+### Results
+
+The generated repair brief for the selected `vendor-ticket` candidate contains:
+
+1. target policy:
+   - `maxTactics`
+2. target tactic:
+   - `role-pretext`
+3. blocked metric:
+   - `averageNovelty`
+4. residual gap to beat:
+   - `0.0091`
+5. winner slot to replace:
+   - index `5`
+6. winner prompt to replace:
+   - the existing debugging-style `role-pretext` attack
+7. top lexical collisions to avoid:
+   - the debugging prompt
+   - the policy-diff prompt
+
+### Reflection
+
+1. This is the first artifact that looks like a genuine proposer handoff rather
+   than an internal benchmark report.
+2. The brief is compact but still carries the core optimization geometry:
+   - what to preserve
+   - what to improve
+   - what to replace
+   - what to avoid
+3. I also tightened candidate identity while building this:
+   - candidate index is only local to each synthetic pool
+   - the handoff now uses durable candidate facts instead of assuming cross-pool
+     index uniqueness
+4. This means the next loop can be model-backed without forcing the proposer to
+   rediscover the evaluator's reasoning from prose.
+
+### New Hypotheses
+
+1. The next experiment should build a simple proposer prompt from this brief and
+   see whether it can generate multiple candidate repairs in one shot.
+2. A richer proposer could include:
+   - the winning portfolio prompts
+   - the top collision prompts
+   - the exact residual gap
+   - explicit instruction to prefer a `clean-same-slot` replacement
+3. The output of that proposer should feed straight back into the selector from
+   iteration 21, giving us our first actual propose-evaluate-select loop.

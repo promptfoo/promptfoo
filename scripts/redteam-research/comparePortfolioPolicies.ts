@@ -47,6 +47,7 @@ type CandidateDiagnostic = {
   blockingMetric?: string;
   candidateIndex: number;
   candidatePrompt: string;
+  candidateTactic: string;
   comparedPolicy: string;
   compatibility: {
     displacedSlotCount: number;
@@ -70,6 +71,19 @@ type SelectedRepairCandidate = {
   candidatePrompt: string;
   compatibility: CandidateDiagnostic['compatibility'];
   residualBlockingMetricGap: number;
+};
+type RepairBrief = {
+  blockedMetric?: string;
+  collisionsToAvoid: Array<{
+    similarity: number;
+    winnerIndex: number;
+    winnerPrompt: string;
+  }>;
+  comparedPolicy: string;
+  residualGapToBeat: number;
+  targetTactic: string;
+  winnerPromptToReplace?: string;
+  winnerSlotToReplace?: number;
 };
 
 function buildSqlCandidatePool(attacks: SqlAttack[]): SqlAttack[] {
@@ -253,6 +267,7 @@ function diagnoseCandidateAgainstPolicy(
     blockingMetric,
     candidateIndex,
     candidatePrompt: pool[candidateIndex].prompt,
+    candidateTactic: pool[candidateIndex].tactic,
     comparedPolicy,
     compatibility: {
       displacedSlotCount: displacedWinnerIndices.length,
@@ -299,6 +314,28 @@ function selectBestRepairCandidate(diagnostics: CandidateDiagnostic[]): Selected
     candidatePrompt: selected.candidatePrompt,
     compatibility: selected.compatibility,
     residualBlockingMetricGap,
+  };
+}
+
+function buildRepairBrief(diagnostic: CandidateDiagnostic): RepairBrief {
+  const [winnerSlotToReplace] = diagnostic.displacedWinnerIndices;
+  const collisionsToAvoid = [...diagnostic.pairwiseSimilarityToWinner]
+    .sort((left, right) => right.similarity - left.similarity)
+    .slice(0, 2);
+  const winnerPromptToReplace = diagnostic.pairwiseSimilarityToWinner.find(
+    ({ winnerIndex }) => winnerIndex === winnerSlotToReplace,
+  )?.winnerPrompt;
+
+  return {
+    blockedMetric: diagnostic.blockingMetric,
+    collisionsToAvoid,
+    comparedPolicy: diagnostic.comparedPolicy,
+    residualGapToBeat: diagnostic.blockingMetric
+      ? -diagnostic.deltaVsWinner[diagnostic.blockingMetric]
+      : 0,
+    targetTactic: diagnostic.candidateTactic,
+    winnerPromptToReplace,
+    winnerSlotToReplace,
   };
 }
 
@@ -486,8 +523,21 @@ async function main() {
   const selectedPromptExtractionRepair = selectBestRepairCandidate(
     promptExtractionRepairCandidates,
   );
+  const selectedPromptExtractionDiagnostic = promptExtractionRepairCandidates.find(
+    (diagnostic) => diagnostic.candidatePrompt === selectedPromptExtractionRepair.candidatePrompt,
+  );
+  if (!selectedPromptExtractionDiagnostic) {
+    throw new Error('Unable to build repair brief for selected prompt extraction candidate');
+  }
+  const promptExtractionRepairBrief = buildRepairBrief(selectedPromptExtractionDiagnostic);
 
-  console.log(JSON.stringify({ results, selectedPromptExtractionRepair }, null, 2));
+  console.log(
+    JSON.stringify(
+      { promptExtractionRepairBrief, results, selectedPromptExtractionRepair },
+      null,
+      2,
+    ),
+  );
 }
 
 await main();
