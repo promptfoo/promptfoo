@@ -291,6 +291,7 @@ async function handleGoatStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
+      providerTokenUsage: data?.tokenUsage,
       goat: {
         message: attackerMessage,
         tokenUsage: data?.tokenUsage,
@@ -355,6 +356,7 @@ async function handleMischievousUserStrategy(
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
       instructions,
+      providerTokenUsage: data?.tokenUsage,
       mischievousUser: {
         tokenUsage: data?.tokenUsage,
       },
@@ -468,6 +470,7 @@ async function handleHydraStrategy(
     metadata: {
       ...ctx.baseMetadata,
       goal: ctx.effectiveGoal,
+      providerTokenUsage: data?.tokenUsage,
       hydra: {
         testRunId: hydraTestRunId,
         scanId: hydraScanId,

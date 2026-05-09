@@ -48,7 +48,7 @@ async function generatePromptForStrategy(strategyId: MultiTurnPromptParams['stra
     '../../../src/server/services/redteamTestCaseGenerationService'
   );
 
-  await generateMultiTurnPrompt({
+  return generateMultiTurnPrompt({
     pluginId: 'harmful:hate',
     strategyId,
     strategyConfigRecord: {},
@@ -140,6 +140,39 @@ describe('redteamTestCaseGenerationService', () => {
       await generatePromptForStrategy('mischievous-user');
 
       await expectTaskRequest(fetchWithRetries, 'mischievous-user-redteam');
+    });
+
+    it.each([
+      {
+        strategyId: 'goat' as const,
+        responseBody: {
+          message: { content: 'goat prompt' },
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'jailbreak:hydra' as const,
+        responseBody: {
+          result: { prompt: 'hydra prompt' },
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'mischievous-user' as const,
+        responseBody: {
+          result: 'mischievous prompt',
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+      },
+    ])('should preserve $strategyId generation usage in metadata.providerTokenUsage', async ({
+      strategyId,
+      responseBody,
+    }) => {
+      mockRemoteGeneration(responseBody);
+
+      const result = await generatePromptForStrategy(strategyId);
+
+      expect(result.metadata.providerTokenUsage).toEqual(responseBody.tokenUsage);
     });
   });
 });
