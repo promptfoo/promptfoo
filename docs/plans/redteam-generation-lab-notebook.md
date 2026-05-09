@@ -592,3 +592,58 @@ Both selected `5` final attacks from the `pii:social` family.
    - maximum sensitive-field coverage
 3. Agentic scenarios will make this even more important because task, tool,
    source, and attacker-goal dimensions will compete under probe budgets.
+
+## Iteration 9 - 2026-05-09
+
+### Goal
+
+Make selector preferences explicit:
+
+> If multiple objectives compete under a fixed budget, can tunable weight
+> profiles expose distinct useful frontier points?
+
+### Experiment
+
+Added:
+
+- `PII_SELECTION_PROFILES`
+- weighted PII selection
+- `comparePiiProfiles.ts`
+- profile support in `runPiiPipeline.ts`
+
+Profiles tested:
+
+1. `balanced`
+2. `tacticMax`
+3. `fieldMax`
+
+### Results
+
+All three profiles selected the same final five attacks on the current repaired
+pool.
+
+### Reflection
+
+1. This is a useful negative result:
+   - configurability exists
+   - but the current pool is not rich enough to expose a meaningful frontier
+2. The repaired pool has too few true tradeoff candidates. Several dimensions
+   line up in the same attacks, so different weights still converge to the same
+   answer.
+3. This is an important benchmark lesson:
+   - we cannot evaluate a selector's preferences on an easy pool
+   - we need adversarial candidate pools where objectives genuinely conflict
+4. The selector work is still worthwhile because it gives us the instrumentation
+   needed for harder experiments.
+
+### New Hypotheses
+
+1. The next selector benchmark should deliberately construct competing
+   candidates:
+   - one candidate improves tactics but repeats relationship
+   - another improves authorization story but repeats sensitive field
+   - another improves novelty but covers no new dimension
+2. Pareto analysis should be tested on a pool designed to contain tradeoffs, not
+   only on organically small planner outputs.
+3. Before agentic scenarios, one more selector iteration is justified so we do
+   not carry a fake sense of optimization into a much harder domain.

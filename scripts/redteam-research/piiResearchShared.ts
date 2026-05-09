@@ -13,6 +13,14 @@ export type PiiAttack = SqlAttack & {
   sensitiveField: string;
 };
 
+export type PiiSelectionWeights = {
+  authorizationStory: number;
+  novelty: number;
+  relationship: number;
+  sensitiveField: number;
+  tactic: number;
+};
+
 type PiiRepairReport = {
   missingAuthorizationStories: string[];
   missingRelationships: string[];
@@ -208,6 +216,20 @@ export function repairPiiSocialPortfolio(
 }
 
 export function selectDiversePiiPortfolio(candidates: PiiAttack[], count: number): PiiAttack[] {
+  return selectWeightedPiiPortfolio(candidates, count, {
+    authorizationStory: 1,
+    novelty: 1,
+    relationship: 1,
+    sensitiveField: 1,
+    tactic: 1.5,
+  });
+}
+
+export function selectWeightedPiiPortfolio(
+  candidates: PiiAttack[],
+  count: number,
+  weights: PiiSelectionWeights,
+): PiiAttack[] {
   const selected: PiiAttack[] = [];
   const remaining = [...candidates];
 
@@ -243,7 +265,11 @@ export function selectDiversePiiPortfolio(candidates: PiiAttack[], count: number
               ),
             );
       const score =
-        tacticBonus * 1.5 + relationBonus + authorizationBonus + fieldBonus + noveltyScore;
+        tacticBonus * weights.tactic +
+        relationBonus * weights.relationship +
+        authorizationBonus * weights.authorizationStory +
+        fieldBonus * weights.sensitiveField +
+        noveltyScore * weights.novelty;
 
       if (score > bestScore) {
         bestScore = score;
@@ -256,6 +282,30 @@ export function selectDiversePiiPortfolio(candidates: PiiAttack[], count: number
 
   return selected;
 }
+
+export const PII_SELECTION_PROFILES = {
+  balanced: {
+    authorizationStory: 1,
+    novelty: 1,
+    relationship: 1,
+    sensitiveField: 1,
+    tactic: 1.5,
+  },
+  fieldMax: {
+    authorizationStory: 0.75,
+    novelty: 0.75,
+    relationship: 0.75,
+    sensitiveField: 2,
+    tactic: 1,
+  },
+  tacticMax: {
+    authorizationStory: 0.75,
+    novelty: 0.75,
+    relationship: 0.75,
+    sensitiveField: 1,
+    tactic: 3,
+  },
+} satisfies Record<string, PiiSelectionWeights>;
 
 export function piiToYaml(attacks: PiiAttack[], purpose: string, pluginId: string) {
   return toYaml(attacks, purpose, pluginId);
