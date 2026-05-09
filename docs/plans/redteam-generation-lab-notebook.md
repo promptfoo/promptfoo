@@ -7517,3 +7517,76 @@ cases while preserving both disagreement directions.
    - then prune near-neighbor surplus within each region
 3. The next experiment should compare naive greedy semantic pruning against a
    coverage-constrained selector that explicitly protects minority failure modes.
+
+## Iteration 91 - 2026-05-09
+
+### Goal
+
+Test whether semantic frontier pruning is robust to candidate arrival order:
+
+> If the same hard cases arrive in a different order, does naive greedy pruning
+> preserve the minority failure direction reliably enough for a benchmark?
+
+### Experiment
+
+1. Added `evaluateRepairCoverageAwareFrontierRetention.ts`.
+2. Reused the frozen `23`-case discriminative stream from iteration 90 so this
+   experiment isolates the selector from generator variance.
+3. Embedded each hard case once with `openai:embedding:text-embedding-3-large`.
+4. Replayed `100` seeded shuffled arrival orders.
+5. Compared:
+   - naive greedy pruning: compare against every retained case
+   - coverage-aware pruning: compare only against retained cases with the same
+     failure direction
+6. Swept thresholds `0.70`, `0.75`, and `0.80`.
+
+### Results
+
+The order-robustness failure is real at useful pruning thresholds:
+
+| Threshold | Selector       | Full critic coverage replays | Frontier size range |
+| --------: | -------------- | ---------------------------: | ------------------: |
+|    `0.70` | naive greedy   |                     `51/100` |           `13`-`16` |
+|    `0.70` | coverage-aware |                    `100/100` |           `14`-`16` |
+|    `0.75` | naive greedy   |                     `51/100` |           `18`-`19` |
+|    `0.75` | coverage-aware |                    `100/100` |           `19`-`20` |
+|    `0.80` | both selectors |                    `100/100` |                `23` |
+
+At the calibrated `0.75` threshold:
+
+1. naive greedy retained all `3` critic-failure cases in only `51` of `100`
+   shuffled replays
+2. naive greedy dropped to `2` critic-failure cases in the other `49`
+3. coverage-aware pruning retained all `3` critic-failure cases in all `100`
+   replays
+4. the cost was small:
+   - naive frontier size: `18`-`19`
+   - coverage-aware frontier size: `19`-`20`
+
+### Reflection
+
+1. The previous iteration's pleasant result was partly an order artifact:
+   - the original arrival order happened to preserve minority coverage
+   - randomized replay shows that the selector itself was not trustworthy
+2. Cross-mode semantic similarity is not a good reason to erase a failure mode:
+   - two attacks can look nearby in embedding space
+   - yet still expose meaningfully different method weaknesses
+3. Coverage-aware pruning is a better default benchmark primitive than global
+   greedy pruning:
+   - only one extra retained case is usually needed
+   - but minority disagreement coverage stops depending on arrival luck
+4. This is the first retained-memory result that looks like a genuine design
+   rule rather than a local patch:
+   - prune within coverage regions
+   - do not let large regions erase small but important ones
+
+### New Hypotheses
+
+1. Retained frontiers should use hierarchical retention:
+   - preserve coverage axes first
+   - prune semantically within each coverage cell second
+2. Failure direction is only the first coverage axis; future cells should also
+   include plugin, tactic, entity, and target-surface families.
+3. The next experiment should test multi-axis coverage-aware retention and see
+   whether richer cells preserve more attack semantics without causing the
+   frontier to explode.
