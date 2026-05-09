@@ -4403,3 +4403,80 @@ Frontier result:
    - high stability
    - low same-tuple mixed-winner collisions
    - and not just raw tuple count
+
+## Iteration 52 - 2026-05-09
+
+### Goal
+
+Stop optimizing by intuition alone and diagnose the concrete failure mode:
+
+> Which semantic representations still place tasks with different winning
+> proposer profiles in the same tuple?
+
+### Experiment
+
+1. Added `diagnoseRepairSemanticWinnerCollisions.ts`.
+2. Updated the role-aware signature generator so its trial artifacts preserve
+   the underlying signatures needed for post-hoc diagnostics.
+3. Re-ran the affected role-aware and role-artifact experiments with preserved
+   signatures.
+4. Computed, per representation and per trial:
+   - same-tuple mixed-winner group count
+   - same-tuple same-winner group count
+   - exact task IDs inside each mixed-winner tuple
+
+### Results
+
+The collision report made the current ontology failures explicit:
+
+| Representation     | Avg mixed-winner tuple groups |
+| ------------------ | ----------------------------: |
+| constrained        |                         `1.0` |
+| role-aware         |                         `1.0` |
+| deterministic-role |                         `1.7` |
+| role-artifact      |                         `0.0` |
+
+The recurring hard cases are:
+
+1. vendor-support pair:
+   - `prompt-extraction-novelty-v2`
+   - `prompt-extraction-coverage-v1`
+2. legal-counsel pair:
+   - `prompt-extraction-novelty-v3`
+   - `prompt-extraction-coverage-v2`
+
+Those pairs share extremely similar apparent semantics but have opposite winners:
+
+1. vendor-support:
+   - `balanced`
+   - `thin`
+2. legal-counsel:
+   - `thin`
+   - `balanced`
+
+The artifact-rich schema removes all tuple collisions:
+
+1. `0.0` average mixed-winner groups
+2. but still only `1/4` best stable label accuracy
+
+### Reflection
+
+1. This is the most useful diagnostic turn since the frontier was introduced.
+2. We now know the core problem is **not** a vague lack of semantic richness:
+   - it is two specific near-duplicate prompt families with opposite winners
+3. The role-aware model helps but does not reliably separate those pairs.
+4. The role-artifact model does separate them, but destroys the useful
+   neighborhood relation needed for routing.
+5. That means the target is sharper than “more detail”:
+   - split mixed-winner pairs
+   - while preserving same-winner locality
+
+### New Hypotheses
+
+1. The missing distinction is likely closer to repair geometry or attack
+   mechanism than to role or artifact alone.
+2. A better objective for future ontology search should explicitly penalize:
+   - mixed-winner collisions
+   - and perhaps reward same-winner neighborhood overlap
+3. The next candidate should probably be an attack-mechanism slot or a learned
+   pairwise discriminator targeted at the two recurring mixed-winner families.

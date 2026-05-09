@@ -224,6 +224,7 @@ async function main() {
           holdout: draw.holdout,
           labelTuples: summarizeLabelTuples(draw.signatures),
           leaveOneOut: draw.leaveOneOut,
+          signatures: draw.signatures,
           trial: draw.trial,
         })),
         trialCount,
