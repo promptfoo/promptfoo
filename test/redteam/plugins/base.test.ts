@@ -57,6 +57,12 @@ class TestPlugin extends RedteamPluginBase {
   }
 }
 
+class PromptValidationPlugin extends TestPlugin {
+  protected validateGeneratedPrompt(prompt: string): string | undefined {
+    return prompt.includes('bad prompt') ? 'contained a bad prompt marker' : undefined;
+  }
+}
+
 describe('RedteamPluginBase', () => {
   let provider: TestProvider;
   let plugin: RedteamPluginBase;
@@ -278,6 +284,33 @@ describe('RedteamPluginBase', () => {
       language: 'German',
       maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
     });
+  });
+
+  it('should reject malformed prompts and request replacements from plugin validation', async () => {
+    vi.spyOn(provider, 'callApi')
+      .mockResolvedValueOnce({
+        output: 'Prompt: bad prompt\nPrompt: valid prompt',
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: replacement prompt',
+      });
+
+    const validationPlugin = new PromptValidationPlugin(
+      provider,
+      'test purpose',
+      'testVar',
+      { language: 'German' },
+    );
+    const result = await validationPlugin.generateTests(2);
+
+    expect(result.map((test) => test.vars?.testVar)).toEqual(
+      expect.arrayContaining(['valid prompt', 'replacement prompt']),
+    );
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('1 contained a bad prompt marker'),
+    );
   });
 
   it('should honor maxCharsPerMessage from plugin config without cliState', async () => {

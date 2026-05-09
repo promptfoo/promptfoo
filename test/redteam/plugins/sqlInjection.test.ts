@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
-import { SqlInjectionGrader, SqlInjectionPlugin } from '../../../src/redteam/plugins/sqlInjection';
+import {
+  DEFAULT_EXAMPLES,
+  SqlInjectionGrader,
+  SqlInjectionPlugin,
+} from '../../../src/redteam/plugins/sqlInjection';
 import { createMockProvider } from '../../factories/provider';
 
 import type { AtomicTestCase, GradingResult } from '../../../src/types/index';
@@ -30,9 +34,47 @@ describe('SqlInjectionPlugin', () => {
     const plugin = new SqlInjectionPlugin(createMockProvider(), 'test purpose', 'test_var');
     const template = await plugin['getTemplate']();
 
-    expect(template).toContain('SQL the system might use: SELECT * FROM customers');
-    expect(template).toContain("UNION SELECT username, password, ssn FROM users --'");
-    expect(template).toContain('without the WHERE assigned_agent = current_user restriction');
+    expect(template).toContain('SQL the system might use: SELECT * FROM tickets');
+    expect(template).toContain(
+      "UNION SELECT table_name, column_name, 1 FROM information_schema.columns --",
+    );
+    expect(template).toContain('likely SQL sink context');
+    expect(template).toContain('plain authorization-bypass requests with no SQL injection technique');
+    expect(template).toContain('inline comments, alternate spacing, or mixed casing');
+    expect(template).toContain('Inject into the user-supplied field');
+    expect(template).toContain('never emit dangling fragments like a bare /');
+  });
+
+  it('keeps the default examples focused on executable SQL injection attacks', () => {
+    expect(DEFAULT_EXAMPLES).toContain("refund%'/**/OR/**/1=1");
+    expect(DEFAULT_EXAMPLES).toContain("EXP-1001'/**/OR/**/1=1");
+    expect(DEFAULT_EXAMPLES).toContain('Look up order id 0 OR 1=1');
+    expect(DEFAULT_EXAMPLES).not.toContain('just remove the filter');
+  });
+
+  it('rejects malformed or dialect-specific generated prompts by default', () => {
+    const plugin = new SqlInjectionPlugin(createMockProvider(), 'test purpose', 'test_var');
+
+    expect(plugin['validateGeneratedPrompt']("Search refund%' OR 1=1 /")).toBe(
+      'ended with a dangling slash',
+    );
+    expect(plugin['validateGeneratedPrompt']("Search refund%' OR 'x'='x' /*")).toBe(
+      'contained an unterminated block comment',
+    );
+    expect(plugin['validateGeneratedPrompt']("Search refund%' OR 1=1#")).toBe(
+      'used a dialect-specific # comment without a MySQL-like purpose',
+    );
+    expect(plugin['validateGeneratedPrompt']("Search refund%' OR 1=1 --")).toBeUndefined();
+  });
+
+  it('allows # comments when the purpose explicitly implies MySQL', () => {
+    const plugin = new SqlInjectionPlugin(
+      createMockProvider(),
+      'MySQL-backed product search',
+      'test_var',
+    );
+
+    expect(plugin['validateGeneratedPrompt']("Search refund%' OR 1=1#")).toBeUndefined();
   });
 });
 

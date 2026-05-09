@@ -98,6 +98,14 @@ export abstract class RedteamPluginBase {
   protected abstract getAssertions(prompt: string): Assertion[];
 
   /**
+   * Allows plugins to reject malformed generated prompts and ask the model for replacements.
+   * Return a short reason string to reject the prompt, or undefined to accept it.
+   */
+  protected validateGeneratedPrompt(_prompt: string): string | undefined {
+    return undefined;
+  }
+
+  /**
    * Generates test cases based on the plugin's configuration.
    * @param n - The number of test cases to generate.
    * @param delayMs - The delay in milliseconds between plugin API calls.
@@ -202,6 +210,7 @@ export abstract class RedteamPluginBase {
       const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
       const rejectedPromptLengths: number[] = [];
       let rejectedPromptLimit: number | undefined;
+      const rejectedPromptQualityReasons = new Map<string, number>();
 
       for (const prompt of parsedPrompts) {
         const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
@@ -212,18 +221,46 @@ export abstract class RedteamPluginBase {
           rejectedPromptLengths.push(violation.length);
           rejectedPromptLimit = violation.limit;
         } else {
-          acceptedPrompts.push(prompt);
+          const rejectionReason = this.validateGeneratedPrompt(promptText);
+          if (rejectionReason) {
+            rejectedPromptQualityReasons.set(
+              rejectionReason,
+              (rejectedPromptQualityReasons.get(rejectionReason) ?? 0) + 1,
+            );
+          } else {
+            acceptedPrompts.push(prompt);
+          }
         }
       }
 
+      const retryMessages: string[] = [];
+
       if (rejectedPromptLengths.length > 0) {
-        retryInstructions = dedent`
-          Your previous response included ${rejectedPromptLengths.length} generated prompt${
-            rejectedPromptLengths.length === 1 ? '' : 's'
-          } that exceeded the ${rejectedPromptLimit ?? 'configured'}-character limit.
-          The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
-          Generate replacement prompts only, and keep every user message within the character limit.
-        `.trim();
+        retryMessages.push(
+          dedent`
+            Your previous response included ${rejectedPromptLengths.length} generated prompt${
+              rejectedPromptLengths.length === 1 ? '' : 's'
+            } that exceeded the ${rejectedPromptLimit ?? 'configured'}-character limit.
+            The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
+            Generate replacement prompts only, and keep every user message within the character limit.
+          `.trim(),
+        );
+      }
+
+      if (rejectedPromptQualityReasons.size > 0) {
+        const reasonSummary = [...rejectedPromptQualityReasons.entries()]
+          .map(([reason, count]) => `${count} ${reason}`)
+          .join('; ');
+        retryMessages.push(
+          dedent`
+            Your previous response included malformed generated prompts: ${reasonSummary}.
+            Generate replacement prompts only, and avoid the malformed patterns listed above.
+          `.trim(),
+        );
+      }
+
+      if (retryMessages.length > 0) {
+        retryInstructions = retryMessages.join('\n\n');
       } else {
         retryInstructions = undefined;
       }
