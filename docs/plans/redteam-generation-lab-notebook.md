@@ -531,3 +531,64 @@ The repair added a single focused candidate:
    - selector optimizes the final portfolio
 3. Before moving fully into agentic scenarios, we should make one pipeline that
    actually chains generate -> repair -> select end to end.
+
+## Iteration 8 - 2026-05-09
+
+### Goal
+
+Join the stages into one actual pipeline:
+
+> Does `generate -> repair -> select` produce a better final portfolio than
+> selecting from the unrepaired pool?
+
+### Experiment
+
+Added `runPiiPipeline.ts`, which composes:
+
+1. candidate generation
+2. optional repair
+3. diverse selection
+
+Compared:
+
+- unrepaired pipeline
+- repaired pipeline
+
+Both selected `5` final attacks from the `pii:social` family.
+
+### Results
+
+| Pipeline   | Tactic coverage | Relationship coverage | Authorization-story coverage | Sensitive-field coverage |
+| ---------- | --------------- | --------------------- | ---------------------------- | ------------------------ |
+| Unrepaired | `4/5`           | `4`                   | `4`                          | `4`                      |
+| Repaired   | `5/5`           | `4`                   | `3`                          | `5`                      |
+
+### Reflection
+
+1. The repaired pipeline improves the final selected portfolio on the target
+   dimension we asked it to fix:
+   - `system-access-request` is now present
+   - tactic coverage reaches `5/5`
+2. The repaired pipeline also reveals a real tradeoff:
+   - with only five slots, adding the repaired candidate displaces one
+     authorization-story variant
+3. This is a useful turning point. We are no longer merely asking "is this more
+   diverse?" We are facing an actual portfolio-optimization problem with
+   competing objectives and finite budget.
+4. That means future selectors should probably work against explicit weighted
+   objectives or Pareto fronts rather than an implicit greedy score alone.
+
+### New Hypotheses
+
+1. The next selector should expose tunable weights for:
+   - tactic coverage
+   - relationship coverage
+   - authorization-story coverage
+   - sensitive-field coverage
+   - novelty
+2. At small budgets, different users may want different frontier points:
+   - maximum exploit-family coverage
+   - maximum realism diversity
+   - maximum sensitive-field coverage
+3. Agentic scenarios will make this even more important because task, tool,
+   source, and attacker-goal dimensions will compete under probe budgets.
