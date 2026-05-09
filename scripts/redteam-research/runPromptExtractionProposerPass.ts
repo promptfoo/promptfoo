@@ -62,6 +62,7 @@ type ProposerPassResult = {
   parseError?: string;
   profile: Exclude<PromptProfile, 'all' | 'both'>;
   tacticPreservationCount: number;
+  topKAverageNoveltyYield: Record<'top1' | 'top2' | 'top3', number>;
 };
 
 function buildStructuredResponseFormat(targetTactic: string) {
@@ -218,6 +219,9 @@ async function runProposerPass({
     }),
     {},
   );
+  const frontierImprovingNoveltyDeltas = frontierImprovingDiagnostics
+    .map((diagnostic) => diagnostic.deltaVsWinner.averageNovelty)
+    .sort((left, right) => right - left);
   const bestGeneratedRepair =
     generatedDiagnostics.length > 0 ? selectBestRepairCandidate(generatedDiagnostics) : undefined;
   const bestAverageNoveltyDelta =
@@ -240,6 +244,11 @@ async function runProposerPass({
     profile,
     tacticPreservationCount: candidates.filter((candidate) => candidate.tactic === targetTactic)
       .length,
+    topKAverageNoveltyYield: {
+      top1: frontierImprovingNoveltyDeltas.slice(0, 1).reduce((sum, value) => sum + value, 0),
+      top2: frontierImprovingNoveltyDeltas.slice(0, 2).reduce((sum, value) => sum + value, 0),
+      top3: frontierImprovingNoveltyDeltas.slice(0, 3).reduce((sum, value) => sum + value, 0),
+    },
   };
 }
 
@@ -329,6 +338,17 @@ async function main() {
       const frontierImprovingTrials = completedPasses.filter(
         (pass) => pass.frontierImprovingCount > 0,
       ).length;
+      const averageTopKNoveltyYield = {
+        top1:
+          completedPasses.reduce((sum, pass) => sum + pass.topKAverageNoveltyYield.top1, 0) /
+          completedPasses.length,
+        top2:
+          completedPasses.reduce((sum, pass) => sum + pass.topKAverageNoveltyYield.top2, 0) /
+          completedPasses.length,
+        top3:
+          completedPasses.reduce((sum, pass) => sum + pass.topKAverageNoveltyYield.top3, 0) /
+          completedPasses.length,
+      };
 
       return [
         requestedProfile,
@@ -338,6 +358,7 @@ async function main() {
               ? bestAverageNoveltyDeltas.reduce((sum, value) => sum + value, 0) /
                 bestAverageNoveltyDeltas.length
               : undefined,
+          averageTopKNoveltyYield,
           frontierImprovingCandidateCount: completedPasses.reduce(
             (sum, pass) => sum + pass.frontierImprovingCount,
             0,

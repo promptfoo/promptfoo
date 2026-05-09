@@ -2044,3 +2044,77 @@ All three profiles preserved `role-pretext` perfectly across all candidates.
    - some `rich` candidates for breadth
    - some `balanced` candidates for larger leaps
      within the same generation budget.
+
+## Iteration 28 - 2026-05-09
+
+### Goal
+
+Measure more than the single best candidate:
+
+> Do the proposer profiles differ in how much total useful novelty they generate
+> across their top several frontier-improving candidates?
+
+### Experiment
+
+1. Added `topKAverageNoveltyYield` to each pass:
+   - `top1`
+   - `top2`
+   - `top3`
+2. Aggregated average top-k yield by proposer profile across repeated trials.
+3. Re-ran the three-profile stochastic comparison:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/runPromptExtractionProposerPass.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  all \
+  3 \
+  0.7
+```
+
+### Results
+
+| Prompt profile | Improving candidates | Avg `top1` yield | Avg `top2` yield | Avg `top3` yield |
+| -------------- | -------------------: | ---------------: | ---------------: | ---------------: |
+| `rich`         |                  `6` |       `+0.00441` |       `+0.00524` |       `+0.00539` |
+| `balanced`     |                  `6` |       `+0.00917` |       `+0.01234` |       `+0.01339` |
+| `thin`         |                  `4` |       `+0.00638` |       `+0.00642` |       `+0.00642` |
+
+Per-trial observations:
+
+1. `rich`
+   - produced `3`, `1`, and `2` improving candidates across the three trials
+2. `balanced`
+   - produced `2`, `3`, and `1`
+   - had the strongest average `top1`, `top2`, and `top3` yield
+3. `thin`
+   - produced `1`, `1`, and `2`
+   - most of its total yield came from a single strong candidate in trial `2`
+
+### Reflection
+
+1. The top-k lens strengthens the case for `balanced`:
+   - it is not merely the best one-shot profile
+   - it also generated the best cumulative useful novelty in this sample
+2. The supposed breadth advantage of `rich` did not reproduce here:
+   - `rich` and `balanced` tied on total improving-candidate count
+   - `balanced` made better use of those candidates
+3. `thin` still looks like a high-variance profile:
+   - occasional good leap
+   - weaker aggregate yield
+4. This is a more useful production signal than raw best-gain alone:
+   - with a generation budget, we care about how much exploitable frontier mass
+     the profile contributes, not just whether one candidate shines
+
+### New Hypotheses
+
+1. `balanced` is now the best provisional default for prompt-extraction repair
+   under a fixed five-candidate budget.
+2. A mixed strategy should only earn its keep if combining profiles improves:
+   - top-k yield
+   - tactic coverage
+   - or robustness across harder frontiers
+3. The next experiment should leave prompt extraction and test whether
+   `balanced` generalizes to another plugin, ideally one with a different repair
+   geometry.
