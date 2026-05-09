@@ -18,6 +18,10 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
   // Cloud task:
   readonly taskId: string = REDTEAM_SIMULATED_USER_TASK_ID;
 
+  protected override shouldCountUserProviderRequests(): boolean {
+    return false;
+  }
+
   constructor(config: Config) {
     invariant(config.injectVar, 'Expected injectVar to be set');
 

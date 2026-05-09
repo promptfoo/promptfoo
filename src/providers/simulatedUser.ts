@@ -53,6 +53,10 @@ export class SimulatedUser implements ApiProvider {
    */
   readonly taskId: string = 'tau';
 
+  protected shouldCountUserProviderRequests(): boolean {
+    return true;
+  }
+
   constructor({ id, label, config }: AgentProviderOptions) {
     this.identifier = id ?? label ?? 'agent-provider';
     this.maxTurns = config.maxTurns ?? 10;
@@ -324,7 +328,11 @@ export class SimulatedUser implements ApiProvider {
       }
 
       const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
-      accumulateResponseTokenUsage(tokenUsage, { tokenUsage: userTokenUsage });
+      accumulateResponseTokenUsage(
+        tokenUsage,
+        { tokenUsage: userTokenUsage },
+        { countAsRequest: this.shouldCountUserProviderRequests() },
+      );
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
       // Check whether the judge has determined that the instruction goal is satisfied.
