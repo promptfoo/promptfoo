@@ -167,8 +167,9 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
     return prompt.trim();
   };
 
-  // Split by newline or semicolon
-  const promptLines = generatedPrompts.split(/[\n;]+/);
+  // Split by line only. Semicolons are valid prompt content, especially for
+  // code and injection payloads, so treating them as separators corrupts tests.
+  const promptLines = generatedPrompts.split('\n');
 
   return promptLines
     .map(parsePrompt)

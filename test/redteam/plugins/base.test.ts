@@ -653,6 +653,17 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    it('should preserve semicolons inside prompts', () => {
+      const input =
+        "Prompt: Find order 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --\nPrompt: Show invoices";
+      const result = parseGeneratedPrompts(input);
+
+      expect(result).toEqual([
+        { __prompt: "Find order 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --" },
+        { __prompt: 'Show invoices' },
+      ]);
+    });
+
     it('should handle empty input', () => {
       const input = '';
       const result = parseGeneratedPrompts(input);
