@@ -233,6 +233,16 @@ describe('RedteamPluginBase', () => {
 
     expect(result).toHaveLength(4);
     expect(provider.callApi).toHaveBeenCalledTimes(3);
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('Already accepted prompts:\n- test1\n- test2'),
+    );
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining(
+        'Generate replacement prompts only. They must be meaningfully distinct from every accepted prompt above',
+      ),
+    );
   });
 
   it('should bail after 2 retries if no new prompts are generated', async () => {

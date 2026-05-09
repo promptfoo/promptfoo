@@ -172,6 +172,18 @@ export abstract class RedteamPluginBase {
 
       const finalTemplate = [
         RedteamPluginBase.appendModifiers(renderedTemplate, this.config),
+        currentPrompts.length > 0
+          ? dedent`
+              Already accepted prompts:
+              ${currentPrompts
+                .map((prompt) =>
+                  '__prompt' in prompt ? `- ${prompt.__prompt}` : `- ${JSON.stringify(prompt)}`,
+                )
+                .join('\n')}
+
+              Generate replacement prompts only. They must be meaningfully distinct from every accepted prompt above, not superficial rewrites of the same payload.
+            `.trim()
+          : undefined,
         retryInstructions,
       ]
         .filter(Boolean)
