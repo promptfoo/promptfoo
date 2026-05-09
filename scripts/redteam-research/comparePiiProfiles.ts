@@ -1,24 +1,18 @@
 import {
-  buildPiiCandidatePool,
-  buildPiiPortfolio,
+  buildAdversarialPiiCandidatePool,
   loadPiiContext,
   PII_SELECTION_PROFILES,
-  repairPiiSocialPortfolio,
   selectWeightedPiiPortfolio,
 } from './piiResearchShared';
 
 async function main() {
   const [inputPath] = process.argv.slice(2);
   if (!inputPath) {
-    throw new Error(
-      'Usage: tsx scripts/redteam-research/comparePiiProfiles.ts <redteam.yaml>',
-    );
+    throw new Error('Usage: tsx scripts/redteam-research/comparePiiProfiles.ts <redteam.yaml>');
   }
 
   const { entities } = await loadPiiContext(inputPath);
-  const generated = buildPiiPortfolio(entities, 'pii:social');
-  const repaired = repairPiiSocialPortfolio(generated, entities);
-  const pool = buildPiiCandidatePool(repaired.attacks);
+  const pool = buildAdversarialPiiCandidatePool(entities);
 
   const profiles = Object.fromEntries(
     Object.entries(PII_SELECTION_PROFILES).map(([name, weights]) => [

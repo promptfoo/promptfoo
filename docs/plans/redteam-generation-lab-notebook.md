@@ -647,3 +647,77 @@ pool.
    only on organically small planner outputs.
 3. Before agentic scenarios, one more selector iteration is justified so we do
    not carry a fake sense of optimization into a much harder domain.
+
+## Iteration 10 - 2026-05-09
+
+### Goal
+
+Build a harder selector benchmark:
+
+> If the original pool was too easy, can an adversarially constructed pool make
+> weighted selector profiles diverge?
+
+### Experiment
+
+Added `buildAdversarialPiiCandidatePool()` with deliberately conflicting
+candidates:
+
+- candidates that improve tactic coverage
+- candidates that improve authorization-story coverage
+- candidates that improve sensitive-field coverage
+- candidates that are lexically close but dimensionally different
+
+### Results
+
+The weighted greedy selector still chose the same final five attacks for:
+
+1. `balanced`
+2. `tacticMax`
+3. `fieldMax`
+
+### Reflection
+
+1. This is another useful negative result.
+2. Merely adding weights is not enough when the greedy marginal-gain path can
+   satisfy most goals simultaneously in the first five picks.
+3. The real limitation may now be the **search procedure**, not the profile:
+   - greedy local choice
+   - no exhaustive frontier enumeration
+   - no explicit Pareto comparison of full portfolios
+4. That is a meaningful shift. We began by thinking about better prompts; now we
+   are squarely in set optimization.
+
+### Ten-Iteration Status
+
+At the end of iteration 10:
+
+1. We built a durable benchmark harness and a detailed lab notebook.
+2. We proved the baseline seed portfolios are much narrower than row counts make
+   them look.
+3. We showed planner-guided generation improves:
+   - `sql-injection`
+   - `prompt-extraction`
+   - `pii:*`
+4. We showed selection matters independently of generation quality.
+5. We upgraded the benchmark from one-dimensional tactic counts to plugin-specific
+   multi-axis coverage.
+6. We added a deterministic critique-and-repair stage and showed it can close
+   real coverage gaps.
+7. We chained generation, repair, and selection into an actual pipeline.
+8. We learned that selector profile weights alone are insufficient on easy pools.
+9. We learned that even hand-built adversarial pools may not expose differences
+   under a greedy algorithm.
+10. We now have a clear next research direction:
+    - evaluate full portfolios
+    - compute Pareto frontiers
+    - compare search methods, not only scoring weights
+
+### New Hypotheses
+
+1. Exhaustive portfolio enumeration on small candidate sets will reveal
+   frontier points that greedy selection misses.
+2. A practical production system may need:
+   - greedy selection for scale
+   - exhaustive or beam-search diagnostics for benchmark design
+3. This selector work should happen before agentic scenario generation so the
+   downstream system has a sound way to choose among far richer attack sets.
