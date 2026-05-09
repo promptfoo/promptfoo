@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { scanResponseToSarif } from '../../../src/codeScan/util/sarif';
-import { type Comment, CodeScanSeverity, type ScanResponse } from '../../../src/types/codeScan';
+import { CodeScanSeverity, type Comment, type ScanResponse } from '../../../src/types/codeScan';
 
 function makeFindingResponse(overrides: Partial<Comment> = {}): ScanResponse {
   return {
@@ -130,8 +130,8 @@ describe('scanResponseToSarif', () => {
       ],
     };
 
-    const region = scanResponseToSarif(response).runs[0].results[0].locations?.[0].physicalLocation
-      .region;
+    const region =
+      scanResponseToSarif(response).runs[0].results[0].locations?.[0].physicalLocation.region;
 
     expect(region).toEqual({ startLine: 100 });
   });

@@ -4,6 +4,8 @@
  * Tests for the GitHub Action main entry point, specifically the CLI args construction.
  */
 
+import * as path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockProcessEnv } from '../util/utils';
 
@@ -297,8 +299,11 @@ describe('code-scan-action main', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.resetModules();
+    // Use path.resolve so this test works on Windows too — path.resolve converts the
+    // POSIX-style literal to a drive-prefixed Windows path that path.resolve will
+    // then re-produce identically when the action does its own resolution.
     restoreEnv = mockProcessEnv(
-      { ...originalEnv, GITHUB_WORKSPACE: '/test/workspace' },
+      { ...originalEnv, GITHUB_WORKSPACE: path.resolve('/test/workspace') },
       { clear: true },
     );
     setupMocks();
@@ -454,8 +459,8 @@ describe('code-scan-action main', () => {
     it('resolves the path against GITHUB_WORKSPACE, creates parent dirs, and exposes the resolved path', async () => {
       await triggerSarifAction('reports/promptfoo-code-scan.sarif');
 
-      const expectedPath = '/test/workspace/reports/promptfoo-code-scan.sarif';
-      const expectedDir = '/test/workspace/reports';
+      const expectedPath = path.resolve('/test/workspace', 'reports/promptfoo-code-scan.sarif');
+      const expectedDir = path.dirname(expectedPath);
 
       await vi.waitFor(() => {
         expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(expectedPath, expect.any(String));
@@ -487,8 +492,9 @@ describe('code-scan-action main', () => {
     });
 
     it('refuses to write when the parent directory resolves outside the workspace via symlink', async () => {
+      // Match the trailing `escape` segment regardless of platform path separator so this works on Windows.
       mocks.fs.realpathSync.mockImplementation((p: string) =>
-        p === '/test/workspace/escape' ? '/etc' : p,
+        /[/\\]escape$/.test(p) ? '/etc' : p,
       );
 
       await triggerSarifAction('escape/result.sarif');
