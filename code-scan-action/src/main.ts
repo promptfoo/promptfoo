@@ -5,11 +5,13 @@
  */
 
 import * as fs from 'fs';
+import * as path from 'path';
 
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
 import { prepareComments } from '../../src/codeScan/util/github';
+import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -30,6 +32,7 @@ interface ActionInputs {
   guidanceFile: string;
   githubToken: string;
   enableForkPrs: boolean;
+  sarifOutputPath: string | undefined;
 }
 
 interface PullRequestForkPayload {
@@ -58,6 +61,9 @@ function getActionInputs(): ActionInputs {
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
     enableForkPrs: core.getBooleanInput('enable-fork-prs'),
+    // core.getInput returns '' when unset; normalize so a falsy check at the call site
+    // doesn't have to special-case the empty-string sentinel.
+    sarifOutputPath: core.getInput('sarif-output-path').trim() || undefined,
   };
 }
 
@@ -402,6 +408,140 @@ async function postFallbackComments(
   }
 }
 
+// The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
+// importing it transitively pulls src/logger.ts (and the winston stack) into this bundle,
+// adding ~800KB to every action download. The inline check below covers the same threat
+// model — path-traversal via `..` plus symlink escape via post-mkdir realpath — without
+// the bundle cost.
+function isPathWithinOrEqualTo(child: string, parent: string): boolean {
+  // Case-sensitive comparison. Both `child` and `parent` are produced by path.resolve on
+  // the same workspace prefix in real use, so casing always matches. An earlier version
+  // lowercased on darwin/win32 to handle hypothetical case-mismatched user input, but
+  // that opened a bypass on case-sensitive APFS volumes (where /Path/A and /path/a are
+  // distinct on disk yet would compare equal here). The post-mkdir realpath check in
+  // writeSarifFile canonicalizes against the actual filesystem, which is the right place
+  // to handle case folding if the underlying volume does it.
+  const pWithSep = parent.endsWith(path.sep) ? parent : parent + path.sep;
+  return child === parent || child.startsWith(pWithSep);
+}
+
+function resolveSarifOutputPath(rawPath: string): string {
+  // getActionInputs normalizes empty/whitespace input to undefined and the call site
+  // skips emitSarifOutput entirely in that case, so we don't repeat the empty check here.
+  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+  const resolved = path.resolve(workspace, rawPath);
+  if (resolved === workspace || !isPathWithinOrEqualTo(resolved, workspace)) {
+    throw new Error(
+      `sarif-output-path "${rawPath}" resolves outside GITHUB_WORKSPACE; refusing to write`,
+    );
+  }
+  return resolved;
+}
+
+function serializeSarif(scanResponse: ScanResponse): string {
+  return JSON.stringify(scanResponseToSarif(scanResponse), null, 2);
+}
+
+// Walk up from `p` until realpathSync resolves successfully, returning the canonical
+// path of the deepest existing ancestor. Used to detect symlinks anywhere in the parent
+// chain *before* mkdir -p has a chance to follow them out of the workspace.
+function realpathDeepestExisting(p: string): string {
+  let current = p;
+  while (true) {
+    try {
+      return fs.realpathSync(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        throw error;
+      }
+      const next = path.dirname(current);
+      if (next === current) {
+        throw new Error(`No existing ancestor for "${p}"`);
+      }
+      current = next;
+    }
+  }
+}
+
+function lstatOrNull(p: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(p);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function writeSarifFile(resolved: string, body: string): void {
+  const parent = path.dirname(resolved);
+  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+
+  // Defense before mkdir: if any existing ancestor of `parent` is a symlink that
+  // resolves outside the workspace, mkdir -p would follow it and create directories
+  // outside the sandbox. Refuse before mutating the filesystem.
+  const realWorkspace = fs.realpathSync(workspace);
+  const realAncestor = realpathDeepestExisting(parent);
+  if (!isPathWithinOrEqualTo(realAncestor, realWorkspace)) {
+    throw new Error(
+      `sarif-output-path "${resolved}" resolves outside GITHUB_WORKSPACE via symlink; refusing to write`,
+    );
+  }
+
+  fs.mkdirSync(parent, { recursive: true });
+
+  // Defense before write: if `resolved` already exists as a symlink, refuse —
+  // writeFileSync follows symlinks and would write through to the link target.
+  if (lstatOrNull(resolved)?.isSymbolicLink()) {
+    throw new Error(
+      `sarif-output-path "${resolved}" is an existing symlink; refusing to overwrite`,
+    );
+  }
+
+  // Close the TOCTOU window between the lstat check and the write: on POSIX, opening with
+  // O_NOFOLLOW makes the call fail atomically if `resolved` was raced into a symlink. On
+  // Windows O_NOFOLLOW is not exposed, so we fall back to plain writeFileSync (the lstat
+  // check above is the only defense there — acceptable given the Actions threat model).
+  const noFollow = (fs.constants as { O_NOFOLLOW?: number }).O_NOFOLLOW;
+  if (typeof noFollow === 'number') {
+    const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow;
+    const fd = fs.openSync(resolved, flags, 0o644);
+    try {
+      fs.writeSync(fd, body);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } else {
+    fs.writeFileSync(resolved, body);
+  }
+}
+
+function emitSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
+  // SARIF output is supplementary — never sink an otherwise-successful scan over a write failure.
+  let resolved: string;
+  try {
+    resolved = resolveSarifOutputPath(rawPath);
+  } catch (error) {
+    core.warning(formatError(error));
+    return;
+  }
+
+  try {
+    writeSarifFile(resolved, serializeSarif(scanResponse));
+    core.setOutput('sarif-path', resolved);
+    core.info(`📝 Wrote SARIF output to ${resolved}`);
+  } catch (error) {
+    core.warning(`Failed to write SARIF output to "${resolved}": ${formatError(error)}`);
+  }
+}
+
+function emitConfiguredSarifOutput(scanResponse: ScanResponse, inputs: ActionInputs): void {
+  if (inputs.sarifOutputPath) {
+    emitSarifOutput(scanResponse, inputs.sarifOutputPath);
+  }
+}
+
 async function handleScanResponse(
   scanResponse: ScanResponse,
   inputs: ActionInputs,
@@ -409,6 +549,8 @@ async function handleScanResponse(
 ): Promise<void> {
   const { comments, commentsPosted, review } = scanResponse;
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
+
+  emitConfiguredSarifOutput(scanResponse, inputs);
 
   if ((comments.length > 0 || review) && commentsPosted === false) {
     await postFallbackComments(

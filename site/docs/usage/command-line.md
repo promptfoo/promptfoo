@@ -311,6 +311,7 @@ Scan code changes for LLM security vulnerabilities.
 | `--api-host <url>`                | Promptfoo API host URL                                   |
 | `--diffs-only`                    | Scan only PR diffs, skip filesystem exploration          |
 | `--json`                          | Output results as JSON                                   |
+| `-f, --format <format>`           | Output format: `text`, `json`, or `sarif`                |
 | `--github-pr <owner/repo#number>` | GitHub PR to post comments to                            |
 | `--min-severity <level>`          | Minimum severity: `low`, `medium`, `high`, or `critical` |
 | `--minimum-severity <level>`      | Alias for `--min-severity`                               |
