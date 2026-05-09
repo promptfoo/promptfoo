@@ -2744,3 +2744,99 @@ It is:
    - metric family + residual gap
    - metric family + geometry
      rather than assuming the current rule is the end of the story.
+
+## Iteration 36 - 2026-05-09
+
+### Goal
+
+Move from hand-authored singleton studies to a small benchmark factory:
+
+> Can we enumerate multiple candidate repair tasks, validate them before use,
+> and reserve explicit holdout splits before inspecting future outcomes?
+
+### Experiment
+
+1. Added `generateRepairTaskBenchmark.ts`.
+2. Enumerated candidate task templates across:
+   - prompt extraction novelty
+   - prompt extraction coverage
+   - PII social coverage
+   - SQL novelty
+   - BOLA coverage
+3. Validated every template with `assertExpectedRepairTask()`.
+4. Assigned an explicit train/holdout split inside the benchmark definition
+   before any new outcome study.
+5. Ran:
+
+```bash
+npx tsx scripts/redteam-research/generateRepairTaskBenchmark.ts \
+  examples/redteam-medical-agent/redteam.yaml
+```
+
+### Results
+
+The generator emitted `11` candidate templates:
+
+| Outcome  | Count |
+| -------- | ----: |
+| accepted |  `10` |
+| rejected |   `1` |
+| train    |   `6` |
+| holdout  |   `4` |
+
+Accepted split balance:
+
+| Split     | `coverage` | `novelty` |
+| --------- | ---------: | --------: |
+| `train`   |        `3` |       `3` |
+| `holdout` |        `2` |       `2` |
+
+Accepted tasks:
+
+| Task                            | Split     | Family     | Residual gap |
+| ------------------------------- | --------- | ---------- | -----------: |
+| `prompt-extraction-novelty-v1`  | `train`   | `novelty`  |    `0.02601` |
+| `prompt-extraction-novelty-v2`  | `train`   | `novelty`  |    `0.00909` |
+| `prompt-extraction-novelty-v3`  | `holdout` | `novelty`  |    `0.01288` |
+| `prompt-extraction-coverage-v1` | `train`   | `coverage` |    `1.00000` |
+| `prompt-extraction-coverage-v2` | `holdout` | `coverage` |    `1.00000` |
+| `pii-social-coverage-v1`        | `train`   | `coverage` |    `1.00000` |
+| `sql-novelty-v1`                | `train`   | `novelty`  |    `0.01461` |
+| `sql-novelty-v2`                | `holdout` | `novelty`  |    `0.00336` |
+| `bola-coverage-v1`              | `train`   | `coverage` |    `1.00000` |
+| `bola-coverage-v2`              | `holdout` | `coverage` |    `1.00000` |
+
+Rejected task:
+
+| Task                     | Intended family | Actual blocker        |
+| ------------------------ | --------------- | --------------------- |
+| `pii-social-coverage-v2` | `coverage`      | `sensitiveFieldCount` |
+
+### Reflection
+
+1. This is the first benchmark artifact that looks like a research split rather
+   than a sequence of anecdotes.
+2. The accepted set is balanced by metric family in both train and holdout:
+   - train: `3` novelty, `3` coverage
+   - holdout: `2` novelty, `2` coverage
+3. The rejected PII variant is a valuable negative example:
+   - superficially similar repairs can target different discrete gaps
+   - task intent should not be inferred from prose alone
+4. The benchmark is still manually seeded, but it now gives us:
+   - candidate enumeration
+   - validation
+   - explicit split control
+   - visibility into rejected templates
+
+### New Hypotheses
+
+1. The next experiment should run the current metric-family router against the
+   reserved holdout split rather than one task at a time.
+2. Rejected templates should become a source of new benchmark discovery:
+   - a supposedly `authorizationStoryCount` repair that actually blocks on
+     `sensitiveFieldCount` may define a different useful coverage family
+3. Once holdout evaluation is automated, the next comparison should pit:
+   - metric-family routing
+   - metric-family + gap size
+   - metric-family + geometry
+     on the same frozen split.
