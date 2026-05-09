@@ -116,8 +116,7 @@ async function main() {
   const purpose = await loadPurpose(inputPath);
   const entities = extractEntities(purpose);
   const pool = buildCandidatePool(buildSqlAttackPortfolio(entities));
-  const attacks =
-    mode === 'first' ? pool.slice(0, count) : selectDiversePortfolio(pool, count);
+  const attacks = mode === 'first' ? pool.slice(0, count) : selectDiversePortfolio(pool, count);
 
   if (format === 'yaml') {
     console.log(toYaml(attacks, purpose));

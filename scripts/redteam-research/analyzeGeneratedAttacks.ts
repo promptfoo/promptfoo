@@ -23,10 +23,16 @@ type TacticRule = {
   pattern: RegExp;
 };
 
+type CoverageRuleSet = {
+  dimension: string;
+  rules: TacticRule[];
+};
+
 type PluginSummary = {
   averageChars: number;
   averagePairwiseDistance: number;
   averageTokens: number;
+  coverageDimensions: Record<string, string[]>;
   duplicateCount: number;
   entityReferenceRate: number;
   maxPairwiseSimilarity: number;
@@ -150,6 +156,47 @@ const TACTIC_RULES: Record<string, TacticRule[]> = {
   ],
 };
 
+const COVERAGE_RULES: Record<string, CoverageRuleSet[]> = {
+  'sql-injection': [
+    {
+      dimension: 'tactic',
+      rules: TACTIC_RULES['sql-injection'],
+    },
+  ],
+  'prompt-extraction': [
+    {
+      dimension: 'tactic',
+      rules: TACTIC_RULES['prompt-extraction'],
+    },
+    {
+      dimension: 'pretext',
+      rules: [
+        { id: 'compliance', pattern: /\b(audit|compliance)\b/i },
+        { id: 'operations', pattern: /\b(handoff|operations)\b/i },
+        { id: 'training', pattern: /\b(training|clinic administrator)\b/i },
+        { id: 'debugging', pattern: /\b(debug|developer instructions)\b/i },
+        { id: 'onboarding', pattern: /\b(onboarding)\b/i },
+        { id: 'incident-response', pattern: /\b(incident review)\b/i },
+        { id: 'change-management', pattern: /\b(policy diff|previous and current)\b/i },
+        { id: 'documentation', pattern: /\b(documentation|checklist)\b/i },
+      ],
+    },
+    {
+      dimension: 'artifact',
+      rules: [
+        { id: 'audit-report', pattern: /\b(audit)\b/i },
+        { id: 'handoff-summary', pattern: /\b(handoff)\b/i },
+        { id: 'training-guide', pattern: /\b(training guide)\b/i },
+        { id: 'debug-transcript', pattern: /\b(debug)\b/i },
+        { id: 'onboarding-email', pattern: /\b(onboarding email)\b/i },
+        { id: 'incident-review', pattern: /\b(incident review)\b/i },
+        { id: 'policy-diff', pattern: /\b(policy diff)\b/i },
+        { id: 'documentation-checklist', pattern: /\b(documentation|checklist)\b/i },
+      ],
+    },
+  ],
+};
+
 function parseArgs(argv: string[]) {
   const [inputPath, ...rest] = argv;
   const args = new Map<string, string>();
@@ -239,6 +286,29 @@ function hasAnyTerm(prompt: string, terms: string[]): boolean {
   return terms.some((term) => normalizedPrompt.includes(normalizeText(term)));
 }
 
+function summarizeCoverageDimensions(pluginId: string, prompts: string[]) {
+  const coverageRules = COVERAGE_RULES[getPluginFamily(pluginId)] ?? [
+    {
+      dimension: 'tactic',
+      rules: TACTIC_RULES[getPluginFamily(pluginId)] ?? [],
+    },
+  ];
+
+  return Object.fromEntries(
+    coverageRules.map(({ dimension, rules }) => {
+      const matched = new Set<string>();
+      for (const prompt of prompts) {
+        for (const rule of rules) {
+          if (rule.pattern.test(prompt)) {
+            matched.add(rule.id);
+          }
+        }
+      }
+      return [dimension, [...matched].sort()];
+    }),
+  );
+}
+
 function summarizePlugin(
   pluginId: string,
   prompts: string[],
@@ -249,20 +319,13 @@ function summarizePlugin(
   const uniqueNormalizedPrompts = new Set(normalizedPrompts).size;
   const tokenizedPrompts = prompts.map(tokenize);
   const tacticRules = TACTIC_RULES[getPluginFamily(pluginId)] ?? [];
-  const detectedTactics = new Set<string>();
+  const coverageDimensions = summarizeCoverageDimensions(pluginId, prompts);
+  const detectedTactics = new Set<string>(coverageDimensions.tactic ?? []);
   const pairwiseSimilarities: number[] = [];
 
   for (let i = 0; i < tokenizedPrompts.length; i += 1) {
     for (let j = i + 1; j < tokenizedPrompts.length; j += 1) {
       pairwiseSimilarities.push(jaccardSimilarity(tokenizedPrompts[i], tokenizedPrompts[j]));
-    }
-  }
-
-  for (const prompt of prompts) {
-    for (const rule of tacticRules) {
-      if (rule.pattern.test(prompt)) {
-        detectedTactics.add(rule.id);
-      }
     }
   }
 
@@ -280,6 +343,7 @@ function summarizePlugin(
     averageChars: average(prompts.map((prompt) => prompt.length)),
     averagePairwiseDistance: 1 - average(pairwiseSimilarities),
     averageTokens: average(tokenizedPrompts.map((tokens) => tokens.length)),
+    coverageDimensions,
     duplicateCount: prompts.length - uniqueNormalizedPrompts,
     entityReferenceRate: prompts.length === 0 ? 0 : entityReferencedCount / prompts.length,
     maxPairwiseSimilarity:
@@ -299,8 +363,8 @@ function formatPercent(value: number): string {
 
 function toMarkdown(summaries: PluginSummary[]): string {
   const lines = [
-    '| Plugin | Count | Unique | Duplicates | Avg Tokens | Avg Distance | Max Similarity | Tactic Coverage | Purpose Grounding | Entity Reference |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: |',
+    '| Plugin | Count | Unique | Duplicates | Avg Tokens | Avg Distance | Max Similarity | Tactic Coverage | Additional Coverage | Purpose Grounding | Entity Reference |',
+    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: |',
   ];
 
   for (const summary of summaries) {
@@ -314,6 +378,7 @@ function toMarkdown(summaries: PluginSummary[]): string {
         summary.averagePairwiseDistance.toFixed(3),
         summary.maxPairwiseSimilarity.toFixed(3),
         `${summary.tacticCoverage.length}/${TACTIC_RULES[getPluginFamily(summary.pluginId)]?.length ?? 0}: ${summary.tacticCoverage.join(', ') || 'none'}`,
+        formatAdditionalCoverage(summary),
         formatPercent(summary.purposeGroundingRate),
         formatPercent(summary.entityReferenceRate),
       ].join(' | '),
@@ -321,6 +386,19 @@ function toMarkdown(summaries: PluginSummary[]): string {
   }
 
   return lines.join('\n');
+}
+
+function formatAdditionalCoverage(summary: PluginSummary): string {
+  const entries = Object.entries(summary.coverageDimensions).filter(
+    ([dimension]) => dimension !== 'tactic',
+  );
+  if (entries.length === 0) {
+    return 'n/a';
+  }
+
+  return entries
+    .map(([dimension, values]) => `${dimension}: ${values.length} (${values.join(', ') || 'none'})`)
+    .join('; ');
 }
 
 async function main() {

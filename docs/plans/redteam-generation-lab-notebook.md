@@ -304,3 +304,85 @@ Selector comparison on the same candidate pool:
    - shared portfolio selector
 3. The next useful move is to make coverage dimensions first-class in the
    analyzer so we can compare plugin families on more than lexical diversity.
+
+## Iteration 5 - 2026-05-09
+
+### Goal
+
+Make the benchmark more faithful:
+
+> Promote plugin-specific coverage dimensions into the analyzer so a corpus that
+> is superficially complete on one coarse axis can still be distinguished from a
+> truly richer portfolio.
+
+### Experiment
+
+Extended `analyzeGeneratedAttacks.ts` with explicit multi-axis coverage support.
+
+Current dimensions:
+
+- `sql-injection`
+  - `tactic`
+- `prompt-extraction`
+  - `tactic`
+  - `pretext`
+  - `artifact`
+
+### Results
+
+Baseline prompt extraction:
+
+| Corpus          | Tactic coverage | Pretext coverage | Artifact coverage |
+| --------------- | --------------- | ---------------- | ----------------- |
+| Existing corpus | `5/5`           | `3`              | `3`               |
+
+Planner prompt extraction:
+
+| Corpus         | Tactic coverage | Pretext coverage | Artifact coverage |
+| -------------- | --------------- | ---------------- | ----------------- |
+| Planner corpus | `5/5`           | `7`              | `6`               |
+
+The richer analyzer reveals a distinction the old metric hid:
+
+- baseline and planner are both `5/5` on coarse tactic labels
+- only the planner meaningfully broadens scenario variety
+
+### Reflection
+
+1. Coarse one-axis coverage can make a narrow corpus look finished.
+2. Multi-axis coverage gives us a much better language for plugin-specific
+   quality:
+   - not only "did we cover the attack family?"
+   - but also "did we cover meaningful ways that family manifests?"
+3. This has implications for generator design:
+   - a planner needs plugin-specific dimensions
+   - a selector needs plugin-specific quotas
+   - a benchmark needs plugin-specific diagnostics
+
+### Five-Iteration Status
+
+At the end of iteration 5:
+
+1. We established a durable benchmark harness and research notebook.
+2. We found a concrete baseline weakness:
+   - many emitted rows
+   - very few unique seed prompts
+3. We showed a taxonomy-guided planner can materially improve `sql-injection`.
+4. We showed a diversity-aware selector improves selected portfolios even with
+   the same candidate pool.
+5. We showed the architecture generalizes to `prompt-extraction`, where it
+   improves not only lexical diversity but also scenario coverage.
+6. We upgraded the benchmark so it can express plugin-specific multi-axis
+   coverage instead of collapsing everything into one tactic score.
+
+### New Hypotheses
+
+1. The next priority is `pii:*`, because it should stress-test relation,
+   authorization-story, and sensitive-field dimensions rather than tactic syntax
+   or artifact shape.
+2. Once PII works, the architecture will have crossed:
+   - syntax attacks
+   - instruction-boundary attacks
+   - privacy/social-engineering attacks
+3. After that, the right next frontier is agentic scenario generation, where the
+   output should become a structured attack scenario rather than a single prompt.
