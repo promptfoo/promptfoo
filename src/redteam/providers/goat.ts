@@ -301,6 +301,11 @@ export default class GoatProvider implements ApiProvider {
                   goal: context?.test?.metadata?.goal as string | undefined,
                 },
               );
+              accumulateResponseTokenUsage(
+                totalTokenUsage,
+                { tokenUsage: transformResult.tokenUsage },
+                { countAsRequest: false },
+              );
               if (transformResult.error) {
                 logger.warn('[GOAT] Transform failed for unblocking prompt', {
                   error: transformResult.error,
@@ -511,6 +516,11 @@ export default class GoatProvider implements ApiProvider {
               purpose: context?.test?.metadata?.purpose as string | undefined,
               goal: context?.test?.metadata?.goal as string | undefined,
             },
+          );
+          accumulateResponseTokenUsage(
+            totalTokenUsage,
+            { tokenUsage: lastTransformResult.tokenUsage },
+            { countAsRequest: false },
           );
 
           // Skip turn if transform failed

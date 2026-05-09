@@ -424,6 +424,11 @@ export class CustomProvider implements ApiProvider {
         );
         lastResponse = response;
         lastTransformResult = transformResult;
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: transformResult?.tokenUsage },
+          { countAsRequest: false },
+        );
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
         if (isConversationEndedResponse(lastResponse)) {
           logger.info('[Custom] Target ended conversation', {

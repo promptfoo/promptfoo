@@ -2100,6 +2100,49 @@ describe('HydraProvider', () => {
       expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
     });
 
+    it('should preserve layered helper usage without counting it as a target probe', async () => {
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        prompt: 'layered attack',
+        originalPrompt: 'Attack message',
+        tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+      });
+
+      mockAgentProvider.callApi.mockResolvedValueOnce({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50, numRequests: 1 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'Target response',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        _perTurnLayers: [{ id: 'indirect-web-pwn' }],
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 112,
+        prompt: 56,
+        completion: 56,
+        numRequests: 1,
+      });
+    });
+
     it('should include outputAudio in redteamHistory when target returns audio', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',

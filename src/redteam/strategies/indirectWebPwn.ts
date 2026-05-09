@@ -4,6 +4,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { RUNTIME_TRANSFORM_TOKEN_USAGE_KEY } from '../shared/runtimeTransform';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -452,6 +453,7 @@ async function transformForPerTurnLayer(
 
     let pageState = pageStateMap.get(stateKey);
     let turnNumber: number;
+    let runtimeTransformTokenUsage: CreateWebPageResponse['tokenUsage'];
 
     if (pageState) {
       // Subsequent turn: Update the existing page
@@ -472,6 +474,7 @@ async function transformForPerTurnLayer(
           useLlmUpdate,
           preferSmallModel,
         );
+        runtimeTransformTokenUsage = response.tokenUsage;
 
         // Update state with new embedding location and fetch prompt
         const previousLocation = pageState.embeddingLocation;
@@ -520,6 +523,7 @@ async function transformForPerTurnLayer(
           useLlmCreate,
           preferSmallModel,
         );
+        runtimeTransformTokenUsage = response.tokenUsage;
 
         // Clean up expired entries before adding new ones
         cleanupExpiredPageState();
@@ -584,6 +588,9 @@ async function transformForPerTurnLayer(
         embeddedPrompt: attackPrompt, // The prompt embedded in the page (URLs replaced)
         indirectWebPwnTurn: turnNumber,
         fetchPrompt, // The "Please visit URL..." prompt sent to the AI
+        ...(runtimeTransformTokenUsage && {
+          [RUNTIME_TRANSFORM_TOKEN_USAGE_KEY]: runtimeTransformTokenUsage,
+        }),
       },
     });
   }

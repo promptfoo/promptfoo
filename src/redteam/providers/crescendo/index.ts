@@ -1135,6 +1135,11 @@ export class CrescendoProvider implements ApiProvider {
           goal: context?.test?.metadata?.goal as string | undefined,
         },
       );
+      accumulateResponseTokenUsage(
+        totalTokenUsage,
+        { tokenUsage: lastTransformResult.tokenUsage },
+        { countAsRequest: false },
+      );
 
       // Skip turn if transform failed
       if (lastTransformResult.error) {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamIterativeMetaProvider, {
   runMetaAgentRedteam,
 } from '../../../src/redteam/providers/iterativeMeta';
+import * as runtimeTransform from '../../../src/redteam/shared/runtimeTransform';
 import {
   createMockProvider,
   createProviderResponse,
@@ -493,6 +494,49 @@ describe('RedteamIterativeMetaProvider', () => {
 
       // Should complete without error when perTurnLayers is provided
       expect(result.metadata.finalIteration).toBeDefined();
+    });
+
+    it('should preserve layered helper usage without counting it as a target probe', async () => {
+      vi.spyOn(runtimeTransform, 'applyRuntimeTransforms').mockResolvedValue({
+        prompt: 'layered attack',
+        originalPrompt: 'Can you help me fix this code...',
+        tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+      });
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: { result: 'Can you help me fix this code...' },
+        tokenUsage: { total: 100, prompt: 50, completion: 50, numRequests: 1 },
+      });
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'Target response',
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+      });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: '{{query}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+        perTurnLayers: ['indirect-web-pwn'],
+      });
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 112,
+        prompt: 56,
+        completion: 56,
+        numRequests: 1,
+      });
     });
   });
 

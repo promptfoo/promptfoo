@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
+import {
+  applyRuntimeTransforms,
+  RUNTIME_TRANSFORM_TOKEN_USAGE_KEY,
+} from '../../../src/redteam/shared/runtimeTransform';
 
 import type { Strategy } from '../../../src/redteam/strategies/types';
 import type { TestCaseWithPlugin } from '../../../src/types';
@@ -109,6 +112,45 @@ describe('runtimeTransform', () => {
 
       expect(mockBase64Strategy.action).toHaveBeenCalledTimes(1);
       expect(mockSecondStrategy.action).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve auxiliary layer usage without exposing the private carrier metadata', async () => {
+      const tokenStrategy: Strategy = {
+        id: 'token-layer',
+        action: vi.fn(async (testCases: TestCaseWithPlugin[]) =>
+          testCases.map((tc) => ({
+            ...tc,
+            vars: {
+              ...tc.vars,
+              input: 'layered prompt',
+            },
+            metadata: {
+              ...tc.metadata,
+              [RUNTIME_TRANSFORM_TOKEN_USAGE_KEY]: {
+                total: 9,
+                prompt: 4,
+                completion: 5,
+                numRequests: 1,
+              },
+            },
+          })),
+        ),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['token-layer'],
+        [tokenStrategy],
+      );
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 9,
+        prompt: 4,
+        completion: 5,
+        numRequests: 0,
+      });
+      expect(result.metadata).not.toHaveProperty(RUNTIME_TRANSFORM_TOKEN_USAGE_KEY);
     });
 
     it('should extract audio data from data URL', async () => {

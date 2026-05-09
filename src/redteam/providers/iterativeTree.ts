@@ -707,6 +707,11 @@ async function runRedteamConversation({
               goal: test?.metadata?.goal as string | undefined,
             },
           );
+          accumulateResponseTokenUsage(
+            totalTokenUsage,
+            { tokenUsage: lastTransformResult.tokenUsage },
+            { countAsRequest: false },
+          );
 
           if (lastTransformResult.error) {
             logger.warn('[IterativeTree] Transform failed, skipping attempt', {

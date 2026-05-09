@@ -319,6 +319,11 @@ export async function runMetaAgentRedteam({
         Strategies,
         transformContext,
       );
+      accumulateResponseTokenUsage(
+        totalTokenUsage,
+        { tokenUsage: lastTransformResult.tokenUsage },
+        { countAsRequest: false },
+      );
 
       if (lastTransformResult.error) {
         logger.warn('[IterativeMeta] Transform failed, skipping iteration', {
