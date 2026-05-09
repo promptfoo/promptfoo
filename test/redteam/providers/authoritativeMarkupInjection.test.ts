@@ -161,6 +161,27 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
+    it('should preserve attack-generation usage when the remote task returns no message', async () => {
+      mockFetchWithProxy.mockResolvedValue({
+        json: async () => ({
+          error: 'Warning',
+          message: 'Skipping generation',
+          tokenUsage: { prompt: 6, completion: 4, total: 10, numRequests: 1 },
+        }),
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({
+        injectVar: 'input',
+      });
+
+      const context = createMockContext(mockTargetProvider);
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.error).toContain('Invalid response from server');
+      expect(result.tokenUsage).toEqual({ prompt: 6, completion: 4, total: 10, numRequests: 1 });
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('should include metadata with redteamFinalPrompt', async () => {
       mockTargetProvider.callApi.mockResolvedValue({
         output: 'target response',
