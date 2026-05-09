@@ -3793,3 +3793,105 @@ Current best evidence:
 3. We should benchmark representation quality separately from router quality:
    - first minimize signature drift
    - then compare routers on frozen signatures
+
+## Iteration 46 - 2026-05-09
+
+### Goal
+
+Test the simplest possible remedy for iteration 45:
+
+> If free-form labels drift too much, does a constrained semantic vocabulary make
+> the representation stable enough to trust?
+
+### Experiment
+
+1. Generalized the repeated-draw stability harness so alternate signature
+   generators can reuse the same evaluator.
+2. Added `evaluateRepairConstrainedSemanticSignatureStability.ts`, which uses a
+   provisional five-slot ontology with explicit enums for:
+   - protected boundary
+   - attacker goal
+   - requested action
+   - social frame
+   - target resource
+3. Kept the same:
+   - frozen benchmark
+   - three live draws
+   - `gpt-5.4-mini`
+   - semantic nearest-neighbor routers
+4. Added tuple-count summaries so the experiment could tell whether stability
+   came from useful consistency or from collapsing distinct tasks together.
+5. Ran:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/evaluateRepairConstrainedSemanticSignatureStability.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  3
+```
+
+### Results
+
+Representation stability improved sharply:
+
+| Measure                   | Free-form labels | Constrained labels |
+| ------------------------- | ---------------: | -----------------: |
+| label-set Jaccard         |          `0.133` |            `0.884` |
+| slot-wise label agreement |          `0.213` |            `0.927` |
+| summary-token Jaccard     |          `0.372` |            `0.486` |
+
+The constrained labels also made several routers perfectly stable across the
+three draws:
+
+| Model                | Holdout route changes |
+| -------------------- | --------------------: |
+| label `1-NN`         |                 `0/4` |
+| slot match `1-NN`    |                 `0/4` |
+| weighted slot `1-NN` |                 `0/4` |
+| slot + plugin `1-NN` |                 `0/4` |
+| summary `1-NN`       |                 `2/4` |
+
+But that stability came with a clear loss of resolution:
+
+1. every trial produced only `7` unique label tuples for `10` tasks
+2. four prompt-extraction tasks collapsed onto the same tuple:
+   - `system-instructions`
+   - `extract-secrets`
+   - `reveal`
+   - `authority-pretext`
+   - `system-prompt`
+3. once that collapse happened, every label-based router became stably weak:
+   - `1/4` holdout accuracy on all three draws
+   - average regret `0.00237`
+
+### Reflection
+
+1. The direct hypothesis is confirmed:
+   - explicit semantic vocabularies massively reduce representation drift
+2. But iteration 46 also shows why “stable” is not the same as “useful”:
+   - the ontology is now reproducible
+   - but too coarse to separate several behaviorally different tasks
+3. This is a better failure mode than iteration 45:
+   - we have moved from stochastic ambiguity
+   - to deterministic under-specification
+4. The four-way prompt-extraction collapse is especially revealing:
+   - those tasks differ in proposer behavior
+   - but not in the coarse semantics currently exposed to the router
+5. The next improvement should not be a return to free-form labels.
+   - it should be a richer canonical representation
+   - probably with one or more extra axes that preserve distinctions the router
+     actually needs
+
+### New Hypotheses
+
+1. The current ontology is missing proposer-relevant dimensions such as:
+   - attack mechanism
+   - variation axis being repaired
+   - perhaps target evidence type
+2. A richer constrained schema may keep most of the new stability while
+   restoring enough resolution to separate the collapsed prompt-extraction
+   tasks.
+3. The right target is not maximal semantic detail:
+   - it is the smallest deterministic representation that still preserves
+     winner-relevant differences.

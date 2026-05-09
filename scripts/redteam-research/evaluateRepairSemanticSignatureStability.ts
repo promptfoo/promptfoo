@@ -13,7 +13,7 @@ import {
 import { buildValidatedRepairTaskBenchmark } from './generateRepairTaskBenchmark';
 import { jaccardSimilarity, tokenize } from './sqlResearchShared';
 
-type SignatureDraw = {
+export type SignatureDraw = {
   holdout: Record<SignatureModel, SignatureEvaluationSummary>;
   leaveOneOut: Record<SignatureModel, SignatureEvaluationSummary>;
   signatures: Record<string, SemanticSignature>;
@@ -38,7 +38,7 @@ function summarySimilarity(left: SemanticSignature, right: SemanticSignature): n
   return jaccardSimilarity(tokenize(left.summary), tokenize(right.summary));
 }
 
-function summarizeSignatureStability(draws: SignatureDraw[]) {
+export function summarizeSignatureStability(draws: SignatureDraw[]) {
   const taskIds = Object.keys(draws[0].signatures);
   const perTask = taskIds.map((taskId) => {
     const labelAgreements: number[] = [];
@@ -81,7 +81,7 @@ function summarizeSignatureStability(draws: SignatureDraw[]) {
   };
 }
 
-function summarizeRouteStability(draws: SignatureDraw[], scope: 'holdout' | 'leaveOneOut') {
+export function summarizeRouteStability(draws: SignatureDraw[], scope: 'holdout' | 'leaveOneOut') {
   return Object.fromEntries(
     signatureModels.map((model) => {
       const predictionMap = new Map<string, Set<string>>();
@@ -114,14 +114,15 @@ function summarizeRouteStability(draws: SignatureDraw[], scope: 'holdout' | 'lea
   );
 }
 
-async function buildSignatureDraw(
+export async function buildSignatureDraw(
   rows: ObservedOutcomeRow[],
   providerId: string,
   trial: number,
+  generateSignature = generateSemanticSignature,
 ): Promise<SignatureDraw> {
   const signatures = Object.fromEntries(
     await Promise.all(
-      rows.map(async (row) => [row.task.id, await generateSemanticSignature(row, providerId)]),
+      rows.map(async (row) => [row.task.id, await generateSignature(row, providerId)]),
     ),
   ) as Record<string, SemanticSignature>;
   const trainingRows = rows.filter((row) => row.task.split === 'train');
