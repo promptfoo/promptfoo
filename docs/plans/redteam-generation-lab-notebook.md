@@ -5227,3 +5227,79 @@ Yet the global `role-mechanism` router still predicts `thin` for
    from prompt-engineering the reranker again.
 3. The global representation frontier may now be mature enough that future gains
    mostly come from **data shaping** rather than ontology search.
+
+## Iteration 61 - 2026-05-09
+
+### Goal
+
+Test the BOLA support-coverage hypothesis directly:
+
+> If we add one balanced-winning local support exemplar shaped like record-level
+> retrieval rather than summary retrieval, does the existing semantic router
+> recover `bola-coverage-v2` without any ontology change?
+
+### Experiment
+
+1. Added `evaluateRepairBolaSupportAugmentation.ts`.
+2. Reused the saved `role-mechanism` draws from iteration 53.
+3. Injected one **synthetic support** point:
+   - BOLA
+   - billing role
+   - private coverage record plus balance details
+   - balanced-winning outcome
+4. Kept the semantic router unchanged.
+5. Compared:
+   - baseline global routing
+   - augmented routing with the extra local support point
+
+### Results
+
+The extra local support point fixes the BOLA residual cleanly:
+
+| Router                    | Stable label holdout accuracy | Avg label holdout regret |
+| ------------------------- | ----------------------------: | -----------------------: |
+| baseline `role-mechanism` |                         `2/4` |                `0.00236` |
+| + BOLA support exemplar   |                         `3/4` |                `0.00117` |
+
+The holdout changes exactly where expected:
+
+1. `bola-coverage-v2`
+   - baseline: `thin`
+   - augmented: `balanced`
+2. `prompt-extraction-coverage-v2`
+   - remains `balanced`
+3. `sql-novelty-v2`
+   - remains `balanced`
+4. `prompt-extraction-novelty-v3`
+   - remains the only miss
+
+### Reflection
+
+1. This validates the iteration-60 diagnosis:
+   - BOLA needed support coverage, not a new label
+2. A single local exemplar was enough:
+   - no reranking
+   - no specialist classifier
+   - no change to the global representation
+3. The architecture picture is getting cleaner:
+   - legal-counsel needs a **specialist learner**
+   - BOLA needs **support augmentation**
+4. Data shaping is now producing gains comparable to specialist routing:
+   - both raise the stable label ceiling from `2/4` to `3/4`
+5. The obvious next question is whether we can combine:
+   - learned legal-counsel packaging
+   - plus BOLA support augmentation
+     and reach `4/4`
+
+### New Hypotheses
+
+1. The best near-term router is probably a hybrid:
+   - global `role-mechanism`
+   - learned legal-counsel packaging expert
+   - augmented local BOLA support
+2. Training-set design may matter more than representation complexity once the
+   ontology is “good enough.”
+3. If the hybrid reaches `4/4`, the next research frontier should shift from
+   architecture search to:
+   - automatic discovery of which support points or specialists are missing
+   - and automatic generation of those counterfactual examples
