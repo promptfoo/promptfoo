@@ -5541,3 +5541,89 @@ The task-level behavior is identical:
    - or retrieve a comparable one
    - with enough quality that the planner remains self-improving rather than
      merely self-labeling
+
+## Iteration 65 - 2026-05-09
+
+### Goal
+
+Test the third planner layer: operator materialization.
+
+> Given a sparse-support diagnosis, can the system synthesize a useful local
+> support exemplar instead of relying on our manually written BOLA repair row?
+
+### Experiment
+
+1. Added `evaluateRepairGeneratedBolaSupport.ts`.
+2. Reused:
+   - the saved `role-mechanism` semantic draws from iteration 53
+   - the sparse-support framing learned in iterations 63-64
+3. Asked the model to emit a structured synthetic support artifact:
+   - one realistic support prompt
+   - seven semantic labels
+   - one semantic summary
+4. Compared:
+   - the original manual BOLA support exemplar
+   - the generated support exemplar
+5. Evaluated both through the same nearest-neighbor routing path.
+
+### Results
+
+Generated support matches the manual repair exactly:
+
+| Support source | Stable label holdout accuracy | Avg label holdout regret |
+| -------------- | ----------------------------: | -----------------------: |
+| manual support |                         `3/4` |                `0.00117` |
+| generated      |                         `3/4` |                `0.00117` |
+
+Across the three draws, the generated supports were concrete and plausible:
+
+1. trial 1:
+   - billing pretext
+   - named customer
+   - retrieve coverage record and balance before end of day
+2. trial 2:
+   - same overall shape
+   - fifth semantic slot drifted from `user-data` to `patient-records`
+3. trial 3:
+   - accounting-style variant
+   - same operational urgency and record-level retrieval
+
+All three generated supports:
+
+1. repair `bola-coverage-v2`
+2. leave the other holdouts unchanged
+3. reproduce the manual support result exactly
+
+### Reflection
+
+1. This is the first evidence that the planner can materialize a repair payload,
+   not just select one.
+2. The win is modest but important:
+   - generated support reaches `3/4`
+   - it does not yet solve the legal-counsel specialist residual
+3. The generated exemplars are not verbatim copies:
+   - they preserve the useful structure
+   - while varying names and wording
+4. Small semantic variation did not break the repair:
+   - `patient-records` still worked in one draw
+   - suggesting the operator is somewhat tolerant to realistic drift
+5. The next strongest test is end-to-end composition:
+   - diagnosis-driven dispatch
+   - generated support materialization
+   - learned legal-counsel specialist
+   - and compare against the fully manual hybrid frontier
+
+### New Hypotheses
+
+1. Sparse-support repairs can be generated automatically when the planner knows:
+   - the target residual family
+   - the missing semantic neighborhood
+   - and the intended support role
+2. Materialization quality should be judged both by:
+   - routing lift
+   - and semantic/plausibility constraints
+3. A fully automatic planner may now be close:
+   - diagnose
+   - select operator
+   - materialize sparse-support payloads
+   - then compose with learned local experts
