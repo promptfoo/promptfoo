@@ -229,7 +229,8 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
-          error: 'LLM did not return a result, likely refusal',
+          error: data.error || 'LLM did not return a result, likely refusal',
+          tokenUsage: data.tokenUsage,
         };
       }
 

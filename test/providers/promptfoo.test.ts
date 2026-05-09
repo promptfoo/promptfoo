@@ -339,6 +339,27 @@ describe('PromptfooChatCompletionProvider', () => {
     expect(result.error).toBe('LLM did not return a result, likely refusal');
   });
 
+  it('should preserve remote task usage when the task server returns an error without a result', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({
+        error: 'Agent output parse error',
+        tokenUsage: { total: 42, prompt: 30, completion: 12, numRequests: 1 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toEqual({
+      error: 'Agent output parse error',
+      tokenUsage: { total: 42, prompt: 30, completion: 12, numRequests: 1 },
+    });
+  });
+
   it('should handle API error', async () => {
     vi.mocked(fetchWithRetries).mockRejectedValue(new Error('API Error'));
 
