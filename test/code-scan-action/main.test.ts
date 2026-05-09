@@ -100,6 +100,7 @@ const mocks = vi.hoisted(() => {
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     realpathSync: vi.fn(),
+    lstatSync: vi.fn(),
   };
 
   return {
@@ -134,6 +135,7 @@ vi.mock('fs', async () => {
     writeFileSync: mocks.fs.writeFileSync,
     mkdirSync: mocks.fs.mkdirSync,
     realpathSync: mocks.fs.realpathSync,
+    lstatSync: mocks.fs.lstatSync,
   };
 });
 
@@ -187,6 +189,12 @@ function setupMocks() {
   mocks.core.getIDToken.mockResolvedValue('fake-oidc-token');
 
   mocks.fs.realpathSync.mockImplementation((p: string) => p);
+  // Default: target file does not exist yet, so writeSarifFile won't trip the symlink check.
+  mocks.fs.lstatSync.mockImplementation(() => {
+    const error = new Error('ENOENT') as NodeJS.ErrnoException;
+    error.code = 'ENOENT';
+    throw error;
+  });
 
   mocks.exec.exec.mockImplementation(
     async (
@@ -501,6 +509,21 @@ describe('code-scan-action main', () => {
 
       await vi.waitFor(() => {
         expect(mocks.core.warning).toHaveBeenCalledWith(expect.stringContaining('via symlink'));
+      });
+
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
+    });
+
+    it('refuses to overwrite an existing symlink at the target path', async () => {
+      mocks.fs.lstatSync.mockReturnValue({ isSymbolicLink: () => true });
+
+      await triggerSarifAction('promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.warning).toHaveBeenCalledWith(
+          expect.stringContaining('existing symlink'),
+        );
       });
 
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();

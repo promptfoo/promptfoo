@@ -69,7 +69,7 @@ interface SarifLog {
     tool: {
       driver: {
         name: string;
-        semanticVersion: string;
+        semanticVersion?: string;
         rules: Array<{
           id: string;
           name: string;
@@ -178,18 +178,22 @@ function toSarifResult(comment: Comment): SarifResult {
 }
 
 export function scanResponseToSarif(response: ScanResponse): SarifLog {
+  const driver: SarifLog['runs'][number]['tool']['driver'] = {
+    name: 'Promptfoo Code Scan',
+    rules: [SARIF_RULE],
+  };
+  // Only emit semanticVersion when we have a real one. The action bundle ships through
+  // esbuild without VERSION injection, so VERSION resolves to the dev fallback there;
+  // emitting `0.0.0-development` to GitHub Code Scanning would be misleading.
+  if (VERSION && VERSION !== '0.0.0-development') {
+    driver.semanticVersion = VERSION;
+  }
   return {
     $schema: SARIF_SCHEMA_URL,
     version: SARIF_VERSION,
     runs: [
       {
-        tool: {
-          driver: {
-            name: 'Promptfoo Code Scan',
-            semanticVersion: VERSION,
-            rules: [SARIF_RULE],
-          },
-        },
+        tool: { driver },
         results: response.comments.filter(isReportableFinding).map(toSarifResult),
       },
     ],

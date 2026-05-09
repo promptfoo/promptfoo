@@ -440,19 +440,63 @@ function serializeSarif(scanResponse: ScanResponse): string {
   return JSON.stringify(scanResponseToSarif(scanResponse), null, 2);
 }
 
+// Walk up from `p` until realpathSync resolves successfully, returning the canonical
+// path of the deepest existing ancestor. Used to detect symlinks anywhere in the parent
+// chain *before* mkdir -p has a chance to follow them out of the workspace.
+function realpathDeepestExisting(p: string): string {
+  let current = p;
+  while (true) {
+    try {
+      return fs.realpathSync(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        throw error;
+      }
+      const next = path.dirname(current);
+      if (next === current) {
+        throw new Error(`No existing ancestor for "${p}"`);
+      }
+      current = next;
+    }
+  }
+}
+
+function lstatOrNull(p: string): fs.Stats | null {
+  try {
+    return fs.lstatSync(p);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
 function writeSarifFile(resolved: string, body: string): void {
   const parent = path.dirname(resolved);
-  fs.mkdirSync(parent, { recursive: true });
-  // path.resolve does not follow symlinks. After mkdir we can canonicalize the parent
-  // and re-check containment so a symlink inside the workspace can't redirect the write.
   const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-  const realParent = fs.realpathSync(parent);
+
+  // Defense before mkdir: if any existing ancestor of `parent` is a symlink that
+  // resolves outside the workspace, mkdir -p would follow it and create directories
+  // outside the sandbox. Refuse before mutating the filesystem.
   const realWorkspace = fs.realpathSync(workspace);
-  if (!isPathWithinOrEqualTo(realParent, realWorkspace)) {
+  const realAncestor = realpathDeepestExisting(parent);
+  if (!isPathWithinOrEqualTo(realAncestor, realWorkspace)) {
     throw new Error(
       `sarif-output-path "${resolved}" resolves outside GITHUB_WORKSPACE via symlink; refusing to write`,
     );
   }
+
+  fs.mkdirSync(parent, { recursive: true });
+
+  // Defense before write: if `resolved` already exists as a symlink, refuse —
+  // writeFileSync follows symlinks and would write through to the link target.
+  if (lstatOrNull(resolved)?.isSymbolicLink()) {
+    throw new Error(
+      `sarif-output-path "${resolved}" is an existing symlink; refusing to overwrite`,
+    );
+  }
+
   fs.writeFileSync(resolved, body);
 }
 

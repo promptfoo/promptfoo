@@ -91,7 +91,19 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   let sessionId: string | undefined = undefined;
 
   const startTime = Date.now();
-  const outputFormat = resolveOutputFormat(options);
+
+  let outputFormat: CodeScanOutputFormat;
+  try {
+    outputFormat = resolveOutputFormat(options);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Scan failed: ${errorMessage}`);
+    cliState.postActionCallback = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      process.exitCode = 1;
+    };
+    return;
+  }
 
   // Load and merge configuration
   const baseConfig: Config = loadConfigOrDefault(options.config);
@@ -103,7 +115,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   // Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
 
-  // Display startup messages (skip in JSON mode to keep stdout clean for parsing)
+  // Display startup messages (skipped for non-text formats to keep stdout clean for parsing)
   if (outputFormat === CodeScanOutputFormat.TEXT) {
     logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
     logger.info(`  Minimum severity: ${config.minimumSeverity}`);
@@ -131,7 +143,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
   registerCleanupHandlers(cleanupRefs);
 
-  // Initialize spinner (hide in JSON mode, but still show logger.info status)
+  // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
   const isWebUI = Boolean(cliState.webUI);
   const spinner = createSpinner({
     format: outputFormat,
@@ -232,7 +244,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     if (includedFiles.length === 0) {
       const msg = 'No files to scan';
 
-      // In JSON mode, output a proper JSON response for programmatic consumption
+      // For non-text formats (JSON, SARIF), emit a structured empty response for programmatic consumption
       if (outputFormat !== CodeScanOutputFormat.TEXT) {
         const response: ScanResponse = { success: true, comments: [], review: msg };
         displayScanResults(response, Date.now() - startTime, {
