@@ -540,10 +540,12 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!row.tokenUsage.assertions) {
     row.tokenUsage.assertions = createEmptyAssertions();
   }
-  row.tokenUsage.assertions.numRequests = (row.tokenUsage.assertions.numRequests ?? 0) + 1;
 
   if (checkResult.tokensUsed) {
     accumulateAssertionTokenUsage(row.tokenUsage.assertions, checkResult.tokensUsed);
+  }
+  if (checkResult.tokensUsed?.numRequests === undefined) {
+    row.tokenUsage.assertions.numRequests = (row.tokenUsage.assertions.numRequests ?? 0) + 1;
   }
   row.gradingResult = checkResult;
 }

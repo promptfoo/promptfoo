@@ -140,7 +140,7 @@ describeEvaluator('evaluator token usage', () => {
         prompt: 30,
         completion: 20,
         cached: 5,
-        numRequests: 0,
+        numRequests: 1, // Assertion requests tracked separately
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
