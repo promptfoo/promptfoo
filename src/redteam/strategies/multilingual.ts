@@ -9,10 +9,13 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+import { mergeProviderTokenUsage } from './util';
 
 import type { TestCase } from '../../types/index';
+import type { TokenUsage } from '../../types/shared';
 
 /**
  * ⚠️ DEPRECATED: This strategy is deprecated and will be removed in a future version.
@@ -344,7 +347,7 @@ async function generateMultilingual(
 async function translateBatchCore(
   text: string,
   languages: string[],
-): Promise<Record<string, string>> {
+): Promise<{ tokenUsage?: TokenUsage; translations: Record<string, string> }> {
   // Prefer a preconfigured multilingual provider if available (set by the server at boot).
   const cachedMultilingual = await redteamProviderManager.getMultilingualProvider();
   const redteamProvider =
@@ -357,6 +360,7 @@ async function translateBatchCore(
   const languagesFormatted = languages.map((lang) => `- ${lang}`).join('\n');
 
   let result;
+  const totalTokenUsage = createEmptyTokenUsage();
   try {
     result = await redteamProvider.callApi(
       dedent`You are a precise translation tool for security research purposes. Translate the following <TEXT> from English to EACH of the languages listed in <LANGUAGES>.
@@ -383,9 +387,10 @@ async function translateBatchCore(
         ${languages.map((lang) => `"${lang}": "translation for ${lang}"`).join(',\n        ')}
       }`,
     );
+    accumulateResponseTokenUsage(totalTokenUsage, result);
   } catch (err) {
     logger.debug(`[translateBatch] Provider call failed: ${err}`);
-    return {};
+    return { translations: {} };
   }
 
   try {
@@ -404,13 +409,13 @@ async function translateBatchCore(
         }
 
         if (!missingLanguages) {
-          return translations;
+          return { translations, tokenUsage: totalTokenUsage };
         }
         if (Object.keys(translations).length > 0) {
           logger.debug(
             `[translateBatch] Got partial translations: ${Object.keys(translations).length}/${languages.length}`,
           );
-          return translations;
+          return { translations, tokenUsage: totalTokenUsage };
         }
       }
     } catch {}
@@ -427,7 +432,7 @@ async function translateBatchCore(
             }
           }
           if (Object.keys(translations).length > 0) {
-            return translations;
+            return { translations, tokenUsage: totalTokenUsage };
           }
         }
       } catch {}
@@ -443,7 +448,7 @@ async function translateBatchCore(
           }
         }
         if (Object.keys(translations).length > 0) {
-          return translations;
+          return { translations, tokenUsage: totalTokenUsage };
         }
       }
     } catch {}
@@ -463,14 +468,14 @@ async function translateBatchCore(
     }
 
     if (Object.keys(translations).length > 0) {
-      return translations;
+      return { translations, tokenUsage: totalTokenUsage };
     }
 
     logger.debug(`[translateBatch] Failed to parse translation result`);
-    return {};
+    return { translations: {}, tokenUsage: totalTokenUsage };
   } catch (error) {
     logger.debug(`[translateBatch] Error parsing translation: ${error}`);
-    return {};
+    return { translations: {}, tokenUsage: totalTokenUsage };
   }
 }
 
@@ -481,23 +486,20 @@ export async function translateBatch(
   text: string,
   languages: string[],
   initialBatchSize?: number,
-): Promise<Record<string, string>> {
+): Promise<{ tokenUsage: TokenUsage; translations: Record<string, string> }> {
   const batchSize = initialBatchSize || languages.length;
   const allTranslations: Record<string, string> = {};
+  const totalTokenUsage = createEmptyTokenUsage();
   let currentBatchSize = Math.min(batchSize, languages.length);
 
   for (let i = 0; i < languages.length; i += currentBatchSize) {
     const languageBatch = languages.slice(i, i + currentBatchSize);
-    const translations = await translateBatchCore(text, languageBatch);
+    const { translations, tokenUsage } = await translateBatchCore(text, languageBatch);
+    accumulateResponseTokenUsage(totalTokenUsage, { tokenUsage });
 
     if (Object.keys(translations).length === 0 && currentBatchSize > 1) {
       // Try each language individually as fallback
-      for (const lang of languageBatch) {
-        const singleTranslation = await translateBatchCore(text, [lang]);
-        if (Object.keys(singleTranslation).length > 0) {
-          Object.assign(allTranslations, singleTranslation);
-        }
-      }
+      await retrySingleTranslations(text, languageBatch, allTranslations, totalTokenUsage);
       currentBatchSize = 1;
     } else if (Object.keys(translations).length > 0) {
       Object.assign(allTranslations, translations);
@@ -505,21 +507,31 @@ export async function translateBatch(
       // Handle partial results - retry missing languages individually
       const missingLanguages = languageBatch.filter((lang) => !(lang in translations));
       if (missingLanguages.length > 0) {
-        for (const lang of missingLanguages) {
-          try {
-            const singleTranslation = await translateBatchCore(text, [lang]);
-            if (Object.keys(singleTranslation).length > 0) {
-              Object.assign(allTranslations, singleTranslation);
-            }
-          } catch (error) {
-            logger.debug(`Translation retry failed for ${lang}: ${error}`);
-          }
-        }
+        await retrySingleTranslations(text, missingLanguages, allTranslations, totalTokenUsage);
       }
     }
   }
 
-  return allTranslations;
+  return { translations: allTranslations, tokenUsage: totalTokenUsage };
+}
+
+async function retrySingleTranslations(
+  text: string,
+  languages: string[],
+  allTranslations: Record<string, string>,
+  totalTokenUsage: TokenUsage,
+): Promise<void> {
+  for (const lang of languages) {
+    try {
+      const singleResult = await translateBatchCore(text, [lang]);
+      accumulateResponseTokenUsage(totalTokenUsage, { tokenUsage: singleResult.tokenUsage });
+      if (Object.keys(singleResult.translations).length > 0) {
+        Object.assign(allTranslations, singleResult.translations);
+      }
+    } catch (error) {
+      logger.debug(`Translation retry failed for ${lang}: ${error}`);
+    }
+  }
 }
 
 export async function addMultilingual(
@@ -590,7 +602,9 @@ export async function addMultilingual(
     const results: TestCase[] = [];
 
     // Use adaptive batching - pass the configured batch size as initial size
-    const translations = await translateBatch(originalText, languages, batchSize);
+    const { translations, tokenUsage } = await translateBatch(originalText, languages, batchSize);
+    const canAttachTranslationUsage =
+      languages.length === 1 && Object.keys(translations).length === 1;
 
     // Create test cases for each successful translation
     for (const [lang, translatedText] of Object.entries(translations)) {
@@ -611,6 +625,14 @@ export async function addMultilingual(
           strategyId: 'multilingual',
           language: lang,
           originalText,
+          ...(canAttachTranslationUsage
+            ? {
+                providerTokenUsage: mergeProviderTokenUsage(
+                  testCase.metadata?.providerTokenUsage,
+                  tokenUsage,
+                ),
+              }
+            : {}),
         },
       });
     }
