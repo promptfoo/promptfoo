@@ -4315,3 +4315,91 @@ Current best evidence:
    - deterministic metadata where obvious
    - constrained LLM semantics where interpretation matters
    - frontier search to choose the smallest useful schema
+
+## Iteration 51 - 2026-05-09
+
+### Goal
+
+Test the artifact hypothesis directly:
+
+> Does adding the concrete requested artifact produce a better semantic
+> representation than requester role alone?
+
+### Experiment
+
+1. Added `evaluateRepairRoleArtifactSemanticSignatureStability.ts`.
+2. Kept the six role-aware slots from iteration 47 and added a seventh enum
+   slot for requested artifact:
+   - `memo`
+   - `ticket`
+   - `privilege-log`
+   - `audit-report`
+   - `export`
+   - `coverage-summary`
+   - `balance`
+3. Re-ran the same:
+   - frozen benchmark
+   - three live draws
+   - repeated-draw stability
+   - frontier comparison
+
+### Results
+
+The artifact axis produced an extremely tidy ontology:
+
+1. `10/10` unique tuples in every draw
+2. label-set similarity: `0.864`
+3. slot agreement: `0.919`
+4. summary similarity: `0.602`
+
+But it did **not** improve routing:
+
+| Model                | Holdout accuracy across draws |
+| -------------------- | ----------------------------: |
+| label `1-NN`         |                 `0/4,0/4,1/4` |
+| slot match `1-NN`    |                 `1/4,1/4,1/4` |
+| weighted slot `1-NN` |                 `1/4,1/4,1/4` |
+| slot + plugin `1-NN` |                 `1/4,2/4,1/4` |
+
+Frontier result:
+
+1. `role-artifact` is nondominated for ontology quality:
+   - more stable than role-aware
+   - full tuple separation
+2. `role-aware` remains the better routing representation:
+   - `2/4` stable label accuracy
+   - versus `1/4` for role-artifact
+3. `deterministic-role` becomes dominated by role-artifact:
+   - role-artifact is more stable
+   - more discriminative
+   - and matches its best stable label accuracy
+
+### Reflection
+
+1. The artifact slot answered a useful question:
+   - yes, we can get perfect separation
+   - no, perfect separation is not itself the thing we want
+2. This is another case where ontology quality and routing utility diverge:
+   - role-artifact is cleaner
+   - role-aware is more useful
+3. The visible requested object is apparently not the same thing as the hidden
+   proposer-choice boundary.
+4. The best current label representation remains the one with richer jointly
+   inferred semantics rather than the one with the neatest tuple grid.
+5. This pushes the research away from “add ever more surface fields” and toward
+   learning or discovering the smaller latent distinctions that actually matter.
+
+### New Hypotheses
+
+1. The next axis should be closer to attack mechanism than output artifact:
+   - disclosure
+   - summarization
+   - scope expansion
+   - impersonation
+2. Alternatively, instead of adding one more manual axis, we should search for
+   axes that specifically split tasks with different observed winners while
+   keeping same-winner tasks near each other.
+3. A future representation objective should reward:
+   - high stability
+   - low same-tuple mixed-winner collisions
+   - and not just raw tuple count
