@@ -105,8 +105,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     return;
   }
 
-  // Structured modes reserve stdout for the payload, so suppress logger output
-  // from the full scan stack before loading config or touching downstream helpers.
+  // Structured modes reserve stdout for the payload. src/entrypoint.ts already pre-sets
+  // LOG_LEVEL=error before the logger module is imported (so any module-init logs are
+  // already suppressed); we re-apply here for callers that bypass the CLI entrypoint
+  // (e.g., library consumers calling executeScan directly).
   if (outputFormat !== CodeScanOutputFormat.TEXT) {
     setLogLevel('error');
   }

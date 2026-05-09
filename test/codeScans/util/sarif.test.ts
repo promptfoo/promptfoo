@@ -215,6 +215,13 @@ describe('scanResponseToSarif', () => {
     expect(sarif.runs[0].results).toEqual([]);
   });
 
+  it('emits findings with missing severity as note level (CommentSchema allows it)', () => {
+    const sarif = scanResponseToSarif(makeFindingResponse({ severity: undefined }));
+    expect(sarif.runs[0].results).toHaveLength(1);
+    expect(sarif.runs[0].results[0].level).toBe('note');
+    expect(sarif.runs[0].results[0].properties.severity).toBeUndefined();
+  });
+
   it('truncates fingerprint input at the configured max so very long findings collide stably', () => {
     // Two findings whose first 160 chars match but tails differ → identical fingerprint
     // (intended: tail variation shouldn't churn the alert id across re-scans).

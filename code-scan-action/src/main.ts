@@ -414,14 +414,15 @@ async function postFallbackComments(
 // model — path-traversal via `..` plus symlink escape via post-mkdir realpath — without
 // the bundle cost.
 function isPathWithinOrEqualTo(child: string, parent: string): boolean {
-  // macOS APFS and Windows NTFS are case-insensitive by default; comparing case-sensitively
-  // here would falsely reject paths whose casing differs from GITHUB_WORKSPACE.
-  const isCaseInsensitive = process.platform === 'darwin' || process.platform === 'win32';
-  const normalize = (p: string) => (isCaseInsensitive ? p.toLowerCase() : p);
-  const c = normalize(child);
-  const p = normalize(parent);
-  const pWithSep = p.endsWith(path.sep) ? p : p + path.sep;
-  return c === p || c.startsWith(pWithSep);
+  // Case-sensitive comparison. Both `child` and `parent` are produced by path.resolve on
+  // the same workspace prefix in real use, so casing always matches. An earlier version
+  // lowercased on darwin/win32 to handle hypothetical case-mismatched user input, but
+  // that opened a bypass on case-sensitive APFS volumes (where /Path/A and /path/a are
+  // distinct on disk yet would compare equal here). The post-mkdir realpath check in
+  // writeSarifFile canonicalizes against the actual filesystem, which is the right place
+  // to handle case folding if the underlying volume does it.
+  const pWithSep = parent.endsWith(path.sep) ? parent : parent + path.sep;
+  return child === parent || child.startsWith(pWithSep);
 }
 
 function resolveSarifOutputPath(rawPath: string): string {

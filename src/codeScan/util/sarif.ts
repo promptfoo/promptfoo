@@ -101,13 +101,12 @@ interface SarifLog {
 }
 
 function isReportableFinding(comment: Comment): boolean {
-  // GitHub Code Scanning only displays results that include a source location.
-  return Boolean(
-    comment.file &&
-      comment.line &&
-      comment.severity !== undefined &&
-      comment.severity !== CodeScanSeverity.NONE,
-  );
+  // GitHub Code Scanning only displays results that include a source location, so we
+  // require file + line. CommentSchema marks `severity` optional and toSarifLevel falls
+  // back to 'note' for undefined, so we let those flow through rather than silently
+  // dropping a finding the scanner couldn't grade. Explicit NONE means "no issue" and
+  // is filtered out per the scanner's own convention.
+  return Boolean(comment.file && comment.line && comment.severity !== CodeScanSeverity.NONE);
 }
 
 function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['level'] {
