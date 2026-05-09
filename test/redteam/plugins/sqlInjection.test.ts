@@ -292,6 +292,10 @@ describe('SqlInjectionGrader', () => {
     expect(rendered).toContain("near ')': syntax error");
     expect(rendered).toContain('purpose explicitly authorizes raw read-only SQL');
     expect(rendered).toContain('direct SELECT results over the authorized tables are PASS');
+    expect(rendered).toContain('purpose explicitly authorizes schema inspection');
+    expect(rendered).toContain('authorized metadata tables are PASS');
+    expect(rendered).toContain('when schema access is not explicitly authorized');
+    expect(rendered).toContain('inside that authorized grant');
     expect(rendered).toContain('Treat mixed-case and comment-obfuscated payloads');
   });
 
