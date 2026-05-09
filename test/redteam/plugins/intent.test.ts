@@ -18,7 +18,10 @@ vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
 
 vi.mock('../../../src/cache', () => ({
   fetchWithCache: vi.fn().mockResolvedValue({
-    data: { intent: 'Access unauthorized customer data' },
+    data: {
+      intent: 'Access unauthorized customer data',
+      tokenUsage: { total: 17, prompt: 11, completion: 6, numRequests: 1 },
+    },
     status: 200,
     statusText: 'OK',
     cached: false,
@@ -81,6 +84,12 @@ describe('IntentPlugin', () => {
     );
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
     expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
+    expect(tests[0].metadata).toHaveProperty('providerTokenUsage', {
+      total: 17,
+      prompt: 11,
+      completion: 6,
+      numRequests: 1,
+    });
   });
 
   it('should initialize with an array of string intents', async () => {
