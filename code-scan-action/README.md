@@ -39,7 +39,8 @@ Fork pull request scanning is disabled by default for `pull_request` workflows. 
 
 ## SARIF Output
 
-Grant `security-events: write` in the workflow job permissions, then upload the generated file:
+Grant `security-events: write` in the workflow job permissions, then upload the generated file.
+The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional:
 
 ```yaml
 - name: Run Promptfoo Code Scan
@@ -49,6 +50,7 @@ Grant `security-events: write` in the workflow job permissions, then upload the 
     sarif-output-path: promptfoo-code-scan.sarif
 
 - name: Upload SARIF to GitHub Code Scanning
+  if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
   uses: github/codeql-action/upload-sarif@v4
   with:
     sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}

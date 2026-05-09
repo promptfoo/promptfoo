@@ -98,7 +98,13 @@ interface SarifLog {
 }
 
 function isReportableFinding(comment: Comment): boolean {
-  return comment.severity !== undefined && comment.severity !== CodeScanSeverity.NONE;
+  // GitHub Code Scanning only displays results that include a source location.
+  return Boolean(
+    comment.file &&
+      comment.line &&
+      comment.severity !== undefined &&
+      comment.severity !== CodeScanSeverity.NONE,
+  );
 }
 
 function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['level'] {

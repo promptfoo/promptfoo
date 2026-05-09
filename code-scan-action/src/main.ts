@@ -519,22 +519,10 @@ function emitSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
   }
 }
 
-function createEmptyScanResponse(review: string): ScanResponse {
-  return {
-    success: true,
-    comments: [],
-    review,
-  };
-}
-
 function emitConfiguredSarifOutput(scanResponse: ScanResponse, inputs: ActionInputs): void {
   if (inputs.sarifOutputPath) {
     emitSarifOutput(scanResponse, inputs.sarifOutputPath);
   }
-}
-
-function emitSkippedSarifOutput(inputs: ActionInputs, review: string): void {
-  emitConfiguredSarifOutput(createEmptyScanResponse(review), inputs);
 }
 
 async function handleScanResponse(
@@ -601,7 +589,6 @@ async function runCodeScan(): Promise<void> {
     core.info(
       'A maintainer can trigger a scan by commenting @promptfoo-scanner, or enable fork PR scans with enable-fork-prs: true',
     );
-    emitSkippedSarifOutput(inputs, 'Fork PR scan skipped because enable-fork-prs is false.');
     return;
   }
 
@@ -617,7 +604,6 @@ async function runCodeScan(): Promise<void> {
 
   if (isSetupPR(files)) {
     core.info('✅ Setup PR detected - workflow file will be added on merge');
-    emitSkippedSarifOutput(inputs, 'Setup PR detected; no scan was required.');
     return;
   }
 
@@ -635,7 +621,6 @@ async function runCodeScan(): Promise<void> {
     const scanResponse = await getScanResponse(cliArgs);
 
     if (!scanResponse) {
-      emitSkippedSarifOutput(inputs, 'Fork PR scan skipped pending maintainer approval.');
       return;
     }
 

@@ -98,6 +98,8 @@ See [JSON Output Schema](#json-output-schema) for the response format.
 promptfoo code-scans run --format sarif > promptfoo-code-scan.sarif
 ```
 
+SARIF output includes location-backed findings that GitHub Code Scanning can display.
+
 ## Configuration File
 
 Create a `.promptfoo-code-scan.yaml` file in your repository root:

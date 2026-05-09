@@ -200,7 +200,7 @@ describe('scanResponseToSarif', () => {
     ).toBe('src/windows%20path/file.ts');
   });
 
-  it('omits non-finding comments and preserves general findings without locations', () => {
+  it('omits non-finding comments and findings without displayable locations', () => {
     const response: ScanResponse = {
       success: true,
       comments: [
@@ -221,13 +221,6 @@ describe('scanResponseToSarif', () => {
 
     const sarif = scanResponseToSarif(response);
 
-    expect(sarif.runs[0].results).toHaveLength(1);
-    expect(sarif.runs[0].results[0]).toMatchObject({
-      level: 'error',
-      message: {
-        text: 'Potential unsafe agent behavior.',
-      },
-      locations: undefined,
-    });
+    expect(sarif.runs[0].results).toEqual([]);
   });
 });

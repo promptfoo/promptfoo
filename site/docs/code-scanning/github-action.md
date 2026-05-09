@@ -114,6 +114,8 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 
 **Write SARIF output for GitHub Code Scanning:**
 
+The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional. Intentionally skipped scans do not publish a clean Code Scanning result.
+
 ```yaml
 - name: Run Promptfoo Code Scan
   id: promptfoo-code-scan
@@ -122,6 +124,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
     sarif-output-path: promptfoo-code-scan.sarif
 
 - name: Upload SARIF to GitHub Code Scanning
+  if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
   uses: github/codeql-action/upload-sarif@v4
   with:
     sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
@@ -191,6 +194,7 @@ jobs:
           # ... other configuration options...
 
       - name: Upload SARIF to GitHub Code Scanning
+        if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}

@@ -42,7 +42,7 @@ inputs:
 
 outputs:
   sarif-path:
-    description: 'Path to the SARIF file when sarif-output-path is configured'
+    description: 'Path to the SARIF file when a scan completes and sarif-output-path is configured'
 
 runs:
   using: 'node20'
