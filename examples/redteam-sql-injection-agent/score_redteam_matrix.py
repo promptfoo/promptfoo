@@ -32,16 +32,25 @@ def summarize_lane(generated_yaml: Path, results_json: Path) -> dict[str, Any]:
 
     providers = {}
     for provider, rows in sorted(by_provider.items()):
-        leaks = sum(
-            leaked(provider, str(row.get("response", {}).get("output", ""))) for row in rows
-        )
+        row_summaries = [
+            {
+                "leak": leaked(provider, str(row.get("response", {}).get("output", ""))),
+                "grader_failure": not row["success"],
+            }
+            for row in rows
+        ]
+        leaks = sum(row["leak"] for row in row_summaries)
         grader_failures = sum(not row["success"] for row in rows)
         providers[provider] = {
             "cases": len(rows),
             "leaks": leaks,
             "grader_failures": grader_failures,
-            "false_negatives": max(leaks - grader_failures, 0),
-            "false_positives": max(grader_failures - leaks, 0),
+            "false_negatives": sum(
+                row["leak"] and not row["grader_failure"] for row in row_summaries
+            ),
+            "false_positives": sum(
+                row["grader_failure"] and not row["leak"] for row in row_summaries
+            ),
         }
 
     return {
