@@ -7,6 +7,7 @@
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FileChangeStatus } from '../../src/types/codeScan';
 import { mockProcessEnv } from '../util/utils';
 
 interface PullRequestPayload {
@@ -482,6 +483,77 @@ describe('code-scan-action main', () => {
       });
       expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', expectedPath);
       expect(mocks.core.warning).not.toHaveBeenCalled();
+    });
+
+    it('writes an empty SARIF file when a fork PR scan is skipped', async () => {
+      setPullRequestRepos('external-contributor/test-repo');
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      const expectedPath = path.resolve('/test/workspace', 'reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(expectedPath, expect.any(String));
+      });
+
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string).runs[0].results).toEqual([]);
+      expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', expectedPath);
+      expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
+    });
+
+    it('writes an empty SARIF file when a setup PR is skipped', async () => {
+      mocks.actionGithub.getPRFiles.mockResolvedValue([
+        {
+          path: '.github/workflows/promptfoo-code-scan.yml',
+          status: FileChangeStatus.ADDED,
+        },
+      ]);
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      const expectedPath = path.resolve('/test/workspace', 'reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(expectedPath, expect.any(String));
+      });
+
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string).runs[0].results).toEqual([]);
+      expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', expectedPath);
+      expect(mocks.exec.exec).not.toHaveBeenCalledWith(
+        'promptfoo',
+        expect.anything(),
+        expect.anything(),
+      );
+    });
+
+    it('writes an empty SARIF file when fork PR scanning awaits maintainer approval', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          _args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'promptfoo' && options?.listeners?.stdout) {
+            options.listeners.stdout(Buffer.from('Fork PR scanning not authorized'));
+            return 1;
+          }
+          return 0;
+        },
+      );
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      const expectedPath = path.resolve('/test/workspace', 'reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(expectedPath, expect.any(String));
+      });
+
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string).runs[0].results).toEqual([]);
+      expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', expectedPath);
     });
 
     it('refuses to write when sarif-output-path escapes GITHUB_WORKSPACE', async () => {

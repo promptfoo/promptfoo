@@ -122,6 +122,7 @@ describe('Scanner machine-readable output', () => {
     vi.doMock('../../src/logger', () => ({
       default: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
       getLogLevel: vi.fn().mockReturnValue('info'),
+      setLogLevel: vi.fn(),
     }));
     vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
       registerCleanupHandlers: vi.fn(),
@@ -152,6 +153,7 @@ describe('Scanner machine-readable output', () => {
 
     const { executeScan } = await import('../../src/codeScan/scanner/index');
     const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+    const { setLogLevel } = await import('../../src/logger');
 
     await executeScan('/test/repo', options);
 
@@ -160,5 +162,6 @@ describe('Scanner machine-readable output', () => {
       expect.any(Number),
       { format: expectedFormat, githubPr: undefined },
     );
+    expect(setLogLevel).toHaveBeenCalledWith('error');
   });
 });

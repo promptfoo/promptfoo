@@ -8,7 +8,7 @@ import path from 'path';
 import type { ChildProcess } from 'child_process';
 
 import cliState from '../../cliState';
-import logger, { getLogLevel } from '../../logger';
+import logger, { getLogLevel, setLogLevel } from '../../logger';
 import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
@@ -103,6 +103,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       process.exitCode = 1;
     };
     return;
+  }
+
+  // Structured modes reserve stdout for the payload, so suppress logger output
+  // from the full scan stack before loading config or touching downstream helpers.
+  if (outputFormat !== CodeScanOutputFormat.TEXT) {
+    setLogLevel('error');
   }
 
   // Load and merge configuration

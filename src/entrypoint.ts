@@ -138,6 +138,29 @@ function formatMalformedNodeVersionMessage(currentVersion: string): string {
 const isBun = typeof (globalThis as Record<string, unknown>).Bun !== 'undefined';
 const isDeno = typeof (globalThis as Record<string, unknown>).Deno !== 'undefined';
 
+function requestsStructuredCodeScanOutput(argv: readonly string[]): boolean {
+  const codeScansIndex = argv.indexOf('code-scans');
+  if (codeScansIndex === -1 || argv[codeScansIndex + 1] !== 'run') {
+    return false;
+  }
+
+  for (let index = codeScansIndex + 2; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === '--json') {
+      return true;
+    }
+    if (arg === '--format' || arg === '-f') {
+      return argv[index + 1] === 'json' || argv[index + 1] === 'sarif';
+    }
+    if (arg.startsWith('--format=')) {
+      const format = arg.slice('--format='.length);
+      return format === 'json' || format === 'sarif';
+    }
+  }
+
+  return false;
+}
+
 if (!isBun && !isDeno) {
   const isSupportedVersion = isSupportedNodeEngineVersion(process.version);
   if (isSupportedVersion === null) {
@@ -148,6 +171,12 @@ if (!isBun && !isDeno) {
     console.error(formatUnsupportedNodeVersionMessage(process.version));
     process.exit(1);
   }
+}
+
+// Structured code-scan modes reserve stdout for the payload. This has to happen
+// before importing main.ts because some startup modules log while they initialize.
+if (requestsStructuredCodeScanOutput(process.argv.slice(2))) {
+  Object.assign(process.env, { LOG_LEVEL: 'error' });
 }
 
 // Update argv[1] so isMainModule() in main.ts correctly detects CLI execution.
