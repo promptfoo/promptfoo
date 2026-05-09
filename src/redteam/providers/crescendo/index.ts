@@ -49,6 +49,7 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   isValidChatMessageArray,
+  mergeStoredGraderResultTokenUsage,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
@@ -663,10 +664,13 @@ export class CrescendoProvider implements ApiProvider {
             );
 
             graderPassed = grade.pass;
-            storedGraderResult = {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            storedGraderResult = mergeStoredGraderResultTokenUsage(
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              storedGraderResult,
+            );
           }
         }
 

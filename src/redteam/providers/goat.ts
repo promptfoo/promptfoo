@@ -37,6 +37,7 @@ import {
   buildGraderResultAssertion,
   getGraderAssertionValue,
   getLastMessageContent,
+  mergeStoredGraderResultTokenUsage,
   tryUnblocking,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -782,10 +783,13 @@ export default class GoatProvider implements ApiProvider {
             gradingContext,
           );
           graderPassed = grade.pass;
-          storedGraderResult = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          storedGraderResult = mergeStoredGraderResultTokenUsage(
+            {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            },
+            storedGraderResult,
+          );
         }
 
         if (graderPassed === false) {

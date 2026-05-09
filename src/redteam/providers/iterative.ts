@@ -46,6 +46,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  mergeStoredGraderResultTokenUsage,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -611,10 +612,13 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = {
-          ...grade,
-          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-        };
+        storedGraderResult = mergeStoredGraderResultTokenUsage(
+          {
+            ...grade,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+          },
+          storedGraderResult,
+        );
       }
     }
     // Calculate the score

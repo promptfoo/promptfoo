@@ -245,7 +245,7 @@ describe('RedteamIterativeProvider', () => {
 
       expect(result.metadata.finalIteration).toBe(1);
       expect(result.metadata.stopReason).toBe('Grader failed');
-      expect(result.metadata.storedGraderResult).toEqual({
+      expect(result.metadata.storedGraderResult).toMatchObject({
         pass: false,
         score: 0,
         reason: 'Jailbreak detected by grader',
@@ -266,6 +266,71 @@ describe('RedteamIterativeProvider', () => {
         undefined, // skipRefusalCheck
         expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
       );
+    });
+
+    it('should preserve cumulative grader token usage across iterations', async () => {
+      const mockGrader = {
+        getResult: vi
+          .fn<any>()
+          .mockResolvedValueOnce({
+            grade: {
+              pass: true,
+              score: 1,
+              reason: 'first pass',
+              tokensUsed: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+            },
+            rubric: 'test rubric',
+          })
+          .mockResolvedValueOnce({
+            grade: {
+              pass: true,
+              score: 1,
+              reason: 'second pass',
+              tokensUsed: { total: 20, prompt: 12, completion: 8, numRequests: 2 },
+            },
+            rubric: 'test rubric',
+          }),
+      };
+
+      mockGetGraderById.mockReturnValue(mockGrader);
+
+      const test: AtomicTestCase = {
+        vars: {},
+        assert: [{ type: 'promptfoo:redteam:test-plugin' }],
+        metadata: { pluginId: 'test-plugin', goal: 'test goal' },
+      };
+
+      const result = await runRedteamConversation({
+        context: {
+          prompt: { raw: '', label: '' },
+          vars: {},
+          test,
+        },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.finalIteration).toBe(2);
+      expect(result.metadata.storedGraderResult).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: 'second pass',
+        tokensUsed: {
+          total: 30,
+          prompt: 18,
+          completion: 12,
+          numRequests: 3,
+        },
+      });
     });
 
     it('should continue iterating when judge score is high and grader passes', async () => {

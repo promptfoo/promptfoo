@@ -13,6 +13,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   type Message,
+  mergeStoredGraderResultTokenUsage,
   messagesToRedteamHistory,
   redteamProviderManager,
   resetRedteamProviderLoader,
@@ -29,6 +30,7 @@ import type {
   AssertionSet,
   CallApiContextParams,
   CallApiOptionsParams,
+  GradingResult,
   Prompt,
 } from '../../../src/types/index';
 
@@ -502,6 +504,72 @@ describe('shared redteam provider utilities', () => {
           temperature: TEMPERATURE,
           response_format: { type: 'json_object' },
         });
+      });
+    });
+  });
+
+  describe('mergeStoredGraderResultTokenUsage', () => {
+    it('preserves the latest grader result while accumulating all prior grader token usage', () => {
+      const previousResult: GradingResult = {
+        pass: false,
+        score: 0,
+        reason: 'first judge',
+        tokensUsed: {
+          total: 10,
+          prompt: 6,
+          completion: 4,
+          numRequests: 1,
+          completionDetails: {
+            reasoning: 2,
+          },
+        },
+      };
+      const latestResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'latest judge',
+        tokensUsed: {
+          total: 20,
+          prompt: 12,
+          completion: 8,
+          numRequests: 2,
+          completionDetails: {
+            reasoning: 3,
+            cacheReadInputTokens: 5,
+          },
+        },
+      };
+
+      expect(mergeStoredGraderResultTokenUsage(latestResult, previousResult)).toEqual({
+        ...latestResult,
+        tokensUsed: {
+          total: 30,
+          prompt: 18,
+          completion: 12,
+          cached: 0,
+          numRequests: 3,
+          completionDetails: {
+            reasoning: 5,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+            cacheReadInputTokens: 5,
+            cacheCreationInputTokens: 0,
+          },
+          assertions: {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            numRequests: 0,
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
+          },
+        },
       });
     });
   });

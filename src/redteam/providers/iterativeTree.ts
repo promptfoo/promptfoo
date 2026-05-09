@@ -55,6 +55,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  mergeStoredGraderResultTokenUsage,
   redteamProviderManager,
 } from './shared';
 import type { Environment } from 'nunjucks';
@@ -951,10 +952,13 @@ async function runRedteamConversation({
               undefined, // skipRefusalCheck
               gradingContext,
             );
-            storedGraderResult = {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            storedGraderResult = mergeStoredGraderResultTokenUsage(
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              storedGraderResult,
+            );
             graderPassed = grade.pass;
           }
         }

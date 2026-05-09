@@ -27,6 +27,7 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
+  mergeStoredGraderResultTokenUsage,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
@@ -551,10 +552,13 @@ export class CustomProvider implements ApiProvider {
               additionalRubric,
             );
             graderPassed = grade.pass;
-            storedGraderResult = {
-              ...grade,
-              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-            };
+            storedGraderResult = mergeStoredGraderResultTokenUsage(
+              {
+                ...grade,
+                assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+              },
+              storedGraderResult,
+            );
           }
         }
 

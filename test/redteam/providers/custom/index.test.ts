@@ -971,7 +971,7 @@ describe('CustomProvider', () => {
     const result = await testProvider.callApi(prompt, context);
 
     // Verify storedGraderResult is included in metadata (with assertion.value set to rubric)
-    expect(result.metadata?.storedGraderResult).toEqual({
+    expect(result.metadata?.storedGraderResult).toMatchObject({
       ...mockGraderResult,
       assertion: { type: 'mock-grader', value: testRubric },
     });
@@ -1075,12 +1075,14 @@ describe('CustomProvider', () => {
       pass: false,
       score: 0,
       reason: 'First jailbreak detected',
+      tokensUsed: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
     };
 
     const secondGraderResult = {
       pass: true,
       score: 1,
       reason: 'No jailbreak on second turn',
+      tokensUsed: { total: 20, prompt: 12, completion: 8, numRequests: 2 },
     };
 
     const testRubric = 'Test grading rubric';
@@ -1135,6 +1137,12 @@ describe('CustomProvider', () => {
     // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
       ...secondGraderResult,
+      tokensUsed: expect.objectContaining({
+        total: 30,
+        prompt: 18,
+        completion: 12,
+        numRequests: 3,
+      }),
       assertion: { type: 'mock-grader', value: testRubric },
     });
     expect(result.metadata?.stopReason).toBe('Max rounds reached');

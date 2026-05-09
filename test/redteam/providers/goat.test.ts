@@ -1158,12 +1158,14 @@ describe('RedteamGoatProvider', () => {
       pass: false,
       score: 0,
       reason: 'Jailbreak detected',
+      tokensUsed: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
     };
 
     const secondGraderResult = {
       pass: true,
       score: 1,
       reason: 'No jailbreak detected',
+      tokensUsed: { total: 20, prompt: 12, completion: 8, numRequests: 2 },
     };
 
     // Mock grader to fail on first turn, pass on second turn
@@ -1202,7 +1204,17 @@ describe('RedteamGoatProvider', () => {
     const result = await provider.callApi('test prompt', context);
 
     // Should continue to max turns and store the LAST grader result
-    expect(result.metadata?.storedGraderResult).toMatchObject(secondGraderResult);
+    expect(result.metadata?.storedGraderResult).toMatchObject({
+      pass: secondGraderResult.pass,
+      score: secondGraderResult.score,
+      reason: secondGraderResult.reason,
+    });
+    expect(result.metadata?.storedGraderResult?.tokensUsed).toMatchObject({
+      total: 30,
+      prompt: 18,
+      completion: 12,
+      numRequests: 3,
+    });
     expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
     expect(result.metadata?.stopReason).toBe('Max turns reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);

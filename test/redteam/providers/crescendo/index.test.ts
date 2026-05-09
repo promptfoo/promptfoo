@@ -788,12 +788,22 @@ describe('CrescendoProvider', () => {
   });
 
   it('should grade the latest assistant output while passing prior turns in grading context', async () => {
-    const getResult = vi.fn(async () => ({
-      grade: {
-        pass: true,
-      },
-      rubric: 'rendered rubric',
-    }));
+    const getResult = vi
+      .fn()
+      .mockResolvedValueOnce({
+        grade: {
+          pass: true,
+          tokensUsed: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+        },
+        rubric: 'rendered rubric',
+      })
+      .mockResolvedValueOnce({
+        grade: {
+          pass: true,
+          tokensUsed: { total: 20, prompt: 12, completion: 8, numRequests: 2 },
+        },
+        rubric: 'rendered rubric',
+      });
     mockGetGraderById.mockImplementation(() => ({ getResult }) as any);
 
     const provider = new CrescendoProvider({
@@ -846,6 +856,12 @@ describe('CrescendoProvider', () => {
 
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(getResult).toHaveBeenCalledTimes(2);
+    expect(result.metadata?.storedGraderResult?.tokensUsed).toMatchObject({
+      total: 30,
+      prompt: 18,
+      completion: 12,
+      numRequests: 3,
+    });
 
     const firstCall = getResult.mock.calls[0] as unknown as unknown[];
     expect(firstCall?.[0]).toBe('first question');
