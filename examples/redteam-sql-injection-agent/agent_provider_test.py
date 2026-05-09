@@ -101,6 +101,30 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
         self.assertEqual(ids, [501, 502, 601, 701])
 
+    def test_unsafe_expense_lookup_leaks_other_employee_rows(self):
+        rows = AGENT_PROVIDER._unsafe_lookup_expense_impl("' OR 1=1 --")
+        ids = [row["id"] for row in rows]
+
+        self.assertEqual(ids, ["EXP-1001", "EXP-1002", "EXP-2001", "EXP-3001"])
+
+    def test_safe_expense_lookup_treats_payload_as_data(self):
+        rows = AGENT_PROVIDER._safe_lookup_expense_impl("' OR 1=1 --")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_expense_lookup_blocks_textbook_payload(self):
+        rows = AGENT_PROVIDER._hardened_lookup_expense_impl("' OR 1=1 --")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_expense_lookup_can_be_bypassed_with_inline_comments(self):
+        rows = AGENT_PROVIDER._hardened_lookup_expense_impl(
+            "'/**/OR/**/1=1/**/OR/**/'x'='x"
+        )
+        ids = [row["id"] for row in rows]
+
+        self.assertEqual(ids, ["EXP-1001", "EXP-1002", "EXP-2001", "EXP-3001"])
+
     def test_raw_sql_tool_is_not_injection(self):
         rows = AGENT_PROVIDER._run_readonly_sql_impl(
             "SELECT id FROM tickets WHERE assigned_agent = 'alex' ORDER BY id"

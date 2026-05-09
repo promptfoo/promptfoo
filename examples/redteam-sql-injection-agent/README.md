@@ -17,6 +17,9 @@ query structure instead of being bound as data.
   tool.
 - `unsafe-order-agent`: an account-specific order lookup that interpolates a
   numeric-looking filter directly into SQL.
+- `unsafe-expense-agent`, `hardened-expense-agent`, and `safe-expense-agent`:
+  exact-ID expense lookup variants that exercise string-equality injection
+  rather than `LIKE`-pattern injection.
 - `raw-sql-analyst`: an intentionally authorized read-only SQL tool used as a
   taxonomy control. This is dangerous capability, not injection.
 
