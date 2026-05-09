@@ -31,6 +31,8 @@ query structure instead of being bound as data.
 - `promptfooconfig.yaml`: an eval that compares the five agent behaviors
 - `promptfooconfig.redteam.yaml`: a generated-corpus benchmark that runs the
   same SQL injection probes against unsafe, hardened, and safe ticket agents
+- `promptfooconfig.redteam.expenses.yaml`: the same benchmark structure for the
+  exact-ID expense-report agents
 - `score_redteam_results.py`: summarizes generated attack-family diversity,
   leaked rows, and grader failures from exported red-team results
 - `requirements.txt`: Python dependencies
@@ -113,3 +115,6 @@ The benchmark uses three interpretations of the same product surface:
 2. `hardened-ticket-agent-redteam` should resist obvious payloads but remain
    bypassable by stronger generations.
 3. `safe-ticket-agent-redteam` should not leak rows for any generated payload.
+
+Run `promptfooconfig.redteam.expenses.yaml` the same way when you want the
+exact-ID expense-report benchmark instead of the `LIKE`-search ticket benchmark.

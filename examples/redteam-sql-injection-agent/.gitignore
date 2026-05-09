@@ -2,3 +2,5 @@ support.sqlite3
 support.sqlite3-*
 redteam.generated.yaml
 redteam.results.json
+redteam.expenses.generated.yaml
+redteam.expenses.results.json
