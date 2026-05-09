@@ -5923,3 +5923,83 @@ The learned action module stays stable in all three draws:
    - when to call a local expert
    - when to materialize support
    - and when the base proposer is already sufficient
+
+## Iteration 70 - 2026-05-09
+
+### Goal
+
+Push one level farther up the planner stack:
+
+> Can we replace the hand-authored legal-counsel activation boundary with a small
+> learned applicability classifier and still preserve the repaired planner
+> frontier?
+
+### Experiment
+
+1. Added `evaluateRepairLearnedBoundaryPlannerComposition.ts`.
+2. Kept fixed:
+   - the residual-family diagnosis from iteration 63
+   - the generated BOLA support exemplar from iteration 65
+   - the learned legal-counsel actions from iteration 68
+3. Added a compact applicability learner with three synthetic boundary examples:
+   - one positive legal-counsel local-ambiguity exemplar
+   - one negative vendor-support prompt-extraction exemplar
+   - one negative billing/BOLA exemplar
+4. Compared:
+   - `global`
+   - `learned-planner`
+   - `learned-boundary-planner`
+
+### Results
+
+The learned boundary preserves the full planner frontier:
+
+| Router                   | Stable label holdout accuracy | Avg label holdout regret |
+| ------------------------ | ----------------------------: | -----------------------: |
+| global                   |                         `2/4` |                `0.00236` |
+| learned planner          |                         `4/4` |                `0.00000` |
+| learned boundary planner |                         `4/4` |                `0.00000` |
+
+Across all three draws, the learned applicability classifier activates on the
+only `local-ambiguity` holdout:
+
+| Task                           | Learned applicability |
+| ------------------------------ | --------------------- |
+| `prompt-extraction-novelty-v3` | `true`                |
+
+### Reflection
+
+1. The legal-counsel activation boundary is no longer a fixed string-match rule
+   inside the planner.
+2. The learned boundary worked because the planner already narrowed the problem:
+   - residual diagnosis selected the `local-ambiguity` family
+   - the applicability learner only had to decide whether the local expert fit
+     that residual
+3. This is a more plausible scalable pattern than learning one monolithic global
+   router:
+   - diagnose first
+   - then learn a small applicability predicate for the chosen operator
+4. The experiment also exposed an important limitation:
+   - on the current benchmark, there is only one positive `local-ambiguity`
+     holdout to classify
+   - so this proves replaceability of the hand-authored boundary, not robust
+     generalization yet
+5. The next useful move is to make the boundary task harder:
+   - generate additional positive and negative local-ambiguity residuals
+   - then test whether the learned applicability predicate still separates them
+
+### New Hypotheses
+
+1. Planner policies should be decomposed into:
+   - diagnosis
+   - operator applicability
+   - operator materialization
+   - operator action
+2. Learned applicability predicates may be much easier to generalize than direct
+   global profile routing because they answer a narrower yes/no question.
+3. The next benchmark expansion should stress operator boundaries explicitly,
+   not only proposer quality:
+   - multiple legal-counsel-like positives
+   - hard negatives from adjacent prompt-extraction roles
+   - and cross-plugin negatives that share surface features but need different
+     repair operators
