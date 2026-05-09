@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { materializeMcpValue } from '../../src/redteam/mcpMaterialization';
+import {
+  McpMaterializationError,
+  materializeMcpValue,
+  materializeTrackedMcpValue,
+} from '../../src/redteam/mcpMaterialization';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
 import type { ApiProvider } from '../../src/types/index';
@@ -119,6 +123,35 @@ describe('materializeMcpValue', () => {
     expect(provider.callApi).toHaveBeenCalledWith(
       expect.stringContaining('Find clean energy companies.'),
     );
+  });
+
+  it('returns provider token usage for tracked materialization', async () => {
+    vi.mocked(provider.callApi).mockResolvedValueOnce({
+      output: '{"tool":"search_companies","args":{"query":"clean energy","limit":3}}',
+      tokenUsage: {
+        prompt: 10,
+        completion: 4,
+        total: 14,
+        numRequests: 1,
+      },
+    });
+
+    await expect(
+      materializeTrackedMcpValue({
+        provider,
+        purpose: 'Search companies',
+        value: 'Find clean energy companies.',
+        tools: [searchCompaniesTool],
+      }),
+    ).resolves.toEqual({
+      value: '{"tool":"search_companies","args":{"query":"clean energy","limit":3}}',
+      tokenUsage: {
+        prompt: 10,
+        completion: 4,
+        total: 14,
+        numRequests: 1,
+      },
+    });
   });
 
   it('accepts MCP JSON from array provider outputs', async () => {
@@ -241,5 +274,34 @@ describe('materializeMcpValue', () => {
         ],
       }),
     ).rejects.toThrow('Failed to materialize MCP value');
+  });
+
+  it('preserves provider token usage when tracked repair fails after the LLM call', async () => {
+    vi.mocked(provider.callApi).mockResolvedValueOnce({
+      output: '{"tool":"search_companies","args":{"limit":3}}',
+      tokenUsage: {
+        prompt: 8,
+        completion: 3,
+        total: 11,
+        numRequests: 1,
+      },
+    });
+
+    await expect(
+      materializeTrackedMcpValue({
+        provider,
+        purpose: 'Search companies',
+        value: 'Find clean energy companies.',
+        tools: [searchCompaniesTool],
+      }),
+    ).rejects.toMatchObject<McpMaterializationError>({
+      message: 'Failed to materialize MCP value: "Find clean energy companies."',
+      tokenUsage: {
+        prompt: 8,
+        completion: 3,
+        total: 11,
+        numRequests: 1,
+      },
+    });
   });
 });

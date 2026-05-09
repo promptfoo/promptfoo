@@ -5,12 +5,32 @@ import logger from '../logger';
 import { extractJsonObjects } from '../util/json';
 
 import type { MCPTool } from '../providers/mcp/types';
-import type { ApiProvider } from '../types/index';
+import type { ApiProvider, TokenUsage } from '../types/index';
 
 type McpToolCall = {
   tool: string;
   args: Record<string, unknown>;
 };
+
+type TrackedMcpMaterialization = {
+  value: string;
+  tokenUsage?: TokenUsage;
+};
+
+type RepairedMcpToolCall = {
+  toolCall?: McpToolCall;
+  tokenUsage?: TokenUsage;
+};
+
+export class McpMaterializationError extends Error {
+  constructor(
+    message: string,
+    readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'McpMaterializationError';
+  }
+}
 
 const TOOL_NAME_FIELDS = ['tool', 'toolName', 'function', 'functionName', 'name'] as const;
 const TOOL_ARGS_FIELDS = ['args', 'arguments', 'params', 'parameters'] as const;
@@ -108,7 +128,7 @@ async function repairMcpToolCallWithProvider({
   toolByName: Map<string, MCPTool>;
   tools: MCPTool[];
   value: unknown;
-}): Promise<McpToolCall | undefined> {
+}): Promise<RepairedMcpToolCall> {
   let response: Awaited<ReturnType<ApiProvider['callApi']>>;
   try {
     response = await provider.callApi(
@@ -134,12 +154,12 @@ async function repairMcpToolCallWithProvider({
         error instanceof Error ? error.message : String(error)
       }`,
     );
-    return undefined;
+    return {};
   }
 
   if (response.error) {
     logger.warn(`Failed to materialize MCP value: ${response.error}`);
-    return undefined;
+    return { tokenUsage: response.tokenUsage };
   }
 
   const output = getProviderOutputString(response);
@@ -148,14 +168,17 @@ async function repairMcpToolCallWithProvider({
   for (const parsedObject of parsedObjects) {
     const toolCall = parseMcpToolCall(parsedObject, allowedToolNames);
     if (validateMcpToolCall(toolCall, toolByName)) {
-      return toolCall;
+      return {
+        toolCall,
+        tokenUsage: response.tokenUsage,
+      };
     }
   }
 
-  return undefined;
+  return { tokenUsage: response.tokenUsage };
 }
 
-export async function materializeMcpValue({
+export async function materializeTrackedMcpValue({
   intentValue,
   purpose,
   provider,
@@ -167,9 +190,11 @@ export async function materializeMcpValue({
   provider?: ApiProvider;
   tools: MCPTool[];
   value: unknown;
-}): Promise<string> {
+}): Promise<TrackedMcpMaterialization> {
   if (tools.length === 0) {
-    return typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value);
+    return {
+      value: typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value),
+    };
   }
 
   const allowedToolNames = new Set(tools.map((tool) => tool.name));
@@ -177,19 +202,19 @@ export async function materializeMcpValue({
   const existingToolCall = parseMcpToolCall(value, allowedToolNames);
 
   if (existingToolCall && validateMcpToolCall(existingToolCall, toolByName)) {
-    return stringifyToolCall(existingToolCall);
+    return { value: stringifyToolCall(existingToolCall) };
   }
 
   const materializationIntentValue = intentValue ?? value;
   if (!provider) {
-    throw new Error(
+    throw new McpMaterializationError(
       `Failed to materialize MCP value: inference provider is required for non-JSON MCP input ${JSON.stringify(
         value,
       )}`,
     );
   }
 
-  const toolCall = await repairMcpToolCallWithProvider({
+  const repaired = await repairMcpToolCallWithProvider({
     allowedToolNames,
     provider,
     purpose: purpose ?? '',
@@ -198,9 +223,21 @@ export async function materializeMcpValue({
     value: materializationIntentValue,
   });
 
-  if (!toolCall || !validateMcpToolCall(toolCall, toolByName)) {
-    throw new Error(`Failed to materialize MCP value: ${JSON.stringify(value)}`);
+  if (!repaired.toolCall || !validateMcpToolCall(repaired.toolCall, toolByName)) {
+    throw new McpMaterializationError(
+      `Failed to materialize MCP value: ${JSON.stringify(value)}`,
+      repaired.tokenUsage,
+    );
   }
 
-  return stringifyToolCall(toolCall);
+  return {
+    value: stringifyToolCall(repaired.toolCall),
+    ...(repaired.tokenUsage ? { tokenUsage: repaired.tokenUsage } : {}),
+  };
+}
+
+export async function materializeMcpValue(
+  params: Parameters<typeof materializeTrackedMcpValue>[0],
+): Promise<string> {
+  return (await materializeTrackedMcpValue(params)).value;
 }
