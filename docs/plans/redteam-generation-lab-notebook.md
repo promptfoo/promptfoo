@@ -4007,3 +4007,95 @@ The weakest stability point is now `prompt-extraction-coverage-v1`:
 3. The best representation may be hybrid:
    - some slots model-generated but constrained
    - some slots copied deterministically from already-known benchmark fields
+
+## Iteration 48 - 2026-05-09
+
+### Goal
+
+Turn the emerging ontology work into something we can optimize deliberately:
+
+> Can we score candidate representations on a shared frontier instead of
+> debating them one-by-one from memory?
+
+### Experiment
+
+1. Added `compareRepairSemanticRepresentationFrontier.ts`.
+2. The frontier report consumes repeated-draw JSON artifacts and compares each
+   representation on:
+   - repeated-draw label stability
+   - average unique tuple count
+   - average holdout routing quality
+   - best fully stable holdout routing accuracy
+   - number of fully stable holdout models
+3. Added a simple Pareto-dominance rule over:
+   - slot agreement
+   - stable holdout accuracy
+   - unique tuple count
+4. Ran the first comparison over:
+   - free-form signatures from iteration 45
+   - five-slot constrained signatures from iteration 46
+   - six-slot role-aware signatures from iteration 47
+5. Ran:
+
+```bash
+npx tsx scripts/redteam-research/compareRepairSemanticRepresentationFrontier.ts \
+  free-form=/private/tmp/repair-semantic-stability-iter45.json \
+  constrained=/private/tmp/repair-constrained-semantic-stability-iter46.json \
+  role-aware=/private/tmp/repair-role-aware-semantic-stability-iter47.json
+```
+
+### Results
+
+Current frontier:
+
+| Representation | Slot agreement | Avg unique tuples | Best stable holdout accuracy |
+| -------------- | -------------: | ----------------: | ---------------------------: |
+| role-aware     |        `0.839` |             `9.3` |                        `2/4` |
+| constrained    |        `0.927` |             `7.0` |                        `1/4` |
+
+Dominance result:
+
+1. `role-aware` is nondominated:
+   - less stable than the five-slot ontology
+   - but more discriminative
+   - and better for stable routing
+2. `constrained` is also nondominated:
+   - worse for routing
+   - but still the strongest pure-stability point
+3. `free-form` is now formally dominated by both:
+   - no fully stable holdout model
+   - far lower label stability
+   - no tuple-resolution advantage available to offset that weakness
+
+### Reflection
+
+1. This is a small tooling iteration, but an important research one:
+   - we now have a reusable representation scorecard
+   - and a concrete definition of improvement
+2. The frontier clarifies that there is not yet one universally “best”
+   representation:
+   - role-aware is the best practical point so far
+   - constrained is the best stability anchor
+3. Free-form signatures have now failed three different tests:
+   - poor repeated-draw stability
+   - unstable routing
+   - formal dominance under the frontier criteria
+4. The next experiments should produce **candidate points** for this frontier,
+   not isolated anecdotes.
+5. This also suggests a natural search loop:
+   - propose a new axis
+   - run repeated draws
+   - add it to the frontier
+   - keep only nondominated variants
+
+### New Hypotheses
+
+1. A hybrid representation that adds deterministic benchmark fields to the
+   constrained ontology may beat role-aware on stability while matching or
+   improving its resolution.
+2. The next candidate should probably be:
+   - five constrained model slots
+   - plus deterministic blocked-metric family
+3. If that hybrid point dominates the five-slot ontology, we can start replacing
+   hand-authored model axes with known deterministic task metadata where
+   possible.
