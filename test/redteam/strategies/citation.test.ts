@@ -184,6 +184,23 @@ describe('citation strategy', () => {
     expect(logger.warn).toHaveBeenCalledWith('No citation test cases were generated');
   });
 
+  it('should preserve one-row API error usage', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        error: 'Validation error: Required at "result.topic"; Required at "result.citation"',
+        tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+      },
+      cached: false,
+      status: 500,
+      statusText: 'Error',
+    });
+
+    await expect(addCitationTestCases(testCases, 'prompt', {})).rejects.toMatchObject({
+      message: 'Validation error: Required at "result.topic"; Required at "result.citation"',
+      tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+    });
+  });
+
   it('should handle invalid response structure gracefully', async () => {
     mockFetchWithCache.mockResolvedValueOnce({
       data: {
@@ -204,6 +221,25 @@ describe('citation strategy', () => {
       '[Citation] Invalid response structure - missing citation data',
     );
     expect(logger.warn).toHaveBeenCalledWith('No citation test cases were generated');
+  });
+
+  it('should preserve one-row invalid response usage', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+        },
+        tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    await expect(addCitationTestCases(testCases, 'prompt', {})).rejects.toMatchObject({
+      message: 'Citation generation returned invalid response structure',
+      tokenUsage: { total: 23, prompt: 14, completion: 9, numRequests: 1 },
+    });
   });
 
   it('should handle network errors gracefully', async () => {

@@ -16,6 +16,16 @@ import { mergeProviderTokenUsage } from './util';
 import type { TestCase } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 
+class CitationGenerationError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'CitationGenerationError';
+  }
+}
+
 async function generateCitations(
   testCases: TestCase[],
   injectVar: string,
@@ -84,6 +94,9 @@ async function generateCitations(
       if (data.error) {
         logger.error(`[Citation] Error in citation generation: ${data.error}`);
         logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
+        if (testCases.length === 1 && data.tokenUsage) {
+          throw new CitationGenerationError(data.error, data.tokenUsage);
+        }
         if (progressBar) {
           progressBar.increment(1);
         }
@@ -94,6 +107,12 @@ async function generateCitations(
       if (!data.result?.citation) {
         logger.error(`[Citation] Invalid response structure - missing citation data`);
         logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
+        if (testCases.length === 1 && data.tokenUsage) {
+          throw new CitationGenerationError(
+            'Citation generation returned invalid response structure',
+            data.tokenUsage,
+          );
+        }
         if (progressBar) {
           progressBar.increment(1);
         }
@@ -152,6 +171,9 @@ async function generateCitations(
       progressBar.stop();
     }
     logger.error(`Error in remote citation generation: ${error}`);
+    if (error instanceof CitationGenerationError) {
+      throw error;
+    }
     return [];
   }
 }
