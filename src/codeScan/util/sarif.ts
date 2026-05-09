@@ -114,7 +114,8 @@ function isReportableFinding(comment: Comment): boolean {
   // findings). CommentSchema marks `severity` optional and toSarifLevel falls back to
   // 'note' for undefined, so we let undefined flow through rather than silently dropping
   // a finding the scanner couldn't grade. Explicit NONE means "no issue" and is filtered.
-  return Boolean(comment.file && comment.severity !== CodeScanSeverity.NONE);
+  const hasFile = comment.file != null && comment.file !== '';
+  return hasFile && comment.severity !== CodeScanSeverity.NONE;
 }
 
 function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['level'] {
