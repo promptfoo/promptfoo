@@ -5,23 +5,27 @@ import { createMockProvider } from '../../factories/provider';
 import type { ApiProvider } from '../../../src/types/index';
 
 const mockUserProviderCallApi = vi.fn();
+const mockUserProviderId = vi.fn();
+const mockPromptfooSimulatedUserProvider = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/providers/promptfoo', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    PromptfooSimulatedUserProvider: vi.fn().mockImplementation(function () {
-      return {
-        callApi: mockUserProviderCallApi,
-        id: vi.fn().mockReturnValue('mock-user-provider'),
-        options: {},
-      };
-    }),
+    PromptfooSimulatedUserProvider: mockPromptfooSimulatedUserProvider,
   };
 });
 
 describe('RedteamMischievousUserProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPromptfooSimulatedUserProvider.mockReset().mockImplementation(function () {
+      return {
+        callApi: mockUserProviderCallApi,
+        id: mockUserProviderId,
+        options: {},
+      };
+    });
+    mockUserProviderId.mockReset().mockReturnValue('mock-user-provider');
     mockUserProviderCallApi.mockResolvedValue({
       output: 'user response',
       tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },

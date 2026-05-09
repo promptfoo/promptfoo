@@ -6,6 +6,8 @@ import {
 } from '../../../src/redteam/strategies/indirectWebPwn';
 
 const mockFetchWithRetries = vi.hoisted(() => vi.fn());
+const mockGetUserEmail = vi.hoisted(() => vi.fn());
+const mockGetRemoteGenerationUrl = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -13,12 +15,12 @@ vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
 }));
 
 vi.mock('../../../src/globalConfig/accounts', () => ({
-  getUserEmail: vi.fn().mockReturnValue('test@example.com'),
+  getUserEmail: mockGetUserEmail,
 }));
 
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
   ...(await importOriginal()),
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://mocked.task.api'),
+  getRemoteGenerationUrl: mockGetRemoteGenerationUrl,
 }));
 
 function mockJsonResponse(payload: unknown, ok = true) {
@@ -33,6 +35,8 @@ function mockJsonResponse(payload: unknown, ok = true) {
 describe('addIndirectWebPwnTestCases token usage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetUserEmail.mockReset().mockReturnValue('test@example.com');
+    mockGetRemoteGenerationUrl.mockReset().mockReturnValue('https://mocked.task.api');
     clearPageState();
   });
 
