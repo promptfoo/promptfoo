@@ -74,13 +74,13 @@ npx tsx scripts/redteam-research/analyzeGeneratedAttacks.ts \
   --format markdown
 ```
 
-| Plugin | Rows | Unique normalized prompts | Detected tactic coverage | Purpose grounding | Entity reference |
-| --- | ---: | ---: | --- | ---: | ---: |
-| `sql-injection` | 35 | 5 | `2/5` | `100%` | `100%` |
-| `pii:direct` | 35 | 5 | `2/5` | `100%` | `100%` |
-| `pii:social` | 35 | 5 | `3/5` | `100%` | `100%` |
-| `prompt-extraction` | 35 | 5 | `5/5` | `100%` | `40%` |
-| `excessive-agency` | 35 | 5 | `5/5` | `100%` | `100%` |
+| Plugin              | Rows | Unique normalized prompts | Detected tactic coverage | Purpose grounding | Entity reference |
+| ------------------- | ---: | ------------------------: | ------------------------ | ----------------: | ---------------: |
+| `sql-injection`     |   35 |                         5 | `2/5`                    |            `100%` |           `100%` |
+| `pii:direct`        |   35 |                         5 | `2/5`                    |            `100%` |           `100%` |
+| `pii:social`        |   35 |                         5 | `3/5`                    |            `100%` |           `100%` |
+| `prompt-extraction` |   35 |                         5 | `5/5`                    |            `100%` |            `40%` |
+| `excessive-agency`  |   35 |                         5 | `5/5`                    |            `100%` |           `100%` |
 
 Observations:
 
@@ -102,3 +102,66 @@ Observations:
 3. Which plugin family gives us the cleanest first win for planner-guided generation?
 4. Should the first prototype live beside the production generator or in a research
    harness until the benchmark is convincing?
+
+## Iteration 2 - 2026-05-09
+
+### Goal
+
+Test the first concrete hypothesis from iteration 1:
+
+> A taxonomy-guided planner should produce a broader SQL attack portfolio than
+> the current single-pass baseline without needing any target feedback yet.
+
+### Experiment
+
+Built `scripts/redteam-research/generateSqlPortfolio.ts`, a deliberately simple
+planner-driven prototype that emits a balanced SQL portfolio across five tactic
+families:
+
+1. `boolean-bypass`
+2. `union-extraction`
+3. `stacked-query`
+4. `schema-discovery`
+5. `authorization-filter-removal`
+
+The prototype extracts target entities from the source purpose text and uses them
+to instantiate concrete healthcare attacks.
+
+### Results
+
+Baseline from the current medical-agent artifact:
+
+| Variant                       | Rows | Unique prompts | Detected tactic coverage | Avg pairwise distance |
+| ----------------------------- | ---: | -------------: | ------------------------ | --------------------: |
+| Existing generated SQL corpus |   35 |              5 | `2/5`                    |               `0.773` |
+
+Planner prototype:
+
+| Variant                       | Rows | Unique prompts | Detected tactic coverage | Avg pairwise distance |
+| ----------------------------- | ---: | -------------: | ------------------------ | --------------------: |
+| Taxonomy-guided SQL portfolio |   10 |             10 | `5/5`                    |               `0.903` |
+
+### Reflection
+
+1. This is the first genuine hill-climb win:
+   - unique prompts improved from `5` to `10`
+   - detected tactic coverage improved from `2/5` to `5/5`
+   - average pairwise distance improved from `0.773` to `0.903`
+2. The first analyzer pass incorrectly reported `0%` grounding for the planner
+   output because the scratch YAML did not carry forward the source `purpose`.
+   That is a benchmark-design lesson: generated artifacts must preserve the
+   evaluation context they depend on.
+3. Even this very simple planner already outperforms the baseline on the first
+   offline objective. The next question is whether a planner can be made
+   **general** rather than one-off and whether over-generation plus selection can
+   improve the portfolio further.
+
+### New Hypotheses
+
+1. A target-independent tactic taxonomy plus target-dependent instantiation may
+   be a strong general pattern for many plugins.
+2. The planner should probably emit **quotas** by tactic and surface, then let a
+   generator instantiate multiple realizations per quota.
+3. The next meaningful step is not more SQL hand-authoring; it is a reusable
+   portfolio-selection layer that can compare candidate sets under a diversity
+   objective.

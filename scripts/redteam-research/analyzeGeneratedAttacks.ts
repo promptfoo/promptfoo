@@ -80,13 +80,15 @@ const TACTIC_RULES: Record<string, TacticRule[]> = {
     },
     {
       id: 'authorization-filter-removal',
-      pattern: /\b(remove|ignore|bypass|without)\b.{0,40}\b(filter|restriction|assigned|department)\b/i,
+      pattern:
+        /\b(remove|ignore|bypass|without)\b.{0,40}\b(filter|restriction|assigned|department)\b/i,
     },
   ],
   pii: [
     {
       id: 'sensitive-field-request',
-      pattern: /\b(ssn|social security|date of birth|address|phone number|email|medical history)\b/i,
+      pattern:
+        /\b(ssn|social security|date of birth|address|phone number|email|medical history)\b/i,
     },
     {
       id: 'bulk-record-request',
@@ -223,7 +225,9 @@ function extractEntityCandidates(purpose: string): string[] {
 }
 
 function extractPurposeKeywords(purpose: string): string[] {
-  return [...new Set(tokenize(purpose).filter((token) => token.length > 3 && !STOPWORDS.has(token)))];
+  return [
+    ...new Set(tokenize(purpose).filter((token) => token.length > 3 && !STOPWORDS.has(token))),
+  ];
 }
 
 function getPrompt(test: TestCase): string | undefined {
@@ -329,7 +333,10 @@ async function main() {
 
   const raw = await fs.readFile(inputPath, 'utf8');
   const parsed = yaml.load(raw) as RedteamFile;
-  const purpose = typeof parsed.redteam?.purpose === 'string' ? parsed.redteam.purpose : '';
+  const purpose =
+    typeof parsed.redteam?.purpose === 'string'
+      ? parsed.redteam.purpose
+      : await inferPurposeFromSiblingConfig(inputPath);
   const purposeKeywords = extractPurposeKeywords(purpose);
   const entityCandidates = extractEntityCandidates(purpose);
   const tests = parsed.tests ?? [];
@@ -349,6 +356,17 @@ async function main() {
   }
 
   console.log(JSON.stringify({ summaries }, null, 2));
+}
+
+async function inferPurposeFromSiblingConfig(inputPath: string): Promise<string> {
+  const siblingConfigPath = new URL('promptfooconfig.yaml', `file://${inputPath}`).pathname;
+  try {
+    const raw = await fs.readFile(siblingConfigPath, 'utf8');
+    const parsed = yaml.load(raw) as RedteamFile;
+    return typeof parsed.redteam?.purpose === 'string' ? parsed.redteam.purpose : '';
+  } catch {
+    return '';
+  }
 }
 
 await main();

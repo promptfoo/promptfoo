@@ -57,16 +57,16 @@ coverage, novelty, and target grounding.
 
 Primary-source anchors for the current research phase:
 
-| Paper | Why it matters here |
-| --- | --- |
-| [PAIR](https://arxiv.org/abs/2310.08419) | Iterative black-box refinement can find semantic jailbreaks in fewer than twenty queries. |
-| [TAP](https://arxiv.org/abs/2312.02119) | Tree search plus pruning improves success while reducing wasted target queries. |
-| [GPTFuzz](https://arxiv.org/abs/2309.10253) | Mutation over seed prompts can scale diversity and effectiveness better than hand-authored templates alone. |
-| [AutoDAN-Turbo](https://arxiv.org/abs/2410.05295) | Strategy self-exploration is itself learnable; attack families should be discovered, not only enumerated manually. |
-| [Crescendo](https://arxiv.org/abs/2404.01833) | Multi-turn escalation is qualitatively different from single-turn jailbreak prompting. |
-| [AgentDojo](https://arxiv.org/abs/2406.13352) | Agent benchmarks need realistic tasks, untrusted data, tools, and adaptive attacks rather than static prompt sets. |
-| [InjecAgent](https://arxiv.org/abs/2403.02691) | Indirect prompt injection should be measured over realistic tool-integrated agents and attack intentions such as harm and exfiltration. |
-| [ToolEmu](https://arxiv.org/abs/2309.15817) | Long-tail agent risks can be explored with emulated tools and automatic evaluators, not only hand-built integrations. |
+| Paper                                             | Why it matters here                                                                                                                     |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [PAIR](https://arxiv.org/abs/2310.08419)          | Iterative black-box refinement can find semantic jailbreaks in fewer than twenty queries.                                               |
+| [TAP](https://arxiv.org/abs/2312.02119)           | Tree search plus pruning improves success while reducing wasted target queries.                                                         |
+| [GPTFuzz](https://arxiv.org/abs/2309.10253)       | Mutation over seed prompts can scale diversity and effectiveness better than hand-authored templates alone.                             |
+| [AutoDAN-Turbo](https://arxiv.org/abs/2410.05295) | Strategy self-exploration is itself learnable; attack families should be discovered, not only enumerated manually.                      |
+| [Crescendo](https://arxiv.org/abs/2404.01833)     | Multi-turn escalation is qualitatively different from single-turn jailbreak prompting.                                                  |
+| [AgentDojo](https://arxiv.org/abs/2406.13352)     | Agent benchmarks need realistic tasks, untrusted data, tools, and adaptive attacks rather than static prompt sets.                      |
+| [InjecAgent](https://arxiv.org/abs/2403.02691)    | Indirect prompt injection should be measured over realistic tool-integrated agents and attack intentions such as harm and exfiltration. |
+| [ToolEmu](https://arxiv.org/abs/2309.15817)       | Long-tail agent risks can be explored with emulated tools and automatic evaluators, not only hand-built integrations.                   |
 
 The literature points toward four design principles for Promptfoo:
 
@@ -252,14 +252,14 @@ Best for:
 
 ### Representative Plugin Set
 
-| Plugin family | Why include it |
-| --- | --- |
-| `sql-injection` | Structured exploit syntax plus natural-language auth-bypass requests |
-| `pii:*` | Privacy boundary testing and social engineering |
-| `prompt-extraction` | Instruction-boundary attacks |
-| `excessive-agency` | Agent capability and tool-boundary misuse |
-| `indirect-prompt-injection` | Untrusted-context attacks |
-| `data-exfil` | Agentic success predicate with deterministic side-channel potential |
+| Plugin family               | Why include it                                                       |
+| --------------------------- | -------------------------------------------------------------------- |
+| `sql-injection`             | Structured exploit syntax plus natural-language auth-bypass requests |
+| `pii:*`                     | Privacy boundary testing and social engineering                      |
+| `prompt-extraction`         | Instruction-boundary attacks                                         |
+| `excessive-agency`          | Agent capability and tool-boundary misuse                            |
+| `indirect-prompt-injection` | Untrusted-context attacks                                            |
+| `data-exfil`                | Agentic success predicate with deterministic side-channel potential  |
 
 ### Offline Metrics
 
