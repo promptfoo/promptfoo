@@ -140,7 +140,13 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.prompt') AS INTEGER)) as assertion_prompt_tokens,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.completion') AS INTEGER)) as assertion_completion_tokens,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.cached') AS INTEGER)) as assertion_cached_tokens,
-      SUM(CAST(json_extract(grading_result, '$.tokensUsed.numRequests') AS INTEGER)) as assertion_num_requests,
+      SUM(
+        CASE
+          WHEN json_extract(grading_result, '$.tokensUsed') IS NOT NULL
+          THEN COALESCE(CAST(json_extract(grading_result, '$.tokensUsed.numRequests') AS INTEGER), 1)
+          ELSE 0
+        END
+      ) as assertion_num_requests,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.reasoning') AS INTEGER)) as assertion_completion_details_reasoning,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.acceptedPrediction') AS INTEGER)) as assertion_completion_details_accepted_prediction,
       SUM(CAST(json_extract(grading_result, '$.tokensUsed.completionDetails.rejectedPrediction') AS INTEGER)) as assertion_completion_details_rejected_prediction,

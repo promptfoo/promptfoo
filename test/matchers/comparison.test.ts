@@ -45,6 +45,7 @@ describe('matchesSelectBest', () => {
         total: 7,
         prompt: 3,
         completion: 4,
+        numRequests: 1,
       },
     });
   });

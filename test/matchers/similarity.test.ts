@@ -49,7 +49,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });
@@ -69,7 +69,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });
@@ -90,7 +90,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });
@@ -112,7 +112,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });
@@ -134,7 +134,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
   });
@@ -173,7 +173,7 @@ describe('matchesSimilarity', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 2,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith('Expected output');
@@ -362,11 +362,11 @@ describe('matchesSimilarity', () => {
       await expect(matchesSimilarity('expected', 'output', 0.8, false, grading)).resolves.toEqual(
         expect.objectContaining({
           tokensUsed: expect.objectContaining({
-            completionDetails: {
+            completionDetails: expect.objectContaining({
               reasoning: 0,
               acceptedPrediction: 0,
               rejectedPrediction: 0,
-            },
+            }),
           }),
         }),
       );

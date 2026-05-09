@@ -61,7 +61,7 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 7,
       },
       metadata: {
         generatedQuestions: expect.arrayContaining([
@@ -120,7 +120,7 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
-        numRequests: 0,
+        numRequests: 7,
       },
       metadata: {
         generatedQuestions: expect.arrayContaining([

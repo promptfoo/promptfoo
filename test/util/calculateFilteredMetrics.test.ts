@@ -302,6 +302,50 @@ describe('calculateFilteredMetrics', () => {
         },
       });
     });
+
+    it('should infer one grading request when persisted grader usage omits numRequests', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { test: 'value' } },
+        promptId: 'test-prompt',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { test: 'value' },
+        response: { output: 'test output' },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          tokensUsed: {
+            total: 7,
+            prompt: 3,
+            completion: 4,
+            cached: 0,
+          },
+        },
+        namedScores: {},
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].tokenUsage.assertions?.numRequests).toBe(1);
+    });
   });
 
   describe('named scores aggregation', () => {

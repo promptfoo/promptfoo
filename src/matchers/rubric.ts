@@ -13,7 +13,7 @@ import invariant from '../util/invariant';
 import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { graderFail, normalizeMatcherTokenUsage } from './shared';
+import { graderFail, normalizeMatcherResponseTokenUsage } from './shared';
 
 import type {
   Assertion,
@@ -138,7 +138,8 @@ function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
-  const failWithTokens = (reason: string) => graderFail(reason, resp.tokenUsage);
+  const failWithTokens = (reason: string) =>
+    graderFail(reason, normalizeMatcherResponseTokenUsage(resp));
 
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
@@ -220,7 +221,7 @@ export async function runJsonGradingPrompt({
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
-    return graderFail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', normalizeMatcherResponseTokenUsage(resp));
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {
@@ -259,9 +260,12 @@ export async function runJsonGradingPrompt({
     pass,
     score,
     reason,
-    tokensUsed: normalizeMatcherTokenUsage({
-      ...resp.tokenUsage,
-      completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
+    tokensUsed: normalizeMatcherResponseTokenUsage({
+      tokenUsage: {
+        ...resp.tokenUsage,
+        completionDetails:
+          resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
+      },
     }),
     metadata: {
       ...responseMetadata,

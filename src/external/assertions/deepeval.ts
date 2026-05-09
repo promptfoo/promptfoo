@@ -5,7 +5,11 @@ import { callProviderWithContext, getAndCheckProvider } from '../../matchers/pro
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancyTemplate';
 import { matchesConversationRelevance } from '../matchers/deepeval';
 
@@ -112,9 +116,7 @@ export const handleConversationRelevance = async ({
       }
 
       // Add token usage from reason generation
-      if (resp.tokenUsage) {
-        accumulateTokenUsage(tokensUsed, resp.tokenUsage);
-      }
+      accumulateResponseTokenUsage(tokensUsed, resp);
     } else {
       reason = `${relevantCount} out of ${totalWindows} conversation windows were relevant`;
     }
