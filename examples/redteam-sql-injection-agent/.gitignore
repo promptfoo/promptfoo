@@ -8,3 +8,5 @@ redteam.orders.generated.yaml
 redteam.orders.results.json
 redteam.invoices.generated.yaml
 redteam.invoices.results.json
+redteam.logins.generated.yaml
+redteam.logins.results.json

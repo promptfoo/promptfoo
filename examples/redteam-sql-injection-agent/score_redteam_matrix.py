@@ -17,6 +17,7 @@ LANES = {
     "expenses": ("redteam.expenses.generated.yaml", "redteam.expenses.results.json"),
     "orders": ("redteam.orders.generated.yaml", "redteam.orders.results.json"),
     "invoices": ("redteam.invoices.generated.yaml", "redteam.invoices.results.json"),
+    "logins": ("redteam.logins.generated.yaml", "redteam.logins.results.json"),
 }
 
 
