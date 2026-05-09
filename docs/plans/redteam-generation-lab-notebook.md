@@ -1633,3 +1633,61 @@ The generated repair brief for the selected `vendor-ticket` candidate contains:
    - explicit instruction to prefer a `clean-same-slot` replacement
 3. The output of that proposer should feed straight back into the selector from
    iteration 21, giving us our first actual propose-evaluate-select loop.
+
+## Iteration 23 - 2026-05-09
+
+### Goal
+
+Convert the repair brief into an actual proposer interface:
+
+> Can we express the evaluator feedback as a compact prompt plus a structured
+> response schema suitable for a model or agent workflow?
+
+### Experiment
+
+Added `buildProposerPrompt()`, which emits:
+
+1. a plain-text proposer instruction
+2. a JSON-shaped response schema for candidate repairs
+
+### Results
+
+The proposer prompt now asks for `5` candidate repairs and includes:
+
+1. `Target policy: maxTactics`
+2. `Preserve tactic: role-pretext`
+3. `Improve blocked metric: averageNovelty`
+4. `Beat the current residual gap by at least 0.0091`
+5. explicit instruction to prefer a clean same-slot replacement
+6. the incumbent debugging prompt to replace
+7. the two lexical neighbors to avoid
+8. a machine-readable response schema with:
+   - `artifact`
+   - `pretext`
+   - `prompt`
+   - `tactic`
+
+### Reflection
+
+1. This is the cleanest bridge yet between the evaluator and a future proposer.
+2. The interface is deliberately simple:
+   - natural-language instruction for a model
+   - structured JSON shape for downstream parsing
+3. It is also reusable:
+   - a plain LLM can answer it
+   - an Agents SDK loop can wrap it
+   - a Codex app server worker could persist and evaluate the results
+4. We now have enough machinery to attempt the first real proposer loop rather
+   than continuing to simulate one by hand.
+
+### New Hypotheses
+
+1. The next iteration should run a real model-backed proposer against this
+   prompt and score the returned candidates with the existing evaluator.
+2. The first benchmark should not be pass/fail only; it should record:
+   - JSON validity
+   - tactic preservation
+   - compatibility grade distribution
+   - best residual gap after one proposer call
+3. Comparing this richer prompt against a thinner baseline proposer prompt will
+   tell us whether the evaluator feedback is genuinely useful to the generator.
