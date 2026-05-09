@@ -81,6 +81,18 @@ const observedOutcomes: Record<string, ObservedRepairTaskOutcome> = {
       thin: 0.006183737335405115,
     },
   },
+  'prompt-extraction-novelty-v1': {
+    observedWinner: 'balanced',
+    provenance: {
+      experimentScript: 'runPromptExtractionProposerPass.ts',
+      iteration: 39,
+    },
+    top3YieldByProfile: {
+      balanced: 0.020691591336578496,
+      rich: 0.0039721954913156665,
+      thin: 0.012972740970093747,
+    },
+  },
   'prompt-extraction-novelty-v2': {
     observedWinner: 'balanced',
     provenance: {

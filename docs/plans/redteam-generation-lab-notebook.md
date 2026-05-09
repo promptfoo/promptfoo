@@ -3051,3 +3051,108 @@ Yet they split evenly by winner:
 3. A useful next baseline may be a task-conditioned router that predicts
    profile yield directly, not a profile label derived from a hand-written
    family rule.
+
+## Iteration 39 - 2026-05-09
+
+### Goal
+
+Close the only remaining evidence gap in the frozen benchmark:
+
+> What happens on `prompt-extraction-novelty-v1`, the larger multi-slot novelty
+> repair that was accepted into the train split but had never actually been run
+> through the proposer comparison?
+
+### Experiment
+
+1. Extended `runPromptExtractionProposerPass.ts` with explicit repair variants:
+   - `v1`
+   - `v2`
+   - `v3`
+   - plus the previous `auto` selector
+2. Ran the missing benchmark task directly:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/runPromptExtractionProposerPass.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  all \
+  3 \
+  0.7 \
+  v1
+```
+
+3. Added the observed result back into `buildRepairOutcomeTable.ts`.
+
+### Results
+
+Repair-state summary:
+
+| Feature                     | Value            |
+| --------------------------- | ---------------- |
+| blocked metric              | `averageNovelty` |
+| blocked metric family       | `novelty`        |
+| residual gap to beat        | `0.02601`        |
+| displaced slots             | `3`              |
+| clean same-slot replacement | `no`             |
+
+Three-trial proposer summary:
+
+| Profile    | Improving trials | Improving candidates | Avg best novelty delta | Avg `top3` yield |
+| ---------- | ---------------: | -------------------: | ---------------------: | ---------------: |
+| `rich`     |              `2` |                  `3` |             `+0.00329` |       `+0.00397` |
+| `balanced` |              `3` |                 `10` |             `+0.01260` |       `+0.02069` |
+| `thin`     |              `2` |                  `6` |             `+0.00457` |       `+0.01297` |
+
+Winner:
+
+```text
+prompt-extraction-novelty-v1 -> balanced
+```
+
+With the benchmark now fully observed:
+
+| Slice    | Metric-family router accuracy |
+| -------- | ----------------------------: |
+| all rows |                        `7/10` |
+| train    |                         `6/6` |
+| holdout  |                         `1/4` |
+
+### Reflection
+
+1. The benchmark is now fully observed:
+   - `10/10` accepted tasks have live outcomes
+2. `v1` behaves like the old in-sample novelty story:
+   - novelty task
+   - predicted `balanced`
+   - observed `balanced`
+3. But the completed table makes the coarse-geometry failure stronger:
+   - `prompt-extraction-novelty-v1`
+   - `prompt-extraction-novelty-v3`
+     share the same signature:
+
+```text
+novelty|slots=3|sameSlot=false|gap=subunit
+```
+
+yet they disagree:
+
+- `v1 -> balanced`
+- `v3 -> thin`
+
+4. We now have **two** mixed-winner coarse-geometry buckets:
+   - one on coverage
+   - one on novelty
+5. That is strong evidence against rescuing the router with one or two more
+   hand-authored threshold features.
+
+### New Hypotheses
+
+1. The next comparison should stop asking for a symbolic class rule and instead
+   ask whether continuous features predict the actual `top3` yield of each
+   profile.
+2. Since the ambiguous pairs are within the same plugin family and same coarse
+   geometry bucket, exact collision values and candidate text semantics now look
+   more promising than bucketed geometry.
+3. The next baseline should likely be a small task-conditioned regression or
+   ranking model over profile yields rather than another manual router.

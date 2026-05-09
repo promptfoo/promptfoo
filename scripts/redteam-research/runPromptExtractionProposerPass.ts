@@ -51,6 +51,7 @@ const proposerResponseSchema = z.object({
 });
 
 type PromptProfile = 'all' | 'balanced' | 'both' | 'rich' | 'thin';
+type RepairVariant = 'auto' | 'v1' | 'v2' | 'v3';
 type ProposerPassResult = {
   bestAverageNoveltyDelta?: number;
   bestGeneratedRepair?: ReturnType<typeof selectBestRepairCandidate>;
@@ -102,24 +103,41 @@ function buildStructuredResponseFormat(targetTactic: string) {
 function buildRepairDiagnostics(
   basePool: PromptExtractionAttack[],
   entities: Awaited<ReturnType<typeof loadPromptExtractionContext>>['entities'],
-): CandidateDiagnostic[] {
-  return [
-    repairPromptExtractionPolicyDisagreement(basePool, entities),
-    repairPromptExtractionTacticNoveltyGap(basePool, entities),
-    repairPromptExtractionTacticNoveltyGapV2(basePool, entities),
-  ].map((pool) => {
+): Array<{ diagnostic: CandidateDiagnostic; id: Exclude<RepairVariant, 'auto'> }> {
+  const repairs = [
+    {
+      id: 'v1',
+      pool: repairPromptExtractionPolicyDisagreement(basePool, entities),
+    },
+    {
+      id: 'v2',
+      pool: repairPromptExtractionTacticNoveltyGap(basePool, entities),
+    },
+    {
+      id: 'v3',
+      pool: repairPromptExtractionTacticNoveltyGapV2(basePool, entities),
+    },
+  ] satisfies Array<{
+    id: Exclude<RepairVariant, 'auto'>;
+    pool: PromptExtractionAttack[];
+  }>;
+
+  return repairs.map(({ id, pool }) => {
     const { policies, portfolios } = analyzePortfolioPool(
       pool,
       PROMPT_EXTRACTION_DIMENSIONS,
       PROMPT_EXTRACTION_POLICIES,
     );
-    return diagnoseCandidateAgainstPolicy(
-      portfolios,
-      policies,
-      pool.length - 1,
-      'maxTactics',
-      pool,
-    );
+    return {
+      diagnostic: diagnoseCandidateAgainstPolicy(
+        portfolios,
+        policies,
+        pool.length - 1,
+        'maxTactics',
+        pool,
+      ),
+      id,
+    };
   });
 }
 
@@ -263,10 +281,11 @@ async function main() {
     profileArg = 'rich',
     trialCountArg = '1',
     temperatureArg = '0',
+    repairVariantArg = 'auto',
   ] = process.argv.slice(2);
   if (!inputPath) {
     throw new Error(
-      'Usage: tsx scripts/redteam-research/runPromptExtractionProposerPass.ts <redteam.yaml> [providerId] [rich|balanced|thin|both|all] [trialCount] [temperature]',
+      'Usage: tsx scripts/redteam-research/runPromptExtractionProposerPass.ts <redteam.yaml> [providerId] [rich|balanced|thin|both|all] [trialCount] [temperature] [auto|v1|v2|v3]',
     );
   }
   if (!['rich', 'balanced', 'thin', 'both', 'all'].includes(profileArg)) {
@@ -280,7 +299,11 @@ async function main() {
   if (!Number.isFinite(temperature) || temperature < 0) {
     throw new Error(`Invalid temperature: ${temperatureArg}`);
   }
+  if (!['auto', 'v1', 'v2', 'v3'].includes(repairVariantArg)) {
+    throw new Error(`Unknown repair variant: ${repairVariantArg}`);
+  }
   const profile = profileArg as PromptProfile;
+  const repairVariant = repairVariantArg as RepairVariant;
 
   const { entities } = await loadPromptExtractionContext(inputPath);
   const basePool = buildPromptExtractionCandidatePool(buildPromptExtractionPortfolio(entities));
@@ -290,13 +313,21 @@ async function main() {
     PROMPT_EXTRACTION_POLICIES,
   );
   const manualDiagnostics = buildRepairDiagnostics(basePool, entities);
-  const selectedManualRepair = selectBestRepairCandidate(manualDiagnostics);
-  const selectedManualDiagnostic = manualDiagnostics.find(
-    (diagnostic) => diagnostic.candidatePrompt === selectedManualRepair.candidatePrompt,
+  const autoSelectedManualRepair = selectBestRepairCandidate(
+    manualDiagnostics.map(({ diagnostic }) => diagnostic),
   );
+  const selectedManualDiagnosticEntry =
+    repairVariant === 'auto'
+      ? manualDiagnostics.find(
+          ({ diagnostic }) =>
+            diagnostic.candidatePrompt === autoSelectedManualRepair.candidatePrompt,
+        )
+      : manualDiagnostics.find(({ id }) => id === repairVariant);
+  const selectedManualDiagnostic = selectedManualDiagnosticEntry?.diagnostic;
   if (!selectedManualDiagnostic) {
     throw new Error('Unable to build proposer prompt from the selected manual repair');
   }
+  const selectedManualRepair = selectBestRepairCandidate([selectedManualDiagnostic]);
 
   const repairBrief = buildRepairBrief(selectedManualDiagnostic);
   const prompts = {
@@ -392,6 +423,7 @@ async function main() {
         profileSummaries,
         providerId,
         repairBrief,
+        selectedRepairVariant: selectedManualDiagnosticEntry.id,
         selectedManualRepair,
         temperature,
         trialCount,
