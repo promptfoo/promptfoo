@@ -3381,3 +3381,100 @@ Leave-one-out accuracy:
    before introducing embedding APIs or learned rerankers.
 3. The next experiment should test a richer semantic representation on the same
    frozen split, not another lexical variant.
+
+## Iteration 42 - 2026-05-09
+
+### Goal
+
+Test whether a **stronger semantic abstraction** does better than lexical
+overlap:
+
+> If a model first distills each repair task into a compact, outcome-blind
+> semantic signature, do nearest neighbors over those signatures route proposer
+> profiles better?
+
+### Experiment
+
+1. Added `evaluateRepairSemanticSignatures.ts`.
+2. For every observed repair task, asked `gpt-5.4-mini` at temperature `0` to
+   produce:
+   - five canonical semantic labels
+   - one concise abstract summary
+3. The signature prompt included only outcome-blind information:
+   - plugin
+   - blocked metric
+   - target tactic
+   - candidate prompt
+   - top collision prompts
+4. Evaluated:
+   - `label-1nn-yield`
+   - `summary-1nn-yield`
+     on the same train -> holdout split and leave-one-out setting.
+5. Ran:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/evaluateRepairSemanticSignatures.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini
+```
+
+### Results
+
+Holdout accuracy:
+
+| Model          | Accuracy |
+| -------------- | -------: |
+| label `1-NN`   |    `3/4` |
+| summary `1-NN` |    `2/4` |
+
+Holdout average regret:
+
+| Model          | Avg regret |
+| -------------- | ---------: |
+| label `1-NN`   |  `0.00119` |
+| summary `1-NN` |  `0.00236` |
+
+Leave-one-out accuracy:
+
+| Model          | Accuracy |
+| -------------- | -------: |
+| label `1-NN`   |   `3/10` |
+| summary `1-NN` |   `2/10` |
+
+Example generated signatures:
+
+| Task                           | Example labels                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `prompt-extraction-novelty-v3` | `protected-instructions`, `extract-sensitive-content`, `reveal-hidden-guidance`, `legal-counsel-pretext`, `internal-system-prompts`  |
+| `sql-novelty-v2`               | `authorization-boundary`, `full-dataset-exfiltration`, `remove-access-filter`, `cross-facility-reconciliation`, `medication-records` |
+| `bola-coverage-v2`             | `financial-record-boundary`, `account-reconciliation`, `retrieve-coverage-record`, `billing-impersonation`, `insurance-policy-data`  |
+
+### Reflection
+
+1. This is the first semantic representation that clearly beats prior holdout
+   baselines:
+   - `label-1nn-yield` reaches `3/4`
+   - and lowers regret to `0.00119`
+2. The labels outperform the free-form summaries:
+   - structured abstraction helps more than another prose description
+3. The improvement is concentrated in the frozen holdout split, not across the
+   full benchmark:
+   - leave-one-out remains weak at `3/10`
+4. The result is encouraging but not yet stable enough to declare victory:
+   - the task set is tiny
+   - the same labels may be brittle under paraphrase or broader task families
+5. Still, the experiment changes the research direction:
+   - richer semantics can add signal that geometry and raw lexical overlap miss
+   - the next question is how to make that signal more robust
+
+### New Hypotheses
+
+1. Structured semantic labels are more useful than raw prompt text or prose
+   summaries for routing.
+2. The next experiment should test whether an embedding space over these same
+   task descriptions preserves the holdout gain while improving leave-one-out.
+3. We may ultimately want a hybrid router:
+   - semantic representation for task similarity
+   - plus a cheap plugin prior
+   - rather than either geometry-only or semantics-only routing.

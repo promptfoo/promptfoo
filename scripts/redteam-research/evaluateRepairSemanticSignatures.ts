@@ -1,0 +1,248 @@
+import { z } from 'zod';
+
+import { loadApiProvider } from '../../src/providers';
+import {
+  buildObservedOutcomeRows,
+  observedOutcomes,
+  type ObservedOutcomeRow,
+  type PromptProfile,
+} from './buildRepairOutcomeTable';
+import { buildValidatedRepairTaskBenchmark } from './generateRepairTaskBenchmark';
+import { buildResearchCallContext } from './portfolioResearchShared';
+import { jaccardSimilarity, tokenize } from './sqlResearchShared';
+
+type SignatureModel = 'label-1nn-yield' | 'summary-1nn-yield';
+type SignaturePrediction = {
+  actualWinner: PromptProfile;
+  predictedProfile: PromptProfile;
+  regret: number;
+  split: ObservedOutcomeRow['task']['split'];
+  taskId: string;
+};
+type SignatureEvaluationSummary = {
+  accuracy: number;
+  averageRegret: number;
+  maxRegret: number;
+  predictions: SignaturePrediction[];
+};
+
+const profiles = ['balanced', 'rich', 'thin'] as const;
+const signatureResponseSchema = z.object({
+  labels: z.array(z.string().min(1)).length(5),
+  summary: z.string().min(1),
+});
+type SemanticSignature = z.infer<typeof signatureResponseSchema>;
+
+function buildSignatureResponseFormat() {
+  return {
+    name: 'repair_semantic_signature',
+    schema: {
+      additionalProperties: false,
+      properties: {
+        labels: {
+          description:
+            'Five short lowercase hyphenated labels capturing boundary, goal, requested action, social frame, and target resource.',
+          items: { type: 'string' },
+          maxItems: 5,
+          minItems: 5,
+          type: 'array',
+        },
+        summary: {
+          description:
+            'One concise sentence that abstracts the task without copying exact names or identifiers.',
+          type: 'string',
+        },
+      },
+      required: ['labels', 'summary'],
+      type: 'object',
+    },
+    type: 'json_schema',
+  };
+}
+
+function buildSignaturePrompt(row: ObservedOutcomeRow): string {
+  return [
+    'Create an outcome-blind semantic signature for this red-team repair task.',
+    'Use machine-comparable lowercase hyphenated labels.',
+    'Do not infer or mention which proposer profile might work best.',
+    '',
+    `Plugin: ${row.task.plugin}`,
+    `Blocked metric: ${row.task.features.blockedMetric ?? 'none'}`,
+    `Target tactic: ${row.task.targetTactic}`,
+    `Candidate prompt: ${row.task.candidatePrompt}`,
+    'Closest winner prompts:',
+    ...row.task.collisionPrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
+    '',
+    'Return exactly five labels in this order:',
+    '1. protected boundary',
+    '2. attacker goal',
+    '3. requested action',
+    '4. social frame',
+    '5. target resource',
+  ].join('\n');
+}
+
+async function generateSemanticSignature(
+  row: ObservedOutcomeRow,
+  providerId: string,
+): Promise<SemanticSignature> {
+  const prompt = buildSignaturePrompt(row);
+  const provider = await loadApiProvider(providerId, {
+    options: {
+      config: {
+        instructions:
+          'You extract compact semantic signatures for red-team tasks. Return only the requested JSON.',
+        max_output_tokens: 500,
+        response_format: buildSignatureResponseFormat(),
+        temperature: 0,
+      },
+    },
+  });
+  const response = await provider.callApi(prompt, buildResearchCallContext(prompt));
+  const rawOutput =
+    typeof response.output === 'string' ? JSON.parse(response.output) : response.output;
+  return signatureResponseSchema.parse(rawOutput);
+}
+
+function selectHighestYieldProfile(yields: Record<PromptProfile, number>): PromptProfile {
+  return [...profiles].sort((left, right) => yields[right] - yields[left])[0];
+}
+
+function getTop3Yields(row: ObservedOutcomeRow): Record<PromptProfile, number> {
+  return observedOutcomes[row.task.id].top3YieldByProfile;
+}
+
+function regretForPrediction(row: ObservedOutcomeRow, predictedProfile: PromptProfile): number {
+  const yields = getTop3Yields(row);
+  return yields[row.observedWinner] - yields[predictedProfile];
+}
+
+function summarizePredictions(
+  predictions: SignaturePrediction[],
+): SignatureEvaluationSummary {
+  return {
+    accuracy:
+      predictions.filter((prediction) => prediction.predictedProfile === prediction.actualWinner)
+        .length / predictions.length,
+    averageRegret:
+      predictions.reduce((sum, prediction) => sum + prediction.regret, 0) / predictions.length,
+    maxRegret: Math.max(...predictions.map((prediction) => prediction.regret)),
+    predictions,
+  };
+}
+
+function signatureText(signature: SemanticSignature, model: SignatureModel): string {
+  return model === 'label-1nn-yield' ? signature.labels.join(' ') : signature.summary;
+}
+
+function predictByNearestSignature(
+  trainingRows: ObservedOutcomeRow[],
+  targetRow: ObservedOutcomeRow,
+  signatures: Record<string, SemanticSignature>,
+  model: SignatureModel,
+): PromptProfile {
+  const targetTokens = tokenize(signatureText(signatures[targetRow.task.id], model));
+  const [nearestNeighbor] = [...trainingRows].sort((left, right) => {
+    const rightSimilarity = jaccardSimilarity(
+      tokenize(signatureText(signatures[right.task.id], model)),
+      targetTokens,
+    );
+    const leftSimilarity = jaccardSimilarity(
+      tokenize(signatureText(signatures[left.task.id], model)),
+      targetTokens,
+    );
+    return rightSimilarity - leftSimilarity;
+  });
+  return selectHighestYieldProfile(getTop3Yields(nearestNeighbor));
+}
+
+function evaluateModels(
+  trainingRows: ObservedOutcomeRow[],
+  evaluationRows: ObservedOutcomeRow[],
+  signatures: Record<string, SemanticSignature>,
+): Record<SignatureModel, SignatureEvaluationSummary> {
+  return Object.fromEntries(
+    (['label-1nn-yield', 'summary-1nn-yield'] as const).map((model) => [
+      model,
+      summarizePredictions(
+        evaluationRows.map((row) => {
+          const predictedProfile = predictByNearestSignature(
+            trainingRows,
+            row,
+            signatures,
+            model,
+          );
+          return {
+            actualWinner: row.observedWinner,
+            predictedProfile,
+            regret: regretForPrediction(row, predictedProfile),
+            split: row.task.split,
+            taskId: row.task.id,
+          };
+        }),
+      ),
+    ]),
+  ) as Record<SignatureModel, SignatureEvaluationSummary>;
+}
+
+function evaluateLeaveOneOut(
+  rows: ObservedOutcomeRow[],
+  signatures: Record<string, SemanticSignature>,
+): Record<SignatureModel, SignatureEvaluationSummary> {
+  return Object.fromEntries(
+    (['label-1nn-yield', 'summary-1nn-yield'] as const).map((model) => [
+      model,
+      summarizePredictions(
+        rows.map((row) => {
+          const trainingRows = rows.filter((candidate) => candidate.task.id !== row.task.id);
+          const predictedProfile = predictByNearestSignature(
+            trainingRows,
+            row,
+            signatures,
+            model,
+          );
+          return {
+            actualWinner: row.observedWinner,
+            predictedProfile,
+            regret: regretForPrediction(row, predictedProfile),
+            split: row.task.split,
+            taskId: row.task.id,
+          };
+        }),
+      ),
+    ]),
+  ) as Record<SignatureModel, SignatureEvaluationSummary>;
+}
+
+async function main() {
+  const [inputPath, providerId = 'openai:responses:gpt-5.4-mini'] = process.argv.slice(2);
+  if (!inputPath) {
+    throw new Error(
+      'Usage: tsx scripts/redteam-research/evaluateRepairSemanticSignatures.ts <redteam.yaml> [providerId]',
+    );
+  }
+  const { accepted } = await buildValidatedRepairTaskBenchmark(inputPath);
+  const observedRows = buildObservedOutcomeRows(accepted);
+  const signatures = Object.fromEntries(
+    await Promise.all(
+      observedRows.map(async (row) => [row.task.id, await generateSemanticSignature(row, providerId)]),
+    ),
+  ) as Record<string, SemanticSignature>;
+  const trainingRows = observedRows.filter((row) => row.task.split === 'train');
+  const holdoutRows = observedRows.filter((row) => row.task.split === 'holdout');
+
+  console.log(
+    JSON.stringify(
+      {
+        holdout: evaluateModels(trainingRows, holdoutRows, signatures),
+        leaveOneOut: evaluateLeaveOneOut(observedRows, signatures),
+        providerId,
+        signatures,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+await main();
