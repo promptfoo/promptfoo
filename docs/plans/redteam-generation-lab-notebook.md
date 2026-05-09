@@ -7770,3 +7770,88 @@ The unstable cases reveal a structural problem rather than random judge noise:
 3. The next experiment should compare the current single-primary schema against
    a bounded multi-label variant and measure both stability and retained-cell
    diversity.
+
+## Iteration 94 - 2026-05-09
+
+### Goal
+
+Test whether the unstable attacked-surface fields improve when changed from
+single-primary slots to bounded multi-label sets:
+
+> Does allowing the judge to name several simultaneously true attacked surfaces
+> make the richer schema more faithful and more stable?
+
+### Experiment
+
+1. Added `evaluateRepairFrontierMultiLabelSignatureStability.ts`.
+2. Kept the stable contextual slots from iteration 93 as scalars:
+   - `attackerPretext`
+   - `mechanism`
+   - `expectedPolicyBreak`
+   - `entityFamily`
+   - `dialogueShape`
+3. Replaced the overloaded slots with bounded sets:
+   - `targetSurfaces`
+   - `requestedAssets`
+4. Allowed up to `3` values in each set and required alphabetical ordering.
+5. Re-ran the same `23` cases across `3` draws with
+   `openai:responses:gpt-5.4-mini`.
+6. Compared the result directly against the scalar schema from iteration 93.
+
+### Results
+
+The multi-label variant was more expressive but less stable:
+
+| Field family     | Scalar schema | Multi-label schema |
+| ---------------- | ------------: | -----------------: |
+| attacked surface |       `15/23` |            `11/23` |
+| requested asset  |       `16/23` |             `9/23` |
+| full tuple       |       `10/23` |             `6/23` |
+
+Other fields did not materially improve enough to offset that regression:
+
+1. `attackerPretext`: `23/23 -> 21/23`
+2. `mechanism`: `20/23 -> 21/23`
+3. `expectedPolicyBreak`: `23/23 -> 23/23`
+4. `entityFamily`: `22/23 -> 21/23`
+5. `dialogueShape`: `23/23 -> 23/23`
+
+The unstable set-valued outputs reveal why:
+
+1. `targetSurfaces` drifts among neighboring combinations such as:
+   - `routing-logic + system-instructions`
+   - `handling-protocol + routing-logic`
+   - `handling-protocol + routing-logic + system-instructions`
+2. `requestedAssets` drifts among neighboring combinations such as:
+   - `escalation-rules + refusal-rules + workflow-guidance`
+   - `escalation-rules + handling-protocol + workflow-guidance`
+   - `escalation-rules + hidden-instructions + refusal-rules`
+
+### Reflection
+
+1. More expressive output is not automatically more measurable output.
+2. The scalar schema underfit the semantics, but the bounded-set schema
+   overfit adjacent interpretations:
+   - the judge now has room to slide among several plausible bundles
+   - stability gets worse, not better
+3. The core problem is becoming clearer:
+   - the ontology itself is not cleanly separable
+   - `handling-protocol`, `hidden-instructions`, and `workflow-guidance` overlap
+     too much for stable categorical assignment
+4. This suggests the next representation should be more atomic:
+   - separate yes/no predicates for concrete semantic claims
+   - avoid making the model choose among overlapping umbrella labels
+
+### New Hypotheses
+
+1. Atomic predicates will be more stable than either scalar primaries or
+   overlapping multi-label bundles.
+2. Good predicates should ask about concrete attack facts, for example:
+   - asks for routing rules
+   - asks for refusal policy
+   - asks for escalation guidance
+   - invokes legal authority
+   - requests verbatim text
+3. The next experiment should replace overlapping categorical labels with a
+   small predicate vector and test whether it improves both field stability and
+   retained-cell usefulness.
