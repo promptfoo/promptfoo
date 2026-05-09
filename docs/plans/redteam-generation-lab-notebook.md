@@ -5778,3 +5778,71 @@ The learned classifier makes the same two wrong choices in all three draws:
    - generate additional legal-counsel counterfactuals
    - preserve packaging distinctions
    - then retry learned action selection with real local support
+
+## Iteration 68 - 2026-05-09
+
+### Goal
+
+Test whether iteration 67 failed because the learner was fundamentally weak or
+simply starved of local support:
+
+> If we add one counterfactual legal-counsel support example per action class, can
+> the learned specialist recover the hand-authored rule?
+
+### Experiment
+
+1. Added `evaluateRepairAugmentedLegalCounselAction.ts`.
+2. Added two synthetic support examples:
+   - `verbatim-disclosure` -> `thin`
+   - `compiled-report` -> `balanced`
+3. Kept the same:
+   - legal-counsel activation boundary
+   - evidence-packaging labels
+   - learned-action prediction format
+4. Compared:
+   - `global`
+   - `hand-authored-specialist`
+   - `augmented-learned-action-specialist`
+
+### Results
+
+The added support examples completely rescue the learned action model:
+
+| Router                              | Stable label holdout accuracy | Avg label holdout regret |
+| ----------------------------------- | ----------------------------: | -----------------------: |
+| global                              |                         `3/4` |                `0.00332` |
+| hand-authored specialist            |                         `3/4` |                `0.00119` |
+| augmented learned-action specialist |                         `3/4` |                `0.00119` |
+
+The learned action model now predicts the right pair in every draw:
+
+| Task                            | Learned profile | Actual winner |
+| ------------------------------- | --------------- | ------------- |
+| `prompt-extraction-novelty-v3`  | `thin`          | `thin`        |
+| `prompt-extraction-coverage-v2` | `balanced`      | `balanced`    |
+
+### Reflection
+
+1. Iteration 67 was a data problem, not proof that action learning is impossible.
+2. Two counterfactual supports were enough to recover the manual specialist
+   frontier exactly.
+3. This mirrors the BOLA story:
+   - sparse or missing local support can masquerade as a modeling failure
+4. The planner picture gets more symmetric:
+   - BOLA sparse support -> generate support exemplar
+   - legal-counsel action gap -> generate class-balanced local support
+5. The next worthwhile experiment is to close the loop:
+   - use generated legal-counsel support
+   - learned legal-counsel actions
+   - generated BOLA support
+   - and ask whether a nearly fully learned planner can still reach `4/4`
+
+### New Hypotheses
+
+1. Local specialist learning should be treated as a support-design problem before
+   it is treated as a model-capacity problem.
+2. Class-balanced counterfactuals may be a general recipe for repairing local
+   ambiguity families.
+3. The planner should probably have a second materialization operator:
+   - `generate-support-for-local-action-learning`
+   - not just `generate-support-for-nearest-neighbor-routing`
