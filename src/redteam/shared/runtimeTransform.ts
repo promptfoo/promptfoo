@@ -66,6 +66,14 @@ export interface RuntimeTransformContext {
   goal?: string;
 }
 
+function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
+  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+    return undefined;
+  }
+
+  return (error as { tokenUsage?: TokenUsage }).tokenUsage;
+}
+
 /**
  * Applies strategy transforms to a prompt at runtime (per-turn).
  * This is used by multi-turn attack providers to transform each turn's
@@ -186,6 +194,11 @@ export async function applyRuntimeTransforms(
         logger.warn(`[RuntimeTransform] Layer ${layerId} returned no test cases`);
       }
     } catch (error) {
+      accumulateResponseTokenUsage(
+        totalTokenUsage,
+        { tokenUsage: getErrorTokenUsage(error) },
+        { countAsRequest: false },
+      );
       const errorMsg = `Transform ${layerId} failed: ${(error as Error).message || 'Unknown error'}`;
       logger.error(`[RuntimeTransform] ${errorMsg}`, { error });
       // Return error so caller can skip the turn

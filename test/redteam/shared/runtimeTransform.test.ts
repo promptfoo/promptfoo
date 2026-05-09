@@ -242,6 +242,37 @@ describe('runtimeTransform', () => {
       expect(result.originalPrompt).toBe('hello');
     });
 
+    it('should preserve failed layer usage when a transform throws it', async () => {
+      const failingStrategy: Strategy = {
+        id: 'failing-with-usage',
+        action: vi.fn(async () => {
+          throw Object.assign(new Error('Transform failed'), {
+            tokenUsage: {
+              total: 11,
+              prompt: 7,
+              completion: 4,
+              numRequests: 1,
+            },
+          });
+        }),
+      };
+
+      const result = await applyRuntimeTransforms(
+        'hello',
+        'input',
+        ['failing-with-usage'],
+        [failingStrategy],
+      );
+
+      expect(result.error).toContain('Transform failing-with-usage failed');
+      expect(result.tokenUsage).toMatchObject({
+        total: 11,
+        prompt: 7,
+        completion: 4,
+        numRequests: 0,
+      });
+    });
+
     it('should preserve pluginId in metadata during transforms', async () => {
       let capturedTestCase: TestCaseWithPlugin | undefined;
 
