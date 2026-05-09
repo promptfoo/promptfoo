@@ -35,6 +35,8 @@ When all steps are transforms (base64, rot13, leetspeak, etc.), layer works as a
 3. **Final Output Only**: Only the last step's outputs become test cases
 4. **Pre-Evaluation**: All transforms are applied before sending to the target
 
+If multiple transform steps perform generation work before evaluation, their token usage is accumulated across the chain for the final layered test case.
+
 ### Mode 2: Agentic + Per-Turn Transforms
 
 When the **first step** is an agentic strategy (hydra, crescendo, goat, jailbreak, etc.), layer enables powerful multi-turn/multi-attempt attacks with per-turn transformations:

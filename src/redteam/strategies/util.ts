@@ -1,6 +1,8 @@
 import { isProviderOptions, type TestCaseWithPlugin } from '../../types/index';
+import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
+import type { TokenUsage } from '../../types/shared';
 import type { RedteamStrategyObject } from '../types';
 
 /**
@@ -50,4 +52,37 @@ export function pluginMatchesStrategyTargets(
 
     return false;
   });
+}
+
+/**
+ * Merge generation-time provider usage across layered strategies without mutating prior metadata.
+ */
+export function mergeProviderTokenUsage(
+  existing: TokenUsage | undefined,
+  update: TokenUsage | undefined,
+): TokenUsage | undefined {
+  if (!existing) {
+    return update;
+  }
+  if (!update) {
+    return existing;
+  }
+
+  const merged: TokenUsage = {
+    ...existing,
+    ...(existing.completionDetails && {
+      completionDetails: { ...existing.completionDetails },
+    }),
+    ...(existing.assertions && {
+      assertions: {
+        ...existing.assertions,
+        ...(existing.assertions.completionDetails && {
+          completionDetails: { ...existing.assertions.completionDetails },
+        }),
+      },
+    }),
+  };
+
+  accumulateTokenUsage(merged, update);
+  return merged;
 }

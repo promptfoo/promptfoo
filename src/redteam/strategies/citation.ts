@@ -11,6 +11,7 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { mergeProviderTokenUsage } from './util';
 
 import type { TestCase } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
@@ -121,7 +122,14 @@ async function generateCitations(
           citation: data.result.citation,
           strategyId: 'citation',
           originalText,
-          ...(data.tokenUsage ? { providerTokenUsage: data.tokenUsage } : {}),
+          ...(data.tokenUsage
+            ? {
+                providerTokenUsage: mergeProviderTokenUsage(
+                  testCase.metadata?.providerTokenUsage,
+                  data.tokenUsage,
+                ),
+              }
+            : {}),
         },
       };
 

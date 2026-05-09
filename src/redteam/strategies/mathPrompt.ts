@@ -9,6 +9,7 @@ import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
+import { mergeProviderTokenUsage } from './util';
 
 import type { TestCase } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
@@ -206,7 +207,14 @@ export async function addMathPrompt(
           ...testCase.metadata,
           strategyId: 'math-prompt',
           originalText,
-          ...(tokenUsage ? { providerTokenUsage: tokenUsage } : {}),
+          ...(tokenUsage
+            ? {
+                providerTokenUsage: mergeProviderTokenUsage(
+                  testCase.metadata?.providerTokenUsage,
+                  tokenUsage,
+                ),
+              }
+            : {}),
         },
       });
 

@@ -117,6 +117,46 @@ describe('citation strategy', () => {
     );
   });
 
+  it('should preserve prior generation usage when layered after another strategy', async () => {
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        result: {
+          topic: 'test topic',
+          key: 'test key',
+          citation: {
+            type: 'Journal Article',
+            content: 'Smith, J. (2024). Test Article. Journal of Testing, 1(1), 1-10.',
+          },
+        },
+        tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await addCitationTestCases(
+      [
+        {
+          ...testCases[0],
+          metadata: {
+            providerTokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+          },
+        },
+      ],
+      'prompt',
+      {},
+    );
+
+    expect(result[0]?.metadata?.providerTokenUsage).toEqual({
+      total: 22,
+      prompt: 13,
+      completion: 9,
+      cached: 0,
+      numRequests: 2,
+    });
+  });
+
   it('should throw error when remote generation is disabled', async () => {
     mockNeverGenerateRemote.mockReturnValue(true);
 
