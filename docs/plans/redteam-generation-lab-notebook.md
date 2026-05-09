@@ -887,3 +887,83 @@ unique portfolios instead of `1`.
    - `max-memory-boundary`
    - `max-source-manipulation`
    - `max-novelty`
+
+## Iteration 13 - 2026-05-09
+
+### Goal
+
+Test whether named policy disagreement generalizes beyond one adversarial PII
+pool:
+
+> Across SQL injection, prompt extraction, and PII, do richer attack spaces
+> actually produce more distinct frontier-optimal policy outputs?
+
+### Experiment
+
+Added `comparePortfolioPolicies.ts`, which:
+
+1. builds plugin-specific candidate pools for:
+   - `sqlInjection`
+   - `promptExtraction`
+   - `piiSocial`
+2. computes exact fixed-budget frontiers for all three pools
+3. applies plugin-appropriate named lexicographic policies
+4. reports `uniquePolicyPortfolioCount` as a direct measure of policy
+   disagreement
+
+### Results
+
+The policy-menu pattern generalized across all three studied plugin families:
+
+| Plugin             | Frontier size | Named policies | Unique policy portfolios |
+| ------------------ | ------------: | -------------: | -----------------------: |
+| `sqlInjection`     |            12 |              2 |                        2 |
+| `promptExtraction` |             7 |              4 |                        2 |
+| `piiSocial`        |             6 |              3 |                        3 |
+
+Key outputs:
+
+1. `sqlInjection`
+   - `maxTactics`: `5` tactics, novelty `0.965`
+   - `maxNovelty`: `4` tactics, novelty `0.972`
+2. `promptExtraction`
+   - `maxTactics`, `maxArtifacts`, and `maxPretexts` all choose the same
+     portfolio with `5/5/5` coverage across tactics, artifacts, and pretexts
+   - `maxNovelty` picks a different portfolio with higher novelty `0.924`, but
+     only `3` tactics
+3. `piiSocial`
+   - preserves the prior three-way split among `maxTactics`,
+     `maxRelationships`, and `maxNovelty`
+
+### Reflection
+
+1. The policy-menu idea is no longer a one-off artifact of the adversarial PII
+   benchmark.
+2. The number of distinct policy outputs is itself diagnostic:
+   - `sqlInjection` has only one semantic dimension plus novelty, so a two-way
+     split is exactly what we would expect
+   - `promptExtraction` is richer, but several objectives align naturally
+   - `piiSocial` has the most semantically conflicting dimensions and therefore
+     the broadest menu
+3. This suggests a useful benchmark statistic:
+   - **policy disagreement** measures whether a candidate pool contains
+     meaningful tradeoffs worth surfacing
+4. It also clarifies generator quality:
+   - a high-quality generator should not merely emit many attacks
+   - it should emit enough semantically different candidates that multiple
+     defensible portfolios exist under different objectives
+5. That gives us a sharper north star than row count, uniqueness, or lexical
+   diversity alone.
+
+### New Hypotheses
+
+1. We should add policy disagreement to the benchmark suite alongside coverage
+   and novelty.
+2. A next-generation generator should likely be rewarded for producing pools
+   with:
+   - strong frontier quality
+   - non-trivial policy disagreement
+   - clear semantic labels for why one frontier point differs from another
+3. The next useful step is to stop hand-authoring all candidate pools and test
+   whether a critique-and-repair generator can intentionally increase frontier
+   richness when a pool collapses to too few meaningful policy outcomes.
