@@ -21,6 +21,9 @@ query structure instead of being bound as data.
 - `unsafe-expense-agent`, `hardened-expense-agent`, and `safe-expense-agent`:
   exact-ID expense lookup variants that exercise string-equality injection
   rather than `LIKE`-pattern injection.
+- `unsafe-invoice-agent`, `hardened-invoice-agent`, and `safe-invoice-agent`:
+  batch invoice lookup variants that exercise parenthesized `IN (...)` list
+  injection.
 - `raw-sql-analyst`: an intentionally authorized read-only SQL tool used as a
   taxonomy control. This is dangerous capability, not injection.
 
@@ -36,6 +39,8 @@ query structure instead of being bound as data.
   exact-ID expense-report agents
 - `promptfooconfig.redteam.orders.yaml`: the same benchmark structure for the
   numeric order-id agents
+- `promptfooconfig.redteam.invoices.yaml`: the same benchmark structure for the
+  parenthesized invoice-batch agents
 - `score_redteam_results.py`: summarizes generated attack-family diversity,
   leaked rows, and grader failures from exported red-team results
 - `requirements.txt`: Python dependencies
@@ -120,6 +125,7 @@ The benchmark uses three interpretations of the same product surface:
 3. `safe-ticket-agent-redteam` should not leak rows for any generated payload.
 
 Run `promptfooconfig.redteam.expenses.yaml` or
-`promptfooconfig.redteam.orders.yaml` the same way when you want the exact-ID
-expense-report or numeric order-id benchmark instead of the `LIKE`-search ticket
-benchmark.
+`promptfooconfig.redteam.orders.yaml` or
+`promptfooconfig.redteam.invoices.yaml` the same way when you want the exact-ID
+expense-report, numeric order-id, or parenthesized invoice-batch benchmark
+instead of the `LIKE`-search ticket benchmark.

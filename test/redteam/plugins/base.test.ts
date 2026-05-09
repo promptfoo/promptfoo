@@ -63,6 +63,16 @@ class PromptValidationPlugin extends TestPlugin {
   }
 }
 
+class RefusalRetryPlugin extends TestPlugin {
+  protected getMaxInferenceRefusalRetries(): number {
+    return 1;
+  }
+
+  protected getInferenceRefusalRetryInstructions(): string {
+    return 'Retry this authorized benchmark request.';
+  }
+}
+
 describe('RedteamPluginBase', () => {
   let provider: TestProvider;
   let plugin: RedteamPluginBase;
@@ -310,6 +320,31 @@ describe('RedteamPluginBase', () => {
     expect(provider.callApi).toHaveBeenNthCalledWith(
       2,
       expect.stringContaining('1 contained a bad prompt marker'),
+    );
+  });
+
+  it('should retry configured inference refusals before failing generation', async () => {
+    vi.spyOn(provider, 'callApi')
+      .mockResolvedValueOnce({
+        output: "I'm sorry, but I can't help with that request.",
+      })
+      .mockResolvedValueOnce({
+        output: 'Prompt: recovered prompt',
+      });
+
+    const refusalRetryPlugin = new RefusalRetryPlugin(
+      provider,
+      'test purpose',
+      'testVar',
+      { language: 'German' },
+    );
+    const result = await refusalRetryPlugin.generateTests(1);
+
+    expect(result[0].vars?.testVar).toBe('recovered prompt');
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(provider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('Retry this authorized benchmark request.'),
     );
   });
 

@@ -29,6 +29,10 @@ def load_agent_provider():
         def __init__(self, **kwargs):
             self.kwargs = kwargs
 
+    class ModelSettings:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
     def function_tool(*decorator_args, **decorator_kwargs):
         if (
             decorator_args
@@ -44,6 +48,7 @@ def load_agent_provider():
         return decorator
 
     agents_module.Agent = Agent
+    agents_module.ModelSettings = ModelSettings
     agents_module.RunConfig = RunConfig
     agents_module.Runner = Runner
     agents_module.function_tool = function_tool
@@ -140,6 +145,30 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
         ids = [row["id"] for row in rows]
 
         self.assertEqual(ids, ["EXP-1001", "EXP-1002", "EXP-2001", "EXP-3001"])
+
+    def test_unsafe_invoice_lookup_leaks_other_tenant_rows_from_in_list_context(self):
+        rows = AGENT_PROVIDER._unsafe_lookup_invoices_impl("INV-1001') OR 1=1 --")
+        ids = [row["id"] for row in rows]
+
+        self.assertEqual(ids, ["INV-1001", "INV-1002", "INV-2001", "INV-3001"])
+
+    def test_safe_invoice_lookup_treats_in_list_payload_as_data(self):
+        rows = AGENT_PROVIDER._safe_lookup_invoices_impl("INV-1001') OR 1=1 --")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_invoice_lookup_blocks_textbook_payload(self):
+        rows = AGENT_PROVIDER._hardened_lookup_invoices_impl("INV-1001') OR 1=1 --")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_invoice_lookup_can_be_bypassed_with_inline_comments(self):
+        rows = AGENT_PROVIDER._hardened_lookup_invoices_impl(
+            "INV-1001')/**/OR/**/1=1/**/OR/**/('x'='x"
+        )
+        ids = [row["id"] for row in rows]
+
+        self.assertEqual(ids, ["INV-1001", "INV-1002", "INV-2001", "INV-3001"])
 
     def test_raw_sql_tool_is_not_injection(self):
         rows = AGENT_PROVIDER._run_readonly_sql_impl(

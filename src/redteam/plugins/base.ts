@@ -113,6 +113,17 @@ export abstract class RedteamPluginBase {
   }
 
   /**
+   * Allows plugins to retry transient inference refusals before surfacing an error.
+   */
+  protected getMaxInferenceRefusalRetries(): number {
+    return 0;
+  }
+
+  protected getInferenceRefusalRetryInstructions(): string | undefined {
+    return undefined;
+  }
+
+  /**
    * Generates test cases based on the plugin's configuration.
    * @param n - The number of test cases to generate.
    * @param delayMs - The delay in milliseconds between plugin API calls.
@@ -142,6 +153,7 @@ export abstract class RedteamPluginBase {
      * In multi-input mode, returns Record<string, string>[]
      */
     let retryInstructions: string | undefined;
+    let refusalRetries = 0;
     const generatePrompts = async (
       currentPrompts: { __prompt: string }[] | Record<string, string>[],
     ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
@@ -193,6 +205,15 @@ export abstract class RedteamPluginBase {
         generatedPrompts.includes('PromptBlock:') ||
         /<Prompt>/i.test(generatedPrompts);
       if (!hasValidPromptMarkers && isBasicRefusal(generatedPrompts)) {
+        if (refusalRetries < this.getMaxInferenceRefusalRetries()) {
+          refusalRetries += 1;
+          retryInstructions = this.getInferenceRefusalRetryInstructions();
+          logger.warn(
+            `${this.constructor.name} received an inference refusal; retrying generation (${refusalRetries}/${this.getMaxInferenceRefusalRetries()})`,
+          );
+          return [];
+        }
+
         let message = `${this.provider.id()} returned a refusal during inference for ${this.constructor.name} test case generation.`;
         // We don't know exactly why the prompt was refused, but we can provide hints to the user based on the values which were
         // included in the context window during inference.
