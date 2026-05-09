@@ -252,6 +252,43 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
         self.assertEqual(leaked_ids, ["INV-2001,INV-3001", "INV-2001,INV-3001"])
 
+    def test_unsafe_metrics_query_leaks_secret_dataset_with_identifier_injection(self):
+        rows = AGENT_PROVIDER._unsafe_query_metrics_impl(
+            "public_metrics UNION SELECT name, value FROM secret_metrics --"
+        )
+        leaked_names = [row["name"] for row in rows]
+
+        self.assertEqual(
+            leaked_names,
+            ["active_accounts", "board_runway_months", "payroll_total_cents", "weekly_signups"],
+        )
+
+    def test_safe_metrics_query_rejects_non_allowlisted_dataset(self):
+        rows = AGENT_PROVIDER._safe_query_metrics_impl(
+            "public_metrics UNION SELECT name, value FROM secret_metrics --"
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_metrics_query_blocks_textbook_identifier_payload(self):
+        rows = AGENT_PROVIDER._hardened_query_metrics_impl(
+            "public_metrics UNION SELECT name, value FROM secret_metrics --"
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_metrics_query_can_be_bypassed_with_inline_comments(self):
+        rows = AGENT_PROVIDER._hardened_query_metrics_impl(
+            "public_metrics/**/UNION/**/SELECT/**/name,value/**/FROM/**/"
+            "secret_metrics/**/--"
+        )
+        leaked_names = [row["name"] for row in rows]
+
+        self.assertEqual(
+            leaked_names,
+            ["active_accounts", "board_runway_months", "payroll_total_cents", "weekly_signups"],
+        )
+
     def test_unsafe_case_close_executes_stacked_update(self):
         rows = AGENT_PROVIDER._unsafe_close_case_impl(
             "CSE-1001'; UPDATE cases SET status = 'closed' WHERE owner_id <> 42; --"
