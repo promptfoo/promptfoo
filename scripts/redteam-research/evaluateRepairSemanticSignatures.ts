@@ -1,42 +1,50 @@
-import { z } from 'zod';
+import { pathToFileURL } from 'node:url';
 
+import { z } from 'zod';
 import { loadApiProvider } from '../../src/providers';
 import {
   buildObservedOutcomeRows,
-  observedOutcomes,
   type ObservedOutcomeRow,
+  observedOutcomes,
   type PromptProfile,
 } from './buildRepairOutcomeTable';
 import { buildValidatedRepairTaskBenchmark } from './generateRepairTaskBenchmark';
 import { buildResearchCallContext } from './portfolioResearchShared';
 import { jaccardSimilarity, tokenize } from './sqlResearchShared';
 
-type SignatureModel =
+export type SignatureModel =
   | 'label-1nn-yield'
   | 'slot-match-1nn-yield'
   | 'slot-plugin-1nn-yield'
   | 'summary-1nn-yield'
   | 'weighted-slot-1nn-yield';
-type SignaturePrediction = {
+export type SignaturePrediction = {
   actualWinner: PromptProfile;
   predictedProfile: PromptProfile;
   regret: number;
   split: ObservedOutcomeRow['task']['split'];
   taskId: string;
 };
-type SignatureEvaluationSummary = {
+export type SignatureEvaluationSummary = {
   accuracy: number;
   averageRegret: number;
   maxRegret: number;
   predictions: SignaturePrediction[];
 };
+export const signatureModels = [
+  'label-1nn-yield',
+  'slot-match-1nn-yield',
+  'weighted-slot-1nn-yield',
+  'slot-plugin-1nn-yield',
+  'summary-1nn-yield',
+] as const satisfies readonly SignatureModel[];
 
 const profiles = ['balanced', 'rich', 'thin'] as const;
 const signatureResponseSchema = z.object({
   labels: z.array(z.string().min(1)).length(5),
   summary: z.string().min(1),
 });
-type SemanticSignature = z.infer<typeof signatureResponseSchema>;
+export type SemanticSignature = z.infer<typeof signatureResponseSchema>;
 
 function buildSignatureResponseFormat() {
   return {
@@ -87,7 +95,7 @@ function buildSignaturePrompt(row: ObservedOutcomeRow): string {
   ].join('\n');
 }
 
-async function generateSemanticSignature(
+export async function generateSemanticSignature(
   row: ObservedOutcomeRow,
   providerId: string,
 ): Promise<SemanticSignature> {
@@ -122,9 +130,7 @@ function regretForPrediction(row: ObservedOutcomeRow, predictedProfile: PromptPr
   return yields[row.observedWinner] - yields[predictedProfile];
 }
 
-function summarizePredictions(
-  predictions: SignaturePrediction[],
-): SignatureEvaluationSummary {
+function summarizePredictions(predictions: SignaturePrediction[]): SignatureEvaluationSummary {
   return {
     accuracy:
       predictions.filter((prediction) => prediction.predictedProfile === prediction.actualWinner)
@@ -201,30 +207,17 @@ function predictByNearestSignature(
   return selectHighestYieldProfile(getTop3Yields(nearestNeighbor));
 }
 
-function evaluateModels(
+export function evaluateModels(
   trainingRows: ObservedOutcomeRow[],
   evaluationRows: ObservedOutcomeRow[],
   signatures: Record<string, SemanticSignature>,
 ): Record<SignatureModel, SignatureEvaluationSummary> {
   return Object.fromEntries(
-    (
-      [
-        'label-1nn-yield',
-        'slot-match-1nn-yield',
-        'weighted-slot-1nn-yield',
-        'slot-plugin-1nn-yield',
-        'summary-1nn-yield',
-      ] as const
-    ).map((model) => [
+    signatureModels.map((model) => [
       model,
       summarizePredictions(
         evaluationRows.map((row) => {
-          const predictedProfile = predictByNearestSignature(
-            trainingRows,
-            row,
-            signatures,
-            model,
-          );
+          const predictedProfile = predictByNearestSignature(trainingRows, row, signatures, model);
           return {
             actualWinner: row.observedWinner,
             predictedProfile,
@@ -238,30 +231,17 @@ function evaluateModels(
   ) as Record<SignatureModel, SignatureEvaluationSummary>;
 }
 
-function evaluateLeaveOneOut(
+export function evaluateLeaveOneOut(
   rows: ObservedOutcomeRow[],
   signatures: Record<string, SemanticSignature>,
 ): Record<SignatureModel, SignatureEvaluationSummary> {
   return Object.fromEntries(
-    (
-      [
-        'label-1nn-yield',
-        'slot-match-1nn-yield',
-        'weighted-slot-1nn-yield',
-        'slot-plugin-1nn-yield',
-        'summary-1nn-yield',
-      ] as const
-    ).map((model) => [
+    signatureModels.map((model) => [
       model,
       summarizePredictions(
         rows.map((row) => {
           const trainingRows = rows.filter((candidate) => candidate.task.id !== row.task.id);
-          const predictedProfile = predictByNearestSignature(
-            trainingRows,
-            row,
-            signatures,
-            model,
-          );
+          const predictedProfile = predictByNearestSignature(trainingRows, row, signatures, model);
           return {
             actualWinner: row.observedWinner,
             predictedProfile,
@@ -286,7 +266,10 @@ async function main() {
   const observedRows = buildObservedOutcomeRows(accepted);
   const signatures = Object.fromEntries(
     await Promise.all(
-      observedRows.map(async (row) => [row.task.id, await generateSemanticSignature(row, providerId)]),
+      observedRows.map(async (row) => [
+        row.task.id,
+        await generateSemanticSignature(row, providerId),
+      ]),
     ),
   ) as Record<string, SemanticSignature>;
   const trainingRows = observedRows.filter((row) => row.task.split === 'train');
@@ -306,4 +289,6 @@ async function main() {
   );
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

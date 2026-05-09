@@ -3662,3 +3662,134 @@ Leave-one-out accuracy:
    - downstream route stability
 3. We should not claim a semantic model is better until it survives repeated
    signature generations, not just one favorable draw.
+
+## Iteration 45 - 2026-05-09
+
+### Goal
+
+Measure the thing that iteration 44 made suspicious:
+
+> Are the semantic signatures stable enough that one routing run means anything?
+
+### Experiment
+
+1. Refactored `evaluateRepairSemanticSignatures.ts` so the signature generator
+   and evaluators can be imported without rerunning the CLI side effect.
+2. Added `evaluateRepairSemanticSignatureStability.ts`, which:
+   - draws fresh semantic signatures multiple times
+   - measures:
+     - label-set similarity
+     - slot-wise label agreement
+     - summary similarity
+   - re-evaluates every semantic router on every draw
+   - reports how many task routes change across draws
+3. Ran three fresh live draws with:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/evaluateRepairSemanticSignatureStability.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  3
+```
+
+### Results
+
+Representation stability across the three draws:
+
+| Measure                   | Average |
+| ------------------------- | ------: |
+| label-set Jaccard         | `0.133` |
+| slot-wise label agreement | `0.213` |
+| summary-token Jaccard     | `0.372` |
+
+The lowest-stability task is `pii-social-coverage-v1`:
+
+1. label-set similarity: `0.000`
+2. slot-wise agreement: `0.000`
+3. summary similarity: `0.215`
+
+Holdout accuracy by draw:
+
+| Model                | Trial 1 | Trial 2 | Trial 3 |
+| -------------------- | ------: | ------: | ------: |
+| label `1-NN`         |   `2/4` |   `1/4` |   `3/4` |
+| slot match `1-NN`    |   `1/4` |   `2/4` |   `3/4` |
+| weighted slot `1-NN` |   `1/4` |   `2/4` |   `3/4` |
+| slot + plugin `1-NN` |   `1/4` |   `2/4` |   `2/4` |
+| summary `1-NN`       |   `1/4` |   `2/4` |   `3/4` |
+
+Holdout route instability:
+
+| Model                | Tasks with changed predictions |
+| -------------------- | -----------------------------: |
+| label `1-NN`         |                          `2/4` |
+| slot match `1-NN`    |                          `2/4` |
+| weighted slot `1-NN` |                          `2/4` |
+| slot + plugin `1-NN` |                          `1/4` |
+| summary `1-NN`       |                          `2/4` |
+
+Leave-one-out instability is also material:
+
+1. label `1-NN`: `3/10` tasks change routes
+2. slot match `1-NN`: `3/10`
+3. weighted slot `1-NN`: `3/10`
+4. slot + plugin `1-NN`: `2/10`
+5. summary `1-NN`: `6/10`
+
+### Reflection
+
+1. This confirms the suspicion from iteration 44:
+   - semantic routing is not yet evaluating a stable representation
+   - it is evaluating a different task embedding on each draw
+2. The variance is not a tiny edge effect:
+   - the same model family swings from `1/4` to `3/4` on holdout
+   - several holdout tasks change predicted proposer profile across draws
+3. `temperature: 0` is **not** enough to make these signatures operationally
+   deterministic for this use case.
+4. Summary text is more lexically self-similar than the label schema, but that
+   does not rescue routing stability:
+   - it still changes `2/4` holdout routes
+   - and `6/10` leave-one-out routes
+5. The important conclusion is now sharper:
+   - before we optimize the router further
+   - we need to stabilize the semantic representation itself
+   - likely by canonical vocabularies, constrained enums, ensembling, or a
+     deterministic post-processing layer
+
+### 45-Iteration Checkpoint
+
+The last five iterations moved from “which router wins?” to “what object are we
+actually routing on?”:
+
+1. Iteration 41 showed richer lexical context helps more than candidate text
+   alone.
+2. Iteration 42 found a promising first signal from LLM-derived semantic
+   signatures.
+3. Iteration 43 showed dense embeddings do not automatically preserve that
+   benefit.
+4. Iteration 44 tested slot-aware comparisons and exposed that fresh signature
+   draws can flip the apparent winner.
+5. Iteration 45 quantified that drift:
+   - labels are highly unstable
+   - downstream routing flips materially across draws
+
+Current best evidence:
+
+| Question                               | Best current answer  |
+| -------------------------------------- | -------------------- |
+| richer semantics help                  | yes                  |
+| dense embeddings are enough            | no                   |
+| current free-form labels are stable    | no                   |
+| summary text is stable enough to trust | no                   |
+| next bottleneck                        | representation drift |
+
+### New Hypotheses
+
+1. The next strongest move is to replace free-form labels with a canonicalized
+   semantic vocabulary or constrained enum set.
+2. A multi-draw ensemble may be useful, but only if it improves route stability
+   more cheaply than a deterministic representation.
+3. We should benchmark representation quality separately from router quality:
+   - first minimize signature drift
+   - then compare routers on frozen signatures
