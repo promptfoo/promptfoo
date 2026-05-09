@@ -621,6 +621,21 @@ describe('App component target selection', () => {
     expect(overviewTotal).toHaveTextContent('1');
   });
 
+  it('preserves zero probe counts in the report header', async () => {
+    const evalData = createComponentMockEvalData(1, [
+      createComponentMockResult(0, 'plugin1', false),
+    ]);
+    evalData.prompts[0]!.metrics = { tokenUsage: { total: 0, numRequests: 0 } } as any;
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    await screen.findByTestId('overview-total');
+    expect(screen.getByText('Depth:').parentElement).toHaveTextContent('0 probes');
+  });
+
   it('should update displayed statistics when a different target is selected', async () => {
     const results = [
       createComponentMockResult(0, 'plugin1', true),
