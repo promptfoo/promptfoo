@@ -1881,3 +1881,83 @@ generate-evaluate-select cycle:
    - local repair quality
    - global portfolio improvement
      as separate objectives rather than forcing one to stand in for the other.
+
+## Iteration 26 - 2026-05-09
+
+### Goal
+
+Move from one paired draw to a small repeated-trial read:
+
+> Is the rich-versus-thin difference stable across multiple proposer samples?
+
+### Experiment
+
+1. Extended `runPromptExtractionProposerPass.ts` with:
+   - `trialCount`
+   - `temperature`
+   - profile-level aggregation
+2. The first three-trial run exposed two measurement traps:
+   - default provider temperature is `0`
+   - Promptfoo request caching replayed identical completions across repeats
+3. Fixed the research harness by:
+   - exposing an explicit temperature argument
+   - forcing proposer calls to use `bustCache: true`
+4. Ran the actual stochastic experiment:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/runPromptExtractionProposerPass.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  both \
+  3 \
+  0.7
+```
+
+### Results
+
+| Prompt profile | Trials | JSON-valid trials | Frontier-improving trials | Frontier-improving candidates | Avg best novelty delta | Min best delta | Max best delta |
+| -------------- | -----: | ----------------: | ------------------------: | ----------------------------: | ---------------------: | -------------: | -------------: |
+| `rich`         |    `3` |               `3` |                       `3` |                           `7` |             `+0.00546` |     `+0.00076` |     `+0.00892` |
+| `thin`         |    `3` |               `3` |                       `3` |                           `6` |             `+0.00784` |     `+0.00508` |     `+0.01125` |
+
+Per-trial best novelty deltas:
+
+| Trial | `rich`     | `thin`     |
+| ----: | ---------- | ---------- |
+|   `1` | `+0.00076` | `+0.00508` |
+|   `2` | `+0.00670` | `+0.00719` |
+|   `3` | `+0.00892` | `+0.01125` |
+
+Both profiles preserved `role-pretext` perfectly across all `30` generated
+candidates.
+
+### Reflection
+
+1. The repeated-trial result weakens the simple story from iteration 25:
+   - the rich prompt still produced slightly more improving candidates overall
+   - the thin prompt produced the stronger best gain in every uncached stochastic
+     trial
+2. This is exactly why repeated live measurement matters:
+   - the single deterministic paired draw overstated the rich prompt advantage
+   - the real signal may be that different handoffs trade off breadth versus best
+     candidate quality
+3. The experiment also sharpened our benchmark discipline:
+   - repeated generation experiments must disable cache
+   - “repeat trials” without stochasticity are not trials
+4. We now have a better experimental surface, even though the hypothesis itself
+   became less tidy.
+
+### New Hypotheses
+
+1. The rich prompt may help produce a broader set of viable candidates, while the
+   thin prompt may leave more room for a single high-novelty leap.
+2. Measuring only the best candidate is insufficient; we should compare:
+   - hit rate
+   - candidate-count yield
+   - best gain
+   - maybe top-k aggregate gain
+3. A partially rich prompt could preserve the useful target guidance while
+   dropping some local-repair constraints that may over-anchor generation.
+4. We should test an intermediate proposer packet next, rather than treating
+   “rich” and “thin” as the only two points in the design space.
