@@ -8,6 +8,7 @@ import {
   buildPromptExtractionPortfolio,
   type PromptExtractionAttack,
   repairPromptExtractionPolicyDisagreement,
+  repairPromptExtractionTacticNoveltyGap,
 } from './promptExtractionResearchShared';
 import {
   buildSqlAttackPortfolio,
@@ -231,6 +232,23 @@ async function main() {
         maxTactics: ['tacticCount', 'artifactCount', 'pretextCount', 'averageNovelty'],
       },
       pool: repairPromptExtractionPolicyDisagreement(
+        buildPromptExtractionCandidatePool(buildPromptExtractionPortfolio(entities)),
+        entities,
+      ),
+    },
+    promptExtractionGapTargeted: {
+      dimensions: [
+        { key: 'artifact', valueOf: (attack) => (attack as PromptExtractionAttack).artifact },
+        { key: 'pretext', valueOf: (attack) => (attack as PromptExtractionAttack).pretext },
+        { key: 'tactic', valueOf: (attack) => attack.tactic },
+      ],
+      policies: {
+        maxArtifacts: ['artifactCount', 'pretextCount', 'tacticCount', 'averageNovelty'],
+        maxNovelty: ['averageNovelty', 'artifactCount', 'pretextCount', 'tacticCount'],
+        maxPretexts: ['pretextCount', 'artifactCount', 'tacticCount', 'averageNovelty'],
+        maxTactics: ['tacticCount', 'artifactCount', 'pretextCount', 'averageNovelty'],
+      },
+      pool: repairPromptExtractionTacticNoveltyGap(
         buildPromptExtractionCandidatePool(buildPromptExtractionPortfolio(entities)),
         entities,
       ),

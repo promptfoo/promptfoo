@@ -1149,3 +1149,63 @@ At the end of iteration 15:
    frontier gaps may concern tool abuse, memory persistence, retrieval
    manipulation, or cross-turn escalation rather than the simpler dimensions
    used here.
+
+## Iteration 16 - 2026-05-09
+
+### Goal
+
+Use the diagnosed gap to drive a better repair:
+
+> Can we preserve all five prompt-extraction tactics while increasing novelty
+> by adding a lexically distant replacement for the current `role-pretext`
+> attack?
+
+### Experiment
+
+Added:
+
+1. `repairPromptExtractionTacticNoveltyGap()`
+2. a `vendor-ticket` / `support-escalation` prompt that keeps the
+   `role-pretext` tactic but shifts lexical surface form substantially
+3. a new `promptExtractionGapTargeted` arm in `comparePortfolioPolicies.ts`
+
+### Results
+
+The gap-targeted candidate also failed to improve the frontier:
+
+| Pool                          | Pool size | Frontier size | Unique policy portfolios |
+| ----------------------------- | --------: | ------------: | -----------------------: |
+| `promptExtraction`            |        10 |             7 |                        2 |
+| `promptExtractionGapTargeted` |        11 |             7 |                        2 |
+
+The named policy outputs were unchanged, including the `maxTactics` portfolio
+at novelty `0.911`.
+
+### Reflection
+
+1. This is a second useful negative result, but it is more informative than the
+   first failed repair.
+2. Frontier-gap diagnosis told us **what** needed improvement, but not whether
+   a proposed candidate was strong enough to alter the optimal set.
+3. The new `vendor-ticket` prompt preserved the intended `role-pretext` tactic,
+   but it still did not displace the existing attack in any selected frontier
+   portfolio.
+4. That means the loop now needs candidate-level explanations:
+   - how much novelty does a new candidate add against each current slot?
+   - what exact portfolio swap would it need to win?
+   - which metric remains worse after insertion?
+5. This is a good research inflection point. We have moved from:
+   - better prompts
+   - to better portfolios
+   - to better diagnostics for why a candidate fails to improve a portfolio
+
+### New Hypotheses
+
+1. The next experiment should compute **counterfactual swap analysis** for
+   repaired candidates against the current selected portfolio.
+2. For each candidate, we should report:
+   - best reachable portfolio containing that candidate
+   - delta versus the current policy winner
+   - the first metric that still blocks adoption
+3. This will let a future model-guided generator iterate with much tighter
+   feedback than "try again, but more diverse."
