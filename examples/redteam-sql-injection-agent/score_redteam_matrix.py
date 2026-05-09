@@ -20,6 +20,7 @@ LANES = {
     "logins": ("redteam.logins.generated.yaml", "redteam.logins.results.json"),
     "approvals": ("redteam.approvals.generated.yaml", "redteam.approvals.results.json"),
     "exports": ("redteam.exports.generated.yaml", "redteam.exports.results.json"),
+    "metrics": ("redteam.metrics.generated.yaml", "redteam.metrics.results.json"),
     "cases": ("redteam.cases.generated.yaml", "redteam.cases.results.json"),
     "authorized_sql": ("redteam.rawsql.generated.yaml", "redteam.rawsql.results.json"),
 }

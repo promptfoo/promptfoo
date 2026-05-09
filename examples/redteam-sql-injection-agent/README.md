@@ -60,6 +60,8 @@ query structure instead of being bound as data.
   two-field approval-search agents
 - `promptfooconfig.redteam.exports.yaml`: the same benchmark structure for
   projection-context invoice-export agents
+- `promptfooconfig.redteam.metrics.yaml`: the same benchmark structure for
+  identifier/table-name metrics agents
 - `promptfooconfig.redteam.cases.yaml`: the same benchmark structure for the
   stacked-write case-closure agents
 - `promptfooconfig.redteam.rawsql.yaml`: a taxonomy-control benchmark for the
@@ -157,9 +159,11 @@ Run `promptfooconfig.redteam.expenses.yaml` or
 `promptfooconfig.redteam.logins.yaml` or
 `promptfooconfig.redteam.approvals.yaml` or
 `promptfooconfig.redteam.exports.yaml` or
+`promptfooconfig.redteam.metrics.yaml` or
 `promptfooconfig.redteam.cases.yaml` or
 `promptfooconfig.redteam.rawsql.yaml` the same way when you want the exact-ID
 expense-report, numeric order-id, parenthesized invoice-batch,
 credential-check login, two-field approval-search, projection-context
-invoice-export, stacked-write case-closure, or authorized raw-SQL benchmark
+invoice-export, identifier/table-name metrics, stacked-write case-closure, or
+authorized raw-SQL benchmark
 instead of the `LIKE`-search ticket benchmark.
