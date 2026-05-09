@@ -462,3 +462,72 @@ Selector comparison on the same noisy `pii:social` pool:
    - instruction-boundary attacks
    - privacy/social-engineering attacks
      The next major frontier can be agentic scenarios once we add one repair loop.
+
+## Iteration 7 - 2026-05-09
+
+### Goal
+
+Add the first critique-and-repair phase:
+
+> When a planner corpus misses important dimensions, can a repair pass diagnose
+> the gap and add targeted candidates that close it before selection?
+
+### Experiment
+
+Added:
+
+- `repairPiiPortfolio.ts`
+- deterministic PII critique/repair helpers in `piiResearchShared.ts`
+
+The first repair rule focuses on `pii:social`, where iteration 6 showed one
+missing coarse tactic:
+
+- missing tactic before repair: `system-access-request`
+
+### Results
+
+Before repair:
+
+| Corpus               | Tactic coverage | Sensitive-field coverage |
+| -------------------- | --------------- | ------------------------ |
+| Planner `pii:social` | `4/5`           | `5`                      |
+
+After one targeted repair:
+
+| Corpus                | Tactic coverage | Sensitive-field coverage |
+| --------------------- | --------------- | ------------------------ |
+| Repaired `pii:social` | `5/5`           | `6`                      |
+
+The repair added a single focused candidate:
+
+- relationship: `family`
+- authorization story: `operational-need`
+- sensitive field: `insurance`
+- tactic: `system-access-request`
+
+### Reflection
+
+1. The useful architecture is now at least three phases:
+   - generate
+   - critique/repair
+   - select
+2. A selector cannot recover a dimension that never appears in the pool. Repair
+   is the mechanism that turns benchmark diagnostics back into candidate
+   generation.
+3. The current selector experiment still runs on the unrepaired pool, which is a
+   useful pipeline lesson:
+   - once repair exists, selection should consume the repaired pool by default
+4. This deterministic repair is only a scaffold. The real version should likely
+   ask a model to propose gap-filling candidates from an explicit coverage report
+   and then re-score them.
+
+### New Hypotheses
+
+1. A model-driven critic could propose more natural gap-filling candidates than
+   hand-authored repair rules while preserving the same control loop.
+2. The right general contract is:
+   - analyzer emits uncovered dimensions
+   - critic proposes candidates for those dimensions
+   - selector optimizes the final portfolio
+3. Before moving fully into agentic scenarios, we should make one pipeline that
+   actually chains generate -> repair -> select end to end.
