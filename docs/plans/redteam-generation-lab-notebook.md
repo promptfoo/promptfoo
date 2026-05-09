@@ -6424,3 +6424,92 @@ context of the whole support set they will actually inhabit.
    frontiers even when individual candidate explanations are imperfect.
 3. The next experiment should introduce one more independent boundary failure
    family and measure how quickly brute-force bundle search becomes impractical.
+
+## Iteration 77 - 2026-05-09
+
+### Goal
+
+Grow the repaired frontier without paying avoidable combinatorial cost:
+
+> If we add a third independent failure family, can we keep joint bundle search
+> useful by materializing each candidate support once and reusing it across the
+> full bundle lattice?
+
+### Experiment
+
+1. Added `evaluateRepairJointBoundaryGrowth.ts`.
+2. Introduced a third boundary failure family:
+   - `legal-counsel-contract-negative-v1`
+   - same hidden-instruction artifact and same legal-counsel role as the positive
+     family
+   - but a supplier-contract filing rather than the patient-related local family
+3. Kept three diagnosis candidates per failure family, which expands the search
+   lattice from `3 x 3 = 9` bundles to `3 x 3 x 3 = 27` bundles.
+4. Changed the experiment shape so each diagnosis candidate is materialized into
+   support exactly once before bundle scoring:
+   - actual support generations: `9`
+   - naive repeated materializations: `81`
+5. Scored every bundle over the enlarged seven-case frontier.
+
+### Results
+
+The third family creates a real new false positive before repair, and factored
+joint search remains useful but no longer perfectly stable:
+
+| Variant                      | Avg stress accuracy | Stable tasks |
+| ---------------------------- | ------------------: | -----------: |
+| baseline learned boundary    |               `4/7` |        `7/7` |
+| factored joint bundle search |             `13/14` |        `6/7` |
+
+The search geometry is now explicit:
+
+| Quantity                              | Value |
+| ------------------------------------- | ----: |
+| failure families                      |   `3` |
+| candidates per family                 |   `3` |
+| candidate supports actually generated |   `9` |
+| bundles evaluated                     |  `27` |
+| naive support generations avoided     |  `72` |
+| classifier calls for bundle scoring   | `189` |
+
+The most important new failure is verifier replay drift:
+
+1. one selected bundle scored `7/7` during search
+2. the exact selected support portfolio replayed at `6/7`
+3. the replay regression flipped `legal-counsel-report-positive-v1` into a
+   false negative
+4. a fresh rerun reproduced the same selection-versus-replay pattern
+
+### Reflection
+
+1. The third failure family confirms that the repaired boundary was not merely
+   overfit to two hand-picked negatives.
+2. Joint search still works, but the scaling pressure is now visible:
+   - the support-generation side can be factored cleanly
+   - the classifier-evaluation side still grows with the bundle lattice
+3. The new failure is not just combinatorics; it is verifier variance:
+   - a single apparently perfect selection pass is not strong evidence
+   - especially once the frontier contains near-neighbor positives and negatives
+4. This is the first experiment where the architecture starts to look like a
+   real optimizer rather than a prompt hack:
+   - propose candidate explanations
+   - materialize reusable support atoms
+   - search over portfolios of those atoms
+5. The most important practical lesson is that "agentic" does not need to mean
+   "recompute everything":
+   - durable intermediate artifacts are part of the algorithm
+   - and they are what keep richer search affordable
+6. The next frontier is no longer whether joint verification works:
+   - it helps on this slice
+   - but selection needs repeated acceptance tests before the optimizer earns
+     the right to trust a bundle
+
+### New Hypotheses
+
+1. Modern red-team generators should cache reusable intermediate hypotheses and
+   supports, not only final attacks.
+2. The expensive frontier will move from support generation to portfolio
+   evaluation as the number of learned failure families grows.
+3. The next experiment should compare one-shot bundle selection with replicated
+   acceptance testing on the same enlarged frontier before trying to optimize
+   search strategy further.
