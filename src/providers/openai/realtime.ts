@@ -550,6 +550,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    * redacted generic payload (NOT String(err) — would leak host-side stack
    * snippets and absolute paths into the model context).
    *
+   * Both success and handler-failure outputs are pushed to the returned
+   * array — failures still represent a tool round that produced output, so
+   * callApi() must not mistake them for "no functionCallHandler configured"
+   * when surfacing an empty model response.
+   *
    * The iteration cap and per-path cleanup (clearTimeout, ws.close,
    * resetRequestTimeout) stay at the call sites because their wiring differs.
    */
@@ -572,6 +577,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         });
       } catch (err) {
         logger.error(`Realtime functionCallHandler "${call.name}" failed: ${String(err)}`);
+        results.push(REDACTED_TOOL_ERROR_OUTPUT);
         sendEvent({
           type: 'conversation.item.create',
           item: {
@@ -693,12 +699,18 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       const ws = new WebSocket(wsUrl, wsOptions);
 
-      // Set a timeout for the WebSocket connection
-      const timeout = setTimeout(() => {
-        logger.error('WebSocket connection timed out after 30 seconds');
-        ws.close();
-        reject(new Error('WebSocket connection timed out'));
-      }, this.config.websocketTimeout || 30000); // Default 30 second timeout
+      // Inactivity-based request timeout. Held in a closure variable so the
+      // tool-round site can pause it (clearTimeout) before awaiting user code
+      // and restart it afterwards — without that, a slow functionCallHandler
+      // can be killed by the outer timeout before we get to send the redacted
+      // function_call_output and request the follow-up response.
+      const startRequestTimeout = () =>
+        setTimeout(() => {
+          logger.error('WebSocket connection timed out');
+          ws.close();
+          reject(new Error('WebSocket connection timed out'));
+        }, this.config.websocketTimeout || 30000);
+      let timeout = startRequestTimeout();
 
       // Accumulators for response text and errors
       let responseText = '';
@@ -952,6 +964,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   return;
                 }
                 toolIterations++;
+                // Pause the inactivity timeout while user code runs — handler
+                // execution time is not WebSocket inactivity, and a slow
+                // handler must not be killed by the outer timeout before the
+                // redacted function_call_output reaches the model.
+                clearTimeout(timeout);
                 const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
                 functionCallResults.push(...roundResults);
 
@@ -959,6 +976,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 sendEvent({
                   type: 'response.create',
                 });
+                timeout = startRequestTimeout();
 
                 // Start a fresh turn for the model's follow-up response.
                 responseText = '';
@@ -1326,12 +1344,18 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
       const ws = new WebSocket(wsUrl, wsOptions);
 
-      // Set a timeout for the WebSocket connection
-      const timeout = setTimeout(() => {
-        logger.error('WebSocket connection timed out after 30 seconds');
-        ws.close();
-        reject(new Error('WebSocket connection timed out'));
-      }, this.config.websocketTimeout || 30000);
+      // Inactivity-based request timeout. Held in a closure variable so the
+      // tool-round site can pause it (clearTimeout) before awaiting user code
+      // and restart it afterwards — without that, a slow functionCallHandler
+      // can be killed by the outer timeout before we get to send the redacted
+      // function_call_output and request the follow-up response.
+      const startRequestTimeout = () =>
+        setTimeout(() => {
+          logger.error('WebSocket connection timed out');
+          ws.close();
+          reject(new Error('WebSocket connection timed out'));
+        }, this.config.websocketTimeout || 30000);
+      let timeout = startRequestTimeout();
 
       // Accumulators for response text and errors
       let responseText = '';
@@ -1583,6 +1607,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   return;
                 }
                 toolIterations++;
+                // Pause the inactivity timeout while user code runs — handler
+                // execution time is not WebSocket inactivity, and a slow
+                // handler must not be killed by the outer timeout before the
+                // redacted function_call_output reaches the model.
+                clearTimeout(timeout);
                 const roundResults = await this.runToolCallRound(pendingFunctionCalls, sendEvent);
                 functionCallResults.push(...roundResults);
 
@@ -1590,6 +1619,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 sendEvent({
                   type: 'response.create',
                 });
+                timeout = startRequestTimeout();
 
                 // Start a fresh turn for the model's follow-up response.
                 responseText = '';
@@ -1774,6 +1804,41 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   }
 
   /**
+   * Tear down all cached persistent-connection state so the next call to
+   * openPersistentConnection() creates a fresh socket. Centralizing this is
+   * load-bearing: leaving connectionReady resolved after the underlying socket
+   * has died makes openPersistentConnection() return immediately, after which
+   * setupMessageHandlers finds persistentConnection === null and the turn
+   * fails with "persistent WebSocket is not set" instead of reconnecting.
+   *
+   * Resetting inflightTurn keeps the queue from being permanently chained to
+   * a poisoned promise, so subsequent turns aren't blocked behind a dead one.
+   */
+  private tearDownPersistentConnection(reason: string): void {
+    if (this.persistentConnection != null) {
+      logger.debug(`Tearing down persistent connection: ${reason}`);
+    }
+    this.persistentConnection = null;
+    this.connectionReady = null;
+    this.inflightTurn = Promise.resolve();
+  }
+
+  // Treat CONNECTING/OPEN as live; CLOSING/CLOSED (or undefined readyState on
+  // a mock that's been "closed" without setting one) as dead. We avoid the
+  // wsState constants so this works for both real ws sockets and the
+  // lightweight mocks in unit tests.
+  private isPersistentConnectionLive(): boolean {
+    const ws = this.persistentConnection;
+    if (ws == null) {
+      return false;
+    }
+    if (typeof ws.readyState !== 'number') {
+      return true;
+    }
+    return ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN;
+  }
+
+  /**
    * Open the persistent socket and resolve only once it has reached readyState OPEN.
    * Concurrent callers share the same Promise so they all wait for the same socket
    * to be ready before any of them send events.
@@ -1782,8 +1847,16 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    * down so the next request creates a fresh connection.
    */
   private openPersistentConnection(): Promise<void> {
-    if (this.connectionReady != null) {
+    // Reuse the cached promise only if the underlying socket is still live.
+    // After a disconnect, connectionReady can remain resolved while the
+    // socket has been nulled — returning it would skip reconnection and the
+    // next turn would fail in sendEvent.
+    if (this.connectionReady != null && this.isPersistentConnectionLive()) {
       return this.connectionReady;
+    }
+    // Cache is stale; clear it so we create a fresh socket below.
+    if (this.connectionReady != null) {
+      this.tearDownPersistentConnection('cached connectionReady is stale');
     }
 
     // A pre-existing connection (e.g., one already opened by an earlier
@@ -1811,22 +1884,46 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     this.persistentConnection = ws;
 
     this.connectionReady = new Promise<void>((resolve, reject) => {
-      const onOpen = () => {
+      const removeBeforeOpenListeners = () => {
         ws.removeListener('error', onErrorBeforeOpen);
+        ws.removeListener('close', onCloseBeforeOpen);
+      };
+      const onOpen = () => {
+        removeBeforeOpenListeners();
         logger.debug('Persistent WebSocket reached OPEN');
         resolve();
       };
       const onErrorBeforeOpen = (err: Error) => {
         ws.removeListener('open', onOpen);
+        ws.removeListener('close', onCloseBeforeOpen);
         logger.error(`Persistent WebSocket failed before OPEN: ${err}`);
         if (this.persistentConnection === ws) {
-          this.persistentConnection = null;
+          this.tearDownPersistentConnection(`error before OPEN: ${err.message}`);
         }
-        this.connectionReady = null;
         reject(err);
+      };
+      // A handshake rejection can fire 'close' without a preceding 'error'
+      // (e.g., server returns an HTTP error response). Without this listener
+      // connectionReady would dangle forever.
+      const onCloseBeforeOpen = (code: number, reason: Buffer) => {
+        ws.removeListener('open', onOpen);
+        ws.removeListener('error', onErrorBeforeOpen);
+        const reasonText = reason?.toString() ?? '';
+        logger.error(
+          `Persistent WebSocket closed before OPEN (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`,
+        );
+        if (this.persistentConnection === ws) {
+          this.tearDownPersistentConnection(`close before OPEN: code=${code}`);
+        }
+        reject(
+          new Error(
+            `Persistent WebSocket closed before OPEN (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`,
+          ),
+        );
       };
       ws.once('open', onOpen);
       ws.once('error', onErrorBeforeOpen);
+      ws.once('close', onCloseBeforeOpen);
     });
 
     return this.connectionReady;
@@ -2188,20 +2285,44 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
     // Add message handler for this request
     if (this.persistentConnection) {
-      this.persistentConnection.on('message', messageHandler);
-      this.persistentConnection.once('error', (error: Error) => {
+      const conn = this.persistentConnection;
+      conn.on('message', messageHandler);
+      const onSocketError = (error: Error) => {
         logger.error(`WebSocket error: ${error}`);
         clearTimeout(requestTimeout);
         this.resetAudioState();
-        this.persistentConnection = null;
-        reject(error);
-      });
-
-      // Set up cleanup function
-      cleanupMessageHandler = () => {
-        if (this.persistentConnection) {
-          this.persistentConnection.removeListener('message', messageHandler);
+        if (this.persistentConnection === conn) {
+          this.tearDownPersistentConnection(`socket error: ${error.message}`);
         }
+        reject(error);
+      };
+      // Without a 'close' listener here, an unexpected disconnect mid-turn
+      // would leave the caller's promise pending until the request timeout
+      // fires; worse, connectionReady stays cached and subsequent turns
+      // would skip reconnection.
+      const onSocketClose = (code: number, reason: Buffer) => {
+        const reasonText = reason?.toString() ?? '';
+        logger.debug(
+          `Persistent WebSocket closed mid-turn (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`,
+        );
+        clearTimeout(requestTimeout);
+        this.resetAudioState();
+        if (this.persistentConnection === conn) {
+          this.tearDownPersistentConnection(`socket close mid-turn: code=${code}`);
+        }
+        reject(
+          new Error(
+            `Persistent WebSocket closed mid-turn (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`,
+          ),
+        );
+      };
+      conn.once('error', onSocketError);
+      conn.once('close', onSocketClose);
+
+      cleanupMessageHandler = () => {
+        conn.removeListener('message', messageHandler);
+        conn.removeListener('error', onSocketError);
+        conn.removeListener('close', onSocketClose);
       };
     }
 
@@ -2234,9 +2355,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // Reset audio state
       this.resetAudioState();
 
-      // Close connection and reset state
+      // Close connection and reset all cached lifecycle state in one place so
+      // a re-used provider instance can open a fresh socket on the next turn.
       this.persistentConnection.close();
-      this.persistentConnection = null;
+      this.tearDownPersistentConnection('cleanup() called');
       this.previousItemId = null;
       this.assistantMessageIds = [];
     }
