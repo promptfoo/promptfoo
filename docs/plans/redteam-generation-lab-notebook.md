@@ -4666,3 +4666,120 @@ The regression is not subtle:
 3. If broad ontology work stalls again, the honest next move is a local pairwise
    model for the remaining legal-counsel collision rather than another global
    abstraction.
+
+## Iteration 55 - 2026-05-09
+
+### Goal
+
+Test the most plausible remaining broad semantic axis from the last two
+iterations:
+
+> Can an output-contract slot separate the stubborn legal-counsel pair better
+> than attack mechanism did?
+
+### Experiment
+
+1. Added `evaluateRepairRoleOutputContractSemanticSignatureStability.ts`.
+2. Kept the role-aware semantic base and replaced the final slot with a
+   constrained output-contract ontology:
+   - `exact-hidden-text`
+   - `classification-support`
+   - `attachment-ready-evidence`
+   - `summary-output`
+   - `record-export`
+   - `scope-change`
+3. Re-ran:
+   - three fresh live draws
+   - repeated-draw stability
+   - frontier comparison
+   - tuple-collision diagnostics against `role-mechanism`
+
+### Results
+
+`role-output-contract` is stable and highly discriminative, but it is not a
+better router:
+
+| Measure                            |  Result |
+| ---------------------------------- | ------: |
+| label-set similarity               | `0.853` |
+| slot agreement                     | `0.905` |
+| avg unique tuples                  |  `10.0` |
+| stable label-model accuracy        |   `1/4` |
+| stable label-model count           |     `1` |
+| avg mixed-winner tuple group count |   `0.0` |
+
+Frontier comparison:
+
+| Representation         | Best stable label accuracy | Avg unique tuples | Frontier status              |
+| ---------------------- | -------------------------: | ----------------: | ---------------------------- |
+| `role-mechanism`       |                      `2/4` |             `9.3` | on frontier                  |
+| `role-artifact`        |                      `1/4` |            `10.0` | on frontier                  |
+| `role-output-contract` |                      `1/4` |            `10.0` | dominated by `role-artifact` |
+
+The intended legal-counsel distinction did **not** materialize:
+
+1. `prompt-extraction-novelty-v3`:
+   - `exact-hidden-text`
+2. `prompt-extraction-coverage-v2`:
+   - also `exact-hidden-text`
+3. The tuple collision disappeared only because other slots split the rows:
+   - `system-prompt`
+   - versus `patient-records`
+4. The slot that was supposed to carry the hypothesis did not carry it.
+
+Holdout behavior confirms the miss:
+
+1. `slot-match-1NN` is the only stable label model:
+   - but only at `1/4`
+2. `prompt-extraction-novelty-v3` remains wrong:
+   - actual `thin`
+   - predicted `balanced`
+3. `prompt-extraction-coverage-v2` stays correct:
+   - but not because the new slot learned a better semantic boundary
+
+### Reflection
+
+1. This is the sharpest warning yet that **resolution is not routing utility**:
+   - `10/10` tuples
+   - zero mixed-winner tuple collisions
+   - still worse than `role-mechanism`
+2. The output-contract ontology was too broad where the hard case needed
+   precision:
+   - both legal-counsel prompts really do ask for hidden text
+   - one simply wraps it in a privilege-log/classification context
+3. The next move should probably stop expanding global ontologies and instead
+   learn a local discriminator for the one pair that still matters.
+4. If we revisit ontology work later, the promising distinction is probably not
+   output contract in the abstract, but **evidence packaging**:
+   - privilege log
+   - audit report
+   - attachment
+   - direct disclosure
+
+### Five-Iteration Checkpoint: 51-55
+
+1. **What improved**
+   - `role-mechanism` is now the best practical semantic representation:
+     - stable label accuracy `2/4`
+     - average mixed-winner tuple groups `0.67`
+   - the vendor-support pair is no longer the main problem
+2. **What failed**
+   - metric family as a label
+   - metric family as a hard gate
+   - artifact-like or output-contract axes that maximize tuple uniqueness
+     without preserving useful neighborhoods
+3. **What we learned**
+   - same-task semantic stability is necessary but not sufficient
+   - tuple count is easy to inflate
+   - the actual bottleneck is one residual local ambiguity:
+     - `prompt-extraction-novelty-v3`
+     - versus `prompt-extraction-coverage-v2`
+4. **Current best hypothesis**
+   - the next hill-climb should move from broad representation design to a
+     targeted pairwise discriminator or mixture-of-experts router that can use
+     global semantics plus a local exception model.
+5. **Near-term research agenda**
+   - build a pairwise separator for the legal-counsel pair
+   - test whether evidence-packaging features help locally
+   - compare global-only, local-only, and hybrid routers on the same holdout
+     frontier before broadening the ontology again
