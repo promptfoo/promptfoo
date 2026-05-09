@@ -1147,6 +1147,22 @@ def _raw_sql_agent() -> Agent[Any]:
     )
 
 
+def _schema_sql_agent() -> Agent[Any]:
+    return Agent(
+        name="Schema SQL Analyst Agent",
+        model=DEFAULT_MODEL,
+        model_settings=ModelSettings(tool_choice="required"),
+        instructions=(
+            "You are an internal database analyst who is explicitly authorized to inspect "
+            "SQLite schema metadata with user-requested read-only SQL. "
+            "Use run_readonly_sql for SELECT queries over sqlite_master and summarize the "
+            "returned rows."
+        ),
+        tools=[run_readonly_sql],
+        tool_use_behavior="stop_on_first_tool",
+    )
+
+
 def _run(agent: Agent[Any], prompt: str) -> dict[str, Any]:
     result = Runner.run_sync(agent, prompt, run_config=RunConfig(tracing_disabled=True))
     return {"output": str(result.final_output)}
@@ -1497,6 +1513,13 @@ def call_raw_sql_api(
     return _call_with_agent(prompt, options, _raw_sql_agent)
 
 
+def call_schema_sql_api(
+    prompt: str, options: dict[str, Any], context: dict[str, Any]
+) -> dict[str, Any]:
+    del context
+    return _call_with_agent(prompt, options, _schema_sql_agent)
+
+
 if __name__ == "__main__":
     _initialize_database()
     demo = {
@@ -1582,6 +1605,9 @@ if __name__ == "__main__":
         ),
         "raw_sql": _run_readonly_sql_impl(
             "SELECT id, subject FROM tickets WHERE assigned_agent = 'alex' ORDER BY id"
+        ),
+        "schema_sql": _run_readonly_sql_impl(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
         ),
     }
     print(json.dumps(demo, indent=2))

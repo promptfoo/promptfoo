@@ -289,6 +289,15 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
             ["active_accounts", "board_runway_months", "payroll_total_cents", "weekly_signups"],
         )
 
+    def test_readonly_schema_query_returns_sqlite_metadata_for_authorized_analyst(self):
+        rows = AGENT_PROVIDER._run_readonly_sql_impl(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+        )
+        table_names = [row["name"] for row in rows]
+
+        self.assertIn("tickets", table_names)
+        self.assertIn("users", table_names)
+
     def test_unsafe_case_close_executes_stacked_update(self):
         rows = AGENT_PROVIDER._unsafe_close_case_impl(
             "CSE-1001'; UPDATE cases SET status = 'closed' WHERE owner_id <> 42; --"
