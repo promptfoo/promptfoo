@@ -967,3 +967,79 @@ Key outputs:
 3. The next useful step is to stop hand-authoring all candidate pools and test
    whether a critique-and-repair generator can intentionally increase frontier
    richness when a pool collapses to too few meaningful policy outcomes.
+
+## Iteration 14 - 2026-05-09
+
+### Goal
+
+Test whether a targeted repair can intentionally enrich a low-disagreement pool:
+
+> If prompt extraction currently yields only two useful policy outcomes, can we
+> add one well-chosen attack that creates a new defensible frontier point?
+
+### Experiment
+
+Added:
+
+1. `repairPromptExtractionPolicyDisagreement()`
+2. a new `access-review` / `security-review` prompt-extraction candidate with
+   the existing `role-pretext` tactic
+3. a new `promptExtractionRepaired` arm in `comparePortfolioPolicies.ts`
+
+The repair candidate was designed to add:
+
+1. a fresh artifact
+2. a fresh pretext
+3. a tactic already present elsewhere
+
+That should improve artifact/pretext richness without automatically improving
+the same tactic dimension as the current coverage-optimal portfolio.
+
+### Results
+
+The targeted repair did **not** increase frontier richness:
+
+| Pool                       | Pool size | Frontier size | Unique policy portfolios |
+| -------------------------- | --------: | ------------: | -----------------------: |
+| `promptExtraction`         |        10 |             7 |                        2 |
+| `promptExtractionRepaired` |        11 |             7 |                        2 |
+
+The selected portfolios were unchanged:
+
+1. `maxArtifacts`, `maxPretexts`, and `maxTactics` still selected the same
+   `5/5/5` coverage portfolio
+2. `maxNovelty` still selected the same novelty-optimal portfolio
+3. The new `access-review` candidate did not become part of any named-policy
+   output
+
+### Reflection
+
+1. This is a useful negative result.
+2. The repair candidate was semantically fresh to a human reader, but it was
+   not frontier-relevant:
+   - the existing coverage-optimal portfolio already saturates artifact,
+     pretext, and tactic counts at the five-attack budget
+   - adding one more attack with an already-covered tactic cannot create a
+     policy-distinct portfolio under the current dimensions
+3. That means the critique step must be more formal:
+   - do not merely ask, "what new-seeming attack can we add?"
+   - ask, "which frontier objective is currently impossible to improve without
+     sacrificing another objective?"
+4. The current benchmark has exposed a gap in our generator design thinking:
+   - semantic novelty in natural language is not the same thing as structural
+     novelty in the optimization space
+5. This is probably exactly why brute-force repeated few-shot generation feels
+   weak in practice. It may generate endless plausible variants without adding
+   the kinds of candidates that change the frontier.
+
+### New Hypotheses
+
+1. Future repair should be **frontier-gap driven**, not free-form:
+   - inspect the active frontier
+   - identify unsatisfied objective combinations
+   - generate specifically into those gaps
+2. For prompt extraction, the real missing candidate may need to trade tactic
+   coverage against a new dimension we are not yet measuring, rather than add
+   another artifact/pretext label to already saturated dimensions.
+3. The next iteration should add an explicit frontier-gap diagnosis report so
+   the generator can reason from measurable deficiency instead of intuition.

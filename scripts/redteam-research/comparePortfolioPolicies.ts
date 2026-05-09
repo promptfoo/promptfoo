@@ -1,12 +1,13 @@
 import {
   buildAdversarialPiiCandidatePool,
-  type PiiAttack,
   loadPiiContext,
+  type PiiAttack,
 } from './piiResearchShared';
 import {
   buildPromptExtractionCandidatePool,
   buildPromptExtractionPortfolio,
   type PromptExtractionAttack,
+  repairPromptExtractionPolicyDisagreement,
 } from './promptExtractionResearchShared';
 import {
   buildSqlAttackPortfolio,
@@ -49,7 +50,10 @@ function buildSqlCandidatePool(attacks: SqlAttack[]): SqlAttack[] {
   ];
 }
 
-function enumerateCombinations<T>(values: T[], count: number): Array<{ indices: number[]; values: T[] }> {
+function enumerateCombinations<T>(
+  values: T[],
+  count: number,
+): Array<{ indices: number[]; values: T[] }> {
   const combinations: Array<{ indices: number[]; values: T[] }> = [];
 
   function visit(startIndex: number, indices: number[], selected: T[]) {
@@ -58,11 +62,7 @@ function enumerateCombinations<T>(values: T[], count: number): Array<{ indices: 
       return;
     }
 
-    for (
-      let index = startIndex;
-      index <= values.length - (count - selected.length);
-      index += 1
-    ) {
+    for (let index = startIndex; index <= values.length - (count - selected.length); index += 1) {
       visit(index + 1, [...indices, index], [...selected, values[index]]);
     }
   }
@@ -71,7 +71,10 @@ function enumerateCombinations<T>(values: T[], count: number): Array<{ indices: 
   return combinations;
 }
 
-function scorePortfolio(attacks: Attack[], dimensions: DimensionAccessor[]): Record<string, number> {
+function scorePortfolio(
+  attacks: Attack[],
+  dimensions: DimensionAccessor[],
+): Record<string, number> {
   const pairwiseNovelty: number[] = [];
 
   for (let leftIndex = 0; leftIndex < attacks.length; leftIndex += 1) {
@@ -124,14 +127,19 @@ function selectLexicographicPortfolio(portfolios: Portfolio[], priorities: strin
 async function main() {
   const [inputPath] = process.argv.slice(2);
   if (!inputPath) {
-    throw new Error('Usage: tsx scripts/redteam-research/comparePortfolioPolicies.ts <redteam.yaml>');
+    throw new Error(
+      'Usage: tsx scripts/redteam-research/comparePortfolioPolicies.ts <redteam.yaml>',
+    );
   }
 
   const { entities } = await loadPiiContext(inputPath);
   const configs: Record<string, PluginConfig> = {
     piiSocial: {
       dimensions: [
-        { key: 'authorizationStory', valueOf: (attack) => (attack as PiiAttack).authorizationStory },
+        {
+          key: 'authorizationStory',
+          valueOf: (attack) => (attack as PiiAttack).authorizationStory,
+        },
         { key: 'relationship', valueOf: (attack) => (attack as PiiAttack).relationship },
         { key: 'sensitiveField', valueOf: (attack) => (attack as PiiAttack).sensitiveField },
         { key: 'tactic', valueOf: (attack) => attack.tactic },
@@ -168,32 +176,29 @@ async function main() {
         { key: 'tactic', valueOf: (attack) => attack.tactic },
       ],
       policies: {
-        maxArtifacts: [
-          'artifactCount',
-          'pretextCount',
-          'tacticCount',
-          'averageNovelty',
-        ],
-        maxNovelty: [
-          'averageNovelty',
-          'artifactCount',
-          'pretextCount',
-          'tacticCount',
-        ],
-        maxPretexts: [
-          'pretextCount',
-          'artifactCount',
-          'tacticCount',
-          'averageNovelty',
-        ],
-        maxTactics: [
-          'tacticCount',
-          'artifactCount',
-          'pretextCount',
-          'averageNovelty',
-        ],
+        maxArtifacts: ['artifactCount', 'pretextCount', 'tacticCount', 'averageNovelty'],
+        maxNovelty: ['averageNovelty', 'artifactCount', 'pretextCount', 'tacticCount'],
+        maxPretexts: ['pretextCount', 'artifactCount', 'tacticCount', 'averageNovelty'],
+        maxTactics: ['tacticCount', 'artifactCount', 'pretextCount', 'averageNovelty'],
       },
       pool: buildPromptExtractionCandidatePool(buildPromptExtractionPortfolio(entities)),
+    },
+    promptExtractionRepaired: {
+      dimensions: [
+        { key: 'artifact', valueOf: (attack) => (attack as PromptExtractionAttack).artifact },
+        { key: 'pretext', valueOf: (attack) => (attack as PromptExtractionAttack).pretext },
+        { key: 'tactic', valueOf: (attack) => attack.tactic },
+      ],
+      policies: {
+        maxArtifacts: ['artifactCount', 'pretextCount', 'tacticCount', 'averageNovelty'],
+        maxNovelty: ['averageNovelty', 'artifactCount', 'pretextCount', 'tacticCount'],
+        maxPretexts: ['pretextCount', 'artifactCount', 'tacticCount', 'averageNovelty'],
+        maxTactics: ['tacticCount', 'artifactCount', 'pretextCount', 'averageNovelty'],
+      },
+      pool: repairPromptExtractionPolicyDisagreement(
+        buildPromptExtractionCandidatePool(buildPromptExtractionPortfolio(entities)),
+        entities,
+      ),
     },
     sqlInjection: {
       dimensions: [{ key: 'tactic', valueOf: (attack) => attack.tactic }],
