@@ -6513,3 +6513,84 @@ The most important new failure is verifier replay drift:
 3. The next experiment should compare one-shot bundle selection with replicated
    acceptance testing on the same enlarged frontier before trying to optimize
    search strategy further.
+
+## Iteration 78 - 2026-05-09
+
+### Goal
+
+Replace lucky one-pass acceptance with an explicit reliability policy:
+
+> On the enlarged seven-case frontier, does selecting bundles by repeated
+> acceptance performance beat trusting the first perfect score?
+
+### Experiment
+
+1. Added `evaluateRepairReplicatedBoundaryAcceptance.ts`.
+2. Reused the same:
+   - three failure families
+   - three diagnosis candidates per family
+   - twenty-seven candidate bundles
+   - seven-case stress frontier
+3. Evaluated every bundle over three acceptance replicates.
+4. Compared two selectors over the exact same bundle pool:
+   - **one-shot**: rank by the first acceptance pass
+   - **replicated**: rank by worst-case acceptance accuracy, then mean accuracy
+5. Replayed both selected bundles on three fresh passes.
+
+### Results
+
+Repeated acceptance did **not** fix the drift in this setup:
+
+| Run | Selector              |  Acceptance profile | Fresh replay average | Replay stability |
+| --- | --------------------- | ------------------: | -------------------: | ---------------: |
+| A   | one-shot              | `7/7`, `7/7`, `7/7` |              `20/21` |            `6/7` |
+| A   | replicated acceptance | `7/7`, `7/7`, `7/7` |              `18/21` |            `7/7` |
+| B   | one-shot              | `7/7`, `6/7`, `6/7` |              `18/21` |            `7/7` |
+| B   | replicated acceptance | `7/7`, `6/7`, `6/7` |              `18/21` |            `7/7` |
+
+The two selectors chose the **same** bundle in both runs:
+
+| Run | Perfect first-pass bundles | Perfect replicated bundles | Interpretation                                            |
+| --- | -------------------------: | -------------------------: | --------------------------------------------------------- |
+| A   |                        `1` |                        `1` | repeated probes saw no weakness                           |
+| B   |                        `2` |                        `0` | repeated probes saw weakness but no better bundle existed |
+
+The cost of that reliability check is now explicit:
+
+| Quantity                         | Value |
+| -------------------------------- | ----: |
+| bundles evaluated                |  `27` |
+| acceptance replicates per bundle |   `3` |
+| acceptance classifier calls      | `567` |
+| replay classifier calls          |  `42` |
+| support generations              |   `9` |
+
+### Reflection
+
+1. Repetition over an unchanged frontier is not automatically a stronger test:
+   - it only helps when the repeated probes actually surface variance
+2. Here, repetition exposed two different failure modes:
+   - in run A, the acceptance evaluator was overconfident
+   - in run B, the evaluator saw the weakness but the candidate pool contained
+     no genuinely robust alternative
+3. That means the frontier and the candidate pool are both things to enrich:
+   - the optimizer needs nearby alternate positives and negatives
+   - and enough support candidates to repair them
+4. The iteration still sharpens the architecture:
+   - proposal
+   - materialization
+   - replicated acceptance
+   - fresh replay
+5. It also prevents a seductive but wrong conclusion:
+   - "more evaluation" is not enough by itself
+   - the extra evaluation must add information
+
+### New Hypotheses
+
+1. Modern attack-generation planners need **diverse** acceptance gates, not only
+   repeated identical probes.
+2. Near-neighbor frontier augmentation is likely more valuable than naive
+   replicate count once a bundle already appears perfectly scored.
+3. The next experiment should add paraphrastic or semantic-neighbor positives
+   around `legal-counsel-report-positive-v1` and test whether a widened frontier
+   catches the brittle bundle before replay.
