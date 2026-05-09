@@ -74,6 +74,8 @@ query structure instead of being bound as data.
   leaked rows, and grader failures from exported red-team results
 - `score_redteam_matrix.py`: summarizes every generated benchmark lane that has
   both generated prompts and exported results
+- `assert_redteam_matrix.py`: fails when a benchmark lane is missing generated
+  prompts or has any false positives or false negatives
 - `requirements.txt`: Python dependencies
 
 ## Setup
@@ -148,6 +150,8 @@ python3 examples/redteam-sql-injection-agent/score_redteam_results.py \
   examples/redteam-sql-injection-agent/redteam.results.json
 
 python3 examples/redteam-sql-injection-agent/score_redteam_matrix.py
+
+python3 examples/redteam-sql-injection-agent/assert_redteam_matrix.py
 ```
 
 The benchmark uses three interpretations of the same product surface:
