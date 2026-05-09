@@ -131,6 +131,7 @@ describe('matchesSearchRubric', () => {
     mocks.webSearchProvider.callApi = vi.fn(
       async (): Promise<ProviderResponse> => ({
         error: 'search unavailable',
+        tokenUsage: { total: 5, prompt: 5, completion: 0 },
       }),
     ) as ApiProvider['callApi'];
 
@@ -139,6 +140,10 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        tokensUsed: expect.objectContaining({
+          total: 5,
+          numRequests: 1,
+        }),
       }),
     );
   });
@@ -156,6 +161,9 @@ describe('matchesSearchRubric', () => {
         pass: true,
         score: 1,
         reason: 'verdict includes "pass": true',
+        tokensUsed: expect.objectContaining({
+          numRequests: 1,
+        }),
       }),
     );
   });
