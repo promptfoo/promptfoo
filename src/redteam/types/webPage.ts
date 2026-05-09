@@ -3,6 +3,8 @@
  * Used by both the indirect-web-pwn strategy and provider.
  */
 
+import type { TokenUsage } from '../../types/providers';
+
 /**
  * Single exfiltration record with request metadata.
  */
@@ -33,6 +35,7 @@ export interface CreateWebPageResponse {
   embeddingLocation?: string;
   /** LLM-generated fetch prompt asking the AI to visit the URL */
   fetchPrompt?: string;
+  tokenUsage?: TokenUsage;
 }
 
 /**
@@ -46,6 +49,7 @@ export interface UpdateWebPageResponse {
   updateCount?: number;
   /** LLM-generated fetch prompt asking the AI to visit the URL */
   fetchPrompt?: string;
+  tokenUsage?: TokenUsage;
 }
 
 /**

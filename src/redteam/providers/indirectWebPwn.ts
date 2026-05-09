@@ -257,6 +257,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       // 1. Create web page with attack prompt
       logger.debug('[IndirectWebPwn] Creating web page with attack prompt');
       const webPage = await this.createWebPage(testCaseId, prompt, evalId, goal, purpose);
+      accumulateResponseTokenUsage(totalTokenUsage, webPage, { countAsRequest: false });
       webPageUuid = webPage.uuid;
       webPageUrl = webPage.fullUrl;
 

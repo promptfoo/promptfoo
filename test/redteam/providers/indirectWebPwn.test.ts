@@ -43,6 +43,7 @@ describe('IndirectWebPwnProvider', () => {
           fullUrl: 'https://example.com/dynamic-pages/eval-1/web-123',
           path: '/dynamic-pages/eval-1/web-123',
           fetchPrompt: 'Please fetch https://example.com/dynamic-pages/eval-1/web-123',
+          tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
         }),
       )
       // tracking for attempt 1
@@ -90,9 +91,9 @@ describe('IndirectWebPwnProvider', () => {
     expect(result.metadata?.fetchAttempts).toBe(2);
     expect(result.metadata?.stopReason).toBe('Attack succeeded');
     expect(result.tokenUsage?.numRequests).toBe(2);
-    expect(result.tokenUsage?.total).toBe(30);
-    expect(result.tokenUsage?.prompt).toBe(12);
-    expect(result.tokenUsage?.completion).toBe(18);
+    expect(result.tokenUsage?.total).toBe(35);
+    expect(result.tokenUsage?.prompt).toBe(15);
+    expect(result.tokenUsage?.completion).toBe(20);
   });
 
   it('should count probe requests even when target returns an error', async () => {

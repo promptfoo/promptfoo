@@ -133,6 +133,7 @@ describe('MemoryPoisoningProvider', () => {
     const scenario = {
       memory: 'memory text',
       followUp: 'follow up text',
+      tokenUsage: { prompt: 7, completion: 3, total: 10, numRequests: 1 },
     };
 
     mockFetch.mockResolvedValueOnce({
@@ -169,9 +170,9 @@ describe('MemoryPoisoningProvider', () => {
 
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBe(3);
-    expect(result.tokenUsage?.prompt).toBe(45); // 10+20+15
-    expect(result.tokenUsage?.completion).toBe(23); // 5+10+8
-    expect(result.tokenUsage?.total).toBe(68); // 15+30+23
+    expect(result.tokenUsage?.prompt).toBe(52); // 7+10+20+15
+    expect(result.tokenUsage?.completion).toBe(26); // 3+5+10+8
+    expect(result.tokenUsage?.total).toBe(78); // 10+15+30+23
   });
 
   it('should handle errors during execution', async () => {
