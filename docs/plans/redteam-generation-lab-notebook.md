@@ -4783,3 +4783,86 @@ Holdout behavior confirms the miss:
    - test whether evidence-packaging features help locally
    - compare global-only, local-only, and hybrid routers on the same holdout
      frontier before broadening the ontology again
+
+## Iteration 56 - 2026-05-09
+
+### Goal
+
+Move from global ontology search to a local-specialist diagnostic:
+
+> If we add a tiny expert for the one remaining legal-counsel ambiguity, how much
+> holdout headroom is actually available?
+
+### Experiment
+
+1. Added `evaluateRepairSemanticLocalExpertRouting.ts`.
+2. Reused the saved `role-mechanism` draws from iteration 53.
+3. Compared:
+   - the original global semantic router
+   - a hand-authored local expert that only activates for outside-counsel
+     prompt-extraction requests
+4. The local expert is intentionally narrow:
+   - `privilege log` -> `thin`
+   - `audit report` -> `balanced`
+   - everything else falls back to the global semantic router
+5. This is a **headroom probe**, not a production-ready learned model.
+
+### Results
+
+The local expert recovers a large share of the remaining headroom:
+
+| Router                        | Stable label holdout accuracy | Avg label holdout regret |
+| ----------------------------- | ----------------------------: | -----------------------: |
+| global `role-mechanism`       |                         `2/4` |                `0.00236` |
+| local packaging expert hybrid |                         `3/4` |                `0.00119` |
+
+The repair is exactly localized:
+
+1. `prompt-extraction-novelty-v3`
+   - global: `balanced`
+   - expert hybrid: `thin`
+2. `prompt-extraction-coverage-v2`
+   - stays correctly `balanced`
+3. `sql-novelty-v2`
+   - stays correctly `balanced`
+4. `bola-coverage-v2`
+   - remains wrong
+   - now the only holdout miss left
+
+Leave-one-out also improves:
+
+| Router                        | Best stable label LOO accuracy |
+| ----------------------------- | -----------------------------: |
+| global `role-mechanism`       |                         `3/10` |
+| local packaging expert hybrid |                         `5/10` |
+
+### Reflection
+
+1. The previous checkpoint was right:
+   - the residual problem is local
+   - not another global ontology failure
+2. Evidence packaging is a genuinely useful cue in the hard family:
+   - privilege-log
+   - versus audit-report
+3. The hand-authored expert is intentionally overfit:
+   - it uses exact lexical packaging cues
+   - and should be treated as an oracle-style diagnostic
+4. But the gain is large enough to justify the next real research step:
+   - learn the local distinction
+   - instead of manually encoding it
+5. The frontier is now usefully decomposed:
+   - one global semantic router
+   - one remaining specialist problem for legal-counsel prompt extraction
+   - one separate residual problem for `bola-coverage-v2`
+
+### New Hypotheses
+
+1. A small learned local expert can recover most of the same legal-counsel gain
+   without hard-coding exact artifact strings.
+2. A contrastive pairwise classifier trained on:
+   - candidate prompt
+   - nearest semantic neighbors
+   - and repair objective text
+     may generalize better than another broad ontology slot.
+3. The BOLA holdout miss is probably a separate specialist family and should not
+   be conflated with the prompt-extraction ambiguity.
