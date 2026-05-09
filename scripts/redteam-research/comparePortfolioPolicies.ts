@@ -48,6 +48,12 @@ type CandidateDiagnostic = {
   candidatePrompt: string;
   comparedPolicy: string;
   deltaVsWinner: Record<string, number>;
+  displacedWinnerIndices: number[];
+  pairwiseSimilarityToWinner: Array<{
+    similarity: number;
+    winnerIndex: number;
+    winnerPrompt: string;
+  }>;
   winner: {
     indices: number[];
     score: Record<string, number>;
@@ -206,6 +212,17 @@ function diagnoseCandidateAgainstPolicy(
   const blockingMetric = winner.priorities.find(
     (metric) => bestContainingCandidate.score[metric] < winner.score[metric],
   );
+  const displacedWinnerIndices = winner.indices.filter(
+    (index) => !bestContainingCandidate.indices.includes(index),
+  );
+  const pairwiseSimilarityToWinner = winner.indices.map((winnerIndex) => ({
+    similarity: jaccardSimilarity(
+      tokenize(pool[candidateIndex].prompt),
+      tokenize(pool[winnerIndex].prompt),
+    ),
+    winnerIndex,
+    winnerPrompt: pool[winnerIndex].prompt,
+  }));
 
   return {
     bestContainingCandidate: {
@@ -217,6 +234,8 @@ function diagnoseCandidateAgainstPolicy(
     candidatePrompt: pool[candidateIndex].prompt,
     comparedPolicy,
     deltaVsWinner,
+    displacedWinnerIndices,
+    pairwiseSimilarityToWinner,
     winner: {
       indices: winner.indices,
       score: winner.score,

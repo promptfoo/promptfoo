@@ -1282,3 +1282,66 @@ The new diagnostics explain both failed repairs precisely:
      portfolio
 3. Once that exists, we can let an actual model iteratively hill-climb instead
    of hand-authoring repairs.
+
+## Iteration 18 - 2026-05-09
+
+### Goal
+
+Make candidate feedback actionable for a future proposer:
+
+> Which exact incumbent attack does a repaired candidate displace, and how much
+> lexical overlap does it have with every member of the winning portfolio?
+
+### Experiment
+
+Extended `candidateDiagnostics` with:
+
+1. `displacedWinnerIndices`
+2. `pairwiseSimilarityToWinner`
+
+### Results
+
+The enriched diagnostics made the failed candidates much easier to reason
+about:
+
+1. `promptExtractionRepaired`
+   - best candidate-containing portfolio displaces winner indices `[4, 5, 6]`
+   - that is a broad restructuring, not a clean one-slot replacement
+   - largest similarity to the incumbent winner is `0.214` against the
+     onboarding-email slot
+2. `promptExtractionGapTargeted`
+   - best candidate-containing portfolio displaces only winner index `[5]`
+   - index `5` is the incumbent `role-pretext` slot, so the repair targeted the
+     right semantic location
+   - highest similarities are:
+     - `0.143` against the displaced `role-pretext` slot
+     - `0.140` against the `policy-diff` slot
+   - those residual overlaps explain why the candidate still loses on novelty
+
+### Reflection
+
+1. This is exactly the extra feedback the generator needed.
+2. The free-form repair fails messily:
+   - it forces multiple slots to move
+   - it still remains too close to onboarding language
+3. The gap-targeted repair is structurally much better:
+   - it replaces the intended slot cleanly
+   - it nearly closes the novelty gap
+4. The next proposal can now be specific instead of generic:
+   - keep `role-pretext`
+   - avoid debugging language
+   - avoid policy-diff language
+   - preserve enough semantic distance from the rest of the five-tactic winner
+5. This is now a credible hill-climbing loop rather than prompt tinkering.
+
+### New Hypotheses
+
+1. A second gap-targeted candidate that avoids both the displaced
+   `role-pretext` and the `policy-diff` lexical neighborhoods should beat the
+   current `maxTactics` winner.
+2. We can probably improve repair prompts by including:
+   - the displaced slot
+   - the two most similar incumbent neighbors
+   - explicit negative lexical guidance
+3. This feedback package is now rich enough to hand to an actual generator
+   model rather than continuing to do all candidate authoring manually.
