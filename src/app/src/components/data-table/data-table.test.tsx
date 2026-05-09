@@ -752,11 +752,12 @@ describe('DataTable', () => {
       await user.click(operatorSelect);
       await user.click(await screen.findByRole('option', { name: 'is any of' }));
 
-      await user.click(
+      // Switching to 'is any of' auto-opens the dropdown.
+      expect(
         within(popover).getByRole('button', {
           name: 'Value for Status filter: No values selected',
         }),
-      );
+      ).toHaveAttribute('aria-expanded', 'true');
       const alphaOption = within(popover).getByRole('checkbox', { name: 'Alpha' });
       expect(alphaOption).not.toBeChecked();
       alphaOption.focus();
@@ -774,6 +775,49 @@ describe('DataTable', () => {
       expect(screen.getByText('Row One')).toBeInTheDocument();
       expect(screen.getByText('Row Two')).toBeInTheDocument();
       expect(screen.getByText('Row Four')).toBeInTheDocument();
+    });
+
+    it('toggles and dismisses the multi-select dropdown via the trigger and Escape key', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
+
+      const popover = await openHeaderFilterPopover('Status');
+
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Status filter',
+      });
+      await user.click(operatorSelect);
+      await user.click(await screen.findByRole('option', { name: 'is any of' }));
+
+      const trigger = within(popover).getByRole('button', {
+        name: 'Value for Status filter: No values selected',
+      });
+      const dropdownLabel = 'Select values for Status filter';
+      expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(within(popover).getByRole('dialog', { name: dropdownLabel })).toBeVisible();
+
+      // Click on the open trigger toggles the dropdown closed.
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        within(popover).queryByRole('dialog', { name: dropdownLabel }),
+      ).not.toBeInTheDocument();
+
+      // Click reopens.
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      // Escape closes the dropdown and leaves the parent header filter popover open.
+      const dropdown = within(popover).getByRole('dialog', { name: dropdownLabel });
+      const alpha = within(dropdown).getByRole('checkbox', { name: 'Alpha' });
+      alpha.focus();
+      await user.keyboard('[Escape]');
+      expect(
+        within(popover).queryByRole('dialog', { name: dropdownLabel }),
+      ).not.toBeInTheDocument();
+      expect(popover).toBeInTheDocument();
     });
 
     it('should open header filter popovers with an active interactive row by default', async () => {

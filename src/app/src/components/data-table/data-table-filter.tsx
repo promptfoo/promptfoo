@@ -438,6 +438,8 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
   );
   const multiSelectSummary = formatMultiSelectSummary(multiSelectValues, filterOptions);
   const [isMultiSelectOpen, setIsMultiSelectOpen] = React.useState<boolean>(false);
+  const multiSelectDropdownId = React.useId();
+  const multiSelectTriggerRef = React.useRef<HTMLButtonElement>(null);
   const columnHeader =
     typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id;
 
@@ -551,6 +553,15 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
       <PopoverContent
         className="w-fit min-w-[320px] max-w-[min(90vw,560px)] overflow-visible p-3"
         align="start"
+        onEscapeKeyDown={(event) => {
+          // When the multi-select dropdown is open, Escape should close it
+          // and leave the parent popover open.
+          if (isMultiSelectOpen) {
+            event.preventDefault();
+            setIsMultiSelectOpen(false);
+            multiSelectTriggerRef.current?.focus();
+          }
+        }}
         onInteractOutside={(e) => {
           // Prevent popover from closing when interacting with portaled Select content.
           // Radix Select renders its dropdown in a separate portal, which can be interpreted
@@ -594,14 +605,17 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                 {operator === 'isAny' ? (
                   <div className="relative min-w-0 w-full">
                     <Button
+                      ref={multiSelectTriggerRef}
                       variant="outline"
                       aria-label={`Value for ${columnHeader} filter: ${multiSelectSummary}`}
+                      aria-haspopup="dialog"
+                      aria-controls={multiSelectDropdownId}
                       aria-expanded={isMultiSelectOpen}
                       className="h-8 w-full min-w-0 overflow-hidden justify-start font-normal"
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => {
                         event.stopPropagation();
-                        setIsMultiSelectOpen(true);
+                        setIsMultiSelectOpen((prev) => !prev);
                       }}
                     >
                       {multiSelectValues.length > 0 ? (
@@ -611,7 +625,12 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                       )}
                     </Button>
                     {isMultiSelectOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 w-full rounded-md border border-border bg-white dark:bg-zinc-900 shadow-md p-2 z-(--z-dropdown)">
+                      <div
+                        id={multiSelectDropdownId}
+                        role="dialog"
+                        aria-label={`Select values for ${columnHeader} filter`}
+                        className="absolute left-0 right-0 top-full mt-1 w-full rounded-md border border-border bg-white dark:bg-zinc-900 shadow-md p-2 z-(--z-dropdown)"
+                      >
                         <div className="space-y-1">
                           {filterOptions.map((option) => {
                             const isSelected = multiSelectValues.includes(option.value);
