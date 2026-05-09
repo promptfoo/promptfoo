@@ -728,9 +728,16 @@ export async function materializeInputValueWithMetadata(
   let output: unknown;
   let tokenUsage: TokenUsage | undefined;
   try {
-    ({ output, tokenUsage } = await context.provider.callApi(
+    const response = await context.provider.callApi(
       buildDocxWrapperPrompt(value, definition, context, injectionPlacement),
-    ));
+    );
+    output = response.output;
+    tokenUsage = response.tokenUsage
+      ? {
+          ...response.tokenUsage,
+          ...(response.tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
+        }
+      : undefined;
   } catch (error) {
     logger.debug('[inputVariables] Failed to generate DOCX wrapper, using fallback render plan', {
       error,

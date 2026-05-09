@@ -143,7 +143,12 @@ export async function encodeMathPrompt(
 
   return {
     encodedPrompt: encodedPrompt.trim() + ' ' + additionalInstruction,
-    tokenUsage: result.tokenUsage,
+    tokenUsage: result.tokenUsage
+      ? {
+          ...result.tokenUsage,
+          ...(result.tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
+        }
+      : undefined,
   };
 }
 

@@ -130,6 +130,7 @@ describe('mathPrompt', () => {
         id: 'mock',
         response: createProviderResponse({
           output: JSON.stringify({ encodedPrompt: 'encoded' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
         }),
       });
 
@@ -151,7 +152,6 @@ describe('mathPrompt', () => {
         total: 10,
         prompt: 5,
         completion: 5,
-        cached: 0,
         numRequests: 1,
       });
     });
