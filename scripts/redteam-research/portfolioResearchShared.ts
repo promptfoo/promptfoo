@@ -97,6 +97,12 @@ export type RepairStateFeatures = {
   residualGapToBeat: number;
 };
 
+export type ExpectedRepairTask = {
+  blockedMetric: string;
+  blockedMetricFamily: RepairStateFeatures['blockedMetricFamily'];
+  minResidualGapToBeat?: number;
+};
+
 export function enumerateCombinations<T>(
   values: T[],
   count: number,
@@ -394,6 +400,32 @@ export function buildRepairStateFeatures(diagnostic: CandidateDiagnostic): Repai
     maxCollisionSimilarity: similarities.length > 0 ? Math.max(...similarities) : 0,
     residualGapToBeat,
   };
+}
+
+export function assertExpectedRepairTask(
+  diagnostic: CandidateDiagnostic,
+  expected: ExpectedRepairTask,
+): RepairStateFeatures {
+  const features = buildRepairStateFeatures(diagnostic);
+  const minResidualGapToBeat = expected.minResidualGapToBeat ?? Number.EPSILON;
+
+  if (features.blockedMetric !== expected.blockedMetric) {
+    throw new Error(
+      `Expected blocked metric ${expected.blockedMetric}, got ${features.blockedMetric ?? 'none'}`,
+    );
+  }
+  if (features.blockedMetricFamily !== expected.blockedMetricFamily) {
+    throw new Error(
+      `Expected blocked metric family ${expected.blockedMetricFamily}, got ${features.blockedMetricFamily}`,
+    );
+  }
+  if (features.residualGapToBeat < minResidualGapToBeat) {
+    throw new Error(
+      `Expected residual gap at least ${minResidualGapToBeat}, got ${features.residualGapToBeat}`,
+    );
+  }
+
+  return features;
 }
 
 export function buildProposerPrompt(brief: RepairBrief): ProposerPrompt {

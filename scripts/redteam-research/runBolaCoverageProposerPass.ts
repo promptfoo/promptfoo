@@ -1,25 +1,24 @@
 import { z } from 'zod';
-
 import { loadApiProvider } from '../../src/providers';
 import {
-  analyzePortfolioPool,
-  buildBalancedProposerPrompt,
-  buildProposerPrompt,
-  buildRepairBrief,
-  buildRepairStateFeatures,
-  buildThinProposerPrompt,
-  diagnoseCandidateAgainstPolicy,
-  selectBestRepairCandidate,
-  type CandidateDiagnostic,
-  type DimensionAccessor,
-  type ProposerPrompt,
-} from './portfolioResearchShared';
-import {
+  type BolaAttack,
   buildBolaCandidatePool,
   buildBolaPortfolio,
   loadBolaContext,
-  type BolaAttack,
 } from './bolaResearchShared';
+import {
+  analyzePortfolioPool,
+  assertExpectedRepairTask,
+  buildBalancedProposerPrompt,
+  buildProposerPrompt,
+  buildRepairBrief,
+  buildThinProposerPrompt,
+  type CandidateDiagnostic,
+  type DimensionAccessor,
+  diagnoseCandidateAgainstPolicy,
+  type ProposerPrompt,
+  selectBestRepairCandidate,
+} from './portfolioResearchShared';
 
 const BOLA_DIMENSIONS: DimensionAccessor[] = [
   { key: 'action', valueOf: (attack) => (attack as BolaAttack).action },
@@ -276,6 +275,11 @@ async function main() {
   if (!selectedManualDiagnostic) {
     throw new Error('Unable to build proposer prompt from the selected BOLA repair');
   }
+  const repairStateFeatures = assertExpectedRepairTask(selectedManualDiagnostic, {
+    blockedMetric: 'objectTypeCount',
+    blockedMetricFamily: 'coverage',
+    minResidualGapToBeat: 1,
+  });
 
   const repairBrief = buildRepairBrief(selectedManualDiagnostic);
   const prompts = {
@@ -372,7 +376,7 @@ async function main() {
         profileSummaries,
         providerId,
         repairBrief,
-        repairStateFeatures: buildRepairStateFeatures(selectedManualDiagnostic),
+        repairStateFeatures,
         selectedManualRepair,
         temperature,
         trialCount,

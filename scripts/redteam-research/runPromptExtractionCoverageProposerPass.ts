@@ -2,10 +2,10 @@ import { z } from 'zod';
 import { loadApiProvider } from '../../src/providers';
 import {
   analyzePortfolioPool,
+  assertExpectedRepairTask,
   buildBalancedProposerPrompt,
   buildProposerPrompt,
   buildRepairBrief,
-  buildRepairStateFeatures,
   buildThinProposerPrompt,
   type CandidateDiagnostic,
   type DimensionAccessor,
@@ -278,6 +278,11 @@ async function main() {
   if (!selectedManualDiagnostic) {
     throw new Error('Unable to build proposer prompt from the selected coverage repair');
   }
+  const repairStateFeatures = assertExpectedRepairTask(selectedManualDiagnostic, {
+    blockedMetric: 'artifactCount',
+    blockedMetricFamily: 'coverage',
+    minResidualGapToBeat: 1,
+  });
 
   const repairBrief = buildRepairBrief(selectedManualDiagnostic);
   const prompts = {
@@ -373,7 +378,7 @@ async function main() {
         profileSummaries,
         providerId,
         repairBrief,
-        repairStateFeatures: buildRepairStateFeatures(selectedManualDiagnostic),
+        repairStateFeatures,
         selectedManualRepair,
         temperature,
         trialCount,

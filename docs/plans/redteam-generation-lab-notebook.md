@@ -2640,3 +2640,107 @@ Per-trial best novelty deltas:
    - the expected blocked metric disappears
    - the residual gap is not positive
    - or the manually designed task no longer expresses the intended family
+
+## Iteration 35 - 2026-05-09
+
+### Goal
+
+Turn the BOLA benchmark failure into reusable protection:
+
+> Can the harness fail fast when a manually designed repair task no longer
+> expresses the task family we think we are testing?
+
+### Experiment
+
+1. Added shared `assertExpectedRepairTask()` validation with checks for:
+   - blocked metric
+   - blocked metric family
+   - minimum residual gap
+2. Wired the validator into:
+   - `runPromptExtractionCoverageProposerPass.ts`
+   - `runBolaCoverageProposerPass.ts`
+3. The coverage harnesses now fail before any proposer call if a benchmark
+   silently collapses into a no-gap or wrong-family task.
+4. Re-ran both coverage harnesses after the change.
+
+### Results
+
+1. Both live coverage harnesses still passed validation:
+   - prompt extraction coverage:
+     - `blockedMetric = artifactCount`
+     - `blockedMetricFamily = coverage`
+     - `residualGapToBeat = 1`
+   - BOLA coverage:
+     - `blockedMetric = objectTypeCount`
+     - `blockedMetricFamily = coverage`
+     - `residualGapToBeat = 1`
+2. A deliberately malformed no-gap diagnostic now fails immediately with:
+
+```text
+Error: Expected blocked metric objectTypeCount, got none
+```
+
+### Reflection
+
+1. This closes the specific failure mode that appeared in iteration 34:
+   - a task can no longer silently change families without the harness noticing
+2. The validator is intentionally simple:
+   - it does not decide whether the benchmark is good
+   - it enforces that the benchmark is at least the benchmark we said we were
+     running
+3. This is an important research hygiene move:
+   - if we later scale to tens or hundreds of synthetic repair tasks, silent
+     benchmark drift would be a larger threat than a single bad proposer run
+
+### 35-Iteration Checkpoint
+
+The last five iterations moved the project from prompt tinkering into the first
+real shape of a research system:
+
+1. Iteration 31 added a second novelty-gap family in SQL and supported:
+   - novelty gap -> `balanced`
+2. Iteration 32 added a second coverage-gap task in prompt extraction and
+   supported:
+   - coverage gap -> `thin`
+3. Iteration 33 turned the narrative into a reproducible task ledger:
+   - four in-sample tasks
+   - explicit router
+   - `4/4` in-sample accuracy
+4. Iteration 34 created the first true holdout in BOLA:
+   - pre-registered prediction `thin`
+   - corrected task family `coverage`
+   - observed winner `thin`
+5. Iteration 35 added fail-fast task validation after the first malformed BOLA
+   construction exposed benchmark drift as a real source of error.
+
+Current best evidence:
+
+| Metric family | Tasks seen | Best observed profile |
+| ------------- | ---------: | --------------------- |
+| `novelty`     |        `2` | `balanced`            |
+| `coverage`    |        `3` | `thin`                |
+
+The router is still simple, but it is no longer only a hunch:
+
+```text
+coverage -> thin
+otherwise -> balanced
+```
+
+It is:
+
+- `4/4` on the current in-sample ledger
+- `1/1` on the first true holdout
+
+### New Hypotheses
+
+1. We should validate **all** future benchmark tasks before generation, not only
+   the coverage tasks added after iteration 34.
+2. The next research leap is not another hand-built singleton task; it is a
+   small benchmark generator that can emit many candidate repair tasks, validate
+   them, and reserve held-out splits before we inspect outcomes.
+3. Once we have enough tasks, the next router should compare:
+   - metric family only
+   - metric family + residual gap
+   - metric family + geometry
+     rather than assuming the current rule is the end of the story.
