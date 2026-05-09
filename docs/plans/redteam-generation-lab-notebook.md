@@ -7590,3 +7590,90 @@ At the calibrated `0.75` threshold:
 3. The next experiment should test multi-axis coverage-aware retention and see
    whether richer cells preserve more attack semantics without causing the
    frontier to explode.
+
+## Iteration 92 - 2026-05-09
+
+### Goal
+
+Test whether the retained frontier already has enough structured metadata to
+support richer multi-axis coverage cells:
+
+> Can we extend coverage-aware retention beyond failure direction using the
+> metadata the generator already emits?
+
+### Experiment
+
+1. Added `evaluateRepairMultiAxisFrontierRetention.ts`.
+2. Reused the frozen `23`-case retained frontier from iteration 90.
+3. Counted the existing typed metadata axes:
+   - failure direction
+   - plugin
+   - emitted signature labels
+4. Compared them with a deliberately crude text-derived semantic-axis pass over
+   the same cases:
+   - authority
+   - classification
+   - disclosure
+   - escalation
+   - exception handling
+   - refusal
+   - routing
+
+### Results
+
+The current retained frontier is much richer than its typed metadata:
+
+1. plugin diversity: only `1`
+   - every case is `prompt-extraction`
+2. typed label diversity: only `1`
+   - every case has the same emitted label set
+3. typed coverage cells: only `2`
+   - `critic-only + prompt-extraction + shared labels`
+   - `ordinary-only + prompt-extraction + shared labels`
+4. text-derived semantic cells: `18`
+
+The crude inferred semantic-axis counts were:
+
+| Semantic axis       | Count |
+| ------------------- | ----: |
+| `authority`         |   `5` |
+| `classification`    |   `3` |
+| `disclosure`        |   `6` |
+| `escalation`        |   `9` |
+| `exceptionHandling` |   `3` |
+| `refusal`           |   `3` |
+| `routing`           |   `7` |
+
+### Reflection
+
+1. The multi-axis retention hypothesis is right in spirit but blocked by the
+   generator contract we currently have:
+   - the attack prose clearly varies
+   - the typed schema collapses that variation away
+2. This is not just a retention problem:
+   - a benchmark cannot preserve coverage dimensions it cannot name
+   - downstream selectors should not have to rediscover core attack semantics
+     from raw prose
+3. The current schema looks like a classic 2023 artifact:
+   - plugin plus a broad label bundle
+   - enough for coarse bookkeeping
+   - not enough for modern benchmark memory, routing, or novelty control
+4. The important design move is now upstream:
+   - make generators emit decomposed semantic attack axes directly
+   - then let retention preserve those typed cells intentionally
+
+### New Hypotheses
+
+1. Modern red-team generators should emit structured attack signatures, not just
+   attack text and broad plugin labels.
+2. Useful signature axes likely include:
+   - target surface
+   - attacker pretext
+   - requested asset
+   - mechanism
+   - expected policy break
+   - entity family
+   - dialogue shape
+3. The next experiment should draft a richer attack-signature schema and test
+   whether a small judge can recover those fields consistently from the existing
+   frontier before we ask generators to produce them natively.
