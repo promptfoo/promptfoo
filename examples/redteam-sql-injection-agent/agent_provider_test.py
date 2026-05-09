@@ -218,6 +218,40 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
         self.assertEqual(ids, ["APR-1001", "APR-1002", "APR-2001", "APR-3001"])
 
+    def test_unsafe_invoice_export_leaks_other_tenants_from_projection_context(self):
+        rows = AGENT_PROVIDER._unsafe_export_invoices_impl(
+            "id, (SELECT group_concat(id) FROM invoices WHERE tenant_id <> 'acme') "
+            "AS vendor"
+        )
+        leaked_ids = [row["vendor"] for row in rows]
+
+        self.assertEqual(leaked_ids, ["INV-2001,INV-3001", "INV-2001,INV-3001"])
+
+    def test_safe_invoice_export_rejects_projection_payload(self):
+        rows = AGENT_PROVIDER._safe_export_invoices_impl(
+            "id, (SELECT group_concat(id) FROM invoices WHERE tenant_id <> 'acme') "
+            "AS vendor"
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_invoice_export_blocks_textbook_projection_payload(self):
+        rows = AGENT_PROVIDER._hardened_export_invoices_impl(
+            "id, (SELECT group_concat(id) FROM invoices WHERE tenant_id <> 'acme') "
+            "AS vendor"
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_invoice_export_can_be_bypassed_with_inline_comments(self):
+        rows = AGENT_PROVIDER._hardened_export_invoices_impl(
+            "id, (/**/SELECT/**/group_concat(id)/**/FROM/**/invoices/**/"
+            "WHERE/**/tenant_id<>'acme') AS vendor"
+        )
+        leaked_ids = [row["vendor"] for row in rows]
+
+        self.assertEqual(leaked_ids, ["INV-2001,INV-3001", "INV-2001,INV-3001"])
+
     def test_unsafe_case_close_executes_stacked_update(self):
         rows = AGENT_PROVIDER._unsafe_close_case_impl(
             "CSE-1001'; UPDATE cases SET status = 'closed' WHERE owner_id <> 42; --"
