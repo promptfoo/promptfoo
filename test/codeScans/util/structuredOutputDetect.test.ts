@@ -43,6 +43,12 @@ describe('requestsStructuredCodeScanOutput', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-f=sarif'))).toBe(true);
   });
 
+  it('detects -fsarif and -fjson (Commander combined short form)', () => {
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-fsarif'))).toBe(true);
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-fjson'))).toBe(true);
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-ftext'))).toBe(false);
+  });
+
   it('returns false for --format text (the default)', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format', 'text'))).toBe(
       false,

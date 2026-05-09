@@ -57,6 +57,13 @@ export function requestsStructuredCodeScanOutput(argv: readonly string[]): boole
       lastFormat = arg.slice(arg.indexOf('=') + 1);
       continue;
     }
+    // Commander also accepts a combined short form for one-character flags: `-fsarif`
+    // is equivalent to `-f sarif`. Match it explicitly so structured-output detection
+    // stays aligned with the parser the actual command uses.
+    if (arg.startsWith('-f') && arg.length > 2 && arg[2] !== '=') {
+      lastFormat = arg.slice(2);
+      continue;
+    }
     if (CODE_SCANS_RUN_VALUE_FLAGS.has(arg)) {
       // Skip the value so a literal like `--base --json` doesn't trip the loop.
       index++;
