@@ -4099,3 +4099,94 @@ Dominance result:
 3. If that hybrid point dominates the five-slot ontology, we can start replacing
    hand-authored model axes with known deterministic task metadata where
    possible.
+
+## Iteration 49 - 2026-05-09
+
+### Goal
+
+Test the first hybrid representation:
+
+> Can deterministic benchmark metadata improve resolution without paying the
+> stochastic cost of another model-generated slot?
+
+### Experiment
+
+1. Extended the constrained-signature artifact to preserve per-trial signatures.
+2. Added `evaluateRepairMetricAwareConstrainedSemanticSignatureStability.ts`.
+3. Reused the same five constrained model slots from iteration 46, then appended
+   a deterministic sixth label:
+   - `metric-family:novelty`
+   - or `metric-family:coverage`
+4. Re-ran the constrained generator and deterministically augmented each fresh
+   draw before evaluating:
+   - repeated-draw stability
+   - route stability
+   - tuple counts
+5. Updated the frontier script to separately track:
+   - best stable model overall
+   - best stable **label** model
+     so a strong summary-text result cannot hide a weak label representation.
+
+### Results
+
+The hybrid representation improved tuple count, but not label routing:
+
+| Representation | Slot agreement | Avg unique tuples | Best stable label accuracy |
+| -------------- | -------------: | ----------------: | -------------------------: |
+| constrained    |        `0.893` |             `7.0` |                      `1/4` |
+| metric-aware   |        `0.911` |             `8.0` |                      `0/4` |
+
+Metric-aware holdout behavior:
+
+1. label `1-NN`: `0/4,1/4,0/4`
+2. slot match `1-NN`: `0/4,0/4,1/4`
+3. weighted slot `1-NN`: `0/4,0/4,0/4`
+4. slot + plugin `1-NN`: `0/4,1/4,1/4`
+5. summary `1-NN`: stable `2/4`
+
+Tuple structure became more detailed but not more useful:
+
+1. prompt-extraction tasks split cleanly into:
+   - `metric-family:novelty`
+   - `metric-family:coverage`
+2. average tuple count rose from `7` to `8`
+3. but the label-neighborhood geometry got worse for proposer routing
+
+Frontier implication:
+
+1. by raw tuple count and stability, metric-aware looks attractive
+2. by **stable label accuracy**, it is worse than the simpler constrained
+   baseline
+3. this forced a useful correction to the frontier report:
+   - overall model quality and label-channel quality must be tracked separately
+
+### Reflection
+
+1. Deterministic metadata is not automatically helpful just because it is true.
+2. `blockedMetricFamily` cleanly separates rows, but apparently along a
+   direction that does not preserve the nearest-neighbor relation needed for
+   routing.
+3. This is a nice negative result:
+   - deterministic
+   - more stable
+   - more discriminative
+   - still worse for the actual label model
+4. The frontier needed the new `bestStableLabelModel` lens because summary text
+   can otherwise mask representation regressions.
+5. The next hybrid candidate should be chosen for routing relevance, not merely
+   availability:
+   - likely requester role
+   - possibly requested artifact
+   - less likely generic repair metadata
+
+### New Hypotheses
+
+1. Deterministic fields should only be added when they are plausibly aligned
+   with proposer-choice boundaries, not simply because they are stable.
+2. The next hybrid representation should combine:
+   - the stable constrained base
+   - plus a deterministic or tightly constrained role/artifact feature that
+     matches the collisions we actually observed
+3. The frontier should eventually use multiple objective views:
+   - one for pure ontology quality
+   - one for routing utility

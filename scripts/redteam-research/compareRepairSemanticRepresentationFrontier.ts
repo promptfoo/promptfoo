@@ -40,6 +40,8 @@ type FrontierRow = {
   averageSummarySimilarity: number;
   averageUniqueTupleCount: number | null;
   bestStableModel: SignatureModel | null;
+  bestStableLabelModel: SignatureModel | null;
+  maxStableLabelHoldoutAccuracy: number;
   maxStableHoldoutAccuracy: number;
   name: string;
   paretoDominatedBy: string[];
@@ -70,7 +72,11 @@ function summarizeRepresentation(name: string, artifact: RepresentationArtifact)
     [SignatureModel, RouteStabilitySummary]
   >;
   const stableModels = holdoutSummaries.filter(([, summary]) => summary.unstableTaskCount === 0);
+  const stableLabelModels = stableModels.filter(([model]) => model !== 'summary-1nn-yield');
   const bestStableModel = [...stableModels].sort(
+    ([, left], [, right]) => right.averageAccuracy - left.averageAccuracy,
+  )[0];
+  const bestStableLabelModel = [...stableLabelModels].sort(
     ([, left], [, right]) => right.averageAccuracy - left.averageAccuracy,
   )[0];
   const tupleCounts =
@@ -86,6 +92,8 @@ function summarizeRepresentation(name: string, artifact: RepresentationArtifact)
     averageSummarySimilarity: artifact.signatureStability.averageSummarySimilarity,
     averageUniqueTupleCount: tupleCounts.length > 0 ? mean(tupleCounts) : null,
     bestStableModel: bestStableModel?.[0] ?? null,
+    bestStableLabelModel: bestStableLabelModel?.[0] ?? null,
+    maxStableLabelHoldoutAccuracy: bestStableLabelModel?.[1].averageAccuracy ?? 0,
     maxStableHoldoutAccuracy: bestStableModel?.[1].averageAccuracy ?? 0,
     name,
     paretoDominatedBy: [],
@@ -96,11 +104,11 @@ function summarizeRepresentation(name: string, artifact: RepresentationArtifact)
 function dominates(left: FrontierRow, right: FrontierRow): boolean {
   const atLeastAsGoodOnEveryAxis =
     left.averageLabelSlotAgreement >= right.averageLabelSlotAgreement &&
-    left.maxStableHoldoutAccuracy >= right.maxStableHoldoutAccuracy &&
+    left.maxStableLabelHoldoutAccuracy >= right.maxStableLabelHoldoutAccuracy &&
     (left.averageUniqueTupleCount ?? 0) >= (right.averageUniqueTupleCount ?? 0);
   const strictlyBetterOnSomeAxis =
     left.averageLabelSlotAgreement > right.averageLabelSlotAgreement ||
-    left.maxStableHoldoutAccuracy > right.maxStableHoldoutAccuracy ||
+    left.maxStableLabelHoldoutAccuracy > right.maxStableLabelHoldoutAccuracy ||
     (left.averageUniqueTupleCount ?? 0) > (right.averageUniqueTupleCount ?? 0);
   return atLeastAsGoodOnEveryAxis && strictlyBetterOnSomeAxis;
 }
@@ -126,8 +134,8 @@ async function main() {
       specs.map(async ({ name, path }) => summarizeRepresentation(name, await loadArtifact(path))),
     ),
   ).sort((left, right) => {
-    if (right.maxStableHoldoutAccuracy !== left.maxStableHoldoutAccuracy) {
-      return right.maxStableHoldoutAccuracy - left.maxStableHoldoutAccuracy;
+    if (right.maxStableLabelHoldoutAccuracy !== left.maxStableLabelHoldoutAccuracy) {
+      return right.maxStableLabelHoldoutAccuracy - left.maxStableLabelHoldoutAccuracy;
     }
     if (right.averageUniqueTupleCount !== left.averageUniqueTupleCount) {
       return (right.averageUniqueTupleCount ?? 0) - (left.averageUniqueTupleCount ?? 0);
