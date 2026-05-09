@@ -2446,3 +2446,87 @@ Per-trial best novelty deltas:
    - task provenance
      so we can stop reasoning from prose alone and start fitting or at least
      inspecting a real router dataset.
+
+## Iteration 33 - 2026-05-09
+
+### Goal
+
+Turn the prose-level routing evidence into a machine-readable benchmark ledger:
+
+> Can we reconstruct the current repair tasks from code, attach their observed
+> live outcomes, and score the simple metric-family router against all of them?
+
+### Experiment
+
+1. Added `buildRepairTaskLedger.ts`.
+2. Reconstructed four task states from code:
+   - prompt extraction novelty
+   - SQL novelty
+   - PII social coverage
+   - prompt extraction coverage
+3. Joined each task with:
+   - repair-state features
+   - observed winning profile
+   - experiment provenance
+   - profile-level outcome summaries
+4. Added a first explicit router:
+   - `coverage -> thin`
+   - otherwise `balanced`
+5. Ran:
+
+```bash
+npx tsx scripts/redteam-research/buildRepairTaskLedger.ts \
+  examples/redteam-medical-agent/redteam.yaml
+```
+
+### Results
+
+The ledger currently contains:
+
+| Task                       | Metric family | Residual gap | Observed winner |
+| -------------------------- | ------------- | -----------: | --------------- |
+| prompt extraction novelty  | `novelty`     |    `0.00909` | `balanced`      |
+| SQL novelty                | `novelty`     |    `0.00336` | `balanced`      |
+| PII social coverage        | `coverage`    |    `1.00000` | `thin`          |
+| prompt extraction coverage | `coverage`    |    `1.00000` | `thin`          |
+
+The explicit router:
+
+```text
+coverage -> thin
+otherwise -> balanced
+```
+
+scored:
+
+| Router                     | Accuracy |
+| -------------------------- | -------: |
+| metric-family first router |    `4/4` |
+
+### Reflection
+
+1. We now have the first reproducible routing dataset rather than a narrative
+   summary of prior experiments.
+2. The current tasks are perfectly separable by blocked-metric family:
+   - both novelty tasks chose `balanced`
+   - both coverage tasks chose `thin`
+3. The feature table also keeps the geometric context attached:
+   - SQL novelty is a very small, clean same-slot gap
+   - prompt-extraction novelty is a larger, clean same-slot gap
+   - PII coverage is clean same-slot
+   - prompt-extraction coverage is a two-slot reshuffle
+4. The `4/4` score is encouraging but **not** yet strong evidence of
+   generalization:
+   - the rule was hypothesized from these same tasks
+   - the sample is tiny
+   - the tasks were manually constructed rather than sampled from a broader
+     benchmark distribution
+
+### New Hypotheses
+
+1. We should treat the current ledger as a tiny training set, not validation.
+2. The next experiment should create a held-out repair task that was not used to
+   invent the rule.
+3. A good held-out candidate is another coverage task on a different surface,
+   because the novelty side already has two plugin families while coverage still
+   leans on prompts built from the same two research families.
