@@ -165,3 +165,64 @@ Planner prototype:
 3. The next meaningful step is not more SQL hand-authoring; it is a reusable
    portfolio-selection layer that can compare candidate sets under a diversity
    objective.
+
+## Iteration 3 - 2026-05-09
+
+### Goal
+
+Test whether curation itself is valuable:
+
+> Given the same over-generated SQL candidate pool, can a portfolio selector
+> recover a materially better subset than naive first-N sampling?
+
+### Experiment
+
+1. Split shared SQL research helpers into
+   `scripts/redteam-research/sqlResearchShared.ts`.
+2. Added `scripts/redteam-research/selectSqlPortfolio.ts`.
+3. Built a deliberately noisy `16`-candidate pool:
+   - near-duplicates
+   - repeated boolean-bypass attacks
+   - the full planner-generated tactic set
+4. Compared:
+   - `first`: first `5` candidates in pool order
+   - `diverse`: greedy selection with a strong unseen-tactic bonus plus lexical
+     novelty
+
+### Results
+
+| Selection policy | Rows | Unique prompts | Detected tactic coverage | Avg pairwise distance | Max similarity |
+| ---------------- | ---: | -------------: | ------------------------ | --------------------: | -------------: |
+| First `5`        |    5 |              4 | `2/5`                    |               `0.681` |        `1.000` |
+| Diverse `5`      |    5 |              5 | `5/5`                    |               `0.941` |        `0.154` |
+
+### Reflection
+
+1. Curation has measurable value even before adding another model:
+   - one duplicate disappears
+   - all tactic families are represented
+   - the selected set becomes much less self-similar
+2. This suggests a modern generator should be decomposed into at least two
+   explicit phases:
+   - candidate generation
+   - portfolio selection
+3. A selector also gives us a natural place to enforce global constraints that
+   are hard to encode in individual prompts:
+   - tactic quotas
+   - entity quotas
+   - surface quotas
+   - novelty ceilings
+   - cost budgets
+4. The experiment also found a harness bug before it produced a result: importing
+   the earlier SQL prototype executed its CLI entrypoint. Splitting pure library
+   code from executable scripts was the right repair and is worth preserving as a
+   rule for future research tools.
+
+### New Hypotheses
+
+1. For larger `n`, selector quality may matter more than raw generator quality
+   once the candidate pool is rich enough.
+2. The next benchmark dimension should be **quota satisfaction** across multiple
+   axes, not only tactic coverage.
+3. We now need a second plugin family to test whether planner + selector is a SQL
+   trick or a reusable generation architecture.
