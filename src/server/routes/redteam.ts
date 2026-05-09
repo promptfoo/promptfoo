@@ -28,6 +28,8 @@ import {
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
+import type { TokenUsage } from '../../types/shared';
+
 export const redteamRouter = Router();
 
 /**
@@ -178,8 +180,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           message: error instanceof Error ? error.message : String(error),
           strategy: strategy.id,
         });
+        const tokenUsage =
+          error && typeof error === 'object' && 'tokenUsage' in error
+            ? (error.tokenUsage as TokenUsage | undefined)
+            : undefined;
         res.status(500).json({
           error: 'Failed to generate multi-turn prompt',
+          ...(tokenUsage ? { tokenUsage } : {}),
         });
         return;
       }
@@ -395,7 +402,14 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 
     if (!response.ok) {
       logger.error(`Cloud function responded with status ${response.status}`);
-      throw new Error(`Cloud function responded with status ${response.status}`);
+      const errorBody = (await response.json().catch(() => undefined)) as
+        | { tokenUsage?: TokenUsage }
+        | undefined;
+      res.status(500).json({
+        error: `Failed to process ${taskId} task`,
+        ...(errorBody?.tokenUsage ? { tokenUsage: errorBody.tokenUsage } : {}),
+      });
+      return;
     }
 
     const data = await response.json();

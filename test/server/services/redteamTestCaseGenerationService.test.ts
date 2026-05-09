@@ -43,6 +43,40 @@ function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
   return fetchWithRetries;
 }
 
+function mockRemoteGenerationResponse({
+  body,
+  status,
+  statusText,
+}: {
+  body: unknown;
+  status: number;
+  statusText: string;
+}) {
+  const fetchWithRetries = vi.fn().mockResolvedValueOnce(
+    new Response(JSON.stringify(body), {
+      status,
+      statusText,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+
+  vi.doMock('../../../src/util/fetch/index', () => ({
+    fetchWithRetries,
+  }));
+  vi.doMock('../../../src/redteam/remoteGeneration', async () => ({
+    getRemoteGenerationUrl: vi.fn().mockReturnValue(await getExpectedRemoteGenerationUrl()),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+  }));
+  vi.doMock('../../../src/providers/shared', () => ({
+    getRequestTimeoutMs: () => TEST_REQUEST_TIMEOUT_MS,
+  }));
+  vi.doMock('../../../src/constants', () => ({
+    VERSION: '0.0.0-test',
+  }));
+
+  return fetchWithRetries;
+}
+
 async function generatePromptForStrategy(
   strategyId: MultiTurnPromptParams['strategyId'],
   baseMetadata: Record<string, unknown> = { pluginConfig: {} },
@@ -109,6 +143,28 @@ describe('redteamTestCaseGenerationService', () => {
 
       await expect(generatePromptForStrategy('goat')).rejects.toThrow('remote generation failed');
       expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      'goat',
+      'jailbreak:hydra',
+      'mischievous-user',
+      'crescendo',
+    ] as const)('should preserve helper usage when %s remote generation fails', async (strategyId) => {
+      mockRemoteGenerationResponse({
+        status: 400,
+        statusText: 'Bad Request',
+        body: {
+          error: 'Warning',
+          message: 'Skipping generation',
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        },
+      });
+
+      await expect(generatePromptForStrategy(strategyId)).rejects.toMatchObject({
+        name: 'MultiTurnGenerationError',
+        tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+      });
     });
 
     it('should call fetchWithRetries with correct parameters for Crescendo strategy', async () => {
@@ -258,6 +314,47 @@ describe('redteamTestCaseGenerationService', () => {
         completion: 9,
         cached: 0,
         numRequests: 2,
+      });
+    });
+
+    it.each([
+      {
+        strategyId: 'goat' as const,
+        responseBody: {
+          message: {},
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'jailbreak:hydra' as const,
+        responseBody: {
+          result: {},
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'mischievous-user' as const,
+        responseBody: {
+          result: '',
+          tokenUsage: { total: 17, prompt: 10, completion: 7, numRequests: 1 },
+        },
+      },
+      {
+        strategyId: 'crescendo' as const,
+        responseBody: {
+          result: {},
+          tokenUsage: { total: 19, prompt: 12, completion: 7, numRequests: 1 },
+        },
+      },
+    ])('should preserve $strategyId helper usage when the response is malformed', async ({
+      strategyId,
+      responseBody,
+    }) => {
+      mockRemoteGeneration(responseBody);
+
+      await expect(generatePromptForStrategy(strategyId)).rejects.toMatchObject({
+        name: 'MultiTurnGenerationError',
+        tokenUsage: responseBody.tokenUsage,
       });
     });
   });

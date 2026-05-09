@@ -24,6 +24,16 @@ export class RemoteGenerationDisabledError extends Error {
   }
 }
 
+export class MultiTurnGenerationError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'MultiTurnGenerationError';
+  }
+}
+
 type PluginWithConfig = {
   id: Plugin;
   config: Record<string, unknown>;
@@ -254,6 +264,33 @@ function getNestedTokenUsage(
   return (nestedMetadata as { tokenUsage?: TokenUsage }).tokenUsage;
 }
 
+async function getRemoteTaskError(
+  response: Response,
+  taskName: string,
+): Promise<MultiTurnGenerationError> {
+  const responseText = await response.text();
+  let parsedBody: { error?: string; message?: string; tokenUsage?: TokenUsage } | undefined;
+  try {
+    parsedBody = JSON.parse(responseText) as {
+      error?: string;
+      message?: string;
+      tokenUsage?: TokenUsage;
+    };
+  } catch {
+    // Fall back to the raw response body below.
+  }
+
+  const detail =
+    parsedBody?.message ||
+    parsedBody?.error ||
+    (responseText ? responseText : `${response.status} ${response.statusText}`);
+
+  return new MultiTurnGenerationError(
+    `${taskName} task failed with status ${response.status}: ${detail}`,
+    parsedBody?.tokenUsage,
+  );
+}
+
 async function handleGoatStrategy(
   ctx: MultiTurnHandlerContext,
 ): Promise<{ prompt: string; done: boolean; metadata: Record<string, unknown> }> {
@@ -286,7 +323,7 @@ async function handleGoatStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
+    throw await getRemoteTaskError(response, 'GOAT');
   }
 
   const data = await response.json();
@@ -294,7 +331,10 @@ async function handleGoatStrategy(
   const nextQuestion = attackerMessage?.content;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new Error('GOAT task did not return a valid next question');
+    throw new MultiTurnGenerationError(
+      'GOAT task did not return a valid next question',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextQuestion.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -349,9 +389,7 @@ async function handleMischievousUserStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Mischievous User task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteTaskError(response, 'Mischievous User');
   }
 
   const data = await response.json();
@@ -364,7 +402,10 @@ async function handleMischievousUserStrategy(
         : '';
 
   if (!nextMessage) {
-    throw new Error('Mischievous User task did not return a valid message');
+    throw new MultiTurnGenerationError(
+      'Mischievous User task did not return a valid message',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextMessage.trim() === '###STOP###' || ctx.turn + 1 >= ctx.resolvedMaxTurns;
@@ -470,7 +511,7 @@ async function handleHydraStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(`Hydra task failed with status ${response.status}: ${await response.text()}`);
+    throw await getRemoteTaskError(response, 'Hydra');
   }
 
   const data = await response.json();
@@ -485,7 +526,10 @@ async function handleHydraStrategy(
           : '';
 
   if (!nextPrompt) {
-    throw new Error('Hydra task did not return a valid next prompt');
+    throw new MultiTurnGenerationError(
+      'Hydra task did not return a valid next prompt',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextPrompt.trim() === '###STOP###' || turnNumber >= ctx.resolvedMaxTurns;
@@ -564,9 +608,7 @@ async function handleCrescendoLikeStrategy(
   );
 
   if (!response.ok) {
-    throw new Error(
-      `Crescendo task failed with status ${response.status}: ${await response.text()}`,
-    );
+    throw await getRemoteTaskError(response, 'Crescendo');
   }
 
   const data = await response.json();
@@ -585,7 +627,10 @@ async function handleCrescendoLikeStrategy(
   const nextQuestion = parsedResult?.generatedQuestion;
 
   if (!nextQuestion || typeof nextQuestion !== 'string') {
-    throw new Error('Crescendo task did not return a valid generated question');
+    throw new MultiTurnGenerationError(
+      'Crescendo task did not return a valid generated question',
+      data?.tokenUsage,
+    );
   }
 
   const done = nextQuestion.trim() === '###STOP###' || roundNumber >= ctx.resolvedMaxTurns;

@@ -127,6 +127,27 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     expect(result.error).toContain('[HarmfulCompletionProvider]');
   });
 
+  it('should preserve helper usage from non-OK harmful generation responses', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({
+        error: 'Could not generate harmful inputs',
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      }),
+      {
+        status: 500,
+        statusText: 'Internal Server Error',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result).toMatchObject({
+      error: '[HarmfulCompletionProvider] Could not generate harmful inputs',
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+  });
+
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
     vi.mocked(getEnvBool).mockImplementation(function (key: string) {
       return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';

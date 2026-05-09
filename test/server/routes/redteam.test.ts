@@ -18,6 +18,7 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redtea
 import { doRedteamRun } from '../../../src/redteam/shared';
 import {
   extractGeneratedPrompt,
+  generateMultiTurnPrompt,
   getPluginConfigurationError,
 } from '../../../src/server/services/redteamTestCaseGenerationService';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
@@ -26,6 +27,7 @@ const mockedPlugins = vi.mocked(Plugins);
 const mockedRedteamProviderManager = vi.mocked(redteamProviderManager);
 const mockedGetPluginConfigurationError = vi.mocked(getPluginConfigurationError);
 const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
+const mockedGenerateMultiTurnPrompt = vi.mocked(generateMultiTurnPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
@@ -50,6 +52,10 @@ describe('Redteam Routes', () => {
         callApi: vi.fn(),
       } as any);
       mockedExtractGeneratedPrompt.mockReturnValue('generated test prompt');
+      mockedGenerateMultiTurnPrompt.mockResolvedValue({
+        prompt: 'generated multi-turn prompt',
+        metadata: {},
+      });
     });
 
     describe('excluded plugins logic', () => {
@@ -475,6 +481,50 @@ describe('Redteam Routes', () => {
         expect(response.body.error).toBe('Plugin requires additional configuration');
       });
     });
+
+    describe('multi-turn generation failures', () => {
+      it('should preserve helper usage on multi-turn generation errors', async () => {
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test case' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        mockedGenerateMultiTurnPrompt.mockRejectedValue(
+          Object.assign(new Error('Hydra task failed'), {
+            tokenUsage: {
+              total: 13,
+              prompt: 8,
+              completion: 5,
+              numRequests: 1,
+            },
+          }),
+        );
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'jailbreak:hydra',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({
+          error: 'Failed to generate multi-turn prompt',
+          tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        });
+      });
+    });
   });
 
   describe('POST /redteam/run', () => {
@@ -666,12 +716,34 @@ describe('Redteam Routes', () => {
       mockedFetchWithProxy.mockResolvedValue({
         ok: false,
         status: 503,
+        json: () => Promise.resolve({ error: 'upstream failed' }),
       } as any);
 
       const response = await request(app).post('/api/redteam/my-task').send({ data: 'test' });
 
       expect(response.status).toBe(500);
       expect(response.body.error).toContain('Failed to process my-task task');
+    });
+
+    it('should preserve helper usage when proxied cloud tasks fail', async () => {
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: () =>
+          Promise.resolve({
+            error: 'Warning',
+            message: 'Skipping generation',
+            tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+          }),
+      } as any);
+
+      const response = await request(app).post('/api/redteam/my-task').send({ data: 'test' });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({
+        error: 'Failed to process my-task task',
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      });
     });
 
     it('should return 400 when taskId exceeds max length', async () => {

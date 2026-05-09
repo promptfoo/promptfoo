@@ -104,7 +104,19 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
+        const responseText = await response.text();
+        let errorPayload: { error?: string; tokenUsage?: TokenUsage } | undefined;
+        try {
+          errorPayload = JSON.parse(responseText) as { error?: string; tokenUsage?: TokenUsage };
+        } catch {
+          // Fall back to the raw response body below.
+        }
+        return {
+          error: `[HarmfulCompletionProvider] ${
+            errorPayload?.error || `API call failed with status ${response.status}: ${responseText}`
+          }`,
+          ...(errorPayload?.tokenUsage ? { tokenUsage: errorPayload.tokenUsage } : {}),
+        };
       }
 
       const data = await response.json();
