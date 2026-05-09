@@ -5627,3 +5627,83 @@ All three generated supports:
    - select operator
    - materialize sparse-support payloads
    - then compose with learned local experts
+
+## Iteration 66 - 2026-05-09
+
+### Goal
+
+Test the first fully composed residual-repair planner:
+
+> If we combine geometry-based diagnosis, automatic repair-family selection,
+> generated sparse-support materialization, and the learned legal-counsel expert,
+> do we still match the manual `4/4` frontier?
+
+### Experiment
+
+1. Added `evaluateRepairAutomaticPlannerComposition.ts`.
+2. Reused:
+   - the saved `role-mechanism` semantic draws from iteration 53
+   - the learned legal-counsel packaging outputs from iteration 57
+   - the residual-family diagnoses from iteration 63
+   - the generated BOLA supports from iteration 65
+3. Compared three policies:
+   - `global`
+   - `manual-hybrid`
+   - `automatic-planner`
+4. The automatic planner executed the whole chain:
+   - diagnose residual family
+   - choose operator
+   - use learned specialist for `local-ambiguity`
+   - use generated support for `sparse-support`
+
+### Results
+
+The fully automatic planner exactly matches the manual frontier:
+
+| Router            | Stable label holdout accuracy | Avg label holdout regret |
+| ----------------- | ----------------------------: | -----------------------: |
+| global            |                         `2/4` |                `0.00236` |
+| manual hybrid     |                         `4/4` |                `0.00000` |
+| automatic planner |                         `4/4` |                `0.00000` |
+
+The task-level decisions are identical to the manual hybrid:
+
+1. `prompt-extraction-novelty-v3`
+   - repaired by the learned specialist
+2. `bola-coverage-v2`
+   - repaired by the generated sparse-support exemplar
+3. already-correct holdouts remain untouched:
+   - `prompt-extraction-coverage-v2`
+   - `sql-novelty-v2`
+
+### Reflection
+
+1. This is the first end-to-end planner milestone:
+   - diagnosis
+   - operator selection
+   - operator materialization
+   - final repair composition
+2. The planner is still not fully learned:
+   - the legal-counsel specialist retains a hand-authored packaging-to-profile map
+3. But one entire branch is now automatic:
+   - sparse-support diagnosis
+   - generated support payload
+   - successful final repair
+4. The system shape is now much clearer than where we started:
+   - not “one better prompt generator”
+   - but a residual-aware planner around several repair operators
+5. The next frontier should be the remaining hand-authored specialist mapping:
+   - learn the packaging-to-profile decision
+   - or replace it with a stronger local policy learner
+
+### New Hypotheses
+
+1. The planner stack can be generalized if each repair operator exposes:
+   - applicability conditions
+   - materialization inputs
+   - and success criteria
+2. Generated sparse-support operators may scale better than manually curated
+   support libraries when new residual families emerge.
+3. The next bottleneck is no longer BOLA:
+   - it is learning specialist actions directly from examples rather than
+     preserving manual class-to-profile mappings.
