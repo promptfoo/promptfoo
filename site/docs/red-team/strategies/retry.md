@@ -51,6 +51,8 @@ The retry strategy works by:
 3. Incorporating these cases into the current test suite
 4. Allowing subsequent strategies to build upon this historical knowledge
 
+Retry reuses the failed case and relevant strategy context, but each new eval records its own fresh token usage instead of inheriting historical spend from the earlier run.
+
 ## Example Scenarios
 
 If you have a test suite with:
