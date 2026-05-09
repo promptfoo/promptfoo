@@ -6675,3 +6675,81 @@ The added positives also failed to change selection pressure enough:
 3. The next experiment should generate matched paraphrase sets centered on the
    unstable anchors themselves and test whether anchor-local twins are more
    diagnostic than broader family neighbors.
+
+## Iteration 80 - 2026-05-09
+
+### Goal
+
+Make the frontier locally precise, not just locally relevant:
+
+> Do matched positive and negative twins centered on the unstable anchors provide
+> stronger selection pressure than the broader legal-counsel neighbors from
+> iteration 79?
+
+### Experiment
+
+1. Added `evaluateRepairAnchorTwinFrontier.ts`.
+2. Reused the same:
+   - three failure families
+   - three diagnosis candidates per family
+   - twenty-seven candidate bundles
+3. Compared two selector frontiers over the same bundle pool:
+   - **broader-neighbor**: the ten-case frontier from iteration 79
+   - **anchor-twin**: the original seven cases plus six matched twins:
+     - three close positive report twins centered on
+       `legal-counsel-report-positive-v1`
+     - three close negative contract twins centered on
+       `legal-counsel-contract-negative-v1`
+4. Replayed both selected bundles three times on the anchor-twin thirteen-case
+   frontier.
+
+### Results
+
+The anchor-local frontier changed the search geometry, but it did **not**
+dominate the broader frontier consistently:
+
+| Run | Selector frontier | Perfect bundles | Fresh anchor replay average | Replay stability |
+| --- | ----------------- | --------------: | --------------------------: | ---------------: |
+| A   | broader-neighbor  |             `2` |                     `39/39` |          `13/13` |
+| A   | anchor-twin       |             `1` |                     `37/39` |          `12/13` |
+| B   | broader-neighbor  |             `0` |                     `36/39` |          `13/13` |
+| B   | anchor-twin       |             `2` |                     `36/39` |          `13/13` |
+
+The matched twins are informative, but not yet decisive:
+
+1. in run A they collapsed the plateau but selected a worse replaying bundle
+2. in run B they exposed more perfect candidates than the broader frontier but
+   still replayed no better
+3. `legal-counsel-report-positive-v1` remained the recurring false negative
+
+### Reflection
+
+1. This is the strongest evidence so far that frontier design is a first-class
+   part of the optimizer, but also that no single radius is obviously sufficient.
+2. Semantic relatedness is not enough:
+   - the benchmark needs examples close to the actual decision hinge
+   - yet an overly narrow hinge can overfit the selected support portfolio
+3. Matched positive/negative twins remain valuable because they expose the exact
+   axis the planner must learn:
+   - same role
+   - similar artifact
+   - different admissibility boundary
+4. The two runs together suggest we want a **mixture**:
+   - anchor-local twins for sharpness
+   - broader neighbors for breadth
+5. The next frontier is therefore composition:
+   - combine broad and anchor-local neighborhoods
+   - then ask whether the union dominates either frontier alone
+
+### New Hypotheses
+
+1. Contrastive anchor twins are useful repair primitives, but not sufficient
+   replacements for broader semantic neighbors.
+2. Good red-team planners should maintain both:
+   - local positive/negative twins
+   - and broader support neighborhoods
+3. The next experiment should compare:
+   - broader neighbors alone
+   - anchor twins alone
+   - their union
+     to see whether mixed neighborhoods dominate either component frontier.
