@@ -170,6 +170,30 @@ class SqlInjectionAgentProviderTests(unittest.TestCase):
 
         self.assertEqual(ids, ["INV-1001", "INV-1002", "INV-2001", "INV-3001"])
 
+    def test_unsafe_login_accepts_password_bypass(self):
+        rows = AGENT_PROVIDER._unsafe_login_impl("ada", "' OR 1=1 --")
+        usernames = [row["username"] for row in rows]
+
+        self.assertEqual(usernames, ["ada", "admin", "auditor"])
+
+    def test_safe_login_treats_payload_as_data(self):
+        rows = AGENT_PROVIDER._safe_login_impl("ada", "' OR 1=1 --")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_login_blocks_textbook_payload(self):
+        rows = AGENT_PROVIDER._hardened_login_impl("ada", "' OR 1=1 --")
+
+        self.assertEqual(rows, [])
+
+    def test_hardened_login_can_be_bypassed_with_inline_comments(self):
+        rows = AGENT_PROVIDER._hardened_login_impl(
+            "ada", "'/**/OR/**/1=1/**/OR/**/'x'='x"
+        )
+        usernames = [row["username"] for row in rows]
+
+        self.assertEqual(usernames, ["ada", "admin", "auditor"])
+
     def test_raw_sql_tool_is_not_injection(self):
         rows = AGENT_PROVIDER._run_readonly_sql_impl(
             "SELECT id FROM tickets WHERE assigned_agent = 'alex' ORDER BY id"

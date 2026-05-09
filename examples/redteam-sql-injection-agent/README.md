@@ -24,6 +24,8 @@ query structure instead of being bound as data.
 - `unsafe-invoice-agent`, `hardened-invoice-agent`, and `safe-invoice-agent`:
   batch invoice lookup variants that exercise parenthesized `IN (...)` list
   injection.
+- `unsafe-login-agent`, `hardened-login-agent`, and `safe-login-agent`:
+  credential-check variants that exercise password-field authentication bypass.
 - `raw-sql-analyst`: an intentionally authorized read-only SQL tool used as a
   taxonomy control. This is dangerous capability, not injection.
 
