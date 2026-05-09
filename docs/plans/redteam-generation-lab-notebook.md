@@ -6594,3 +6594,84 @@ The cost of that reliability check is now explicit:
 3. The next experiment should add paraphrastic or semantic-neighbor positives
    around `legal-counsel-report-positive-v1` and test whether a widened frontier
    catches the brittle bundle before replay.
+
+## Iteration 79 - 2026-05-09
+
+### Goal
+
+Make the acceptance frontier more informative instead of merely more repetitive:
+
+> If we add close positive neighbors around the brittle
+> `legal-counsel-report-positive-v1` case, does the selector reject the bundle
+> that looked acceptable on the original seven-case frontier?
+
+### Experiment
+
+1. Added `evaluateRepairNeighborAcceptanceFrontier.ts`.
+2. Reused the same:
+   - three failure families
+   - three diagnosis candidates per family
+   - twenty-seven candidate bundles
+3. Built two acceptance frontiers over the same bundle pool:
+   - **base**: the original seven stress cases
+   - **widened**: those seven cases plus three close legal-counsel positives:
+     - `legal-counsel-memo-positive-v1`
+     - `legal-counsel-attachment-positive-v1`
+     - `legal-counsel-brief-positive-v1`
+4. Selected the best bundle once on each frontier.
+5. Replayed both selected bundles three times on the widened ten-case frontier.
+
+### Results
+
+The widened frontier improved coverage, but it still did **not** reliably repair
+the boundary:
+
+| Run | Selector frontier | Acceptance score | Fresh widened replay average | Replay stability |
+| --- | ----------------- | ---------------: | ---------------------------: | ---------------: |
+| A   | base              |            `7/7` |                      `29/30` |           `9/10` |
+| A   | widened           |          `10/10` |                      `29/30` |           `9/10` |
+| B   | base              |            `7/7` |                      `29/30` |           `9/10` |
+| B   | widened           |          `10/10` |                      `28/30` |           `8/10` |
+
+The added positives also failed to change selection pressure enough:
+
+1. both frontiers still had `7` perfect bundles on the rerun
+2. both selectors chose the same generated support portfolio
+3. replay drift merely moved among nearby anchor cases:
+   - `legal-counsel-report-positive-v1`
+   - `legal-counsel-contract-negative-v1`
+
+### Reflection
+
+1. This is a useful negative result:
+   - broader family coverage is not automatically the same thing as stronger
+     selection pressure
+2. The useful acceptance frontier is not just "more cases":
+   - it needs the _right_ nearby cases
+   - and these three paraphrases were still too broad to break the
+     perfect-bundle tie plateau
+3. The replay failures continuing to land on the report/contract anchors suggest
+   the next frontier should be anchor-focused:
+   - paraphrase the exact unstable tasks
+   - vary the wording as little as possible
+   - ask whether matched local twins expose the bad bundle before replay
+4. This still brings the research closer to the actual attack-generation
+   problem:
+   - good attacks are not isolated strings
+   - they live in families of paraphrases, roles, artifacts, and target intents
+5. The planner now wants an explicit frontier-builder:
+   - mine or generate local positive and negative neighbors
+   - score candidate memories against that neighborhood
+   - only then accept a repair
+6. But the builder also needs a notion of _anchor closeness_, not just semantic
+   relatedness.
+
+### New Hypotheses
+
+1. Boundary repair quality should be measured over neighborhoods, but the
+   neighborhood radius matters.
+2. Positive-neighbor generation is as important as adversarial negative
+   generation when guarding against overcorrection.
+3. The next experiment should generate matched paraphrase sets centered on the
+   unstable anchors themselves and test whether anchor-local twins are more
+   diagnostic than broader family neighbors.
