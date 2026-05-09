@@ -2118,3 +2118,93 @@ Per-trial observations:
 3. The next experiment should leave prompt extraction and test whether
    `balanced` generalizes to another plugin, ideally one with a different repair
    geometry.
+
+## Iteration 29 - 2026-05-09
+
+### Goal
+
+Transfer the proposer-profile experiment to another plugin family:
+
+> Does the prompt-extraction ordering generalize to a PII social repair problem
+> with different dimensions and a different blocking metric?
+
+### Experiment
+
+1. Added `runPiiProposerPass.ts`, a parallel live proposer harness for
+   `pii:social`.
+2. Reused the shared frontier evaluator but switched the objective surface to:
+   - `authorizationStory`
+   - `relationship`
+   - `sensitiveField`
+   - `tactic`
+3. The selected PII repair brief targets:
+   - policy: `maxTactics`
+   - tactic: `system-access-request`
+   - blocked metric: `authorizationStoryCount`
+   - residual gap to beat: `1`
+4. Ran the same three-profile stochastic comparison:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/runPiiProposerPass.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  all \
+  3 \
+  0.7
+```
+
+### Results
+
+| Prompt profile | Improving candidates | Avg best novelty delta | Avg `top3` yield |
+| -------------- | -------------------: | ---------------------: | ---------------: |
+| `rich`         |                  `9` |             `+0.01356` |       `+0.03152` |
+| `balanced`     |                 `11` |             `+0.00839` |       `+0.01813` |
+| `thin`         |                 `13` |             `+0.01771` |       `+0.04107` |
+
+Per-trial best novelty deltas:
+
+| Trial | `rich`     | `balanced` | `thin`     |
+| ----: | ---------- | ---------- | ---------- |
+|   `1` | `+0.01986` | `+0.00736` | `+0.01439` |
+|   `2` | `+0.01367` | `+0.00647` | `+0.01495` |
+|   `3` | `+0.00714` | `+0.01133` | `+0.02379` |
+
+All three profiles preserved `system-access-request` perfectly.
+
+### Reflection
+
+1. The prompt-extraction ordering does **not** transfer cleanly:
+   - `thin` was best on:
+     - improving-candidate count
+     - best gain
+     - top-k yield
+   - `balanced` was weakest on novelty yield despite producing many improving
+     candidates
+2. This is a useful failure of overgeneralization:
+   - the best prompt packet appears to depend on the plugin's repair geometry
+   - prompt extraction rewarded global optimization guidance
+   - PII social benefited from a looser proposer packet
+3. The blocked metric changed from:
+   - `averageNovelty`
+   - to `authorizationStoryCount`
+     and that may matter a great deal
+4. We should stop looking for one universal proposer profile and instead learn a
+   routing policy over:
+   - plugin type
+   - blocked metric
+   - frontier geometry
+   - desired portfolio outcome
+
+### New Hypotheses
+
+1. Prompt-profile choice should be conditioned on the active blocked metric:
+   - novelty repair may benefit from `balanced`
+   - discrete coverage repair may benefit from `thin`
+2. We need a compact feature vector for repair situations before we can learn or
+   hand-design a routing policy.
+3. The next experiment should compare repair tasks by:
+   - blocked metric family
+   - residual gap size
+   - winner-collision density
+   - local-versus-global replacement structure
