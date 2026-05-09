@@ -499,7 +499,22 @@ function writeSarifFile(resolved: string, body: string): void {
     );
   }
 
-  fs.writeFileSync(resolved, body);
+  // Close the TOCTOU window between the lstat check and the write: on POSIX, opening with
+  // O_NOFOLLOW makes the call fail atomically if `resolved` was raced into a symlink. On
+  // Windows O_NOFOLLOW is not exposed, so we fall back to plain writeFileSync (the lstat
+  // check above is the only defense there — acceptable given the Actions threat model).
+  const noFollow = (fs.constants as { O_NOFOLLOW?: number }).O_NOFOLLOW;
+  if (typeof noFollow === 'number') {
+    const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC | noFollow;
+    const fd = fs.openSync(resolved, flags, 0o644);
+    try {
+      fs.writeSync(fd, body);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } else {
+    fs.writeFileSync(resolved, body);
+  }
 }
 
 function emitSarifOutput(scanResponse: ScanResponse, rawPath: string): void {

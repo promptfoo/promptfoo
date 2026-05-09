@@ -10,6 +10,7 @@
  */
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 
 type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';

@@ -22,9 +22,9 @@ describe('requestsStructuredCodeScanOutput', () => {
   });
 
   it('detects --format sarif and --format json (space-separated)', () => {
-    expect(
-      requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format', 'sarif')),
-    ).toBe(true);
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format', 'sarif'))).toBe(
+      true,
+    );
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format', 'json'))).toBe(
       true,
     );
@@ -39,9 +39,7 @@ describe('requestsStructuredCodeScanOutput', () => {
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format=sarif'))).toBe(
       true,
     );
-    expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format=json'))).toBe(
-      true,
-    );
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format=json'))).toBe(true);
     expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-f=sarif'))).toBe(true);
   });
 
@@ -59,13 +57,11 @@ describe('requestsStructuredCodeScanOutput', () => {
     // Regression: an earlier implementation returned eagerly on --format and missed
     // a later --json. Matters because Commander allows redundant flags.
     expect(
-      requestsStructuredCodeScanOutput(
-        argv('code-scans', 'run', '--format', 'text', '--json'),
-      ),
+      requestsStructuredCodeScanOutput(argv('code-scans', 'run', '--format', 'text', '--json')),
     ).toBe(true);
-    expect(
-      requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-f=text', '--json')),
-    ).toBe(true);
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '-f=text', '--json'))).toBe(
+      true,
+    );
   });
 
   it('detects the latest format when multiple --format flags appear', () => {
@@ -81,7 +77,7 @@ describe('requestsStructuredCodeScanOutput', () => {
     ).toBe(false);
   });
 
-  it('does not misinterpret a value-eating flag\'s argument as a structured-output flag', () => {
+  it("does not misinterpret a value-eating flag's argument as a structured-output flag", () => {
     // `--base --json` — the literal `--json` is the value of `--base`, not a real flag.
     expect(
       requestsStructuredCodeScanOutput(argv('code-scans', 'run', '.', '--base', '--json')),
@@ -92,9 +88,9 @@ describe('requestsStructuredCodeScanOutput', () => {
   });
 
   it('stops scanning at the conventional `--` positional separator', () => {
-    expect(
-      requestsStructuredCodeScanOutput(argv('code-scans', 'run', '.', '--', '--json')),
-    ).toBe(false);
+    expect(requestsStructuredCodeScanOutput(argv('code-scans', 'run', '.', '--', '--json'))).toBe(
+      false,
+    );
   });
 
   it('returns false for a bare --format with no value', () => {

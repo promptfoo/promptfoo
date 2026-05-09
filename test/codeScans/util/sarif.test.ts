@@ -200,6 +200,56 @@ describe('scanResponseToSarif', () => {
     ).toBe('src/windows%20path/file.ts');
   });
 
+  it.each([
+    [CodeScanSeverity.CRITICAL, 'error'],
+    [CodeScanSeverity.HIGH, 'error'],
+    [CodeScanSeverity.MEDIUM, 'warning'],
+    [CodeScanSeverity.LOW, 'note'],
+  ])('maps severity %s to SARIF level %s', (severity, expected) => {
+    const sarif = scanResponseToSarif(makeFindingResponse({ severity }));
+    expect(sarif.runs[0].results[0].level).toBe(expected);
+  });
+
+  it('drops findings with severity NONE even when they have a file and line', () => {
+    const sarif = scanResponseToSarif(
+      makeFindingResponse({ severity: CodeScanSeverity.NONE }),
+    );
+    expect(sarif.runs[0].results).toEqual([]);
+  });
+
+  it('truncates fingerprint input at the configured max so very long findings collide stably', () => {
+    // Two findings whose first 160 chars match but tails differ → identical fingerprint
+    // (intended: tail variation shouldn't churn the alert id across re-scans).
+    const longHead = 'This is a long LLM finding that describes a potential issue with user input. '.repeat(
+      3,
+    );
+    const tailA = ` First tail variation A — ${'a'.repeat(50)}`;
+    const tailB = ` Second tail variation B — ${'b'.repeat(50)}`;
+    const hashA = fingerprintOf(makeFindingResponse({ finding: longHead + tailA }));
+    const hashB = fingerprintOf(makeFindingResponse({ finding: longHead + tailB }));
+    expect(hashA).toBe(hashB);
+
+    // Sanity: a divergence inside the first 160 chars does change the hash.
+    const earlyDiverge = fingerprintOf(
+      makeFindingResponse({ finding: 'Different opening text — ' + longHead + tailA }),
+    );
+    expect(earlyDiverge).not.toBe(hashA);
+  });
+
+  it.each([
+    ['src/path with spaces/file.ts', 'src/path%20with%20spaces/file.ts'],
+    ['src/anchor#fragment.ts', 'src/anchor%23fragment.ts'],
+    ['src/café/résumé.ts', 'src/caf%C3%A9/r%C3%A9sum%C3%A9.ts'],
+    ['src\\mixed/style/file.ts', 'src/mixed/style/file.ts'],
+  ])('encodes artifactLocation.uri "%s" as "%s"', (input, expected) => {
+    const sarif = scanResponseToSarif(
+      makeFindingResponse({ file: input, line: 1, startLine: undefined }),
+    );
+    expect(sarif.runs[0].results[0].locations?.[0].physicalLocation.artifactLocation.uri).toBe(
+      expected,
+    );
+  });
+
   it('omits non-finding comments and findings without displayable locations', () => {
     const response: ScanResponse = {
       success: true,

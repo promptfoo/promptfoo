@@ -24,6 +24,9 @@ const SARIF_RULE: SarifRule = {
   },
   defaultConfiguration: { level: 'warning' },
   help: { text: RULE_HELP_TEXT, markdown: RULE_HELP_TEXT },
+  // 'medium' is the SARIF spec's heuristic-grade tag (very-high|high|medium|low|very-low).
+  // It signals to GitHub Code Scanning that these findings are model-derived rather than
+  // deterministic AST matches, which affects ranking and dedup behavior.
   properties: { tags: ['security', 'llm-security'], precision: 'medium' },
 };
 
@@ -145,6 +148,10 @@ function createFingerprint(comment: Comment): string {
 }
 
 function toArtifactUri(filePath: string): string {
+  // SARIF artifactLocation.uri must be a valid URI. Encode each segment so spaces, '#',
+  // '%', and non-ASCII characters in filenames are legal, but preserve '/' separators so
+  // the path structure round-trips. Backslashes (Windows clients) are normalized first.
+  // Contract: caller passes a raw path, never a pre-encoded URI.
   return filePath.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/');
 }
 

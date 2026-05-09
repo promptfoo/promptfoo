@@ -129,7 +129,7 @@ vi.mock('../../code-scan-action/src/github', () => mocks.actionGithub);
 vi.mock('../../code-scan-action/src/config', () => mocks.config);
 
 vi.mock('fs', async () => {
-  const actual = await vi.importActual('fs');
+  const actual = await vi.importActual<typeof import('fs')>('fs');
   return {
     ...actual,
     unlinkSync: mocks.fs.unlinkSync,
@@ -137,6 +137,11 @@ vi.mock('fs', async () => {
     mkdirSync: mocks.fs.mkdirSync,
     realpathSync: mocks.fs.realpathSync,
     lstatSync: mocks.fs.lstatSync,
+    // Strip O_NOFOLLOW so writeSarifFile takes the writeFileSync fallback path that the
+    // tests are written against. The O_NOFOLLOW branch is straightforward fs plumbing
+    // (open/write/close); the user-visible defenses (lstat refusal, parent-realpath
+    // refusal, traversal refusal) are exercised by dedicated tests.
+    constants: { ...actual.constants, O_NOFOLLOW: undefined },
   };
 });
 
@@ -568,6 +573,33 @@ describe('code-scan-action main', () => {
       expect(mocks.fs.mkdirSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it('walks up through ENOENT ancestors to find a real symlink when the immediate parent does not exist yet', async () => {
+      // Simulate: `reports/` is a symlink to /etc, the new sub-directory `reports/today` doesn't
+      // exist yet. realpath of the not-yet-created leaf throws ENOENT and we walk up to the
+      // existing symlink, which canonicalizes outside the workspace.
+      const escapeDir = path.resolve('/test/workspace', 'reports');
+      const newSubdir = path.resolve('/test/workspace', 'reports/today');
+      mocks.fs.realpathSync.mockImplementation((p: string) => {
+        if (p === newSubdir) {
+          const error = new Error('ENOENT') as NodeJS.ErrnoException;
+          error.code = 'ENOENT';
+          throw error;
+        }
+        if (p === escapeDir) {
+          return '/etc';
+        }
+        return p;
+      });
+
+      await triggerSarifAction('reports/today/x.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.warning).toHaveBeenCalledWith(expect.stringContaining('via symlink'));
+      });
+
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
     });
 
     it('refuses to write when the parent directory resolves outside the workspace via symlink', async () => {
