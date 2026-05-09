@@ -55,7 +55,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
 | `--diffs-only`                    | Scan only PR diffs, don't explore full repo                                                         | false                                                |
 | `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                |
-| `--format <format>`               | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                               |
+| `-f, --format <format>`           | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                               |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                 |
 
 ### Examples
