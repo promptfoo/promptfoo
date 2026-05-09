@@ -2,10 +2,10 @@ import {
   buildAdversarialPiiCandidatePool,
   loadPiiContext,
   PII_SELECTION_PROFILES,
-  scorePiiPortfolio,
-  selectWeightedPiiPortfolio,
   type PiiAttack,
   type PiiPortfolioScore,
+  scorePiiPortfolio,
+  selectWeightedPiiPortfolio,
 } from './piiResearchShared';
 
 type ScoredPortfolio = {
@@ -21,8 +21,36 @@ const SCORE_KEYS = [
   'sensitiveFieldCount',
   'tacticCount',
 ] as const;
+type ScoreKey = (typeof SCORE_KEYS)[number];
 
-function enumerateCombinations<T>(values: T[], count: number): Array<{ indices: number[]; values: T[] }> {
+const LEXICOGRAPHIC_POLICIES = {
+  maxNovelty: [
+    'averageNovelty',
+    'sensitiveFieldCount',
+    'tacticCount',
+    'authorizationStoryCount',
+    'relationshipCount',
+  ],
+  maxRelationships: [
+    'relationshipCount',
+    'sensitiveFieldCount',
+    'authorizationStoryCount',
+    'tacticCount',
+    'averageNovelty',
+  ],
+  maxTactics: [
+    'tacticCount',
+    'sensitiveFieldCount',
+    'authorizationStoryCount',
+    'relationshipCount',
+    'averageNovelty',
+  ],
+} satisfies Record<string, ScoreKey[]>;
+
+function enumerateCombinations<T>(
+  values: T[],
+  count: number,
+): Array<{ indices: number[]; values: T[] }> {
   const combinations: Array<{ indices: number[]; values: T[] }> = [];
 
   function visit(startIndex: number, indices: number[], selected: T[]) {
@@ -31,11 +59,7 @@ function enumerateCombinations<T>(values: T[], count: number): Array<{ indices: 
       return;
     }
 
-    for (
-      let index = startIndex;
-      index <= values.length - (count - selected.length);
-      index += 1
-    ) {
+    for (let index = startIndex; index <= values.length - (count - selected.length); index += 1) {
       visit(index + 1, [...indices, index], [...selected, values[index]]);
     }
   }
@@ -62,6 +86,31 @@ function findMatchingPortfolio(
   );
 }
 
+function compareLexicographically(
+  left: ScoredPortfolio,
+  right: ScoredPortfolio,
+  keys: ScoreKey[],
+): number {
+  for (const key of keys) {
+    if (left.score[key] !== right.score[key]) {
+      return right.score[key] - left.score[key];
+    }
+  }
+
+  return left.indices.join(',').localeCompare(right.indices.join(','));
+}
+
+function selectLexicographicPortfolio(
+  portfolios: ScoredPortfolio[],
+  keys: ScoreKey[],
+): ScoredPortfolio {
+  const [selected] = [...portfolios].sort((left, right) =>
+    compareLexicographically(left, right, keys),
+  );
+
+  return selected;
+}
+
 async function main() {
   const [inputPath] = process.argv.slice(2);
   if (!inputPath) {
@@ -76,8 +125,7 @@ async function main() {
     score: scorePiiPortfolio(values),
   }));
   const frontier = portfolios.filter(
-    (portfolio) =>
-      !portfolios.some((candidate) => dominates(candidate.score, portfolio.score)),
+    (portfolio) => !portfolios.some((candidate) => dominates(candidate.score, portfolio.score)),
   );
 
   const greedyProfiles = Object.fromEntries(
@@ -92,7 +140,9 @@ async function main() {
       return [
         name,
         {
-          frontierMember: frontier.some((candidate) => candidate.indices.join(',') === portfolio.indices.join(',')),
+          frontierMember: frontier.some(
+            (candidate) => candidate.indices.join(',') === portfolio.indices.join(','),
+          ),
           indices: portfolio.indices,
           score: portfolio.score,
           weights,
@@ -100,6 +150,27 @@ async function main() {
       ];
     }),
   );
+  const lexicographicPolicies = Object.fromEntries(
+    Object.entries(LEXICOGRAPHIC_POLICIES).map(([name, keys]) => {
+      const portfolio = selectLexicographicPortfolio(frontier, keys);
+
+      return [
+        name,
+        {
+          frontierMember: true,
+          indices: portfolio.indices,
+          priorityOrder: keys,
+          score: portfolio.score,
+        },
+      ];
+    }),
+  );
+  const uniquePolicyPortfolioCount = new Set(
+    Object.values({
+      ...greedyProfiles,
+      ...lexicographicPolicies,
+    }).map((policy) => policy.indices.join(',')),
+  ).size;
 
   const bestByMetric = Object.fromEntries(
     SCORE_KEYS.map((key) => [
@@ -107,7 +178,8 @@ async function main() {
       portfolios
         .filter(
           (portfolio) =>
-            portfolio.score[key] === Math.max(...portfolios.map((candidate) => candidate.score[key])),
+            portfolio.score[key] ===
+            Math.max(...portfolios.map((candidate) => candidate.score[key])),
         )
         .map((portfolio) => ({
           indices: portfolio.indices,
@@ -126,8 +198,10 @@ async function main() {
         })),
         frontierSize: frontier.length,
         greedyProfiles,
+        lexicographicPolicies,
         poolSize: pool.length,
         portfolioCount: portfolios.length,
+        uniquePolicyPortfolioCount,
       },
       null,
       2,

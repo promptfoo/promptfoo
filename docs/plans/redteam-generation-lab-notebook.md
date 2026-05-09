@@ -803,3 +803,87 @@ Exact search over the adversarial PII pool found:
 3. Once we move into agentic attack generation, frontier reporting may matter
    more than ever because tool abuse, memory abuse, source abuse, and social
    deception will likely compete under the same fixed probe budget.
+
+## Iteration 12 - 2026-05-09
+
+### Goal
+
+Compare explicit selection policies on the same exact search space:
+
+> Do named lexicographic objectives expose useful alternatives that scalar
+> weighting currently hides?
+
+### Experiment
+
+Extended `enumeratePiiFrontier.ts` with three lexicographic policies:
+
+1. `maxTactics`
+2. `maxRelationships`
+3. `maxNovelty`
+
+Each policy chooses from the exact Pareto frontier using an explicit priority
+order instead of a summed weighted score.
+
+### Results
+
+The named lexicographic policies produced `3` distinct frontier portfolios:
+
+1. `maxTactics`
+   - indices `[0, 1, 2, 5, 6]`
+   - `5` tactics
+   - `5` sensitive fields
+   - `4` authorization stories
+   - `3` relationships
+   - novelty `0.924`
+2. `maxRelationships`
+   - indices `[0, 1, 2, 3, 5]`
+   - `4` relationships
+   - `5` sensitive fields
+   - `4` authorization stories
+   - `4` tactics
+   - novelty `0.909`
+3. `maxNovelty`
+   - indices `[0, 1, 4, 5, 6]`
+   - novelty `0.936`
+   - `5` sensitive fields
+   - `4` tactics
+   - `3` authorization stories
+   - `3` relationships
+
+By contrast, the three scalar weighted profiles still collapsed to one shared
+portfolio. Across all scalar and lexicographic policies, we now expose `3`
+unique portfolios instead of `1`.
+
+### Reflection
+
+1. This is the strongest selector result so far:
+   - explicit policy names expose real tradeoffs
+   - they are easier to explain than arbitrary weight vectors
+   - they are all backed by the exact frontier rather than local greedy choices
+2. The semantics are product-relevant:
+   - `maxTactics` is the closest fit for exploit discovery
+   - `maxRelationships` is a better fit for realism and authorization-boundary
+     probing
+   - `maxNovelty` is better for corpus diversification and research sampling
+3. This suggests a better user-facing architecture than a single hidden
+   selector:
+   - choose a default
+   - surface named alternatives
+   - keep the frontier for analysis and benchmark development
+4. Scalar weights are still useful internally, especially for large pools where
+   exhaustive search is impossible, but they should not be the only semantic
+   layer exposed to users or researchers.
+
+### New Hypotheses
+
+1. The next experiment should test whether named policy outputs remain useful
+   once we move from one synthetic adversarial pool to multiple plugin-specific
+   pools.
+2. We should likely measure **portfolio disagreement** as a benchmark statistic:
+   - if all policies choose the same set, the pool may be too easy
+   - if named policies diverge meaningfully, the pool contains real tradeoffs
+3. For agentic attack generation, named policies may eventually become:
+   - `max-tool-abuse`
+   - `max-memory-boundary`
+   - `max-source-manipulation`
+   - `max-novelty`
