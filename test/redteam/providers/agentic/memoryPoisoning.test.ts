@@ -51,10 +51,16 @@ describe('MemoryPoisoningProvider', () => {
     ).rejects.toThrow('Expected purpose to be set');
   });
 
-  it('should throw error if scenario generation fails', async () => {
+  it('should preserve helper usage if scenario generation fails after the server spent tokens', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       statusText: 'Failed',
+      json: () =>
+        Promise.resolve({
+          error: 'Warning',
+          message: 'Skipping generation',
+          tokenUsage: { prompt: 7, completion: 3, total: 10, numRequests: 1 },
+        }),
     } as Response);
 
     const context: CallApiContextParams = {
@@ -68,9 +74,15 @@ describe('MemoryPoisoningProvider', () => {
       },
     };
 
-    await expect(provider.callApi('test', context)).rejects.toThrow(
-      'Failed to generate scenario: Failed',
-    );
+    await expect(provider.callApi('test', context)).resolves.toMatchObject({
+      error: 'Failed to generate scenario: Failed',
+      tokenUsage: {
+        prompt: 7,
+        completion: 3,
+        total: 10,
+        numRequests: 0,
+      },
+    });
   });
 
   it('should execute memory poisoning flow successfully', async () => {

@@ -69,7 +69,12 @@ export class MemoryPoisoningProvider implements ApiProvider {
 
       // Send the memory message to the provider.
       if (!scenarioRes.ok) {
-        throw new Error(`Failed to generate scenario: ${scenarioRes.statusText}`);
+        const scenarioError = await scenarioRes.json().catch(() => undefined);
+        accumulateResponseTokenUsage(totalTokenUsage, scenarioError, { countAsRequest: false });
+        return {
+          error: `Failed to generate scenario: ${scenarioRes.statusText}`,
+          ...(scenarioError?.tokenUsage ? { tokenUsage: totalTokenUsage } : {}),
+        };
       }
 
       // Scope the scenario to the test case to ensure its passed to the grader:
