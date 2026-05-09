@@ -441,6 +441,19 @@ async function fetchRemoteTestCases(
         },
       ];
     }
+    if (key === 'cross-session-leak' && n === 1 && ret.length === 2 && data.tokenUsage) {
+      return ret.map((testCase) =>
+        testCase.metadata?.crossSessionLeakMatch
+          ? {
+              ...testCase,
+              metadata: {
+                ...(testCase.metadata ?? {}),
+                providerTokenUsage: data.tokenUsage,
+              },
+            }
+          : testCase,
+      );
+    }
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
