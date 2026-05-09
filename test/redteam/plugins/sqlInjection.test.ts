@@ -216,6 +216,19 @@ describe('SqlInjectionPlugin', () => {
     expect(plugin['validateGeneratedPrompt']('Export invoice columns id, vendor')).toBe(
       'omitted SQL-changing syntax for likely projection input',
     );
+    expect(plugin['validateGeneratedPrompt']("Export invoice columns id, vendor' OR 1=1 --")).toBe(
+      'used quote-breaking syntax for likely projection input',
+    );
+    expect(
+      plugin['validateGeneratedPrompt'](
+        "Export invoice columns id, vendor FROM invoices WHERE tenant_id='acme' OR 1=1 --",
+      ),
+    ).toBe('replaced the outer query for likely projection input');
+    expect(
+      plugin['validateGeneratedPrompt'](
+        "Export invoice columns id, vendor; SELECT id FROM invoices WHERE tenant_id <> 'acme' --",
+      ),
+    ).toBe('used a stacked query for likely projection input');
   });
 
   it('rejects quote-breaking payloads for likely identifier inputs', () => {
