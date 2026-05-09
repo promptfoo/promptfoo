@@ -7294,3 +7294,77 @@ post-hoc slice on the same batch found:
 3. The next experiment should accumulate discriminative cases across several
    batches and measure whether the retained frontier stays informative even when
    later batches are easy.
+
+## Iteration 88 - 2026-05-09
+
+### Goal
+
+Turn the active benchmark loop into a durable memory rather than a sequence of
+forgettable batches:
+
+> If we retain discriminative frontier cases across several generated batches,
+> does the benchmark stay informative even when later batches are easy?
+
+### Experiment
+
+1. Added `evaluateRepairRetainedTransferFrontier.ts`.
+2. Wrapped three fresh runs of the active transfer-frontier search.
+3. After each batch:
+   - kept only cases where the ordinary and critic-gated methods disagreed
+   - deduplicated retained cases by expected label, summary, and prompt text
+   - recomputed the retained frontier summary
+4. Compared:
+   - per-batch yield
+   - accumulated retained yield
+
+### Results
+
+Retained frontier memory fixes the forgetting problem immediately:
+
+| Batch | Batch candidates | Batch discriminative cases | Batch ordinary failures | Batch critic failures | Retained discriminative cases after batch |
+| ----: | ---------------: | -------------------------: | ----------------------: | --------------------: | ----------------------------------------: |
+|   `1` |             `24` |                        `0` |                     `0` |                   `0` |                                       `0` |
+|   `2` |             `24` |                        `3` |                     `8` |                  `11` |                                       `3` |
+|   `3` |             `24` |                        `0` |                     `0` |                   `0` |                                       `3` |
+
+The retained frontier after three batches contains:
+
+1. `generated-transfer-positive-6`
+2. `generated-transfer-positive-8`
+3. `generated-transfer-positive-11`
+
+All three are:
+
+1. correct for the ordinary bundle
+2. false negatives for the critic-gated bundle
+
+### Reflection
+
+1. This is the first benchmark-memory result that survives low-yield future
+   batches.
+2. The retained set changes the meaning of batch variance:
+   - easy batches are no longer wasted
+   - they simply fail to expand the frontier
+3. It also changes the evaluation story:
+   - the critic-gated proposer looked stronger on one earlier frontier
+   - the retained memory now preserves a counter-frontier where it is weaker
+4. That is exactly what a serious benchmark should do:
+   - remember the best attacks against every method
+   - not keep re-rolling until one method looks good
+5. The next architectural layer is now visible:
+   - proposal generator
+   - local proposal critic
+   - active benchmark generator
+   - candidate benchmark critic
+   - retained hard-memory frontier
+
+### New Hypotheses
+
+1. Retained hard memory should become a first-class artifact of the red-team
+   generation system, not a transient eval output.
+2. The retained frontier should track method-specific wins and losses, because a
+   frontier that only preserves one model's successes becomes propaganda rather
+   than measurement.
+3. The next experiment should measure retained-frontier growth over more batches
+   and test whether simple novelty rules prevent duplicate hard cases from
+   dominating memory.
