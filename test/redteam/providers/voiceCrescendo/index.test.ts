@@ -226,6 +226,40 @@ describe('VoiceCrescendoProvider', () => {
     expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
+  it('should preserve attacker usage when voice prompt generation fails', async () => {
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(
+      createMockProvider({
+        id: 'mock-provider',
+        callApi: vi.fn().mockResolvedValue({
+          error: 'provider refusal',
+          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+        }),
+      }),
+    );
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      maxBacktracks: 0,
+      delayBetweenTurns: 0,
+    });
+
+    const result = await provider.callApi('Test goal', {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 15,
+      prompt: 10,
+      completion: 5,
+      numRequests: 0,
+    });
+    expect(result.metadata?.stopReason).toBe('Error');
+    expect(getTargetResponse).not.toHaveBeenCalled();
+  });
+
   it('should include metadata with conversation history', async () => {
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
 

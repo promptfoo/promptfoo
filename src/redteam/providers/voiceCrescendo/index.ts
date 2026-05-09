@@ -304,6 +304,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     emotionalTone: string;
     escalationLevel: string;
     tokenUsage?: TokenUsage;
+    error?: string;
   }> {
     const redTeamProvider = await this.getRedTeamProvider();
 
@@ -325,7 +326,13 @@ export class VoiceCrescendoProvider implements ApiProvider {
     TokenUsageTracker.getInstance().trackResponseUsage(redTeamProvider.id(), response);
 
     if (response.error) {
-      throw new Error(`Failed to generate voice prompt: ${response.error}`);
+      return {
+        voicePrompt: '',
+        emotionalTone: 'neutral',
+        escalationLevel: 'medium',
+        tokenUsage: response.tokenUsage,
+        error: response.error,
+      };
     }
 
     const output =
@@ -500,6 +507,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
           emotionalTone,
           escalationLevel,
           tokenUsage: redteamTokenUsage,
+          error: redteamError,
         } = await this.generateNextVoicePrompt(currentTurn);
         // Redteam generation calls are internal and should not count as target probes.
         accumulateResponseTokenUsage(
@@ -507,6 +515,9 @@ export class VoiceCrescendoProvider implements ApiProvider {
           { tokenUsage: redteamTokenUsage },
           { countAsRequest: false },
         );
+        if (redteamError) {
+          throw new Error(`Failed to generate voice prompt: ${redteamError}`);
+        }
         lastPrompt = voicePrompt;
 
         logger.debug(`[VoiceCrescendo] Generated prompt: ${voicePrompt.substring(0, 100)}...`);
