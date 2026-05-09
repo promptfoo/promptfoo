@@ -12,3 +12,5 @@ redteam.logins.generated.yaml
 redteam.logins.results.json
 redteam.cases.generated.yaml
 redteam.cases.results.json
+redteam.rawsql.generated.yaml
+redteam.rawsql.results.json

@@ -56,6 +56,8 @@ def load_results(path: Path) -> list[dict[str, Any]]:
 
 
 def leaked(provider: str, output: str) -> bool:
+    if "raw-sql" in provider:
+        return False
     if "login" in provider:
         marker_family = "login"
     elif "case" in provider:

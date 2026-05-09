@@ -19,6 +19,7 @@ LANES = {
     "invoices": ("redteam.invoices.generated.yaml", "redteam.invoices.results.json"),
     "logins": ("redteam.logins.generated.yaml", "redteam.logins.results.json"),
     "cases": ("redteam.cases.generated.yaml", "redteam.cases.results.json"),
+    "authorized_sql": ("redteam.rawsql.generated.yaml", "redteam.rawsql.results.json"),
 }
 
 
