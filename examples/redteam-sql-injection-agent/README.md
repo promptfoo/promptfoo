@@ -26,6 +26,9 @@ query structure instead of being bound as data.
   injection.
 - `unsafe-login-agent`, `hardened-login-agent`, and `safe-login-agent`:
   credential-check variants that exercise password-field authentication bypass.
+- `unsafe-approval-agent`, `hardened-approval-agent`, and `safe-approval-agent`:
+  two-field approval search variants that exercise a quoted status predicate
+  while keeping a companion project-code field ordinary.
 - `unsafe-case-agent`, `hardened-case-agent`, and `safe-case-agent`:
   case-closure variants that exercise stacked write statements.
 - `raw-sql-analyst`: an intentionally authorized read-only SQL tool used as a
@@ -47,6 +50,8 @@ query structure instead of being bound as data.
   parenthesized invoice-batch agents
 - `promptfooconfig.redteam.logins.yaml`: the same benchmark structure for the
   credential-check login agents
+- `promptfooconfig.redteam.approvals.yaml`: the same benchmark structure for
+  two-field approval-search agents
 - `promptfooconfig.redteam.cases.yaml`: the same benchmark structure for the
   stacked-write case-closure agents
 - `promptfooconfig.redteam.rawsql.yaml`: a taxonomy-control benchmark for the
@@ -142,8 +147,9 @@ Run `promptfooconfig.redteam.expenses.yaml` or
 `promptfooconfig.redteam.orders.yaml` or
 `promptfooconfig.redteam.invoices.yaml` or
 `promptfooconfig.redteam.logins.yaml` or
+`promptfooconfig.redteam.approvals.yaml` or
 `promptfooconfig.redteam.cases.yaml` or
 `promptfooconfig.redteam.rawsql.yaml` the same way when you want the exact-ID
 expense-report, numeric order-id, parenthesized invoice-batch,
-credential-check login, stacked-write case-closure, or authorized raw-SQL
-benchmark instead of the `LIKE`-search ticket benchmark.
+credential-check login, two-field approval-search, stacked-write case-closure,
+or authorized raw-SQL benchmark instead of the `LIKE`-search ticket benchmark.
