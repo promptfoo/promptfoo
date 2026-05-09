@@ -241,6 +241,19 @@ interface ColumnFilterDisplay {
   filterOptions: FilterOption[];
 }
 
+const formatMultiSelectSummary = (selectedValues: string[], options: FilterOption[]): string => {
+  if (selectedValues.length === 0) {
+    return 'No values selected';
+  }
+  if (selectedValues.length > 2) {
+    return `${selectedValues.length} selected`;
+  }
+  const labels = selectedValues.map(
+    (entry) => options.find((option) => option.value === entry)?.label || entry,
+  );
+  return `${selectedValues.length} selected: ${labels.join(', ')}`;
+};
+
 // Select filter component for discrete values
 interface SelectFilterProps {
   operator: SelectOperator;
@@ -265,30 +278,18 @@ function SelectFilterInput({
 }: SelectFilterProps) {
   const isMultiSelect = operator === 'isAny';
   const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
-  const selectedValueSummary =
-    selectedValues.length > 0
-      ? `${selectedValues.length} selected${
-          selectedValues.length <= 2
-            ? `: ${selectedValues
-                .map(
-                  (selectedValue) =>
-                    options.find((option) => option.value === selectedValue)?.label ||
-                    selectedValue,
-                )
-                .join(', ')}`
-            : ''
-        }`
-      : 'No values selected';
+  const selectedSummary = formatMultiSelectSummary(selectedValues, options);
 
   const handleSingleSelect = (newValue: string) => {
     onChange(newValue);
   };
 
   const handleMultiSelectToggle = (optionValue: string) => {
-    const currentValues = Array.isArray(value) ? value : [];
-    const newValues = currentValues.includes(optionValue)
-      ? currentValues.filter((v) => v !== optionValue)
-      : [...currentValues, optionValue];
+    // Use the normalized selectedValues so a string-shaped value isn't silently
+    // dropped on the first toggle when the UI was already showing it as selected.
+    const newValues = selectedValues.includes(optionValue)
+      ? selectedValues.filter((v) => v !== optionValue)
+      : [...selectedValues, optionValue];
     onChange(newValues);
   };
 
@@ -313,15 +314,11 @@ function SelectFilterInput({
             <Button
               variant="outline"
               disabled={disabled}
-              aria-label={`${valueLabel}: ${selectedValueSummary}`}
+              aria-label={`${valueLabel}: ${selectedSummary}`}
               className="h-8 min-w-[150px] flex-1 justify-start font-normal"
             >
               {selectedValues.length > 0 ? (
-                <span className="truncate">
-                  {selectedValues.length} selected
-                  {selectedValues.length <= 2 &&
-                    `: ${selectedValues.map((v) => options.find((o) => o.value === v)?.label || v).join(', ')}`}
-                </span>
+                <span className="truncate">{selectedSummary}</span>
               ) : (
                 <span className="text-gray-500 dark:text-gray-400">Select values...</span>
               )}
@@ -439,18 +436,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
   const [multiSelectValues, setMultiSelectValues] = React.useState<string[]>(
     Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : [],
   );
-  const multiSelectSummary =
-    multiSelectValues.length > 0
-      ? `${multiSelectValues.length} selected${
-          multiSelectValues.length <= 2
-            ? `: ${multiSelectValues
-                .map(
-                  (entry) => filterOptions.find((option) => option.value === entry)?.label || entry,
-                )
-                .join(', ')}`
-            : ''
-        }`
-      : 'No values selected';
+  const multiSelectSummary = formatMultiSelectSummary(multiSelectValues, filterOptions);
   const [isMultiSelectOpen, setIsMultiSelectOpen] = React.useState<boolean>(false);
   const columnHeader =
     typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id;
@@ -619,17 +605,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                       }}
                     >
                       {multiSelectValues.length > 0 ? (
-                        <span className="truncate">
-                          {multiSelectValues.length} selected
-                          {multiSelectValues.length <= 2 &&
-                            `: ${multiSelectValues
-                              .map(
-                                (entry) =>
-                                  filterOptions.find((option) => option.value === entry)?.label ||
-                                  entry,
-                              )
-                              .join(', ')}`}
-                        </span>
+                        <span className="truncate">{multiSelectSummary}</span>
                       ) : (
                         <span className="text-zinc-500 dark:text-zinc-400">Select values...</span>
                       )}
