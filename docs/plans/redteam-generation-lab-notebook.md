@@ -5457,3 +5457,87 @@ The per-draw picture is also intuitive:
 3. The real long-run target may be a two-stage planner:
    - diagnose the residual family
    - generate the minimum repair artifact needed for that family
+
+## Iteration 64 - 2026-05-09
+
+### Goal
+
+Wire residual diagnosis into action selection:
+
+> Can geometry-derived repair-family diagnoses recover the same `4/4` result as
+> the hand-built hybrid, without manually naming which held-out task needs which
+> repair?
+
+### Experiment
+
+1. Added `evaluateRepairDiagnosisDrivenRouting.ts`.
+2. Reused:
+   - the saved `role-mechanism` semantic draws from iteration 53
+   - the saved learned packaging classifications from iteration 57
+   - the residual-family diagnoses from iteration 63
+   - the synthetic BOLA support point from iteration 61
+3. Compared three policies:
+   - `global`
+   - `manual-hybrid`
+   - `diagnosis-driven`
+4. The diagnosis-driven dispatcher used only aggregate residual type:
+   - `local-ambiguity` -> learned legal-counsel expert
+   - `sparse-support` -> BOLA support augmentation
+   - `unclassified` -> global route unchanged
+
+### Results
+
+The automatic dispatcher exactly matches the manual hybrid:
+
+| Router           | Stable label holdout accuracy | Avg label holdout regret |
+| ---------------- | ----------------------------: | -----------------------: |
+| global           |                         `2/4` |                `0.00236` |
+| manual hybrid    |                         `4/4` |                `0.00000` |
+| diagnosis-driven |                         `4/4` |                `0.00000` |
+
+The task-level behavior is identical:
+
+1. `prompt-extraction-novelty-v3`
+   - diagnosis: `local-ambiguity`
+   - dispatched to the learned specialist
+   - corrected to `thin`
+2. `bola-coverage-v2`
+   - diagnosis: `sparse-support`
+   - dispatched to support augmentation
+   - corrected to `balanced`
+3. the two already-correct holdouts stay untouched:
+   - `prompt-extraction-coverage-v2`
+   - `sql-novelty-v2`
+
+### Reflection
+
+1. This is the first step that feels planner-like rather than experiment-like:
+   - diagnose failure type
+   - choose repair family
+   - recover the right action automatically
+2. The result also clarifies what remains hand-built:
+   - the available repair **operators** are still manual
+   - but the routing between them is no longer task-ID-specific
+3. This is a stronger abstraction boundary:
+   - new residual families can be added as new operators
+   - the dispatcher can remain geometry-driven
+4. The remaining challenge is to stop hand-authoring the operator payloads:
+   - learn the legal-counsel mapping
+   - synthesize or retrieve the needed BOLA support
+5. The next useful experiment is to ask whether the system can generate the
+   support repair artifact itself from the sparse-support diagnosis.
+
+### New Hypotheses
+
+1. A residual planner can be decomposed into:
+   - diagnosis
+   - operator selection
+   - operator materialization
+2. We have now shown the first two layers can work separately:
+   - iteration 63: diagnosis
+   - iteration 64: operator selection
+3. The next research frontier is operator materialization:
+   - generate the missing exemplar
+   - or retrieve a comparable one
+   - with enough quality that the planner remains self-improving rather than
+     merely self-labeling
