@@ -4190,3 +4190,128 @@ Frontier implication:
 3. The frontier should eventually use multiple objective views:
    - one for pure ontology quality
    - one for routing utility
+
+## Iteration 50 - 2026-05-09
+
+### Goal
+
+Test a hybrid axis that is better aligned with the observed collisions:
+
+> Can deterministic requester-role metadata improve the stable constrained base
+> more usefully than generic blocked-metric metadata did?
+
+### Experiment
+
+1. Added `evaluateRepairDeterministicRoleAwareSemanticSignatureStability.ts`.
+2. Reused the five constrained model slots from iteration 46.
+3. Appended one deterministic requester-role label inferred from the benchmark
+   prompt text:
+   - `security-reviewer`
+   - `vendor-support`
+   - `legal-counsel`
+   - `insurer`
+   - `auditor`
+   - `billing`
+4. Re-ran:
+   - constrained signatures
+   - deterministic role augmentation
+   - frontier comparison
+5. Compared the new point against:
+   - fresh constrained rerun
+   - role-aware model-generated ontology
+   - metric-aware hybrid
+
+### Results
+
+Deterministic role is a genuine improvement over the fresh constrained baseline:
+
+| Representation     | Slot agreement | Avg unique tuples | Best stable label accuracy |
+| ------------------ | -------------: | ----------------: | -------------------------: |
+| constrained        |        `0.867` |             `7.3` |                      `1/4` |
+| deterministic-role |        `0.889` |             `8.3` |                      `1/4` |
+
+It also produced the best stable **overall** model so far:
+
+1. summary `1-NN`: stable `3/4`
+2. best average regret: `0.00119`
+
+But it still did **not** recover the role-aware label frontier:
+
+| Representation     | Best stable label accuracy |
+| ------------------ | -------------------------: |
+| role-aware         |                      `2/4` |
+| deterministic-role |                      `1/4` |
+| constrained        |                      `1/4` |
+
+Tuple behavior:
+
+1. deterministic role raised tuple count to `8-9`
+2. it separated:
+   - `security-reviewer`
+   - `vendor-support`
+   - `legal-counsel`
+3. but some coarse constrained labels still kept distinct prompt families too
+   close for the label router
+
+### Reflection
+
+1. This is a better hybrid than metric-aware:
+   - the added field aligns with a real observed collision
+   - and it improves the constrained baseline on the frontier
+2. The deterministic extractor is good enough to help the ontology:
+   - more tuples
+   - slightly higher stability
+   - stronger summary-neighbor performance
+3. But the fully role-aware model still wins on label routing:
+   - that suggests the useful information is not only “who is asking?”
+   - it may be the interaction between requester role and the other semantic
+     slots the model is jointly inferring
+4. The hybrid path is promising, but the crude string-rule extractor is probably
+   too shallow to replace model-generated role entirely.
+5. The frontier now has three interesting nondominated modes:
+   - pure stability
+   - strongest label routing
+   - strongest overall stable routing
+
+### 50-Iteration Checkpoint
+
+The last ten iterations substantially changed the research program:
+
+1. iterations 41-45 established that semantics help, but free-form signatures
+   are too unstable to trust
+2. iteration 46 showed constrained ontologies can fix drift but become too
+   coarse
+3. iteration 47 found the first useful richer axis:
+   - requester role
+4. iteration 48 turned ontology work into an explicit Pareto frontier
+5. iteration 49 showed deterministic metadata can hurt if it is misaligned with
+   routing geometry
+6. iteration 50 showed deterministic requester role is a better hybrid, though
+   still weaker than the jointly inferred role-aware labels
+
+Current best evidence:
+
+| Question                                        | Best current answer |
+| ----------------------------------------------- | ------------------- |
+| free-form semantic labels usable as-is          | no                  |
+| constrained labels stabilize the representation | yes                 |
+| one coarse constrained schema is enough         | no                  |
+| requester role is a useful semantic axis        | yes                 |
+| deterministic metadata always helps             | no                  |
+| best current label representation               | role-aware          |
+| best current stable overall model               | deterministic-role  |
+
+### New Hypotheses
+
+1. The next high-value candidate is likely a richer constrained artifact axis,
+   not another generic benchmark field.
+2. A requested-artifact slot may split:
+   - memo
+   - ticket
+   - privilege log
+   - audit report
+     in a way that is both stable and proposer-relevant.
+3. The long-term system may want:
+   - deterministic metadata where obvious
+   - constrained LLM semantics where interpretation matters
+   - frontier search to choose the smallest useful schema
