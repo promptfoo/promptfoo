@@ -6216,3 +6216,79 @@ confusions:
 3. The next experiment should test automatic confusion diagnosis from the error
    traces alone, because that is the remaining human-authored step in this
    repair cycle.
+
+## Iteration 74 - 2026-05-09
+
+### Goal
+
+Remove the last hand-authored step from the boundary-repair loop:
+
+> Can the system infer the confusion families from failed boundary cases, then
+> generate the right contrastive supports and recover the stress frontier
+> automatically?
+
+### Experiment
+
+1. Added `evaluateRepairDiagnosedBoundarySupport.ts`.
+2. Fed the repair loop only:
+   - the failed negative case
+   - the positive local-expert exemplar
+3. Asked the model to infer:
+   - a short failure-mode label
+   - the property that should make the failed case negative
+4. Reused those inferred diagnoses to generate support and re-evaluate the same
+   six stress cases over three draws.
+
+### Results
+
+Automatic diagnosis is helpful but not yet frontier-preserving:
+
+| Boundary variant               | Avg stress accuracy | Stability   |
+| ------------------------------ | ------------------: | ----------- |
+| original learned boundary      |     `13/18`-`14/18` | `5/6`       |
+| generated-support augmentation |               `6/6` | `6/6`       |
+| diagnosed-support augmentation |     `16/18`-`18/18` | `5/6`-`6/6` |
+
+The diagnosis step gets one confusion family right and one subtly wrong:
+
+| Failed case                             | Inferred diagnosis quality                            |
+| --------------------------------------- | ----------------------------------------------------- |
+| `legal-counsel-records-negative-v1`     | correct topic boundary                                |
+| `security-reviewer-summary-negative-v1` | wrong axis: summary vs extraction, not requester role |
+
+On one run, that wrong-axis repair introduced a new unstable false positive on
+`vendor-support-report-negative-v1`; on a fresh rerun, the same automatic path
+recovered the full `6/6` frontier.
+
+### Reflection
+
+1. This is the first place where the fully automatic loop becomes unreliable in
+   an informative way:
+   - the support generator is fine
+   - the bottleneck is diagnosis quality
+2. The weaker diagnosis is locally plausible:
+   - the security-reviewer case really is summary-like
+   - but that is not the discriminative feature that protects the planner
+3. The result makes verification and resampling essential:
+   - one generated patch improved the original failure set
+   - while quietly regressing a nearby negative
+   - another fresh draw recovered the full frontier
+4. Compared with the 2023-style few-shot generator, we are now doing something
+   much richer:
+   - maintaining a planner
+   - proposing repairs
+   - and catching bad repairs with targeted stress tests
+5. The next move should be a diagnosis evaluator:
+   - ask candidate diagnoses to explain all nearby positives and negatives
+   - then prefer diagnoses that are discriminative over the whole local slice,
+     not merely plausible for one failed item
+
+### New Hypotheses
+
+1. The right state object for modern attack generation is not merely a prompt
+   template; it is a planner with operator-local support memory and repair logs.
+2. Automatic diagnosis needs selection pressure:
+   - explanations should be judged by how well they separate the local contrast
+     set, not just by whether they sound reasonable.
+3. The next experiment should rank multiple candidate diagnoses against nearby
+   positives and negatives before generating support from the best one.
