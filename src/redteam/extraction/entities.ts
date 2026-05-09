@@ -1,7 +1,12 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
+import {
+  callExtractionWithMetadata,
+  type ExtractionResult,
+  fetchRemoteGenerationWithMetadata,
+  formatPrompts,
+} from './util';
 
 import type { ApiProvider } from '../../types/index';
 import type { ExtractionOptions } from './purpose';
@@ -12,15 +17,26 @@ export async function extractEntities(
   prompts: string[],
   options?: ExtractionOptions,
 ): Promise<string[]> {
+  return (await extractEntitiesWithMetadata(provider, prompts, options)).result;
+}
+
+export async function extractEntitiesWithMetadata(
+  provider: ApiProvider,
+  prompts: string[],
+  options?: ExtractionOptions,
+): Promise<ExtractionResult<string[]>> {
   if (!options?.forceLocal && shouldGenerateRemote()) {
     try {
-      const result = await fetchRemoteGeneration('entities' as RedTeamTask, prompts);
-      return result as string[];
+      const response = await fetchRemoteGenerationWithMetadata('entities' as RedTeamTask, prompts);
+      return {
+        result: response.result as string[],
+        ...(response.tokenUsage ? { tokenUsage: response.tokenUsage } : {}),
+      };
     } catch (error) {
       logger.warn(
         `[Entity Extraction] Failed, returning 0 entities. Error using remote generation: ${error}`,
       );
-      return [];
+      return { result: [] };
     }
   }
 
@@ -47,7 +63,7 @@ export async function extractEntities(
     FORMAT: Begin each entity with "Entity:" on a new line.
   `;
   try {
-    const entities = await callExtraction(provider, prompt, (output: string) => {
+    const entities = await callExtractionWithMetadata(provider, prompt, (output: string) => {
       const entities = output
         .split('\n')
         .filter((line) => line.trim().startsWith('Entity:'))
@@ -65,6 +81,6 @@ export async function extractEntities(
     return entities;
   } catch (error) {
     logger.warn(`Error using local extraction, returning empty list: ${error}`);
-    return [];
+    return { result: [] };
   }
 }

@@ -1,7 +1,12 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import { callExtraction, fetchRemoteGeneration, formatPrompts } from './util';
+import {
+  callExtractionWithMetadata,
+  type ExtractionResult,
+  fetchRemoteGenerationWithMetadata,
+  formatPrompts,
+} from './util';
 
 import type { ApiProvider } from '../../types/index';
 import type { RedTeamTask } from './util';
@@ -17,21 +22,32 @@ export async function extractSystemPurpose(
   prompts: string[],
   options?: ExtractionOptions,
 ): Promise<string> {
+  return (await extractSystemPurposeWithMetadata(provider, prompts, options)).result;
+}
+
+export async function extractSystemPurposeWithMetadata(
+  provider: ApiProvider,
+  prompts: string[],
+  options?: ExtractionOptions,
+): Promise<ExtractionResult<string>> {
   const onlyTemplatePrompt =
     prompts.length === 1 && prompts[0] && prompts[0].trim().replace(/\s+/g, '') === '{{prompt}}';
 
   if (prompts.length === 0 || onlyTemplatePrompt) {
     logger.debug('[purpose] No meaningful prompts provided, returning default purpose');
-    return DEFAULT_PURPOSE;
+    return { result: DEFAULT_PURPOSE };
   }
 
   if (!options?.forceLocal && shouldGenerateRemote()) {
     try {
-      const result = await fetchRemoteGeneration('purpose' as RedTeamTask, prompts);
-      return result as string;
+      const response = await fetchRemoteGenerationWithMetadata('purpose' as RedTeamTask, prompts);
+      return {
+        result: response.result as string,
+        ...(response.tokenUsage ? { tokenUsage: response.tokenUsage } : {}),
+      };
     } catch (error) {
       logger.warn(`[purpose] Error using remote generation, returning empty string: ${error}`);
-      return '';
+      return { result: '' };
     }
   }
 
@@ -50,12 +66,12 @@ export async function extractSystemPurpose(
   `;
 
   try {
-    return callExtraction(provider, prompt, (output: string) => {
+    return callExtractionWithMetadata(provider, prompt, (output: string) => {
       const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
       return match ? match[1].trim() : output.trim();
     });
   } catch (error) {
     logger.warn(`[purpose] Error using extracting purpose, returning empty string: ${error}`);
-    return '';
+    return { result: '' };
   }
 }

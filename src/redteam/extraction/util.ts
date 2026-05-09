@@ -9,14 +9,19 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 
-import type { ApiProvider } from '../../types/index';
+import type { ApiProvider, TokenUsage } from '../../types/index';
 
 export const RedTeamGenerationResponse = z.object({
   task: z.string(),
   result: z.union([z.string(), z.array(z.string())]),
+  tokenUsage: z.custom<TokenUsage>().optional(),
 });
 
 export type RedTeamTask = 'purpose' | 'entities';
+export type ExtractionResult<T> = {
+  result: T;
+  tokenUsage?: TokenUsage;
+};
 
 /**
  * Fetches remote generation results for a given task and prompts.
@@ -36,6 +41,13 @@ export async function fetchRemoteGeneration(
   task: RedTeamTask,
   prompts: string[],
 ): Promise<string | string[]> {
+  return (await fetchRemoteGenerationWithMetadata(task, prompts)).result;
+}
+
+export async function fetchRemoteGenerationWithMetadata(
+  task: RedTeamTask,
+  prompts: string[],
+): Promise<ExtractionResult<string | string[]>> {
   invariant(
     !getEnvBool('PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION'),
     'fetchRemoteGeneration should never be called when remote generation is disabled',
@@ -60,7 +72,10 @@ export async function fetchRemoteGeneration(
     );
 
     const parsedResponse = RedTeamGenerationResponse.parse(response.data);
-    return parsedResponse.result;
+    return {
+      result: parsedResponse.result,
+      ...(parsedResponse.tokenUsage ? { tokenUsage: parsedResponse.tokenUsage } : {}),
+    };
   } catch (error) {
     logger.warn(`Error using remote generation for task '${task}': ${error}`);
     throw error;
@@ -72,7 +87,15 @@ export async function callExtraction<T>(
   prompt: string,
   processOutput: (output: string) => T,
 ): Promise<T> {
-  const { output, error } = await provider.callApi(
+  return (await callExtractionWithMetadata(provider, prompt, processOutput)).result;
+}
+
+export async function callExtractionWithMetadata<T>(
+  provider: ApiProvider,
+  prompt: string,
+  processOutput: (output: string) => T,
+): Promise<ExtractionResult<T>> {
+  const { output, error, tokenUsage } = await provider.callApi(
     JSON.stringify([{ role: 'user', content: prompt }]),
   );
 
@@ -86,7 +109,17 @@ export async function callExtraction<T>(
     throw new Error(`Invalid extraction output: expected string, got: ${output}`);
   }
 
-  return processOutput(output);
+  return {
+    result: processOutput(output),
+    ...(tokenUsage
+      ? {
+          tokenUsage: {
+            ...tokenUsage,
+            ...(tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
+          },
+        }
+      : {}),
+  };
 }
 
 export function formatPrompts(prompts: string[]): string {

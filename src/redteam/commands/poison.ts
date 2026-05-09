@@ -12,6 +12,8 @@ import { setupEnv } from '../../util/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { Command } from 'commander';
 
+import type { TokenUsage } from '../../types/index';
+
 interface PoisonOptions {
   documents: string[];
   goal?: string;
@@ -26,6 +28,7 @@ interface PoisonResponse {
   intendedResult: string;
   task: string;
   originalPath?: string;
+  tokenUsage?: TokenUsage;
 }
 
 type FilePath = string;
@@ -127,6 +130,7 @@ export async function poisonDocument(
       originalPath: result.originalPath,
       poisonedDocument: result.poisonedDocument,
       intendedResult: result.intendedResult,
+      ...(result.tokenUsage ? { tokenUsage: result.tokenUsage } : {}),
     };
   } catch (error) {
     throw new Error(`Failed to poison ${doc.docLike}: ${error}`);

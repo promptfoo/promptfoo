@@ -2,7 +2,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
-import { extractEntities } from '../../../src/redteam/extraction/entities';
+import {
+  extractEntities,
+  extractEntitiesWithMetadata,
+} from '../../../src/redteam/extraction/entities';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
@@ -95,6 +98,28 @@ describe('Entities Extractor', () => {
     );
   });
 
+  it('should preserve remote extraction token usage through the metadata helper', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        task: 'entities',
+        result: ['Apple', 'Google'],
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const result = await extractEntitiesWithMetadata(provider, ['prompt1', 'prompt2']);
+
+    expect(result).toEqual({
+      result: ['Apple', 'Google'],
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+  });
+
   it('should not fall back to local extraction when remote generation fails', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
@@ -117,6 +142,21 @@ describe('Entities Extractor', () => {
     expect(result).toEqual(['Apple', 'Google']);
     expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('prompt'));
     expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should preserve local extraction token usage through the metadata helper', async () => {
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
+    vi.mocked(provider.callApi).mockResolvedValue({
+      output: 'Entity: Apple\nEntity: Google',
+      tokenUsage: { total: 15, prompt: 10, completion: 5 },
+    });
+
+    const result = await extractEntitiesWithMetadata(provider, ['prompt']);
+
+    expect(result).toEqual({
+      result: ['Apple', 'Google'],
+      tokenUsage: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+    });
   });
 
   it('should honor an explicit local-extraction override', async () => {
