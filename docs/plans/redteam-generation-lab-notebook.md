@@ -7049,3 +7049,83 @@ pool, but it preserved the part that mattered:
    - compositional value inside the global attack portfolio
 3. The next experiment should test whether the same critic pattern transfers to
    a different failure family instead of overfitting to this legal-counsel hinge.
+
+## Iteration 85 - 2026-05-09
+
+### Goal
+
+Check whether the local-critic architecture from iteration 84 transfers beyond
+the original report-positive / contract-negative hinge.
+
+### Experiment
+
+1. Added `evaluateRepairTransferredHingeCritic.ts`.
+2. Tried two transfer families in sequence:
+   - **action-semantic transfer**:
+     - security-reviewer exact extraction
+     - versus security-reviewer summarization
+   - **protected-object transfer**:
+     - legal-counsel hidden-system-instruction disclosure
+     - versus legal-counsel patient-record disclosure
+3. For each transfer slice:
+   - sampled three ordinary contrastive hinge pairs
+   - sampled six hinge pairs for ungated ranking
+   - scored the six-pair set with the same local critic pattern
+   - replayed the selected downstream bundles three times on the mixed slice
+
+### Results
+
+The transfer attempt did **not** produce a useful discriminator because the hand
+built transfer slices were too easy.
+
+#### Action-Semantic Transfer
+
+Every downstream pool saturated immediately:
+
+| Candidate pool        | Perfect bundles | Fresh replay | Stability |
+| --------------------- | --------------: | -----------: | --------: |
+| contrastive-hinge     |            `27` |      `33/33` |   `11/11` |
+| ranked-hinge          |            `54` |      `33/33` |   `11/11` |
+| critic-selected-hinge |            `27` |      `33/33` |   `11/11` |
+
+That benchmark was underchallenging and was rejected as a serious transfer test.
+
+#### Protected-Object Transfer
+
+The stronger legal-counsel transfer family looked more plausible but still
+ceilinged on replay:
+
+| Candidate pool        | Perfect bundles, run 1 | Replay, run 1 | Perfect bundles, run 2 | Replay, run 2 |
+| --------------------- | ---------------------: | ------------: | ---------------------: | ------------: |
+| contrastive-hinge     |                   `25` |       `33/33` |                   `27` |       `33/33` |
+| ranked-hinge          |                   `51` |       `33/33` |                   `54` |       `33/33` |
+| critic-selected-hinge |                   `25` |       `33/33` |                   `27` |       `33/33` |
+
+### Reflection
+
+1. This iteration is a benchmark-design failure, not a method failure.
+2. The transfer slices were semantically distinct from the original hinge, but
+   not adversarial enough to separate methods once any reasonable contrastive
+   support was present.
+3. That means iteration 84 still stands, but iteration 85 does **not** establish
+   general transfer:
+   - a saturated benchmark cannot compare architectures
+4. The study now has a second-order problem:
+   - we are no longer only generating better attacks
+   - we also need to generate better **attack-generator benchmarks**
+5. Hand-authored twins are useful for diagnosis, but they are not enough for
+   hill climbing once the current method reaches the easy ceiling.
+6. The next transfer study should be adversarially generated:
+   - mine near-miss positives and negatives
+   - retain only cases that separate baseline and improved methods
+   - then ask whether the critic generalizes on that harder frontier
+
+### New Hypotheses
+
+1. Local critics probably transfer only on slices where the benchmark still has
+   enough difficulty to expose proposal-quality differences.
+2. Benchmark generation needs its own active-search loop, not just hand-authored
+   paraphrases.
+3. The next experiment should generate candidate transfer twins automatically,
+   score them for discriminative power against multiple proposer variants, and
+   keep only the frontier cases that avoid ceiling effects.
