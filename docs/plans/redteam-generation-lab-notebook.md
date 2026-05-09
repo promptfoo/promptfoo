@@ -5303,3 +5303,82 @@ The holdout changes exactly where expected:
    architecture search to:
    - automatic discovery of which support points or specialists are missing
    - and automatic generation of those counterfactual examples
+
+## Iteration 62 - 2026-05-09
+
+### Goal
+
+Test whether the two successful residual repairs are actually composable:
+
+> Does a router that combines the learned legal-counsel packaging expert with the
+> BOLA support exemplar reach a better frontier than either repair alone?
+
+### Experiment
+
+1. Added `evaluateRepairHybridResidualRouting.ts`.
+2. Reused:
+   - the saved `role-mechanism` semantic draws from iteration 53
+   - the saved learned packaging classifications from iteration 57
+   - the synthetic BOLA support point from iteration 61
+3. Compared four routing policies on the same held-out rows:
+   - `global`
+   - `learned-legal-counsel-packaging-expert`
+   - `bola-support-augmentation`
+   - `hybrid`
+4. Kept the repairs orthogonal:
+   - legal-counsel expert only changes the prompt-extraction pair
+   - BOLA augmentation only changes the available local support set
+
+### Results
+
+The repairs compose perfectly:
+
+| Router                                 | Stable label holdout accuracy | Avg label holdout regret |
+| -------------------------------------- | ----------------------------: | -----------------------: |
+| global `role-mechanism`                |                         `2/4` |                `0.00236` |
+| learned legal-counsel packaging expert |                         `3/4` |                `0.00119` |
+| BOLA support augmentation              |                         `3/4` |                `0.00117` |
+| combined hybrid                        |                         `4/4` |                `0.00000` |
+
+The holdout decomposition is especially clean:
+
+1. learned legal-counsel expert fixes only:
+   - `prompt-extraction-novelty-v3`
+2. BOLA support augmentation fixes only:
+   - `bola-coverage-v2`
+3. the hybrid keeps:
+   - `prompt-extraction-coverage-v2`
+   - `sql-novelty-v2`
+     correct throughout
+4. all four policies remain stable across all three saved semantic draws
+
+### Reflection
+
+1. This is the strongest evidence yet that one global representation will not be
+   the whole answer:
+   - the useful frontier is **global router + targeted residual repairs**
+2. The two repairs are additive because they address different failure modes:
+   - legal-counsel: hidden local ambiguity after semantically similar routing
+   - BOLA: missing support coverage despite adequate semantic separation
+3. The best system shape is starting to look hierarchical:
+   - route globally
+   - detect residual family
+   - either invoke a specialist learner or synthesize missing support
+4. The result is promising, but not yet a deployment story:
+   - the legal-counsel packaging-to-profile map is still hand-authored
+   - the BOLA support row is still manually synthesized
+5. The next frontier is therefore **automatic residual diagnosis** rather than
+   another ontology sweep.
+
+### New Hypotheses
+
+1. A residual-diagnosis layer can choose among:
+   - use global route unchanged
+   - ask a local expert
+   - add or retrieve local support
+2. The residual type may be detectable from training geometry:
+   - high semantic similarity plus conflicting winners -> local ambiguity
+   - low support density near a holdout family -> missing support
+3. If that diagnosis can be automated, we may be able to turn the current manual
+   repairs into a self-improving attack-generation planner rather than a hand-built
+   collection of exceptions.
