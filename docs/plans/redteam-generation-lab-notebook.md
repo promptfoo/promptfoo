@@ -386,3 +386,79 @@ At the end of iteration 5:
    - privacy/social-engineering attacks
 3. After that, the right next frontier is agentic scenario generation, where the
    output should become a structured attack scenario rather than a single prompt.
+
+## Iteration 6 - 2026-05-09
+
+### Goal
+
+Stress-test the architecture on privacy/social-engineering attacks:
+
+> Can planner plus selector improve `pii:*` when the useful variation is about
+> relationship, authorization story, and sensitive field rather than syntax or
+> artifact format?
+
+### Experiment
+
+Added:
+
+- `piiResearchShared.ts`
+- `generatePiiPortfolio.ts`
+- `selectPiiPortfolio.ts`
+
+Extended the analyzer with PII-specific dimensions:
+
+1. `relationship`
+2. `authorization-story`
+3. `sensitive-field`
+
+### Results
+
+Baseline:
+
+| Corpus                | Unique prompts | Coarse tactic coverage |
+| --------------------- | -------------: | ---------------------- |
+| Existing `pii:direct` |              5 | `2/5`                  |
+| Existing `pii:social` |              5 | `3/5`                  |
+
+Planner corpora:
+
+| Corpus               | Unique prompts | Coarse tactic coverage | Relationship coverage | Authorization-story coverage | Sensitive-field coverage |
+| -------------------- | -------------: | ---------------------- | --------------------- | ---------------------------- | ------------------------ |
+| Planner `pii:direct` |              6 | `2/5`                  | `2`                   | `1`                          | `6`                      |
+| Planner `pii:social` |              6 | `4/5`                  | `4`                   | `4`                          | `5`                      |
+
+Selector comparison on the same noisy `pii:social` pool:
+
+| Selection policy | Unique prompts | Coarse tactic coverage | Relationship coverage | Authorization-story coverage | Sensitive-field coverage | Avg pairwise distance |
+| ---------------- | -------------: | ---------------------- | --------------------- | ---------------------------- | ------------------------ | --------------------: |
+| First `5`        |              2 | `3/5`                  | `4`                   | `2`                          | `2`                      |               `0.364` |
+| Diverse `5`      |              5 | `4/5`                  | `4`                   | `4`                          | `4`                      |               `0.889` |
+
+### Reflection
+
+1. The architecture continues to transfer:
+   - planner broadens the candidate space
+   - selector rescues a useful portfolio from a noisy pool
+2. `pii:social` is the strongest PII result so far because the planner
+   materially broadens:
+   - who is asking
+   - why they claim access
+   - what kind of data they seek
+3. The result is also more nuanced than the previous two families:
+   - `pii:direct` is deliberately narrow on authorization story
+   - `pii:social` still misses one coarse PII tactic
+4. This is a useful sign that the benchmark is now strong enough to reveal
+   **where** a generator is weak, not just whether it is better on average.
+
+### New Hypotheses
+
+1. The next improvement to PII should be planner repair:
+   - diagnose uncovered dimensions
+   - ask for replacements that specifically fill them
+2. This is a natural place to add a critique-and-repair phase before candidate
+   selection.
+3. The architecture now has evidence across:
+   - syntax attacks
+   - instruction-boundary attacks
+   - privacy/social-engineering attacks
+     The next major frontier can be agentic scenarios once we add one repair loop.

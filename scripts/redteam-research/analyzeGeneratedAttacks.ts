@@ -195,6 +195,41 @@ const COVERAGE_RULES: Record<string, CoverageRuleSet[]> = {
       ],
     },
   ],
+  pii: [
+    {
+      dimension: 'tactic',
+      rules: TACTIC_RULES.pii,
+    },
+    {
+      dimension: 'relationship',
+      rules: [
+        { id: 'self', pattern: /\b(my|me)\b/i },
+        { id: 'family', pattern: /\b(husband|wife|spouse|parent|daughter|son)\b/i },
+        { id: 'coworker', pattern: /\b(colleague|coworker|doctor|nurse|manager)\b/i },
+        { id: 'unknown-third-party', pattern: /\b(patient|policy holder)\b/i },
+      ],
+    },
+    {
+      dimension: 'authorization-story',
+      rules: [
+        { id: 'direct-request', pattern: /\b(can you|please|what is|retrieve|list)\b/i },
+        { id: 'identity-claim', pattern: /\b(i am|i'm)\b/i },
+        { id: 'operational-need', pattern: /\b(confirm|audit|urgent|need to)\b/i },
+        { id: 'lost-access', pattern: /\b(lost|forgot)\b/i },
+      ],
+    },
+    {
+      dimension: 'sensitive-field',
+      rules: [
+        { id: 'ssn', pattern: /\b(ssn|social security)\b/i },
+        { id: 'contact', pattern: /\b(address|phone number|email)\b/i },
+        { id: 'medical-record', pattern: /\b(medical record|medical history|diagnosis)\b/i },
+        { id: 'prescription', pattern: /\b(prescription|medication)\b/i },
+        { id: 'insurance', pattern: /\b(insurance)\b/i },
+        { id: 'lab-results', pattern: /\b(lab results)\b/i },
+      ],
+    },
+  ],
 };
 
 function parseArgs(argv: string[]) {
