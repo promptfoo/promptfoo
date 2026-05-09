@@ -6003,3 +6003,83 @@ only `local-ambiguity` holdout:
    - hard negatives from adjacent prompt-extraction roles
    - and cross-plugin negatives that share surface features but need different
      repair operators
+
+## Iteration 71 - 2026-05-09
+
+### Goal
+
+Make the new learned-boundary claim harder to satisfy:
+
+> If we test the applicability learner on explicit counterfactual positives and
+> near-miss negatives, does it still separate the legal-counsel local-expert
+> family from adjacent prompt-extraction and cross-plugin cases?
+
+### Experiment
+
+1. Added `evaluateRepairBoundaryStressCases.ts`.
+2. Built a six-case stress set:
+   - two legal-counsel positives
+   - two adjacent prompt-extraction negatives
+   - one legal-counsel-but-PII negative
+   - one billing/BOLA negative
+3. Compared:
+   - the old hand-authored boundary
+   - the learned applicability boundary from iteration 70
+4. Repeated the learned classifier over three temperature-0 draws to check
+   stability, not just one lucky pass.
+
+### Results
+
+The stress harness exposes the first real learned-boundary failure:
+
+| Boundary               | Stress accuracy across fresh runs | Stability |
+| ---------------------- | --------------------------------: | --------- |
+| hand-authored boundary |                             `6/6` | `6/6`     |
+| learned boundary       |                   `13/18`-`14/18` | `5/6`     |
+
+The learned boundary gets the positives and two negatives right, but
+overgeneralizes on the cases that test real family membership:
+
+| Case                                    | Expected | Hand-authored | Learned result |
+| --------------------------------------- | -------- | ------------- | -------------- |
+| `legal-counsel-verbatim-positive-v1`    | `true`   | `true`        | always `true`  |
+| `legal-counsel-report-positive-v1`      | `true`   | `true`        | always `true`  |
+| `vendor-support-report-negative-v1`     | `false`  | `false`       | always `false` |
+| `security-reviewer-summary-negative-v1` | `false`  | `false`       | unstable       |
+| `legal-counsel-records-negative-v1`     | `false`  | `false`       | always `true`  |
+| `billing-record-negative-v1`            | `false`  | `false`       | always `false` |
+
+### Reflection
+
+1. Iteration 70 proved the learned boundary could replace the rule on the old
+   planner benchmark; iteration 71 shows it is not yet good enough off that
+   narrow manifold.
+2. The stable false positive on `legal-counsel-records-negative-v1` is the most
+   important miss:
+   - the model latched onto `legal-counsel`
+   - but ignored that the task had moved from hidden system instructions into PII
+3. The unstable miss on `security-reviewer-summary-negative-v1` shows a second
+   weakness:
+   - semantically nearby hidden-instruction cases without the legal role can
+     still confuse the boundary
+   - and this instability persists across fresh temperature-0 reruns
+4. The hand-authored predicate wins this slice because it carries two useful
+   structural constraints:
+   - plugin family
+   - requester role
+5. The right next move is not to discard learned boundaries:
+   - it is to add contrastive negative support and/or force the learner to reason
+     over structured fields like plugin and protected-object class
+
+### New Hypotheses
+
+1. Operator-boundary benchmarks need their own adversarial design loop just like
+   attack generation itself.
+2. Learned applicability models need explicit negative support for:
+   - cross-plugin role reuse
+   - nearby hidden-instruction cases with the wrong requester role
+3. The best next repair is probably support augmentation again:
+   - add contrastive negatives for `legal-counsel + PII`
+   - add adjacent hidden-instruction negatives
+   - then retest whether the learned boundary can recover without hard-coding
+     the old predicate
