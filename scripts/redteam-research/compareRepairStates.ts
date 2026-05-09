@@ -1,16 +1,16 @@
 import {
-  analyzePortfolioPool,
-  buildRepairStateFeatures,
-  diagnoseCandidateAgainstPolicy,
-  selectBestRepairCandidate,
-  type CandidateDiagnostic,
-  type DimensionAccessor,
-} from './portfolioResearchShared';
-import {
   buildAdversarialPiiCandidatePool,
   loadPiiContext,
   type PiiAttack,
 } from './piiResearchShared';
+import {
+  analyzePortfolioPool,
+  buildRepairStateFeatures,
+  type CandidateDiagnostic,
+  type DimensionAccessor,
+  diagnoseCandidateAgainstPolicy,
+  selectBestRepairCandidate,
+} from './portfolioResearchShared';
 import {
   buildPromptExtractionCandidatePool,
   buildPromptExtractionPortfolio,
@@ -122,7 +122,13 @@ function selectPiiRepair(basePool: PiiAttack[]): CandidateDiagnostic {
   const diagnostics = manualRepairs.map((candidate) => {
     const pool = [...basePool, candidate];
     const { policies, portfolios } = analyzePortfolioPool(pool, PII_DIMENSIONS, PII_POLICIES);
-    return diagnoseCandidateAgainstPolicy(portfolios, policies, pool.length - 1, 'maxTactics', pool);
+    return diagnoseCandidateAgainstPolicy(
+      portfolios,
+      policies,
+      pool.length - 1,
+      'maxTactics',
+      pool,
+    );
   });
   const selectedRepair = selectBestRepairCandidate(diagnostics);
   const selectedDiagnostic = diagnostics.find(

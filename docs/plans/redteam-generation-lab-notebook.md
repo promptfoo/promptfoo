@@ -2283,3 +2283,70 @@ best for this repair state?”
 2. This rule needs at least one more plugin family before we trust it.
 3. The next useful experiment is to construct a SQL repair benchmark and see
    whether its winning profile lines up with the blocked metric family.
+
+## Iteration 31 - 2026-05-09
+
+### Goal
+
+Test the first repair-routing rule on a third plugin family:
+
+> If SQL repair is also a novelty-gap problem, does `balanced` win there too?
+
+### Experiment
+
+1. Added `runSqlProposerPass.ts` for `sql-injection`.
+2. Constructed a SQL repair benchmark where:
+   - policy: `maxTactics`
+   - tactic: `authorization-filter-removal`
+   - blocked metric: `averageNovelty`
+   - metric family: `novelty`
+   - residual gap to beat: `0.00336`
+3. Ran:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/runSqlProposerPass.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  all \
+  3 \
+  0.7
+```
+
+### Results
+
+| Prompt profile | Improving trials | Improving candidates | Avg best novelty delta | Avg `top3` yield |
+| -------------- | ---------------: | -------------------: | ---------------------: | ---------------: |
+| `rich`         |              `2` |                  `4` |             `+0.00147` |       `+0.00360` |
+| `balanced`     |              `3` |                  `8` |             `+0.00183` |       `+0.00543` |
+| `thin`         |              `2` |                  `2` |             `+0.00008` |       `+0.00180` |
+
+Per-trial best novelty deltas:
+
+| Trial | `rich`     | `balanced` | `thin`     |
+| ----: | ---------- | ---------- | ---------- |
+|   `1` | `+0.00270` | `+0.00270` | `+0.00270` |
+|   `2` | `+0.00270` | `+0.00007` | `+0.00270` |
+|   `3` | `-0.00100` | `+0.00270` | `-0.00515` |
+
+### Reflection
+
+1. SQL supports the metric-family routing hypothesis:
+   - it is another novelty-gap repair
+   - `balanced` was the only profile with improvements in all three trials
+   - it also won on total improving candidates and top-k yield
+2. The profile ordering is not identical to prompt extraction, but the preferred
+   profile is the same for the same broad repair family.
+3. That gives the first cross-plugin evidence for:
+   - novelty gap -> `balanced`
+   - coverage gap -> `thin`
+4. We still need more coverage tasks before trusting the second half of the rule,
+   but the novelty side now has support from two distinct plugin families.
+
+### New Hypotheses
+
+1. The next experiment should add another coverage-gap repair benchmark, not
+   another novelty-gap benchmark.
+2. We should start recording profile wins against repair-state features in a
+   machine-readable table so a future router can be fit or at least inspected
+   systematically.
