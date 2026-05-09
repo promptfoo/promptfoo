@@ -7855,3 +7855,87 @@ The unstable set-valued outputs reveal why:
 3. The next experiment should replace overlapping categorical labels with a
    small predicate vector and test whether it improves both field stability and
    retained-cell usefulness.
+
+## Iteration 95 - 2026-05-09
+
+### Goal
+
+Replace overlapping categorical labels with literal semantic predicates:
+
+> Are concrete yes/no facts more stable than either single-primary labels or
+> bounded multi-label bundles?
+
+### Experiment
+
+1. Added `evaluateRepairFrontierPredicateSignatureStability.ts`.
+2. Reused the frozen `23`-case frontier.
+3. Defined seven literal predicates:
+   - `asksForAuthorityChecks`
+   - `asksForClassificationRules`
+   - `asksForEscalationGuidance`
+   - `asksForRefusalPolicy`
+   - `asksForRoutingRules`
+   - `invokesLegalAuthority`
+   - `requestsVerbatimText`
+4. Instructed the judge to answer `true` only for explicitly supported facts.
+5. Re-ran the same `23` cases across `3` draws with
+   `openai:responses:gpt-5.4-mini`.
+6. Compared full-signature stability against the prior two schemas.
+
+### Results
+
+The predicate vector is decisively better:
+
+| Representation             | Stable full signatures |
+| -------------------------- | ---------------------: |
+| scalar categorical schema  |                `10/23` |
+| bounded multi-label schema |                 `6/23` |
+| atomic predicate vector    |                `20/23` |
+
+Predicate-level stability was also very high:
+
+| Predicate                    | Stable cases |
+| ---------------------------- | -----------: |
+| `asksForAuthorityChecks`     |      `23/23` |
+| `asksForClassificationRules` |      `23/23` |
+| `asksForEscalationGuidance`  |      `22/23` |
+| `asksForRefusalPolicy`       |      `23/23` |
+| `asksForRoutingRules`        |      `23/23` |
+| `invokesLegalAuthority`      |      `22/23` |
+| `requestsVerbatimText`       |      `22/23` |
+
+The representation still preserved useful differentiation:
+
+1. unique predicate tuples per trial:
+   - trial `1`: `20`
+   - trial `2`: `19`
+   - trial `3`: `19`
+2. only `3` cases remained unstable, each on a single borderline predicate:
+   - `requestsVerbatimText`
+   - `invokesLegalAuthority`
+   - `asksForEscalationGuidance`
+
+### Reflection
+
+1. This is the strongest schema result so far:
+   - the vector is far more stable
+   - and it still preserves most of the semantic variety we care about
+2. The winning move was to ask smaller questions:
+   - not "which umbrella category is primary?"
+   - but "is this concrete attack fact present?"
+3. This has a direct implication for modern red-team generation:
+   - generators should emit attack text plus an auditable predicate signature
+   - retained-memory systems should preserve predicate coverage before semantic
+     pruning
+4. The residual instability is now small enough that modest prompt refinement,
+   verifier passes, or deterministic lexical helpers may plausibly close the
+   gap.
+
+### New Hypotheses
+
+1. Predicate signatures should become the core internal coverage currency for
+   retained attack memory.
+2. A small verifier or hybrid lexical/judge system may make the remaining
+   borderline predicates effectively deterministic.
+3. The next experiment should test whether a second-pass verifier can repair the
+   last three unstable predicate cases without reducing tuple diversity.
