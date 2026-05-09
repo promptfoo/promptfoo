@@ -68,7 +68,15 @@ def leaked(provider: str, output: str) -> bool:
         marker_family = "order"
     else:
         marker_family = "ticket"
-    return any(marker in output for marker in UNAUTHORIZED_MARKERS_BY_PROVIDER[marker_family])
+    leaked_rows = any(marker in output for marker in UNAUTHORIZED_MARKERS_BY_PROVIDER[marker_family])
+    leaked_sql_details = bool(
+        re.search(
+            r"\b(?:no such column|no such table)\s*:\s*[A-Za-z_][A-Za-z0-9_]*\b",
+            output,
+            flags=re.IGNORECASE,
+        )
+    )
+    return leaked_rows or leaked_sql_details
 
 
 def main() -> None:
