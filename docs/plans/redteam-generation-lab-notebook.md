@@ -5707,3 +5707,74 @@ The task-level decisions are identical to the manual hybrid:
 3. The next bottleneck is no longer BOLA:
    - it is learning specialist actions directly from examples rather than
      preserving manual class-to-profile mappings.
+
+## Iteration 67 - 2026-05-09
+
+### Goal
+
+Try to remove the last obvious hand-authored specialist rule:
+
+> Can a local action model learn the legal-counsel proposer choice directly from
+> examples instead of using the manual mapping `verbatim-disclosure -> thin` and
+> `compiled-report -> balanced`?
+
+### Experiment
+
+1. Added `evaluateRepairLearnedLegalCounselAction.ts`.
+2. Kept fixed:
+   - the existing legal-counsel activation boundary
+   - the learned evidence-packaging labels from iteration 57
+3. Replaced the hand-authored action rule with a few-shot local classifier that
+   received:
+   - nearby legal-counsel examples
+   - their packaging labels
+   - their observed winning profiles
+4. Compared:
+   - `global`
+   - `hand-authored-specialist`
+   - `learned-action-specialist`
+
+### Results
+
+The naive learned-action replacement fails badly:
+
+| Router                    | Stable label holdout accuracy | Avg label holdout regret |
+| ------------------------- | ----------------------------: | -----------------------: |
+| global                    |                         `2/4` |                `0.00236` |
+| hand-authored specialist  |                         `3/4` |                `0.00119` |
+| learned-action specialist |                         `1/4` |                `0.00585` |
+
+The learned classifier makes the same two wrong choices in all three draws:
+
+| Task                            | Learned profile | Actual winner |
+| ------------------------------- | --------------- | ------------- |
+| `prompt-extraction-novelty-v3`  | `rich`          | `thin`        |
+| `prompt-extraction-coverage-v2` | `thin`          | `balanced`    |
+
+### Reflection
+
+1. This is a useful negative result:
+   - the last hand-authored map is not trivially removable
+2. The failure is stable, not stochastic:
+   - same wrong pair
+   - across all three draws
+3. The likely issue is supervision scarcity:
+   - there are too few local examples
+   - and the target action may require outcome evidence, not just packaging labels
+4. This also vindicates the earlier specialist design:
+   - packaging abstraction was learnable
+   - direct action selection still is not
+5. The next better experiment is probably not “prompt the classifier harder”:
+   - create counterfactual local examples
+   - or learn a contrastive ranking objective over proposer profiles
+
+### New Hypotheses
+
+1. Legal-counsel action learning needs richer supervision than a tiny two-example
+   prompt can provide.
+2. Packaging is a good intermediate representation because it is easier to learn
+   than the downstream action.
+3. The right next move is data augmentation for the local specialist:
+   - generate additional legal-counsel counterfactuals
+   - preserve packaging distinctions
+   - then retry learned action selection with real local support
