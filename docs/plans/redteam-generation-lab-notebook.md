@@ -6969,3 +6969,83 @@ The larger hinge pool exposed a different failure mode than expected:
    report replicated distributions, not just one selected bundle.
 4. The next experiment should score each hinge pair directly against the report
    and contract twin set before combining it with the other support examples.
+
+## Iteration 84 - 2026-05-09
+
+### Goal
+
+Add the missing verifier from iteration 83:
+
+> If we score each contrastive hinge pair directly against the local
+> report-positive / contract-negative twin family before bundle assembly, can we
+> reduce the selection variance without changing the mixed frontier?
+
+### Experiment
+
+1. Extended `evaluateRepairContrastiveHingeSupport.ts`.
+2. Kept the sixteen-case mixed frontier unchanged.
+3. Added an eight-case **hinge critic** over:
+   - the report-positive anchor plus three report twins
+   - the contract-negative anchor plus three contract twins
+4. Scored six generated hinge pairs with three repeated critic probes each.
+5. Compared four downstream pools:
+   - **negative-only**
+   - **contrastive-hinge**
+   - **ranked-hinge**: all six sampled pairs admitted to bundle search
+   - **critic-selected-hinge**: only the top three hinge pairs by
+     minimum critic accuracy, then average accuracy, then stability
+6. Ran two full experiment replicates because iteration 83 showed that
+   single-draw proposer conclusions are too noisy.
+
+### Results
+
+The hinge critic is the first proposer-side gate in this sequence that reduced
+variance across both fresh runs:
+
+| Candidate pool        | Perfect bundles, run 1 | Replay, run 1 | Stability, run 1 | Perfect bundles, run 2 | Replay, run 2 | Stability, run 2 |
+| --------------------- | ---------------------: | ------------: | ---------------: | ---------------------: | ------------: | ---------------: |
+| negative-only         |                    `1` |       `46/48` |          `14/16` |                    `4` |       `45/48` |          `14/16` |
+| contrastive-hinge     |                   `12` |       `46/48` |          `14/16` |                   `20` |       `47/48` |          `15/16` |
+| ranked-hinge          |                   `29` |       `48/48` |          `16/16` |                   `35` |       `46/48` |          `14/16` |
+| critic-selected-hinge |                   `15` |       `48/48` |          `16/16` |                   `19` |       `48/48` |          `16/16` |
+
+The critic-selected pool admitted fewer total bundles than the six-pair ranked
+pool, but it preserved the part that mattered:
+
+1. both top-ranked critic pairs scored `8/8` on every local-twin probe
+2. both downstream selected bundles replayed perfectly on the full mixed
+   frontier
+3. the ungated six-pair pool still suffered a contract-negative wobble on the
+   second run even though it found more nominally perfect bundles overall
+
+### Reflection
+
+1. This is the strongest evidence so far that the generator needs a
+   **proposal-local verifier**, not only a global acceptance frontier.
+2. The hinge critic works because it inspects the exact boundary the proposer is
+   trying to repair before composition noise enters:
+   - preserve nearby positives
+   - reject nearby negatives
+3. Perfect-bundle count is not enough:
+   - the ungated ranked pool found more perfect bundles
+   - the critic-selected pool was still more reliable
+4. The cost tradeoff is real:
+   - critic scoring adds replicated calls
+   - but it narrows the expensive downstream search space from six hinge pairs
+     to three
+5. The architecture starting to emerge is layered:
+   - proposer generates candidate attacks or repairs
+   - local critics test narrow boundary quality
+   - global frontier tests compositional behavior
+   - replicated replay estimates whether the apparent gain is durable
+
+### New Hypotheses
+
+1. Local proposal critics should be plugin- and failure-family specific, not a
+   single universal evaluator.
+2. A good attack-generation system should rank candidates by:
+   - exploit relevance
+   - local boundary fidelity
+   - compositional value inside the global attack portfolio
+3. The next experiment should test whether the same critic pattern transfers to
+   a different failure family instead of overfitting to this legal-counsel hinge.

@@ -56,7 +56,13 @@ type ReplaySummary = {
   unstableTaskIds: string[];
 };
 
+type CriticScoredHingeCandidate = ReplaySummary & {
+  candidate: SupportCandidate;
+  minAccuracy: number;
+};
+
 const candidateCount = 3;
+const hingeCriticReplayCount = 3;
 const rankedHingeCandidateCount = 6;
 const replayCount = 3;
 const boundaryResponseSchema = z.object({
@@ -424,6 +430,16 @@ const sharedFailureTaskIds = [
   'legal-counsel-records-negative-v1',
   'security-reviewer-summary-negative-v1',
 ] as const;
+const hingeCriticStressCaseIds = [
+  'legal-counsel-report-positive-v1',
+  'legal-counsel-report-positive-twin-a-v1',
+  'legal-counsel-report-positive-twin-b-v1',
+  'legal-counsel-report-positive-twin-c-v1',
+  'legal-counsel-contract-negative-v1',
+  'legal-counsel-contract-negative-twin-a-v1',
+  'legal-counsel-contract-negative-twin-b-v1',
+  'legal-counsel-contract-negative-twin-c-v1',
+] as const;
 
 function mean(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -720,9 +736,17 @@ async function evaluateSupportPortfolio(
   candidates: SupportCandidate[],
   providerId: string,
 ): Promise<StressPrediction[]> {
+  return evaluateSupportOnStressCases(candidates, mixedStressCases, providerId);
+}
+
+async function evaluateSupportOnStressCases(
+  candidates: SupportCandidate[],
+  stressCases: readonly BoundaryStressCase[],
+  providerId: string,
+): Promise<StressPrediction[]> {
   const support = candidates.flatMap((candidate) => candidate.generatedSupport);
   return Promise.all(
-    mixedStressCases.map(async (stressCase) => ({
+    stressCases.map(async (stressCase) => ({
       actualShouldUseLocalExpert: stressCase.expectedShouldUseLocalExpert,
       learnedPrediction: await learnBoundaryForCase(stressCase, support, providerId),
       taskId: stressCase.id,
@@ -803,6 +827,54 @@ async function replaySelectedBundle(
   };
 }
 
+function summarizeHingeCandidate(candidate: CriticScoredHingeCandidate) {
+  return {
+    averageAccuracy: candidate.averageAccuracy,
+    generatedSupport: candidate.candidate.generatedSupport,
+    minAccuracy: candidate.minAccuracy,
+    perReplay: candidate.perReplay,
+    stableTaskCount: candidate.stableTaskCount,
+    unstableTaskCount: candidate.unstableTaskCount,
+    unstableTaskIds: candidate.unstableTaskIds,
+  };
+}
+
+async function scoreHingeCandidateWithCritic(
+  candidate: SupportCandidate,
+  providerId: string,
+): Promise<CriticScoredHingeCandidate> {
+  const hingeCriticStressCases = hingeCriticStressCaseIds.map((taskId) => getStressCase(taskId));
+  const replays = await Promise.all(
+    Array.from({ length: hingeCriticReplayCount }, () =>
+      evaluateSupportOnStressCases([candidate], hingeCriticStressCases, providerId),
+    ),
+  );
+  const predictionMap = new Map<string, Set<boolean>>();
+  for (const replay of replays) {
+    for (const prediction of replay) {
+      const predictions = predictionMap.get(prediction.taskId) ?? new Set<boolean>();
+      predictions.add(prediction.learnedPrediction);
+      predictionMap.set(prediction.taskId, predictions);
+    }
+  }
+  const unstableTaskIds = [...predictionMap.entries()]
+    .filter(([, predictions]) => predictions.size > 1)
+    .map(([taskId]) => taskId);
+  const perReplay = replays.map((predictions, index) => ({
+    replay: index + 1,
+    ...summarizePredictions(predictions),
+  }));
+  return {
+    averageAccuracy: mean(perReplay.map((summary) => summary.accuracy)),
+    candidate,
+    minAccuracy: Math.min(...perReplay.map((summary) => summary.accuracy)),
+    perReplay,
+    stableTaskCount: predictionMap.size - unstableTaskIds.length,
+    unstableTaskCount: unstableTaskIds.length,
+    unstableTaskIds,
+  };
+}
+
 async function main() {
   const [providerId = 'openai:responses:gpt-5.4-mini'] = process.argv.slice(2);
   const diagnosisGroups = await Promise.all(
@@ -845,6 +917,20 @@ async function main() {
       generateContrastiveHingeSupport(providerId),
     ),
   );
+  const rankedContrastiveHingeCritics = await Promise.all(
+    rankedContrastiveHingeGroup.map((candidate) =>
+      scoreHingeCandidateWithCritic(candidate, providerId),
+    ),
+  );
+  const criticSelectedContrastiveHingeGroup = [...rankedContrastiveHingeCritics]
+    .sort(
+      (left, right) =>
+        right.minAccuracy - left.minAccuracy ||
+        right.averageAccuracy - left.averageAccuracy ||
+        right.stableTaskCount - left.stableTaskCount,
+    )
+    .slice(0, candidateCount)
+    .map(({ candidate }) => candidate);
   const [negativeOnlyBundles, contrastiveBundles] = await Promise.all([
     Promise.all(
       cartesianProduct(negativeOnlyCandidateGroups).map((bundle) =>
@@ -868,13 +954,27 @@ async function main() {
       scoreBundle(bundle, providerId),
     ),
   );
+  const criticSelectedContrastiveBundles = await Promise.all(
+    cartesianProduct([...sharedCandidateGroups, criticSelectedContrastiveHingeGroup]).map(
+      (bundle) => scoreBundle(bundle, providerId),
+    ),
+  );
   const selectedRankedContrastiveBundle = [...rankedContrastiveBundles].sort(
     (left, right) => right.score - left.score,
   )[0];
-  const [negativeOnlyReplay, contrastiveReplay, rankedContrastiveReplay] = await Promise.all([
+  const selectedCriticContrastiveBundle = [...criticSelectedContrastiveBundles].sort(
+    (left, right) => right.score - left.score,
+  )[0];
+  const [
+    negativeOnlyReplay,
+    contrastiveReplay,
+    rankedContrastiveReplay,
+    criticSelectedContrastiveReplay,
+  ] = await Promise.all([
     replaySelectedBundle(selectedNegativeOnlyBundle, providerId),
     replaySelectedBundle(selectedContrastiveBundle, providerId),
     replaySelectedBundle(selectedRankedContrastiveBundle, providerId),
+    replaySelectedBundle(selectedCriticContrastiveBundle, providerId),
   ]);
 
   console.log(
@@ -882,6 +982,8 @@ async function main() {
       {
         baselineApplicabilityExamples,
         candidateCount,
+        hingeCriticReplayCount,
+        hingeCriticStressCaseIds,
         mixedStressCases,
         providerId,
         rankedHingeCandidateCount,
@@ -905,6 +1007,22 @@ async function main() {
               .length,
             replay: rankedContrastiveReplay,
             selectedBundle: summarizeBundle(selectedRankedContrastiveBundle),
+          },
+          criticSelectedContrastiveHingePool: {
+            bundleCount: criticSelectedContrastiveBundles.length,
+            criticRankedCandidates: rankedContrastiveHingeCritics
+              .sort(
+                (left, right) =>
+                  right.minAccuracy - left.minAccuracy ||
+                  right.averageAccuracy - left.averageAccuracy ||
+                  right.stableTaskCount - left.stableTaskCount,
+              )
+              .map((candidate) => summarizeHingeCandidate(candidate)),
+            perfectBundleCount: criticSelectedContrastiveBundles.filter(
+              (bundle) => bundle.score === 1,
+            ).length,
+            replay: criticSelectedContrastiveReplay,
+            selectedBundle: summarizeBundle(selectedCriticContrastiveBundle),
           },
         },
       },
