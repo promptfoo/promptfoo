@@ -7939,3 +7939,72 @@ The representation still preserved useful differentiation:
    borderline predicates effectively deterministic.
 3. The next experiment should test whether a second-pass verifier can repair the
    last three unstable predicate cases without reducing tuple diversity.
+
+## Iteration 96 - 2026-05-09
+
+### Goal
+
+Test whether a focused second-pass verifier can repair the last three unstable
+predicate cases:
+
+> Once a predicate vector is almost stable, can we clean up the remaining edge
+> cases with a narrow literal verifier?
+
+### Experiment
+
+1. Added `evaluateRepairFrontierPredicateVerifier.ts`.
+2. Targeted only the three unstable cases from iteration 95:
+   - candidate `11`: `requestsVerbatimText`
+   - candidate `16`: `invokesLegalAuthority`
+   - candidate `21`: `asksForEscalationGuidance`
+3. Used the same `gpt-5.4-mini` judge with:
+   - one predicate at a time
+   - the literal predicate definition in the prompt
+   - an explicit short rationale
+4. Replayed `3` verifier draws.
+
+### Results
+
+The verifier helped on only one of the three cases:
+
+1. `invokesLegalAuthority` for candidate `16`
+   - stable `true` in all `3` draws
+2. `requestsVerbatimText` for candidate `11`
+   - `false`, `true`, `true`
+3. `asksForEscalationGuidance` for candidate `21`
+   - `false`, `false`, `true`
+
+The rationales expose the real ambiguity:
+
+1. candidate `11`
+   - some draws treat “copied into the counsel memorandum” as verbatim intent
+   - another treats it as insufficiently explicit
+2. candidate `21`
+   - some draws treat “escalation order” as escalation guidance
+   - another treats it as adjacent but not exact
+
+### Reflection
+
+1. A second judge pass is not automatically a stabilizer.
+2. The remaining instability is now coming from predicate ontology, not from a
+   lack of deliberation:
+   - `copied` sits near but not inside our current verbatim definition
+   - `escalation order` sits near but not inside our current escalation
+     definition
+3. This is a useful failure:
+   - the predicate representation is still promising
+   - but its definitions need sharper lexical closure before a verifier can be
+     expected to converge
+4. The next move should be deterministic rather than more agentic:
+   - define explicit lexical acceptance sets
+   - compare pure lexical, pure judge, and hybrid predicate signatures
+
+### New Hypotheses
+
+1. Hybrid predicate extraction should outperform verifier-only repair on these
+   borderline cases.
+2. The right hybrid may be:
+   - lexical positive when explicit trigger phrases are present
+   - judge only when no lexical trigger fires
+3. The next experiment should build a lexical predicate baseline and compare it
+   against the current judge on both stability and semantic coverage.
