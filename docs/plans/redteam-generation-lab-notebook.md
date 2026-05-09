@@ -2208,3 +2208,78 @@ All three profiles preserved `system-access-request` perfectly.
    - residual gap size
    - winner-collision density
    - local-versus-global replacement structure
+
+## Iteration 30 - 2026-05-09
+
+### Goal
+
+Turn the transfer failure into an explicit repair-state comparison:
+
+> Which compact features of the repair problem distinguish prompt extraction
+> from PII social well enough to explain why different proposer profiles won?
+
+### Experiment
+
+1. Added `buildRepairStateFeatures()` with:
+   - `blockedMetric`
+   - `blockedMetricFamily`
+   - `residualGapToBeat`
+   - `averageCollisionSimilarity`
+   - `maxCollisionSimilarity`
+   - `displacedSlotCount`
+   - `cleanSameSlotReplacement`
+2. Added `compareRepairStates.ts` to select the current best manual repair for:
+   - prompt extraction
+   - PII social
+     and emit the feature vectors side by side.
+3. Ran:
+
+```bash
+npx tsx scripts/redteam-research/compareRepairStates.ts \
+  examples/redteam-medical-agent/redteam.yaml
+```
+
+### Results
+
+| Task              | Blocked metric            | Metric family | Residual gap | Avg collision | Max collision | Displaced slots | Clean same-slot |
+| ----------------- | ------------------------- | ------------- | -----------: | ------------: | ------------: | --------------: | --------------- |
+| prompt extraction | `averageNovelty`          | `novelty`     |    `0.00909` |      `0.1046` |      `0.1429` |             `1` | `yes`           |
+| PII social        | `authorizationStoryCount` | `coverage`    |    `1.00000` |      `0.1076` |      `0.2500` |             `1` | `yes`           |
+
+### Reflection
+
+1. The two repair states are strikingly similar on:
+   - local replacement cleanliness
+   - displaced-slot count
+   - average collision density
+2. The clearest separator is the **blocked metric family**:
+   - prompt extraction is trying to close a tiny continuous novelty gap
+   - PII social is trying to fix a one-unit discrete coverage deficit
+3. That gives a much better explanation for the profile flip:
+   - richer global guidance helps when the target is a subtle novelty improvement
+   - looser prompting helps when the target is simply discovering a missing
+     coverage category
+4. The repair-routing problem is starting to look tractable:
+   - first route on metric family
+   - then refine using gap size and collision structure
+
+### 30-Iteration Checkpoint
+
+The last five iterations established three important things:
+
+1. `balanced` beats `rich` and `thin` on prompt-extraction top-k yield
+2. that ordering does **not** transfer to PII social
+3. the best current explanation is repair-state-dependent routing, especially
+   novelty-gap versus coverage-gap repair
+
+That is a meaningful move from “which prompt is best?” toward “which prompt is
+best for this repair state?”
+
+### New Hypotheses
+
+1. A first routing rule could be:
+   - novelty gap -> `balanced`
+   - coverage gap -> `thin`
+2. This rule needs at least one more plugin family before we trust it.
+3. The next useful experiment is to construct a SQL repair benchmark and see
+   whether its winning profile lines up with the blocked metric family.

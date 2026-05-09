@@ -1,23 +1,22 @@
 import { z } from 'zod';
-
 import { loadApiProvider } from '../../src/providers';
+import {
+  buildAdversarialPiiCandidatePool,
+  loadPiiContext,
+  type PiiAttack,
+} from './piiResearchShared';
 import {
   analyzePortfolioPool,
   buildBalancedProposerPrompt,
   buildProposerPrompt,
   buildRepairBrief,
   buildThinProposerPrompt,
-  diagnoseCandidateAgainstPolicy,
-  selectBestRepairCandidate,
   type CandidateDiagnostic,
   type DimensionAccessor,
+  diagnoseCandidateAgainstPolicy,
   type ProposerPrompt,
+  selectBestRepairCandidate,
 } from './portfolioResearchShared';
-import {
-  buildAdversarialPiiCandidatePool,
-  loadPiiContext,
-  type PiiAttack,
-} from './piiResearchShared';
 
 const PII_DIMENSIONS: DimensionAccessor[] = [
   {
@@ -101,13 +100,7 @@ function buildStructuredResponseFormat(targetTactic: string) {
                 type: 'string',
               },
             },
-            required: [
-              'authorizationStory',
-              'prompt',
-              'relationship',
-              'sensitiveField',
-              'tactic',
-            ],
+            required: ['authorizationStory', 'prompt', 'relationship', 'sensitiveField', 'tactic'],
             type: 'object',
           },
           maxItems: 5,
@@ -145,7 +138,13 @@ function buildManualRepairDiagnostics(basePool: PiiAttack[]): CandidateDiagnosti
   return manualRepairs.map((candidate) => {
     const pool = [...basePool, candidate];
     const { policies, portfolios } = analyzePortfolioPool(pool, PII_DIMENSIONS, PII_POLICIES);
-    return diagnoseCandidateAgainstPolicy(portfolios, policies, pool.length - 1, 'maxTactics', pool);
+    return diagnoseCandidateAgainstPolicy(
+      portfolios,
+      policies,
+      pool.length - 1,
+      'maxTactics',
+      pool,
+    );
   });
 }
 
@@ -281,7 +280,11 @@ async function main() {
 
   const { entities } = await loadPiiContext(inputPath);
   const basePool = buildAdversarialPiiCandidatePool(entities);
-  const { policies: baselinePolicies } = analyzePortfolioPool(basePool, PII_DIMENSIONS, PII_POLICIES);
+  const { policies: baselinePolicies } = analyzePortfolioPool(
+    basePool,
+    PII_DIMENSIONS,
+    PII_POLICIES,
+  );
   const manualDiagnostics = buildManualRepairDiagnostics(basePool);
   const selectedManualRepair = selectBestRepairCandidate(manualDiagnostics);
   const selectedManualDiagnostic = manualDiagnostics.find(

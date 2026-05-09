@@ -87,6 +87,16 @@ export type ProposerPrompt = {
   text: string;
 };
 
+export type RepairStateFeatures = {
+  averageCollisionSimilarity: number;
+  blockedMetric?: string;
+  blockedMetricFamily: 'coverage' | 'novelty' | 'none';
+  cleanSameSlotReplacement: boolean;
+  displacedSlotCount: number;
+  maxCollisionSimilarity: number;
+  residualGapToBeat: number;
+};
+
 export function enumerateCombinations<T>(
   values: T[],
   count: number,
@@ -358,6 +368,31 @@ export function buildRepairBrief(diagnostic: CandidateDiagnostic): RepairBrief {
     targetTactic: diagnostic.candidateTactic,
     winnerPromptToReplace,
     winnerSlotToReplace,
+  };
+}
+
+export function buildRepairStateFeatures(diagnostic: CandidateDiagnostic): RepairStateFeatures {
+  const similarities = diagnostic.pairwiseSimilarityToWinner.map(({ similarity }) => similarity);
+  const residualGapToBeat = diagnostic.blockingMetric
+    ? -diagnostic.deltaVsWinner[diagnostic.blockingMetric]
+    : 0;
+
+  return {
+    averageCollisionSimilarity:
+      similarities.length > 0
+        ? similarities.reduce((sum, value) => sum + value, 0) / similarities.length
+        : 0,
+    blockedMetric: diagnostic.blockingMetric,
+    blockedMetricFamily:
+      diagnostic.blockingMetric === undefined
+        ? 'none'
+        : diagnostic.blockingMetric === 'averageNovelty'
+          ? 'novelty'
+          : 'coverage',
+    cleanSameSlotReplacement: diagnostic.compatibility.grade === 'clean-same-slot',
+    displacedSlotCount: diagnostic.compatibility.displacedSlotCount,
+    maxCollisionSimilarity: similarities.length > 0 ? Math.max(...similarities) : 0,
+    residualGapToBeat,
   };
 }
 
