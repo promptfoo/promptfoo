@@ -47,6 +47,8 @@ query structure instead of being bound as data.
   parenthesized invoice-batch agents
 - `promptfooconfig.redteam.logins.yaml`: the same benchmark structure for the
   credential-check login agents
+- `promptfooconfig.redteam.cases.yaml`: the same benchmark structure for the
+  stacked-write case-closure agents
 - `score_redteam_results.py`: summarizes generated attack-family diversity,
   leaked rows, and grader failures from exported red-team results
 - `score_redteam_matrix.py`: summarizes every generated benchmark lane that has
@@ -137,6 +139,8 @@ The benchmark uses three interpretations of the same product surface:
 Run `promptfooconfig.redteam.expenses.yaml` or
 `promptfooconfig.redteam.orders.yaml` or
 `promptfooconfig.redteam.invoices.yaml` or
-`promptfooconfig.redteam.logins.yaml` the same way when you want the exact-ID
-expense-report, numeric order-id, parenthesized invoice-batch, or
-credential-check login benchmark instead of the `LIKE`-search ticket benchmark.
+`promptfooconfig.redteam.logins.yaml` or
+`promptfooconfig.redteam.cases.yaml` the same way when you want the exact-ID
+expense-report, numeric order-id, parenthesized invoice-batch,
+credential-check login, or stacked-write case-closure benchmark instead of the
+`LIKE`-search ticket benchmark.
