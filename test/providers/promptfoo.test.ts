@@ -510,6 +510,27 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(result.error).toContain('API call error');
   });
 
+  it('should preserve task usage from failed simulated-user responses', async () => {
+    const mockResponse = new Response(
+      JSON.stringify({
+        message: 'Internal Server Error',
+        tokenUsage: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+      }),
+      {
+        status: 500,
+        statusText: 'Internal Server Error',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
+
+    expect(result).toMatchObject({
+      error: 'API call error: Internal Server Error',
+      tokenUsage: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+    });
+  });
+
   it('should handle API call exception', async () => {
     vi.mocked(fetchWithRetries).mockRejectedValue(new Error('Network Error'));
 

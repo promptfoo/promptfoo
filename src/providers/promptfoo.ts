@@ -30,6 +30,38 @@ interface PromptfooHarmfulCompletionOptions {
   config?: PluginConfig;
 }
 
+async function getRemoteTaskErrorPayload(response: Response): Promise<{
+  errorMessage: string;
+  tokenUsage?: TokenUsage;
+}> {
+  const responseText = await response.text();
+  let errorPayload:
+    | {
+        error?: string;
+        message?: string;
+        tokenUsage?: TokenUsage;
+      }
+    | undefined;
+
+  try {
+    errorPayload = JSON.parse(responseText) as {
+      error?: string;
+      message?: string;
+      tokenUsage?: TokenUsage;
+    };
+  } catch {
+    // Fall back to the raw response body below.
+  }
+
+  return {
+    errorMessage:
+      errorPayload?.error ||
+      errorPayload?.message ||
+      `API call failed with status ${response.status}: ${responseText}`,
+    ...(errorPayload?.tokenUsage ? { tokenUsage: errorPayload.tokenUsage } : {}),
+  };
+}
+
 /**
  * Provider for generating harmful/adversarial content using Promptfoo's unaligned models.
  * Used by red team plugins to generate test cases for harmful content categories.
@@ -104,18 +136,10 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        const responseText = await response.text();
-        let errorPayload: { error?: string; tokenUsage?: TokenUsage } | undefined;
-        try {
-          errorPayload = JSON.parse(responseText) as { error?: string; tokenUsage?: TokenUsage };
-        } catch {
-          // Fall back to the raw response body below.
-        }
+        const errorPayload = await getRemoteTaskErrorPayload(response);
         return {
-          error: `[HarmfulCompletionProvider] ${
-            errorPayload?.error || `API call failed with status ${response.status}: ${responseText}`
-          }`,
-          ...(errorPayload?.tokenUsage ? { tokenUsage: errorPayload.tokenUsage } : {}),
+          error: `[HarmfulCompletionProvider] ${errorPayload.errorMessage}`,
+          ...(errorPayload.tokenUsage ? { tokenUsage: errorPayload.tokenUsage } : {}),
         };
       }
 
@@ -354,7 +378,11 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
       );
 
       if (!response.ok) {
-        throw new Error(`API call failed with status ${response.status}: ${await response.text()}`);
+        const errorPayload = await getRemoteTaskErrorPayload(response);
+        return {
+          error: `API call error: ${errorPayload.errorMessage}`,
+          ...(errorPayload.tokenUsage ? { tokenUsage: errorPayload.tokenUsage } : {}),
+        };
       }
 
       const data = (await response.json()) as {
