@@ -1005,6 +1005,9 @@ describe('EvalOutputCell', () => {
         },
         gradingResult: {
           ...defaultProps.output.gradingResult,
+          pass: defaultProps.output.gradingResult?.pass ?? true,
+          score: defaultProps.output.gradingResult?.score ?? 0.8,
+          reason: defaultProps.output.gradingResult?.reason ?? 'Test reason',
           tokensUsed: {
             prompt: 4,
             completion: 3,

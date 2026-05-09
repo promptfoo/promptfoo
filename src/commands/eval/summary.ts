@@ -233,7 +233,7 @@ function getProviderUsageLines(tracker: TokenUsageTracker | undefined): string[]
     return [];
   }
 
-  const providerIds = tracker.getProviderIds();
+  const providerIds = tracker.getProviderIds() ?? [];
   if (providerIds.length <= 1) {
     return [];
   }

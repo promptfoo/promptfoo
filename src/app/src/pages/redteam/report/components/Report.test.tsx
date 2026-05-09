@@ -625,7 +625,7 @@ describe('App component target selection', () => {
     const evalData = createComponentMockEvalData(1, [
       createComponentMockResult(0, 'plugin1', false),
     ]);
-    evalData.prompts[0]!.metrics = { tokenUsage: { total: 0, numRequests: 0 } } as any;
+    evalData.prompts![0]!.metrics = { tokenUsage: { total: 0, numRequests: 0 } } as any;
     mockCallApi.mockResolvedValue({
       json: () => Promise.resolve({ data: evalData }),
     });
@@ -640,7 +640,7 @@ describe('App component target selection', () => {
     const evalData = createComponentMockEvalData(1, [
       createComponentMockResult(0, 'plugin1', false),
     ]);
-    evalData.prompts[0]!.metrics = {
+    evalData.prompts![0]!.metrics = {
       tokenUsage: {
         total: 100,
         numRequests: 2,

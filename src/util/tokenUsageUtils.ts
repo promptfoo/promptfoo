@@ -1,11 +1,11 @@
 import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
 
-export type NormalizedTokenUsage = Omit<Required<TokenUsage>, 'assertions' | 'completionDetails'> & {
+export type NormalizedTokenUsage = Omit<
+  Required<TokenUsage>,
+  'assertions' | 'completionDetails'
+> & {
   completionDetails: Required<CompletionTokenDetails>;
-  assertions: Omit<
-    Required<NonNullable<TokenUsage['assertions']>>,
-    'completionDetails'
-  > & {
+  assertions: Omit<Required<NonNullable<TokenUsage['assertions']>>, 'completionDetails'> & {
     completionDetails: Required<CompletionTokenDetails>;
   };
 };

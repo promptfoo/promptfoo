@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { materializeMcpValue, materializeTrackedMcpValue } from '../../src/redteam/mcpMaterialization';
+import {
+  materializeMcpValue,
+  materializeTrackedMcpValue,
+} from '../../src/redteam/mcpMaterialization';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
 import type { ApiProvider } from '../../src/types/index';
