@@ -7218,3 +7218,79 @@ The strengthened oversampled batch found a more balanced frontier:
 3. The next experiment should add a frontier-candidate critic that ranks
    generated benchmark cases by expected discriminative value before we spend
    downstream evaluation calls on them.
+
+## Iteration 87 - 2026-05-09
+
+### Goal
+
+Add a cheaper pre-evaluation stage to the new benchmark loop:
+
+> Can a candidate-level frontier critic concentrate discriminative benchmark
+> cases before we spend downstream evaluation calls on the whole generated
+> batch?
+
+### Experiment
+
+1. Extended `evaluateRepairActiveTransferFrontier.ts`.
+2. Added a frontier-candidate critic that scores each generated benchmark case
+   on:
+   - boundary tightness
+   - label preservation
+   - opposite-class lexical overlap
+   - predicted discriminative value
+3. Ranked each generated batch of `24` candidates and selected the top `8`.
+4. Compared:
+   - the critic-selected top `8`
+   - the non-selected remaining `16`
+5. Ran two fresh generated batches.
+
+### Results
+
+The candidate critic behaves like a useful **filter**, but not like a replacement
+for better batch generation:
+
+| Generated batch | Top-8 discriminative cases | Remaining-16 discriminative cases | Ordinary failures in top 8 | Critic failures in top 8 |
+| --------------- | -------------------------: | --------------------------------: | -------------------------: | -----------------------: |
+| run 1           |                        `1` |                               `0` |                        `0` |                      `1` |
+| run 2           |                        `0` |                               `0` |                        `0` |                      `0` |
+
+On run 1, the critic-ranked slice captured the only disagreement in the whole
+batch:
+
+1. `generated-transfer-positive-9`
+   - ordinary bundle stayed correct
+   - critic-gated bundle failed
+
+The top-ranked run-1 slice was heavily positive-skewed; a quick label-balanced
+post-hoc slice on the same batch found:
+
+1. `0` ordinary failures
+2. `0` critic failures
+3. `0` discriminative cases
+
+### Reflection
+
+1. The candidate critic has some value:
+   - when a batch contains a useful frontier case, it can concentrate it
+2. But it does **not** solve the higher-level scarcity problem:
+   - if the generated batch contains no hard cases, every ranking is empty
+3. The positive skew matters:
+   - current hardness on this family is not symmetric across labels
+   - a mechanically balanced selector can erase the very frontier we care about
+4. This gives us a cleaner architecture:
+   - batch generator controls whether hard cases exist
+   - candidate critic controls where we spend evaluation within a batch
+   - retained hard memory controls whether useful discoveries survive future
+     low-yield batches
+5. The next move should therefore be **retained frontier accumulation**, not more
+   local ranking polish.
+
+### New Hypotheses
+
+1. Multi-batch frontier search with a retained hard set should be more useful
+   than any single-batch critic ranking.
+2. Candidate critics should optimize yield, not label balance, unless the target
+   benchmark explicitly requires balanced class coverage.
+3. The next experiment should accumulate discriminative cases across several
+   batches and measure whether the retained frontier stays informative even when
+   later batches are easy.

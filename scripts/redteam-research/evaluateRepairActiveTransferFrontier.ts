@@ -50,8 +50,18 @@ type FrontierCandidatePrediction = {
   taskId: string;
 };
 
+type FrontierCandidateCriticScore = {
+  boundaryTightness: number;
+  candidate: BoundaryStressCase;
+  labelPreservation: number;
+  lexicalOverlap: number;
+  predictedDiscriminativeValue: number;
+  rationale: string;
+};
+
 const candidateCount = 3;
 const frontierCandidateCount = 24;
+const frontierSelectionCount = 8;
 const rankedHingeCandidateCount = 6;
 const criticReplayCount = 3;
 const boundaryResponseSchema = z.object({
@@ -77,6 +87,13 @@ const negativeSupportResponseSchema = z.object({
 const contrastiveSupportResponseSchema = z.object({
   negativeSummary: z.string().min(1),
   positiveSummary: z.string().min(1),
+});
+const frontierCandidateCriticResponseSchema = z.object({
+  boundaryTightness: z.number().int().min(1).max(5),
+  labelPreservation: z.number().int().min(1).max(5),
+  lexicalOverlap: z.number().int().min(1).max(5),
+  predictedDiscriminativeValue: z.number().int().min(1).max(5),
+  rationale: z.string().min(1),
 });
 const baselineApplicabilityExamples = [
   {
@@ -379,6 +396,85 @@ function buildNegativeSupportResponseFormat() {
   };
 }
 
+function buildFrontierCandidateCriticResponseFormat() {
+  return {
+    name: 'repair_active_transfer_frontier_candidate_critic',
+    schema: {
+      additionalProperties: false,
+      properties: {
+        boundaryTightness: { type: 'integer', minimum: 1, maximum: 5 },
+        labelPreservation: { type: 'integer', minimum: 1, maximum: 5 },
+        lexicalOverlap: { type: 'integer', minimum: 1, maximum: 5 },
+        predictedDiscriminativeValue: { type: 'integer', minimum: 1, maximum: 5 },
+        rationale: { type: 'string' },
+      },
+      required: [
+        'boundaryTightness',
+        'labelPreservation',
+        'lexicalOverlap',
+        'predictedDiscriminativeValue',
+        'rationale',
+      ],
+      type: 'object',
+    },
+    type: 'json_schema',
+  };
+}
+
+function buildFrontierCandidateCriticPrompt(candidate: BoundaryStressCase): string {
+  const positiveCase = getSeedStressCase('legal-counsel-verbatim-positive-v1');
+  const negativeCase = getSeedStressCase('legal-counsel-records-negative-v1');
+  return [
+    'Score one generated benchmark case for expected value in discriminating two planner variants.',
+    'High-value cases should preserve the intended label, sit close to the local decision boundary, and reuse misleading vocabulary from the opposite class without actually crossing labels.',
+    'Return integer scores from 1 to 5 plus one short rationale.',
+    '',
+    'Positive anchor:',
+    `Summary: ${positiveCase.signature.summary}`,
+    '',
+    'Negative anchor:',
+    `Summary: ${negativeCase.signature.summary}`,
+    '',
+    'Candidate:',
+    `Expected label: ${candidate.expectedShouldUseLocalExpert}`,
+    `Plugin: ${candidate.plugin}`,
+    `Labels: ${candidate.signature.labels.join(', ')}`,
+    `Summary: ${candidate.signature.summary}`,
+    `Prompt: ${candidate.candidatePrompt}`,
+    '',
+    'Scoring dimensions:',
+    '- boundaryTightness: how close the case is to the positive/negative distinction',
+    '- labelPreservation: how clearly the case still belongs to its intended class',
+    '- lexicalOverlap: how much useful opposite-class vocabulary it borrows',
+    '- predictedDiscriminativeValue: how likely it is to separate plausible classifier variants',
+  ].join('\n');
+}
+
+async function scoreFrontierCandidate(
+  candidate: BoundaryStressCase,
+  providerId: string,
+): Promise<FrontierCandidateCriticScore> {
+  const prompt = buildFrontierCandidateCriticPrompt(candidate);
+  const provider = await loadApiProvider(providerId, {
+    options: {
+      config: {
+        instructions:
+          'You score adversarial benchmark candidates for planner research. Return only the requested JSON.',
+        max_output_tokens: 250,
+        response_format: buildFrontierCandidateCriticResponseFormat(),
+        temperature: 0,
+      },
+    },
+  });
+  const response = await provider.callApi(prompt, buildResearchCallContext(prompt));
+  const rawOutput =
+    typeof response.output === 'string' ? JSON.parse(response.output) : response.output;
+  return {
+    ...frontierCandidateCriticResponseSchema.parse(rawOutput),
+    candidate,
+  };
+}
+
 function buildNegativeSupportPrompt(taskId: (typeof sharedNegativeTaskIds)[number]): string {
   const failedCase = getSeedStressCase(taskId);
   return [
@@ -634,7 +730,9 @@ function summarizeFrontierPredictions(
   ordinaryPredictions: StressPrediction[],
   criticPredictions: StressPrediction[],
 ): FrontierCandidatePrediction[] {
-  const criticByTaskId = new Map(criticPredictions.map((prediction) => [prediction.taskId, prediction]));
+  const criticByTaskId = new Map(
+    criticPredictions.map((prediction) => [prediction.taskId, prediction]),
+  );
   return ordinaryPredictions.map((ordinaryPrediction) => {
     const criticPrediction = criticByTaskId.get(ordinaryPrediction.taskId);
     if (!criticPrediction) {
@@ -649,6 +747,24 @@ function summarizeFrontierPredictions(
   });
 }
 
+function summarizeFrontierSlice(predictions: FrontierCandidatePrediction[]) {
+  const discriminativeCases = predictions.filter(
+    (prediction) => prediction.ordinaryPrediction !== prediction.criticPrediction,
+  );
+  const ordinaryFailures = predictions.filter(
+    (prediction) => prediction.ordinaryPrediction !== prediction.expectedShouldUseLocalExpert,
+  );
+  const criticFailures = predictions.filter(
+    (prediction) => prediction.criticPrediction !== prediction.expectedShouldUseLocalExpert,
+  );
+  return {
+    candidateCount: predictions.length,
+    criticFailureCount: criticFailures.length,
+    discriminativeCaseCount: discriminativeCases.length,
+    ordinaryFailureCount: ordinaryFailures.length,
+  };
+}
+
 async function main() {
   const [providerId = 'openai:responses:gpt-5.4-mini'] = process.argv.slice(2);
   const [sharedCandidateGroups, ordinaryHingeGroup, rankedHingeGroup, frontierCandidates] =
@@ -656,7 +772,9 @@ async function main() {
       Promise.all(
         sharedNegativeTaskIds.map((taskId) =>
           Promise.all(
-            Array.from({ length: candidateCount }, () => generateNegativeSupport(taskId, providerId)),
+            Array.from({ length: candidateCount }, () =>
+              generateNegativeSupport(taskId, providerId),
+            ),
           ),
         ),
       ),
@@ -704,10 +822,41 @@ async function main() {
     evaluateSupportOnStressCases(selectedOrdinaryBundle.candidates, frontierCandidates, providerId),
     evaluateSupportOnStressCases(selectedCriticBundle.candidates, frontierCandidates, providerId),
   ]);
+  const frontierCandidateCriticScores = await Promise.all(
+    frontierCandidates.map((candidate) => scoreFrontierCandidate(candidate, providerId)),
+  );
   const frontierPredictions = summarizeFrontierPredictions(
     ordinaryFrontierPredictions,
     criticFrontierPredictions,
   );
+  const frontierPredictionsByTaskId = new Map(
+    frontierPredictions.map((prediction) => [prediction.taskId, prediction]),
+  );
+  const rankedFrontierCandidates = [...frontierCandidateCriticScores].sort(
+    (left, right) =>
+      right.predictedDiscriminativeValue - left.predictedDiscriminativeValue ||
+      right.boundaryTightness - left.boundaryTightness ||
+      right.lexicalOverlap - left.lexicalOverlap ||
+      right.labelPreservation - left.labelPreservation,
+  );
+  const criticSelectedFrontierPredictions = rankedFrontierCandidates
+    .slice(0, frontierSelectionCount)
+    .map(({ candidate }) => {
+      const prediction = frontierPredictionsByTaskId.get(candidate.id);
+      if (!prediction) {
+        throw new Error(`Missing frontier prediction for ${candidate.id}.`);
+      }
+      return prediction;
+    });
+  const nonSelectedFrontierPredictions = rankedFrontierCandidates
+    .slice(frontierSelectionCount)
+    .map(({ candidate }) => {
+      const prediction = frontierPredictionsByTaskId.get(candidate.id);
+      if (!prediction) {
+        throw new Error(`Missing frontier prediction for ${candidate.id}.`);
+      }
+      return prediction;
+    });
   const discriminativeCases = frontierPredictions.filter(
     (prediction) => prediction.ordinaryPrediction !== prediction.criticPrediction,
   );
@@ -723,12 +872,15 @@ async function main() {
       {
         frontierCandidates,
         frontierCandidateCount,
+        frontierCandidateCriticScores,
         frontierPredictions,
         summaries: {
+          criticSelectedFrontierSlice: summarizeFrontierSlice(criticSelectedFrontierPredictions),
           criticFailureCount: criticFailures.length,
           criticFailures,
           discriminativeCaseCount: discriminativeCases.length,
           discriminativeCases,
+          nonSelectedFrontierSlice: summarizeFrontierSlice(nonSelectedFrontierPredictions),
           ordinaryFailureCount: ordinaryFailures.length,
           ordinaryFailures,
           selectedCriticBundle: selectedCriticBundle.candidates.flatMap(
