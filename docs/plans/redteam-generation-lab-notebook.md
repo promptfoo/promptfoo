@@ -6364,3 +6364,63 @@ diagnosis set regressed to `16/18` with interference on:
    multiple patches interact.
 3. The next experiment should rank repair bundles jointly over the shared
    boundary memory instead of selecting one diagnosis per failure in isolation.
+
+## Iteration 76 - 2026-05-09
+
+### Goal
+
+Make repair selection composition-aware:
+
+> If we search jointly over candidate diagnosis bundles instead of choosing one
+> diagnosis per failure independently, can we remove the interference that kept
+> iteration 75 from being reliably stable?
+
+### Experiment
+
+1. Added `evaluateRepairJointBoundaryBundles.ts`.
+2. Sampled three diagnosis candidates for each of the two known failure
+   families.
+3. Enumerated the `3 x 3 = 9` possible two-patch bundles.
+4. Materialized each bundle into support, scored each bundle over the entire
+   six-case stress slice, then selected the best bundle jointly.
+
+### Results
+
+Joint bundle selection restores stable repair:
+
+| Boundary variant              | Avg stress accuracy | Stability   |
+| ----------------------------- | ------------------: | ----------- |
+| ranked-diagnosis augmentation |     `16/18`-`18/18` | `4/6`-`6/6` |
+| joint-bundle augmentation     |               `6/6` | `6/6`       |
+
+The important change is that candidate diagnoses are now admitted only in the
+context of the whole support set they will actually inhabit.
+
+### Reflection
+
+1. The interference problem was a search problem:
+   - individually reasonable patches
+   - can still be poor citizens in a shared memory
+2. Joint bundle scoring is the first version of the planner treating memory as a
+   portfolio rather than a bag of examples.
+3. This is also a practical design lesson:
+   - support memories should have acceptance tests
+   - and the acceptance tests should run on the whole local frontier
+4. The repair loop now has a much more credible shape:
+   - sample hypotheses
+   - materialize candidate supports
+   - score complete memories
+   - keep the bundle that survives verification
+5. The next frontier is growth:
+   - add a third failure family
+   - and see whether bundle search still scales acceptably or needs a better
+     optimizer than brute-force enumeration
+
+### New Hypotheses
+
+1. Operator memory should be managed as a portfolio optimization problem, not a
+   nearest-neighbor cache.
+2. Joint verification may be enough to preserve monotonic repair on small local
+   frontiers even when individual candidate explanations are imperfect.
+3. The next experiment should introduce one more independent boundary failure
+   family and measure how quickly brute-force bundle search becomes impractical.
