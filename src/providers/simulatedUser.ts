@@ -301,6 +301,7 @@ export class SimulatedUser implements ApiProvider {
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
       agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
+      accumulateResponseTokenUsage(tokenUsage, agentResponse);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -311,7 +312,6 @@ export class SimulatedUser implements ApiProvider {
       }
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
-      accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
     for (let i = 0; i < maxTurns; i++) {
@@ -353,6 +353,7 @@ export class SimulatedUser implements ApiProvider {
         targetProvider,
         context,
       );
+      accumulateResponseTokenUsage(tokenUsage, agentResponse);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -363,8 +364,6 @@ export class SimulatedUser implements ApiProvider {
       }
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
-
-      accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
 
     return this.serializeOutput(
