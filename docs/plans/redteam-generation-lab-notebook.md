@@ -4480,3 +4480,102 @@ The artifact-rich schema removes all tuple collisions:
    - and perhaps reward same-winner neighborhood overlap
 3. The next candidate should probably be an attack-mechanism slot or a learned
    pairwise discriminator targeted at the two recurring mixed-winner families.
+
+## Iteration 53 - 2026-05-09
+
+### Goal
+
+Use the collision diagnostic from iteration 52 to test a more targeted axis:
+
+> Does attack mechanism separate the recurring mixed-winner prompt families
+> better than surface artifact while preserving useful neighborhoods?
+
+### Experiment
+
+1. Added `evaluateRepairRoleMechanismSemanticSignatureStability.ts`.
+2. Kept the role-aware slots and replaced artifact with a constrained mechanism
+   slot:
+   - `disclosure`
+   - `summarization`
+   - `attachment`
+   - `scope-expansion`
+   - `impersonation`
+   - `record-export`
+3. Re-ran:
+   - three fresh live draws
+   - repeated-draw stability
+   - collision diagnostics
+   - frontier comparison against role-aware and role-artifact
+
+### Results
+
+`role-mechanism` is the strongest semantic representation so far:
+
+| Measure                            |  Result |
+| ---------------------------------- | ------: |
+| label-set similarity               | `0.824` |
+| slot agreement                     | `0.895` |
+| avg unique tuples                  |   `9.3` |
+| stable label-model accuracy        |   `2/4` |
+| stable label-model count           |     `4` |
+| avg mixed-winner tuple group count |  `0.67` |
+
+Holdout label behavior:
+
+| Model                | Accuracy across draws |
+| -------------------- | --------------------: |
+| label `1-NN`         |         `2/4,2/4,2/4` |
+| slot match `1-NN`    |         `2/4,2/4,2/4` |
+| weighted slot `1-NN` |         `2/4,2/4,2/4` |
+| slot + plugin `1-NN` |         `2/4,2/4,2/4` |
+
+Collision comparison:
+
+| Representation | Avg mixed-winner tuple groups |
+| -------------- | ----------------------------: |
+| role-aware     |                         `1.0` |
+| role-mechanism |                        `0.67` |
+| role-artifact  |                         `0.0` |
+
+Frontier comparison:
+
+1. `role-mechanism` dominates the fresh `role-aware` rerun:
+   - higher slot agreement
+   - higher tuple count
+   - same best stable label accuracy
+   - more stable label models
+2. `role-artifact` remains an ontology-quality extreme:
+   - zero tuple collisions
+   - but no stable routing model in this rerun
+
+### Reflection
+
+1. This is the first real semantic improvement since requester role:
+   - mechanism is closer to proposer-choice structure than artifact
+2. The vendor-support mixed-winner pair is now separated reliably:
+   - `disclosure`
+   - versus `attachment`
+3. The legal-counsel pair is still difficult:
+   - both often collapse to `disclosure`
+4. That gives the next search target with unusual clarity:
+   - preserve the mechanism improvement
+   - find one more distinction that separates the legal-counsel pair without
+     oversplitting everything else
+5. The emerging pattern is that **functional attack shape** matters more than
+   surface form:
+   - role helped
+   - artifact overfit the surface
+   - mechanism improved the latent geometry
+
+### New Hypotheses
+
+1. The legal-counsel pair may require a distinction between:
+   - raw disclosure
+   - and classification-oriented disclosure
+2. Another promising axis is requested evidence mode:
+   - exact text
+   - summary
+   - attachment
+   - classification support
+3. A learned pairwise separator focused on the remaining legal-counsel collision
+   may now be more efficient than another broad ontology expansion.
