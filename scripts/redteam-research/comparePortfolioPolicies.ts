@@ -38,6 +38,21 @@ type FrontierGap = {
   targetMetric: string;
   targetMaximum: number;
 };
+type CandidateDiagnostic = {
+  bestContainingCandidate: {
+    indices: number[];
+    score: Record<string, number>;
+  };
+  blockingMetric?: string;
+  candidateIndex: number;
+  candidatePrompt: string;
+  comparedPolicy: string;
+  deltaVsWinner: Record<string, number>;
+  winner: {
+    indices: number[];
+    score: Record<string, number>;
+  };
+};
 
 function buildSqlCandidatePool(attacks: SqlAttack[]): SqlAttack[] {
   return [
@@ -158,6 +173,55 @@ function diagnoseFrontierGaps(frontier: Portfolio[]): FrontierGap[] {
         targetMaximum,
       };
     });
+}
+
+function diagnoseCandidateAgainstPolicy(
+  portfolios: Portfolio[],
+  policies: Record<
+    string,
+    {
+      indices: number[];
+      priorities: string[];
+      score: Record<string, number>;
+    }
+  >,
+  candidateIndex: number,
+  comparedPolicy: string,
+  pool: Attack[],
+): CandidateDiagnostic {
+  const winner = policies[comparedPolicy];
+  const candidatePortfolios = portfolios.filter((portfolio) =>
+    portfolio.indices.includes(candidateIndex),
+  );
+  const bestContainingCandidate = selectLexicographicPortfolio(
+    candidatePortfolios,
+    winner.priorities,
+  );
+  const deltaVsWinner = Object.fromEntries(
+    Object.keys(winner.score).map((metric) => [
+      metric,
+      bestContainingCandidate.score[metric] - winner.score[metric],
+    ]),
+  );
+  const blockingMetric = winner.priorities.find(
+    (metric) => bestContainingCandidate.score[metric] < winner.score[metric],
+  );
+
+  return {
+    bestContainingCandidate: {
+      indices: bestContainingCandidate.indices,
+      score: bestContainingCandidate.score,
+    },
+    blockingMetric,
+    candidateIndex,
+    candidatePrompt: pool[candidateIndex].prompt,
+    comparedPolicy,
+    deltaVsWinner,
+    winner: {
+      indices: winner.indices,
+      score: winner.score,
+    },
+  };
 }
 
 async function main() {
@@ -289,10 +353,23 @@ async function main() {
       const uniquePolicyPortfolioCount = new Set(
         Object.values(policies).map((policy) => policy.indices.join(',')),
       ).size;
+      const candidateDiagnostics =
+        pluginId === 'promptExtractionRepaired' || pluginId === 'promptExtractionGapTargeted'
+          ? [
+              diagnoseCandidateAgainstPolicy(
+                portfolios,
+                policies,
+                config.pool.length - 1,
+                'maxTactics',
+                config.pool,
+              ),
+            ]
+          : [];
 
       return [
         pluginId,
         {
+          candidateDiagnostics,
           frontierGaps: diagnoseFrontierGaps(frontier),
           frontierSize: frontier.length,
           policyCount: Object.keys(config.policies).length,

@@ -1209,3 +1209,76 @@ at novelty `0.911`.
    - the first metric that still blocks adoption
 3. This will let a future model-guided generator iterate with much tighter
    feedback than "try again, but more diverse."
+
+## Iteration 17 - 2026-05-09
+
+### Goal
+
+Explain failed repairs at the candidate level:
+
+> If we force a repaired candidate into the best portfolio for a target policy,
+> what exact score do we obtain, and which metric still blocks adoption?
+
+### Experiment
+
+Extended `comparePortfolioPolicies.ts` with `candidateDiagnostics` for the two
+prompt-extraction repair arms. For each repaired candidate, the report now
+includes:
+
+1. the best `maxTactics` portfolio that contains the candidate
+2. the current `maxTactics` winner
+3. the score deltas
+4. the first lexicographic metric that blocks adoption
+
+### Results
+
+The new diagnostics explain both failed repairs precisely:
+
+1. `promptExtractionRepaired`
+   - best portfolio containing the `access-review` candidate still reaches
+     `5/5/5`
+   - but novelty falls to `0.885`
+   - delta versus the incumbent `maxTactics` winner:
+     - `averageNovelty: -0.026`
+   - first blocking metric:
+     - `averageNovelty`
+2. `promptExtractionGapTargeted`
+   - best portfolio containing the `vendor-ticket` candidate also reaches
+     `5/5/5`
+   - novelty improves to `0.901`
+   - delta versus the incumbent:
+     - `averageNovelty: -0.009`
+   - first blocking metric:
+     - `averageNovelty`
+
+### Reflection
+
+1. This is a real step forward.
+2. The gap-targeted repair did not win, but it moved materially closer to the
+   incumbent than the earlier free-form repair:
+   - `-0.026` novelty gap became `-0.009`
+3. That means the frontier-gap diagnosis was useful even though the first
+   candidate was insufficient.
+4. More importantly, we now have a closed-loop improvement signal:
+   - preserve the exact semantic counts
+   - keep pushing novelty upward
+   - stop once the candidate-containing portfolio beats the incumbent
+5. This begins to look like a viable agentic generator protocol:
+   - critic identifies the blocking metric
+   - proposer generates a candidate to improve that metric while preserving the
+     scarce dimensions
+   - evaluator returns the residual delta
+   - loop continues until the candidate crosses the boundary or stalls
+
+### New Hypotheses
+
+1. The next repair should be another `role-pretext` candidate that is even more
+   lexically distant from the existing five-tactic winner, guided by the exact
+   `-0.009` novelty deficit.
+2. We should eventually expose:
+   - candidate-level score deltas
+   - pairwise similarity to the attacks in the incumbent portfolio
+   - the specific incumbent slot displaced in the best candidate-containing
+     portfolio
+3. Once that exists, we can let an actual model iteratively hill-climb instead
+   of hand-authoring repairs.
