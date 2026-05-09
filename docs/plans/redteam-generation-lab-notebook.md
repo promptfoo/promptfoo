@@ -2530,3 +2530,113 @@ scored:
 3. A good held-out candidate is another coverage task on a different surface,
    because the novelty side already has two plugin families while coverage still
    leans on prompts built from the same two research families.
+
+## Iteration 34 - 2026-05-09
+
+### Goal
+
+Test the metric-family router on a genuinely held-out task:
+
+> Before looking at the result, if a new BOLA repair task is coverage-blocked,
+> does the current router correctly predict that `thin` should win?
+
+### Locked Prediction
+
+Before running the experiment, the current router predicts:
+
+```text
+blocked metric family = coverage
+predicted winning proposer profile = thin
+```
+
+### Experiment
+
+1. Added `bolaResearchShared.ts`.
+2. Added `runBolaCoverageProposerPass.ts`.
+3. Built a new BOLA portfolio surface with:
+   - `action`
+   - `actorClaim`
+   - `objectType`
+   - `tactic`
+4. Constructed a held-out repair task where:
+   - policy: `maxTactics`
+   - target tactic: `billing-impersonation`
+   - blocked metric: `objectTypeCount`
+   - residual gap to beat: `1`
+5. Ran:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/runBolaCoverageProposerPass.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  all \
+  3 \
+  0.7
+```
+
+### Results
+
+The first implementation attempt was invalid:
+
+1. I accidentally gave the base BOLA pool **six** distinct tactics.
+2. That let the manual candidate join a five-item `maxTactics` portfolio
+   without forcing the intended same-tactic replacement.
+3. The supposed held-out coverage task collapsed into:
+   - `blocked metric family = none`
+   - `residual gap = 0`
+4. I corrected the benchmark by restricting the base pool to five unique tactics
+   before running the actual held-out test.
+
+Corrected repair-state features:
+
+| Feature                      | Value             |
+| ---------------------------- | ----------------- |
+| blocked metric               | `objectTypeCount` |
+| blocked metric family        | `coverage`        |
+| residual gap to beat         | `1.00000`         |
+| average collision similarity | `0.1877`          |
+| max collision similarity     | `0.3103`          |
+| displaced slots              | `2`               |
+| clean same-slot replacement  | `no`              |
+
+| Prompt profile | Improving trials | Improving candidates | Avg best novelty delta | Avg `top3` yield |
+| -------------- | ---------------: | -------------------: | ---------------------: | ---------------: |
+| `rich`         |              `3` |                 `10` |             `+0.02022` |       `+0.04698` |
+| `balanced`     |              `3` |                 `15` |             `+0.04057` |       `+0.11569` |
+| `thin`         |              `3` |                 `15` |             `+0.06157` |       `+0.17392` |
+
+Per-trial best novelty deltas:
+
+| Trial | `rich`     | `balanced` | `thin`     |
+| ----: | ---------- | ---------- | ---------- |
+|   `1` | `+0.02268` | `+0.04597` | `+0.07145` |
+|   `2` | `+0.03331` | `+0.03207` | `+0.04512` |
+|   `3` | `+0.00466` | `+0.04367` | `+0.06812` |
+
+### Reflection
+
+1. The pre-registered router prediction was correct:
+   - coverage gap
+   - predicted winner `thin`
+   - observed winner `thin`
+2. This is more meaningful than another in-sample success because:
+   - BOLA was not used to invent the rule
+   - the surface differs from prompt extraction and PII social
+   - the geometry again differs from the prior coverage examples
+3. The invalid first attempt was also useful:
+   - benchmark construction is now a first-class failure mode
+   - a benchmark should report when the intended gap silently disappears
+4. `thin` did not merely edge out the alternatives:
+   - it won on every tracked yield measure
+   - and produced the highest best-gain in every trial
+
+### New Hypotheses
+
+1. The metric-family router has now cleared its first true holdout.
+2. We need automated benchmark validation so a malformed task cannot quietly
+   masquerade as evidence.
+3. The next experiment should add task-validity checks that fail when:
+   - the expected blocked metric disappears
+   - the residual gap is not positive
+   - or the manually designed task no longer expresses the intended family
