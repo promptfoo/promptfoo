@@ -108,6 +108,9 @@ function isReportableFinding(comment: Comment): boolean {
 }
 
 function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['level'] {
+  if (severity === undefined) {
+    return 'note';
+  }
   switch (severity) {
     case CodeScanSeverity.CRITICAL:
     case CodeScanSeverity.HIGH:
@@ -116,8 +119,13 @@ function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['leve
       return 'warning';
     case CodeScanSeverity.LOW:
     case CodeScanSeverity.NONE:
-    default:
+      // NONE is filtered upstream by isReportableFinding; kept here for exhaustiveness.
       return 'note';
+    default: {
+      // Compile-time exhaustiveness: adding a CodeScanSeverity value forces this to break.
+      const _exhaustive: never = severity;
+      return _exhaustive;
+    }
   }
 }
 

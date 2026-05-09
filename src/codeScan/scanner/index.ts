@@ -56,7 +56,7 @@ export interface ScanOptions {
   guidanceFile?: string;
 }
 
-function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat {
+export function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat {
   const parsed = CodeScanOutputFormatSchema.safeParse(options.format ?? CodeScanOutputFormat.TEXT);
   if (!parsed.success) {
     throw new Error(

@@ -32,7 +32,7 @@ interface ActionInputs {
   guidanceFile: string;
   githubToken: string;
   enableForkPrs: boolean;
-  sarifOutputPath: string;
+  sarifOutputPath: string | undefined;
 }
 
 interface PullRequestForkPayload {
@@ -61,7 +61,9 @@ function getActionInputs(): ActionInputs {
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
     enableForkPrs: core.getBooleanInput('enable-fork-prs'),
-    sarifOutputPath: core.getInput('sarif-output-path'),
+    // core.getInput returns '' when unset; normalize so a falsy check at the call site
+    // doesn't have to special-case the empty-string sentinel.
+    sarifOutputPath: core.getInput('sarif-output-path').trim() || undefined,
   };
 }
 
