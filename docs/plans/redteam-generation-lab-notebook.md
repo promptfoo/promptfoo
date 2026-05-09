@@ -721,3 +721,85 @@ At the end of iteration 10:
    - exhaustive or beam-search diagnostics for benchmark design
 3. This selector work should happen before agentic scenario generation so the
    downstream system has a sound way to choose among far richer attack sets.
+
+## Iteration 11 - 2026-05-09
+
+### Goal
+
+Inspect the whole fixed-budget search space instead of continuing to tune the
+greedy selector blindly:
+
+> Does the adversarial PII pool contain better five-attack portfolios than the
+> greedy selector currently finds?
+
+### Experiment
+
+Added:
+
+1. whole-portfolio scoring for:
+   - tactic count
+   - relationship count
+   - authorization-story count
+   - sensitive-field count
+   - average lexical novelty
+2. `enumeratePiiFrontier.ts`
+3. exact enumeration of all `8 choose 5 = 56` portfolios in the adversarial PII
+   pool
+4. Pareto filtering over the full score vector
+5. a comparison between the exact frontier and each current greedy profile
+
+### Results
+
+Exact search over the adversarial PII pool found:
+
+1. `56` total five-attack portfolios
+2. `6` Pareto-optimal frontier portfolios
+3. all three current greedy profiles select the same portfolio:
+   - indices `[0, 1, 2, 5, 6]`
+   - `4` authorization stories
+   - `3` relationships
+   - `5` sensitive fields
+   - `5` tactics
+   - average novelty `0.924`
+4. that shared greedy result is genuinely frontier-optimal, not dominated
+5. however, other frontier portfolios expose real tradeoffs:
+   - `[0, 1, 2, 3, 5]` reaches `4` relationships and `5` fields, but only
+     `4` tactics
+   - `[0, 1, 4, 5, 6]` reaches the highest average novelty at `0.936`, but only
+     `3` authorization stories and `3` relationships
+   - `[1, 2, 3, 5, 6]` keeps `5` tactics with `4` relationships, but drops to
+     `4` fields and `3` authorization stories
+
+### Reflection
+
+1. The greedy selector is better than the previous hypothesis gave it credit
+   for: on this pool it lands on a valid Pareto frontier point.
+2. The current profile system is still inadequate:
+   - different weights do not expose different useful portfolios
+   - scalar weighting hides the fact that several frontier points are
+     defensible depending on the evaluation objective
+3. This changes the design direction again:
+   - we do not merely need a better single selector
+   - we need a way to reason about and perhaps emit multiple candidate
+     portfolios representing different operational priorities
+4. The benchmark also needs to stop calling one portfolio "best" unless the
+   downstream objective is explicit. In a real product:
+   - a compliance reviewer may prefer relationship diversity
+   - a model-security researcher may prefer exploit-family coverage
+   - a corpus-building workflow may prefer novelty
+5. The frontier lens is likely more useful than a single weighted score for
+   future experiments on agentic attack generation.
+
+### New Hypotheses
+
+1. We should compare:
+   - greedy scalar selection
+   - lexicographic constrained selection
+   - multi-portfolio frontier reporting
+2. A practical red-team generator may benefit from returning:
+   - one default balanced portfolio
+   - plus a small set of named alternative portfolios such as `max-tactics`,
+     `max-relationship-coverage`, and `max-novelty`
+3. Once we move into agentic attack generation, frontier reporting may matter
+   more than ever because tool abuse, memory abuse, source abuse, and social
+   deception will likely compete under the same fixed probe budget.

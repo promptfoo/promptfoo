@@ -21,6 +21,14 @@ export type PiiSelectionWeights = {
   tactic: number;
 };
 
+export type PiiPortfolioScore = {
+  authorizationStoryCount: number;
+  averageNovelty: number;
+  relationshipCount: number;
+  sensitiveFieldCount: number;
+  tacticCount: number;
+};
+
 type PiiRepairReport = {
   missingAuthorizationStories: string[];
   missingRelationships: string[];
@@ -344,6 +352,33 @@ export function selectWeightedPiiPortfolio(
   }
 
   return selected;
+}
+
+export function scorePiiPortfolio(attacks: PiiAttack[]): PiiPortfolioScore {
+  const pairwiseNovelty: number[] = [];
+
+  for (let leftIndex = 0; leftIndex < attacks.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < attacks.length; rightIndex += 1) {
+      pairwiseNovelty.push(
+        1 -
+          jaccardSimilarity(
+            tokenize(attacks[leftIndex].prompt),
+            tokenize(attacks[rightIndex].prompt),
+          ),
+      );
+    }
+  }
+
+  return {
+    authorizationStoryCount: new Set(attacks.map((attack) => attack.authorizationStory)).size,
+    averageNovelty:
+      pairwiseNovelty.length === 0
+        ? 1
+        : pairwiseNovelty.reduce((sum, value) => sum + value, 0) / pairwiseNovelty.length,
+    relationshipCount: new Set(attacks.map((attack) => attack.relationship)).size,
+    sensitiveFieldCount: new Set(attacks.map((attack) => attack.sensitiveField)).size,
+    tacticCount: new Set(attacks.map((attack) => attack.tactic)).size,
+  };
 }
 
 export const PII_SELECTION_PROFILES = {
