@@ -211,18 +211,15 @@ describe('scanResponseToSarif', () => {
   });
 
   it('drops findings with severity NONE even when they have a file and line', () => {
-    const sarif = scanResponseToSarif(
-      makeFindingResponse({ severity: CodeScanSeverity.NONE }),
-    );
+    const sarif = scanResponseToSarif(makeFindingResponse({ severity: CodeScanSeverity.NONE }));
     expect(sarif.runs[0].results).toEqual([]);
   });
 
   it('truncates fingerprint input at the configured max so very long findings collide stably', () => {
     // Two findings whose first 160 chars match but tails differ → identical fingerprint
     // (intended: tail variation shouldn't churn the alert id across re-scans).
-    const longHead = 'This is a long LLM finding that describes a potential issue with user input. '.repeat(
-      3,
-    );
+    const longHead =
+      'This is a long LLM finding that describes a potential issue with user input. '.repeat(3);
     const tailA = ` First tail variation A — ${'a'.repeat(50)}`;
     const tailB = ` Second tail variation B — ${'b'.repeat(50)}`;
     const hashA = fingerprintOf(makeFindingResponse({ finding: longHead + tailA }));
