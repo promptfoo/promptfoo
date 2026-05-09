@@ -5,6 +5,7 @@ import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import { RUNTIME_TRANSFORM_TOKEN_USAGE_KEY } from '../shared/runtimeTransform';
+import { createWebPageTaskError, WebPageTaskError } from '../shared/webPageTaskError';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -254,8 +255,7 @@ async function createWebPage(
   );
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to create web page: ${response.status} ${errorText}`);
+    throw await createWebPageTaskError(response, 'create web page');
   }
 
   return response.json();
@@ -306,8 +306,7 @@ async function updateWebPage(
   );
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to update web page: ${response.status} ${errorText}`);
+    throw await createWebPageTaskError(response, 'update web page');
   }
 
   return response.json();
@@ -403,6 +402,163 @@ function transformForStandaloneMode(
   });
 }
 
+function getRuntimeTransformTokenUsage(error: unknown): CreateWebPageResponse['tokenUsage'] {
+  return error instanceof WebPageTaskError ? error.tokenUsage : undefined;
+}
+
+function withRuntimeTransformTokenUsage(
+  testCase: TestCaseWithPlugin,
+  tokenUsage: CreateWebPageResponse['tokenUsage'],
+): TestCaseWithPlugin {
+  if (!tokenUsage) {
+    return testCase;
+  }
+
+  return {
+    ...testCase,
+    metadata: {
+      ...testCase.metadata,
+      [RUNTIME_TRANSFORM_TOKEN_USAGE_KEY]: tokenUsage,
+    },
+  };
+}
+
+async function updateExistingPageState(params: {
+  stateKey: string;
+  pageState: PageState;
+  attackPrompt: string;
+  evalId?: string;
+  useLlmUpdate: boolean;
+  preferSmallModel: boolean;
+}): Promise<CreateWebPageResponse['tokenUsage']> {
+  const { stateKey, pageState, attackPrompt, evalId, useLlmUpdate, preferSmallModel } = params;
+
+  logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
+    stateKey,
+    uuid: pageState.uuid,
+    evalId,
+    previousTurn: pageState.turnCount,
+    previousEmbeddingLocation: pageState.embeddingLocation,
+    promptLength: attackPrompt.length,
+  });
+
+  try {
+    const response = await updateWebPage(
+      pageState.uuid,
+      attackPrompt,
+      evalId,
+      useLlmUpdate,
+      preferSmallModel,
+    );
+
+    const previousLocation = pageState.embeddingLocation;
+    pageState.turnCount++;
+    pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
+    if (response.fetchPrompt) {
+      pageState.fetchPrompt = response.fetchPrompt;
+    }
+
+    logger.debug('[IndirectWebPwn] Updated page with new embedding location', {
+      uuid: pageState.uuid,
+      previousEmbeddingLocation: previousLocation,
+      newEmbeddingLocation: pageState.embeddingLocation,
+      turnCount: pageState.turnCount,
+      updateCount: response.updateCount,
+      hasServerFetchPrompt: !!response.fetchPrompt,
+    });
+
+    return response.tokenUsage;
+  } catch (error) {
+    logger.error('[IndirectWebPwn] Failed to update page', {
+      error: error instanceof Error ? error.message : String(error),
+      uuid: pageState.uuid,
+    });
+    return getRuntimeTransformTokenUsage(error);
+  }
+}
+
+async function createInitialPageState(params: {
+  stateKey: string;
+  testCaseId: string;
+  attackPrompt: string;
+  evalId?: string;
+  goal?: string;
+  purpose?: string;
+  useLlmCreate: boolean;
+  preferSmallModel: boolean;
+}): Promise<
+  | {
+      pageState: PageState;
+      runtimeTransformTokenUsage?: CreateWebPageResponse['tokenUsage'];
+    }
+  | {
+      error: unknown;
+      runtimeTransformTokenUsage?: CreateWebPageResponse['tokenUsage'];
+    }
+> {
+  const {
+    stateKey,
+    testCaseId,
+    attackPrompt,
+    evalId,
+    goal,
+    purpose,
+    useLlmCreate,
+    preferSmallModel,
+  } = params;
+
+  logger.debug('[IndirectWebPwn] First turn - creating new page', {
+    stateKey,
+    promptLength: attackPrompt.length,
+  });
+
+  try {
+    const response = await createWebPage(
+      testCaseId,
+      attackPrompt,
+      evalId,
+      goal,
+      purpose,
+      useLlmCreate,
+      preferSmallModel,
+    );
+
+    cleanupExpiredPageState();
+
+    const pageState: PageState = {
+      uuid: response.uuid,
+      fullUrl: response.fullUrl,
+      turnCount: 1,
+      embeddingLocation: response.embeddingLocation || 'main_content',
+      createdAt: Date.now(),
+      fetchPrompt: response.fetchPrompt,
+    };
+    pageStateMap.set(stateKey, pageState);
+
+    logger.debug('[IndirectWebPwn] Created new page for per-turn layer', {
+      uuid: pageState.uuid,
+      fullUrl: pageState.fullUrl,
+      embeddingLocation: pageState.embeddingLocation,
+      turnCount: 1,
+      hasServerFetchPrompt: !!response.fetchPrompt,
+    });
+
+    return {
+      pageState,
+      runtimeTransformTokenUsage: response.tokenUsage,
+    };
+  } catch (error) {
+    logger.error('[IndirectWebPwn] Failed to create page', {
+      error: error instanceof Error ? error.message : String(error),
+      stateKey,
+    });
+    return {
+      error,
+      runtimeTransformTokenUsage: getRuntimeTransformTokenUsage(error),
+    };
+  }
+}
+
 /**
  * Per-turn layer mode: Transforms prompts for use in multi-turn attack flows.
  *
@@ -461,105 +617,36 @@ async function transformForPerTurnLayer(
     let runtimeTransformTokenUsage: CreateWebPageResponse['tokenUsage'];
 
     if (pageState) {
-      // Subsequent turn: Update the existing page
-      logger.debug('[IndirectWebPwn] Subsequent turn - updating page', {
+      runtimeTransformTokenUsage = await updateExistingPageState({
         stateKey,
-        uuid: pageState.uuid,
+        pageState,
+        attackPrompt,
         evalId,
-        previousTurn: pageState.turnCount,
-        previousEmbeddingLocation: pageState.embeddingLocation,
-        promptLength: attackPrompt.length,
+        useLlmUpdate,
+        preferSmallModel,
       });
-
-      try {
-        const response = await updateWebPage(
-          pageState.uuid,
-          attackPrompt,
-          evalId,
-          useLlmUpdate,
-          preferSmallModel,
-        );
-        runtimeTransformTokenUsage = response.tokenUsage;
-
-        // Update state with new embedding location and fetch prompt
-        const previousLocation = pageState.embeddingLocation;
-        pageState.turnCount++;
-        pageState.embeddingLocation = response.embeddingLocation || pageState.embeddingLocation;
-        // Update fetch prompt if server provided a new one
-        if (response.fetchPrompt) {
-          pageState.fetchPrompt = response.fetchPrompt;
-        }
-
-        logger.debug('[IndirectWebPwn] Updated page with new embedding location', {
-          uuid: pageState.uuid,
-          previousEmbeddingLocation: previousLocation,
-          newEmbeddingLocation: pageState.embeddingLocation,
-          turnCount: pageState.turnCount,
-          updateCount: response.updateCount,
-          hasServerFetchPrompt: !!response.fetchPrompt,
-        });
-      } catch (error) {
-        logger.error('[IndirectWebPwn] Failed to update page', {
-          error: error instanceof Error ? error.message : String(error),
-          uuid: pageState.uuid,
-        });
-        // On error, still use the existing URL
-      }
-
       turnNumber = pageState.turnCount;
     } else {
-      // First turn: Create a new page
-      logger.debug('[IndirectWebPwn] First turn - creating new page', {
+      const createdPage = await createInitialPageState({
         stateKey,
-        promptLength: attackPrompt.length,
+        testCaseId,
+        attackPrompt,
+        evalId,
+        goal: testCase.metadata?.goal as string | undefined,
+        purpose: testCase.metadata?.purpose as string | undefined,
+        useLlmCreate,
+        preferSmallModel,
       });
 
-      try {
-        // Extract goal and purpose from metadata (evalId already extracted above)
-        const goal = testCase.metadata?.goal as string | undefined;
-        const purpose = testCase.metadata?.purpose as string | undefined;
-
-        const response = await createWebPage(
-          testCaseId,
-          attackPrompt,
-          evalId,
-          goal,
-          purpose,
-          useLlmCreate,
-          preferSmallModel,
+      if ('error' in createdPage) {
+        results.push(
+          withRuntimeTransformTokenUsage(testCase, createdPage.runtimeTransformTokenUsage),
         );
-        runtimeTransformTokenUsage = response.tokenUsage;
-
-        // Clean up expired entries before adding new ones
-        cleanupExpiredPageState();
-
-        pageState = {
-          uuid: response.uuid,
-          fullUrl: response.fullUrl,
-          turnCount: 1,
-          embeddingLocation: response.embeddingLocation || 'main_content',
-          createdAt: Date.now(),
-          fetchPrompt: response.fetchPrompt, // Server-generated fetch prompt (if useLlm)
-        };
-        pageStateMap.set(stateKey, pageState);
-
-        logger.debug('[IndirectWebPwn] Created new page for per-turn layer', {
-          uuid: pageState.uuid,
-          fullUrl: pageState.fullUrl,
-          embeddingLocation: pageState.embeddingLocation,
-          turnCount: 1,
-          hasServerFetchPrompt: !!response.fetchPrompt,
-        });
-      } catch (error) {
-        logger.error('[IndirectWebPwn] Failed to create page', {
-          error: error instanceof Error ? error.message : String(error),
-          stateKey,
-        });
-        // On error, pass through the original prompt
-        results.push(testCase);
         continue;
       }
 
+      pageState = createdPage.pageState;
+      runtimeTransformTokenUsage = createdPage.runtimeTransformTokenUsage;
       turnNumber = 1;
     }
 

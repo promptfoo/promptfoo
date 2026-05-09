@@ -6,6 +6,7 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
+import { createWebPageTaskError, WebPageTaskError } from '../shared/webPageTaskError';
 import { getTargetResponse } from './shared';
 
 import type {
@@ -153,8 +154,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     );
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to create web page: ${response.status} ${errorText}`);
+      throw await createWebPageTaskError(response, 'create web page');
     }
 
     return response.json();
@@ -347,6 +347,13 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       if (error instanceof Error && error.name === 'AbortError') {
         logger.debug('[IndirectWebPwn] Operation aborted');
         throw error;
+      }
+      if (error instanceof WebPageTaskError) {
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: error.tokenUsage },
+          { countAsRequest: false },
+        );
       }
       logger.error('[IndirectWebPwn] Error during attack', {
         error: error instanceof Error ? error.message : String(error),

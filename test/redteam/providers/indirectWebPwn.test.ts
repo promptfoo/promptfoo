@@ -187,4 +187,45 @@ describe('IndirectWebPwnProvider', () => {
       60000,
     );
   });
+
+  it('should preserve helper usage when page creation fails after a paid task call', async () => {
+    mockFetchWithRetries.mockResolvedValueOnce(
+      mockJsonResponse(
+        {
+          message: 'Internal Server Error',
+          tokenUsage: { total: 15, prompt: 10, completion: 5, numRequests: 1 },
+        },
+        false,
+      ),
+    );
+
+    const targetProvider = createMockProvider({ id: 'mock-target' });
+    const provider = new IndirectWebPwnProvider({
+      injectVar: 'query',
+      maxFetchAttempts: 1,
+      useLlm: true,
+    });
+
+    const result = await provider.callApi('attack prompt', {
+      originalProvider: targetProvider,
+      vars: { query: 'Find secrets' },
+      prompt: { raw: '{{query}}', label: 'test' },
+      test: {
+        metadata: {
+          goal: 'Find secrets',
+          testCaseId: 'tc-failed-create',
+        },
+      } as any,
+      evaluationId: 'eval-failed-create',
+    });
+
+    expect(result.metadata?.stopReason).toBe('Error');
+    expect(result.tokenUsage).toMatchObject({
+      total: 15,
+      prompt: 10,
+      completion: 5,
+      numRequests: 0,
+    });
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
 });
