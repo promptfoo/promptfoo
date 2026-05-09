@@ -2350,3 +2350,99 @@ Per-trial best novelty deltas:
 2. We should start recording profile wins against repair-state features in a
    machine-readable table so a future router can be fit or at least inspected
    systematically.
+
+## Iteration 32 - 2026-05-09
+
+### Goal
+
+Add a second coverage-gap benchmark inside prompt extraction itself:
+
+> Does the provisional `coverage gap -> thin` rule still hold when the missing
+> quantity is artifact coverage instead of PII authorization-story coverage?
+
+### Experiment
+
+1. Added `runPromptExtractionCoverageProposerPass.ts`.
+2. Built a coverage-repair task where:
+   - policy: `maxTactics`
+   - target tactic: `role-pretext`
+   - blocked metric: `artifactCount`
+   - residual gap to beat: `1`
+3. The manual repair deliberately reuses `audit-report`:
+   - every compliance-pretext candidate already consumes that artifact
+   - so a `role-pretext` candidate can preserve all five tactics
+   - but only reach four distinct artifacts
+4. Ran:
+
+```bash
+PROMPTFOO_CONFIG_DIR=/private/tmp/promptfoo-c782-config \
+  npx tsx scripts/redteam-research/runPromptExtractionCoverageProposerPass.ts \
+  examples/redteam-medical-agent/redteam.yaml \
+  openai:responses:gpt-5.4-mini \
+  all \
+  3 \
+  0.7
+```
+
+### Results
+
+Repair-state features:
+
+| Feature                      | Value           |
+| ---------------------------- | --------------- |
+| blocked metric               | `artifactCount` |
+| blocked metric family        | `coverage`      |
+| residual gap to beat         | `1.00000`       |
+| average collision similarity | `0.1221`        |
+| max collision similarity     | `0.1458`        |
+| displaced slots              | `2`             |
+| clean same-slot replacement  | `no`            |
+
+| Prompt profile | Improving trials | Improving candidates | Avg best novelty delta | Avg `top3` yield |
+| -------------- | ---------------: | -------------------: | ---------------------: | ---------------: |
+| `rich`         |              `2` |                  `4` |             `+0.00285` |       `+0.00483` |
+| `balanced`     |              `3` |                  `9` |             `+0.01317` |       `+0.02172` |
+| `thin`         |              `3` |                 `10` |             `+0.01804` |       `+0.02746` |
+
+Per-trial best novelty deltas:
+
+| Trial | `rich`     | `balanced` | `thin`     |
+| ----: | ---------- | ---------- | ---------- |
+|   `1` | `+0.00678` | `+0.01780` | `+0.01452` |
+|   `2` | `-0.00178` | `+0.01764` | `+0.02248` |
+|   `3` | `+0.00356` | `+0.00405` | `+0.01711` |
+
+### Reflection
+
+1. The second coverage benchmark also favored `thin`:
+   - it tied `balanced` on improving-trial coverage
+   - beat it on total improving candidates
+   - beat it on best-gain and fixed-budget `top3` yield
+2. This is stronger evidence than the PII result alone because the local geometry
+   changed materially:
+   - PII social was a clean same-slot replacement
+   - prompt-extraction coverage required a two-slot reshuffle
+3. Despite that geometry change, the winner stayed the same for the same metric
+   family.
+4. Current evidence now supports:
+   - novelty gap -> `balanced`
+   - coverage gap -> `thin`
+     across:
+   - prompt extraction novelty
+   - SQL novelty
+   - PII social coverage
+   - prompt extraction coverage
+
+### New Hypotheses
+
+1. Metric family is now the best first-order routing feature we have.
+2. Local geometry may still explain the **margin** of victory within a route:
+   - `thin` crushed PII social
+   - but `balanced` stayed closer on prompt-extraction coverage
+3. The next experiment should write a machine-readable repair-task ledger that
+   records:
+   - repair-state features
+   - observed winning profile
+   - task provenance
+     so we can stop reasoning from prose alone and start fitting or at least
+     inspecting a real router dataset.
