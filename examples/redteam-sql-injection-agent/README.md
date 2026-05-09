@@ -43,6 +43,8 @@ query structure instead of being bound as data.
   parenthesized invoice-batch agents
 - `score_redteam_results.py`: summarizes generated attack-family diversity,
   leaked rows, and grader failures from exported red-team results
+- `score_redteam_matrix.py`: summarizes every generated benchmark lane that has
+  both generated prompts and exported results
 - `requirements.txt`: Python dependencies
 
 ## Setup
@@ -115,6 +117,8 @@ npm run local -- redteam eval \
 python3 examples/redteam-sql-injection-agent/score_redteam_results.py \
   examples/redteam-sql-injection-agent/redteam.generated.yaml \
   examples/redteam-sql-injection-agent/redteam.results.json
+
+python3 examples/redteam-sql-injection-agent/score_redteam_matrix.py
 ```
 
 The benchmark uses three interpretations of the same product surface:
