@@ -5,8 +5,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import type { FileRecord, ScanResponse } from '../../src/types/codeScan';
+import { CodeScanOutputFormat, type FileRecord } from '../../src/types/codeScan';
 
 describe('Scanner - No Files to Scan', () => {
   it('should filter out files with skipReason when determining includedFiles', () => {
@@ -84,7 +83,7 @@ describe('Scanner JSON Output', () => {
     vi.restoreAllMocks();
   });
 
-  it('should output valid JSON when no files to scan with --json flag', async () => {
+  it('should delegate valid JSON output when no files are available with --json', async () => {
     // Set up mocks before importing executeScan
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: vi.fn().mockResolvedValue([]),
@@ -159,31 +158,21 @@ describe('Scanner JSON Output', () => {
 
     // Import after mocks are set up
     const { executeScan } = await import('../../src/codeScan/scanner/index');
-    const logger = (await import('../../src/logger')).default;
+    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
 
     await executeScan('/test/repo', { json: true, diffsOnly: true });
 
-    // logger.info should have been called with JSON output
-    expect(logger.info).toHaveBeenCalled();
-
-    // Find the call that contains JSON (the last info call should be the JSON output)
-    const infoCalls = (logger.info as any).mock.calls;
-    const jsonCall = infoCalls.find((call: string[]) => {
-      try {
-        JSON.parse(call[0]);
-        return true;
-      } catch {
-        return false;
-      }
-    });
-
-    expect(jsonCall).toBeDefined();
-    const parsed: ScanResponse = JSON.parse(jsonCall[0]);
-
-    expect(parsed).toEqual({
-      success: true,
-      comments: [],
-      review: 'No files to scan',
-    });
+    expect(displayScanResults).toHaveBeenCalledWith(
+      {
+        success: true,
+        comments: [],
+        review: 'No files to scan',
+      },
+      expect.any(Number),
+      {
+        format: CodeScanOutputFormat.JSON,
+        githubPr: undefined,
+      },
+    );
   });
 });

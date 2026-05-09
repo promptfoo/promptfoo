@@ -10,6 +10,7 @@ import * as core from '@actions/core';
 import * as exec from '@actions/exec';
 import * as github from '@actions/github';
 import { prepareComments } from '../../src/codeScan/util/github';
+import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -30,6 +31,7 @@ interface ActionInputs {
   guidanceFile: string;
   githubToken: string;
   enableForkPrs: boolean;
+  sarifOutputPath: string;
 }
 
 interface PullRequestForkPayload {
@@ -58,6 +60,7 @@ function getActionInputs(): ActionInputs {
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
     enableForkPrs: core.getBooleanInput('enable-fork-prs'),
+    sarifOutputPath: core.getInput('sarif-output-path'),
   };
 }
 
@@ -409,6 +412,15 @@ async function handleScanResponse(
 ): Promise<void> {
   const { comments, commentsPosted, review } = scanResponse;
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
+
+  if (inputs.sarifOutputPath) {
+    fs.writeFileSync(
+      inputs.sarifOutputPath,
+      JSON.stringify(scanResponseToSarif(scanResponse), null, 2),
+    );
+    core.setOutput('sarif-path', inputs.sarifOutputPath);
+    core.info(`📝 Wrote SARIF output to ${inputs.sarifOutputPath}`);
+  }
 
   if ((comments.length > 0 || review) && commentsPosted === false) {
     await postFallbackComments(

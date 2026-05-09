@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => {
     info: vi.fn(),
     warning: vi.fn(),
     error: vi.fn(),
+    setOutput: vi.fn(),
     setFailed: vi.fn(),
   };
 
@@ -94,6 +95,7 @@ const mocks = vi.hoisted(() => {
 
   const fs = {
     unlinkSync: vi.fn(),
+    writeFileSync: vi.fn(),
   };
 
   return {
@@ -125,6 +127,7 @@ vi.mock('fs', async () => {
   return {
     ...actual,
     unlinkSync: mocks.fs.unlinkSync,
+    writeFileSync: mocks.fs.writeFileSync,
   };
 });
 
@@ -422,6 +425,39 @@ describe('code-scan-action main', () => {
       expectCliArg(args, '--github-pr', 'test-owner/test-repo#123');
       expect(mocks.actionGithub.getPRFiles).toHaveBeenCalled();
       expect(mocks.core.getIDToken).toHaveBeenCalled();
+    });
+  });
+
+  describe('SARIF output', () => {
+    it('writes SARIF output and exposes the generated path when configured', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity' || name === 'minimum-severity') {
+          return 'medium';
+        }
+        if (name === 'sarif-output-path') {
+          return 'promptfoo-code-scan.sarif';
+        }
+        return '';
+      });
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.fs.writeFileSync).toHaveBeenCalledWith(
+          'promptfoo-code-scan.sarif',
+          expect.any(String),
+        );
+      });
+
+      const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(JSON.parse(sarifJson as string)).toMatchObject({
+        $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+        version: '2.1.0',
+      });
+      expect(mocks.core.setOutput).toHaveBeenCalledWith('sarif-path', 'promptfoo-code-scan.sarif');
     });
   });
 });
