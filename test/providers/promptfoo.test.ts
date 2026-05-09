@@ -68,15 +68,24 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should handle successful API call', async () => {
-    const mockResponse = new Response(JSON.stringify({ output: 'test output' }), {
-      status: 200,
-      statusText: 'OK',
-    });
+    const mockResponse = new Response(
+      JSON.stringify({
+        output: 'test output',
+        tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
-    expect(result).toEqual({ output: ['test output'] });
+    expect(result).toEqual({
+      output: ['test output'],
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
   });
 
   it('should filter out null and undefined values from output array', async () => {

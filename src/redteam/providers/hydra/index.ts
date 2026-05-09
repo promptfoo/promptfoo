@@ -460,6 +460,9 @@ export class HydraProvider implements ApiProvider {
               purpose: test?.metadata?.purpose as string | undefined,
             },
           );
+          accumulateResponseTokenUsage(totalTokenUsage, materializedInputVars, {
+            countAsRequest: false,
+          });
         }
       }
       const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;

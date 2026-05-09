@@ -1257,6 +1257,39 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
+    it('should preserve remote GOAT generation usage without inflating probe counts', async () => {
+      mockFetch.mockResolvedValueOnce({
+        json: async () => ({
+          materializationHandled: true,
+          message: { role: 'assistant', content: 'test response' },
+          tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+        }),
+        ok: true,
+      });
+
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('target response', {
+        total: 100,
+        prompt: 60,
+        completion: 40,
+        numRequests: 1,
+      });
+
+      const context = createMockContext(targetProvider);
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 140,
+        prompt: 85,
+        completion: 55,
+        numRequests: 1,
+      });
+    });
+
     it('should accumulate token usage across multiple turns', async () => {
       const provider = new RedteamGoatProvider({
         injectVar: 'goal',

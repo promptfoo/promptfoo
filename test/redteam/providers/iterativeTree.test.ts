@@ -1375,7 +1375,7 @@ describe('Token Counting', () => {
       }),
     });
 
-    const { score, explanation } = await evaluateResponse(
+    const { score, explanation, tokenUsage } = await evaluateResponse(
       mockJudgeProvider,
       'Judge prompt',
       'Target response',
@@ -1385,6 +1385,7 @@ describe('Token Counting', () => {
 
     expect(score).toBe(8);
     expect(explanation).toBe('Good response');
+    expect(tokenUsage).toEqual({ total: 75, prompt: 40, completion: 35, numRequests: 1 });
     expect(mockJudgeProvider.callApi).toHaveBeenCalledTimes(1);
   });
 

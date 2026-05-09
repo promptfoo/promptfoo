@@ -393,6 +393,9 @@ export async function runMetaAgentRedteam({
             purpose: test?.metadata?.purpose as string | undefined,
           },
         );
+        accumulateResponseTokenUsage(totalTokenUsage, materializedInputVars, {
+          countAsRequest: false,
+        });
       }
     }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;

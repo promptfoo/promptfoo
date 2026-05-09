@@ -145,9 +145,9 @@ describe('RedteamIterativeImageProvider', () => {
 
     // Verify token usage is accumulated from: redteam (25) + target (150) + vision (70) + judge (45) = 290
     expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(200);
-    expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
-    expect(result.tokenUsage?.completion).toBeGreaterThan(0);
+    expect(result.tokenUsage?.total).toBe(290);
+    expect(result.tokenUsage?.prompt).toBe(195);
+    expect(result.tokenUsage?.completion).toBe(95);
     // Probe counting should only include target calls.
     expect(result.tokenUsage?.numRequests).toBe(1);
   });
@@ -207,7 +207,7 @@ describe('RedteamIterativeImageProvider', () => {
 
     // Vision provider (300) + target (75) + redteam (15) + judge (30) = 420 total
     expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(300); // At least vision tokens
+    expect(result.tokenUsage?.total).toBe(420);
     // Probe counting should only include target calls.
     expect(result.tokenUsage?.numRequests).toBe(1);
   });

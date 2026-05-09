@@ -89,6 +89,7 @@ interface GoatResponse extends ProviderResponse {
 export interface ExtractAttackFailureResponse {
   message: string;
   task: string;
+  tokenUsage?: TokenUsage;
 }
 
 interface GoatConfig {
@@ -270,6 +271,9 @@ export default class GoatProvider implements ApiProvider {
             goal: context?.test?.metadata?.goal || context?.vars[this.config.injectVar],
             purpose: context?.test?.metadata?.purpose,
           });
+          accumulateResponseTokenUsage(totalTokenUsage, unblockingResult, {
+            countAsRequest: false,
+          });
 
           if (unblockingResult.success && unblockingResult.unblockingPrompt) {
             logger.debug(
@@ -361,6 +365,7 @@ export default class GoatProvider implements ApiProvider {
             options?.abortSignal,
           );
           const data = (await response.json()) as ExtractAttackFailureResponse;
+          accumulateResponseTokenUsage(totalTokenUsage, data, { countAsRequest: false });
 
           if (!data.message) {
             logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
@@ -403,6 +408,7 @@ export default class GoatProvider implements ApiProvider {
           options?.abortSignal,
         );
         const data = await response.json();
+        accumulateResponseTokenUsage(totalTokenUsage, data, { countAsRequest: false });
         if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
           logger.info('[GOAT] Invalid message from GOAT, skipping turn', { data });
           continue;

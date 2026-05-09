@@ -1562,11 +1562,11 @@ describe('CrescendoProvider', () => {
 
       const result = await provider.callApi('test prompt', context);
 
-      // Should accumulate token usage from target provider calls
+      // Should accumulate non-assertion strategy work while keeping probes target-only.
       expect(result.tokenUsage).toMatchObject({
-        total: 100,
-        prompt: 40,
-        completion: 60,
+        total: 205,
+        prompt: 92,
+        completion: 113,
         numRequests: 1,
         cached: 0,
       });
@@ -1617,11 +1617,11 @@ describe('CrescendoProvider', () => {
 
       const result = await provider.callApi('test prompt', context);
 
-      // Should accumulate token usage from all target provider calls
+      // Should accumulate target plus strategy-side usage across both rounds.
       expect(result.tokenUsage).toMatchObject({
-        total: 180,
-        prompt: 70,
-        completion: 110,
+        total: 400,
+        prompt: 180,
+        completion: 220,
         numRequests: 2,
         cached: 0,
       });
@@ -1863,6 +1863,7 @@ describe('CrescendoProvider', () => {
       vi.mocked(tryUnblocking).mockResolvedValue({
         success: true,
         unblockingPrompt: 'Our registration number is REG123456',
+        tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
       });
 
       mockScoringProvider.callApi.mockResolvedValue({
@@ -1876,11 +1877,11 @@ describe('CrescendoProvider', () => {
 
       const result = await provider.callApi('test prompt', context);
 
-      // Should accumulate token usage from both target provider calls
+      // Should accumulate target plus strategy-side calls, without treating strategy calls as probes.
       expect(result.tokenUsage).toMatchObject({
-        total: 140,
-        prompt: 55,
-        completion: 85,
+        total: 270,
+        prompt: 120,
+        completion: 150,
         numRequests: 2,
         cached: 0,
       });

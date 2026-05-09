@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
   ATTACKER_MODEL_SMALL,
@@ -1097,6 +1098,30 @@ describe('shared redteam provider utilities', () => {
         'blocking-question-analysis',
         BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP,
       );
+    });
+
+    it('returns token usage when unblocking analysis runs', async () => {
+      mockProcessEnv({ PROMPTFOO_ENABLE_UNBLOCKING: 'true' });
+      mockedCheckServerFeatureSupport.mockResolvedValue(true);
+      const callApiSpy = vi
+        .spyOn(PromptfooChatCompletionProvider.prototype, 'callApi')
+        .mockResolvedValue({
+          output: { isBlocking: false },
+          tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
+        });
+
+      const result = await tryUnblocking({
+        messages: [],
+        lastResponse: 'No blocking question here',
+        goal: 'test-goal',
+        purpose: 'test-purpose',
+      });
+
+      expect(result).toEqual({
+        success: false,
+        tokenUsage: { total: 15, prompt: 8, completion: 7, numRequests: 1 },
+      });
+      callApiSpy.mockRestore();
     });
   });
 

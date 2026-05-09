@@ -274,6 +274,7 @@ export async function runRedteamConversation({
       options,
     );
     TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+    accumulateResponseTokenUsage(totalTokenUsage, redteamResp, { countAsRequest: false });
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
       await sleep(redteamProvider.delay);
@@ -402,6 +403,9 @@ export async function runRedteamConversation({
             purpose: test?.metadata?.purpose as string | undefined,
           },
         );
+        accumulateResponseTokenUsage(totalTokenUsage, materializedInputVars, {
+          countAsRequest: false,
+        });
       }
     }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
@@ -652,6 +656,7 @@ export async function runRedteamConversation({
     );
 
     TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
+    accumulateResponseTokenUsage(totalTokenUsage, judgeResp, { countAsRequest: false });
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
       await sleep(gradingProvider.delay);

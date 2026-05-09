@@ -181,7 +181,7 @@ export async function evaluateResponse(
   targetResponse: string,
   previousBestResponse: string,
   containsPenalizedPhrase: boolean,
-): Promise<{ score: number; explanation: string }> {
+): Promise<{ score: number; explanation: string; tokenUsage?: TokenUsage }> {
   const judgeBody = JSON.stringify([
     {
       role: 'system',
@@ -225,7 +225,11 @@ export async function evaluateResponse(
 
     if (parsed?.currentResponse?.rating === undefined) {
       logger.debug('[IterativeTree] Invalid judge response, using default score');
-      return { score: 1, explanation: 'Failed to parse judge response' };
+      return {
+        score: 1,
+        explanation: 'Failed to parse judge response',
+        tokenUsage: judgeResp.tokenUsage,
+      };
     }
 
     let currentScore = parsed.currentResponse.rating;
@@ -238,6 +242,7 @@ export async function evaluateResponse(
     return {
       score: currentScore,
       explanation: parsed?.currentResponse?.explanation,
+      tokenUsage: judgeResp.tokenUsage,
     };
   } catch (e) {
     // Re-throw abort errors to properly cancel the operation
@@ -245,7 +250,11 @@ export async function evaluateResponse(
       throw e;
     }
     logger.debug(`[IterativeTree] Error parsing judge response, using default score: ${e}`);
-    return { score: 1, explanation: 'Failed to parse judge response' };
+    return {
+      score: 1,
+      explanation: 'Failed to parse judge response',
+      tokenUsage: judgeResp.tokenUsage,
+    };
   }
 }
 
@@ -634,6 +643,7 @@ async function runRedteamConversation({
           materializationHandled,
           materializedVars,
           prompt: newInjectVar,
+          tokenUsage: redteamTokenUsage,
         } = await getNewPrompt(
           redteamProvider,
           [...redteamHistory, { role: 'assistant', content: node.prompt }],
@@ -654,6 +664,13 @@ async function runRedteamConversation({
         }
 
         attempts++;
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: redteamTokenUsage },
+          {
+            countAsRequest: false,
+          },
+        );
 
         // Extract JSON from <Prompt> tags if present (multi-input mode)
         const extractedPrompt = extractPromptFromTags(newInjectVar);
@@ -815,12 +832,23 @@ async function runRedteamConversation({
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
 
-        const { score, explanation } = await evaluateResponse(
+        const {
+          score,
+          explanation,
+          tokenUsage: judgeTokenUsage,
+        } = await evaluateResponse(
           gradingProvider,
           judgeSystemPrompt,
           targetResponse.output,
           bestResponse,
           containsPenalizedPhrase,
+        );
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: judgeTokenUsage },
+          {
+            countAsRequest: false,
+          },
         );
 
         logger.debug(

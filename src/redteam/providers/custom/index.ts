@@ -388,19 +388,27 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug(`\n[Custom] ROUND ${roundNum}\n`);
 
-        const { generatedQuestion: attackPrompt } = await this.getAttackPrompt(
-          roundNum,
-          evalFlag,
-          lastResponse,
-          lastFeedback,
-          objectiveScore,
-          options,
-        );
+        const { generatedQuestion: attackPrompt, tokenUsage: attackTokenUsage } =
+          await this.getAttackPrompt(
+            roundNum,
+            evalFlag,
+            lastResponse,
+            lastFeedback,
+            objectiveScore,
+            options,
+          );
 
         if (!attackPrompt) {
           logger.debug('[Custom] failed to generate a question. Will skip turn and try again');
           continue;
         }
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: attackTokenUsage },
+          {
+            countAsRequest: false,
+          },
+        );
 
         logger.debug(`[Custom] Generated attack prompt: ${attackPrompt}`);
 
@@ -453,6 +461,9 @@ export class CustomProvider implements ApiProvider {
           goal: this.userGoal,
           purpose: context?.test?.metadata?.purpose,
         });
+        accumulateResponseTokenUsage(totalTokenUsage, unblockingResult, {
+          countAsRequest: false,
+        });
 
         if (unblockingResult.success && unblockingResult.unblockingPrompt) {
           // Target is asking a blocking question, send the unblocking answer
@@ -501,10 +512,17 @@ export class CustomProvider implements ApiProvider {
           }
         }
 
-        const [isRefusal, refusalRationale] = await this.getRefusalScore(
+        const [isRefusal, refusalRationale, refusalTokenUsage] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
           options,
+        );
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: refusalTokenUsage },
+          {
+            countAsRequest: false,
+          },
         );
         logger.debug(
           `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -577,7 +595,14 @@ export class CustomProvider implements ApiProvider {
           // Note: outputImage not tracked as TargetResponse doesn't include image yet
         });
 
-        const [evalScore] = await this.getEvalScore(lastResponse.output, options);
+        const [evalScore, evalTokenUsage] = await this.getEvalScore(lastResponse.output, options);
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: evalTokenUsage },
+          {
+            countAsRequest: false,
+          },
+        );
 
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
@@ -932,14 +957,14 @@ export class CustomProvider implements ApiProvider {
     attackPrompt: string,
     lastResponse: string,
     options?: CallApiOptionsParams,
-  ): Promise<[boolean, string]> {
+  ): Promise<[boolean, string, TokenUsage | undefined]> {
     logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
     // Short-circuit refusal grading for standard refusal prefixes
     if (isBasicRefusal(lastResponse)) {
       logger.debug(
         '[Custom] Response contains a standard refusal prefix. Short-circuiting refusal grading.',
       );
-      return [true, 'The output contains a standard refusal.'];
+      return [true, 'The output contains a standard refusal.', undefined];
     }
 
     // Otherwise, use the scoring chat to grade the refusal
@@ -996,7 +1021,7 @@ export class CustomProvider implements ApiProvider {
       'Expected refusal grader metadata to be a number',
     );
 
-    return [parsed.value, parsed.rationale];
+    return [parsed.value, parsed.rationale, refusalResponse.tokenUsage];
   }
 
   private async getEvalScore(

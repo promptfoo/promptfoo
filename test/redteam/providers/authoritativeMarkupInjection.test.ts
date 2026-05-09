@@ -100,6 +100,12 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
 
   describe('Token Usage Tracking', () => {
     it('should accumulate token usage from target provider', async () => {
+      mockFetchWithProxy.mockResolvedValue({
+        json: async () => ({
+          message: { role: 'assistant', content: 'injected content' },
+          tokenUsage: { prompt: 6, completion: 4, total: 10, numRequests: 1 },
+        }),
+      });
       mockTargetProvider.callApi.mockResolvedValue({
         output: 'target response',
         tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
@@ -113,9 +119,9 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       const result = await provider.callApi('test prompt', context);
 
       expect(result.tokenUsage).toBeDefined();
-      expect(result.tokenUsage?.prompt).toBe(50);
-      expect(result.tokenUsage?.completion).toBe(25);
-      expect(result.tokenUsage?.total).toBe(75);
+      expect(result.tokenUsage?.prompt).toBe(56);
+      expect(result.tokenUsage?.completion).toBe(29);
+      expect(result.tokenUsage?.total).toBe(85);
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 

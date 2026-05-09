@@ -310,6 +310,7 @@ async function runRedteamConversation({
       }
 
       TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+      accumulateResponseTokenUsage(totalTokenUsage, redteamResp, { countAsRequest: false });
 
       if (redteamResp.error) {
         logger.warn(`Iteration ${i + 1}: Redteam provider error: ${redteamResp.error}`);
@@ -352,6 +353,9 @@ async function runRedteamConversation({
               purpose: test?.metadata?.purpose as string | undefined,
             })
           : undefined;
+      accumulateResponseTokenUsage(totalTokenUsage, materializedPromptVars, {
+        countAsRequest: false,
+      });
       const currentRenderInputVars = materializedPromptVars?.vars ?? parsedPromptVars;
 
       targetPrompt = await renderPrompt(
@@ -504,6 +508,7 @@ async function runRedteamConversation({
       }
 
       TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), judgeResp.tokenUsage);
+      accumulateResponseTokenUsage(totalTokenUsage, judgeResp, { countAsRequest: false });
 
       let score: number;
       let scoreComponents: JudgeResponse['currentResponse']['components'];

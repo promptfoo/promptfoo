@@ -989,11 +989,61 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      // Verify that target token usage is accumulated
-      expect(result.tokenUsage.total).toBe(100);
-      expect(result.tokenUsage.prompt).toBe(60);
-      expect(result.tokenUsage.completion).toBe(40);
+      // Includes one attacker call and one internal judge call, but only the target counts as a probe.
+      expect(result.tokenUsage.total).toBe(120);
+      expect(result.tokenUsage.prompt).toBe(70);
+      expect(result.tokenUsage.completion).toBe(50);
       expect(result.tokenUsage.numRequests).toBe(1);
+    });
+
+    it('should preserve strategy-side token usage without inflating probe counts', async () => {
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockImplementation(async (_provider, prompt, context, _options) => {
+        return mockTargetProvider.callApi(prompt, context);
+      });
+
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            improvement: 'test improvement',
+            prompt: 'test prompt',
+          }),
+          tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 5, explanation: 'test' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+          tokenUsage: { total: 30, prompt: 18, completion: 12, numRequests: 1 },
+        });
+
+      mockTargetProvider.callApi.mockResolvedValueOnce({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
+        cached: false,
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 170,
+        prompt: 103,
+        completion: 67,
+        numRequests: 1,
+      });
     });
 
     it('should accumulate token usage across multiple iterations', async () => {
@@ -1035,10 +1085,10 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      // Verify accumulated token usage from all target calls
-      expect(result.tokenUsage.total).toBe(450); // 100 + 150 + 200
-      expect(result.tokenUsage.prompt).toBe(270); // 60 + 90 + 120
-      expect(result.tokenUsage.completion).toBe(180); // 40 + 60 + 80
+      // Includes three attacker calls and three internal judge calls in addition to target work.
+      expect(result.tokenUsage.total).toBe(510); // 450 target + 60 strategy
+      expect(result.tokenUsage.prompt).toBe(300); // 270 target + 30 strategy
+      expect(result.tokenUsage.completion).toBe(210); // 180 target + 30 strategy
       expect(result.tokenUsage.numRequests).toBe(3);
     });
 
@@ -1080,11 +1130,10 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      // Token usage should accumulate correctly even with missing data
-      // getTargetResponse adds numRequests: 1 automatically, so: 100 + 0 + 200 = 300
-      expect(result.tokenUsage.total).toBe(300);
-      expect(result.tokenUsage.prompt).toBe(180); // 60 + 0 + 120
-      expect(result.tokenUsage.completion).toBe(120); // 40 + 0 + 80
+      // Strategy work is still preserved while target probes remain the only counted requests.
+      expect(result.tokenUsage.total).toBe(360); // 300 target + 60 strategy
+      expect(result.tokenUsage.prompt).toBe(210); // 180 target + 30 strategy
+      expect(result.tokenUsage.completion).toBe(150); // 120 target + 30 strategy
       expect(result.tokenUsage.numRequests).toBe(3); // All calls counted
     });
 
@@ -1125,10 +1174,10 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      // Only successful calls should contribute to token usage
-      expect(result.tokenUsage.total).toBe(250); // 100 + 150
-      expect(result.tokenUsage.prompt).toBe(150); // 60 + 90
-      expect(result.tokenUsage.completion).toBe(100); // 40 + 60
+      // Failed target calls do not add target tokens, but completed strategy calls are still counted.
+      expect(result.tokenUsage.total).toBe(300); // 250 target + 50 strategy
+      expect(result.tokenUsage.prompt).toBe(175); // 150 target + 25 strategy
+      expect(result.tokenUsage.completion).toBe(125); // 100 target + 25 strategy
       expect(result.tokenUsage.numRequests).toBe(3); // All calls are counted, including errors
     });
 
@@ -1165,10 +1214,10 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      // Should handle zero counts correctly: 0 + 100 = 100
-      expect(result.tokenUsage.total).toBe(100);
-      expect(result.tokenUsage.prompt).toBe(60);
-      expect(result.tokenUsage.completion).toBe(40);
+      // Includes two attacker calls and two internal judge calls.
+      expect(result.tokenUsage.total).toBe(140);
+      expect(result.tokenUsage.prompt).toBe(80);
+      expect(result.tokenUsage.completion).toBe(60);
       expect(result.tokenUsage.numRequests).toBe(2);
     });
   });

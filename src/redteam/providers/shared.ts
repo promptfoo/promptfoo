@@ -650,6 +650,7 @@ export async function tryUnblocking({
 }): Promise<{
   success: boolean;
   unblockingPrompt?: string;
+  tokenUsage?: TokenUsage;
 }> {
   try {
     // Unblocking is disabled by default, enable via environment variable
@@ -708,7 +709,7 @@ export async function tryUnblocking({
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
-      return { success: false };
+      return { success: false, tokenUsage: response.tokenUsage };
     }
 
     const parsed = response.output as any;
@@ -721,11 +722,13 @@ export async function tryUnblocking({
       return {
         success: true,
         unblockingPrompt: parsed.unblockingAnswer,
+        tokenUsage: response.tokenUsage,
       };
     } else {
       logger.debug('[Unblocking] No blocking question detected');
       return {
         success: false,
+        tokenUsage: response.tokenUsage,
       };
     }
   } catch (error) {

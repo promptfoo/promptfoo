@@ -115,6 +115,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     });
 
     const totalTokenUsage = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(totalTokenUsage, data, { countAsRequest: false });
 
     // Call the target provider with the injected attack
     throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);
