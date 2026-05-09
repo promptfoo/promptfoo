@@ -16,6 +16,7 @@ import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
+import { Strategies } from '../../../src/redteam/strategies/index';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
@@ -670,11 +671,62 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(500);
-        expect(response.body.tokenUsage).toEqual({
+        expect(response.body.tokenUsage).toMatchObject({
           total: 19,
           prompt: 12,
           completion: 7,
           numRequests: 1,
+        });
+      });
+
+      it('should merge plugin and strategy usage when a preview strategy fails', async () => {
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'test-provider',
+          callApi: vi.fn().mockResolvedValue({
+            output: 'generated',
+            tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+          }),
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('prompt');
+            return [{ vars: { query: 'test case' } }];
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          action: vi.fn().mockRejectedValue(
+            Object.assign(new Error('strategy failed'), {
+              tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+            }),
+          ),
+        } as any);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'citation',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(500);
+        expect(response.body.tokenUsage).toMatchObject({
+          total: 20,
+          prompt: 12,
+          completion: 8,
+          numRequests: 2,
         });
       });
     });
@@ -716,9 +768,88 @@ describe('Redteam Routes', () => {
           });
 
         expect(response.status).toBe(500);
-        expect(response.body).toEqual({
+        expect(response.body).toMatchObject({
           error: 'Failed to generate multi-turn prompt',
           tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+        });
+      });
+
+      it('should merge plugin and multi-turn helper usage on generation errors', async () => {
+        mockedRedteamProviderManager.getProvider.mockResolvedValue({
+          id: () => 'test-provider',
+          callApi: vi.fn().mockResolvedValue({
+            output: 'generated',
+            tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+          }),
+        } as any);
+        const mockPluginFactory = {
+          key: 'harmful:hate',
+          action: vi.fn().mockImplementation(async ({ provider }) => {
+            await provider.callApi('prompt');
+            return [{ vars: { query: 'test case' } }];
+          }),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+        mockedGenerateMultiTurnPrompt.mockRejectedValue(
+          Object.assign(new Error('Hydra task failed'), {
+            tokenUsage: {
+              total: 7,
+              prompt: 4,
+              completion: 3,
+              numRequests: 1,
+            },
+          }),
+        );
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmful:hate',
+              config: {},
+            },
+            strategy: {
+              id: 'jailbreak:hydra',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({
+          error: 'Failed to generate multi-turn prompt',
+          tokenUsage: {
+            total: 20,
+            prompt: 12,
+            completion: 8,
+            cached: 0,
+            numRequests: 2,
+            completionDetails: {
+              reasoning: 0,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
+            assertions: {
+              total: 0,
+              prompt: 0,
+              completion: 0,
+              cached: 0,
+              numRequests: 0,
+              completionDetails: {
+                reasoning: 0,
+                acceptedPrediction: 0,
+                rejectedPrediction: 0,
+                cacheReadInputTokens: 0,
+                cacheCreationInputTokens: 0,
+              },
+            },
+          },
         });
       });
     });

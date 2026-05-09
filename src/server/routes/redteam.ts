@@ -19,7 +19,11 @@ import { TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../../util/tokenUsageUtils';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
@@ -59,6 +63,19 @@ function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
   return error && typeof error === 'object' && 'tokenUsage' in error
     ? (error.tokenUsage as TokenUsage | undefined)
     : undefined;
+}
+
+function mergeTokenUsage(...usages: Array<TokenUsage | undefined>): TokenUsage | undefined {
+  const definedUsages = usages.filter((usage): usage is TokenUsage => Boolean(usage));
+  if (definedUsages.length === 0) {
+    return undefined;
+  }
+
+  const totalTokenUsage = createEmptyTokenUsage();
+  for (const usage of definedUsages) {
+    accumulateTokenUsage(totalTokenUsage, usage);
+  }
+  return totalTokenUsage;
 }
 
 /**
@@ -187,7 +204,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         }
       } catch (error) {
         logger.error(`Error applying strategy ${strategy.id}`, { error });
-        const tokenUsage = trackedRedteamProvider.getTokenUsage() || getErrorTokenUsage(error);
+        const tokenUsage = mergeTokenUsage(
+          trackedRedteamProvider.getTokenUsage(),
+          getErrorTokenUsage(error),
+        );
         res.status(500).json({
           error: `Failed to apply strategy ${strategy.id}`,
           ...(tokenUsage ? { tokenUsage } : {}),
@@ -243,7 +263,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           message: error instanceof Error ? error.message : String(error),
           strategy: strategy.id,
         });
-        const tokenUsage = getErrorTokenUsage(error);
+        const tokenUsage = mergeTokenUsage(
+          trackedRedteamProvider.getTokenUsage(),
+          getErrorTokenUsage(error),
+        );
         res.status(500).json({
           error: 'Failed to generate multi-turn prompt',
           ...(tokenUsage ? { tokenUsage } : {}),
