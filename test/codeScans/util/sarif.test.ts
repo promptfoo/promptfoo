@@ -222,6 +222,43 @@ describe('scanResponseToSarif', () => {
     expect(sarif.runs[0].results[0].properties.severity).toBeUndefined();
   });
 
+  it('exposes the docs URL via tool.driver.informationUri', () => {
+    const sarif = scanResponseToSarif(makeFindingResponse());
+    expect(sarif.runs[0].tool.driver.informationUri).toBe(
+      'https://www.promptfoo.dev/docs/code-scanning/cli/',
+    );
+  });
+
+  it('emits a file-only finding (no line) with an artifactLocation but no region', () => {
+    const sarif = scanResponseToSarif(
+      makeFindingResponse({ file: 'src/x.ts', line: null, startLine: undefined }),
+    );
+    expect(sarif.runs[0].results).toHaveLength(1);
+    const location = sarif.runs[0].results[0].locations?.[0].physicalLocation;
+    expect(location?.artifactLocation.uri).toBe('src/x.ts');
+    expect(location?.region).toBeUndefined();
+  });
+
+  it('omits the rule descriptor when there are no SARIF results', () => {
+    const sarif = scanResponseToSarif({ success: true, comments: [] });
+    expect(sarif.runs[0].tool.driver.rules).toEqual([]);
+    expect(sarif.runs[0].results).toEqual([]);
+  });
+
+  it('preserves the scan review summary under properties.promptfoo', () => {
+    const sarif = scanResponseToSarif({
+      success: true,
+      comments: [],
+      review: 'No issues found in this PR.',
+    });
+    expect(sarif.runs[0].properties?.promptfoo?.review).toBe('No issues found in this PR.');
+  });
+
+  it('omits run.properties when there is no review summary to carry', () => {
+    const sarif = scanResponseToSarif({ success: true, comments: [] });
+    expect(sarif.runs[0].properties).toBeUndefined();
+  });
+
   it('truncates fingerprint input at the configured max so very long findings collide stably', () => {
     // Two findings whose first 160 chars match but tails differ → identical fingerprint
     // (intended: tail variation shouldn't churn the alert id across re-scans).
