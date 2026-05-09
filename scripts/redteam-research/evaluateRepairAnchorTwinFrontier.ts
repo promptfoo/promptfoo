@@ -415,6 +415,7 @@ const anchorTwinCases = [
 ] as const satisfies readonly BoundaryStressCase[];
 const broaderStressCases = [...baseStressCases, ...broaderNeighborCases] as const;
 const anchorStressCases = [...baseStressCases, ...anchorTwinCases] as const;
+const mixedStressCases = [...baseStressCases, ...broaderNeighborCases, ...anchorTwinCases] as const;
 const baselineFailureTaskIds = [
   'legal-counsel-records-negative-v1',
   'security-reviewer-summary-negative-v1',
@@ -679,8 +680,7 @@ async function scoreBundle(
 
 function cartesianProduct<T>(groups: T[][]): T[][] {
   return groups.reduce<T[][]>(
-    (accumulator, group) =>
-      accumulator.flatMap((prefix) => group.map((item) => [...prefix, item])),
+    (accumulator, group) => accumulator.flatMap((prefix) => group.map((item) => [...prefix, item])),
     [[]],
   );
 }
@@ -752,12 +752,15 @@ async function main() {
     diagnosisGroups.map((candidateGroup) => materializeCandidateGroup(candidateGroup, providerId)),
   );
   const candidateBundles = cartesianProduct(materializedCandidateGroups);
-  const [broaderScoredBundles, anchorScoredBundles] = await Promise.all([
+  const [broaderScoredBundles, anchorScoredBundles, mixedScoredBundles] = await Promise.all([
     Promise.all(
       candidateBundles.map((bundle) => scoreBundle(bundle, broaderStressCases, providerId)),
     ),
     Promise.all(
       candidateBundles.map((bundle) => scoreBundle(bundle, anchorStressCases, providerId)),
+    ),
+    Promise.all(
+      candidateBundles.map((bundle) => scoreBundle(bundle, mixedStressCases, providerId)),
     ),
   ]);
   const selectedBroaderBundle = [...broaderScoredBundles].sort(
@@ -766,9 +769,13 @@ async function main() {
   const selectedAnchorBundle = [...anchorScoredBundles].sort(
     (left, right) => right.score - left.score,
   )[0];
-  const [broaderReplayOnAnchor, anchorReplayOnAnchor] = await Promise.all([
-    replaySelectedBundle(selectedBroaderBundle, anchorStressCases, providerId),
-    replaySelectedBundle(selectedAnchorBundle, anchorStressCases, providerId),
+  const selectedMixedBundle = [...mixedScoredBundles].sort(
+    (left, right) => right.score - left.score,
+  )[0];
+  const [broaderReplayOnMixed, anchorReplayOnMixed, mixedReplayOnMixed] = await Promise.all([
+    replaySelectedBundle(selectedBroaderBundle, mixedStressCases, providerId),
+    replaySelectedBundle(selectedAnchorBundle, mixedStressCases, providerId),
+    replaySelectedBundle(selectedMixedBundle, mixedStressCases, providerId),
   ]);
 
   console.log(
@@ -781,18 +788,24 @@ async function main() {
         broaderNeighborCases,
         broaderStressCases,
         candidateCount,
+        mixedStressCases,
         providerId,
         replayCount,
         summaries: {
           anchorTwinSelection: {
             perfectBundleCount: anchorScoredBundles.filter((bundle) => bundle.score === 1).length,
-            replayOnAnchorFrontier: anchorReplayOnAnchor,
+            replayOnMixedFrontier: anchorReplayOnMixed,
             selectedBundle: summarizeBundle(selectedAnchorBundle),
           },
           broaderNeighborSelection: {
             perfectBundleCount: broaderScoredBundles.filter((bundle) => bundle.score === 1).length,
-            replayOnAnchorFrontier: broaderReplayOnAnchor,
+            replayOnMixedFrontier: broaderReplayOnMixed,
             selectedBundle: summarizeBundle(selectedBroaderBundle),
+          },
+          mixedSelection: {
+            perfectBundleCount: mixedScoredBundles.filter((bundle) => bundle.score === 1).length,
+            replayOnMixedFrontier: mixedReplayOnMixed,
+            selectedBundle: summarizeBundle(selectedMixedBundle),
           },
         },
       },

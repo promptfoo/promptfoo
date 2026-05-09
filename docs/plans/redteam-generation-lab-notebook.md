@@ -6753,3 +6753,74 @@ The matched twins are informative, but not yet decisive:
    - anchor twins alone
    - their union
      to see whether mixed neighborhoods dominate either component frontier.
+
+## Iteration 81 - 2026-05-09
+
+### Goal
+
+Test the mixed-frontier hypothesis directly:
+
+> Does the union of broader neighbors and anchor-local twins dominate either
+> frontier by itself when every selected bundle is replayed on the full mixed
+> neighborhood?
+
+### Experiment
+
+1. Extended `evaluateRepairAnchorTwinFrontier.ts`.
+2. Reused the same:
+   - three failure families
+   - three diagnosis candidates per family
+   - twenty-seven candidate bundles
+3. Compared three selector frontiers over the same bundle pool:
+   - **broader-neighbor**: original seven cases plus three broader positives
+   - **anchor-twin**: original seven cases plus six matched anchor twins
+   - **mixed**: the union of both sets, sixteen total cases
+4. Replayed all three selected bundles three times on the mixed sixteen-case
+   frontier.
+
+### Results
+
+The mixed frontier did **not** dominate the components across runs:
+
+| Run | Selector frontier | Perfect bundles | Fresh mixed replay average | Replay stability |
+| --- | ----------------- | --------------: | -------------------------: | ---------------: |
+| A   | broader-neighbor  |             `0` |                    `45/48` |          `16/16` |
+| A   | anchor-twin       |             `1` |                    `46/48` |          `15/16` |
+| A   | mixed             |             `0` |                    `45/48` |          `16/16` |
+| B   | broader-neighbor  |             `2` |                    `45/48` |          `16/16` |
+| B   | anchor-twin       |             `1` |                    `46/48` |          `15/16` |
+| B   | mixed             |             `2` |                    `46/48` |          `15/16` |
+
+The union was stricter, but the current candidate pool still could not reliably
+turn that extra evidence into a better selected bundle:
+
+1. in run A the mixed frontier found no perfect bundle at all
+2. in run B it merely tied anchor-only selection
+3. the recurring miss remained `legal-counsel-report-positive-v1`
+
+### Reflection
+
+1. The mixed frontier is still a useful acceptance object, but not yet a better
+   selector by itself.
+2. The failure mode has shifted again:
+   - benchmark design is richer
+   - but the available support candidates may be too weak for the benchmark
+3. That is an important distinction for the larger research agenda:
+   - sometimes the evaluator is underpowered
+   - sometimes the proposer simply has not generated a repair worth accepting
+4. A modern generator should therefore co-evolve:
+   - frontier quality
+   - candidate diversity
+5. The next frontier is to enlarge or target the candidate pool, not merely make
+   the evaluator stricter.
+
+### New Hypotheses
+
+1. Mixed frontiers may be stronger acceptance objects, but they only help if the
+   proposer can supply candidates that satisfy them.
+2. Attack generation should be multi-scale:
+   - broad exploration for diversity
+   - local contrast for boundary repair
+3. The next experiment should expand the repair candidate pool around the
+   stubborn report-positive / contract-negative hinge and ask whether richer
+   proposals finally let the mixed frontier outperform the component frontiers.
