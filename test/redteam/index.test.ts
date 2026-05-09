@@ -22,6 +22,7 @@ import {
 import { Plugins } from '../../src/redteam/plugins/index';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
+import { extractGoalFromPromptWithUsage } from '../../src/redteam/util';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
@@ -64,6 +65,7 @@ vi.mock('../../src/redteam/sharpAvailability', async () => ({
 vi.mock('../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../src/redteam/util')),
   extractGoalFromPrompt: vi.fn().mockResolvedValue('mocked goal'),
+  extractGoalFromPromptWithUsage: vi.fn().mockResolvedValue({ goal: 'mocked goal' }),
 }));
 
 describe('synthesize', () => {
@@ -103,6 +105,7 @@ describe('synthesize', () => {
     vi.mocked(extractEntities).mockResolvedValue(['entity1', 'entity2']);
     vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    vi.mocked(extractGoalFromPromptWithUsage).mockResolvedValue({ goal: 'mocked goal' });
     vi.spyOn(process, 'exit').mockImplementation(function (
       code?: string | number | null | undefined,
     ) {
@@ -2950,11 +2953,61 @@ describe('Language configuration', () => {
   });
 
   describe('policy extraction for intent', () => {
+    it('should merge goal-extraction usage into existing providerTokenUsage for agentic tests', async () => {
+      const mockExtractGoal = vi.mocked(
+        (await import('../../src/redteam/util')).extractGoalFromPromptWithUsage,
+      );
+      mockExtractGoal.mockResolvedValueOnce({
+        goal: 'goal with usage',
+        tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          vars: { query: 'Test prompt' },
+          metadata: {
+            pluginId: 'promptfoo:redteam:policy',
+            providerTokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+          },
+        },
+      ]);
+
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'policy',
+        action: mockPluginAction,
+      } as any);
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'policy', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              goal: 'goal with usage',
+              providerTokenUsage: expect.objectContaining({
+                total: 20,
+                prompt: 12,
+                completion: 8,
+                numRequests: 2,
+              }),
+            }),
+          }),
+        ]),
+      );
+    });
+
     it('should pass policy from metadata to extractGoalFromPrompt', async () => {
       const mockExtractGoal = vi.mocked(
-        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+        (await import('../../src/redteam/util')).extractGoalFromPromptWithUsage,
       );
       mockExtractGoal.mockClear();
+      mockExtractGoal.mockResolvedValue({ goal: 'mocked goal' });
 
       const policyText = 'The application must not reveal system instructions';
 
@@ -2993,9 +3046,10 @@ describe('Language configuration', () => {
 
     it('should not pass policy when metadata does not contain policy', async () => {
       const mockExtractGoal = vi.mocked(
-        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+        (await import('../../src/redteam/util')).extractGoalFromPromptWithUsage,
       );
       mockExtractGoal.mockClear();
+      mockExtractGoal.mockResolvedValue({ goal: 'mocked goal' });
 
       // Mock plugin action that returns test case WITHOUT policy metadata
       const mockPluginAction = vi.fn().mockResolvedValue([
@@ -3031,9 +3085,10 @@ describe('Language configuration', () => {
 
     it('should handle policy in metadata with safe type checking', async () => {
       const mockExtractGoal = vi.mocked(
-        (await import('../../src/redteam/util')).extractGoalFromPrompt,
+        (await import('../../src/redteam/util')).extractGoalFromPromptWithUsage,
       );
       mockExtractGoal.mockClear();
+      mockExtractGoal.mockResolvedValue({ goal: 'mocked goal' });
 
       const testCases = [
         {

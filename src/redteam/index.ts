@@ -50,7 +50,7 @@ import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { mergeProviderTokenUsage, pluginMatchesStrategyTargets } from './strategies/util';
 import {
-  extractGoalFromPrompt,
+  extractGoalFromPromptWithUsage,
   extractMaterializedVariablesFromJsonWithMetadata,
   getShortPluginId,
 } from './util';
@@ -1412,9 +1412,20 @@ export async function synthesize({
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
             const policy = getPolicyText(testCase.metadata);
-            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
-
-            (testCase.metadata as any).goal = extractedGoal;
+            const extractedGoal = await extractGoalFromPromptWithUsage(
+              prompt,
+              purpose,
+              plugin.id,
+              policy,
+            );
+            testCase.metadata ??= {};
+            (testCase.metadata as any).goal = extractedGoal.goal;
+            if (extractedGoal.tokenUsage) {
+              (testCase.metadata as any).providerTokenUsage = mergeProviderTokenUsage(
+                testCase.metadata.providerTokenUsage as TokenUsage | undefined,
+                extractedGoal.tokenUsage,
+              );
+            }
           }
         }
 
@@ -1538,9 +1549,20 @@ export async function synthesize({
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
             const policy = getPolicyText(testCase.metadata);
-            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
-
-            (testCase.metadata as any).goal = extractedGoal;
+            const extractedGoal = await extractGoalFromPromptWithUsage(
+              prompt,
+              purpose,
+              plugin.id,
+              policy,
+            );
+            testCase.metadata ??= {};
+            (testCase.metadata as any).goal = extractedGoal.goal;
+            if (extractedGoal.tokenUsage) {
+              (testCase.metadata as any).providerTokenUsage = mergeProviderTokenUsage(
+                testCase.metadata.providerTokenUsage as TokenUsage | undefined,
+                extractedGoal.tokenUsage,
+              );
+            }
           }
         }
 
