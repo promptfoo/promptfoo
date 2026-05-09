@@ -5042,3 +5042,87 @@ The holdout effect is severe:
    - specialist detector
    - local structural classifier
    - learned profile mapper
+
+## Iteration 59 - 2026-05-09
+
+### Goal
+
+Test a more structured alternative to the failed direct selector:
+
+> If we preserve the learned packaging abstraction and ask only for a
+> balanced-versus-thin comparison, can a contrastive local reranker learn the
+> legal-counsel mapping more reliably?
+
+### Experiment
+
+1. Added `evaluateRepairSemanticContrastiveLocalExpertRouting.ts`.
+2. Reused:
+   - the saved `role-mechanism` draws from iteration 53
+   - the learned packaging labels from iteration 57
+3. Activated only on legal-counsel prompt-extraction tasks.
+4. Asked the model to compare:
+   - `balanced`
+   - versus `thin`
+5. Showed it:
+   - balanced-winning local examples
+   - thin-winning local examples
+   - the target task
+   - the learned evidence-packaging class
+
+### Results
+
+The contrastive reranker is better framed than the direct selector, but still not
+good enough:
+
+| Router                          | Avg label holdout accuracy | Avg label holdout regret |
+| ------------------------------- | -------------------------: | -----------------------: |
+| global `role-mechanism`         |                     `0.50` |                `0.00236` |
+| contrastive local expert hybrid |                     `0.33` |                `0.00450` |
+
+The choices are unstable across draws:
+
+| Trial | `novelty-v3` | `coverage-v2` |
+| ----: | -----------: | ------------: |
+|   `1` |   `balanced` |    `balanced` |
+|   `2` |   `balanced` |        `thin` |
+|   `3` |   `balanced` |        `thin` |
+
+That means:
+
+1. `prompt-extraction-novelty-v3`
+   - remains wrong on every draw
+2. `prompt-extraction-coverage-v2`
+   - is correct once
+   - wrong twice
+3. the learned packaging labels are present and correct
+   - but the reranker still does not learn the right mapping reliably
+
+### Reflection
+
+1. This is an informative partial failure:
+   - contrastive framing helps a little
+   - but not enough to overcome the shortcut bias
+2. The model can learn the **structure**:
+   - `verbatim-disclosure`
+   - versus `compiled-report`
+3. It still cannot robustly infer the **policy**:
+   - which proposer profile should follow from that structure
+4. The likely missing ingredient is supervision density:
+   - we have learned packaging labels
+   - but almost no examples that teach the packaging-to-profile relation itself
+5. That suggests two sensible next moves:
+   - add synthetic counterfactual local examples that break the shortcut
+   - or keep the structural classifier learned and learn the mapping with a
+     simpler calibrated layer once there is more data
+
+### New Hypotheses
+
+1. The right learning problem is probably two-stage:
+   - representation first
+   - calibrated mapping second
+2. Counterfactual local examples should improve reranking more than another
+   prompt rewrite alone.
+3. Before adding more legal-counsel machinery, it may be better to analyze the
+   other residual family:
+   - `bola-coverage-v2`
+     because it may reveal whether specialist failures share a broader pattern.
