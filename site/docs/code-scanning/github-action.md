@@ -42,14 +42,14 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 
 | Input               | Description                                                      | Default                     |
 | ------------------- | ---------------------------------------------------------------- | --------------------------- |
-| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.dev` |
+| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app` |
 | `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
 | `minimum-severity`  | Alias for `min-severity`                                         | `medium`                    |
 | `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
 | `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
 | `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
 | `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                     |
-| `sarif-output-path` | Optional path to write SARIF 2.1.0 results for GitHub upload     | None                        |
+| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning     | None                        |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
 
@@ -112,6 +112,25 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
     config-path: .promptfoo-code-scan.yaml
 ```
 
+**Write SARIF output for GitHub Code Scanning:**
+
+The action sets `sarif-path` only when a scan actually completes, so keep the upload step conditional. Intentionally skipped scans do not publish a clean Code Scanning result.
+
+```yaml
+- name: Run Promptfoo Code Scan
+  id: promptfoo-code-scan
+  uses: promptfoo/code-scan-action@v1
+  with:
+    sarif-output-path: promptfoo-code-scan.sarif
+
+- name: Upload SARIF to GitHub Code Scanning
+  if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
+  uses: github/codeql-action/upload-sarif@v4
+  with:
+    sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
+    category: promptfoo-code-scan
+```
+
 ### Configuration File
 
 Create a `.promptfoo-code-scan.yaml` in your repository root. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
@@ -128,45 +147,6 @@ guidance: |
   Focus on authentication and authorization vulnerabilities.
   Treat any PII exposure as high severity.
 ```
-
-## GitHub Code Scanning Alerts
-
-The action can write SARIF 2.1.0 results that GitHub turns into code scanning alerts in the repository Security tab. Set `sarif-output-path`, then upload the file with GitHub's SARIF upload action.
-
-```yaml
-name: Promptfoo Code Scan
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-
-jobs:
-  security-scan:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      security-events: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Run Promptfoo Code Scan
-        uses: promptfoo/code-scan-action@v1
-        with:
-          sarif-output-path: promptfoo-code-scan.sarif
-
-      - name: Upload Promptfoo SARIF
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: promptfoo-code-scan.sarif
-          category: promptfoo-code-scan
-```
-
-GitHub requires `security-events: write` for SARIF upload. In private repositories, GitHub's upload flow may also require `actions: read` in addition to `contents: read`.
 
 ## Manual Installation
 
@@ -203,6 +183,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Promptfoo Code Scan
+        id: promptfoo-code-scan
         uses: promptfoo/code-scan-action@v1
         env:
           PROMPTFOO_API_KEY: ${{ secrets.PROMPTFOO_API_KEY }}
@@ -212,10 +193,11 @@ jobs:
           sarif-output-path: promptfoo-code-scan.sarif
           # ... other configuration options...
 
-      - name: Upload Promptfoo SARIF
+      - name: Upload SARIF to GitHub Code Scanning
+        if: ${{ steps.promptfoo-code-scan.outputs.sarif-path != '' }}
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: promptfoo-code-scan.sarif
+          sarif_file: ${{ steps.promptfoo-code-scan.outputs.sarif-path }}
           category: promptfoo-code-scan
 ```
 

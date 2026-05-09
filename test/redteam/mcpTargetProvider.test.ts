@@ -15,19 +15,6 @@ vi.mock('../../src/redteam/providers/shared', () => ({
   },
 }));
 
-const searchCompaniesTool: MCPTool = {
-  name: 'search_companies',
-  description: 'Search sample company records.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string' },
-      limit: { type: 'integer', default: 10 },
-    },
-    required: ['query'],
-  },
-};
-
 class FakeMcpProvider extends MCPProvider {
   calls: { context?: CallApiContextParams; prompt: string }[] = [];
   cleanupCalls = 0;
@@ -51,6 +38,19 @@ class FakeMcpProvider extends MCPProvider {
 }
 
 describe('maybeWrapMcpProviderForRedteam', () => {
+  const searchCompaniesTool: MCPTool = {
+    name: 'search_companies',
+    description: 'Search sample company records.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        limit: { type: 'integer', default: 10 },
+      },
+      required: ['query'],
+    },
+  };
+
   beforeEach(() => {
     providerManagerMocks.getProvider.mockReset();
   });
