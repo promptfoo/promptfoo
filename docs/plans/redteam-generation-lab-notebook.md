@@ -6824,3 +6824,75 @@ turn that extra evidence into a better selected bundle:
 3. The next experiment should expand the repair candidate pool around the
    stubborn report-positive / contract-negative hinge and ask whether richer
    proposals finally let the mixed frontier outperform the component frontiers.
+
+## Iteration 82 - 2026-05-09
+
+### Goal
+
+Improve the proposer instead of the evaluator:
+
+> On the fixed mixed frontier, does a candidate pool that proposes a matched
+> positive/negative hinge pair outperform the old pool that only adds a negative
+> contract support example?
+
+### Experiment
+
+1. Added `evaluateRepairContrastiveHingeSupport.ts`.
+2. Kept the mixed sixteen-case frontier from iteration 81 fixed.
+3. Compared two candidate pools, each with twenty-seven bundles:
+   - **negative-only**:
+     - one generated negative support candidate for each failure family
+   - **contrastive-hinge**:
+     - the same negative candidates for records and security-reviewer failures
+     - plus a matched support pair for the report-positive / contract-negative
+       hinge:
+       - one positive report support
+       - one negative contract support
+4. Replayed the best selected bundle from each pool three times on the mixed
+   frontier.
+
+### Results
+
+The contrastive proposer improves the pool immediately, though it does not make
+the frontier perfectly solved yet:
+
+| Candidate pool    | Perfect bundles | Fresh mixed replay average | Replay stability |
+| ----------------- | --------------: | -------------------------: | ---------------: |
+| negative-only     |         `1`-`9` |                    `46/48` |          `15/16` |
+| contrastive-hinge |       `18`-`25` |                    `47/48` |          `15/16` |
+
+The key change is semantic balance:
+
+1. negative-only repair keeps teaching the planner what to exclude
+2. contrastive repair teaches the planner:
+   - what to exclude
+   - and what nearby positive behavior must remain inside the family
+3. the residual miss moved from the report-positive anchor to a single
+   contract-negative twin, which is a materially narrower failure
+
+### Reflection
+
+1. This is the first proposer-side improvement that cleanly lifts the older pool
+   on the mixed frontier.
+2. The report-positive drift was not merely an evaluation problem:
+   - it was a proposal-shape problem
+3. Modern red-team generation should therefore propose **contrastive edits**:
+   - attack families
+   - failure exemplars
+   - paired nearby non-failures that must be preserved
+4. This matters beyond the toy planner:
+   - if a system only generates adversarial failures, it can overlearn the
+     boundary in exactly the wrong direction
+5. The next frontier is to make the pair itself more robust:
+   - either generate several contrastive variants
+   - or rank them against the whole twin set instead of accepting the first pair
+
+### New Hypotheses
+
+1. Contrastive support pairs are stronger repair units than isolated negative
+   examples when the decision boundary is narrow.
+2. A modern attack generator should track both:
+   - vulnerabilities found
+   - nearby safe behaviors that repairs must not erase
+3. The next experiment should sample several contrastive hinge pairs and rank
+   them against the whole mixed frontier before selecting the one to admit.
