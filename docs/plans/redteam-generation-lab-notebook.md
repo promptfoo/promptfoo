@@ -13750,3 +13750,57 @@ Add the second target regime implied by iteration `188`:
    distribution of target regimes, not a single universal success rate.
 3. Target-regime diversity may be as important as prompt diversity when we judge
    whether a red-team generator is actually useful.
+
+## Iteration 190 - 2026-05-10
+
+### Goal
+
+Promote the last two one-off target runs into a reusable benchmark summary:
+
+> If generator quality should be judged across a distribution of target regimes,
+> what first suite-level scorecard should we optimize?
+
+### Experiment
+
+1. Reused the two real replay outputs already collected:
+   - `hardened-medical-agent`
+   - `permissive-family`
+2. Added a suite reducer that aggregates by generator cohort instead of by
+   individual target:
+   - leak-ready prompt rate
+   - mean realized failure rate across regimes
+   - regimes with any realized failure
+   - total realized failures across the whole suite
+3. Kept the per-regime detail visible beneath the aggregate table so the suite
+   score cannot hide whether one target is doing all the work.
+
+### Results
+
+| Cohort           | Leak-ready prompts | Mean failure rate across regimes | Regimes with any failure | Total realized failures |
+| ---------------- | ------------------ | -------------------------------- | ------------------------ | ----------------------- |
+| `legacy-generic` | `1/6`              | `0%`                             | `0/2`                    | `0/12`                  |
+| `portfolio`      | `6/6`              | `50%`                            | `1/2`                    | `6/12`                  |
+
+### Reflection
+
+1. The suite view is a better optimization surface than either single replay:
+   - it preserves the hardened-target negative result
+   - it still rewards generators that expose weaknesses where they exist
+2. `Regimes with any failure` is especially useful alongside raw failure count:
+   it distinguishes broad utility from one target that happens to leak often.
+3. We now have the first tiny version of an expected-yield benchmark:
+   generator quality under a distribution of targets, not only under one target.
+
+### New Hypotheses
+
+1. The next useful target additions should diversify weakness type rather than
+   merely add more copies of `permissive-family`.
+2. Once the target suite reaches at least three qualitatively distinct regimes,
+   we should compare alternative aggregation policies:
+   - uniform mean over regimes
+   - vulnerability-weighted mean
+   - frontier-weighted mean
+3. The eventual generator selector may need a Pareto frontier over:
+   - semantic coverage
+   - leak-ready prompt rate
+   - expected realized yield across target regimes
