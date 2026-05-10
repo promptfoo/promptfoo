@@ -42,6 +42,12 @@ export type PromptExtractionSemanticBandComparison = {
   semanticBandAwareFivePortfolio: PromptExtractionSemanticBandSummary;
 };
 
+export type PromptExtractionBeforeAfterReport = {
+  afterPrompts: string[];
+  beforePrompts: string[];
+  comparison: PromptExtractionSemanticBandComparison;
+};
+
 export function summarizePromptExtractionSemanticBandComparison(
   baselinePrompts: readonly string[],
   fullPortfolioPrompts: readonly string[],
@@ -54,6 +60,35 @@ export function summarizePromptExtractionSemanticBandComparison(
     fullCuratedPortfolio: summarizePromptSet(fullPortfolioPrompts),
     semanticBandAwareFivePortfolio: summarizePromptSet(semanticBandAwareFivePrompts),
   };
+}
+
+export function renderPromptExtractionBeforeAfterMarkdown(
+  report: PromptExtractionBeforeAfterReport,
+): string {
+  const { afterPrompts, beforePrompts, comparison } = report;
+  const baseline = comparison.baselineUniquePrompts.bandCoverage;
+  const after = comparison.semanticBandAwareFivePortfolio.bandCoverage;
+
+  return [
+    '# Prompt Extraction Before / After',
+    '',
+    '| Portfolio | Core disclosure | Protected control plane |',
+    '| --- | ---: | ---: |',
+    `| Baseline unique prompts | ${formatBandCoverage(baseline['core-disclosure'])} | ${formatBandCoverage(baseline['protected-control-plane'])} |`,
+    `| Semantic-band-aware five-prompt portfolio | ${formatBandCoverage(after['core-disclosure'])} | ${formatBandCoverage(after['protected-control-plane'])} |`,
+    '',
+    '## Before',
+    '',
+    ...beforePrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
+    '',
+    '## After',
+    '',
+    ...afterPrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
+    '',
+    '## Reading',
+    '',
+    'The baseline portfolio already covers the generic prompt-extraction floor, but it does not exercise any protected-control-plane probes. The semantic-band-aware portfolio keeps the same core floor while adding authority checks, routing and classification logic, refusal policy, escalation guidance, legal authority, and verbatim extraction coverage.',
+  ].join('\n');
 }
 
 async function loadUniquePromptExtractionPrompts(inputPath: string): Promise<string[]> {
@@ -78,11 +113,28 @@ function summarizePromptSet(prompts: readonly string[]): PromptExtractionSemanti
   };
 }
 
+function formatBandCoverage(summary: ObservedPluginFeatureBandCoverageSummary[string]): string {
+  return `${summary.observedFeatureCount}/${summary.featureCount} features, ${summary.promptsWithFeaturesCount}/${summary.promptCount} prompts`;
+}
+
+function parseArgs(args: string[]): { format: 'json' | 'markdown'; inputPath?: string } {
+  const formatIndex = args.indexOf('--format');
+  const format = formatIndex === -1 ? 'json' : args[formatIndex + 1];
+  const positionalArgs = args.filter(
+    (arg, index) => arg !== '--format' && (formatIndex === -1 || index !== formatIndex + 1),
+  );
+
+  return {
+    format: format === 'markdown' ? 'markdown' : 'json',
+    inputPath: positionalArgs[0],
+  };
+}
+
 async function main() {
-  const [inputPath] = process.argv.slice(2);
+  const { format, inputPath } = parseArgs(process.argv.slice(2));
   if (!inputPath) {
     throw new Error(
-      'Usage: tsx scripts/redteam-research/comparePromptExtractionSemanticBands.ts <redteam.yaml>',
+      'Usage: tsx scripts/redteam-research/comparePromptExtractionSemanticBands.ts <redteam.yaml> [--format json|markdown]',
     );
   }
 
@@ -97,19 +149,23 @@ async function main() {
     buildPromptExtractionCandidatePool(fullPortfolio),
     5,
   );
-
-  console.log(
-    JSON.stringify(
-      summarizePromptExtractionSemanticBandComparison(
-        baselinePrompts,
-        fullPortfolio.map((attack) => attack.prompt),
-        diverseFivePortfolio.map((attack) => attack.prompt),
-        semanticBandAwareFivePortfolio.map((attack) => attack.prompt),
-      ),
-      null,
-      2,
+  const report = {
+    afterPrompts: semanticBandAwareFivePortfolio.map((attack) => attack.prompt),
+    beforePrompts: baselinePrompts,
+    comparison: summarizePromptExtractionSemanticBandComparison(
+      baselinePrompts,
+      fullPortfolio.map((attack) => attack.prompt),
+      diverseFivePortfolio.map((attack) => attack.prompt),
+      semanticBandAwareFivePortfolio.map((attack) => attack.prompt),
     ),
-  );
+  };
+
+  if (format === 'markdown') {
+    console.log(renderPromptExtractionBeforeAfterMarkdown(report));
+    return;
+  }
+
+  console.log(JSON.stringify(report.comparison, null, 2));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

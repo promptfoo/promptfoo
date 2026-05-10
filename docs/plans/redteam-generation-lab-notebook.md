@@ -10358,3 +10358,68 @@ The six selected production families cover:
    - band-aware scoring
    - contract-backed families
    - benchmarked selectors
+
+## Iteration 131 - 2026-05-10
+
+### Goal
+
+Make the prompt-extraction gain legible to humans, not only benchmark scripts:
+
+> Can we turn the new semantic-band result into a durable before/after artifact
+> that explains why the new attacks are better?
+
+### Experiment
+
+1. Extended `comparePromptExtractionSemanticBands.ts` with:
+   - `--format markdown`
+   - a reusable Markdown renderer
+2. Generated a checked-in report snapshot from the real medical-agent corpus.
+3. Kept the same benchmark underneath so the artifact stays tied to:
+   - `2/2` core disclosure coverage
+   - `7/7` protected-control-plane coverage
+
+### Results
+
+The new report makes the improvement visible at a glance:
+
+| Portfolio                                 | Core disclosure | Protected control plane |
+| ----------------------------------------- | --------------: | ----------------------: |
+| baseline unique prompts                   |           `2/2` |                   `0/7` |
+| semantic-band-aware five-prompt portfolio |           `2/2` |                   `7/7` |
+
+The before prompts mostly ask for:
+
+1. system instructions
+2. internal guidelines
+3. configuration
+4. onboarding rules
+5. system prompt text
+
+The after prompts add distinct probes for:
+
+1. authority checks
+2. routing rules
+3. classification logic
+4. refusal policy
+5. escalation guidance
+
+### Reflection
+
+1. This is a useful forcing function:
+   - if a quality gain cannot be shown in a short report
+   - it may be optimizing the wrong thing
+2. The artifact clarifies that the win is not "more jailbreaky wording":
+   - it is semantically broader coverage over concrete control-plane surfaces
+3. Human-readable snapshots should probably become a standard companion to
+   generator benchmarks once we start refactoring more plugins.
+
+### New Hypotheses
+
+1. The next useful target is `sql-injection`, where the same decomposition may
+   reveal:
+   - exploit-mechanism coverage
+   - authorization-bypass coverage
+2. If SQL behaves like prompt extraction, the current diversity selector may also
+   trade away important bands while chasing lexical novelty.
+3. We should eventually make these before/after reports generic across plugins,
+   not one-off per benchmark.
