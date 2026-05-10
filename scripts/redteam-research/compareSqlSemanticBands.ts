@@ -9,6 +9,11 @@ import {
   summarizeObservedPluginFeatureCoverage,
 } from '../../src/redteam/generation/predicateSignatures';
 import {
+  formatBandCoverage,
+  renderMarkdownTable,
+  renderNumberedSection,
+} from './reportRenderingShared';
+import {
   buildSqlCandidatePool,
   selectDiverseSqlPortfolio,
   selectSemanticBandAwareSqlPortfolio,
@@ -76,24 +81,42 @@ export function renderSqlBeforeAfterMarkdown(report: SqlBeforeAfterReport): stri
   return [
     '# SQL Injection Before / After',
     '',
-    '| Portfolio | Exploit mechanism | Authorization bypass |',
-    '| --- | ---: | ---: |',
-    `| Baseline unique prompts | ${formatBandCoverage(baseline['exploit-mechanism'])} | ${formatBandCoverage(baseline['authorization-bypass'])} |`,
-    `| First five | ${formatBandCoverage(firstFive['exploit-mechanism'])} | ${formatBandCoverage(firstFive['authorization-bypass'])} |`,
-    `| Diversity-only five | ${formatBandCoverage(diverseFive['exploit-mechanism'])} | ${formatBandCoverage(diverseFive['authorization-bypass'])} |`,
-    `| Semantic-band-aware five | ${formatBandCoverage(semanticFive['exploit-mechanism'])} | ${formatBandCoverage(semanticFive['authorization-bypass'])} |`,
-    '',
-    '## Baseline',
-    '',
-    ...baselinePrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
-    '',
-    '## First Five',
-    '',
-    ...firstFivePrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
-    '',
-    '## Diversity-Only Five',
-    '',
-    ...diverseFivePrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
+    ...renderMarkdownTable(
+      ['Portfolio', 'Exploit mechanism', 'Authorization bypass'],
+      [
+        {
+          cells: [
+            'Baseline unique prompts',
+            formatBandCoverage(baseline['exploit-mechanism']),
+            formatBandCoverage(baseline['authorization-bypass']),
+          ],
+        },
+        {
+          cells: [
+            'First five',
+            formatBandCoverage(firstFive['exploit-mechanism']),
+            formatBandCoverage(firstFive['authorization-bypass']),
+          ],
+        },
+        {
+          cells: [
+            'Diversity-only five',
+            formatBandCoverage(diverseFive['exploit-mechanism']),
+            formatBandCoverage(diverseFive['authorization-bypass']),
+          ],
+        },
+        {
+          cells: [
+            'Semantic-band-aware five',
+            formatBandCoverage(semanticFive['exploit-mechanism']),
+            formatBandCoverage(semanticFive['authorization-bypass']),
+          ],
+        },
+      ],
+    ),
+    ...renderNumberedSection('Baseline', baselinePrompts),
+    ...renderNumberedSection('First Five', firstFivePrompts),
+    ...renderNumberedSection('Diversity-Only Five', diverseFivePrompts),
     '',
     '## Reading',
     '',
@@ -121,10 +144,6 @@ function summarizePromptSet(prompts: readonly string[]): SqlSemanticBandSummary 
     promptCount: prompts.length,
     semanticFeatureCoverage: summarizeObservedPluginFeatureCoverage('sql-injection', prompts),
   };
-}
-
-function formatBandCoverage(summary: ObservedPluginFeatureBandCoverageSummary[string]): string {
-  return `${summary.observedFeatureCount}/${summary.featureCount} features, ${summary.promptsWithFeaturesCount}/${summary.promptCount} prompts`;
 }
 
 function parseArgs(args: string[]): { format: 'json' | 'markdown'; inputPath?: string } {

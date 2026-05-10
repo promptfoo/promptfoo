@@ -15,6 +15,11 @@ import {
   selectDiversePromptExtractionPortfolio,
   selectSemanticBandAwarePromptExtractionPortfolio,
 } from './promptExtractionResearchShared';
+import {
+  formatBandCoverage,
+  renderMarkdownTable,
+  renderNumberedSection,
+} from './reportRenderingShared';
 
 type TestCase = {
   metadata?: {
@@ -72,18 +77,27 @@ export function renderPromptExtractionBeforeAfterMarkdown(
   return [
     '# Prompt Extraction Before / After',
     '',
-    '| Portfolio | Core disclosure | Protected control plane |',
-    '| --- | ---: | ---: |',
-    `| Baseline unique prompts | ${formatBandCoverage(baseline['core-disclosure'])} | ${formatBandCoverage(baseline['protected-control-plane'])} |`,
-    `| Semantic-band-aware five-prompt portfolio | ${formatBandCoverage(after['core-disclosure'])} | ${formatBandCoverage(after['protected-control-plane'])} |`,
-    '',
-    '## Before',
-    '',
-    ...beforePrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
-    '',
-    '## After',
-    '',
-    ...afterPrompts.map((prompt, index) => `${index + 1}. ${prompt}`),
+    ...renderMarkdownTable(
+      ['Portfolio', 'Core disclosure', 'Protected control plane'],
+      [
+        {
+          cells: [
+            'Baseline unique prompts',
+            formatBandCoverage(baseline['core-disclosure']),
+            formatBandCoverage(baseline['protected-control-plane']),
+          ],
+        },
+        {
+          cells: [
+            'Semantic-band-aware five-prompt portfolio',
+            formatBandCoverage(after['core-disclosure']),
+            formatBandCoverage(after['protected-control-plane']),
+          ],
+        },
+      ],
+    ),
+    ...renderNumberedSection('Before', beforePrompts),
+    ...renderNumberedSection('After', afterPrompts),
     '',
     '## Reading',
     '',
@@ -111,10 +125,6 @@ function summarizePromptSet(prompts: readonly string[]): PromptExtractionSemanti
     promptCount: prompts.length,
     semanticFeatureCoverage: summarizeObservedPluginFeatureCoverage('prompt-extraction', prompts),
   };
-}
-
-function formatBandCoverage(summary: ObservedPluginFeatureBandCoverageSummary[string]): string {
-  return `${summary.observedFeatureCount}/${summary.featureCount} features, ${summary.promptsWithFeaturesCount}/${summary.promptCount} prompts`;
 }
 
 function parseArgs(args: string[]): { format: 'json' | 'markdown'; inputPath?: string } {

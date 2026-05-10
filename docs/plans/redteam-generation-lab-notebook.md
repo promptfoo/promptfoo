@@ -10762,3 +10762,57 @@ The refactor preserves the important guarantees:
      aligned across plugins.
 3. Before that, it may be useful to port the shared greedy selector into the
    production generation layer rather than leaving it only in research scripts.
+
+## Iteration 138 - 2026-05-10
+
+### Goal
+
+Reduce report duplication without erasing the useful plugin-specific story:
+
+> Can we share the Markdown scaffolding while keeping each benchmark's
+> interpretation local?
+
+### Experiment
+
+1. Added `reportRenderingShared.ts` with reusable helpers for:
+   - band-coverage formatting
+   - markdown tables
+   - numbered prompt sections
+2. Rewired:
+   - prompt-extraction before/after rendering
+   - SQL before/after rendering
+3. Kept the plugin-specific:
+   - row selection
+   - section choices
+   - reading text
+     local to each report.
+
+### Results
+
+The refactor preserves both checked-in artifacts exactly:
+
+1. prompt-extraction markdown snapshot: unchanged
+2. SQL markdown snapshot: unchanged
+
+### Reflection
+
+1. This mirrors the selector abstraction lesson:
+   - share the plumbing
+   - keep the semantics local
+2. The report layer is now easier to extend for future plugins without forcing a
+   one-size-fits-all story.
+3. We now have a small repeated pattern across:
+   - selectors
+   - report rendering
+     that points toward a more coherent research harness.
+
+### New Hypotheses
+
+1. The next useful step is to bridge research and production more directly:
+   - the production generation layer has portfolio abstractions already
+   - but the semantic-band-aware selector remains research-only
+2. Porting the selector concept into production would be more valuable than
+   adding a third reporting abstraction.
+3. Prompt extraction is the safest first production target because:
+   - it already has contract-backed families
+   - it already demonstrated a real selection regression
