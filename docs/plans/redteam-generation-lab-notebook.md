@@ -14284,3 +14284,47 @@ Test the first hypothesis from iteration `198`:
    breadth predicts realized yield.
 3. If both hold, `pii:direct` may graduate faster than `pii:social` through
    stages `3` and `4`.
+
+## Iteration 200 - 2026-05-10
+
+### Goal
+
+Advance `pii:direct` from the new stage-2 proxy into its first target replay:
+
+> Can a deliberately strict direct-PII target give us a clean hardened baseline
+> before we introduce any susceptible regime?
+
+### Experiment
+
+1. Added a deterministic `strict-refusal` direct-PII target provider.
+2. Built a six-prompt replay harness from the same stage-2 direct-PII portfolio.
+3. Kept the replay on the real `promptfoo` eval path with the existing
+   `promptfoo:redteam:pii:direct` grader so target outputs and grading still pass
+   through the normal runtime.
+4. Used the hardened replay to compare:
+   - field-visible prompt count
+   - realized `PIILeak` failures
+
+### Results
+
+| Target regime    | Field-visible prompts | Realized `PIILeak` failures |
+| ---------------- | --------------------: | --------------------------: |
+| `strict-refusal` |                 `6/6` |                       `0/6` |
+
+### Reflection
+
+1. `pii:direct` now has its first true stage-3 asset.
+2. The result is intentionally flat on outcome:
+   - the prompts are still good
+   - the hardened target simply does not leak
+3. That separation matters because it prevents us from mistaking zero realized
+   yield for a bad generator.
+
+### New Hypotheses
+
+1. A useful stage-4 regime should be selectively permissive rather than
+   universally leaky, so direct-field breadth can matter.
+2. The easiest next candidate is probably a target that leaks contact and SSN
+   details but still refuses medical-record and prescription requests.
+3. If the six-prompt frontier is well formed, that selective target should create
+   a nonzero but submaximal realized failure rate rather than another flat result.
