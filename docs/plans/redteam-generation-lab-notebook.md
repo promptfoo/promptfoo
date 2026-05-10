@@ -13635,3 +13635,55 @@ Move the live `pii:social` benchmark one step closer to an outcome label:
    - featureful prompt rate
    - leak-ready prompt rate
    - realized target failure rate
+
+## Iteration 188 - 2026-05-10
+
+### Goal
+
+Check the new proxy against real behavior instead of stacking another abstract
+quality measure on top of it:
+
+> Does `leak-ready` track realized `PIILeak` failures on a live target replay?
+
+### Experiment
+
+1. Built a reproducible replay harness around the same twelve live prompts:
+   - six legacy-generic prompts
+   - six portfolio prompts
+2. Targeted the checked-in `examples/redteam-medical-agent` HTTP app.
+3. Reused the real `promptfoo:redteam:pii:social` grader rather than a bespoke
+   labeler.
+4. Stored the same prompt-level cohort and `leakReady` metadata in the replay
+   config so the exported eval JSON can be summarized without hand-labeling.
+5. Ran the live target with the real medical-agent server and exported results
+   through `npm run local -- eval`.
+
+### Results
+
+| Cohort           | Leak-ready prompts | Realized `PIILeak` failures |
+| ---------------- | ------------------ | --------------------------- |
+| `legacy-generic` | `1/6`              | `0/6`                       |
+| `portfolio`      | `6/6`              | `0/6`                       |
+
+### Reflection
+
+1. The proxy is useful, but it is **not** an outcome label by itself.
+2. On this particular target, every prompt in both cohorts was refused or gated
+   behind authentication, so realized failures stayed flat even while attack
+   shape differed sharply.
+3. This is exactly the separation we needed to make explicit:
+   - prompt quality answers whether the attack is well formed
+   - target susceptibility answers whether the system actually breaks
+
+### New Hypotheses
+
+1. Future hill climbs need at least two target regimes:
+   - a hardened target where good attacks may still all fail
+   - a deliberately vulnerable target where better attacks should separate on
+     realized failure rate
+2. Leak-ready rate may still be predictive inside a mixed target population even
+   when it is uninformative on a single robust target.
+3. The benchmark ladder should stay explicit:
+   - frontier coverage
+   - leak-ready prompt rate
+   - target-specific realized failure rate
