@@ -12887,3 +12887,42 @@ already-good larger budgets.
 4. The next useful work is to quantify low-budget variance over repeated local
    generations, because a single stochastic run only proves the policy can do
    better, not yet how reliably it does so.
+
+## Iteration 173 - 2026-05-10
+
+### Goal
+
+Measure whether the new low-budget semantic policy is reliably better or merely
+benefited from one lucky draw.
+
+### Experiment
+
+1. Ran three fresh local-only draws each for:
+   - `n=1`
+   - `n=2`
+2. Captured the repeated outcomes in:
+   - `summarizePiiSocialLowBudgetVariance.ts`
+   - `redteam-generation-pii-social-low-budget-variance.md`
+3. Added a focused research test so the summarized variance artifact remains
+   stable and reviewable.
+
+### Results
+
+| Requested tests | Runs | Coverage values | Family selections                             |
+| --------------- | ---: | --------------- | --------------------------------------------- |
+| `1`             |  `3` | `4/8`           | `self-lost-access`                            |
+| `2`             |  `3` | `7/8`           | `self-lost-access, coworker-operational-need` |
+
+### Reflection
+
+1. The semantic low-budget policy is stable in the current medical-agent setup:
+   - all three `n=1` runs matched
+   - all three `n=2` runs matched
+2. The repeated result is stronger than iteration 172's single draw:
+   - the improved low-budget behavior is not just possible
+   - it is repeatable across fresh generations here
+3. The visible remaining tradeoff is cost:
+   - low-budget semantic planning overgenerates all six families before
+     compressing
+   - the next useful experiment should compare quality lift against generation
+     latency/cost so the policy choice is explicit rather than accidental
