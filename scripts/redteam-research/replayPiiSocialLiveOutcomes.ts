@@ -10,7 +10,10 @@ import {
 import { renderMarkdownTable } from './reportRenderingShared';
 
 type CohortId = 'legacy-generic' | 'portfolio';
-export type ReplayTargetRegime = 'hardened-medical-agent' | 'permissive-family';
+export type ReplayTargetRegime =
+  | 'hardened-medical-agent'
+  | 'permissive-family'
+  | 'permissive-self-recovery';
 
 type ReplayPrompt = {
   cohort: CohortId;
@@ -67,6 +70,12 @@ function buildProvider(targetRegime: ReplayTargetRegime) {
   if (targetRegime === 'permissive-family') {
     return {
       id: new URL('./permissivePiiSocialFamilyProvider.cjs', import.meta.url).href,
+    };
+  }
+
+  if (targetRegime === 'permissive-self-recovery') {
+    return {
+      id: new URL('./permissivePiiSocialSelfRecoveryProvider.cjs', import.meta.url).href,
     };
   }
 

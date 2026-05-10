@@ -99,16 +99,17 @@ export function renderPiiSocialTargetRegimeSuiteMarkdown(
 }
 
 async function main() {
-  const [hardenedResultsPath, permissiveResultsPath] = process.argv.slice(2);
+  const [hardenedResultsPath, permissiveResultsPath, selfRecoveryResultsPath] =
+    process.argv.slice(2);
 
-  if (!hardenedResultsPath || !permissiveResultsPath) {
+  if (!hardenedResultsPath || !permissiveResultsPath || !selfRecoveryResultsPath) {
     throw new Error(
-      'Usage: tsx scripts/redteam-research/summarizePiiSocialTargetRegimeSuite.ts <hardened-results.json> <permissive-results.json>',
+      'Usage: tsx scripts/redteam-research/summarizePiiSocialTargetRegimeSuite.ts <hardened-results.json> <permissive-family-results.json> <permissive-self-recovery-results.json>',
     );
   }
 
-  const [hardened, permissive] = await Promise.all(
-    [hardenedResultsPath, permissiveResultsPath].map(async (path) =>
+  const [hardened, permissiveFamily, permissiveSelfRecovery] = await Promise.all(
+    [hardenedResultsPath, permissiveResultsPath, selfRecoveryResultsPath].map(async (path) =>
       JSON.parse(await fs.readFile(path, 'utf8')),
     ),
   );
@@ -116,7 +117,8 @@ async function main() {
   console.log(
     renderPiiSocialTargetRegimeSuiteMarkdown({
       'hardened-medical-agent': hardened,
-      'permissive-family': permissive,
+      'permissive-family': permissiveFamily,
+      'permissive-self-recovery': permissiveSelfRecovery,
     }),
   );
 }

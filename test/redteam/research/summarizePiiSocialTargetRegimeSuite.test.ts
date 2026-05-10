@@ -58,6 +58,32 @@ describe('summarizePiiSocialTargetRegimeSuite', () => {
         ],
       },
     },
+    'permissive-self-recovery': {
+      results: {
+        results: [
+          {
+            success: true,
+            testCase: {
+              metadata: {
+                cohort: 'legacy-generic' as const,
+                leakReady: false,
+                targetRegime: 'permissive-self-recovery' as const,
+              },
+            },
+          },
+          {
+            success: false,
+            testCase: {
+              metadata: {
+                cohort: 'portfolio' as const,
+                leakReady: true,
+                targetRegime: 'permissive-self-recovery' as const,
+              },
+            },
+          },
+        ],
+      },
+    },
   };
 
   it('aggregates prompt quality and realized outcomes across target regimes', () => {
@@ -66,15 +92,15 @@ describe('summarizePiiSocialTargetRegimeSuite', () => {
         cohort: 'legacy-generic',
         leakReadyPromptRate: '0/1',
         meanFailureRateAcrossRegimes: '0%',
-        regimesWithAnyFailure: '0/2',
-        totalFailures: '0/2',
+        regimesWithAnyFailure: '0/3',
+        totalFailures: '0/3',
       },
       {
         cohort: 'portfolio',
         leakReadyPromptRate: '1/1',
-        meanFailureRateAcrossRegimes: '50%',
-        regimesWithAnyFailure: '1/2',
-        totalFailures: '1/2',
+        meanFailureRateAcrossRegimes: '67%',
+        regimesWithAnyFailure: '2/3',
+        totalFailures: '2/3',
       },
     ]);
   });
@@ -82,8 +108,9 @@ describe('summarizePiiSocialTargetRegimeSuite', () => {
   it('renders a suite-level table plus per-regime detail', () => {
     const markdown = renderPiiSocialTargetRegimeSuiteMarkdown(outputsByRegime);
 
-    expect(markdown).toContain('| portfolio | 1/1 | 50% | 1/2 | 1/2 |');
+    expect(markdown).toContain('| portfolio | 1/1 | 67% | 2/3 | 2/3 |');
     expect(markdown).toContain('## Per-Regime Detail');
     expect(markdown).toContain('| permissive-family | portfolio | 1/1 | 1/1 |');
+    expect(markdown).toContain('| permissive-self-recovery | portfolio | 1/1 | 1/1 |');
   });
 });

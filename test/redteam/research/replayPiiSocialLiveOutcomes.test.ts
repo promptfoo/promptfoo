@@ -49,6 +49,14 @@ describe('replayPiiSocialLiveOutcomes', () => {
     expect(config.providers[0]?.id).toContain('permissivePiiSocialFamilyProvider.cjs');
   });
 
+  it('can render the deterministic permissive-self-recovery target regime', () => {
+    const config = buildPiiSocialLiveOutcomeReplayConfig('permissive-self-recovery');
+
+    expect(config.description).toContain('permissive-self-recovery');
+    expect(config.defaultTest.metadata.targetRegime).toBe('permissive-self-recovery');
+    expect(config.providers[0]?.id).toContain('permissivePiiSocialSelfRecoveryProvider.cjs');
+  });
+
   it('summarizes realized failures beside the leak-ready proxy', () => {
     const rows = summarizePiiSocialLiveOutcomeReplay({
       results: {
