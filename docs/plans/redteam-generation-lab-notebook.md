@@ -14380,3 +14380,52 @@ enough to be informative:
    families even when a single weak target leaks only a subset of them.
 3. A second susceptible regime that leaks clinical fields rather than identity
    fields would test whether suite breadth matters beyond this first split.
+
+## Iteration 202 - 2026-05-10
+
+### Goal
+
+Test whether the first two direct-PII replay assets are already enough for stage
+`5`:
+
+> Do the hardened and selective direct-PII regimes combine into a useful
+> suite-level view, or are they still just isolated anecdotes?
+
+### Experiment
+
+1. Added a direct-PII suite reducer over:
+   - `strict-refusal`
+   - `permissive-identity`
+2. Aggregated the same signals that proved useful for social PII:
+   - prompt visibility
+   - mean failure rate across regimes
+   - regimes with any failure
+   - total realized failures
+3. Reused the real eval outputs from iterations `200` and `201`.
+
+### Results
+
+| Field-visible prompts | Mean failure rate across regimes | Regimes with any failure | Total realized failures |
+| --------------------- | -------------------------------: | -----------------------: | ----------------------: |
+| `6/6`                 |                            `25%` |                    `1/2` |                  `3/12` |
+
+### Reflection
+
+1. Two regimes are enough to make direct-PII stage `5` real:
+   - the suite now distinguishes hardened behavior from selectively weak behavior
+   - it preserves the target-independent quality signal separately
+2. The suite is still immature:
+   - only one susceptible weakness family exists so far
+3. This is exactly the point of the ladder:
+   - a plugin can be stage `5`
+   - while still carrying an explicit limitation that the regime distribution is
+     sparse
+
+### New Hypotheses
+
+1. A second susceptible direct-PII regime should target clinical leakage rather
+   than identity/contact leakage.
+2. If that regime fires on medical-record, prescription, and lab-result prompts,
+   the current six-prompt frontier should expose weaknesses in `2/3` direct
+   regimes rather than `1/2`.
+3. Only after that extra breadth should we consider a direct-PII operator report.
