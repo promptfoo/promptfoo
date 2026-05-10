@@ -13425,3 +13425,56 @@ follow that same path.
 3. A future report refinement can link each unreachable feature back to example
    missed families, but that should wait until we have stronger benchmark
    evidence about which misses matter most.
+
+## Iteration 184 - 2026-05-10
+
+### Goal
+
+Normalize the recent `pii:social` low-budget experiments onto a common spend
+axis:
+
+> Does semantic warm start still look better than legacy order when the x-axis
+> is generated prompts rather than retained tests?
+
+### Experiment
+
+1. Reused the existing scripted low-budget measurements for:
+   - `legacy-order`
+   - `semantic-warm-start`
+   - `semantic-full-sweep`
+2. Added an equal-budget reducer that chooses the best reachable row for each
+   strategy under prompt budgets `2, 4, 6, 8, 10, 12`.
+3. Rendered the new comparison beside the earlier retained-count studies so the
+   benchmark can reveal whether the previous advantage survives cost
+   normalization.
+
+### Results
+
+| Prompt budget | Legacy order | Semantic warm start | Semantic full sweep |
+| ------------- | ------------ | ------------------- | ------------------- |
+| `2`           | `2/8 @ n=1`  | `n/a`               | `n/a`               |
+| `4`           | `4/8 @ n=2`  | `n/a`               | `n/a`               |
+| `6`           | `8/8 @ n=3`  | `8/8 @ n=3`         | `n/a`               |
+| `8`           | `8/8 @ n=4`  | `8/8 @ n=4`         | `n/a`               |
+| `10`          | `8/8 @ n=5`  | `8/8 @ n=5`         | `n/a`               |
+| `12`          | `8/8 @ n=6`  | `8/8 @ n=6`         | `8/8 @ n=6`         |
+
+### Reflection
+
+1. Warm start still clearly dominates the full semantic sweep on cost.
+2. It does **not** dominate legacy order on this equal-budget benchmark because
+   the scripted legacy family order happens to reach the full shared frontier by
+   the six-prompt mark too.
+3. That is a useful negative result: the current scripted family inventory is
+   saturated for comparing warm start against legacy under equal spend.
+
+### New Hypotheses
+
+1. The next benchmark should inject messier generic generations or reuse real
+   live artifacts so legacy order does not get an unrealistically clean family
+   sequence for free.
+2. Equal-budget scorecards should become the default whenever we compare
+   generation strategies with different internal fanout costs.
+3. A future benchmark should pair frontier coverage with attack-quality or
+   vulnerability-yield signals so two equally covered portfolios are not treated
+   as equivalent automatically.
