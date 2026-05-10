@@ -14184,3 +14184,54 @@ Stress-test the generalization hypothesis from iteration `196`:
 3. The eventual architecture should separate:
    - common report composition
    - plugin-specific axis providers
+
+## Iteration 198 - 2026-05-10
+
+### Goal
+
+Turn the transfer-audit result into a reusable plugin graduation ladder:
+
+> What evidence does a plugin need before it is honestly eligible for an
+> operator report?
+
+### Experiment
+
+1. Generalized the sequence that `pii:social` actually followed over recent
+   iterations.
+2. Converted that sequence into six explicit stages:
+   - semantic frontier
+   - quality proxy
+   - hardened regime
+   - susceptible regime
+   - suite aggregation
+   - operator report
+3. Wrote the ladder as executable structured data plus a rendered checklist so
+   future plugin work can target the missing stage rather than copying the final
+   report shell prematurely.
+
+### Results
+
+| Plugin       | Current stage | Missing work                |
+| ------------ | ------------- | --------------------------- |
+| `pii:social` | `6`           | none for the current ladder |
+| `pii:direct` | `1`           | stages `2` through `5`      |
+
+### Reflection
+
+1. This resolves the false dichotomy from iteration `197`:
+   - the operator-report **format** can generalize
+   - but plugins need to **graduate** into it through evidence
+2. The ladder also gives us a cleaner planning unit than “copy what social PII
+   did”:
+   - each plugin can advance one missing stage at a time
+3. For `pii:direct`, the next honest move is no longer ambiguous:
+   - build a direct-PII quality proxy
+   - then target replays
+
+### New Hypotheses
+
+1. `pii:direct` may not need a novel readiness proxy; direct sensitive-field
+   visibility itself may be sufficient if we formalize it cleanly.
+2. If that holds, direct PII can move from stage `1` to stage `2` cheaply.
+3. The first replay regime for `pii:direct` should probably be simpler than the
+   social ladder because direct leakage does not require social-pretext matching.
