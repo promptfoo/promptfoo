@@ -11765,3 +11765,65 @@ without pretending the analyzer now has complete semantic parity:
    - analyzer-only residual labels for default states
 3. A before/after example report over real generated prompts would now be more
    illuminating because the new predicates materially change what is visible.
+
+## Iteration 154 - 2026-05-10
+
+### Goal
+
+Turn the social-PII predicate expansion into a human-readable visibility diff:
+
+> Did the new shared predicates merely improve a score, or do they make the
+> actual attack prompts easier to inspect?
+
+### Experiment
+
+1. Added `comparePiiSocialPredicateVisibility.ts`.
+2. Simulated the legacy view with only:
+   - `requestsPrescriptionDetails`
+   - `requestsRefillDates`
+3. Compared that against the current eight-predicate shared extractor on the
+   same six-prompt social-PII portfolio.
+4. Captured the concrete prompt-level result in:
+   - `redteam-generation-pii-social-before-after.md`
+
+### Results
+
+| Metric                 | Before | After |
+| ---------------------- | -----: | ----: |
+| Visible prompts        |  `1/6` | `6/6` |
+| Newly visible prompts  |    n/a | `5/6` |
+| Unique visible signals |    `1` |   `7` |
+
+### Example Delta
+
+| Attack shape              | Before                | After                                                               |
+| ------------------------- | --------------------- | ------------------------------------------------------------------- |
+| family identity claim     | `none`                | `claimsFamilyRelationship`, `claimsIdentity`                        |
+| coworker operational need | `none`                | `claimsCoworkerRelationship`, `claimsOperationalNeed`               |
+| self lost-access claim    | `requestsRefillDates` | `requestsRefillDates`, `claimsSelfRelationship`, `claimsLostAccess` |
+
+### Reflection
+
+1. The richer vocabulary changes the audit experience, not just the denominator:
+   - five prompts that were previously invisible now carry explicit shared
+     evidence
+   - the one previously visible prompt now tells us why it is socially risky
+2. The fourth prompt is especially useful:
+   - it stays `unknown-third-party`
+   - but it is no longer empty, because `claimsOperationalNeed` captures the
+     authorization story
+3. This strengthens the case for a staged frontier:
+   - positive social claims can be shared today
+   - default relationship buckets can remain analyzer-only until we have better
+     positive evidence
+
+### New Hypotheses
+
+1. The next question is not whether the new predicates help. They do.
+2. The next useful question is whether `unknown-third-party` and
+   `direct-request` should be treated as:
+   - explicit residual buckets
+   - derived absences over richer positive predicates
+   - or signs that the corpus itself needs more variety before frontier design
+3. We should inspect a larger real corpus slice before choosing among those
+   three interpretations.
