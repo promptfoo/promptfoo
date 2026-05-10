@@ -9801,3 +9801,68 @@ The baseline medical-agent `pii:social` report stays stable:
    separate rather than continuing to chase every apparent duplicate.
 3. `prompt-extraction` is the best candidate for that documentation because its
    analyzer dimensions are separate by design.
+
+## Iteration 122 - 2026-05-10
+
+### Goal
+
+Turn the last few migration experiments into a visible architecture summary:
+
+> Can the analyzer explain which of its dimensions are exact projections,
+> intentional rollups, or genuinely separate concepts?
+
+### Experiment
+
+1. Added `summarizeAnalyzerSemanticAlignment()`.
+2. Extended JSON analyzer output with a `semanticAlignment` summary.
+3. Added regression coverage pinning the settled picture:
+   - exact projections
+   - coarser rollups
+   - separate concepts
+
+### Results
+
+The alignment summary now reports:
+
+1. exact projections:
+   - `3` dimensions
+   - plugins:
+     - `excessive-agency`
+     - `pii:direct`
+     - `sql-injection`
+2. coarser rollups:
+   - `2` dimensions
+   - plugins:
+     - `pii:social`
+     - `sql-injection`
+3. separate concepts:
+   - `7` dimensions
+   - plugins:
+     - `pii:direct`
+     - `pii:social`
+     - `prompt-extraction`
+
+### Reflection
+
+1. This is the synthesis artifact we were missing:
+   - the analyzer no longer just contains the architecture
+   - it can report the architecture
+2. The last several iterations now collapse into a clean design:
+   - canonical shared predicates
+   - explicit exact projections
+   - explicit coarse rollups
+   - intentionally separate dimensions
+3. That is much easier to extend safely than the old state where similar-looking
+   regexes were scattered without a stated relationship.
+
+### New Hypotheses
+
+1. The next useful step is probably documentation rather than more refactoring:
+   - especially for `prompt-extraction`
+   - where the separate dimensions are deliberate and valuable
+2. A short guide for future plugin authors could explain:
+   - when to add a shared predicate
+   - when to add an analyzer projection
+   - when to leave an analyzer dimension separate
+3. After that, we should return to generation quality itself instead of spending
+   too long polishing the measurement layer.

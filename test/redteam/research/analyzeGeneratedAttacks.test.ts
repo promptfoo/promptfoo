@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getAnalyzerSemanticAlignment,
   getTacticCount,
+  summarizeAnalyzerSemanticAlignment,
   summarizeCoverageDimensions,
 } from '../../../scripts/redteam-research/analyzeGeneratedAttacks';
 
@@ -98,6 +99,23 @@ describe('analyzeGeneratedAttacks shared semantic coverage', () => {
       ]),
     ).toMatchObject({
       'sensitive-field': ['prescription'],
+    });
+  });
+
+  it('summarizes which plugins use exact, rolled-up, or separate analyzer semantics', () => {
+    expect(summarizeAnalyzerSemanticAlignment()).toEqual({
+      'coarser-rollup': {
+        dimensionCount: 2,
+        pluginIds: ['pii:social', 'sql-injection'],
+      },
+      'exact-projection': {
+        dimensionCount: 3,
+        pluginIds: ['excessive-agency', 'pii:direct', 'sql-injection'],
+      },
+      'separate-concept': {
+        dimensionCount: 7,
+        pluginIds: ['pii:direct', 'pii:social', 'prompt-extraction'],
+      },
     });
   });
 });

@@ -42,6 +42,14 @@ export type AnalyzerSemanticAlignment = {
   sharedPredicateIds: string[];
 };
 
+export type AnalyzerSemanticAlignmentSummary = Record<
+  AnalyzerSemanticAlignmentKind,
+  {
+    dimensionCount: number;
+    pluginIds: string[];
+  }
+>;
+
 type PluginSummary = {
   averageChars: number;
   averagePairwiseDistance: number;
@@ -617,6 +625,47 @@ export function getAnalyzerSemanticAlignment(pluginId: string): AnalyzerSemantic
   return ANALYZER_SEMANTIC_ALIGNMENT_BY_PLUGIN[pluginId] ?? [];
 }
 
+export function summarizeAnalyzerSemanticAlignment(
+  pluginIds: readonly string[] = Object.keys(ANALYZER_SEMANTIC_ALIGNMENT_BY_PLUGIN),
+): AnalyzerSemanticAlignmentSummary {
+  const summary = {
+    'coarser-rollup': {
+      dimensionCount: 0,
+      pluginIds: new Set<string>(),
+    },
+    'exact-projection': {
+      dimensionCount: 0,
+      pluginIds: new Set<string>(),
+    },
+    'separate-concept': {
+      dimensionCount: 0,
+      pluginIds: new Set<string>(),
+    },
+  };
+
+  for (const pluginId of pluginIds) {
+    for (const alignment of getAnalyzerSemanticAlignment(pluginId)) {
+      summary[alignment.kind].dimensionCount += 1;
+      summary[alignment.kind].pluginIds.add(pluginId);
+    }
+  }
+
+  return {
+    'coarser-rollup': {
+      dimensionCount: summary['coarser-rollup'].dimensionCount,
+      pluginIds: [...summary['coarser-rollup'].pluginIds].sort(),
+    },
+    'exact-projection': {
+      dimensionCount: summary['exact-projection'].dimensionCount,
+      pluginIds: [...summary['exact-projection'].pluginIds].sort(),
+    },
+    'separate-concept': {
+      dimensionCount: summary['separate-concept'].dimensionCount,
+      pluginIds: [...summary['separate-concept'].pluginIds].sort(),
+    },
+  };
+}
+
 function summarizePlugin(
   pluginId: string,
   prompts: string[],
@@ -741,7 +790,16 @@ async function main() {
     return;
   }
 
-  console.log(JSON.stringify({ summaries }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        semanticAlignment: summarizeAnalyzerSemanticAlignment(pluginIds),
+        summaries,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function inferPurposeFromSiblingConfig(inputPath: string): Promise<string> {
