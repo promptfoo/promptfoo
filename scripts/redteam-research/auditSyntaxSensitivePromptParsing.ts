@@ -1,5 +1,9 @@
 import { pathToFileURL } from 'node:url';
 
+import {
+  classifyPromptDriftSeverity,
+  type DriftSeverity,
+} from '../../src/redteam/generation/promptParsingQuality';
 import { parseGeneratedPrompts } from '../../src/redteam/plugins/multiInputFormat';
 
 type ParsedPromptDrift = {
@@ -7,12 +11,6 @@ type ParsedPromptDrift = {
   index: number;
   legacyPrompt: string;
 };
-
-type DriftSeverity =
-  | 'benign-rewrite'
-  | 'dangerous-feature-loss'
-  | 'exact-preserved'
-  | 'non-dangerous-truncation';
 
 type PromptFeatureAudit = {
   currentPrompt: string;
@@ -36,27 +34,6 @@ function parseGeneratedPromptsLegacy(generatedPrompts: string): string[] {
     .split(/[\n;]+/)
     .filter((line) => /prompt\s*:/i.test(line))
     .map((line) => line.replace(/^.*?prompt\s*:/i, '').trim());
-}
-
-function classifyDriftSeverity({
-  currentPrompt,
-  expectedFeatures,
-  legacyPrompt,
-  legacyRetainedFeatures,
-}: Omit<PromptFeatureAudit, 'currentRetainedFeatures' | 'index' | 'severity'>): DriftSeverity {
-  if (legacyPrompt === currentPrompt) {
-    return 'exact-preserved';
-  }
-
-  if (legacyRetainedFeatures.length < expectedFeatures.length) {
-    return 'dangerous-feature-loss';
-  }
-
-  if (legacyPrompt.length < currentPrompt.length && currentPrompt.startsWith(legacyPrompt)) {
-    return 'non-dangerous-truncation';
-  }
-
-  return 'benign-rewrite';
 }
 
 function auditPromptBlock(
@@ -101,11 +78,10 @@ function auditPromptBlock(
       index,
       legacyPrompt,
       legacyRetainedFeatures,
-      severity: classifyDriftSeverity({
+      severity: classifyPromptDriftSeverity({
         currentPrompt,
         expectedFeatures: promptExpectedFeatures,
         legacyPrompt,
-        legacyRetainedFeatures,
       }),
     };
   });
@@ -208,14 +184,10 @@ const severityCalibrationCases = [
 
 function auditSeverityCalibration() {
   const cases = severityCalibrationCases.map((calibrationCase) => {
-    const legacyRetainedFeatures = calibrationCase.expectedFeatures.filter((feature) =>
-      calibrationCase.legacyPrompt.includes(feature),
-    );
-    const actualSeverity = classifyDriftSeverity({
+    const actualSeverity = classifyPromptDriftSeverity({
       currentPrompt: calibrationCase.currentPrompt,
       expectedFeatures: calibrationCase.expectedFeatures,
       legacyPrompt: calibrationCase.legacyPrompt,
-      legacyRetainedFeatures,
     });
 
     return {

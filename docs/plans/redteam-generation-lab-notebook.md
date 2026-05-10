@@ -8700,3 +8700,61 @@ Overall:
 3. The longer-term question is whether these parser-health metrics should live:
    - only in research tooling
    - or as reusable generation-quality diagnostics shared by the product path
+
+## Iteration 106 - 2026-05-10
+
+### Goal
+
+Turn the calibrated taxonomy into something that can actually regress loudly:
+
+> Can we extract the pure severity classifier into reusable code and protect its
+> semantics with ordinary automated tests?
+
+### Experiment
+
+1. Extracted the pure severity logic into:
+   - `src/redteam/generation/promptParsingQuality.ts`
+2. Kept the broader benchmark harness in the research script:
+   - the empirical parser comparison still belongs there
+   - only the stable pure classifier moved out
+3. Added direct unit coverage for the four calibrated buckets:
+   - exact preservation
+   - benign rewrite
+   - non-dangerous truncation
+   - dangerous feature loss
+
+### Results
+
+The new direct unit suite passed:
+
+1. test file:
+   - `test/redteam/generation/promptParsingQuality.test.ts`
+2. cases:
+   - `4`
+3. pass rate:
+   - `100%`
+
+The runtime research harness still imports and uses the same classifier, so the
+controlled calibration remains visible in the report while the taxonomy itself
+now has a first-class regression guardrail.
+
+### Reflection
+
+1. This is the right boundary for now:
+   - the pure decision rule is reusable
+   - the research-only empirical harness stays experimental
+2. Moving only the classifier keeps us from productizing the whole notebook by
+   accident while still hardening the piece we expect to reuse.
+3. The distinction matters for future work:
+   - exploratory fixtures can keep changing quickly
+   - stabilized measurement primitives should accumulate tests
+
+### New Hypotheses
+
+1. The next useful step is to grow beyond the toy calibration set with a larger
+   empirical benchmark slice drawn from real generated prompts.
+2. We should next ask whether the severity taxonomy remains informative when
+   the prompts are not handcrafted to hit clean boundaries.
+3. If the real slice shows mixed buckets rather than only catastrophic loss,
+   that will make the new metrics substantially more useful for release-time
+   triage.
