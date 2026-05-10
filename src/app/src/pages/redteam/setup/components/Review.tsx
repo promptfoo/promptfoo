@@ -72,7 +72,11 @@ interface JobStatusResponse {
 interface IntentEntry {
   display: string;
   isMultiStep: boolean;
-  index: number;
+  // Position of the intent plugin in `config.plugins`. Configs may contain
+  // multiple intent plugins, so we identify which one this entry came from.
+  pluginIndex: number;
+  // Position of the entry within that plugin's `config.intent` array.
+  entryIndex: number;
 }
 
 interface IntentPluginRef {
@@ -91,41 +95,48 @@ const isNonEmptyIntentEntry = (entry: string | string[]): boolean =>
 
 type ReviewPlugin = RedteamPlugin | { id: string; config?: PluginConfig };
 
-// Each top-level entry in `config.intent` is one intent test case at runtime
-// (an inner array is a single multi-step sequence). Preserves the original
-// index so the remove handler can target multi-step entries by position.
+// Aggregates entries across every intent plugin in the config. Each top-level
+// entry in `config.intent` is one intent test case at runtime (an inner array
+// is a single multi-step sequence). Tracks (pluginIndex, entryIndex) so the
+// remove handler can target the exact entry, even when multiple intent plugins
+// exist (e.g. configs assembled from YAML that include duplicate `intent:`
+// blocks).
 function getDisplayedIntents(plugins: readonly ReviewPlugin[]): IntentEntry[] {
-  const intentPlugin = plugins.find(isIntentPlugin);
-  if (!intentPlugin) {
-    return [];
-  }
-  const raw = intentPlugin.config.intent;
-  const entries: (string | string[])[] = Array.isArray(raw) ? raw : [raw];
-  return entries.flatMap<IntentEntry>((entry, index) => {
-    if (!isNonEmptyIntentEntry(entry)) {
+  return plugins.flatMap<IntentEntry>((plugin, pluginIndex) => {
+    if (!isIntentPlugin(plugin)) {
       return [];
     }
-    if (Array.isArray(entry)) {
-      return [{ display: entry.join(' → '), isMultiStep: true, index }];
-    }
-    return [{ display: entry, isMultiStep: false, index }];
+    const raw = plugin.config.intent;
+    const entries: (string | string[])[] = Array.isArray(raw) ? raw : [raw];
+    return entries.flatMap<IntentEntry>((entry, entryIndex) => {
+      if (!isNonEmptyIntentEntry(entry)) {
+        return [];
+      }
+      if (Array.isArray(entry)) {
+        return [
+          { display: entry.join(' → '), isMultiStep: true, pluginIndex, entryIndex },
+        ];
+      }
+      return [{ display: entry, isMultiStep: false, pluginIndex, entryIndex }];
+    });
   });
 }
 
-function removeIntentByIndex(
+function removeIntentEntry(
   plugins: readonly ReviewPlugin[],
-  indexToRemove: number,
+  pluginIndex: number,
+  entryIndex: number,
 ): ReviewPlugin[] | null {
-  const intentPlugin = plugins.find(isIntentPlugin);
-  if (!intentPlugin) {
+  const target = plugins[pluginIndex];
+  if (!target || !isIntentPlugin(target)) {
     return null;
   }
-  const currentIntents: (string | string[])[] = Array.isArray(intentPlugin.config.intent)
-    ? intentPlugin.config.intent
-    : [intentPlugin.config.intent];
-  const newIntents = currentIntents.filter((_, i) => i !== indexToRemove);
-  return plugins.map((p) =>
-    isIntentPlugin(p) ? { ...p, config: { ...p.config, intent: newIntents } } : p,
+  const currentIntents: (string | string[])[] = Array.isArray(target.config.intent)
+    ? target.config.intent
+    : [target.config.intent];
+  const newIntents = currentIntents.filter((_, i) => i !== entryIndex);
+  return plugins.map((p, i) =>
+    i === pluginIndex && isIntentPlugin(p) ? { ...p, config: { ...p.config, intent: newIntents } } : p,
   );
 }
 
@@ -375,8 +386,8 @@ export default function Review({
   const intents = useMemo(() => getDisplayedIntents(config.plugins), [config.plugins]);
 
   const handleRemoveIntent = useCallback(
-    (indexToRemove: number) => {
-      const next = removeIntentByIndex(config.plugins, indexToRemove);
+    (pluginIndex: number, entryIndex: number) => {
+      const next = removeIntentEntry(config.plugins, pluginIndex, entryIndex);
       if (next) {
         updateConfig('plugins', next);
       }
@@ -858,12 +869,13 @@ export default function Review({
                 <div className="space-y-2">
                   {intents
                     .slice(0, expanded ? undefined : 5)
-                    .map(({ display, isMultiStep, index }) => {
+                    .map(({ display, isMultiStep, pluginIndex, entryIndex }) => {
                       // Truncate long entries for the SR/title label so screen
                       // readers can distinguish multiple Remove buttons.
                       const shortLabel = display.length > 80 ? `${display.slice(0, 80)}…` : display;
+                      const key = `${pluginIndex}:${entryIndex}`;
                       return (
-                        <div key={index} className="relative rounded-lg bg-muted/50 p-3 pr-8">
+                        <div key={key} className="relative rounded-lg bg-muted/50 p-3 pr-8">
                           <p className="line-clamp-2 text-sm" title={display}>
                             {display}
                           </p>
@@ -877,7 +889,7 @@ export default function Review({
                             size="icon"
                             aria-label={`Remove intent: ${shortLabel}`}
                             className="absolute right-1 top-1 size-6"
-                            onClick={() => handleRemoveIntent(index)}
+                            onClick={() => handleRemoveIntent(pluginIndex, entryIndex)}
                           >
                             <X className="size-4" />
                           </Button>

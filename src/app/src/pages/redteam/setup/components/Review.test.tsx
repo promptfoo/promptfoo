@@ -1827,5 +1827,45 @@ Application Details:
 
       expect(screen.queryByText(/^Intents \(/)).not.toBeInTheDocument();
     });
+
+    it('aggregates intents from multiple intent plugins and removes from the correct one', () => {
+      mockUseRedTeamConfig.mockReturnValue({
+        config: {
+          ...defaultConfig,
+          plugins: [
+            { id: 'intent', config: { intent: ['first plugin a', 'first plugin b'] } },
+            { id: 'sql-injection' },
+            { id: 'intent', config: { intent: ['second plugin only'] } },
+          ],
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // All three intents should be visible — both plugins are aggregated.
+      expect(screen.getByText('Intents (3)')).toBeInTheDocument();
+      expect(screen.getByText('first plugin a')).toBeInTheDocument();
+      expect(screen.getByText('first plugin b')).toBeInTheDocument();
+      expect(screen.getByText('second plugin only')).toBeInTheDocument();
+
+      // Removing the entry that lives on the second intent plugin must mutate
+      // that plugin only — the first plugin's intents should be preserved.
+      const targetRow = screen.getByText('second plugin only').closest('div');
+      const deleteButton = targetRow!.querySelector('button');
+      clickElement(deleteButton!);
+
+      expect(mockUpdateConfig).toHaveBeenCalledWith('plugins', [
+        { id: 'intent', config: { intent: ['first plugin a', 'first plugin b'] } },
+        { id: 'sql-injection' },
+        { id: 'intent', config: { intent: [] } },
+      ]);
+    });
   });
 });
