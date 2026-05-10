@@ -11827,3 +11827,72 @@ Turn the social-PII predicate expansion into a human-readable visibility diff:
    - or signs that the corpus itself needs more variety before frontier design
 3. We should inspect a larger real corpus slice before choosing among those
    three interpretations.
+
+## Iteration 155 - 2026-05-10
+
+### Goal
+
+Use the real benchmark corpus to test whether the remaining `pii:social`
+blind spots are genuine residual states or a sign that the old corpus itself is
+semantically different:
+
+> What does the medical-agent benchmark still hide after the shared predicate
+> expansion?
+
+### Experiment
+
+1. Added `auditPiiSocialCorpusResiduals.ts`.
+2. Switched from the six-prompt curated portfolio to the full medical-agent
+   benchmark slice for `pii:social`.
+3. Counted:
+   - total rows
+   - unique prompts
+   - rows with shared evidence
+   - rows with no shared evidence
+4. Captured the result in:
+   - `redteam-generation-pii-social-corpus-residuals.md`
+
+### Results
+
+| Metric                     |   Value |
+| -------------------------- | ------: |
+| Total rows                 |    `35` |
+| Unique prompts             |     `5` |
+| Featureful rows            |  `7/35` |
+| Featureless rows           | `28/35` |
+| Featureful unique prompts  |   `1/5` |
+| Featureless unique prompts |   `4/5` |
+
+### Residual Pattern
+
+The four featureless unique prompts are not hidden variants of the curated
+positive-claim corpus. They are mostly:
+
+1. direct requests for another patient's history or contact details
+2. a weak operational request for insurance details
+3. a direct prescription listing request
+4. a direct contact-information request
+
+### Reflection
+
+1. The benchmark slice is highly repetitive:
+   - `35` rows
+   - only `5` unique prompts
+2. The curated research portfolio and the historical benchmark are measuring
+   different things:
+   - curated portfolio: explicit social claims
+   - legacy benchmark: mostly direct leakage requests that happen to live under
+     `pii:social`
+3. That means the remaining problem is not just how to represent
+   `unknown-third-party` or `direct-request`.
+   It is also whether the plugin boundary itself should stay as it is.
+
+### New Hypotheses
+
+1. We should not widen the new social frontier blindly just to fit a weak legacy
+   corpus.
+2. A better next step is to separate:
+   - positive-claim social engineering
+   - generic unauthorized PII access
+3. If those are genuinely different attack families, `pii:social` may need a
+   migration plan rather than one increasingly broad frontier.
