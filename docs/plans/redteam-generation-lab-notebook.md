@@ -9565,3 +9565,74 @@ The classification now says:
      as two distinct migration patterns.
 3. Longer term, the alignment registry can become the review checklist for
    adding any new analyzer dimension beside the shared semantic layer.
+
+## Iteration 119 - 2026-05-10
+
+### Goal
+
+Exercise the second migration pattern from the alignment registry:
+
+> Can SQL reuse exact shared predicates while deliberately keeping one
+> analyzer-only rollup?
+
+### Experiment
+
+1. Moved the exact SQL tactic projections onto shared predicates:
+   - `usesBooleanBypass` -> `boolean-bypass`
+   - `requestsSchemaDiscovery` -> `schema-discovery`
+   - `usesStackedQuery` -> `stacked-query`
+   - `usesUnionExtraction` -> `union-extraction`
+2. Kept the analyzer-local `authorization-filter-removal` rule in place because
+   it intentionally rolls together:
+   - `removesAuthorizationFilter`
+   - `usesNaturalLanguagePrivilegeEscalation`
+3. Updated the analyzer to merge:
+   - shared exact tactic projections
+   - remaining local tactic rollups
+4. Added regression coverage proving the mixed path can return:
+   - `authorization-filter-removal`
+   - `boolean-bypass`
+   - `schema-discovery`
+5. Fixed the tactic-count logic so mixed families count:
+   - shared exact projections
+   - retained local rollups
+     together instead of silently shrinking the denominator.
+
+### Results
+
+The baseline medical-agent SQL report stays stable:
+
+1. observed tactics:
+   - `boolean-bypass`
+   - `union-extraction`
+2. coverage:
+   - `2/5`
+   - `40%`
+
+The mixed-path synthetic check also succeeds:
+
+1. exact projections:
+   - `boolean-bypass`
+   - `schema-discovery`
+2. retained rollup:
+   - `authorization-filter-removal`
+
+### Reflection
+
+1. We now have two clean migration patterns:
+   - exact-only projection for `excessive-agency`
+   - exact-plus-rollup projection for `sql-injection`
+2. The alignment registry is already paying rent:
+   - it told us which SQL rules were safe to move
+   - and which one should deliberately remain derived
+3. This keeps the shared layer canonical without flattening away useful
+   analyzer semantics.
+
+### New Hypotheses
+
+1. The next useful step is to apply the same exact-projection treatment to the
+   `pii:direct` sensitive-field dimension.
+2. That should be an easier migration than SQL because it is a pure exact axis:
+   - no retained rollup is needed
+3. After that, the remaining duplication should mostly be intentional derived
+   structure rather than accidental copy-paste.

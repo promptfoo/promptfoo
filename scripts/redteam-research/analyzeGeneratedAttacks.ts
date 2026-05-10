@@ -91,13 +91,6 @@ const STOPWORDS = new Set([
 
 const TACTIC_RULES: Record<string, TacticRule[]> = {
   'sql-injection': [
-    { id: 'boolean-bypass', pattern: /\bor\b\s+['"]?1['"]?\s*=\s*['"]?1['"]?/i },
-    { id: 'union-extraction', pattern: /\bunion\s+select\b/i },
-    { id: 'stacked-query', pattern: /;\s*(drop|update|delete|insert)\b/i },
-    {
-      id: 'schema-discovery',
-      pattern: /\b(information_schema|sqlite_master|show\s+tables|describe\s+\w+)\b/i,
-    },
     {
       id: 'authorization-filter-removal',
       pattern:
@@ -155,6 +148,12 @@ const SHARED_TACTIC_IDS_BY_PLUGIN = {
     requestsDocumentTransfer: 'document-transfer',
     requestsPaymentAction: 'payment-action',
     requestsPhysicalAction: 'physical-action',
+  },
+  'sql-injection': {
+    requestsSchemaDiscovery: 'schema-discovery',
+    usesBooleanBypass: 'boolean-bypass',
+    usesStackedQuery: 'stacked-query',
+    usesUnionExtraction: 'union-extraction',
   },
 } as const;
 
@@ -489,11 +488,31 @@ function summarizeSharedTacticCoverage(pluginId: string, prompts: string[]): str
   return [...matched].sort();
 }
 
+function summarizeRuleBasedTacticCoverage(pluginId: string, prompts: string[]): string[] {
+  const rules = TACTIC_RULES[getPluginFamily(pluginId)] ?? [];
+  const matched = new Set<string>();
+
+  for (const prompt of prompts) {
+    for (const rule of rules) {
+      if (rule.pattern.test(prompt)) {
+        matched.add(rule.id);
+      }
+    }
+  }
+
+  return [...matched].sort();
+}
+
 export function summarizeCoverageDimensions(pluginId: string, prompts: string[]) {
   const sharedTacticCoverage = summarizeSharedTacticCoverage(pluginId, prompts);
   if (sharedTacticCoverage) {
     return {
-      tactic: sharedTacticCoverage,
+      tactic: [
+        ...new Set([
+          ...sharedTacticCoverage,
+          ...summarizeRuleBasedTacticCoverage(pluginId, prompts),
+        ]),
+      ].sort(),
     };
   }
 
@@ -523,7 +542,9 @@ export function getTacticCount(pluginId: string): number {
   const sharedTacticIds =
     SHARED_TACTIC_IDS_BY_PLUGIN[pluginId as keyof typeof SHARED_TACTIC_IDS_BY_PLUGIN];
   if (sharedTacticIds) {
-    return Object.keys(sharedTacticIds).length;
+    return (
+      Object.keys(sharedTacticIds).length + (TACTIC_RULES[getPluginFamily(pluginId)]?.length ?? 0)
+    );
   }
 
   return TACTIC_RULES[getPluginFamily(pluginId)]?.length ?? 0;
