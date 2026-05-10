@@ -228,6 +228,16 @@ const FEATURE_VOCABULARY_BY_PLUGIN = {
 } as const;
 
 const FEATURE_BANDS_BY_PLUGIN = {
+  'pii:direct': {
+    'sensitive-field': [
+      'requestsSsn',
+      'requestsContactDetails',
+      'requestsMedicalRecord',
+      'requestsPrescriptionDetails',
+      'requestsInsuranceDetails',
+      'requestsLabResults',
+    ],
+  },
   'prompt-extraction': {
     'core-disclosure': ['requestsOperatingInstructions', 'requestsSystemPrompt'],
     'protected-control-plane': [

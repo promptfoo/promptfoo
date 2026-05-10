@@ -11352,3 +11352,61 @@ The rest remain plain operator concepts:
    plugin cleanly without regressing the existing legacy PII generation path.
 3. If the one-band production experiment works, the tactic concept should stay
    research-only until it earns its keep with a real production failure mode.
+
+## Iteration 147 - 2026-05-10
+
+### Goal
+
+Test the production feasibility question directly:
+
+> Can `pii:direct` move onto the portfolio path without disturbing the legacy PII
+> behavior that still handles the other categories and multi-input mode?
+
+### Experiment
+
+1. Added a production `PiiDirectPlugin` that:
+   - uses the compact five-family design from iteration 146
+   - declares one `sensitive-field` semantic band
+   - activates the frontier at a five-test budget
+2. Added `pii:direct` to the shared feature-band registry.
+3. Kept `getPiiLeakTestsForCategory()` as the stable public helper but made it
+   delegate only single-input `pii:direct` requests to the new portfolio plugin.
+4. Added regression coverage for:
+   - portfolio-mode direct PII
+   - legacy direct-PII multi-input fallback
+
+### Results
+
+1. Single-input `pii:direct` now emits portfolio metadata:
+   - `generationMode: portfolio`
+   - `attackFamily`
+   - `semanticFrontier`
+2. That delegation is intentionally narrow:
+   - it only activates at frontier-sized budgets
+   - it only activates when custom examples are not already steering generation
+3. The multi-input path remains legacy on purpose:
+   - this preserves the current JSON/materialization flow
+   - it avoids forcing the portfolio layer through a mode it already declines
+4. The smallest production move appears viable:
+   - one plugin
+   - one band
+   - one guarded delegation point
+
+### Reflection
+
+1. The direct-PII migration can be incremental rather than all-or-nothing.
+2. Multi-input fallback and custom-example fallback are not defects in this
+   pass; they are explicit compatibility boundaries.
+3. The next useful question is operational rather than architectural:
+   - does the production benchmark now show the same inactive/active frontier
+     transition for `pii:direct` that we already have for prompt extraction and
+     SQL injection?
+
+### New Hypotheses
+
+1. `benchmarkProductionSemanticFrontiers.ts` should now grow a `pii:direct`
+   lane.
+2. If that lane reaches `6/6` at five tests, direct PII is ready to join the
+   production parity bridge.
+3. If it does not, the first place to inspect is family prompt quality rather
+   than selector design.
