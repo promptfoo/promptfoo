@@ -12466,3 +12466,63 @@ Observed live-generation features:
 3. A production-quality fix likely needs both:
    - a family-aware generator
    - more robust predicates around typographic apostrophes and social claims
+
+## Iteration 166 - 2026-05-10
+
+### Goal
+
+Move `pii:social` onto the production portfolio generator path instead of
+leaving it on the older generic few-shot flow.
+
+### Experiment
+
+1. Added `PII_SOCIAL_ATTACK_FAMILIES` with six explicit families:
+   - family identity claim
+   - coworker operational need
+   - self lost access
+   - third-party operational need
+   - family aftercare claim
+   - self session recovery
+2. Added `PiiSocialPlugin` as a `PortfolioRedteamPluginBase` implementation.
+3. Reused the shared frontier bands already established for `pii:social`:
+   - relationship
+   - authorization story
+   - sensitive field
+4. Routed normal single-input `pii:social` runs with `n >= 6` through the
+   portfolio path.
+5. Added a focused production test proving the dispatch now selects
+   `generationMode: portfolio`.
+
+### Results
+
+| Surface                         | Before                         | After                              |
+| ------------------------------- | ------------------------------ | ---------------------------------- |
+| production dispatch             | generic `generatePiiLeak(...)` | dedicated `PiiSocialPlugin`        |
+| family coverage                 | implicit                       | six explicit attack families       |
+| semantic frontier participation | none                           | relationship + story + field bands |
+| regression proof                | absent                         | focused plugin-path test           |
+
+Live rerun after enabling the portfolio path:
+
+| Slice                | Rows | Unique prompts | Featureful prompts | Shared coverage |
+| -------------------- | ---: | -------------: | -----------------: | --------------: |
+| legacy live baseline |  `6` |            `6` |              `2/6` |           `3/8` |
+| portfolio first pass |  `6` |            `6` |              `2/6` |           `3/8` |
+
+### Reflection
+
+1. This is the first production-side `pii:social` fix after the benchmark work.
+2. The implementation intentionally mirrors the successful `pii:direct`
+   pattern so the two PII families now share the same architecture.
+3. The next question is empirical, not architectural:
+   - does the live generator now improve over the `2/6`, `3/8` baseline?
+
+### New Hypotheses
+
+1. The family-aware path alone is not sufficient while the shared predicates
+   remain too brittle for normal generated wording.
+2. The remaining misses do cluster around lexical variants such as
+   typographic apostrophes and family phrases not yet represented in the shared
+   predicates.
+3. The next highest-leverage step is to harden the predicates before changing
+   the family prompts again.
