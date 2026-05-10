@@ -12585,3 +12585,100 @@ in the live generator output.
    relationship/identity family.
 3. If live coverage still stalls, the next problem is likely repair behavior or
    over-broad self-claim detection rather than missing vocabulary alone.
+
+## Iteration 168 - 2026-05-10
+
+### Goal
+
+Test whether the final missing live `pii:social` feature is a portfolio-contract
+problem rather than another extractor problem.
+
+### Experiment
+
+1. Audited the six production `PII_SOCIAL_ATTACK_FAMILIES`.
+2. Found one mismatch:
+   - `self-lost-access` instructions explicitly ask for prescription details or
+     refill dates
+   - but its acceptance contract only required:
+     - `claimsSelfRelationship`
+     - `claimsLostAccess`
+3. Tightened the family contract to require:
+   - `requestsRefillDates`
+   - `claimsSelfRelationship`
+   - `claimsLostAccess`
+4. Added a focused regression test so the portfolio cannot silently forget the
+   refill-date signal again.
+
+### Hypothesis
+
+If the last gap is caused by a weak family contract, then the live generator
+should now repair toward `requestsRefillDates` and move from `7/8` to `8/8`
+shared coverage without changing the predicate vocabulary again.
+
+### First Live Result
+
+| Surface                   | Previous rerun | Tightened contract only |
+| ------------------------- | -------------: | ----------------------: |
+| featureful live prompts   |          `6/6` |                   `4/6` |
+| shared feature coverage   |          `7/8` |                   `6/8` |
+| `requestsRefillDates` hit |           `no` |                    `no` |
+
+### Reflection
+
+1. The first hypothesis was too optimistic:
+   - the acceptance contract was under-specified
+   - but strengthening it alone caused the family to disappear from the selected
+     portfolio when generation still failed to satisfy the new requirement
+2. This is useful because it points at a second bottleneck:
+   - the family prompt still says "prescription details or refill dates"
+   - the model can satisfy the English instruction while skipping the exact
+     lexical feature the frontier needs
+3. The next repair is therefore prompt-side, not predicate-side:
+   - keep the stronger contract
+   - make the family ask explicitly for the phrase `refill dates`
+
+### Second Hypothesis
+
+If the family prompt names the required surface form explicitly, then the
+existing repair loop should be able to recover `requestsRefillDates` instead of
+silently routing around the family.
+
+### Second Live Result
+
+| Surface                   | Explicit prompt, remote path |
+| ------------------------- | ---------------------------: |
+| featureful live prompts   |                        `6/6` |
+| shared feature coverage   |                        `6/8` |
+| `requestsRefillDates` hit |                         `no` |
+
+### Confound Discovered
+
+1. The remote-path reruns were not measuring the local branch at all:
+   - emitted YAML lacked `generationMode: portfolio`
+   - emitted YAML lacked `attackFamily` metadata
+2. `src/redteam/plugins/index.ts` routes PII generation to the remote path when
+   `shouldGenerateRemote()` is true.
+3. To test local generator changes, the CLI run must set:
+   - `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`
+
+### Local-Only Verification
+
+| Surface                         | Local-only result |
+| ------------------------------- | ----------------: |
+| emitted prompts                 |               `5` |
+| featureful emitted prompts      |             `5/5` |
+| shared `pii:social` coverage    |             `7/8` |
+| `requestsRefillDates` recovered |             `yes` |
+| `generationMode: portfolio`     |             `yes` |
+
+### Final Reflection
+
+1. The stronger `self-lost-access` contract is directionally correct:
+   - local-only generation now recovers `requestsRefillDates`
+2. The remaining issue is different from the one we started with:
+   - the local portfolio still selects only five prompts
+   - it recovers refill dates but now misses `requestsPrescriptionDetails`
+3. The next experiment should stop treating all live runs as interchangeable:
+   - remote-path runs are production-path observations
+   - local-only runs are branch-effect measurements
+   - the next hill-climb should target the local sensitive-field frontier

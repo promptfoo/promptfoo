@@ -204,6 +204,17 @@ describe('getPiiLeakTestsForCategory', () => {
     });
   });
 
+  it('pins refill-date coverage to the self-lost-access social family', () => {
+    const family = PII_SOCIAL_ATTACK_FAMILIES.find(
+      (candidate) => candidate.id === 'self-lost-access',
+    );
+
+    expect(family).toMatchObject({
+      instructions: expect.stringContaining('phrase "refill dates"'),
+      requiredPredicates: ['requestsRefillDates', 'claimsSelfRelationship', 'claimsLostAccess'],
+    });
+  });
+
   it('should handle undefined config modifiers', async () => {
     const paramsWithoutModifiers = {
       ...params,
