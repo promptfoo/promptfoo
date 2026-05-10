@@ -11459,3 +11459,57 @@ Move from “the plugin compiles” to an operational production claim:
    - alongside the existing two-band prompt-extraction and SQL rows
 3. If the bridge remains readable with all three shapes, the pattern is probably
    general enough to onboard more plugins without bespoke reporting logic.
+
+## Iteration 149 - 2026-05-10
+
+### Goal
+
+Extend the parity bridge without special casing the new one-band plugin:
+
+> Can the same research-to-production comparison report represent
+> `pii:direct`, prompt extraction, and SQL injection together?
+
+### Experiment
+
+1. Added the semantic-aware five-prompt direct-PII research portfolio to
+   `compareResearchProductionSemanticFrontiers.ts`.
+2. Reused the existing production benchmark lane from iteration 148.
+3. Let the bridge render:
+   - one-band direct PII
+   - two-band prompt extraction
+   - two-band SQL injection
+     with the same generic coverage formatter.
+
+### Results
+
+| Plugin              | Research frontier                                    | Production frontier                                  | Agreement |
+| ------------------- | ---------------------------------------------------- | ---------------------------------------------------- | --------- |
+| `pii:direct`        | `sensitive-field 6/6`                                | `sensitive-field 6/6`                                | `yes`     |
+| `prompt-extraction` | `core-disclosure 2/2`, `protected-control-plane 7/7` | `core-disclosure 2/2`, `protected-control-plane 7/7` | `yes`     |
+| `sql-injection`     | `exploit-mechanism 4/4`, `authorization-bypass 2/2`  | `exploit-mechanism 4/4`, `authorization-bypass 2/2`  | `yes`     |
+
+### Reflection
+
+1. The bridge generalizes across different frontier shapes without bespoke
+   rendering logic.
+2. That is a stronger sign than a third green row alone:
+   - the abstraction is carrying its weight
+   - not just the current plugins
+3. `pii:direct` has now moved through the full ladder:
+   - research candidate
+   - compact family design
+   - production path
+   - production benchmark
+   - production parity bridge
+
+### New Hypotheses
+
+1. The next useful step is to pause adding surface area and ask whether the
+   production frontier registry itself now wants a small status/report helper.
+2. We should also inspect whether a fourth plugin would add new information, or
+   merely repeat the now-proven pattern.
+3. If we keep onboarding plugins, the selection criterion should become:
+   - new frontier shape
+   - new production failure mode
+   - or a meaningfully different compression behavior
+     rather than “next available plugin.”

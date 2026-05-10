@@ -1,28 +1,28 @@
 import { pathToFileURL } from 'node:url';
 
 import {
-  renderMarkdownTable,
-} from './reportRenderingShared';
+  type ObservedPluginFeatureBandCoverageSummary,
+  summarizeObservedPluginFeatureBandCoverage,
+} from '../../src/redteam/generation/predicateSignatures';
+import {
+  type ProductionSemanticFrontierBenchmark,
+  runProductionSemanticFrontierBenchmark,
+} from './benchmarkProductionSemanticFrontiers';
+import {
+  buildPiiCandidatePool,
+  buildPiiPortfolio,
+  selectSemanticFeatureAwarePiiDirectPortfolio,
+} from './piiResearchShared';
 import {
   buildPromptExtractionCandidatePool,
   buildPromptExtractionPortfolio,
   selectSemanticBandAwarePromptExtractionPortfolio,
 } from './promptExtractionResearchShared';
-import {
-  buildSqlCandidatePool,
-  selectSemanticBandAwareSqlPortfolio,
-} from './selectSqlPortfolio';
+import { renderMarkdownTable } from './reportRenderingShared';
+import { buildSqlCandidatePool, selectSemanticBandAwareSqlPortfolio } from './selectSqlPortfolio';
 import { buildSqlAttackPortfolio, extractEntities } from './sqlResearchShared';
-import {
-  summarizeObservedPluginFeatureBandCoverage,
-  type ObservedPluginFeatureBandCoverageSummary,
-} from '../../src/redteam/generation/predicateSignatures';
-import {
-  runProductionSemanticFrontierBenchmark,
-  type ProductionSemanticFrontierBenchmark,
-} from './benchmarkProductionSemanticFrontiers';
 
-type PluginId = 'prompt-extraction' | 'sql-injection';
+type PluginId = 'pii:direct' | 'prompt-extraction' | 'sql-injection';
 
 type ResearchProductionSemanticFrontierComparison = {
   pluginId: PluginId;
@@ -45,6 +45,19 @@ function summarizeResearchPromptExtraction() {
 
   return summarizeObservedPluginFeatureBandCoverage(
     'prompt-extraction',
+    selected.map((attack) => attack.prompt),
+  );
+}
+
+function summarizeResearchPiiDirect() {
+  const fullPortfolio = buildPiiPortfolio(REFERENCE_ENTITIES, 'pii:direct');
+  const selected = selectSemanticFeatureAwarePiiDirectPortfolio(
+    buildPiiCandidatePool(fullPortfolio),
+    5,
+  );
+
+  return summarizeObservedPluginFeatureBandCoverage(
+    'pii:direct',
     selected.map((attack) => attack.prompt),
   );
 }
@@ -98,21 +111,31 @@ function summarizeProductionBands(
 }
 
 function isComplete(summary: ObservedPluginFeatureBandCoverageSummary): boolean {
-  return Object.values(summary).every(
-    (band) => band.observedFeatureCount === band.featureCount,
-  );
+  return Object.values(summary).every((band) => band.observedFeatureCount === band.featureCount);
 }
 
 export async function compareResearchProductionSemanticFrontiers(): Promise<
   ResearchProductionSemanticFrontierComparison[]
 > {
   const production = await runProductionSemanticFrontierBenchmark([5]);
+  const piiDirectProduction = getProductionBenchmark(production, 'pii:direct');
   const promptExtractionProduction = getProductionBenchmark(production, 'prompt-extraction');
   const sqlProduction = getProductionBenchmark(production, 'sql-injection');
+  const piiDirectResearch = summarizeResearchPiiDirect();
   const promptExtractionResearch = summarizeResearchPromptExtraction();
   const sqlResearch = summarizeResearchSqlInjection();
 
   return [
+    {
+      agreesOnCompleteFrontier:
+        isComplete(piiDirectResearch) === Boolean(piiDirectProduction.semanticFrontier?.complete),
+      pluginId: 'pii:direct',
+      productionBandCoverage: summarizeProductionBands('pii:direct', piiDirectProduction),
+      productionComplete: Boolean(piiDirectProduction.semanticFrontier?.complete),
+      productionSelectedFamilies: piiDirectProduction.selectedFamilyIds,
+      researchBandCoverage: piiDirectResearch,
+      researchComplete: isComplete(piiDirectResearch),
+    },
     {
       agreesOnCompleteFrontier:
         isComplete(promptExtractionResearch) ===
@@ -166,7 +189,7 @@ export function renderResearchProductionSemanticFrontierComparisonMarkdown(
     '',
     '## Reading',
     '',
-    'The production handoff preserves the same high-level frontier claims that motivated the research refactor: prompt extraction remains fully covered across its core-disclosure and protected-control-plane bands, and SQL injection remains fully covered across exploit-mechanism and authorization-bypass bands. The selected production family sets are allowed to differ from the research portfolios as long as those semantic frontier claims stay intact.',
+    'The production handoff preserves the same high-level frontier claims that motivated the research refactor across one-band and two-band plugins alike: direct PII remains fully covered across its sensitive-field band, prompt extraction remains fully covered across core-disclosure and protected-control-plane, and SQL injection remains fully covered across exploit-mechanism and authorization-bypass. The selected production family sets are allowed to differ from the research portfolios as long as those semantic frontier claims stay intact.',
   ].join('\n');
 }
 
