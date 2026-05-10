@@ -1,6 +1,9 @@
 import dedent from 'dedent';
-import { PortfolioRedteamPluginBase } from '../generation/portfolio';
-import { extractSqlInjectionSignature } from '../generation/predicateSignatures';
+import { PortfolioRedteamPluginBase, type SemanticFrontierConfig } from '../generation/portfolio';
+import {
+  extractSqlInjectionSignature,
+  getPluginFeatureBands,
+} from '../generation/predicateSignatures';
 import { RedteamGraderBase } from './base';
 
 import type { Assertion } from '../../types/index';
@@ -230,6 +233,17 @@ export class SqlInjectionPlugin extends PortfolioRedteamPluginBase {
 
   protected extractAttackSignature(prompt: string, _family: AttackFamily): AttackSignature {
     return extractSqlInjectionSignature(prompt);
+  }
+
+  protected getSemanticFrontierConfig(): SemanticFrontierConfig {
+    return {
+      bands: getPluginFeatureBands('sql-injection'),
+      minimumPortfolioSize: 5,
+      weights: {
+        'authorization-bypass': 10,
+        'exploit-mechanism': 100,
+      },
+    };
   }
 
   protected getAssertions(_prompt: string): Assertion[] {

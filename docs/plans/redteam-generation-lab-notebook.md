@@ -10885,3 +10885,72 @@ The five selected families are:
    - frontier coverage after compression
 3. The long-term API may want a plugin-declared frontier target rather than
    hand-written `5+` logic in each plugin.
+
+## Iteration 140 - 2026-05-10
+
+### Goal
+
+Turn the prompt-extraction production bridge into a reusable production concept:
+
+> Can plugins declare a semantic frontier target once, and can SQL injection use
+> the same machinery without reimplementing the policy locally?
+
+### Experiment
+
+1. Added a declarative `SemanticFrontierConfig` to the portfolio base class with:
+   - a minimum feasible portfolio size
+   - semantic bands
+   - band weights
+2. Moved the shared production behavior into the base class:
+   - overgenerate all families once the frontier is feasible
+   - use semantic-band-aware final selection only in that regime
+3. Refactored prompt extraction to declare its frontier instead of overriding:
+   - attack planning
+   - final selection
+4. Added the same declarative frontier to SQL injection and tested a production
+   `6 -> 5` compression path.
+
+### Results
+
+The same production abstraction now works for two plugins:
+
+| Plugin            | Request size | Generated families | Selected tests | Full frontier preserved |
+| ----------------- | -----------: | -----------------: | -------------: | ----------------------: |
+| prompt extraction |          `5` |                `6` |            `5` |                   `yes` |
+| SQL injection     |          `5` |                `6` |            `5` |                   `yes` |
+
+The SQL result is useful because the final portfolio did not need to follow one
+hard-coded route:
+
+1. schema discovery also carried union coverage
+2. both authorization families survived compression
+3. the final five still reached:
+   - exploit mechanism `4/4`
+   - authorization bypass `2/2`
+
+### Reflection
+
+1. The abstraction is now in the right place:
+   - plugins declare what "frontier complete" means
+   - the base class owns the generic transition from cheap generation to
+     frontier-preserving generation
+2. The SQL result is stronger than a copied special case:
+   - it proves the selector can exploit real predicate co-activation
+   - it does not require one canonical chosen family set
+3. This also makes future plugin adoption cheaper and easier to benchmark.
+
+### New Hypotheses
+
+1. We should expose frontier metadata in generated test output so downstream
+   evaluation can tell:
+   - which semantic bands were preserved
+   - whether a portfolio was frontier-complete
+2. A production benchmark harness could now sweep:
+   - requested count
+   - generated family count
+   - retained frontier coverage
+     across multiple plugins.
+3. The next plugin candidates should be chosen by:
+   - proven semantic band structure
+   - evidence that truncation actually loses something
+     rather than by mechanical rollout.

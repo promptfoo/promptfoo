@@ -2,10 +2,19 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import { type GeneratedPrompt, RedteamPluginBase } from '../plugins/base';
 import { getShortPluginId } from '../util';
-import { buildBalancedAttackPlan, selectCoverageAwareCandidates } from './selection';
+import {
+  buildBalancedAttackPlan,
+  type SemanticBandSelectionConfig,
+  selectCoverageAwareCandidates,
+  selectSemanticBandAwareCandidates,
+} from './selection';
 
 import type { TestCase } from '../../types/index';
 import type { AttackCandidate, AttackFamily, AttackPlan, AttackSignature } from './types';
+
+export type SemanticFrontierConfig = SemanticBandSelectionConfig & {
+  minimumPortfolioSize: number;
+};
 
 export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   protected abstract readonly attackFamilies: readonly AttackFamily[];
@@ -26,14 +35,29 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     return 1;
   }
 
+  protected getSemanticFrontierConfig(): SemanticFrontierConfig | undefined {
+    return undefined;
+  }
+
   protected buildAttackPlan(requestedCount: number): AttackPlan {
-    return buildBalancedAttackPlan(this.attackFamilies, requestedCount);
+    const semanticFrontier = this.getSemanticFrontierConfig();
+    const plannedCount =
+      semanticFrontier && requestedCount >= semanticFrontier.minimumPortfolioSize
+        ? Math.max(requestedCount, this.attackFamilies.length)
+        : requestedCount;
+
+    return buildBalancedAttackPlan(this.attackFamilies, plannedCount);
   }
 
   protected selectPortfolioCandidates(
     candidates: readonly AttackCandidate[],
     requestedCount: number,
   ): AttackCandidate[] {
+    const semanticFrontier = this.getSemanticFrontierConfig();
+    if (semanticFrontier && requestedCount >= semanticFrontier.minimumPortfolioSize) {
+      return selectSemanticBandAwareCandidates(candidates, requestedCount, semanticFrontier);
+    }
+
     return selectCoverageAwareCandidates(candidates, requestedCount);
   }
 
