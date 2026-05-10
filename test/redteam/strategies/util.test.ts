@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { pluginMatchesStrategyTargets } from '../../../src/redteam/strategies/util';
+import {
+  mergeProviderTokenUsage,
+  pluginMatchesStrategyTargets,
+} from '../../../src/redteam/strategies/util';
 
 import type { TestCaseWithPlugin } from '../../../src/types/index';
 
@@ -338,5 +341,45 @@ describe('pluginMatchesStrategyTargets', () => {
       };
       expect(pluginMatchesStrategyTargets(mismatchCase, 'base64', ['harmful'])).toBe(false);
     });
+  });
+});
+
+describe('mergeProviderTokenUsage', () => {
+  it('clones usage when only an update is provided', () => {
+    const update = {
+      total: 3,
+      completionDetails: { reasoning: 2 },
+      assertions: {
+        total: 1,
+        completionDetails: { reasoning: 1 },
+      },
+    };
+
+    const merged = mergeProviderTokenUsage(undefined, update);
+
+    expect(merged).toEqual(update);
+    expect(merged).not.toBe(update);
+    expect(merged?.completionDetails).not.toBe(update.completionDetails);
+    expect(merged?.assertions).not.toBe(update.assertions);
+    expect(merged?.assertions?.completionDetails).not.toBe(update.assertions.completionDetails);
+  });
+
+  it('clones usage when only existing usage is provided', () => {
+    const existing = {
+      total: 3,
+      completionDetails: { reasoning: 2 },
+      assertions: {
+        total: 1,
+        completionDetails: { reasoning: 1 },
+      },
+    };
+
+    const merged = mergeProviderTokenUsage(existing, undefined);
+
+    expect(merged).toEqual(existing);
+    expect(merged).not.toBe(existing);
+    expect(merged?.completionDetails).not.toBe(existing.completionDetails);
+    expect(merged?.assertions).not.toBe(existing.assertions);
+    expect(merged?.assertions?.completionDetails).not.toBe(existing.assertions.completionDetails);
   });
 });

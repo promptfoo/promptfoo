@@ -28,6 +28,7 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   mergeStoredGraderResultTokenUsage,
+  RedteamProviderError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
@@ -899,6 +900,7 @@ export class CustomProvider implements ApiProvider {
           response: {
             output: '',
             error: lastTransformResult.error,
+            tokenUsage: { numRequests: 0 },
           },
           transformResult: lastTransformResult,
         };
@@ -1018,10 +1020,10 @@ export class CustomProvider implements ApiProvider {
       await sleep(scoringProvider.delay);
     }
     if (refusalResponse.error) {
-      logger.warn('[Custom] Refusal score provider returned an error', {
-        error: refusalResponse.error,
-      });
-      return [false, `Refusal check error: ${refusalResponse.error}`, refusalResponse.tokenUsage];
+      throw new RedteamProviderError(
+        `Error from redteam (refusal) provider: ${refusalResponse.error}`,
+        refusalResponse.tokenUsage,
+      );
     }
 
     logger.debug(`[Custom] Refusal score response: ${refusalResponse.output}`);
@@ -1090,18 +1092,10 @@ export class CustomProvider implements ApiProvider {
       await sleep(scoringProvider.delay);
     }
     if (evalResponse.error) {
-      logger.warn('[Custom] Eval score provider returned an error', {
-        error: evalResponse.error,
-      });
-      return [
-        {
-          value: false,
-          description: 'Evaluation error',
-          rationale: `Evaluation error: ${evalResponse.error}`,
-          metadata: 0,
-        },
+      throw new RedteamProviderError(
+        `Error from redteam (eval) provider: ${evalResponse.error}`,
         evalResponse.tokenUsage,
-      ];
+      );
     }
 
     logger.debug(`[Custom] Eval score response: ${evalResponse.output}`);

@@ -33,6 +33,16 @@ import { TransformInputType, transform } from '../../util/transform';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
+export class RedteamProviderError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'RedteamProviderError';
+  }
+}
+
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';

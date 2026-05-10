@@ -435,22 +435,16 @@ describe('RedteamIterativeProvider', () => {
       expect(result.explanation).toBe('Failed to parse judge response');
     });
 
-    it('should preserve judge usage when the judge provider returns an error', async () => {
+    it('should throw with preserved judge usage when the judge provider returns an error', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({
         error: 'judge failed',
         tokenUsage: { total: 30, prompt: 12, completion: 18, numRequests: 1 },
       });
 
-      const result = await evaluateResponse(
-        mockRedteamProvider,
-        'Judge prompt',
-        'Response',
-        'Best',
-        false,
-      );
-
-      expect(result).toMatchObject({
-        error: 'judge failed',
+      await expect(
+        evaluateResponse(mockRedteamProvider, 'Judge prompt', 'Response', 'Best', false),
+      ).rejects.toMatchObject({
+        message: 'Error from redteam (judge) provider: judge failed',
         tokenUsage: { total: 30, prompt: 12, completion: 18, numRequests: 1 },
       });
     });
@@ -468,17 +462,14 @@ describe('RedteamIterativeProvider', () => {
       expect(result.prompt).toBe('');
     });
 
-    it('should preserve attacker usage when the redteam provider returns an error', async () => {
+    it('should throw with preserved attacker usage when the redteam provider returns an error', async () => {
       mockRedteamProvider.callApi.mockResolvedValue({
         error: 'attacker failed',
         tokenUsage: { total: 40, prompt: 16, completion: 24, numRequests: 1 },
       });
 
-      const result = await getNewPrompt(mockRedteamProvider, []);
-
-      expect(result).toMatchObject({
-        error: 'attacker failed',
-        prompt: '',
+      await expect(getNewPrompt(mockRedteamProvider, [])).rejects.toMatchObject({
+        message: 'Error from redteam provider: attacker failed',
         tokenUsage: { total: 40, prompt: 16, completion: 24, numRequests: 1 },
       });
     });

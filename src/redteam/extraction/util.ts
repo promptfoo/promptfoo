@@ -23,6 +23,16 @@ export type ExtractionResult<T> = {
   tokenUsage?: TokenUsage;
 };
 
+class ExtractionError extends Error {
+  constructor(
+    message: string,
+    public readonly tokenUsage?: TokenUsage,
+  ) {
+    super(message);
+    this.name = 'ExtractionError';
+  }
+}
+
 /**
  * Fetches remote generation results for a given task and prompts.
  *
@@ -98,27 +108,29 @@ export async function callExtractionWithMetadata<T>(
   const { output, error, tokenUsage } = await provider.callApi(
     JSON.stringify([{ role: 'user', content: prompt }]),
   );
+  const normalizedTokenUsage = tokenUsage
+    ? {
+        ...tokenUsage,
+        ...(tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
+      }
+    : { numRequests: 1 };
 
   if (error) {
     logger.error(`Error in extraction: ${error}`);
-    throw new Error(`Failed to perform extraction: ${error}`);
+    throw new ExtractionError(`Failed to perform extraction: ${error}`, normalizedTokenUsage);
   }
 
   if (typeof output !== 'string') {
     logger.error(`Invalid output from extraction. Got: ${output}`);
-    throw new Error(`Invalid extraction output: expected string, got: ${output}`);
+    throw new ExtractionError(
+      `Invalid extraction output: expected string, got: ${output}`,
+      normalizedTokenUsage,
+    );
   }
 
   return {
     result: processOutput(output),
-    ...(tokenUsage
-      ? {
-          tokenUsage: {
-            ...tokenUsage,
-            ...(tokenUsage.numRequests === undefined ? { numRequests: 1 } : {}),
-          },
-        }
-      : {}),
+    tokenUsage: normalizedTokenUsage,
   };
 }
 

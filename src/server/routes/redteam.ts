@@ -17,6 +17,7 @@ import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import { TestCase, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
+import { BaseTokenUsageSchema } from '../../types/shared';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
 import {
@@ -44,25 +45,28 @@ function createUsageTrackingProvider(provider: ApiProvider): {
 } {
   const tokenUsage = createEmptyTokenUsage();
   let hasTokenUsage = false;
+  const trackedProvider = Object.assign(Object.create(Object.getPrototypeOf(provider)), provider, {
+    callApi: async (...args: Parameters<ApiProvider['callApi']>) => {
+      const response = await provider.callApi(...args);
+      accumulateResponseTokenUsage(tokenUsage, response);
+      hasTokenUsage = true;
+      return response;
+    },
+  }) as ApiProvider;
 
   return {
-    provider: {
-      ...provider,
-      callApi: async (...args: Parameters<ApiProvider['callApi']>) => {
-        const response = await provider.callApi(...args);
-        accumulateResponseTokenUsage(tokenUsage, response);
-        hasTokenUsage = true;
-        return response;
-      },
-    },
+    provider: trackedProvider,
     getTokenUsage: () => (hasTokenUsage ? tokenUsage : undefined),
   };
 }
 
 function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  return error && typeof error === 'object' && 'tokenUsage' in error
-    ? (error.tokenUsage as TokenUsage | undefined)
-    : undefined;
+  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+    return undefined;
+  }
+
+  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 function mergeTokenUsage(...usages: Array<TokenUsage | undefined>): TokenUsage | undefined {

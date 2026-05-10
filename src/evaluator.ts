@@ -65,6 +65,7 @@ import {
   type TestSuite,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
+import { BaseTokenUsageSchema } from './types/shared';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
@@ -88,6 +89,7 @@ import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
+  accumulateTokenUsage,
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
@@ -1436,6 +1438,14 @@ async function runEvalInternal({
     if (!isAbortError) {
       logger.error('Provider call failed during eval', logContext);
     }
+    const parsedTokenUsage =
+      err && typeof err === 'object' && 'tokenUsage' in err
+        ? BaseTokenUsageSchema.safeParse(err.tokenUsage)
+        : undefined;
+    const errorTokenUsage = parsedTokenUsage?.success ? createEmptyTokenUsage() : undefined;
+    if (errorTokenUsage && parsedTokenUsage?.success) {
+      accumulateTokenUsage(errorTokenUsage, parsedTokenUsage.data);
+    }
 
     return [
       {
@@ -1451,6 +1461,7 @@ async function runEvalInternal({
         testCase: test,
         promptId: prompt.id || '',
         metadata,
+        ...(errorTokenUsage ? { tokenUsage: errorTokenUsage } : {}),
       },
     ];
   }

@@ -159,4 +159,33 @@ describeEvaluator('evaluator token usage', () => {
     // The main verification is at the stats level (already done above)
     // Individual results may not always have tokenUsage populated in the summary
   });
+
+  it('should preserve provider usage when a provider throws a token-carrying error', async () => {
+    const providerWithErrorUsage: ApiProvider = {
+      id: vi.fn().mockReturnValue('provider-with-error-usage'),
+      callApi: vi.fn().mockRejectedValue(
+        Object.assign(new Error('provider failed'), {
+          tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+        }),
+      ),
+    };
+
+    const [result] = await runEval({
+      delay: 0,
+      testIdx: 0,
+      promptIdx: 0,
+      repeatIndex: 0,
+      isRedteam: false,
+      provider: providerWithErrorUsage,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {},
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      tokenUsage: { total: 9, prompt: 5, completion: 4, numRequests: 1 },
+    });
+  });
 });

@@ -5,6 +5,7 @@ import logger from '../../../src/logger';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import {
   callExtraction,
+  callExtractionWithMetadata,
   fetchRemoteGeneration,
   formatPrompts,
   RedTeamGenerationResponse,
@@ -276,6 +277,33 @@ describe('Extraction Utils', () => {
       await expect(callExtraction(provider, 'test prompt', vi.fn())).rejects.toThrow(
         'Invalid extraction output: expected string, got: undefined',
       );
+    });
+  });
+
+  describe('callExtractionWithMetadata', () => {
+    it('should count a provider response without usage as one request', async () => {
+      vi.mocked(provider.callApi).mockResolvedValue({ output: 'test output' });
+
+      await expect(
+        callExtractionWithMetadata(provider, 'test prompt', (output) => output.toUpperCase()),
+      ).resolves.toEqual({
+        result: 'TEST OUTPUT',
+        tokenUsage: { numRequests: 1 },
+      });
+    });
+
+    it('should preserve token usage on provider errors', async () => {
+      vi.mocked(provider.callApi).mockResolvedValue({
+        error: 'API error',
+        tokenUsage: { total: 12, prompt: 7, completion: 5 },
+      });
+
+      await expect(
+        callExtractionWithMetadata(provider, 'test prompt', vi.fn()),
+      ).rejects.toMatchObject({
+        message: 'Failed to perform extraction: API error',
+        tokenUsage: { total: 12, prompt: 7, completion: 5, numRequests: 1 },
+      });
     });
   });
 

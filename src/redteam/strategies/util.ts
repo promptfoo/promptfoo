@@ -62,10 +62,38 @@ export function mergeProviderTokenUsage(
   update: TokenUsage | undefined,
 ): TokenUsage | undefined {
   if (!existing) {
-    return update;
+    return update
+      ? {
+          ...update,
+          ...(update.completionDetails && {
+            completionDetails: { ...update.completionDetails },
+          }),
+          ...(update.assertions && {
+            assertions: {
+              ...update.assertions,
+              ...(update.assertions.completionDetails && {
+                completionDetails: { ...update.assertions.completionDetails },
+              }),
+            },
+          }),
+        }
+      : undefined;
   }
   if (!update) {
-    return existing;
+    return {
+      ...existing,
+      ...(existing.completionDetails && {
+        completionDetails: { ...existing.completionDetails },
+      }),
+      ...(existing.assertions && {
+        assertions: {
+          ...existing.assertions,
+          ...(existing.assertions.completionDetails && {
+            completionDetails: { ...existing.assertions.completionDetails },
+          }),
+        },
+      }),
+    };
   }
 
   const merged: TokenUsage = {

@@ -50,6 +50,7 @@ import {
   isConversationEndedResponse,
   isValidChatMessageArray,
   mergeStoredGraderResultTokenUsage,
+  RedteamProviderError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
@@ -1325,10 +1326,10 @@ export class CrescendoProvider implements ApiProvider {
       await sleep(scoringProvider.delay);
     }
     if (refusalResponse.error) {
-      logger.warn('[Crescendo] Refusal score provider returned an error', {
-        error: refusalResponse.error,
-      });
-      return [false, `Refusal check error: ${refusalResponse.error}`, refusalResponse.tokenUsage];
+      throw new RedteamProviderError(
+        `Error from redteam (refusal) provider: ${refusalResponse.error}`,
+        refusalResponse.tokenUsage,
+      );
     }
 
     logger.debug(`[Crescendo] Refusal score response: ${refusalResponse.output}`);
@@ -1399,18 +1400,10 @@ export class CrescendoProvider implements ApiProvider {
       await sleep(scoringProvider.delay);
     }
     if (evalResponse.error) {
-      logger.warn('[Crescendo] Eval score provider returned an error', {
-        error: evalResponse.error,
-      });
-      return [
-        {
-          value: false,
-          description: 'Evaluation error',
-          rationale: `Evaluation error: ${evalResponse.error}`,
-          metadata: 0,
-        },
+      throw new RedteamProviderError(
+        `Error from redteam (eval) provider: ${evalResponse.error}`,
         evalResponse.tokenUsage,
-      ];
+      );
     }
 
     logger.debug(`[Crescendo] Eval score response: ${evalResponse.output}`);

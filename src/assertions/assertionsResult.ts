@@ -125,6 +125,9 @@ export class AssertionsResult {
 
     if (result.tokensUsed) {
       accumulateAssertionTokenUsage(this.tokensUsed, result.tokensUsed);
+      if (result.tokensUsed.numRequests === undefined) {
+        this.tokensUsed.numRequests = (this.tokensUsed.numRequests ?? 0) + 1;
+      }
     }
 
     if (result.pass) {

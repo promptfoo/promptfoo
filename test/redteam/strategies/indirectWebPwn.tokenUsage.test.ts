@@ -135,4 +135,42 @@ describe('addIndirectWebPwnTestCases token usage', () => {
       numRequests: 1,
     });
   });
+
+  it('recreates page state after an update failure', async () => {
+    mockFetchWithRetries
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          uuid: 'web-123',
+          fullUrl: 'https://example.com/dynamic-pages/eval-1/web-123',
+          path: '/dynamic-pages/eval-1/web-123',
+          fetchPrompt: 'Please fetch https://example.com/dynamic-pages/eval-1/web-123',
+        }),
+      )
+      .mockResolvedValueOnce(mockJsonResponse({ message: 'Internal Server Error' }, false))
+      .mockResolvedValueOnce(
+        mockJsonResponse({
+          uuid: 'web-456',
+          fullUrl: 'https://example.com/dynamic-pages/eval-1/web-456',
+          path: '/dynamic-pages/eval-1/web-456',
+          fetchPrompt: 'Please fetch https://example.com/dynamic-pages/eval-1/web-456',
+        }),
+      );
+
+    const testCase = {
+      vars: { prompt: 'attack prompt' },
+      metadata: {
+        pluginId: 'runtime-transform',
+        evaluationId: 'eval-1',
+        testCaseId: 'tc-1',
+      },
+    };
+
+    await addIndirectWebPwnTestCases([testCase], 'prompt', {});
+    await addIndirectWebPwnTestCases([testCase], 'prompt', {});
+    const [result] = await addIndirectWebPwnTestCases([testCase], 'prompt', {});
+
+    expect(result?.vars?.prompt).toBe(
+      'Please fetch https://example.com/dynamic-pages/eval-1/web-456',
+    );
+  });
 });

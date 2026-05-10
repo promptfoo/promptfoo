@@ -473,6 +473,7 @@ async function updateExistingPageState(params: {
       error: error instanceof Error ? error.message : String(error),
       uuid: pageState.uuid,
     });
+    pageStateMap.delete(stateKey);
     return getRuntimeTransformTokenUsage(error);
   }
 }

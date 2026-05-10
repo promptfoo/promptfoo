@@ -255,6 +255,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
     let webFetchActuallyUsed = false;
     let fetchAttempts = 0;
 
+    let attackError: string | undefined;
     try {
       // 1. Create web page with attack prompt
       logger.debug('[IndirectWebPwn] Creating web page with attack prompt');
@@ -358,6 +359,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
       logger.error('[IndirectWebPwn] Error during attack', {
         error: error instanceof Error ? error.message : String(error),
       });
+      attackError = error instanceof Error ? error.message : String(error);
       stopReason = 'Error';
     }
 
@@ -384,6 +386,7 @@ export default class IndirectWebPwnProvider implements ApiProvider {
         fetchAttempts,
       },
       tokenUsage: totalTokenUsage,
+      ...(attackError ? { error: attackError } : {}),
     };
   }
 }

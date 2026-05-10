@@ -159,6 +159,31 @@ describe('AssertionsResult', () => {
     });
   });
 
+  it('counts one request when an assertion result reports tokens without numRequests', async () => {
+    assertionsResult.addResult({
+      index: 0,
+      result: {
+        ...succeedingResult,
+        tokensUsed: {
+          total: 7,
+          prompt: 4,
+          completion: 3,
+          cached: 0,
+        },
+      },
+    });
+
+    await expect(assertionsResult.testResult()).resolves.toMatchObject({
+      tokensUsed: {
+        total: 7,
+        prompt: 4,
+        completion: 3,
+        cached: 0,
+        numRequests: 1,
+      },
+    });
+  });
+
   it('respects succeeding threshold', async () => {
     const threshold = 0.5;
 

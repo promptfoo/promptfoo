@@ -66,7 +66,7 @@ export async function extractSystemPurposeWithMetadata(
   `;
 
   try {
-    return callExtractionWithMetadata(provider, prompt, (output: string) => {
+    return await callExtractionWithMetadata(provider, prompt, (output: string) => {
       const match = output.match(/<Purpose>(.*?)<\/Purpose>/);
       return match ? match[1].trim() : output.trim();
     });
