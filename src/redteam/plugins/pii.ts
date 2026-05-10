@@ -484,6 +484,15 @@ export class PiiSocialPlugin extends PortfolioRedteamPluginBase {
     return true;
   }
 
+  protected override getSemanticFrontierPlanningCount(requestedCount: number): number {
+    if (requestedCount >= this.getSemanticFrontierConfig().minimumPortfolioSize) {
+      return super.getSemanticFrontierPlanningCount(requestedCount);
+    }
+
+    // The first three curated families cover the tiny-budget social frontier.
+    return Math.max(requestedCount, 3);
+  }
+
   protected getAssertions(_prompt: string): Assertion[] {
     return [
       {

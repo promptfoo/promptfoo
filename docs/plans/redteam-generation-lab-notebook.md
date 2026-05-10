@@ -12972,3 +12972,45 @@ low-budget planning.
      semantic coverage profile is satisfied
    - or whether plugins need a separate tiny-budget policy from their full
      compression policy
+
+## Iteration 175 - 2026-05-10
+
+### Goal
+
+Test whether `pii:social` can keep the low-budget quality gains without paying
+for the full six-family sweep.
+
+### Experiment
+
+1. Added a generic semantic-frontier planning-count hook to the portfolio base.
+2. Specialized `PiiSocialPlugin` so sub-threshold semantic batches warm-start
+   from three curated families instead of all six.
+3. Froze the old full-sweep behavior inside a research comparison harness so the
+   before/after stays reproducible.
+4. Added focused product and research regression coverage.
+
+### Results
+
+| Requested tests | Full-sweep work | Warm-start work | Full-sweep coverage | Warm-start coverage |
+| --------------- | --------------: | --------------: | ------------------: | ------------------: |
+| `1`             |            `12` |             `6` |               `4/8` |               `4/8` |
+| `2`             |            `12` |             `6` |               `7/8` |               `7/8` |
+| `3`             |            `12` |             `6` |               `8/8` |               `8/8` |
+| `4`             |            `12` |             `8` |               `8/8` |               `8/8` |
+| `5`             |            `12` |            `10` |               `8/8` |               `8/8` |
+| `6`             |            `12` |            `12` |               `8/8` |               `8/8` |
+
+### Reflection
+
+1. The three-family warm start dominates the previous full-sweep low-budget
+   policy on this benchmark:
+   - equal retained shared coverage at every tested size
+   - strictly less generation work below the six-test threshold
+2. The critical design move was separating:
+   - semantic selection
+   - from the number of families explored before selection
+3. The remaining risk is that this warm start is currently curated for the
+   present `pii:social` family ordering:
+   - the next useful probe should perturb family order or family availability
+   - if the result is brittle, we should derive the warm-start set from predicate
+     coverage rather than source order

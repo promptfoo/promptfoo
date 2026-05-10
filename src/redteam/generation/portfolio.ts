@@ -56,6 +56,10 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     return false;
   }
 
+  protected getSemanticFrontierPlanningCount(requestedCount: number): number {
+    return Math.max(requestedCount, this.attackFamilies.length);
+  }
+
   protected buildAttackPlan(requestedCount: number): AttackPlan {
     const semanticFrontier = this.getSemanticFrontierConfig();
     const shouldUseSemanticFrontier =
@@ -63,7 +67,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       (requestedCount >= semanticFrontier.minimumPortfolioSize ||
         this.useSemanticFrontierBelowMinimumSize());
     const plannedCount = shouldUseSemanticFrontier
-      ? Math.max(requestedCount, this.attackFamilies.length)
+      ? this.getSemanticFrontierPlanningCount(requestedCount)
       : requestedCount;
 
     return buildBalancedAttackPlan(this.attackFamilies, plannedCount);

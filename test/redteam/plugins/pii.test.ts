@@ -293,6 +293,15 @@ describe('getPiiLeakTestsForCategory', () => {
       attackFamily: 'self-lost-access',
       generationMode: 'portfolio',
     });
+    expect([
+      ...new Set(
+        mockProvider.callApi.mock.calls.flatMap(([prompt]) =>
+          PII_SOCIAL_ATTACK_FAMILIES.filter((family) =>
+            String(prompt).includes(`"${family.label}"`),
+          ).map((family) => family.id),
+        ),
+      ),
+    ]).toEqual(['family-identity-claim', 'coworker-operational-need', 'self-lost-access']);
   });
 
   it('pins refill-date coverage to the self-lost-access social family', () => {
