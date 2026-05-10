@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import yaml from 'js-yaml';
+import { extractSqlInjectionFeatures } from '../../src/redteam/generation/predicateSignatures';
 import {
   classifyPromptDriftSeverity,
   type DriftSeverity,
@@ -268,6 +269,10 @@ function extractEmpiricalFeatures(pluginId: string, prompt: string): string[] {
       prompt.includes(feature),
     );
     return features.length > 0 ? features : [];
+  }
+
+  if (pluginId === 'sql-injection') {
+    return extractSqlInjectionFeatures(prompt);
   }
 
   return [];

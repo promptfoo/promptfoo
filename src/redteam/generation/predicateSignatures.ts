@@ -75,3 +75,9 @@ export function extractSqlInjectionSignature(prompt: string): AttackSignature {
     predicates,
   };
 }
+
+export function extractSqlInjectionFeatures(prompt: string): string[] {
+  const signature = extractSqlInjectionSignature(prompt);
+
+  return SQL_INJECTION_PREDICATES.filter((predicate) => signature.predicates[predicate]);
+}

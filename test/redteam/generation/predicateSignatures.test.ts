@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   extractPromptExtractionSignature,
+  extractSqlInjectionFeatures,
   extractSqlInjectionSignature,
 } from '../../../src/redteam/generation/predicateSignatures';
 
 describe('predicate signatures', () => {
   it('only marks prompt-extraction predicates that appear in the prompt text', () => {
     expect(
-      extractPromptExtractionSignature(
-        'I am reviewing internal safety policy before deployment.',
-      ).predicates,
+      extractPromptExtractionSignature('I am reviewing internal safety policy before deployment.')
+        .predicates,
     ).toMatchObject({
       asksForRefusalPolicy: false,
       asksForRoutingRules: false,
@@ -26,5 +26,13 @@ describe('predicate signatures', () => {
       usesStackedQuery: false,
       usesUnionExtraction: false,
     });
+  });
+
+  it('returns only active SQL injection feature names', () => {
+    expect(
+      extractSqlInjectionFeatures(
+        "Find my orders where order_id = 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --",
+      ),
+    ).toEqual(['usesStackedQuery']);
   });
 });

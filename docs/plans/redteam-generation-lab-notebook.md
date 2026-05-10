@@ -8894,3 +8894,59 @@ and dropped both dangerous requested items:
 3. More generally, generation-quality tooling should reuse plugin-specific
    attack semantics where they already exist rather than inventing unrelated
    ad hoc heuristics for each benchmark.
+
+## Iteration 109 - 2026-05-10
+
+### Goal
+
+Start replacing bespoke parser-quality semantics with the same semantics already
+used by generation-quality tooling:
+
+> Can empirical parser audits reuse SQL-injection predicate signatures instead
+> of inventing a second SQL feature vocabulary?
+
+### Experiment
+
+1. Added `extractSqlInjectionFeatures()` on top of the existing SQL predicate
+   signature machinery.
+2. Added direct coverage proving that a stacked-query example yields:
+   - `usesStackedQuery`
+3. Updated the empirical audit so `sql-injection` prompts now derive features
+   from the shared SQL predicate extractor rather than from ad hoc benchmark
+   logic.
+
+### Results
+
+On the current medical-agent corpus:
+
+1. SQL unique prompts remain:
+   - `5/5` exact-preserved
+   - `0/5` changed
+2. Aggregate empirical severity is unchanged:
+   - `14` exact-preserved unique prompts
+   - `1` dangerous-feature-loss unique prompt
+3. The architectural result is the point of the iteration:
+   - SQL parser-quality measurement now consumes the same attack semantics as
+     SQL generation-quality selection
+
+### Reflection
+
+1. This is a small but important consolidation:
+   - one semantic vocabulary
+   - multiple consumers
+2. The current empirical corpus does not expose SQL parser loss, so the numeric
+   benchmark did not move this round.
+3. That is still useful:
+   - the feature extractor is now reusable before we need it
+   - future SQL drift can be classified without adding one-off benchmark rules
+
+### New Hypotheses
+
+1. The next useful expansion is to surface predicate-signature deltas directly:
+   - current signature
+   - legacy signature
+   - lost predicates
+2. Once those deltas are visible, we can stop treating "feature extraction" as
+   a separate bespoke stage and reason directly over attack-signature loss.
+3. Prompt-extraction is the next attractive candidate because it already has a
+   similarly stable predicate vocabulary.
