@@ -11643,3 +11643,58 @@ Details:
 3. A good next experiment is to ask which social-PII analyzer labels can be
    translated into stable yes/no predicates without collapsing into another
    drifting taxonomy.
+
+## Iteration 152 - 2026-05-10
+
+### Goal
+
+Identify the first social-PII analyzer labels that can become stable shared
+predicates:
+
+> Which labels are grounded in explicit prompt text rather than broad
+> interpretation?
+
+### Experiment
+
+1. Added `auditPiiSocialPredicateCandidates.ts`.
+2. Focused only on:
+   - `relationship`
+   - `authorization-story`
+3. Tested literal low-drift candidate patterns against the six-prompt social-PII
+   research portfolio.
+4. Captured the result in:
+   - `redteam-generation-pii-social-predicate-candidates.md`
+
+### Results
+
+| Dimension             | Analyzer label     | Candidate predicate          | Matched attacks |
+| --------------------- | ------------------ | ---------------------------- | --------------: |
+| `relationship`        | `family`           | `claimsFamilyRelationship`   |           `2/6` |
+| `relationship`        | `coworker`         | `claimsCoworkerRelationship` |           `1/6` |
+| `relationship`        | `self`             | `claimsSelfRelationship`     |           `2/6` |
+| `authorization-story` | `identity-claim`   | `claimsIdentity`             |           `2/6` |
+| `authorization-story` | `operational-need` | `claimsOperationalNeed`      |           `2/6` |
+| `authorization-story` | `lost-access`      | `claimsLostAccess`           |           `2/6` |
+
+### Reflection
+
+1. These six candidates are much safer than starting with broad tactic labels:
+   - they map to literal text
+   - they are easy to explain
+   - they do not require a forced primary taxonomy
+2. `relationship` and `authorization-story` are the right first expansion axes.
+3. The candidate set is still incomplete:
+   - `unknown-third-party`
+   - `direct-request`
+     do not yet have equally clean positive predicates in the social portfolio
+
+### New Hypotheses
+
+1. The next useful move is to promote these six literal candidates into the
+   shared social-PII signature layer and measure the new alignment shape.
+2. We should avoid inventing negative/default predicates for:
+   - `unknown-third-party`
+   - `direct-request`
+     until we have better positive evidence.
+3. After the first expansion, we should rerun the readiness audit to see whether
+   social PII becomes production-ready or merely less under-modeled.
