@@ -482,6 +482,7 @@ describe('code-scan-action main', () => {
 
       expect(mocks.fs.mkdirSync).toHaveBeenCalledWith(expectedDir, { recursive: true });
       const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(sarifJson).toEqual(expect.stringMatching(/\n$/));
       expect(JSON.parse(sarifJson as string)).toMatchObject({
         $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
         version: '2.1.0',
