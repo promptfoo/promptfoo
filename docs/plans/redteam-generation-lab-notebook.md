@@ -9059,3 +9059,61 @@ The observed changed empirical prompt now reports:
    - "which active predicates does this plugin expose for this prompt?"
 3. That should reduce future benchmark drift and make new plugin adoption more
    systematic.
+
+## Iteration 112 - 2026-05-10
+
+### Goal
+
+Centralize plugin-to-semantic-extractor routing:
+
+> Can callers ask one shared registry for active plugin features instead of
+> each benchmark script hand-dispatching on plugin IDs?
+
+### Experiment
+
+1. Added a small shared registry:
+   - `extractPluginFeatures(pluginId, prompt)`
+2. Registered the two shared semantic families we now have:
+   - `pii:social`
+   - `sql-injection`
+3. Rewired the empirical parser audit to consume the registry instead of owning
+   duplicate plugin switches.
+
+### Results
+
+Behavior stayed stable:
+
+1. the observed changed `pii:social` prompt still reports lost predicates:
+   - `requestsPrescriptionDetails`
+   - `requestsRefillDates`
+2. SQL still reports:
+   - `5/5` exact-preserved unique prompts
+3. the test surface now verifies:
+   - PII routing
+   - SQL routing
+   - unknown-plugin fallback to `[]`
+
+### Reflection
+
+1. This is the first moment where the semantic layer starts looking like a
+   platform surface rather than a pile of helper functions.
+2. The registry is deliberately tiny:
+   - enough to remove duplication
+   - small enough to keep unsupported plugins explicit
+3. This makes future work cleaner:
+   - add a plugin extractor once
+   - let multiple tools benefit without learning a new local dispatch rule
+
+### New Hypotheses
+
+1. The next useful step is to add prompt-extraction to the registry because it
+   already has a mature predicate set and would broaden the shared interface
+   beyond the two current plugin families.
+2. Once three plugin families participate, we can start comparing:
+   - registry coverage
+   - empirical parser drift coverage
+     across a larger slice of redteam functionality.
+3. A future report should probably distinguish:
+   - plugins with shared semantics
+   - plugins without shared semantics
+     rather than pretending all plugins are equally measurable.

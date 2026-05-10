@@ -2,10 +2,7 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import yaml from 'js-yaml';
-import {
-  extractPiiSocialFeatures,
-  extractSqlInjectionFeatures,
-} from '../../src/redteam/generation/predicateSignatures';
+import { extractPluginFeatures } from '../../src/redteam/generation/predicateSignatures';
 import {
   classifyPromptDriftSeverity,
   type DriftSeverity,
@@ -271,27 +268,11 @@ function auditSeverityCalibration() {
 }
 
 function extractEmpiricalFeatures(pluginId: string, prompt: string): string[] {
-  if (pluginId === 'pii:social') {
-    return extractPiiSocialFeatures(prompt);
-  }
-
-  if (pluginId === 'sql-injection') {
-    return extractSqlInjectionFeatures(prompt);
-  }
-
-  return [];
+  return extractPluginFeatures(pluginId, prompt);
 }
 
 function extractEmpiricalPredicates(pluginId: string, prompt: string): string[] {
-  if (pluginId === 'pii:social') {
-    return extractPiiSocialFeatures(prompt);
-  }
-
-  if (pluginId === 'sql-injection') {
-    return extractSqlInjectionFeatures(prompt);
-  }
-
-  return [];
+  return extractPluginFeatures(pluginId, prompt);
 }
 
 function auditEmpiricalPromptSet(

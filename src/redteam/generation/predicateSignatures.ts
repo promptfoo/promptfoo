@@ -112,3 +112,15 @@ export function extractSqlInjectionFeatures(prompt: string): string[] {
 
   return SQL_INJECTION_PREDICATES.filter((predicate) => signature.predicates[predicate]);
 }
+
+const FEATURE_EXTRACTORS_BY_PLUGIN = {
+  'pii:social': extractPiiSocialFeatures,
+  'sql-injection': extractSqlInjectionFeatures,
+} as const;
+
+export function extractPluginFeatures(pluginId: string, prompt: string): string[] {
+  const extractor =
+    FEATURE_EXTRACTORS_BY_PLUGIN[pluginId as keyof typeof FEATURE_EXTRACTORS_BY_PLUGIN];
+
+  return extractor ? extractor(prompt) : [];
+}
