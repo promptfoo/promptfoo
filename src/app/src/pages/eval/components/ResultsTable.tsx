@@ -64,7 +64,7 @@ import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { getNamedMetricTotals } from './utils';
+import { getNamedMetricTotals, parseEvalOutputPromptHash } from './utils';
 
 /**
  * Audio player component that handles both storage refs and base64 data
@@ -1477,6 +1477,7 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [locationHash, setLocationHash] = React.useState(() => window.location.hash);
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1510,6 +1511,12 @@ function ResultsTable({
       pageSize: filteredResultsCount > 10 ? 50 : 10,
     });
   }, [filteredResultsCount]);
+
+  React.useEffect(() => {
+    const handleHashChange = () => setLocationHash(window.location.hash);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -1927,7 +1934,7 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={info.row.index}
+                    rowIndex={pagination.pageIndex * pagination.pageSize + info.row.index}
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,
@@ -2028,18 +2035,21 @@ function ResultsTable({
     const url = new URL(window.location.href);
     if (url.searchParams.has('rowId')) {
       url.searchParams.delete('rowId');
-      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
+      navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
     }
   }, [navigate]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
+    const detailsHashTarget = parseEvalOutputPromptHash(locationHash);
     const rowId = params['rowId'];
+    const rowIndexFromQuery =
+      rowId && Number.isInteger(Number(rowId)) ? Number(rowId) - 1 : undefined;
+    const requestedRowIndex = detailsHashTarget?.rowIndex ?? rowIndexFromQuery;
 
-    if (rowId && Number.isInteger(Number(rowId))) {
-      const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
+    if (requestedRowIndex !== undefined) {
+      const rowIndex = Math.max(0, Math.min(requestedRowIndex, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -2109,7 +2119,7 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount, locationHash]);
 
   // Use TanStack Table's built-in method to calculate total width of visible columns.
   // This automatically handles both column visibility changes and user-initiated column resizing.

@@ -9,8 +9,8 @@ import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
-const { mockSetSearchParams, mockShowToast } = vi.hoisted(() => ({
-  mockSetSearchParams: vi.fn(),
+const { mockNavigate, mockShowToast } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
   mockShowToast: vi.fn(),
 }));
 
@@ -60,8 +60,8 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useNavigate: () => vi.fn(),
-    useSearchParams: () => [new URLSearchParams(), mockSetSearchParams],
+    useNavigate: () => mockNavigate,
+    useSearchParams: () => [new URLSearchParams(window.location.search), vi.fn()],
     useParams: () => ({}),
   };
 });
@@ -127,7 +127,9 @@ describe('Eval', () => {
     baseMockTableStore.setIsStreaming.mockClear();
     baseMockResultsViewSettings.setInComparisonMode.mockClear();
     baseMockResultsViewSettings.setComparisonEvalIds.mockClear();
+    mockNavigate.mockClear();
     mockShowToast.mockClear();
+    window.history.replaceState({}, '', '/eval/test-eval');
 
     useTestTimers();
 
@@ -423,7 +425,7 @@ describe('Eval', () => {
     expect(resultsView?.getAttribute('data-default-eval-id')).toBe('eval-2');
   });
 
-  it('should call setSearchParams with { replace: true } when clearing filters', async () => {
+  it('does not rewrite the URL when clearing filters that are not present', async () => {
     let subscriptionCallback: ((filters: any) => void) | null = null;
 
     // Mock subscribe to capture the callback and trigger it
@@ -444,10 +446,8 @@ describe('Eval', () => {
       filters: mockFilters,
     });
 
-    mockSetSearchParams.mockClear();
-
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/eval/test-eval#details-row-51-prompt-1']}>
         <Eval fetchId="test-eval" />
       </MemoryRouter>,
     );
@@ -463,11 +463,10 @@ describe('Eval', () => {
       });
     }
 
-    // Should call setSearchParams with replace: true when clearing filters
-    expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), { replace: true });
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('should call setSearchParams with { replace: true } when applying filters', async () => {
+  it('preserves the details hash when applying filters', async () => {
     let subscriptionCallback: ((filters: any) => void) | null = null;
 
     // Mock subscribe to capture the callback and trigger it
@@ -498,10 +497,10 @@ describe('Eval', () => {
       filters: mockFilters,
     });
 
-    mockSetSearchParams.mockClear();
+    window.history.replaceState({}, '', '/eval/test-eval#details-row-51-prompt-1');
 
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/eval/test-eval#details-row-51-prompt-1']}>
         <Eval fetchId="test-eval" />
       </MemoryRouter>,
     );
@@ -517,7 +516,17 @@ describe('Eval', () => {
       });
     }
 
-    // Should call setSearchParams with replace: true when applying filters
-    expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), { replace: true });
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pathname: '/eval/test-eval',
+        hash: '#details-row-51-prompt-1',
+      }),
+      { replace: true },
+    );
+
+    const [nextLocation] = mockNavigate.mock.calls[0];
+    expect(new URLSearchParams(nextLocation.search).get('filter')).toBe(
+      JSON.stringify(Object.values(mockFilters.values)),
+    );
   });
 });

@@ -41,7 +41,7 @@ import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-import { getHumanRating } from './utils';
+import { buildEvalOutputPromptHash, getHumanRating, parseEvalOutputPromptHash } from './utils';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -1291,6 +1291,7 @@ function EvalOutputCell({
   const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
+  const [locationHash, setLocationHash] = React.useState(() => window.location.hash);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
@@ -1301,11 +1302,42 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
+  React.useEffect(() => {
+    const handleHashChange = () => setLocationHash(window.location.hash);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  React.useEffect(() => {
+    const hashTarget = parseEvalOutputPromptHash(locationHash);
+    if (!hashTarget) {
+      setOpen(false);
+      return;
+    }
+
+    setOpen(hashTarget.rowIndex === rowIndex && hashTarget.promptIndex === promptIndex);
+  }, [locationHash, rowIndex, promptIndex]);
+
+  const promptDetailsHash = buildEvalOutputPromptHash(rowIndex, promptIndex);
+
+  const updatePromptHash = (hash: string) => {
+    const url = new URL(window.location.href);
+    url.hash = hash;
+    window.history.replaceState({}, '', url);
+    setLocationHash(hash);
+  };
+
   const handlePromptOpen = () => {
     setOpen(true);
+    if (locationHash !== promptDetailsHash) {
+      updatePromptHash(promptDetailsHash);
+    }
   };
   const handlePromptClose = () => {
     setOpen(false);
+    if (locationHash === promptDetailsHash) {
+      updatePromptHash('');
+    }
   };
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);

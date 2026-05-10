@@ -1,6 +1,67 @@
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
+const EVAL_OUTPUT_PROMPT_HASH_PATTERN = /^#details-row-(\d+)-prompt-(\d+)$/;
+
+export interface EvalOutputPromptHashTarget {
+  rowIndex: number;
+  promptIndex: number;
+}
+
+export interface EvalUrlParts {
+  pathname: string;
+  search: string;
+  hash: string;
+}
+
+/**
+ * Builds the URL hash used for deep-linking to an eval output details dialog.
+ * Public URLs use one-based row/prompt numbers while the UI uses zero-based indexes internally.
+ */
+export function buildEvalOutputPromptHash(rowIndex: number, promptIndex: number): string {
+  return `#details-row-${rowIndex + 1}-prompt-${promptIndex + 1}`;
+}
+
+/**
+ * Parses an eval output details hash into zero-based row/prompt indexes.
+ */
+export function parseEvalOutputPromptHash(hash: string): EvalOutputPromptHashTarget | null {
+  const match = hash.match(EVAL_OUTPUT_PROMPT_HASH_PATTERN);
+  if (!match) {
+    return null;
+  }
+
+  const rowNumber = Number.parseInt(match[1], 10);
+  const promptNumber = Number.parseInt(match[2], 10);
+
+  if (rowNumber < 1 || promptNumber < 1) {
+    return null;
+  }
+
+  return {
+    rowIndex: rowNumber - 1,
+    promptIndex: promptNumber - 1,
+  };
+}
+
+/**
+ * Builds router location parts after mutating search params while preserving the current hash.
+ */
+export function buildEvalUrlWithSearchParams(
+  location: EvalUrlParts,
+  mutateSearchParams: (params: URLSearchParams) => void,
+): EvalUrlParts {
+  const nextSearchParams = new URLSearchParams(location.search);
+  mutateSearchParams(nextSearchParams);
+  const nextSearch = nextSearchParams.toString();
+
+  return {
+    pathname: location.pathname,
+    search: nextSearch ? `?${nextSearch}` : '',
+    hash: location.hash,
+  };
+}
+
 /**
  * Creates a deterministic hash from a list of variable names.
  * Used to group evals with the same "schema" for column visibility persistence.

@@ -64,10 +64,12 @@ const resetMockStoreState = () => {
 
 beforeEach(() => {
   resetMockStoreState();
+  window.history.replaceState({}, '', '/');
 });
 
 afterEach(() => {
   resetMockStoreState();
+  window.history.replaceState({}, '', '/');
   restoreTestTimers();
 });
 
@@ -250,6 +252,24 @@ describe('EvalOutputCell', () => {
     // Check that metadata is passed correctly
     const passedMetadata = JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}');
     expect(passedMetadata.testKey).toBe('testValue');
+  });
+
+  it('adds a details hash when the prompt dialog opens', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
+  });
+
+  it('opens the prompt dialog from a matching details hash', () => {
+    window.history.replaceState({}, '', '/#details-row-1-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.getByTestId('dialog-component')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#details-row-1-prompt-1');
   });
 
   it('handles keyboard navigation between buttons', async () => {

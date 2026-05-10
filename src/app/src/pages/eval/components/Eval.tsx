@@ -9,7 +9,7 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
@@ -19,6 +19,7 @@ import './Eval.css';
 import { useToast } from '@app/hooks/useToast';
 import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
+import { buildEvalUrlWithSearchParams } from './utils';
 
 interface EvalOptions {
   /**
@@ -29,8 +30,9 @@ interface EvalOptions {
 
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
 
   const {
@@ -127,6 +129,21 @@ export default function Eval({ fetchId }: EvalOptions) {
     [searchParams, navigate],
   );
 
+  const replaceSearchParams = useCallback(
+    (mutateSearchParams: (params: URLSearchParams) => void) => {
+      navigate(
+        buildEvalUrlWithSearchParams(
+          { ...location, hash: window.location.hash },
+          mutateSearchParams,
+        ),
+        {
+          replace: true,
+        },
+      );
+    },
+    [location, navigate],
+  );
+
   // ================================
   // Effects
   // ================================
@@ -143,33 +160,25 @@ export default function Eval({ fetchId }: EvalOptions) {
 
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
-          // clear the search params
-          setSearchParams(
-            (prev) => {
-              prev.delete('filter');
-              return prev;
-            },
-            { replace: true },
-          );
+          if (_searchParams.has('filter')) {
+            replaceSearchParams((params) => {
+              params.delete('filter');
+            });
+          }
         } else if (_filters.appliedCount > 0) {
           // Serialize the filters to a JSON string
           const serializedFilters = JSON.stringify(Object.values(_filters.values));
           // Check whether the serialized filters are already in the search params
           if (_searchParams.get('filter') !== serializedFilters) {
-            // Add each filter to the search params
-            setSearchParams(
-              (prev) => {
-                prev.set('filter', serializedFilters);
-                return prev;
-              },
-              { replace: true },
-            );
+            replaceSearchParams((params) => {
+              params.set('filter', serializedFilters);
+            });
           }
         }
       },
     );
     return () => unsubscribe();
-  }, [setSearchParams]);
+  }, [replaceSearchParams]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {

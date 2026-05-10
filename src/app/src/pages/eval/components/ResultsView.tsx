@@ -25,7 +25,7 @@ import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
 import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
@@ -44,7 +44,7 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { hashVarSchema } from './utils';
+import { buildEvalUrlWithSearchParams, hashVarSchema } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/table-core';
@@ -234,7 +234,8 @@ export default function ResultsView({
   defaultEvalId,
 }: ResultsViewProps) {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const {
     table,
@@ -274,16 +275,14 @@ export default function ResultsView({
   // Debounced update for URL, table, and pill
   const debouncedUpdate = useDebouncedCallback((text: string) => {
     setDebouncedSearchText(text);
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
+    navigate(
+      buildEvalUrlWithSearchParams({ ...location, hash: window.location.hash }, (params) => {
         if (text) {
-          next.set('search', text);
+          params.set('search', text);
         } else {
-          next.delete('search');
+          params.delete('search');
         }
-        return next;
-      },
+      }),
       { replace: true },
     );
   }, 300);
@@ -292,12 +291,10 @@ export default function ResultsView({
     setSearchInputValue('');
     debouncedUpdate.cancel();
     setDebouncedSearchText('');
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('search');
-        return next;
-      },
+    navigate(
+      buildEvalUrlWithSearchParams({ ...location, hash: window.location.hash }, (params) => {
+        params.delete('search');
+      }),
       { replace: true },
     );
   };
@@ -315,20 +312,18 @@ export default function ResultsView({
   const activeView: ActiveView = viewParam === 'report' ? 'report' : 'results';
   const setActiveView = React.useCallback(
     (view: ActiveView) => {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
+      navigate(
+        buildEvalUrlWithSearchParams({ ...location, hash: window.location.hash }, (params) => {
           if (view === 'results') {
-            next.delete('view');
+            params.delete('view');
           } else {
-            next.set('view', view);
+            params.set('view', view);
           }
-          return next;
-        },
+        }),
         { replace: true },
       );
     },
-    [setSearchParams],
+    [location, navigate],
   );
   const [reportActions, setReportActions] = React.useState<React.ReactNode>(null);
 

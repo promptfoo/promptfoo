@@ -1,11 +1,14 @@
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import { describe, expect, it } from 'vitest';
 import {
+  buildEvalOutputPromptHash,
+  buildEvalUrlWithSearchParams,
   getHumanRating,
   getNamedMetricTotal,
   getNamedMetricTotals,
   hasHumanRating,
   hashVarSchema,
+  parseEvalOutputPromptHash,
 } from './utils';
 import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
@@ -21,6 +24,46 @@ const createBaseOutput = (): EvaluateTableOutput => ({
   latencyMs: 0,
   namedScores: {},
   testCase: {},
+});
+
+describe('eval output prompt hashes', () => {
+  it('builds a readable one-based hash', () => {
+    expect(buildEvalOutputPromptHash(0, 1)).toBe('#details-row-1-prompt-2');
+  });
+
+  it('parses hashes back to zero-based indexes', () => {
+    expect(parseEvalOutputPromptHash('#details-row-3-prompt-2')).toEqual({
+      rowIndex: 2,
+      promptIndex: 1,
+    });
+  });
+
+  it('rejects malformed or zero-valued hashes', () => {
+    expect(parseEvalOutputPromptHash('#details-row-0-prompt-1')).toBeNull();
+    expect(parseEvalOutputPromptHash('#details-row-1-prompt-0')).toBeNull();
+    expect(parseEvalOutputPromptHash('#other-fragment')).toBeNull();
+  });
+});
+
+describe('buildEvalUrlWithSearchParams', () => {
+  it('preserves the current hash while updating search params', () => {
+    expect(
+      buildEvalUrlWithSearchParams(
+        {
+          pathname: '/eval/eval-1',
+          search: '?view=report',
+          hash: '#details-row-51-prompt-1',
+        },
+        (params) => {
+          params.set('search', 'prompt');
+        },
+      ),
+    ).toEqual({
+      pathname: '/eval/eval-1',
+      search: '?view=report&search=prompt',
+      hash: '#details-row-51-prompt-1',
+    });
+  });
 });
 
 describe('hasHumanRating', () => {

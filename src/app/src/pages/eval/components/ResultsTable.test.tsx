@@ -1024,8 +1024,28 @@ describe('ResultsTable Metadata Search', () => {
 });
 
 describe('ResultsTable Row Navigation', () => {
-  it('clears row-id URL parameter when changing pages', () => {
-    const mockURL = new URL('http://localhost/?rowId=3');
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  afterEach(() => {
+    window.history.replaceState({}, '', '/');
+  });
+
+  it('clears row-id URL parameter when changing pages without dropping the details hash', () => {
+    const mockURL = new URL('http://localhost/?rowId=3#details-row-51-prompt-1');
 
     const mockReplaceState = vi.fn();
     const originalHistory = window.history;
@@ -1045,12 +1065,79 @@ describe('ResultsTable Row Navigation', () => {
 
     clearRowIdFromUrl();
 
-    expect(mockReplaceState).toHaveBeenCalled();
+    expect(mockReplaceState).toHaveBeenCalledWith(
+      {},
+      '',
+      expect.objectContaining({
+        hash: '#details-row-51-prompt-1',
+        search: '',
+      }),
+    );
 
     Object.defineProperty(window, 'history', {
       value: originalHistory,
       configurable: true,
       writable: true,
+    });
+  });
+
+  it('uses a details hash to fetch the page containing the requested row', async () => {
+    const mockFetchEvalData = vi.fn();
+    window.history.replaceState({}, '', '/#details-row-51-prompt-1');
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: mockFetchEvalData,
+      filteredResultsCount: 120,
+      totalResultsCount: 120,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
     });
   });
 });
