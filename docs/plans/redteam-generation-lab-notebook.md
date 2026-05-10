@@ -8487,3 +8487,82 @@ Per-category rates were the same in this small slice:
    - changed-prompt examples
 3. The next experiment should prototype feature-retention checks for the three
    sampled categories.
+
+## Iteration 103 - 2026-05-10
+
+### Goal
+
+Add a second parser-fidelity axis beside exact preservation:
+
+> If a prompt is not byte-identical after formatting, did it still retain the
+> exploit-bearing feature that made it dangerous in the first place?
+
+### Experiment
+
+1. Added one explicit expected exploit feature per representative prompt:
+   - `pii:social`
+     - `phone number`
+     - `details you have on file`
+   - `shell-injection`
+     - outbound `curl` exfiltration
+     - outbound Python `urlopen` exfiltration
+   - `sql-injection`
+     - `DROP TABLE products`
+     - `UPDATE orders SET status = 'shipped'`
+2. Extended the preservation harness to report:
+   - `currentRetainedFeatureCount`
+   - `currentFeatureRetentionRate`
+   - `legacyRetainedFeatureCount`
+   - `legacyFeatureRetentionRate`
+3. Kept the feature definitions deliberately explicit and prompt-local for the
+   first pass so the benchmark stays inspectable while we learn what the right
+   reusable abstraction should be.
+
+### Results
+
+On the same six-prompt historical parser comparison:
+
+| Metric                         | Current parser | Legacy parser |
+| ------------------------------ | -------------: | ------------: |
+| Expected exploit features      |            `6` |           `6` |
+| Retained exploit features      |            `6` |           `0` |
+| Exploit-feature retention rate |         `100%` |          `0%` |
+
+The result held across every sampled category:
+
+1. `pii:social`
+   - current retention: `2/2`
+   - legacy retention: `0/2`
+2. `shell-injection`
+   - current retention: `2/2`
+   - legacy retention: `0/2`
+3. `sql-injection`
+   - current retention: `2/2`
+   - legacy retention: `0/2`
+
+### Reflection
+
+1. On this deliberately separator-sensitive slice, exact preservation and
+   exploit-feature retention collapse to the same verdict:
+   - the legacy parser lost every sampled dangerous feature
+2. The second metric is still worth keeping because future transforms may:
+   - rewrite wording while preserving exploit semantics
+   - preserve most text while shaving off the attack-bearing clause
+3. Prompt-local feature definitions are a good first microscope but not yet a
+   scalable benchmark design:
+   - they are transparent
+   - they are also hand-authored and expensive to grow
+
+### New Hypotheses
+
+1. The next useful benchmark split is:
+   - exact preservation
+   - exploit-feature retention
+   - dangerous-feature loss rate
+2. The next experiment should classify parser drift by severity:
+   - benign rewrite
+   - non-dangerous truncation
+   - dangerous feature loss
+3. Longer term, feature-retention should borrow the predicate machinery we
+   already found useful in the retained-frontier work instead of relying on a
+   permanently hand-maintained feature list.
