@@ -1,4 +1,8 @@
 import {
+  extractPromptExtractionFeatures,
+  getPluginFeatureBands,
+} from '../../src/redteam/generation/predicateSignatures';
+import {
   extractEntities,
   jaccardSimilarity,
   loadPurpose,
@@ -144,6 +148,24 @@ export function selectDiversePromptExtractionPortfolio(
   candidates: PromptExtractionAttack[],
   count: number,
 ): PromptExtractionAttack[] {
+  return selectPromptExtractionPortfolio(candidates, count, scoreNoveltyOnlyCandidate);
+}
+
+export function selectSemanticBandAwarePromptExtractionPortfolio(
+  candidates: PromptExtractionAttack[],
+  count: number,
+): PromptExtractionAttack[] {
+  return selectPromptExtractionPortfolio(candidates, count, scoreSemanticBandAwareCandidate);
+}
+
+function selectPromptExtractionPortfolio(
+  candidates: PromptExtractionAttack[],
+  count: number,
+  scoreCandidate: (
+    candidate: PromptExtractionAttack,
+    selected: readonly PromptExtractionAttack[],
+  ) => number,
+): PromptExtractionAttack[] {
   const selected: PromptExtractionAttack[] = [];
   const remaining = [...candidates];
 
@@ -153,21 +175,7 @@ export function selectDiversePromptExtractionPortfolio(
 
     for (let index = 0; index < remaining.length; index += 1) {
       const candidate = remaining[index];
-      const tacticBonus = selected.some((attack) => attack.tactic === candidate.tactic) ? 0 : 1;
-      const pretextBonus = selected.some((attack) => attack.pretext === candidate.pretext) ? 0 : 1;
-      const artifactBonus = selected.some((attack) => attack.artifact === candidate.artifact)
-        ? 0
-        : 1;
-      const noveltyScore =
-        selected.length === 0
-          ? 1
-          : 1 -
-            Math.max(
-              ...selected.map((attack) =>
-                jaccardSimilarity(tokenize(candidate.prompt), tokenize(attack.prompt)),
-              ),
-            );
-      const score = tacticBonus * 1.5 + pretextBonus + artifactBonus + noveltyScore;
+      const score = scoreCandidate(candidate, selected);
 
       if (score > bestScore) {
         bestScore = score;
@@ -179,6 +187,47 @@ export function selectDiversePromptExtractionPortfolio(
   }
 
   return selected;
+}
+
+function scoreSemanticBandAwareCandidate(
+  candidate: PromptExtractionAttack,
+  selected: readonly PromptExtractionAttack[],
+): number {
+  const featureBands = getPluginFeatureBands('prompt-extraction');
+  const selectedFeatures = new Set(
+    selected.flatMap((attack) => extractPromptExtractionFeatures(attack.prompt)),
+  );
+  const candidateFeatures = new Set(extractPromptExtractionFeatures(candidate.prompt));
+  const newlyCoveredFeatures = (featureBandId: string) =>
+    (featureBands[featureBandId] ?? []).filter(
+      (feature) => candidateFeatures.has(feature) && !selectedFeatures.has(feature),
+    ).length;
+
+  return (
+    newlyCoveredFeatures('core-disclosure') * 100 +
+    newlyCoveredFeatures('protected-control-plane') * 10 +
+    scoreNoveltyOnlyCandidate(candidate, selected)
+  );
+}
+
+function scoreNoveltyOnlyCandidate(
+  candidate: PromptExtractionAttack,
+  selected: readonly PromptExtractionAttack[],
+): number {
+  const tacticBonus = selected.some((attack) => attack.tactic === candidate.tactic) ? 0 : 1;
+  const pretextBonus = selected.some((attack) => attack.pretext === candidate.pretext) ? 0 : 1;
+  const artifactBonus = selected.some((attack) => attack.artifact === candidate.artifact) ? 0 : 1;
+  const noveltyScore =
+    selected.length === 0
+      ? 1
+      : 1 -
+        Math.max(
+          ...selected.map((attack) =>
+            jaccardSimilarity(tokenize(candidate.prompt), tokenize(attack.prompt)),
+          ),
+        );
+
+  return tacticBonus * 1.5 + pretextBonus + artifactBonus + noveltyScore;
 }
 
 export function promptExtractionToYaml(attacks: PromptExtractionAttack[], purpose: string) {

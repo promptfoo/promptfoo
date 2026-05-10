@@ -10114,3 +10114,58 @@ Run the first real before/after benchmark enabled by the new banded metric:
    least:
    - `2/2` on core disclosure
    - better than `1/7` on protected-control-plane coverage
+
+## Iteration 127 - 2026-05-10
+
+### Goal
+
+Test whether the selection layer alone can repair the semantic regression found
+in iteration `126`:
+
+> If we prioritize semantic bands before novelty, can we preserve core prompt
+> extraction coverage without changing the candidate pool?
+
+### Experiment
+
+1. Added `selectSemanticBandAwarePromptExtractionPortfolio()`.
+2. Kept the existing candidate pool unchanged.
+3. Ranked candidates by:
+   - newly covered `core-disclosure` features
+   - newly covered `protected-control-plane` features
+   - then the older novelty score
+4. Extended the band benchmark to compare:
+   - the existing diversity-only selector
+   - the new semantic-band-aware selector
+
+### Results
+
+On the same five-prompt selection size:
+
+| Selector            |               Core disclosure |       Protected control plane |
+| ------------------- | ----------------------------: | ----------------------------: |
+| diversity-only      | `1/2` features, `2/5` prompts | `1/7` features, `1/5` prompts |
+| semantic-band-aware | `2/2` features, `2/5` prompts | `1/7` features, `1/5` prompts |
+
+### Reflection
+
+1. Semantic-aware selection fixes the regression:
+   - it restores both core disclosure features
+   - while preserving the one frontier feature already present in the pool
+2. It cannot exceed `1/7` protected-control-plane coverage because:
+   - the current pool only contains `requestsVerbatimText`
+   - none of the candidates cover refusal policy, routing, escalation,
+     classification, legal authority, or authority checks
+3. That is a clean decomposition:
+   - selector bug fixed
+   - generator pool still too shallow
+
+### New Hypotheses
+
+1. The next useful step is to enrich the candidate pool itself with explicit
+   protected-control-plane families.
+2. A good enriched pool should make `7/7` frontier coverage achievable in five
+   prompts.
+3. Once that pool exists, the semantic-band-aware selector should be able to
+   preserve:
+   - `2/2` core disclosure
+   - while hill climbing the full protected-control-plane band

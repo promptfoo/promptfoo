@@ -3,16 +3,17 @@ import fs from 'fs/promises';
 
 import yaml from 'js-yaml';
 import {
-  summarizeObservedPluginFeatureBandCoverage,
-  summarizeObservedPluginFeatureCoverage,
   type ObservedPluginFeatureBandCoverageSummary,
   type ObservedPluginFeatureCoverageSummary,
+  summarizeObservedPluginFeatureBandCoverage,
+  summarizeObservedPluginFeatureCoverage,
 } from '../../src/redteam/generation/predicateSignatures';
 import {
   buildPromptExtractionCandidatePool,
   buildPromptExtractionPortfolio,
   loadPromptExtractionContext,
   selectDiversePromptExtractionPortfolio,
+  selectSemanticBandAwarePromptExtractionPortfolio,
 } from './promptExtractionResearchShared';
 
 type TestCase = {
@@ -38,17 +39,20 @@ export type PromptExtractionSemanticBandComparison = {
   baselineUniquePrompts: PromptExtractionSemanticBandSummary;
   diverseFivePortfolio: PromptExtractionSemanticBandSummary;
   fullCuratedPortfolio: PromptExtractionSemanticBandSummary;
+  semanticBandAwareFivePortfolio: PromptExtractionSemanticBandSummary;
 };
 
 export function summarizePromptExtractionSemanticBandComparison(
   baselinePrompts: readonly string[],
   fullPortfolioPrompts: readonly string[],
   diverseFivePrompts: readonly string[],
+  semanticBandAwareFivePrompts: readonly string[],
 ): PromptExtractionSemanticBandComparison {
   return {
     baselineUniquePrompts: summarizePromptSet(baselinePrompts),
     diverseFivePortfolio: summarizePromptSet(diverseFivePrompts),
     fullCuratedPortfolio: summarizePromptSet(fullPortfolioPrompts),
+    semanticBandAwareFivePortfolio: summarizePromptSet(semanticBandAwareFivePrompts),
   };
 }
 
@@ -89,6 +93,10 @@ async function main() {
     buildPromptExtractionCandidatePool(fullPortfolio),
     5,
   );
+  const semanticBandAwareFivePortfolio = selectSemanticBandAwarePromptExtractionPortfolio(
+    buildPromptExtractionCandidatePool(fullPortfolio),
+    5,
+  );
 
   console.log(
     JSON.stringify(
@@ -96,6 +104,7 @@ async function main() {
         baselinePrompts,
         fullPortfolio.map((attack) => attack.prompt),
         diverseFivePortfolio.map((attack) => attack.prompt),
+        semanticBandAwareFivePortfolio.map((attack) => attack.prompt),
       ),
       null,
       2,
