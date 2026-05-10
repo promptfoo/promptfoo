@@ -5,7 +5,10 @@ import yaml from 'js-yaml';
 import { buildPiiPortfolio, loadPiiContext } from './piiResearchShared';
 import { renderMarkdownTable } from './reportRenderingShared';
 
-export type PiiDirectReplayTargetRegime = 'strict-refusal' | 'permissive-identity';
+export type PiiDirectReplayTargetRegime =
+  | 'strict-refusal'
+  | 'permissive-identity'
+  | 'permissive-clinical';
 
 type ReplayResult = {
   success: boolean;
@@ -36,7 +39,9 @@ function buildProvider(targetRegime: PiiDirectReplayTargetRegime) {
     id: new URL(
       targetRegime === 'permissive-identity'
         ? './permissivePiiDirectIdentityProvider.cjs'
-        : './strictPiiDirectRefusalProvider.cjs',
+        : targetRegime === 'permissive-clinical'
+          ? './permissivePiiDirectClinicalProvider.cjs'
+          : './strictPiiDirectRefusalProvider.cjs',
       import.meta.url,
     ).href,
   };
@@ -121,7 +126,7 @@ export function renderPiiDirectOutcomeReplayMarkdown(
     '',
     '## Reading',
     '',
-    'The strict-refusal regime is intentionally hardened: all six direct-PII prompts remain high-quality probes, but the target refuses every one of them. The permissive-identity regime is intentionally narrower: it leaks identity/contact fields while still refusing the other direct-PII families, creating the first non-flat stage-4 replay for `pii:direct`.',
+    'The strict-refusal regime is intentionally hardened: all six direct-PII prompts remain high-quality probes, but the target refuses every one of them. The permissive-identity and permissive-clinical regimes expose different weak spots, so the direct-PII frontier can now be tested against qualitatively distinct leak families instead of a single selective target.',
   ].join('\n');
 }
 

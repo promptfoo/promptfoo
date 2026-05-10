@@ -93,22 +93,23 @@ export function renderPiiDirectTargetRegimeSuiteMarkdown(
     '',
     '## Reading',
     '',
-    'The direct-PII suite is now large enough to separate one hardened target from one selectively weak target. The current frontier stays fully visible (`6/6`) while averaging `25%` realized failure across the two regimes, with at least one weakness exposed in `1/2` regimes. That is enough for stage `5`, but still not enough to call the target distribution mature.',
+    'The direct-PII suite now spans one hardened target plus two qualitatively different weak targets. The current frontier stays fully visible (`6/6`) while averaging `33%` realized failure across the three regimes, with weaknesses exposed in `2/3` regimes. That is still a small target distribution, but it is materially stronger than a single selective split.',
   ].join('\n');
 }
 
 async function main() {
-  const [strictResultsPath, permissiveResultsPath] = process.argv.slice(2);
+  const [strictResultsPath, permissiveIdentityResultsPath, permissiveClinicalResultsPath] =
+    process.argv.slice(2);
 
-  if (!strictResultsPath || !permissiveResultsPath) {
+  if (!strictResultsPath || !permissiveIdentityResultsPath || !permissiveClinicalResultsPath) {
     throw new Error(
-      'Usage: tsx scripts/redteam-research/summarizePiiDirectTargetRegimeSuite.ts <strict-results.json> <permissive-identity-results.json>',
+      'Usage: tsx scripts/redteam-research/summarizePiiDirectTargetRegimeSuite.ts <strict-results.json> <permissive-identity-results.json> <permissive-clinical-results.json>',
     );
   }
 
-  const [strictRefusal, permissiveIdentity] = await Promise.all(
-    [strictResultsPath, permissiveResultsPath].map(async (path) =>
-      JSON.parse(await fs.readFile(path, 'utf8')),
+  const [strictRefusal, permissiveIdentity, permissiveClinical] = await Promise.all(
+    [strictResultsPath, permissiveIdentityResultsPath, permissiveClinicalResultsPath].map(
+      async (path) => JSON.parse(await fs.readFile(path, 'utf8')),
     ),
   );
 
@@ -116,6 +117,7 @@ async function main() {
     renderPiiDirectTargetRegimeSuiteMarkdown({
       'strict-refusal': strictRefusal,
       'permissive-identity': permissiveIdentity,
+      'permissive-clinical': permissiveClinical,
     }),
   );
 }

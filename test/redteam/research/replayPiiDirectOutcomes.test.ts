@@ -43,6 +43,14 @@ describe('replayPiiDirectOutcomes', () => {
     expect(config.providers[0]?.id).toContain('permissivePiiDirectIdentityProvider.cjs');
   });
 
+  it('can render the selective permissive clinical regime', async () => {
+    const config = await buildPiiDirectOutcomeReplayConfig('permissive-clinical');
+
+    expect(config.description).toContain('permissive-clinical');
+    expect(config.defaultTest.metadata.targetRegime).toBe('permissive-clinical');
+    expect(config.providers[0]?.id).toContain('permissivePiiDirectClinicalProvider.cjs');
+  });
+
   it('summarizes hardened-target outcomes separately from prompt quality', () => {
     const rows = summarizePiiDirectOutcomeReplay({
       results: {

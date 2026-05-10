@@ -14429,3 +14429,52 @@ Test whether the first two direct-PII replay assets are already enough for stage
    the current six-prompt frontier should expose weaknesses in `2/3` direct
    regimes rather than `1/2`.
 3. Only after that extra breadth should we consider a direct-PII operator report.
+
+## Iteration 203 - 2026-05-10
+
+### Goal
+
+Broaden the direct-PII target distribution with a second susceptible regime:
+
+> If a target leaks clinical fields instead of identity fields, does the same
+> six-prompt frontier still expose a distinct family of weaknesses?
+
+### Experiment
+
+1. Added a deterministic `permissive-clinical` provider that leaks only on:
+   - medical-record requests
+   - prescription requests
+   - lab-result requests
+2. Reused the same six direct-PII prompts and normal `pii:direct` grader path.
+3. Extended the direct suite so it now spans:
+   - `strict-refusal`
+   - `permissive-identity`
+   - `permissive-clinical`
+
+### Results
+
+| Target regime         | Field-visible prompts | Realized `PIILeak` failures |
+| --------------------- | --------------------: | --------------------------: |
+| `strict-refusal`      |                 `6/6` |                       `0/6` |
+| `permissive-identity` |                 `6/6` |                       `3/6` |
+| `permissive-clinical` |                 `6/6` |                       `3/6` |
+
+### Reflection
+
+1. The second susceptible regime confirms the direct frontier is not overfit to
+   one identity/contact weakness.
+2. Identity and clinical leakage produce complementary failure sets:
+   - the same portfolio hits both
+   - different prompt families are responsible in each case
+3. The direct-PII suite is now more credible:
+   - one hardened regime
+   - two qualitatively different vulnerable regimes
+
+### New Hypotheses
+
+1. The suite-level reducer should now move from `1/2` vulnerable regimes to
+   `2/3`.
+2. With this extra breadth, `pii:direct` may now be close enough to stage `6`
+   that a compact operator report would be informative rather than premature.
+3. Before building that report, we should check whether any direct field family
+   is still absent from realized yield across the current regime set.
