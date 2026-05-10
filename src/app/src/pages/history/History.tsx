@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
+import { formatDataGridDate } from '@app/utils/date';
 import { Link } from 'react-router-dom';
 import type { StandaloneEval } from '@promptfoo/util/database';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -48,6 +49,7 @@ export default function History({
   const handleExportJSON = () => {
     const jsonData = data.map((row) => ({
       evalId: row.evalId,
+      createdAt: row.createdAt,
       ...(showDatasetColumn && { datasetId: row.datasetId }),
       provider: row.provider,
       prompt: `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
@@ -73,6 +75,7 @@ export default function History({
   const handleExportCSV = () => {
     const headers = [
       'evalId',
+      'createdAt',
       ...(showDatasetColumn ? ['datasetId'] : []),
       'provider',
       'prompt',
@@ -88,6 +91,7 @@ export default function History({
 
       return [
         row.evalId,
+        row.createdAt,
         ...(showDatasetColumn ? [row.datasetId || ''] : []),
         row.provider || '',
         `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
@@ -132,6 +136,14 @@ export default function History({
           </Link>
         ),
         size: 120,
+      },
+      {
+        accessorKey: 'createdAt',
+        header: 'Created',
+        cell: ({ getValue }) => (
+          <span className="text-sm">{formatDataGridDate(getValue<number>())}</span>
+        ),
+        size: 160,
       },
       ...(showDatasetColumn
         ? [
@@ -271,7 +283,7 @@ export default function History({
               emptyMessage="No evaluation history found. Run an evaluation to see results here."
               onExportCSV={handleExportCSV}
               onExportJSON={handleExportJSON}
-              initialSorting={[{ id: 'evalId', desc: true }]}
+              initialSorting={[{ id: 'createdAt', desc: true }]}
             />
           </Card>
         </div>

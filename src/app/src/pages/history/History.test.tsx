@@ -14,7 +14,7 @@ const mockData: StandaloneEval[] = [
     raw: 'What is the capital of France?',
     label: 'What is the capital of France?',
     description: 'First evaluation',
-    createdAt: new Date().getTime(),
+    createdAt: new Date('2024-01-01T00:00:00Z').getTime(),
     config: {},
     metrics: {
       testPassCount: 9,
@@ -42,7 +42,7 @@ const mockData: StandaloneEval[] = [
     raw: 'Summarize the following text.',
     label: 'Summarize the following text.',
     description: 'Second evaluation',
-    createdAt: new Date().getTime(),
+    createdAt: new Date('2024-01-02T00:00:00Z').getTime(),
     config: {},
     metrics: {
       testPassCount: 7,
@@ -72,6 +72,7 @@ describe('History', () => {
     );
 
     expect(screen.getByRole('columnheader', { name: 'Eval' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Created' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Dataset' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Provider' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Prompt' })).toBeInTheDocument();
@@ -114,6 +115,18 @@ describe('History', () => {
     expect(row2Cells.getByText('2')).toBeInTheDocument();
     expect(row2Cells.getByText('1 err')).toBeInTheDocument();
     expect(row2Cells.getByText('0.75')).toBeInTheDocument();
+  });
+
+  it('should show the newest evaluation first by creation time', () => {
+    render(
+      <MemoryRouter>
+        <History data={mockData} isLoading={false} error={null} showDatasetColumn={true} />
+      </MemoryRouter>,
+    );
+
+    const rows = screen.getAllByRole('row');
+    expect(rows[1]).toHaveTextContent('eval-2024-01-02');
+    expect(rows[2]).toHaveTextContent('eval-2024-01-01');
   });
 
   it('should display the loading overlay when isLoading is true', () => {
