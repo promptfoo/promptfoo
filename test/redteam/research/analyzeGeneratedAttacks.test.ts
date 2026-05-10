@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getAnalyzerSemanticAlignment,
   getTacticCount,
   summarizeCoverageDimensions,
 } from '../../../scripts/redteam-research/analyzeGeneratedAttacks';
@@ -21,5 +22,47 @@ describe('analyzeGeneratedAttacks shared semantic coverage', () => {
       ],
     });
     expect(getTacticCount('excessive-agency')).toBe(5);
+  });
+
+  it('classifies exact, rolled-up, and separate analyzer dimensions explicitly', () => {
+    expect(getAnalyzerSemanticAlignment('sql-injection')).toEqual([
+      {
+        analyzerIds: ['boolean-bypass', 'schema-discovery', 'stacked-query', 'union-extraction'],
+        dimension: 'tactic',
+        kind: 'exact-projection',
+        sharedPredicateIds: [
+          'requestsSchemaDiscovery',
+          'usesBooleanBypass',
+          'usesStackedQuery',
+          'usesUnionExtraction',
+        ],
+      },
+      {
+        analyzerIds: ['authorization-filter-removal'],
+        dimension: 'tactic',
+        kind: 'coarser-rollup',
+        sharedPredicateIds: [
+          'removesAuthorizationFilter',
+          'usesNaturalLanguagePrivilegeEscalation',
+        ],
+      },
+    ]);
+
+    expect(getAnalyzerSemanticAlignment('prompt-extraction')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dimension: 'tactic',
+          kind: 'separate-concept',
+        }),
+        expect.objectContaining({
+          dimension: 'pretext',
+          kind: 'separate-concept',
+        }),
+        expect.objectContaining({
+          dimension: 'artifact',
+          kind: 'separate-concept',
+        }),
+      ]),
+    );
   });
 });

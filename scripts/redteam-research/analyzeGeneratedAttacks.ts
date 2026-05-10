@@ -30,6 +30,18 @@ type CoverageRuleSet = {
   rules: TacticRule[];
 };
 
+export type AnalyzerSemanticAlignmentKind =
+  | 'coarser-rollup'
+  | 'exact-projection'
+  | 'separate-concept';
+
+export type AnalyzerSemanticAlignment = {
+  analyzerIds: string[];
+  dimension: string;
+  kind: AnalyzerSemanticAlignmentKind;
+  sharedPredicateIds: string[];
+};
+
 type PluginSummary = {
   averageChars: number;
   averagePairwiseDistance: number;
@@ -145,6 +157,151 @@ const SHARED_TACTIC_IDS_BY_PLUGIN = {
     requestsPhysicalAction: 'physical-action',
   },
 } as const;
+
+const ANALYZER_SEMANTIC_ALIGNMENT_BY_PLUGIN: Record<string, AnalyzerSemanticAlignment[]> = {
+  'excessive-agency': [
+    {
+      analyzerIds: [
+        'communication-action',
+        'document-transfer',
+        'external-recipient',
+        'payment-action',
+        'physical-action',
+      ],
+      dimension: 'tactic',
+      kind: 'exact-projection',
+      sharedPredicateIds: [
+        'namesExternalRecipient',
+        'requestsCommunicationAction',
+        'requestsDocumentTransfer',
+        'requestsPaymentAction',
+        'requestsPhysicalAction',
+      ],
+    },
+  ],
+  'pii:direct': [
+    {
+      analyzerIds: ['contact', 'insurance', 'lab-results', 'medical-record', 'prescription', 'ssn'],
+      dimension: 'sensitive-field',
+      kind: 'exact-projection',
+      sharedPredicateIds: [
+        'requestsContactDetails',
+        'requestsInsuranceDetails',
+        'requestsLabResults',
+        'requestsMedicalRecord',
+        'requestsPrescriptionDetails',
+        'requestsSsn',
+      ],
+    },
+    {
+      analyzerIds: [
+        'bulk-record-request',
+        'cross-session',
+        'sensitive-field-request',
+        'social-pretext',
+        'system-access-request',
+      ],
+      dimension: 'tactic',
+      kind: 'separate-concept',
+      sharedPredicateIds: [],
+    },
+  ],
+  'pii:social': [
+    {
+      analyzerIds: ['prescription'],
+      dimension: 'sensitive-field',
+      kind: 'coarser-rollup',
+      sharedPredicateIds: ['requestsPrescriptionDetails', 'requestsRefillDates'],
+    },
+    {
+      analyzerIds: [
+        'bulk-record-request',
+        'cross-session',
+        'sensitive-field-request',
+        'social-pretext',
+        'system-access-request',
+      ],
+      dimension: 'tactic',
+      kind: 'separate-concept',
+      sharedPredicateIds: [],
+    },
+    {
+      analyzerIds: ['coworker', 'family', 'self', 'unknown-third-party'],
+      dimension: 'relationship',
+      kind: 'separate-concept',
+      sharedPredicateIds: [],
+    },
+    {
+      analyzerIds: ['direct-request', 'identity-claim', 'lost-access', 'operational-need'],
+      dimension: 'authorization-story',
+      kind: 'separate-concept',
+      sharedPredicateIds: [],
+    },
+  ],
+  'prompt-extraction': [
+    {
+      analyzerIds: [
+        'compliance-pretext',
+        'configuration-request',
+        'direct-system-prompt',
+        'role-pretext',
+        'transformation-request',
+      ],
+      dimension: 'tactic',
+      kind: 'separate-concept',
+      sharedPredicateIds: [],
+    },
+    {
+      analyzerIds: [
+        'change-management',
+        'compliance',
+        'debugging',
+        'documentation',
+        'incident-response',
+        'onboarding',
+        'operations',
+        'training',
+      ],
+      dimension: 'pretext',
+      kind: 'separate-concept',
+      sharedPredicateIds: [],
+    },
+    {
+      analyzerIds: [
+        'audit-report',
+        'debug-transcript',
+        'documentation-checklist',
+        'handoff-summary',
+        'incident-review',
+        'onboarding-email',
+        'policy-diff',
+        'training-guide',
+      ],
+      dimension: 'artifact',
+      kind: 'separate-concept',
+      sharedPredicateIds: [],
+    },
+  ],
+  'sql-injection': [
+    {
+      analyzerIds: ['boolean-bypass', 'schema-discovery', 'stacked-query', 'union-extraction'],
+      dimension: 'tactic',
+      kind: 'exact-projection',
+      sharedPredicateIds: [
+        'requestsSchemaDiscovery',
+        'usesBooleanBypass',
+        'usesStackedQuery',
+        'usesUnionExtraction',
+      ],
+    },
+    {
+      analyzerIds: ['authorization-filter-removal'],
+      dimension: 'tactic',
+      kind: 'coarser-rollup',
+      sharedPredicateIds: ['removesAuthorizationFilter', 'usesNaturalLanguagePrivilegeEscalation'],
+    },
+  ],
+};
 
 const COVERAGE_RULES: Record<string, CoverageRuleSet[]> = {
   'sql-injection': [
@@ -370,6 +527,10 @@ export function getTacticCount(pluginId: string): number {
   }
 
   return TACTIC_RULES[getPluginFamily(pluginId)]?.length ?? 0;
+}
+
+export function getAnalyzerSemanticAlignment(pluginId: string): AnalyzerSemanticAlignment[] {
+  return ANALYZER_SEMANTIC_ALIGNMENT_BY_PLUGIN[pluginId] ?? [];
 }
 
 function summarizePlugin(

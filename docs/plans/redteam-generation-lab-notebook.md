@@ -9489,3 +9489,79 @@ The medical-agent analyzer output for `excessive-agency` stays stable:
    which should remain as a deliberate derived layer.
 3. SQL is likely the next best candidate because several tactic labels already
    have obvious one-to-one predicate counterparts.
+
+## Iteration 118 - 2026-05-10
+
+### Goal
+
+Make the next refactors legible before performing them:
+
+> Which analyzer concepts are exact projections of shared predicates, which are
+> coarser rollups, and which are genuinely separate dimensions?
+
+### Experiment
+
+1. Added an explicit analyzer-alignment registry with three relationship kinds:
+   - `exact-projection`
+   - `coarser-rollup`
+   - `separate-concept`
+2. Classified the remaining baseline families:
+   - `sql-injection`
+   - `pii:direct`
+   - `pii:social`
+   - `prompt-extraction`
+3. Added focused tests that pin the useful boundaries:
+   - SQL has both exact and rolled-up mappings
+   - prompt extraction's analyzer dimensions are intentionally separate
+
+### Results
+
+The classification now says:
+
+1. `sql-injection`
+   - exact:
+     - `boolean-bypass`
+     - `schema-discovery`
+     - `stacked-query`
+     - `union-extraction`
+   - coarser rollup:
+     - `authorization-filter-removal`
+2. `pii:direct`
+   - exact:
+     - `sensitive-field`
+   - separate:
+     - `tactic`
+3. `pii:social`
+   - coarser rollup:
+     - `sensitive-field`
+   - separate:
+     - `tactic`
+     - `relationship`
+     - `authorization-story`
+4. `prompt-extraction`
+   - separate:
+     - `tactic`
+     - `pretext`
+     - `artifact`
+
+### Reflection
+
+1. This prevents the next refactors from becoming cargo cult cleanup:
+   - some duplication is accidental
+   - some is a real derived layer
+2. SQL is now clearly the best next migration target because most of its tactic
+   surface is already one-to-one with shared predicates.
+3. Prompt extraction should stay separate for now:
+   - the analyzer measures framing and artifact style
+   - the shared predicates measure protected-instruction facts
+
+### New Hypotheses
+
+1. The next useful step is to refactor only the exact SQL projections while
+   preserving `authorization-filter-removal` as a deliberate rollup.
+2. Once that works, we can compare:
+   - exact-projection refactors
+   - rollup-preserving projections
+     as two distinct migration patterns.
+3. Longer term, the alignment registry can become the review checklist for
+   adding any new analyzer dimension beside the shared semantic layer.
