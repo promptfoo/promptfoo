@@ -8,6 +8,12 @@ type ParsedPromptDrift = {
   legacyPrompt: string;
 };
 
+type DriftSeverity =
+  | 'benign-rewrite'
+  | 'dangerous-feature-loss'
+  | 'exact-preserved'
+  | 'non-dangerous-truncation';
+
 type PromptFeatureAudit = {
   currentPrompt: string;
   currentRetainedFeatures: string[];
@@ -15,6 +21,7 @@ type PromptFeatureAudit = {
   index: number;
   legacyPrompt: string;
   legacyRetainedFeatures: string[];
+  severity: DriftSeverity;
 };
 
 function parseGeneratedPromptsLegacy(generatedPrompts: string): string[] {
@@ -22,6 +29,27 @@ function parseGeneratedPromptsLegacy(generatedPrompts: string): string[] {
     .split(/[\n;]+/)
     .filter((line) => /prompt\s*:/i.test(line))
     .map((line) => line.replace(/^.*?prompt\s*:/i, '').trim());
+}
+
+function classifyDriftSeverity({
+  currentPrompt,
+  expectedFeatures,
+  legacyPrompt,
+  legacyRetainedFeatures,
+}: Omit<PromptFeatureAudit, 'currentRetainedFeatures' | 'index' | 'severity'>): DriftSeverity {
+  if (legacyPrompt === currentPrompt) {
+    return 'exact-preserved';
+  }
+
+  if (legacyRetainedFeatures.length < expectedFeatures.length) {
+    return 'dangerous-feature-loss';
+  }
+
+  if (legacyPrompt.length < currentPrompt.length && currentPrompt.startsWith(legacyPrompt)) {
+    return 'non-dangerous-truncation';
+  }
+
+  return 'benign-rewrite';
 }
 
 function auditPromptBlock(
@@ -52,17 +80,26 @@ function auditPromptBlock(
   const featureAudits: PromptFeatureAudit[] = currentPrompts.map((currentPrompt, index) => {
     const promptExpectedFeatures = expectedFeatures[index] ?? [];
     const legacyPrompt = legacyPrompts[index] ?? '';
+    const currentRetainedFeatures = promptExpectedFeatures.filter((feature) =>
+      currentPrompt.includes(feature),
+    );
+    const legacyRetainedFeatures = promptExpectedFeatures.filter((feature) =>
+      legacyPrompt.includes(feature),
+    );
+
     return {
       currentPrompt,
-      currentRetainedFeatures: promptExpectedFeatures.filter((feature) =>
-        currentPrompt.includes(feature),
-      ),
+      currentRetainedFeatures,
       expectedFeatures: promptExpectedFeatures,
       index,
       legacyPrompt,
-      legacyRetainedFeatures: promptExpectedFeatures.filter((feature) =>
-        legacyPrompt.includes(feature),
-      ),
+      legacyRetainedFeatures,
+      severity: classifyDriftSeverity({
+        currentPrompt,
+        expectedFeatures: promptExpectedFeatures,
+        legacyPrompt,
+        legacyRetainedFeatures,
+      }),
     };
   });
   const expectedFeatureCount = featureAudits.reduce(
@@ -76,6 +113,18 @@ function auditPromptBlock(
   const legacyRetainedFeatureCount = featureAudits.reduce(
     (total, audit) => total + audit.legacyRetainedFeatures.length,
     0,
+  );
+  const severityCounts = featureAudits.reduce(
+    (counts, audit) => ({
+      ...counts,
+      [audit.severity]: counts[audit.severity] + 1,
+    }),
+    {
+      'benign-rewrite': 0,
+      'dangerous-feature-loss': 0,
+      'exact-preserved': 0,
+      'non-dangerous-truncation': 0,
+    } satisfies Record<DriftSeverity, number>,
   );
 
   return {
@@ -93,6 +142,7 @@ function auditPromptBlock(
       expectedFeatureCount === 0 ? 1 : legacyRetainedFeatureCount / expectedFeatureCount,
     legacyPromptCount: legacyPrompts.length,
     legacyRetainedFeatureCount,
+    severityCounts,
     truncatedPromptCount,
     truncationRate: promptCount === 0 ? 0 : truncatedPromptCount / promptCount,
   };
@@ -158,6 +208,22 @@ async function main() {
     (total, audit) => total + audit.legacyRetainedFeatureCount,
     0,
   );
+  const severityCounts = Object.values(audits).reduce(
+    (counts, audit) => ({
+      'benign-rewrite': counts['benign-rewrite'] + audit.severityCounts['benign-rewrite'],
+      'dangerous-feature-loss':
+        counts['dangerous-feature-loss'] + audit.severityCounts['dangerous-feature-loss'],
+      'exact-preserved': counts['exact-preserved'] + audit.severityCounts['exact-preserved'],
+      'non-dangerous-truncation':
+        counts['non-dangerous-truncation'] + audit.severityCounts['non-dangerous-truncation'],
+    }),
+    {
+      'benign-rewrite': 0,
+      'dangerous-feature-loss': 0,
+      'exact-preserved': 0,
+      'non-dangerous-truncation': 0,
+    } satisfies Record<DriftSeverity, number>,
+  );
 
   console.log(
     JSON.stringify(
@@ -174,6 +240,7 @@ async function main() {
             expectedFeatureCount === 0 ? 1 : legacyRetainedFeatureCount / expectedFeatureCount,
           legacyRetainedFeatureCount,
           promptCount,
+          severityCounts,
           truncatedPromptCount,
           truncationRate: promptCount === 0 ? 0 : truncatedPromptCount / promptCount,
         },

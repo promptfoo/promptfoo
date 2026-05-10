@@ -8566,3 +8566,72 @@ The result held across every sampled category:
 3. Longer term, feature-retention should borrow the predicate machinery we
    already found useful in the retained-frontier work instead of relying on a
    permanently hand-maintained feature list.
+
+## Iteration 104 - 2026-05-10
+
+### Goal
+
+Move from raw drift metrics to severity-aware drift metrics:
+
+> When formatting changes an attack prompt, can we tell whether it was harmless,
+> merely incomplete, or actually destructive to the attack?
+
+### Experiment
+
+1. Added four prompt-level severity buckets to the preservation harness:
+   - `exact-preserved`
+   - `benign-rewrite`
+   - `non-dangerous-truncation`
+   - `dangerous-feature-loss`
+2. Classified severity from the same two ingredients introduced earlier:
+   - string-level change/truncation
+   - retained exploit features
+3. Reported `severityCounts`:
+   - per category
+   - across the full sampled slice
+
+### Results
+
+Across the same six representative prompts:
+
+| Severity bucket            | Count |
+| -------------------------- | ----: |
+| `exact-preserved`          |   `0` |
+| `benign-rewrite`           |   `0` |
+| `non-dangerous-truncation` |   `0` |
+| `dangerous-feature-loss`   |   `6` |
+
+Each sampled category produced the same pattern:
+
+1. `pii:social`
+   - `2/2` were `dangerous-feature-loss`
+2. `shell-injection`
+   - `2/2` were `dangerous-feature-loss`
+3. `sql-injection`
+   - `2/2` were `dangerous-feature-loss`
+
+### Reflection
+
+1. This makes the old parser failure more operationally legible:
+   - it did not merely alter attacks
+   - it converted every sampled attack into a materially weaker artifact
+2. Severity buckets are more decision-useful than a single changed-count:
+   - `changed = 6` says something moved
+   - `dangerous-feature-loss = 6` says the benchmark can no longer trust the
+     resulting tests
+3. The current slice is intentionally adversarial, so the classifier has only
+   exercised the worst bucket so far:
+   - that is a useful finding
+   - it is not yet broad validation of the full taxonomy
+
+### New Hypotheses
+
+1. The next experiment should build a small controlled calibration set that
+   explicitly exercises all four severity buckets.
+2. Once calibrated, severity counts can become a durable benchmark health
+   output:
+   - exactness for formatter fidelity
+   - feature retention for attack semantics
+   - severity for triage
+3. If the classifier behaves cleanly on a controlled set, we can then consider
+   lifting it from a research script into shared generation-quality tooling.
