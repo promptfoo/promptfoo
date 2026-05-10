@@ -679,6 +679,7 @@ export default function Review({
                     {count > 1 ? `${label} (${count})` : label}
                     <button
                       type="button"
+                      aria-label={`Remove plugin ${label}`}
                       onClick={() => {
                         const newPlugins = config.plugins.filter((plugin) => {
                           const pluginLabel = getPluginSummary(plugin).label;
@@ -723,6 +724,7 @@ export default function Review({
                     {count > 1 ? `${label} (${count})` : label}
                     <button
                       type="button"
+                      aria-label={`Remove strategy ${label}`}
                       onClick={() => {
                         const strategyId =
                           Object.entries(strategyDisplayNames).find(
@@ -810,6 +812,11 @@ export default function Review({
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Remove policy ${
+                            isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : makeDefaultPolicyName(index)
+                          }`}
                           className="size-6 shrink-0"
                           onClick={() => {
                             const policyToMatch =
@@ -897,10 +904,12 @@ export default function Review({
         <div className="mt-6 rounded-lg border border-border shadow-sm">
           {/* Application Details */}
           <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border p-4 hover:bg-muted/50">
-              <div className="flex items-center gap-2">
-                <Info className="size-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">Application Details</h3>
+            <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 border-b border-border p-4 hover:bg-muted/50 sm:items-center">
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Info className="size-4 shrink-0 text-muted-foreground" />
+                  <h3 className="min-w-0 text-lg font-semibold">Application Details</h3>
+                </div>
                 {config.purpose && (
                   <Badge
                     variant="outline"
@@ -1058,10 +1067,12 @@ export default function Review({
 
           {/* Advanced Configuration */}
           <Collapsible open={isAdvancedConfigExpanded} onOpenChange={setIsAdvancedConfigExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border p-4 hover:bg-muted/50">
-              <div className="flex items-center gap-2">
-                <Sliders className="size-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">Advanced Configuration</h3>
+            <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 border-b border-border p-4 hover:bg-muted/50 sm:items-center">
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Sliders className="size-4 shrink-0 text-muted-foreground" />
+                  <h3 className="min-w-0 text-lg font-semibold">Advanced Configuration</h3>
+                </div>
                 <Badge variant="outline" className="text-xs">
                   Optional
                 </Badge>
