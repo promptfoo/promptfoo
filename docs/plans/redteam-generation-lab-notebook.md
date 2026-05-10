@@ -13922,3 +13922,61 @@ Use the new three-regime suite to test the next research question from iteration
 3. The selector should only collapse to one scalar after a policy decision has
    been made explicitly, not because one metric happens to be convenient to
    sort.
+
+## Iteration 193 - 2026-05-10
+
+### Goal
+
+Turn the aggregation-policy lesson into a benchmark surface that keeps multiple
+objectives visible:
+
+> Can a Pareto report preserve prompt quality, target breadth, and realized yield
+> without prematurely collapsing them into one scalar?
+
+### Experiment
+
+1. Reused the observed cohorts and the two stress profiles from iteration `192`.
+2. Factored the shared target-regime candidate profiles out of the scalar-policy
+   script so multiple reports use the same evidence.
+3. Added a Pareto report with three maximize axes:
+   - leak-ready prompt rate
+   - regimes with any realized failure
+   - mean realized failure rate across regimes
+4. Marked each candidate as:
+   - on frontier
+   - or dominated by another candidate that is at least as good on every axis
+     and strictly better on at least one
+
+### Results
+
+| Candidate          | Source         | Leak-ready prompts | Regimes with any failure | Mean failure rate | On frontier | Dominated by                                      |
+| ------------------ | -------------- | ------------------ | ------------------------ | ----------------- | ----------- | ------------------------------------------------- |
+| `legacy-generic`   | observed       | `1/6`              | `0/3`                    | `0%`              | `no`        | `portfolio`, `family-overfit`, `balanced-breadth` |
+| `portfolio`        | observed       | `6/6`              | `2/3`                    | `44%`             | `yes`       | `-`                                               |
+| `family-overfit`   | stress profile | `6/6`              | `1/3`                    | `33%`             | `no`        | `portfolio`                                       |
+| `balanced-breadth` | stress profile | `6/6`              | `2/3`                    | `22%`             | `no`        | `portfolio`                                       |
+
+### Reflection
+
+1. The Pareto report is a better default diagnostic artifact than either scalar
+   mean:
+   - it keeps the breadth axis visible
+   - it makes dominance relations explicit
+   - it does not pretend a convenience score is the research objective
+2. `portfolio` is the only nondominated candidate in this small set, but the
+   reason matters more than the label:
+   - same leak-ready rate as both stress profiles
+   - same breadth as `balanced-breadth`
+   - higher realized yield than both
+3. This gives us the likely shape of a production comparison surface:
+   - frontier membership first
+   - then optional scalar policy only after the user has declared a tradeoff
+
+### New Hypotheses
+
+1. The next useful report should identify _which axis_ makes each dominated
+   candidate lose, not only who dominates it.
+2. For real candidate sets with multiple nondominated generators, we will need a
+   tie-break recommendation layer rather than a silent scalar fallback.
+3. The same Pareto framing may generalize beyond `pii:social` to the wider
+   plugin portfolio once live replay suites exist for more vulnerabilities.
