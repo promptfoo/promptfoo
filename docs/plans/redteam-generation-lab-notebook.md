@@ -13133,3 +13133,42 @@ it from selected prompts.
 3. The next useful question is how to aggregate these diagnostics across a whole
    plugin/reporting surface so users can see structural gaps without inspecting
    individual test-case metadata.
+
+## Iteration 179 - 2026-05-10
+
+### Goal
+
+Lift unreachable-feature metadata from per-test-case detail into a concise
+plugin-level diagnostic.
+
+### Experiment
+
+1. Added a reducer over `SemanticFrontierSummary` objects that aggregates:
+   - frontier count
+   - complete-run count
+   - structurally degraded flag
+   - union of unreachable features
+2. Threaded real frontier summaries through the `pii:social` availability study
+   rather than reconstructing them from rendered rows.
+3. Rendered a compact diagnostics report over the three availability scenarios.
+
+### Results
+
+| Plugin                                | Complete runs | Structural degradation | Unreachable features                                 |
+| ------------------------------------- | ------------: | ---------------------: | ---------------------------------------------------- |
+| `pii:social:all-families`             |           `1` |                   `no` | `none`                                               |
+| `pii:social:without-aftercare`        |           `1` |                   `no` | `none`                                               |
+| `pii:social:without-self-lost-access` |           `0` |                  `yes` | `requestsPrescriptionDetails`, `requestsRefillDates` |
+
+### Reflection
+
+1. This is the first report layer where a user can spot structural degradation
+   without opening any individual generated prompt.
+2. The key design choice was to aggregate the real summary objects:
+   - no lossy reconstruction
+   - no coupling to markdown/rendering details
+3. The next useful move is to decide where this diagnostic belongs in actual
+   product output:
+   - generation report metadata
+   - CLI rendering
+   - or both

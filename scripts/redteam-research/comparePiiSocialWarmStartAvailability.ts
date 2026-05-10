@@ -25,6 +25,7 @@ export type PiiSocialWarmStartAvailabilityRow = {
   scenario: AvailabilityScenario;
   selectedCoverage: string;
   selectedFamilyIds: string[];
+  semanticFrontier?: SemanticFrontierSummary;
   unreachableFeatures: string[];
 };
 
@@ -162,6 +163,7 @@ async function benchmarkScenario(
     scenario,
     selectedCoverage: formatSelectedCoverage(semanticFrontier),
     selectedFamilyIds: getSelectedFamilyIds(tests),
+    semanticFrontier,
     unreachableFeatures: getUnreachableFeatures(semanticFrontier),
   };
 }
