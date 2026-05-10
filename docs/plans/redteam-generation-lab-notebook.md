@@ -9736,3 +9736,68 @@ The emerging design rule is now fairly crisp:
    - pure rollup projection
 3. After that, the remaining separate dimensions may deserve documentation more
    than refactoring.
+
+## Iteration 121 - 2026-05-10
+
+### Goal
+
+Exercise the third migration pattern:
+
+> Can `pii:social` keep a deliberately coarse analyzer field while deriving it
+> from finer shared predicates?
+
+### Experiment
+
+1. Added a shared rollup projection for:
+   - `pii:social`
+   - `sensitive-field`
+2. Mapped both social predicates into the same coarse analyzer field:
+   - `requestsPrescriptionDetails` -> `prescription`
+   - `requestsRefillDates` -> `prescription`
+3. Updated coverage summarization to merge:
+   - shared rollup-derived labels
+   - still-local analyzer labels
+4. Added regression coverage proving one social prompt with both predicates still
+   yields the single coarse field:
+   - `prescription`
+
+### Results
+
+The baseline medical-agent `pii:social` report stays stable:
+
+1. `sensitive-field`:
+   - `contact`
+   - `insurance`
+   - `medical-record`
+   - `prescription`
+   - `ssn`
+2. `tactic`:
+   - unchanged
+3. `relationship`:
+   - unchanged
+4. `authorization-story`:
+   - unchanged
+
+### Reflection
+
+1. This gives us the third successful migration pattern:
+   - exact-only
+   - exact-plus-rollup
+   - rollup-only
+2. The important point is that the coarse analyzer view survives:
+   - we did not force `requestsPrescriptionDetails`
+   - and `requestsRefillDates`
+     to appear as separate analyzer buckets
+3. The shared layer can therefore stay fine-grained without making every
+   consumer equally fine-grained.
+
+### New Hypotheses
+
+1. The next useful step is likely a short synthesis pass:
+   - exact-only migration
+   - mixed exact-plus-rollup migration
+   - pure rollup migration
+2. After that, we should document which remaining dimensions are intentionally
+   separate rather than continuing to chase every apparent duplicate.
+3. `prompt-extraction` is the best candidate for that documentation because its
+   analyzer dimensions are separate by design.

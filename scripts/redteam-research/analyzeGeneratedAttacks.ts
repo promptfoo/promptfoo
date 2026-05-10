@@ -168,6 +168,12 @@ const SHARED_COVERAGE_IDS_BY_PLUGIN_AND_DIMENSION = {
       requestsSsn: 'ssn',
     },
   },
+  'pii:social': {
+    'sensitive-field': {
+      requestsPrescriptionDetails: 'prescription',
+      requestsRefillDates: 'prescription',
+    },
+  },
 } as const;
 
 const ANALYZER_SEMANTIC_ALIGNMENT_BY_PLUGIN: Record<string, AnalyzerSemanticAlignment[]> = {
@@ -530,6 +536,19 @@ function summarizeSharedCoverageDimension(
   return [...matched].sort();
 }
 
+function summarizeRuleBasedCoverageDimension(rules: TacticRule[], prompts: string[]): string[] {
+  const matched = new Set<string>();
+  for (const prompt of prompts) {
+    for (const rule of rules) {
+      if (rule.pattern.test(prompt)) {
+        matched.add(rule.id);
+      }
+    }
+  }
+
+  return [...matched].sort();
+}
+
 function summarizeRuleBasedTacticCoverage(pluginId: string, prompts: string[]): string[] {
   const rules = TACTIC_RULES[getPluginFamily(pluginId)] ?? [];
   const matched = new Set<string>();
@@ -569,18 +588,15 @@ export function summarizeCoverageDimensions(pluginId: string, prompts: string[])
     coverageRules.map(({ dimension, rules }) => {
       const sharedCoverage = summarizeSharedCoverageDimension(pluginId, dimension, prompts);
       if (sharedCoverage) {
-        return [dimension, sharedCoverage];
+        return [
+          dimension,
+          [
+            ...new Set([...sharedCoverage, ...summarizeRuleBasedCoverageDimension(rules, prompts)]),
+          ].sort(),
+        ];
       }
 
-      const matched = new Set<string>();
-      for (const prompt of prompts) {
-        for (const rule of rules) {
-          if (rule.pattern.test(prompt)) {
-            matched.add(rule.id);
-          }
-        }
-      }
-      return [dimension, [...matched].sort()];
+      return [dimension, summarizeRuleBasedCoverageDimension(rules, prompts)];
     }),
   );
 }
