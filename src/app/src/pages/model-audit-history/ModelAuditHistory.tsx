@@ -29,7 +29,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { type ListScansQuery, MODEL_AUDIT_SORT_FIELDS } from '../../../../types/api/modelAudit';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -256,6 +256,7 @@ export default function ModelAuditHistory() {
     ],
     [setScanToDelete],
   );
+  const isEmptyHistory = totalCount === 0 && historicalScans.length === 0 && !isLoadingHistory;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -279,12 +280,14 @@ export default function ModelAuditHistory() {
       {/* Main Content */}
       <div className="container max-w-7xl mx-auto px-4 py-8 space-y-4">
         {/* Toolbar */}
-        <div className="flex justify-between items-center">
-          <Button size="sm" onClick={handleNewScan}>
-            <AddIcon className="size-4 mr-2" />
-            New Scan
-          </Button>
-        </div>
+        {!isEmptyHistory && (
+          <div className="flex justify-between items-center">
+            <Button size="sm" onClick={handleNewScan}>
+              <AddIcon className="size-4 mr-2" />
+              New Scan
+            </Button>
+          </div>
+        )}
 
         <Card className="overflow-hidden bg-white dark:bg-zinc-900">
           {historyError ? (
@@ -295,7 +298,7 @@ export default function ModelAuditHistory() {
               <h3 className="text-lg font-semibold text-destructive mb-1">Error loading history</h3>
               <p className="text-sm text-muted-foreground">{historyError}</p>
             </div>
-          ) : totalCount === 0 && historicalScans.length === 0 && !isLoadingHistory ? (
+          ) : isEmptyHistory ? (
             <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center md:p-8">
               <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <SearchIcon className="size-6" />
@@ -306,11 +309,9 @@ export default function ModelAuditHistory() {
                   Run your first model security scan to see results here
                 </p>
               </div>
-              <Button asChild className="sm:ml-auto">
-                <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
-                  <AddIcon className="size-4 mr-2" />
-                  New Scan
-                </RouterLink>
+              <Button className="sm:ml-auto" onClick={handleNewScan}>
+                <AddIcon className="size-4 mr-2" />
+                Run Your First Scan
               </Button>
             </div>
           ) : (

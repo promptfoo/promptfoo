@@ -88,11 +88,11 @@ describe('ModelAuditHistory', () => {
     );
   };
 
-  it('should render the history page with New Scan button', () => {
+  it('should render the empty history page with a first-scan CTA', () => {
     renderComponent();
 
-    // Should have at least one "New Scan" button (toolbar + possibly empty state)
-    expect(screen.getAllByText('New Scan').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Run Your First Scan')).toBeInTheDocument();
+    expect(screen.queryByText('New Scan')).not.toBeInTheDocument();
   });
 
   it('should fetch historical scans on mount', async () => {
@@ -189,6 +189,12 @@ describe('ModelAuditHistory', () => {
   });
 
   it('should have New Scan button in toolbar', async () => {
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: [createMockScan('1', 'Scan 1')],
+      totalCount: 1,
+    } as any);
+
     renderComponent();
 
     // Verify the New Scan button is rendered in the toolbar
@@ -205,7 +211,7 @@ describe('ModelAuditHistory', () => {
 
     renderComponent();
 
-    await user.click(screen.getAllByText('New Scan')[0]);
+    await user.click(screen.getByText('Run Your First Scan'));
 
     expect(mockStartNewScan).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('/model-audit/setup');
