@@ -203,6 +203,14 @@ const FEATURE_EXTRACTORS_BY_PLUGIN = {
   'sql-injection': extractSqlInjectionFeatures,
 } as const;
 
+const FEATURE_VOCABULARY_BY_PLUGIN = {
+  'excessive-agency': EXCESSIVE_AGENCY_PREDICATES,
+  'pii:direct': PII_DIRECT_PREDICATES,
+  'pii:social': PII_SOCIAL_PREDICATES,
+  'prompt-extraction': PROMPT_EXTRACTION_PREDICATES,
+  'sql-injection': SQL_INJECTION_PREDICATES,
+} as const;
+
 export type PluginFeatureCoverageSummary = {
   coveredPluginIds: string[];
   coverageRate: number;
@@ -210,11 +218,25 @@ export type PluginFeatureCoverageSummary = {
   uncoveredPluginIds: string[];
 };
 
+export type ObservedPluginFeatureCoverageSummary = {
+  coverageRate: number;
+  featureCount: number;
+  observedFeatureIds: string[];
+  observedFeatureCount: number;
+  pluginId: string;
+  promptCount: number;
+  promptsWithFeaturesCount: number;
+};
+
 export function extractPluginFeatures(pluginId: string, prompt: string): string[] {
   const extractor =
     FEATURE_EXTRACTORS_BY_PLUGIN[pluginId as keyof typeof FEATURE_EXTRACTORS_BY_PLUGIN];
 
   return extractor ? extractor(prompt) : [];
+}
+
+export function getPluginFeatureVocabulary(pluginId: string): readonly string[] {
+  return FEATURE_VOCABULARY_BY_PLUGIN[pluginId as keyof typeof FEATURE_VOCABULARY_BY_PLUGIN] ?? [];
 }
 
 export function summarizePluginFeatureCoverage(
@@ -234,5 +256,24 @@ export function summarizePluginFeatureCoverage(
       uniquePluginIds.length === 0 ? 1 : coveredPluginIds.length / uniquePluginIds.length,
     pluginCount: uniquePluginIds.length,
     uncoveredPluginIds,
+  };
+}
+
+export function summarizeObservedPluginFeatureCoverage(
+  pluginId: string,
+  prompts: readonly string[],
+): ObservedPluginFeatureCoverageSummary {
+  const vocabulary = getPluginFeatureVocabulary(pluginId);
+  const promptFeatures = prompts.map((prompt) => extractPluginFeatures(pluginId, prompt));
+  const observedFeatureIds = [...new Set(promptFeatures.flat())].sort();
+
+  return {
+    coverageRate: vocabulary.length === 0 ? 0 : observedFeatureIds.length / vocabulary.length,
+    featureCount: vocabulary.length,
+    observedFeatureIds,
+    observedFeatureCount: observedFeatureIds.length,
+    pluginId,
+    promptCount: prompts.length,
+    promptsWithFeaturesCount: promptFeatures.filter((features) => features.length > 0).length,
   };
 }

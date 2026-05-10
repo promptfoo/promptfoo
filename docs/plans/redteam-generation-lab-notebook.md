@@ -9866,3 +9866,67 @@ The alignment summary now reports:
    - when to leave an analyzer dimension separate
 3. After that, we should return to generation quality itself instead of spending
    too long polishing the measurement layer.
+
+## Iteration 123 - 2026-05-10
+
+### Goal
+
+Return to generation quality with the sharper measurement layer in hand:
+
+> If we score each baseline corpus against the shared semantic vocabulary, which
+> families are genuinely broad and which merely have many rows?
+
+### Experiment
+
+1. Added reusable plugin feature vocabularies.
+2. Added `summarizeObservedPluginFeatureCoverage()` to compare:
+   - observed active features
+   - total available shared features
+   - prompts that activate at least one shared feature
+3. Surfaced `semanticFeatureCoverage` inside each analyzer summary.
+4. Re-ran the five baseline medical-agent families against the new metric.
+
+### Results
+
+On the five unique baseline prompts per family:
+
+| Plugin              | Observed shared features | Vocabulary size | Coverage |
+| ------------------- | -----------------------: | --------------: | -------: |
+| `pii:direct`        |                      `6` |             `6` |   `100%` |
+| `pii:social`        |                      `2` |             `2` |   `100%` |
+| `excessive-agency`  |                      `5` |             `5` |   `100%` |
+| `sql-injection`     |                      `2` |             `6` |    `33%` |
+| `prompt-extraction` |                      `0` |             `7` |     `0%` |
+
+The standout finding is `prompt-extraction`:
+
+1. it has `35` rows
+2. it has `5` unique baseline prompts
+3. it activates `0/7` shared protected-instruction predicates
+4. `0/35` generated rows activate even one of those shared predicates
+
+### Reflection
+
+1. This is exactly the kind of signal row counts were hiding:
+   - some corpora are broad
+   - some are populous but semantically thin
+2. The new metric also separates two different problems:
+   - SQL is partly covered but missing several exploit forms
+   - prompt extraction is currently measuring a largely different semantic slice
+3. That means the next generation work should not be generic:
+   - SQL needs breadth expansion
+   - prompt extraction needs vocabulary alignment or a deliberately richer seed
+     family
+
+### New Hypotheses
+
+1. The next useful step is to inspect the five unique baseline
+   `prompt-extraction` prompts beside the seven shared predicates and determine
+   whether:
+   - the generator is weak
+   - the predicate vocabulary is mismatched
+   - or both
+2. If the vocabulary is right, then the first hill-climbing target should be:
+   - raise `prompt-extraction` semantic feature coverage above `0/7`
+3. If the vocabulary is mismatched, then the next step should be to expand the
+   predicate schema before using it as an optimization target.

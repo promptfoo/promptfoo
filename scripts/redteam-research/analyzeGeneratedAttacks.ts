@@ -2,7 +2,11 @@ import { pathToFileURL } from 'node:url';
 import fs from 'fs/promises';
 
 import yaml from 'js-yaml';
-import { extractPluginFeatures } from '../../src/redteam/generation/predicateSignatures';
+import {
+  extractPluginFeatures,
+  type ObservedPluginFeatureCoverageSummary,
+  summarizeObservedPluginFeatureCoverage,
+} from '../../src/redteam/generation/predicateSignatures';
 
 type TestCase = {
   vars?: {
@@ -60,6 +64,7 @@ type PluginSummary = {
   maxPairwiseSimilarity: number;
   pluginId: string;
   purposeGroundingRate: number;
+  semanticFeatureCoverage: ObservedPluginFeatureCoverageSummary;
   tacticCoverage: string[];
   tacticCoverageRate: number;
   total: number;
@@ -707,6 +712,7 @@ function summarizePlugin(
       pairwiseSimilarities.length === 0 ? 0 : Math.max(...pairwiseSimilarities),
     pluginId,
     purposeGroundingRate: prompts.length === 0 ? 0 : purposeGroundedCount / prompts.length,
+    semanticFeatureCoverage: summarizeObservedPluginFeatureCoverage(pluginId, prompts),
     tacticCoverage: [...detectedTactics].sort(),
     tacticCoverageRate: tacticCount === 0 ? 0 : detectedTactics.size / tacticCount,
     total: prompts.length,

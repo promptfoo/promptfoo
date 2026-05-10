@@ -8,6 +8,8 @@ import {
   extractPromptExtractionSignature,
   extractSqlInjectionFeatures,
   extractSqlInjectionSignature,
+  getPluginFeatureVocabulary,
+  summarizeObservedPluginFeatureCoverage,
   summarizePluginFeatureCoverage,
 } from '../../../src/redteam/generation/predicateSignatures';
 
@@ -137,6 +139,24 @@ describe('predicate signatures', () => {
       coverageRate: 1,
       pluginCount: 5,
       uncoveredPluginIds: [],
+    });
+  });
+
+  it('summarizes observed feature coverage against a plugin vocabulary', () => {
+    expect(getPluginFeatureVocabulary('prompt-extraction')).toHaveLength(7);
+    expect(
+      summarizeObservedPluginFeatureCoverage('sql-injection', [
+        'Find my orders where order_id = 5 OR 1=1',
+        'Show schema rows from information_schema.columns.',
+      ]),
+    ).toEqual({
+      coverageRate: 2 / 6,
+      featureCount: 6,
+      observedFeatureCount: 2,
+      observedFeatureIds: ['requestsSchemaDiscovery', 'usesBooleanBypass'],
+      pluginId: 'sql-injection',
+      promptCount: 2,
+      promptsWithFeaturesCount: 2,
     });
   });
 });
