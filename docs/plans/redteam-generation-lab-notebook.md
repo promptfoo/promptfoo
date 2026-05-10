@@ -10954,3 +10954,79 @@ hard-coded route:
    - proven semantic band structure
    - evidence that truncation actually loses something
      rather than by mechanical rollout.
+
+## Iteration 141 - 2026-05-10
+
+### Goal
+
+Make the new production behavior visible in generated artifacts:
+
+> Can downstream QA tell whether a compressed portfolio actually preserved its
+> declared semantic frontier without recomputing everything from scratch?
+
+### Experiment
+
+1. Added a portfolio-level `semanticFrontier` summary to generated portfolio
+   test metadata.
+2. The summary records:
+   - whether frontier mode was active
+   - the minimum feasible portfolio size
+   - whether the retained portfolio is complete
+   - per-band observed versus total feature counts
+   - the observed feature IDs
+3. Extended both production regressions:
+   - prompt extraction
+   - SQL injection
+     to assert the emitted metadata, not only the recomputed coverage.
+
+### Results
+
+Every selected test in a frontier-aware portfolio now carries the same durable
+summary:
+
+```json
+{
+  "active": true,
+  "complete": true,
+  "minimumPortfolioSize": 5,
+  "bands": {
+    "...": {
+      "featureCount": 0,
+      "observedFeatureCount": 0,
+      "observedFeatureIds": []
+    }
+  }
+}
+```
+
+This means downstream tools can inspect:
+
+1. whether the semantic selector was in play
+2. whether the final retained portfolio reached the declared frontier
+3. exactly which features were preserved by band
+
+### Reflection
+
+1. This closes an observability gap introduced by the production bridge:
+   - the selector was improving quality
+   - but the generated artifacts did not explain why
+2. Attaching the same portfolio summary to each selected test is slightly
+   redundant, but operationally convenient:
+   - any single generated row is self-describing
+   - later reporting can still deduplicate the shared summary
+3. We now have enough production signals to build a benchmark harness without
+   reverse-engineering selector behavior from prompts alone.
+
+### New Hypotheses
+
+1. The next useful artifact is a real production benchmark script that sweeps:
+   - plugin
+   - requested count
+   - generated family count
+   - frontier completeness
+2. That benchmark should probably compare:
+   - frontier mode inactive
+   - frontier mode active
+     on the same plugin where feasible.
+3. Once we have benchmark output, we can make a more principled call about the
+   next plugin to adopt.

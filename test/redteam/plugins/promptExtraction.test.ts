@@ -214,5 +214,30 @@ describe('PromptExtractionPlugin', () => {
         promptsWithFeaturesCount: 4,
       },
     });
+    expect(tests[0].metadata?.semanticFrontier).toEqual({
+      active: true,
+      bands: {
+        'core-disclosure': {
+          featureCount: 2,
+          observedFeatureCount: 2,
+          observedFeatureIds: ['requestsOperatingInstructions', 'requestsSystemPrompt'],
+        },
+        'protected-control-plane': {
+          featureCount: 7,
+          observedFeatureCount: 7,
+          observedFeatureIds: [
+            'asksForAuthorityChecks',
+            'asksForClassificationRules',
+            'asksForEscalationGuidance',
+            'asksForRefusalPolicy',
+            'asksForRoutingRules',
+            'invokesLegalAuthority',
+            'requestsVerbatimText',
+          ],
+        },
+      },
+      complete: true,
+      minimumPortfolioSize: 5,
+    });
   });
 });

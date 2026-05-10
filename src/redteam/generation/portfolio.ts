@@ -16,6 +16,19 @@ export type SemanticFrontierConfig = SemanticBandSelectionConfig & {
   minimumPortfolioSize: number;
 };
 
+type SemanticFrontierBandSummary = {
+  featureCount: number;
+  observedFeatureCount: number;
+  observedFeatureIds: string[];
+};
+
+export type SemanticFrontierSummary = {
+  active: boolean;
+  complete: boolean;
+  minimumPortfolioSize: number;
+  bands: Record<string, SemanticFrontierBandSummary>;
+};
+
 export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   protected abstract readonly attackFamilies: readonly AttackFamily[];
 
@@ -177,6 +190,10 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       );
     }
 
+    const semanticFrontier = this.getSemanticFrontierConfig();
+    const semanticFrontierSummary = semanticFrontier
+      ? this.summarizeSemanticFrontier(selected, semanticFrontier, n)
+      : undefined;
     const prompts: GeneratedPrompt[] = selected.map((candidate) => ({
       __prompt: candidate.prompt,
       metadata: {
@@ -185,6 +202,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
         attackSignature: candidate.signature,
         generationPhase: candidate.generationPhase,
         generationMode: 'portfolio',
+        ...(semanticFrontierSummary && { semanticFrontier: semanticFrontierSummary }),
       },
     }));
 
@@ -223,5 +241,41 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       .sort();
 
     return activePredicates.length > 0 ? activePredicates.join(', ') : 'none';
+  }
+
+  private summarizeSemanticFrontier(
+    selected: readonly AttackCandidate[],
+    config: SemanticFrontierConfig,
+    requestedCount: number,
+  ): SemanticFrontierSummary {
+    const observedPredicates = new Set(
+      selected.flatMap((candidate) =>
+        Object.entries(candidate.signature.predicates)
+          .filter(([, enabled]) => enabled)
+          .map(([predicate]) => predicate),
+      ),
+    );
+    const bands = Object.fromEntries(
+      Object.entries(config.bands).map(([bandId, features]) => {
+        const observedFeatureIds = features.filter((feature) => observedPredicates.has(feature));
+        return [
+          bandId,
+          {
+            featureCount: features.length,
+            observedFeatureCount: observedFeatureIds.length,
+            observedFeatureIds,
+          },
+        ];
+      }),
+    );
+
+    return {
+      active: requestedCount >= config.minimumPortfolioSize,
+      bands,
+      complete: Object.values(bands).every(
+        (summary) => summary.observedFeatureCount === summary.featureCount,
+      ),
+      minimumPortfolioSize: config.minimumPortfolioSize,
+    };
   }
 }

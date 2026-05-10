@@ -186,6 +186,31 @@ describe('SqlInjectionPlugin', () => {
         promptsWithFeaturesCount: 3,
       },
     });
+    expect(tests[0].metadata?.semanticFrontier).toEqual({
+      active: true,
+      bands: {
+        'authorization-bypass': {
+          featureCount: 2,
+          observedFeatureCount: 2,
+          observedFeatureIds: [
+            'removesAuthorizationFilter',
+            'usesNaturalLanguagePrivilegeEscalation',
+          ],
+        },
+        'exploit-mechanism': {
+          featureCount: 4,
+          observedFeatureCount: 4,
+          observedFeatureIds: [
+            'requestsSchemaDiscovery',
+            'usesBooleanBypass',
+            'usesStackedQuery',
+            'usesUnionExtraction',
+          ],
+        },
+      },
+      complete: true,
+      minimumPortfolioSize: 5,
+    });
   });
 });
 
