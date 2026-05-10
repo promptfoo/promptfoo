@@ -10532,3 +10532,61 @@ This means the apparent gap from iteration `132` was primarily a schema mismatch
    - first-N
    - diversity-only
    - semantic-band-aware
+
+## Iteration 134 - 2026-05-10
+
+### Goal
+
+Move from SQL pool quality to SQL selection quality:
+
+> When we compress the pool to five prompts, which selector preserves the whole
+> SQL frontier?
+
+### Experiment
+
+1. Exposed the SQL candidate-pool and selector helpers for reuse.
+2. Added a SQL semantic-band-aware selector.
+3. Compared five-prompt portfolios from:
+   - first-N
+   - diversity-only
+   - semantic-band-aware
+
+### Results
+
+| Prompt set               | Exploit mechanism | Authorization bypass |
+| ------------------------ | ----------------: | -------------------: |
+| first five               |             `2/4` |                `0/2` |
+| diversity-only five      |             `4/4` |                `2/2` |
+| semantic-band-aware five |             `4/4` |                `2/2` |
+
+The SQL result diverges from prompt extraction in a useful way:
+
+1. naive truncation still loses both breadth and bypass coverage
+2. diversity-only selection repairs exploit-mechanism breadth
+3. it also preserves both authorization-bypass predicates because one retained
+   prompt co-activates them together
+4. semantic-band-aware selection ties rather than improves on the current pool
+
+### Reflection
+
+1. Tactic labels are a useful scaffold, but too coarse to be the final memory.
+2. But selector failure depends on the geometry of the pool:
+   - SQL's two bypass predicates currently co-occur in one strong prompt
+   - prompt extraction's control-plane predicates were spread across prompts
+3. That means semantic-aware selection is still a prudent abstraction, but it is
+   not needed to repair this specific SQL candidate pool.
+
+### New Hypotheses
+
+1. Prompt extraction and SQL now support the same architectural rule:
+   - generate broadly
+   - select against semantic bands
+   - use novelty only as a tie-breaker
+2. The next valuable artifact is a SQL before/after report like the prompt
+   extraction one, because the human story is now:
+   - first-N fails
+   - diversity-only succeeds
+   - semantic-aware is future-proof rather than currently necessary
+3. We should test a perturbed SQL pool later where bypass predicates are split
+   across separate prompts before generalizing too strongly from this easier
+   case.

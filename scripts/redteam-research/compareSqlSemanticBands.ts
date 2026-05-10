@@ -8,6 +8,11 @@ import {
   summarizeObservedPluginFeatureBandCoverage,
   summarizeObservedPluginFeatureCoverage,
 } from '../../src/redteam/generation/predicateSignatures';
+import {
+  buildSqlCandidatePool,
+  selectDiverseSqlPortfolio,
+  selectSemanticBandAwareSqlPortfolio,
+} from './selectSqlPortfolio';
 import { buildSqlAttackPortfolio, extractEntities, loadPurpose } from './sqlResearchShared';
 
 type TestCase = {
@@ -32,15 +37,24 @@ export type SqlSemanticBandSummary = {
 export type SqlSemanticBandComparison = {
   baselineUniquePrompts: SqlSemanticBandSummary;
   curatedPortfolio: SqlSemanticBandSummary;
+  diverseFivePortfolio: SqlSemanticBandSummary;
+  firstFivePortfolio: SqlSemanticBandSummary;
+  semanticBandAwareFivePortfolio: SqlSemanticBandSummary;
 };
 
 export function summarizeSqlSemanticBandComparison(
   baselinePrompts: readonly string[],
   curatedPrompts: readonly string[],
+  firstFivePrompts: readonly string[],
+  diverseFivePrompts: readonly string[],
+  semanticBandAwareFivePrompts: readonly string[],
 ): SqlSemanticBandComparison {
   return {
     baselineUniquePrompts: summarizePromptSet(baselinePrompts),
     curatedPortfolio: summarizePromptSet(curatedPrompts),
+    diverseFivePortfolio: summarizePromptSet(diverseFivePrompts),
+    firstFivePortfolio: summarizePromptSet(firstFivePrompts),
+    semanticBandAwareFivePortfolio: summarizePromptSet(semanticBandAwareFivePrompts),
   };
 }
 
@@ -69,18 +83,27 @@ function summarizePromptSet(prompts: readonly string[]): SqlSemanticBandSummary 
 async function main() {
   const [inputPath] = process.argv.slice(2);
   if (!inputPath) {
-    throw new Error('Usage: tsx scripts/redteam-research/compareSqlSemanticBands.ts <redteam.yaml>');
+    throw new Error(
+      'Usage: tsx scripts/redteam-research/compareSqlSemanticBands.ts <redteam.yaml>',
+    );
   }
 
   const baselinePrompts = await loadUniqueSqlPrompts(inputPath);
   const entities = extractEntities(await loadPurpose(inputPath));
   const curatedPortfolio = buildSqlAttackPortfolio(entities);
+  const candidatePool = buildSqlCandidatePool(curatedPortfolio);
+  const firstFivePortfolio = candidatePool.slice(0, 5);
+  const diverseFivePortfolio = selectDiverseSqlPortfolio(candidatePool, 5);
+  const semanticBandAwareFivePortfolio = selectSemanticBandAwareSqlPortfolio(candidatePool, 5);
 
   console.log(
     JSON.stringify(
       summarizeSqlSemanticBandComparison(
         baselinePrompts,
         curatedPortfolio.map((attack) => attack.prompt),
+        firstFivePortfolio.map((attack) => attack.prompt),
+        diverseFivePortfolio.map((attack) => attack.prompt),
+        semanticBandAwareFivePortfolio.map((attack) => attack.prompt),
       ),
       null,
       2,

@@ -1,3 +1,9 @@
+import { pathToFileURL } from 'node:url';
+
+import {
+  extractSqlInjectionFeatures,
+  getPluginFeatureBands,
+} from '../../src/redteam/generation/predicateSignatures';
 import {
   buildSqlAttackPortfolio,
   extractEntities,
@@ -12,7 +18,7 @@ type CandidatePoolOptions = {
   includeNearDuplicates?: boolean;
 };
 
-function buildCandidatePool(
+export function buildSqlCandidatePool(
   attacks: SqlAttack[],
   { includeNearDuplicates = true }: CandidatePoolOptions = {},
 ): SqlAttack[] {
@@ -38,7 +44,7 @@ function buildCandidatePool(
   return [...duplicateVariants, ...attacks];
 }
 
-function getNoveltyScore(candidate: SqlAttack, selected: SqlAttack[]): number {
+function getNoveltyScore(candidate: SqlAttack, selected: readonly SqlAttack[]): number {
   if (selected.length === 0) {
     return 1;
   }
@@ -50,7 +56,22 @@ function getNoveltyScore(candidate: SqlAttack, selected: SqlAttack[]): number {
   return 1 - maxSimilarity;
 }
 
-function selectDiversePortfolio(candidates: SqlAttack[], count: number): SqlAttack[] {
+export function selectDiverseSqlPortfolio(candidates: SqlAttack[], count: number): SqlAttack[] {
+  return selectSqlPortfolio(candidates, count, scoreDiverseCandidate);
+}
+
+export function selectSemanticBandAwareSqlPortfolio(
+  candidates: SqlAttack[],
+  count: number,
+): SqlAttack[] {
+  return selectSqlPortfolio(candidates, count, scoreSemanticBandAwareCandidate);
+}
+
+function selectSqlPortfolio(
+  candidates: SqlAttack[],
+  count: number,
+  scoreCandidate: (candidate: SqlAttack, selected: readonly SqlAttack[]) => number,
+): SqlAttack[] {
   const selected: SqlAttack[] = [];
   const remaining = [...candidates];
 
@@ -60,10 +81,7 @@ function selectDiversePortfolio(candidates: SqlAttack[], count: number): SqlAtta
 
     for (let index = 0; index < remaining.length; index += 1) {
       const candidate = remaining[index];
-      const tacticAlreadyCovered = selected.some((attack) => attack.tactic === candidate.tactic);
-      const tacticBonus = tacticAlreadyCovered ? 0 : 1;
-      const noveltyScore = getNoveltyScore(candidate, selected);
-      const score = tacticBonus * 2 + noveltyScore;
+      const score = scoreCandidate(candidate, selected);
 
       if (score > bestScore) {
         bestScore = score;
@@ -75,6 +93,34 @@ function selectDiversePortfolio(candidates: SqlAttack[], count: number): SqlAtta
   }
 
   return selected;
+}
+
+function scoreDiverseCandidate(candidate: SqlAttack, selected: readonly SqlAttack[]): number {
+  const tacticAlreadyCovered = selected.some((attack) => attack.tactic === candidate.tactic);
+  const tacticBonus = tacticAlreadyCovered ? 0 : 1;
+
+  return tacticBonus * 2 + getNoveltyScore(candidate, selected);
+}
+
+function scoreSemanticBandAwareCandidate(
+  candidate: SqlAttack,
+  selected: readonly SqlAttack[],
+): number {
+  const featureBands = getPluginFeatureBands('sql-injection');
+  const selectedFeatures = new Set(
+    selected.flatMap((attack) => extractSqlInjectionFeatures(attack.prompt)),
+  );
+  const candidateFeatures = new Set(extractSqlInjectionFeatures(candidate.prompt));
+  const newlyCoveredFeatures = (featureBandId: string) =>
+    (featureBands[featureBandId] ?? []).filter(
+      (feature) => candidateFeatures.has(feature) && !selectedFeatures.has(feature),
+    ).length;
+
+  return (
+    newlyCoveredFeatures('exploit-mechanism') * 100 +
+    newlyCoveredFeatures('authorization-bypass') * 10 +
+    scoreDiverseCandidate(candidate, selected)
+  );
 }
 
 function parseArgs(argv: string[]) {
@@ -109,14 +155,19 @@ async function main() {
   const { inputPath, count, format, mode } = parseArgs(process.argv.slice(2));
   if (!inputPath) {
     throw new Error(
-      'Usage: tsx scripts/redteam-research/selectSqlPortfolio.ts <redteam.yaml> [--count n] [--mode first|diverse] [--format json|yaml]',
+      'Usage: tsx scripts/redteam-research/selectSqlPortfolio.ts <redteam.yaml> [--count n] [--mode first|diverse|semantic] [--format json|yaml]',
     );
   }
 
   const purpose = await loadPurpose(inputPath);
   const entities = extractEntities(purpose);
-  const pool = buildCandidatePool(buildSqlAttackPortfolio(entities));
-  const attacks = mode === 'first' ? pool.slice(0, count) : selectDiversePortfolio(pool, count);
+  const pool = buildSqlCandidatePool(buildSqlAttackPortfolio(entities));
+  const attacks =
+    mode === 'first'
+      ? pool.slice(0, count)
+      : mode === 'semantic'
+        ? selectSemanticBandAwareSqlPortfolio(pool, count)
+        : selectDiverseSqlPortfolio(pool, count);
 
   if (format === 'yaml') {
     console.log(toYaml(attacks, purpose));
@@ -137,4 +188,6 @@ async function main() {
   );
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}
