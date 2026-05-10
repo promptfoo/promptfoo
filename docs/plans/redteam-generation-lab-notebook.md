@@ -14031,3 +14031,58 @@ Make the Pareto report more actionable:
    labels may be more useful than a single global tie-breaker.
 3. This may become the seed of an operator-facing benchmark report rather than
    just a research artifact.
+
+## Iteration 195 - 2026-05-10
+
+### Goal
+
+Translate the Pareto diagnostics into operator guidance:
+
+> Can the report suggest the next kind of optimization move without collapsing
+> back into one scalar winner?
+
+### Experiment
+
+1. Reused the same Pareto rows from iteration `194`.
+2. Added a deliberately coarse recommendation policy:
+   - `retain` for nondominated candidates
+   - `retire` for candidates that are weak on both prompt quality and breadth
+   - `expand frontier` for dominated candidates that still miss regimes
+   - `increase conversion` for dominated candidates that already match the best
+     breadth we currently care about
+3. Kept the recommendation beside the underlying Pareto evidence instead of
+   replacing it.
+
+### Results
+
+| Candidate          | Recommendation        | Reading                                                |
+| ------------------ | --------------------- | ------------------------------------------------------ |
+| `legacy-generic`   | `retire`              | behind on prompt quality, breadth, and yield           |
+| `portfolio`        | `retain`              | current nondominated point                             |
+| `family-overfit`   | `expand frontier`     | good construction, but misses one susceptible regime   |
+| `balanced-breadth` | `increase conversion` | breadth is already present; yield is the remaining gap |
+
+### Reflection
+
+1. This is the first artifact in the recent sequence that feels genuinely
+   operator-facing rather than research-only.
+2. The labels are simple, but importantly they do not overwrite the evidence:
+   the recommendation remains auditable against the visible Pareto axes.
+3. The sequence from iterations `191`-`195` now forms a useful ladder:
+   - target diversity
+   - aggregation critique
+   - Pareto report
+   - dominance gaps
+   - action labels
+
+### New Hypotheses
+
+1. The next useful experiment is to package this into a single operator report
+   instead of making readers stitch together five artifacts.
+2. That report should probably include:
+   - current frontier table
+   - recommendation summary
+   - per-regime evidence
+   - known benchmark limitations
+3. Once packaged, we can ask whether the same report template generalizes cleanly
+   to another plugin family.

@@ -95,6 +95,7 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
         leakReadyPromptRate: '0/1',
         meanFailureRateAcrossRegimes: '0%',
         onFrontier: false,
+        recommendation: 'retire',
         regimesWithAnyFailure: '0/3',
         source: 'observed',
       },
@@ -105,6 +106,7 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
         leakReadyPromptRate: '1/1',
         meanFailureRateAcrossRegimes: '67%',
         onFrontier: true,
+        recommendation: 'retain',
         regimesWithAnyFailure: '2/3',
         source: 'observed',
       },
@@ -115,6 +117,7 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
         leakReadyPromptRate: '6/6',
         meanFailureRateAcrossRegimes: '33%',
         onFrontier: false,
+        recommendation: 'expand frontier',
         regimesWithAnyFailure: '1/3',
         source: 'stress-profile',
       },
@@ -125,6 +128,7 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
         leakReadyPromptRate: '6/6',
         meanFailureRateAcrossRegimes: '22%',
         onFrontier: false,
+        recommendation: 'increase conversion',
         regimesWithAnyFailure: '2/3',
         source: 'stress-profile',
       },
@@ -136,9 +140,9 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
       renderPiiSocialTargetRegimeParetoFrontier(outputsByRegime),
     );
 
-    expect(markdown).toContain('| portfolio | observed | 1/1 | 2/3 | 67% | yes | - | - |');
+    expect(markdown).toContain('| portfolio | observed | 1/1 | 2/3 | 67% | yes | - | - | retain |');
     expect(markdown).toContain(
-      '| family-overfit | stress-profile | 6/6 | 1/3 | 33% | no | portfolio | breadth +1, yield +33pp |',
+      '| family-overfit | stress-profile | 6/6 | 1/3 | 33% | no | portfolio | breadth +1, yield +33pp | expand frontier |',
     );
   });
 });
