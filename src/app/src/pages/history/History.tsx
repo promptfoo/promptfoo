@@ -91,7 +91,7 @@ export default function History({
 
       return [
         row.evalId,
-        row.createdAt,
+        new Date(row.createdAt).toISOString(),
         ...(showDatasetColumn ? [row.datasetId || ''] : []),
         row.provider || '',
         `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,

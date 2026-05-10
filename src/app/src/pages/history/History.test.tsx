@@ -1,6 +1,8 @@
+import { mockObjectUrl, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import History from './History';
 import type { StandaloneEval } from '@promptfoo/util/database';
 
@@ -64,6 +66,11 @@ const mockData: StandaloneEval[] = [
 ];
 
 describe('History', () => {
+  afterEach(() => {
+    restoreBrowserMocks();
+    vi.restoreAllMocks();
+  });
+
   it('should render a DataGrid with all expected columns and rows when provided with a non-empty data array', () => {
     render(
       <MemoryRouter>
@@ -127,6 +134,24 @@ describe('History', () => {
     const rows = screen.getAllByRole('row');
     expect(rows[1]).toHaveTextContent('eval-2024-01-02');
     expect(rows[2]).toHaveTextContent('eval-2024-01-01');
+  });
+
+  it('should export created timestamps as ISO strings in CSV output', async () => {
+    const user = userEvent.setup();
+    const { createObjectURL } = mockObjectUrl('blob:history-test');
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    render(
+      <MemoryRouter>
+        <History data={mockData} isLoading={false} error={null} showDatasetColumn={true} />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Export' }));
+    await user.click(screen.getByText('Export CSV'));
+
+    const [blob] = createObjectURL.mock.calls[0] as [Blob];
+    await expect(blob.text()).resolves.toContain('2024-01-02T00:00:00.000Z');
   });
 
   it('should display the loading overlay when isLoading is true', () => {
