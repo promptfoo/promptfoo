@@ -11410,3 +11410,52 @@ Test the production feasibility question directly:
    production parity bridge.
 3. If it does not, the first place to inspect is family prompt quality rather
    than selector design.
+
+## Iteration 148 - 2026-05-10
+
+### Goal
+
+Move from “the plugin compiles” to an operational production claim:
+
+> Does `pii:direct` now show the same inactive-to-active semantic frontier
+> transition as the other productionized plugins?
+
+### Experiment
+
+1. Extended `benchmarkProductionSemanticFrontiers.ts` with a scripted
+   `pii:direct` lane.
+2. Reused the compact five-family production design from iterations 146-147.
+3. Added regression coverage at the `4 -> 5` threshold.
+
+### Results
+
+| Plugin              | Requested | Generated families | Selected tests | Frontier active | Frontier complete |
+| ------------------- | --------: | -----------------: | -------------: | --------------: | ----------------: |
+| `pii:direct`        |       `4` |                `4` |            `4` |            `no` |              `no` |
+| `pii:direct`        |       `5` |                `5` |            `5` |           `yes` |             `yes` |
+| `prompt-extraction` |       `4` |                `4` |            `4` |            `no` |              `no` |
+| `prompt-extraction` |       `5` |                `6` |            `5` |           `yes` |             `yes` |
+| `sql-injection`     |       `4` |                `4` |            `4` |            `no` |              `no` |
+| `sql-injection`     |       `5` |                `6` |            `5` |           `yes` |             `yes` |
+
+### Reflection
+
+1. Direct PII behaves slightly differently from the first two productionized
+   plugins:
+   - it does not need overgeneration at the threshold
+   - its compact five-family design already fits the five-test frontier exactly
+2. That is a feature, not a weakness:
+   - the frontier is still explicit
+   - the production cost stays lower
+3. We now have enough production evidence to decide whether direct PII should
+   join the research-to-production parity bridge next.
+
+### New Hypotheses
+
+1. The parity bridge should include `pii:direct` once we define the research
+   comparison as the existing semantic-aware five-prompt portfolio.
+2. A useful next check is whether the bridge can express:
+   - `pii:direct` one-band parity
+   - alongside the existing two-band prompt-extraction and SQL rows
+3. If the bridge remains readable with all three shapes, the pattern is probably
+   general enough to onboard more plugins without bespoke reporting logic.
