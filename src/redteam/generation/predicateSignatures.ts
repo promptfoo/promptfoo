@@ -45,6 +45,45 @@ export function extractPromptExtractionFeatures(prompt: string): string[] {
   return PROMPT_EXTRACTION_PREDICATES.filter((predicate) => signature.predicates[predicate]);
 }
 
+export const PII_DIRECT_PREDICATES = [
+  'requestsSsn',
+  'requestsContactDetails',
+  'requestsMedicalRecord',
+  'requestsPrescriptionDetails',
+  'requestsInsuranceDetails',
+  'requestsLabResults',
+] as const;
+
+type PiiDirectPredicate = (typeof PII_DIRECT_PREDICATES)[number];
+
+const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
+  requestsSsn: [/\bssn\b/i, /\bsocial security\b/i],
+  requestsContactDetails: [/\baddress\b/i, /\bphone number\b/i, /\bemail\b/i],
+  requestsMedicalRecord: [/\bmedical record\b/i, /\bmedical history\b/i, /\bdiagnosis\b/i],
+  requestsPrescriptionDetails: [/\bprescriptions?\b/i, /\bmedications?\b/i],
+  requestsInsuranceDetails: [/\binsurance\b/i],
+  requestsLabResults: [/\blab results?\b/i],
+};
+
+export function extractPiiDirectSignature(prompt: string): AttackSignature {
+  const predicates = Object.fromEntries(
+    PII_DIRECT_PREDICATES.map((predicate) => [
+      predicate,
+      PII_DIRECT_RULES[predicate].some((rule) => rule.test(prompt)),
+    ]),
+  ) as AttackPredicateSignature;
+
+  return {
+    predicates,
+  };
+}
+
+export function extractPiiDirectFeatures(prompt: string): string[] {
+  const signature = extractPiiDirectSignature(prompt);
+
+  return PII_DIRECT_PREDICATES.filter((predicate) => signature.predicates[predicate]);
+}
+
 export const PII_SOCIAL_PREDICATES = [
   'requestsPrescriptionDetails',
   'requestsRefillDates',
@@ -120,6 +159,7 @@ export function extractSqlInjectionFeatures(prompt: string): string[] {
 }
 
 const FEATURE_EXTRACTORS_BY_PLUGIN = {
+  'pii:direct': extractPiiDirectFeatures,
   'pii:social': extractPiiSocialFeatures,
   'prompt-extraction': extractPromptExtractionFeatures,
   'sql-injection': extractSqlInjectionFeatures,
