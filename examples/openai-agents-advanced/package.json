@@ -1,0 +1,12 @@
+{
+  "name": "@promptfoo/openai-agents-advanced-example",
+  "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
+  "description": "Advanced OpenAI Agents SDK TypeScript example with sessions, sandbox agents, skills, and tracing",
+  "type": "module",
+  "dependencies": {
+    "@openai/agents": "^0.9.0",
+    "zod": "^4.3.6"
+  }
+}

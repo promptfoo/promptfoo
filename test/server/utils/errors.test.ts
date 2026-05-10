@@ -199,6 +199,29 @@ describe('server/utils/errors', () => {
       expect(status).toHaveBeenCalledWith(500);
     });
 
+    it('caps long Error.cause chains before serializing unbounded logger context', () => {
+      const { res } = createResponseMock();
+      const chain = Array.from({ length: 6 }, (_, index) => {
+        const err = new Error(`level-${index}`) as Error & { cause?: unknown };
+        err.stack = `Error: level-${index}\n    at level${index}`;
+        return err;
+      });
+      for (let i = 0; i < chain.length - 1; i++) {
+        chain[i].cause = chain[i + 1];
+      }
+
+      sendError(res, 500, 'Failed', chain[0]);
+
+      const [, context] = (logger.error as unknown as Mock).mock.calls[0];
+      const cappedCause = (
+        context as {
+          error: { cause: { cause: { cause: { cause: unknown } } } };
+        }
+      ).error.cause.cause.cause.cause;
+      expect(cappedCause).toEqual({ name: 'Error', message: 'level-4' });
+      expect(JSON.stringify(context)).not.toContain('level-5');
+    });
+
     it('falls back to a hand-built envelope if ErrorResponseSchema.parse throws', async () => {
       // Force the schema parse to throw, simulating a future tightening that
       // rejects what `sendError` produces. Without the safeRespond fallback,

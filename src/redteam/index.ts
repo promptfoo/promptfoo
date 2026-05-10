@@ -413,13 +413,25 @@ function getPluginLanguageCount(
   return Array.isArray(pluginLanguageConfig) ? pluginLanguageConfig.length : 1;
 }
 
+// Cache resolved intent counts per plugin instance. Resolving `file://`
+// intent lists requires disk I/O + parsing; `getExpectedPluginTestCount` is
+// invoked many times per run (totals, logging, progress, reporting), so we
+// memoize on the plugin object identity to avoid redundant reads.
+const intentTestCountCache = new WeakMap<object, number>();
+
 function getIntentTestCount(plugin: SynthesizeOptions['plugins'][number]): number | undefined {
   if (plugin.id !== 'intent') {
     return undefined;
   }
 
+  const cached = intentTestCountCache.get(plugin as object);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const intent = plugin.config?.intent;
   if (!intent) {
+    intentTestCountCache.set(plugin as object, 0);
     return 0;
   }
 
@@ -429,11 +441,16 @@ function getIntentTestCount(plugin: SynthesizeOptions['plugins'][number]): numbe
   let resolved: unknown;
   try {
     resolved = maybeLoadFromExternalFile(intent as string | object);
-  } catch {
+  } catch (err) {
+    logger.debug(
+      `[redteam] Failed to resolve intent file for pre-generation count; treating as a single intent. Run-time count from IntentPlugin will be authoritative. Error: ${err instanceof Error ? err.message : String(err)}`,
+    );
     resolved = intent;
   }
 
-  return Array.isArray(resolved) ? resolved.length : 1;
+  const count = Array.isArray(resolved) ? resolved.length : 1;
+  intentTestCountCache.set(plugin as object, count);
+  return count;
 }
 
 function getExpectedPluginTestCount(
