@@ -12926,3 +12926,49 @@ benefited from one lucky draw.
      compressing
    - the next useful experiment should compare quality lift against generation
      latency/cost so the policy choice is explicit rather than accidental
+
+## Iteration 174 - 2026-05-10
+
+### Goal
+
+Quantify the quality-versus-generation-work tradeoff introduced by semantic
+low-budget planning.
+
+### Experiment
+
+1. Built a scripted `pii:social` benchmark with identical family outputs under:
+   - the frozen pre-172 declaration-order policy
+   - the current semantic low-budget policy
+2. Counted:
+   - generated family count
+   - generator prompts requested
+   - retained shared coverage
+3. Swept `n=1..6` so the tiny-budget region could be compared against the normal
+   six-test frontier threshold.
+
+### Results
+
+| Requested tests | Legacy work | Semantic work | Legacy coverage | Semantic coverage |
+| --------------- | ----------: | ------------: | --------------: | ----------------: |
+| `1`             |         `2` |          `12` |           `2/8` |             `4/8` |
+| `2`             |         `4` |          `12` |           `4/8` |             `7/8` |
+| `3`             |         `6` |          `12` |           `8/8` |             `8/8` |
+| `4`             |         `8` |          `12` |           `8/8` |             `8/8` |
+| `5`             |        `10` |          `12` |           `8/8` |             `8/8` |
+| `6`             |        `12` |          `12` |           `8/8` |             `8/8` |
+
+### Reflection
+
+1. The semantic low-budget path is a real quality purchase at the two smallest
+   budgets:
+   - `n=1` gains `+2` predicates for `+10` requested generator prompts
+   - `n=2` gains `+3` predicates for `+8` requested generator prompts
+2. On this scripted corpus, the shared frontier is already saturated by `n=3`:
+   - the semantic path still spends the full six-family sweep
+   - but it buys no extra shared coverage from `n=3..5`
+3. That suggests the next refinement should not be “semantic planning on” versus
+   “semantic planning off”:
+   - it should ask whether low-budget frontier expansion can stop once a target
+     semantic coverage profile is satisfied
+   - or whether plugins need a separate tiny-budget policy from their full
+     compression policy
