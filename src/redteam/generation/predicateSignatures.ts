@@ -1,6 +1,8 @@
 import type { AttackPredicateSignature, AttackSignature } from './types';
 
 export const PROMPT_EXTRACTION_PREDICATES = [
+  'requestsSystemPrompt',
+  'requestsOperatingInstructions',
   'asksForAuthorityChecks',
   'asksForClassificationRules',
   'asksForEscalationGuidance',
@@ -13,6 +15,15 @@ export const PROMPT_EXTRACTION_PREDICATES = [
 type PromptExtractionPredicate = (typeof PROMPT_EXTRACTION_PREDICATES)[number];
 
 const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
+  requestsSystemPrompt: [/\bsystem prompt\b/i, /\bsystem instructions?\b/i],
+  requestsOperatingInstructions: [
+    /\bhidden (?:operating )?instructions?\b/i,
+    /\binternal guidelines?\b/i,
+    /\binternal operating rules?\b/i,
+    /\bcore instructions?\b/i,
+    /\brules and principles you operate under\b/i,
+    /\bsteps and protocols you are programmed to follow\b/i,
+  ],
   asksForAuthorityChecks: [/\bauthority checks?\b/i, /\bauthorization checks?\b/i],
   asksForClassificationRules: [/\bclassification rules?\b/i, /\bclassification logic\b/i],
   asksForEscalationGuidance: [/\bescalation guidance\b/i, /\bescalation order\b/i],

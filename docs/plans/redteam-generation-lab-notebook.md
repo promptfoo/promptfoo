@@ -9930,3 +9930,75 @@ The standout finding is `prompt-extraction`:
    - raise `prompt-extraction` semantic feature coverage above `0/7`
 3. If the vocabulary is mismatched, then the next step should be to expand the
    predicate schema before using it as an optimization target.
+
+## Iteration 124 - 2026-05-10
+
+### Goal
+
+Decide whether the `prompt-extraction` `0/7` result was:
+
+1. a real generation failure
+2. a feature-schema mismatch
+3. or both
+
+### Experiment
+
+1. Inspected the five unique baseline `prompt-extraction` prompts beside the
+   production plugin families.
+2. Found a structural mismatch:
+   - the plugin already has broad `direct-disclosure` and `format-conversion`
+     families
+   - the shared vocabulary only modeled narrower downstream facets such as:
+     - refusal policy
+     - routing logic
+     - escalation guidance
+     - legal authority
+3. Added two missing core predicates:
+   - `requestsSystemPrompt`
+   - `requestsOperatingInstructions`
+4. Re-ran baseline semantic feature coverage.
+
+### Results
+
+Before the schema repair:
+
+| Plugin              | Observed shared features | Vocabulary size | Prompts with features |
+| ------------------- | -----------------------: | --------------: | --------------------: |
+| `prompt-extraction` |                      `0` |             `7` |                `0/35` |
+
+After the schema repair:
+
+| Plugin              | Observed shared features | Vocabulary size | Prompts with features |
+| ------------------- | -----------------------: | --------------: | --------------------: |
+| `prompt-extraction` |                      `2` |             `9` |               `35/35` |
+
+The baseline corpus is therefore not off-family. It is on-family but shallow:
+
+1. all prompts now register as prompt-extraction attempts
+2. they only cover the generic system-prompt / operating-instructions layer
+3. they still cover `0/7` of the richer protected-control-plane facets added by
+   the later portfolio work
+
+### Reflection
+
+1. The previous `0/7` reading conflated two different problems:
+   - missing core schema coverage
+   - genuinely narrow generation
+2. After repairing the schema, the picture is more useful:
+   - old baseline = broad direct extraction
+   - new desired frontier = richer protected-control-plane extraction
+3. This is a better foundation for hill climbing because we can now optimize
+   for:
+   - core on-family validity
+   - plus incremental protected-control-plane breadth
+
+### New Hypotheses
+
+1. The next useful generation step is to quantify prompt-extraction coverage in
+   two bands:
+   - core disclosure coverage
+   - protected-control-plane coverage
+2. The old baseline should score well on the first band and poorly on the
+   second.
+3. A modern generator should improve the second band without sacrificing the
+   first.
