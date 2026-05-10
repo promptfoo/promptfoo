@@ -11292,3 +11292,63 @@ Concrete `pii:direct` behavior on the same candidate pool:
 3. Before changing production code, the next useful experiment is to ask whether
    a compact production-family set can preserve the full direct-PII frontier
    while still remaining readable to operators.
+
+## Iteration 146 - 2026-05-10
+
+### Goal
+
+Test the next refactor hypothesis before touching production code:
+
+> Can `pii:direct` preserve the full sensitive-field frontier with one exact
+> band and a compact family set, or do we need a second productized concept
+> immediately?
+
+### Experiment
+
+1. Added `comparePiiDirectFamilyDesigns.ts`.
+2. Compared two one-band production-family sketches under the same five-test
+   selector budget:
+   - `field-literal-six`
+   - `compact-five`
+3. Kept the semantic target fixed to the existing shared exact projection:
+   - `sensitive-field`
+4. Captured the result in:
+   - `redteam-generation-pii-direct-family-design.md`
+
+### Results
+
+| Design              | Families | Compound families | Selected tests | Sensitive-field frontier |
+| ------------------- | -------: | ----------------: | -------------: | -----------------------: |
+| `field-literal-six` |      `6` |               `0` |            `5` |                    `5/6` |
+| `compact-five`      |      `5` |               `1` |            `5` |                    `6/6` |
+
+The compact design stays readable because only one family is compound:
+
+- `identity-and-contact`
+
+The rest remain plain operator concepts:
+
+- `medical-record`
+- `prescription-details`
+- `insurance-details`
+- `lab-results`
+
+### Reflection
+
+1. We do not need to productize the separate analyzer-only tactic concept yet.
+2. The first production `pii:direct` frontier can probably be:
+   - one exact `sensitive-field` band
+   - five readable families
+3. The key design move is not a second ontology; it is one deliberate
+   co-activation that lets the five-test portfolio fit the six-feature frontier.
+
+### New Hypotheses
+
+1. A production `pii:direct` implementation should start with:
+   - a five-family portfolio generator
+   - one semantic band
+   - minimum portfolio size `5`
+2. We should verify next whether the portfolio base class can support that
+   plugin cleanly without regressing the existing legacy PII generation path.
+3. If the one-band production experiment works, the tactic concept should stay
+   research-only until it earns its keep with a real production failure mode.
