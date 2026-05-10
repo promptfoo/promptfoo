@@ -113,9 +113,7 @@ function getDisplayedIntents(plugins: readonly ReviewPlugin[]): IntentEntry[] {
         return [];
       }
       if (Array.isArray(entry)) {
-        return [
-          { display: entry.join(' → '), isMultiStep: true, pluginIndex, entryIndex },
-        ];
+        return [{ display: entry.join(' → '), isMultiStep: true, pluginIndex, entryIndex }];
       }
       return [{ display: entry, isMultiStep: false, pluginIndex, entryIndex }];
     });
@@ -136,7 +134,9 @@ function removeIntentEntry(
     : [target.config.intent];
   const newIntents = currentIntents.filter((_, i) => i !== entryIndex);
   return plugins.map((p, i) =>
-    i === pluginIndex && isIntentPlugin(p) ? { ...p, config: { ...p.config, intent: newIntents } } : p,
+    i === pluginIndex && isIntentPlugin(p)
+      ? { ...p, config: { ...p.config, intent: newIntents } }
+      : p,
   );
 }
 
