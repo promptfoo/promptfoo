@@ -5,7 +5,7 @@ import { getShortPluginId } from '../util';
 import { buildBalancedAttackPlan, selectCoverageAwareCandidates } from './selection';
 
 import type { TestCase } from '../../types/index';
-import type { AttackCandidate, AttackFamily, AttackSignature } from './types';
+import type { AttackCandidate, AttackFamily, AttackPlan, AttackSignature } from './types';
 
 export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   protected abstract readonly attackFamilies: readonly AttackFamily[];
@@ -24,6 +24,17 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
   protected getMaxFamilyRepairAttempts(): number {
     return 1;
+  }
+
+  protected buildAttackPlan(requestedCount: number): AttackPlan {
+    return buildBalancedAttackPlan(this.attackFamilies, requestedCount);
+  }
+
+  protected selectPortfolioCandidates(
+    candidates: readonly AttackCandidate[],
+    requestedCount: number,
+  ): AttackCandidate[] {
+    return selectCoverageAwareCandidates(candidates, requestedCount);
   }
 
   protected async getFamilyRepairTemplate(
@@ -60,7 +71,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       return super.generateTests(n, delayMs);
     }
 
-    const plan = buildBalancedAttackPlan(this.attackFamilies, n);
+    const plan = this.buildAttackPlan(n);
     const candidates: AttackCandidate[] = [];
 
     for (const family of plan.families) {
@@ -135,7 +146,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       );
     }
 
-    const selected = selectCoverageAwareCandidates(candidates, n);
+    const selected = this.selectPortfolioCandidates(candidates, n);
     if (selected.length !== n) {
       logger.warn(
         `${this.constructor.name} selected ${selected.length}/${n} portfolio candidates after coverage-aware selection`,

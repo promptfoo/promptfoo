@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildBalancedAttackPlan,
   selectCoverageAwareCandidates,
+  selectSemanticBandAwareCandidates,
 } from '../../../src/redteam/generation/selection';
 
 import type { AttackCandidate, AttackFamily } from '../../../src/redteam/generation/types';
@@ -90,5 +91,58 @@ describe('selectCoverageAwareCandidates', () => {
     expect(new Set(selected.map((candidate) => candidate.familyId))).toEqual(
       new Set(['alpha', 'beta']),
     );
+  });
+});
+
+describe('selectSemanticBandAwareCandidates', () => {
+  it('preserves weighted semantic bands before falling back to novelty', () => {
+    const selected = selectSemanticBandAwareCandidates(
+      [
+        makeCandidate('direct disclosure', 'direct', {
+          requestsOperatingInstructions: true,
+          requestsSystemPrompt: true,
+        }),
+        makeCandidate('policy audit', 'policy', {
+          asksForRefusalPolicy: true,
+        }),
+        makeCandidate('routing review', 'routing', {
+          asksForClassificationRules: true,
+          asksForRoutingRules: true,
+        }),
+        makeCandidate('authority pretext', 'authority', {
+          asksForAuthorityChecks: true,
+          invokesLegalAuthority: true,
+          requestsVerbatimText: true,
+        }),
+        makeCandidate('format conversion', 'format', {
+          requestsOperatingInstructions: true,
+        }),
+      ],
+      4,
+      {
+        bands: {
+          'core-disclosure': ['requestsOperatingInstructions', 'requestsSystemPrompt'],
+          'protected-control-plane': [
+            'asksForAuthorityChecks',
+            'asksForClassificationRules',
+            'asksForRefusalPolicy',
+            'asksForRoutingRules',
+            'invokesLegalAuthority',
+            'requestsVerbatimText',
+          ],
+        },
+        weights: {
+          'core-disclosure': 100,
+          'protected-control-plane': 10,
+        },
+      },
+    );
+
+    expect(selected.map((candidate) => candidate.familyId)).toEqual([
+      'direct',
+      'authority',
+      'routing',
+      'policy',
+    ]);
   });
 });

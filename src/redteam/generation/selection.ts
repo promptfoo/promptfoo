@@ -1,5 +1,10 @@
 import type { AttackCandidate, AttackFamily, AttackPlan } from './types';
 
+export type SemanticBandSelectionConfig = {
+  bands: Record<string, readonly string[]>;
+  weights: Record<string, number>;
+};
+
 function normalizePrompt(prompt: string): string {
   return prompt.toLowerCase().replace(/\s+/g, ' ').trim();
 }
@@ -68,6 +73,18 @@ function compareCandidates(
   return left.prompt.localeCompare(right.prompt);
 }
 
+function dedupeCandidatesByPrompt(candidates: readonly AttackCandidate[]): AttackCandidate[] {
+  const dedupedByPrompt = new Map<string, AttackCandidate>();
+  for (const candidate of candidates) {
+    const key = normalizePrompt(candidate.prompt);
+    if (!dedupedByPrompt.has(key)) {
+      dedupedByPrompt.set(key, candidate);
+    }
+  }
+
+  return [...dedupedByPrompt.values()];
+}
+
 export function buildBalancedAttackPlan(
   families: readonly AttackFamily[],
   requestedCount: number,
@@ -104,15 +121,7 @@ export function selectCoverageAwareCandidates(
     return [];
   }
 
-  const dedupedByPrompt = new Map<string, AttackCandidate>();
-  for (const candidate of candidates) {
-    const key = normalizePrompt(candidate.prompt);
-    if (!dedupedByPrompt.has(key)) {
-      dedupedByPrompt.set(key, candidate);
-    }
-  }
-
-  const deduped = [...dedupedByPrompt.values()];
+  const deduped = dedupeCandidatesByPrompt(candidates);
   const byCell = new Map<string, AttackCandidate[]>();
   const byFamily = new Map<string, AttackCandidate[]>();
   for (const candidate of deduped) {
@@ -173,6 +182,80 @@ export function selectCoverageAwareCandidates(
     if (!next) {
       break;
     }
+    selected.push(next);
+  }
+
+  return selected;
+}
+
+function getSemanticBandGain(
+  candidate: AttackCandidate,
+  selected: readonly AttackCandidate[],
+  config: SemanticBandSelectionConfig,
+): number {
+  const selectedPredicates = new Set(
+    selected.flatMap((item) =>
+      Object.entries(item.signature.predicates)
+        .filter(([, enabled]) => enabled)
+        .map(([predicate]) => predicate),
+    ),
+  );
+
+  return Object.entries(config.bands).reduce((score, [bandId, predicates]) => {
+    const newlyCoveredPredicates = predicates.filter(
+      (predicate) =>
+        candidate.signature.predicates[predicate] === true && !selectedPredicates.has(predicate),
+    ).length;
+
+    return score + newlyCoveredPredicates * (config.weights[bandId] ?? 1);
+  }, 0);
+}
+
+function getFamilyCoverageGain(
+  candidate: AttackCandidate,
+  selected: readonly AttackCandidate[],
+): number {
+  return selected.some(
+    (item) => item.pluginId === candidate.pluginId && item.familyId === candidate.familyId,
+  )
+    ? 0
+    : 1;
+}
+
+export function selectSemanticBandAwareCandidates(
+  candidates: readonly AttackCandidate[],
+  requestedCount: number,
+  config: SemanticBandSelectionConfig,
+): AttackCandidate[] {
+  if (requestedCount <= 0) {
+    return [];
+  }
+
+  const remaining = dedupeCandidatesByPrompt(candidates);
+  const selected: AttackCandidate[] = [];
+
+  while (selected.length < requestedCount && remaining.length > 0) {
+    remaining.sort((left, right) => {
+      const semanticDelta =
+        getSemanticBandGain(right, selected, config) - getSemanticBandGain(left, selected, config);
+      if (semanticDelta !== 0) {
+        return semanticDelta;
+      }
+
+      const familyCoverageDelta =
+        getFamilyCoverageGain(right, selected) - getFamilyCoverageGain(left, selected);
+      if (familyCoverageDelta !== 0) {
+        return familyCoverageDelta;
+      }
+
+      return compareCandidates(left, right, selected);
+    });
+
+    const next = remaining.shift();
+    if (!next) {
+      break;
+    }
+
     selected.push(next);
   }
 

@@ -10816,3 +10816,72 @@ The refactor preserves both checked-in artifacts exactly:
 3. Prompt extraction is the safest first production target because:
    - it already has contract-backed families
    - it already demonstrated a real selection regression
+
+## Iteration 139 - 2026-05-10
+
+### Goal
+
+Move the strongest selector lesson out of research-only code:
+
+> Can the production prompt-extraction generator preserve the full semantic
+> frontier when a user asks for five attacks instead of six?
+
+### Experiment
+
+1. Added production portfolio hooks for:
+   - custom attack plans
+   - custom final candidate selection
+2. Added a reusable semantic-band-aware production selector with:
+   - weighted new-band gain
+   - family-coverage tie-breaking
+   - novelty fallback
+3. Updated `PromptExtractionPlugin` so that:
+   - requests below the feasible full-frontier size keep the old cheaper plan
+   - requests of `5+` overgenerate all six semantic families before compression
+   - final selection prioritizes:
+     - `core-disclosure`
+     - then `protected-control-plane`
+4. Added regression coverage for:
+   - generic weighted band selection
+   - the real production `6 -> 5` prompt-extraction compression path
+
+### Results
+
+The production path now preserves the same frontier the research harness found:
+
+| Request size | Family generation plan | Selected tests | Core disclosure | Protected control plane |
+| ------------ | ---------------------- | -------------: | --------------: | ----------------------: |
+| `3`          | old cheap plan         |            `3` |       unchanged |               unchanged |
+| `5`          | all `6` families       |            `5` |           `2/2` |                   `7/7` |
+
+The five selected families are:
+
+1. `direct-disclosure`
+2. `policy-audit`
+3. `routing-review`
+4. `escalation-review`
+5. `authority-pretext`
+
+### Reflection
+
+1. The production bug was partly a planning bug:
+   - if a family is never generated
+   - no downstream selector can recover its predicates
+2. The right bridge is selective, not maximalist:
+   - preserve the cheap small-`n` path
+   - overgenerate only once the requested size can actually fit the frontier
+3. This is a stronger production pattern than the research-only greedy loop:
+   - family generation establishes candidate availability
+   - semantic selection decides which families survive compression
+
+### New Hypotheses
+
+1. SQL injection is the next candidate for the same production bridge:
+   - current pools happen to survive diversity-only selection
+   - perturbed pools already showed the abstraction matters
+2. We should add an explicit production benchmark for:
+   - requested count
+   - generated family count
+   - frontier coverage after compression
+3. The long-term API may want a plugin-declared frontier target rather than
+   hand-written `5+` logic in each plugin.

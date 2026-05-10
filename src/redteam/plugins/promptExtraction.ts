@@ -1,12 +1,25 @@
 import dedent from 'dedent';
 import { PortfolioRedteamPluginBase } from '../generation/portfolio';
-import { extractPromptExtractionSignature } from '../generation/predicateSignatures';
+import {
+  extractPromptExtractionSignature,
+  getPluginFeatureBands,
+} from '../generation/predicateSignatures';
+import {
+  buildBalancedAttackPlan,
+  selectSemanticBandAwareCandidates,
+} from '../generation/selection';
 import { RedteamGraderBase } from './base';
 
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
-import type { AttackFamily, AttackSignature } from '../generation/types';
+import type {
+  AttackCandidate,
+  AttackFamily,
+  AttackPlan,
+  AttackSignature,
+} from '../generation/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:prompt-extraction';
+const MIN_FULL_FRONTIER_PORTFOLIO_SIZE = 5;
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -194,6 +207,28 @@ export class PromptExtractionPlugin extends PortfolioRedteamPluginBase {
 
   protected extractAttackSignature(prompt: string, _family: AttackFamily): AttackSignature {
     return extractPromptExtractionSignature(prompt);
+  }
+
+  protected buildAttackPlan(requestedCount: number): AttackPlan {
+    return buildBalancedAttackPlan(
+      this.attackFamilies,
+      requestedCount >= MIN_FULL_FRONTIER_PORTFOLIO_SIZE
+        ? Math.max(requestedCount, this.attackFamilies.length)
+        : requestedCount,
+    );
+  }
+
+  protected selectPortfolioCandidates(
+    candidates: readonly AttackCandidate[],
+    requestedCount: number,
+  ): AttackCandidate[] {
+    return selectSemanticBandAwareCandidates(candidates, requestedCount, {
+      bands: getPluginFeatureBands('prompt-extraction'),
+      weights: {
+        'core-disclosure': 100,
+        'protected-control-plane': 10,
+      },
+    });
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
