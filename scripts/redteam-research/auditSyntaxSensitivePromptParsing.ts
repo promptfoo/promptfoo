@@ -6,6 +6,7 @@ import { extractSqlInjectionFeatures } from '../../src/redteam/generation/predic
 import {
   classifyPromptDriftSeverity,
   type DriftSeverity,
+  diffActivePredicates,
 } from '../../src/redteam/generation/promptParsingQuality';
 import { parseGeneratedPrompts } from '../../src/redteam/plugins/multiInputFormat';
 
@@ -46,9 +47,12 @@ type EmpiricalRedteamFile = {
 type EmpiricalPromptAudit = {
   changedPromptCount: number;
   changedPromptFeatureAudits: {
+    currentPredicates: string[];
     currentPrompt: string;
     expectedFeatures: string[];
+    legacyPredicates: string[];
     legacyPrompt: string;
+    lostPredicates: string[];
     severity: DriftSeverity;
   }[];
   exactPreservedPromptCount: number;
@@ -278,6 +282,14 @@ function extractEmpiricalFeatures(pluginId: string, prompt: string): string[] {
   return [];
 }
 
+function extractEmpiricalPredicates(pluginId: string, prompt: string): string[] {
+  if (pluginId === 'sql-injection') {
+    return extractSqlInjectionFeatures(prompt);
+  }
+
+  return [];
+}
+
 function auditEmpiricalPromptSet(
   pluginId: string,
   prompts: readonly string[],
@@ -297,8 +309,13 @@ function auditEmpiricalPromptSet(
   const featureAudits = prompts.map((currentPrompt, index) => {
     const expectedFeatures = extractEmpiricalFeatures(pluginId, currentPrompt);
     const legacyPrompt = legacyPrompts[index] ?? '';
+    const predicateDelta = diffActivePredicates(
+      extractEmpiricalPredicates(pluginId, currentPrompt),
+      extractEmpiricalPredicates(pluginId, legacyPrompt),
+    );
 
     return {
+      ...predicateDelta,
       currentPrompt,
       expectedFeatures,
       legacyPrompt,

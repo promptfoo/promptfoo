@@ -10,6 +10,12 @@ export type PromptDriftSeverityInput = {
   legacyPrompt: string;
 };
 
+export type PredicateSignatureDelta = {
+  currentPredicates: string[];
+  legacyPredicates: string[];
+  lostPredicates: string[];
+};
+
 export function classifyPromptDriftSeverity({
   currentPrompt,
   expectedFeatures,
@@ -31,4 +37,17 @@ export function classifyPromptDriftSeverity({
   }
 
   return 'benign-rewrite';
+}
+
+export function diffActivePredicates(
+  currentPredicates: readonly string[],
+  legacyPredicates: readonly string[],
+): PredicateSignatureDelta {
+  const legacyPredicateSet = new Set(legacyPredicates);
+
+  return {
+    currentPredicates: [...currentPredicates],
+    legacyPredicates: [...legacyPredicates],
+    lostPredicates: currentPredicates.filter((predicate) => !legacyPredicateSet.has(predicate)),
+  };
 }

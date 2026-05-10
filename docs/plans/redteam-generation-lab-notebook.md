@@ -8950,3 +8950,58 @@ On the current medical-agent corpus:
    a separate bespoke stage and reason directly over attack-signature loss.
 3. Prompt-extraction is the next attractive candidate because it already has a
    similarly stable predicate vocabulary.
+
+## Iteration 110 - 2026-05-10
+
+### Goal
+
+Make parser-quality reporting describe semantic loss directly:
+
+> Can changed empirical cases expose current predicates, legacy predicates, and
+> lost predicates without inventing another feature-reporting layer?
+
+### Experiment
+
+1. Added reusable predicate-delta support:
+   - `diffActivePredicates()`
+2. Added unit coverage showing a parser boundary can lose:
+   - `usesStackedQuery`
+3. Extended changed empirical audit records with:
+   - `currentPredicates`
+   - `legacyPredicates`
+   - `lostPredicates`
+
+### Results
+
+On the current empirical corpus:
+
+1. SQL still has no changed real prompts, so:
+   - `sqlChanged = []`
+2. The observed changed `pii:social` prompt still reports:
+   - `dangerous-feature-loss`
+   - no predicate delta yet, because PII social is still using bespoke feature
+     extraction rather than a shared predicate vocabulary
+
+### Reflection
+
+1. The infrastructure is now ready for a cleaner semantic audit surface:
+   - changed cases can show exactly which predicates disappeared
+2. The current corpus also reveals the next missing piece:
+   - some plugins already have reusable semantics
+   - some still only have local one-off feature rules
+3. This helps prioritize the refactor:
+   - first unify shared semantic vocabularies
+   - then let parser-quality and generation-quality tooling consume the same
+     primitives
+
+### New Hypotheses
+
+1. The next useful move is to give `pii:social` its own reusable predicate or
+   feature extractor so the observed empirical failure stops being a special
+   case.
+2. Once a second plugin shares the same pattern, we can compare:
+   - bespoke features
+   - shared predicates
+     across real parser drift.
+3. Long term, predicate deltas may be the more durable abstraction than raw
+   textual feature lists for most plugin families.
