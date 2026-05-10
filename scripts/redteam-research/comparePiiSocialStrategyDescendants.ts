@@ -1,25 +1,9 @@
 import { pathToFileURL } from 'node:url';
-import fs from 'fs/promises';
 
-import yaml from 'js-yaml';
 import { extractPiiSocialFeatures } from '../../src/redteam/generation/predicateSignatures';
 import { buildPiiPortfolio, loadPiiContext } from './piiResearchShared';
+import { buildPiiSocialLegacyRows } from './piiSocialLegacyCorpus';
 import { renderMarkdownTable } from './reportRenderingShared';
-
-type TestCase = {
-  metadata?: {
-    originalText?: unknown;
-    pluginId?: unknown;
-    strategyId?: unknown;
-  };
-  vars?: {
-    prompt?: unknown;
-  };
-};
-
-type RedteamFile = {
-  tests?: TestCase[];
-};
 
 export type PiiSocialStrategyDescendantSummary = {
   ancestorCount: number;
@@ -33,49 +17,25 @@ export type PiiSocialStrategyDescendantComparison = {
   refreshedPrototype: PiiSocialStrategyDescendantSummary[];
 };
 
-function getPrompt(test: TestCase): string | undefined {
-  return typeof test.vars?.prompt === 'string' && test.vars.prompt.length > 0
-    ? test.vars.prompt
-    : undefined;
-}
+function summarizeHistoricalDescendants(): PiiSocialStrategyDescendantSummary[] {
+  const grouped = new Map<string, string[]>();
 
-function getAncestorPrompt(test: TestCase): string | undefined {
-  return typeof test.metadata?.originalText === 'string' && test.metadata.originalText.length > 0
-    ? test.metadata.originalText
-    : getPrompt(test);
-}
-
-async function summarizeLegacyDescendants(
-  inputPath: string,
-): Promise<PiiSocialStrategyDescendantSummary[]> {
-  const raw = await fs.readFile(inputPath, 'utf8');
-  const parsed = yaml.load(raw) as RedteamFile;
-  const grouped = new Map<string, TestCase[]>();
-
-  for (const test of parsed.tests ?? []) {
-    if (test.metadata?.pluginId !== 'pii:social') {
-      continue;
-    }
-
-    const strategyId =
-      typeof test.metadata?.strategyId === 'string' ? test.metadata.strategyId : 'base';
-    const rows = grouped.get(strategyId) ?? [];
-    rows.push(test);
-    grouped.set(strategyId, rows);
+  for (const row of buildPiiSocialLegacyRows()) {
+    const prompts = grouped.get(row.strategyId) ?? [];
+    prompts.push(row.prompt);
+    grouped.set(row.strategyId, prompts);
   }
 
   return [...grouped.entries()]
-    .map(([strategyId, rows]) => {
-      const ancestorPrompts = [
-        ...new Set(rows.map(getAncestorPrompt).filter((prompt): prompt is string => Boolean(prompt))),
-      ];
+    .map(([strategyId, prompts]) => {
+      const ancestorPrompts = [...new Set(prompts)];
 
       return {
         ancestorCount: ancestorPrompts.length,
         featurefulAncestorCount: ancestorPrompts.filter(
           (prompt) => extractPiiSocialFeatures(prompt).length > 0,
         ).length,
-        rowCount: rows.length,
+        rowCount: prompts.length,
         strategyId,
       };
     })
@@ -101,7 +61,7 @@ function summarizeRefreshedPrototype(
 export async function comparePiiSocialStrategyDescendants(
   inputPath = 'examples/redteam-medical-agent/redteam.yaml',
 ): Promise<PiiSocialStrategyDescendantComparison> {
-  const legacy = await summarizeLegacyDescendants(inputPath);
+  const legacy = summarizeHistoricalDescendants();
   const { entities } = await loadPiiContext(inputPath);
   const refreshedPrompts = buildPiiPortfolio(entities, 'pii:social').map((attack) => attack.prompt);
 
@@ -133,12 +93,7 @@ export function renderPiiSocialStrategyDescendantComparisonMarkdown(
     ),
     '',
     ...renderMarkdownTable(
-      [
-        'Strategy',
-        'Refreshed rows',
-        'Refreshed ancestors',
-        'Refreshed featureful ancestors',
-      ],
+      ['Strategy', 'Refreshed rows', 'Refreshed ancestors', 'Refreshed featureful ancestors'],
       comparison.refreshedPrototype.map((summary) => ({
         cells: [
           summary.strategyId,
@@ -151,7 +106,7 @@ export function renderPiiSocialStrategyDescendantComparisonMarkdown(
     '',
     '## Reading',
     '',
-    'Every current strategy context preserves the same five legacy ancestors, and only one of those five ancestors carries shared social evidence. Replacing the base slice with the six-prompt refreshed prototype would therefore improve every descendant context at once: each strategy would inherit six distinct ancestors and all six would stay visible to the shared social layer.',
+    'Every historical strategy context preserved the same five legacy ancestors, and only one of those five ancestors carried shared social evidence. Replacing that slice with the six-prompt refreshed benchmark improves every descendant context at once: each strategy inherits six distinct ancestors and all six stay visible to the shared social layer.',
   ].join('\n');
 }
 

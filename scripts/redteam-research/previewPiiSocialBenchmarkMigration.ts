@@ -1,38 +1,10 @@
 import { pathToFileURL } from 'node:url';
-import fs from 'fs/promises';
 
-import yaml from 'js-yaml';
 import { buildPiiPortfolio, loadPiiContext, type PiiAttack } from './piiResearchShared';
+import { buildPiiSocialLegacyRows } from './piiSocialLegacyCorpus';
 import { renderMarkdownTable } from './reportRenderingShared';
 
-type TestCase = {
-  assert?: unknown[];
-  metadata?: {
-    goal?: unknown;
-    originalText?: unknown;
-    pluginConfig?: unknown;
-    pluginId?: unknown;
-    severity?: unknown;
-    strategyConfig?: unknown;
-    strategyId?: unknown;
-  };
-  provider?: {
-    config?: unknown;
-    id?: unknown;
-  };
-  vars?: {
-    prompt?: unknown;
-  };
-};
-
-type RedteamFile = {
-  tests?: TestCase[];
-};
-
 type StrategyTemplate = {
-  assert?: unknown[];
-  metadata?: Record<string, unknown>;
-  provider?: unknown;
   strategyId: string;
 };
 
@@ -46,41 +18,18 @@ export type PiiSocialBenchmarkMigrationPreview = {
   replacedLegacyPrompts: string[];
 };
 
-function getPrompt(test: TestCase): string | undefined {
-  return typeof test.vars?.prompt === 'string' && test.vars.prompt.length > 0
-    ? test.vars.prompt
-    : undefined;
-}
-
-function getStrategyId(test: TestCase): string {
-  return typeof test.metadata?.strategyId === 'string' ? test.metadata.strategyId : 'base';
-}
-
-async function loadLegacyRows(inputPath: string): Promise<TestCase[]> {
-  const raw = await fs.readFile(inputPath, 'utf8');
-  const parsed = yaml.load(raw) as RedteamFile;
-
-  return (parsed.tests ?? []).filter((test) => test.metadata?.pluginId === 'pii:social');
-}
-
-function buildStrategyTemplates(rows: readonly TestCase[]): StrategyTemplate[] {
+function buildStrategyTemplates(): StrategyTemplate[] {
   const seen = new Set<string>();
   const templates: StrategyTemplate[] = [];
 
-  for (const row of rows) {
-    const strategyId = getStrategyId(row);
+  for (const row of buildPiiSocialLegacyRows()) {
+    const strategyId = row.strategyId;
     if (seen.has(strategyId)) {
       continue;
     }
 
     seen.add(strategyId);
     templates.push({
-      assert: row.assert,
-      metadata:
-        row.metadata && typeof row.metadata === 'object'
-          ? (row.metadata as Record<string, unknown>)
-          : undefined,
-      provider: row.provider,
       strategyId,
     });
   }
@@ -103,17 +52,16 @@ function materializePreviewRows(
 export async function previewPiiSocialBenchmarkMigration(
   inputPath = 'examples/redteam-medical-agent/redteam.yaml',
 ): Promise<PiiSocialBenchmarkMigrationPreview> {
-  const legacyRows = await loadLegacyRows(inputPath);
+  const legacyRows = buildPiiSocialLegacyRows();
   const { entities } = await loadPiiContext(inputPath);
   const refreshedAttacks = buildPiiPortfolio(entities, 'pii:social');
+  const templates = buildStrategyTemplates();
 
   return {
     legacyRows: legacyRows.length,
-    previewRows: refreshedAttacks.length * buildStrategyTemplates(legacyRows).length,
-    refreshedRows: materializePreviewRows(refreshedAttacks, buildStrategyTemplates(legacyRows)),
-    replacedLegacyPrompts: [
-      ...new Set(legacyRows.map(getPrompt).filter((prompt): prompt is string => Boolean(prompt))),
-    ],
+    previewRows: refreshedAttacks.length * templates.length,
+    refreshedRows: materializePreviewRows(refreshedAttacks, templates),
+    replacedLegacyPrompts: [...new Set(legacyRows.map((row) => row.prompt))],
   };
 }
 
@@ -167,9 +115,7 @@ export function renderPiiSocialBenchmarkMigrationPreviewMarkdown(
 
 async function main() {
   console.log(
-    renderPiiSocialBenchmarkMigrationPreviewMarkdown(
-      await previewPiiSocialBenchmarkMigration(),
-    ),
+    renderPiiSocialBenchmarkMigrationPreviewMarkdown(await previewPiiSocialBenchmarkMigration()),
   );
 }
 

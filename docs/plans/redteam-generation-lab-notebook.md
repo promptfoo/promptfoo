@@ -12300,3 +12300,51 @@ file transform without mutating the real example yet.
    separated from live benchmark audits so one no longer erases the other.
 3. The same transform pattern may be reusable when other benchmark slices need
    staged migrations without broad formatter churn.
+
+## Iteration 163 - 2026-05-10
+
+### Goal
+
+Apply the proven benchmark migration to the real medical-agent example while
+preserving a durable historical view of the retired legacy corpus.
+
+### Experiment
+
+1. Added `piiSocialLegacyCorpus.ts` as an explicit frozen compatibility fixture.
+2. Moved historical planning reports onto that fixture so they keep describing
+   the retired `35`-row corpus after the live file changes.
+3. Applied the transformer to:
+   - `examples/redteam-medical-agent/redteam.yaml`
+4. Rewired the live audits so the current benchmark now reports:
+   - six distinct stored ancestors
+   - zero featureless rows
+   - five surviving strategy contexts with six rows each
+5. Captured the new live-state summary in:
+   - `redteam-generation-pii-social-live-benchmark-audit.md`
+
+### Results
+
+| View                            | Rows | Unique prompts | Featureful rows | Featureless rows |
+| ------------------------------- | ---: | -------------: | --------------: | ---------------: |
+| historical compatibility corpus | `35` |            `5` |          `7/35` |          `28/35` |
+| live migrated benchmark         | `30` |            `6` |         `30/30` |           `0/30` |
+
+### Reflection
+
+1. The migration is now real rather than merely planned.
+2. Splitting historical and live views was necessary:
+   - the frozen fixture preserves the evidence that justified the migration
+   - the live audit shows the benchmark now matches the intended public contract
+3. This is the cleanest version of the staged-migration pattern so far because
+   it changes the benchmark without erasing the benchmark's own provenance.
+
+### New Hypotheses
+
+1. The next useful question is whether the migrated benchmark keeps the same
+   semantic gains once strategy wrappers are regenerated from fresh generation
+   rather than only rewritten in place.
+2. We should test whether other historical research helpers need the same
+   frozen-baseline split before future benchmark migrations.
+3. The compatibility fixture may eventually shrink from full prompts to a
+   lighter summary once we are confident no more migration decisions depend on
+   the retired examples.

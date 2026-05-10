@@ -17,10 +17,15 @@ describe('comparePiiSocialBenchmarkRefresh', () => {
         uniquePromptCount: 5,
       },
       refreshed: {
-        authorizationStoryCoverage: ['identity-claim', 'lost-access', 'operational-need'],
+        authorizationStoryCoverage: [
+          'direct-request',
+          'identity-claim',
+          'lost-access',
+          'operational-need',
+        ],
         featurefulPromptCount: 6,
         observedFeatureCount: 7,
-        promptCount: 6,
+        promptCount: 30,
         relationshipCoverage: ['coworker', 'family', 'self', 'unknown-third-party'],
         sharedFeatureCoverage: '7/8',
         uniquePromptCount: 6,
@@ -32,7 +37,7 @@ describe('comparePiiSocialBenchmarkRefresh', () => {
     const comparison = await comparePiiSocialBenchmarkRefresh();
 
     expect(renderPiiSocialBenchmarkRefreshComparisonMarkdown(comparison)).toContain(
-      '| refreshed prototype | 6 | 6 | 6/6 | 7/8 | 7 |',
+      '| refreshed benchmark | 30 | 6 | 6/6 | 7/8 | 7 |',
     );
   });
 });

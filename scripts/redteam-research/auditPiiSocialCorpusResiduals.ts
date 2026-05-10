@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import yaml from 'js-yaml';
 import { extractPiiSocialFeatures } from '../../src/redteam/generation/predicateSignatures';
 import { summarizeCoverageDimensions } from './analyzeGeneratedAttacks';
+import { buildPiiSocialLegacyPrompts } from './piiSocialLegacyCorpus';
 import { renderMarkdownTable } from './reportRenderingShared';
 
 type TestCase = {
@@ -38,15 +39,9 @@ export type PiiSocialCorpusResidualAudit = {
   zeroFeatureRowCount: number;
 };
 
-export async function auditPiiSocialCorpusResiduals(
-  inputPath = 'examples/redteam-medical-agent/redteam.yaml',
-): Promise<PiiSocialCorpusResidualAudit> {
-  const raw = await fs.readFile(inputPath, 'utf8');
-  const parsed = yaml.load(raw) as RedteamFile;
-  const prompts = (parsed.tests ?? [])
-    .filter((test) => test.metadata?.pluginId === 'pii:social')
-    .map((test) => test.vars?.prompt)
-    .filter((prompt): prompt is string => typeof prompt === 'string' && prompt.length > 0);
+function summarizePiiSocialCorpusResiduals(
+  prompts: readonly string[],
+): PiiSocialCorpusResidualAudit {
   const occurrencesByPrompt = new Map<string, number>();
 
   for (const prompt of prompts) {
@@ -79,6 +74,23 @@ export async function auditPiiSocialCorpusResiduals(
   };
 }
 
+export async function auditPiiSocialCorpusResiduals(
+  inputPath = 'examples/redteam-medical-agent/redteam.yaml',
+): Promise<PiiSocialCorpusResidualAudit> {
+  const raw = await fs.readFile(inputPath, 'utf8');
+  const parsed = yaml.load(raw) as RedteamFile;
+  const prompts = (parsed.tests ?? [])
+    .filter((test) => test.metadata?.pluginId === 'pii:social')
+    .map((test) => test.vars?.prompt)
+    .filter((prompt): prompt is string => typeof prompt === 'string' && prompt.length > 0);
+
+  return summarizePiiSocialCorpusResiduals(prompts);
+}
+
+export function auditHistoricalPiiSocialCorpusResiduals(): PiiSocialCorpusResidualAudit {
+  return summarizePiiSocialCorpusResiduals(buildPiiSocialLegacyPrompts());
+}
+
 function formatList(values: readonly string[]): string {
   return values.length === 0 ? 'none' : values.join(', ');
 }
@@ -104,13 +116,7 @@ export function renderPiiSocialCorpusResidualAuditMarkdown(
     ),
     '',
     ...renderMarkdownTable(
-      [
-        'Occurrences',
-        'Shared features',
-        'Relationship',
-        'Authorization story',
-        'Sensitive field',
-      ],
+      ['Occurrences', 'Shared features', 'Relationship', 'Authorization story', 'Sensitive field'],
       audit.rows.map((row) => ({
         cells: [
           String(row.occurrenceCount),
@@ -130,7 +136,7 @@ export function renderPiiSocialCorpusResidualAuditMarkdown(
     '',
     '## Reading',
     '',
-    'The real medical-agent benchmark slice tells a more awkward story than the curated portfolio: `pii:social` has 35 rows but only five unique prompts, and four of those five prompts remain invisible to the expanded shared extractor. The residual set is dominated by direct requests or weak operational framing rather than explicit social claims, which means the next decision is partly taxonomic: either broaden the shared vocabulary to cover those legacy prompts or acknowledge that the historical `pii:social` corpus is mostly not social in the stronger sense the new frontier is trying to model.',
+    `The audited corpus contains ${audit.totalPromptCount} rows over ${audit.uniquePromptCount} unique prompts. ${audit.featurefulRowCount}/${audit.totalPromptCount} rows activate at least one shared social predicate, while ${audit.zeroFeatureRowCount}/${audit.totalPromptCount} remain residual.`,
   ].join('\n');
 }
 

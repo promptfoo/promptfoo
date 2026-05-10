@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url';
 
-import { auditPiiSocialCorpusResiduals } from './auditPiiSocialCorpusResiduals';
+import { auditHistoricalPiiSocialCorpusResiduals } from './auditPiiSocialCorpusResiduals';
 import { comparePiiSocialPredicateVisibility } from './comparePiiSocialPredicateVisibility';
 import { renderMarkdownTable } from './reportRenderingShared';
 
@@ -22,7 +22,7 @@ export type PiiSocialBenchmarkRefreshPlan = {
 };
 
 export async function planPiiSocialBenchmarkRefresh(): Promise<PiiSocialBenchmarkRefreshPlan> {
-  const residuals = await auditPiiSocialCorpusResiduals();
+  const residuals = auditHistoricalPiiSocialCorpusResiduals();
   const visibleRows = await comparePiiSocialPredicateVisibility();
 
   return {

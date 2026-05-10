@@ -7,7 +7,8 @@ import {
   summarizeObservedPluginFeatureBandCoverage,
   summarizeObservedPluginFeatureCoverage,
 } from '../../src/redteam/generation/predicateSignatures';
-import { buildPiiPortfolio, loadPiiContext } from './piiResearchShared';
+import { summarizeCoverageDimensions } from './analyzeGeneratedAttacks';
+import { buildPiiSocialLegacyPrompts } from './piiSocialLegacyCorpus';
 import { renderMarkdownTable } from './reportRenderingShared';
 
 type TestCase = {
@@ -38,7 +39,7 @@ export type PiiSocialBenchmarkRefreshComparison = {
   refreshed: PiiSocialBenchmarkSliceSummary;
 };
 
-async function loadLegacyPiiSocialPrompts(inputPath: string): Promise<string[]> {
+async function loadPiiSocialPrompts(inputPath: string): Promise<string[]> {
   const raw = await fs.readFile(inputPath, 'utf8');
   const parsed = yaml.load(raw) as RedteamFile;
 
@@ -72,16 +73,16 @@ function summarizeSlice(
 export async function comparePiiSocialBenchmarkRefresh(
   inputPath = 'examples/redteam-medical-agent/redteam.yaml',
 ): Promise<PiiSocialBenchmarkRefreshComparison> {
-  const legacyPrompts = await loadLegacyPiiSocialPrompts(inputPath);
-  const { entities } = await loadPiiContext(inputPath);
-  const refreshedAttacks = buildPiiPortfolio(entities, 'pii:social');
+  const legacyPrompts = buildPiiSocialLegacyPrompts();
+  const refreshedPrompts = await loadPiiSocialPrompts(inputPath);
+  const refreshedCoverage = summarizeCoverageDimensions('pii:social', refreshedPrompts);
 
   return {
     legacy: summarizeSlice(legacyPrompts, [], []),
     refreshed: summarizeSlice(
-      refreshedAttacks.map((attack) => attack.prompt),
-      refreshedAttacks.map((attack) => attack.relationship),
-      refreshedAttacks.map((attack) => attack.authorizationStory),
+      refreshedPrompts,
+      refreshedCoverage.relationship ?? [],
+      refreshedCoverage['authorization-story'] ?? [],
     ),
   };
 }
@@ -116,7 +117,7 @@ export function renderPiiSocialBenchmarkRefreshComparisonMarkdown(
         },
         {
           cells: [
-            'refreshed prototype',
+            'refreshed benchmark',
             String(comparison.refreshed.promptCount),
             String(comparison.refreshed.uniquePromptCount),
             `${comparison.refreshed.featurefulPromptCount}/${comparison.refreshed.uniquePromptCount}`,
@@ -139,7 +140,7 @@ export function renderPiiSocialBenchmarkRefreshComparisonMarkdown(
         },
         {
           cells: [
-            'refreshed prototype',
+            'refreshed benchmark',
             comparison.refreshed.relationshipCoverage.join(', '),
             comparison.refreshed.authorizationStoryCoverage.join(', '),
           ],
@@ -155,7 +156,7 @@ export function renderPiiSocialBenchmarkRefreshComparisonMarkdown(
     '',
     '## Reading',
     '',
-    'The prototype refresh satisfies the new benchmark contract immediately: it reduces row count, increases unique retained prompts, makes every retained prompt visible to the shared social layer, and expands observed predicate coverage from the legacy slice’s sparse direct-request profile to the intended positive-claim frontier.',
+    'The migrated live benchmark now satisfies the refresh contract directly: it shrinks the stored slice, increases unique retained prompts, makes every retained prompt visible to the shared social layer, and expands observed predicate coverage from the historical sparse direct-request profile to the intended positive-claim frontier.',
   ].join('\n');
 }
 

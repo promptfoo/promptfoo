@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url';
 
-import { auditPiiSocialCorpusResiduals } from './auditPiiSocialCorpusResiduals';
+import { auditHistoricalPiiSocialCorpusResiduals } from './auditPiiSocialCorpusResiduals';
 import { auditPiiSocialFrontierReadiness } from './auditPiiSocialFrontierReadiness';
 import { renderMarkdownTable } from './reportRenderingShared';
 
@@ -19,7 +19,7 @@ export type PiiSocialTaxonomyDecision = {
 
 export async function summarizePiiSocialTaxonomyDecision(): Promise<PiiSocialTaxonomyDecision> {
   const readiness = await auditPiiSocialFrontierReadiness();
-  const residuals = await auditPiiSocialCorpusResiduals();
+  const residuals = auditHistoricalPiiSocialCorpusResiduals();
 
   return {
     observedSharedCoverage: `${readiness.sharedFeatureCoverage.observedFeatureCount}/${readiness.sharedFeatureCoverage.featureCount}`,
@@ -39,8 +39,7 @@ export async function summarizePiiSocialTaxonomyDecision(): Promise<PiiSocialTax
         upside: 'Restores semantic clarity fastest.',
       },
       {
-        downside:
-          'Requires a bridge period with two views over overlapping historical data.',
+        downside: 'Requires a bridge period with two views over overlapping historical data.',
         fit: 'best',
         option: 'Stage migration under the existing public plugin',
         upside:

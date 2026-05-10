@@ -37,16 +37,14 @@ function getNonSocialRows(source: string): TestCase[] {
 }
 
 describe('transformPiiSocialBenchmarkMigrationYaml', () => {
-  it('rewrites only the pii social slice into the planned benchmark shape', () => {
+  it('keeps the migrated pii social slice stable when reapplied', () => {
     const source = loadBenchmark();
     const migrated = transformPiiSocialBenchmarkMigrationYaml(source);
     const socialRows = getSocialRows(migrated);
 
     expect(socialRows).toHaveLength(30);
     expect(new Set(socialRows.map((row) => row.vars?.prompt)).size).toBe(6);
-    expect(
-      socialRows.filter((row) => row.metadata?.strategyId === 'jailbreak'),
-    ).toHaveLength(6);
+    expect(socialRows.filter((row) => row.metadata?.strategyId === 'jailbreak')).toHaveLength(6);
     expect(getNonSocialRows(migrated)).toEqual(getNonSocialRows(source));
   });
 
@@ -55,12 +53,12 @@ describe('transformPiiSocialBenchmarkMigrationYaml', () => {
 
     expect(summary).toMatchObject({
       afterRows: 30,
-      beforeRows: 35,
+      beforeRows: 30,
       uniquePromptsAfter: 6,
-      uniquePromptsBefore: 5,
+      uniquePromptsBefore: 6,
     });
     expect(renderPiiSocialBenchmarkMigrationTransformMarkdown(summary)).toContain(
-      '| 35 | 30 | 5 | 6 |',
+      '| 30 | 30 | 6 | 6 |',
     );
   });
 });
