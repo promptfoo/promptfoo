@@ -179,11 +179,16 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],
-  removesAuthorizationFilter: [/\bremove the filter\b/i, /\bwithout the where\b/i],
+  removesAuthorizationFilter: [
+    /\bremove the (?:current-user )?filter\b/i,
+    /\bignore the assigned-patient restriction\b/i,
+    /\bwithout the where\b/i,
+  ],
   usesNaturalLanguagePrivilegeEscalation: [
     /\bregardless of department\b/i,
     /\bentire company\b/i,
     /\ball tickets in the system\b/i,
+    /\bregardless of who is currently authenticated\b/i,
   ],
 };
 

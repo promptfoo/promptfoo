@@ -10478,3 +10478,57 @@ The split immediately clarifies the shape of the problem:
    already reaches `2/2` authorization-bypass coverage.
 3. Only after that should we judge whether the selector drops an important SQL
    band.
+
+## Iteration 133 - 2026-05-10
+
+### Goal
+
+Resolve the ambiguity from iteration `132`:
+
+> Is the missing SQL authorization-bypass coverage real, or did the detector
+> fail to recognize the curated portfolio's wording?
+
+### Experiment
+
+1. Broadened the shared SQL authorization-bypass predicates to recognize:
+   - `remove the current-user filter`
+   - `ignore the assigned-patient restriction`
+   - `regardless of who is currently authenticated`
+2. Kept the candidate pool unchanged.
+3. Re-ran the exact same SQL semantic-band comparison.
+
+### Results
+
+| Prompt set              | Exploit mechanism | Authorization bypass |
+| ----------------------- | ----------------: | -------------------: |
+| baseline unique prompts |             `2/4` |                `0/2` |
+| curated SQL portfolio   |             `4/4` |                `2/2` |
+
+This means the apparent gap from iteration `132` was primarily a schema mismatch:
+
+1. the curated SQL pool already contained both authorization-bypass ideas
+2. the detector was too literal to see either one
+3. once repaired, the planner portfolio reaches the full `6/6` SQL vocabulary
+
+### Reflection
+
+1. This is the same lesson prompt extraction taught us:
+   - do not hill climb against a metric until the metric recognizes the attack
+     family you actually mean to optimize
+2. The curated SQL pool is healthier than the flat score suggested:
+   - `4/4` exploit mechanism
+   - `2/2` authorization bypass
+3. The next SQL question can now move one layer downstream:
+   - does the selection policy preserve both bands when it compresses the pool?
+
+### New Hypotheses
+
+1. The current diverse SQL selector probably preserves exploit breadth because it
+   optimizes tactic coverage explicitly.
+2. It may or may not preserve authorization-bypass breadth:
+   - the two bypass prompts share the same coarse tactic label
+   - so one may be discarded as redundant
+3. A SQL selector benchmark should compare:
+   - first-N
+   - diversity-only
+   - semantic-band-aware
