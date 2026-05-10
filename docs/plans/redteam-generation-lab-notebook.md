@@ -13172,3 +13172,81 @@ plugin-level diagnostic.
    - generation report metadata
    - CLI rendering
    - or both
+
+## Iteration 180 - 2026-05-10
+
+### Goal
+
+Turn the semantic-frontier work into a visible product artifact:
+
+> Can a generated redteam config expose plugin-level frontier health without
+> forcing users to inspect one test row at a time?
+
+### Experiment
+
+1. Added a core frontier-diagnostics summarizer that scans generated tests and
+   deduplicates the shared `semanticFrontier` metadata attached to each selected
+   row.
+2. Persisted that plugin-level summary into generated config metadata as
+   `semanticFrontierDiagnostics` for:
+   - normal output files
+   - append-in-place writes
+   - the default `redteam.yaml` output path
+3. Kept the emitted shape intentionally small:
+   - frontier count
+   - complete frontier count
+   - structural degradation flag
+   - unreachable feature IDs
+
+### Results
+
+Generated redteam YAML can now say, in one place, whether a plugin has a
+structural frontier problem:
+
+```yaml
+metadata:
+  semanticFrontierDiagnostics:
+    - pluginId: pii:social
+      frontierCount: 1
+      completeFrontierCount: 0
+      structurallyDegraded: true
+      unreachableFeatureIds:
+        - requestsRefillDates
+```
+
+That is the first product-facing bridge from the recent research loop into an
+artifact a user can inspect without reverse-engineering every prompt.
+
+Live `pii:social` before/after verification with the same local model and the
+same medical-assistant purpose:
+
+| Slice               | Featureful prompts | Shared coverage | Frontier diagnostics |
+| ------------------- | -----------------: | --------------: | -------------------- |
+| legacy generic path |              `1/6` |           `4/8` | `none`               |
+| portfolio path      |              `6/6` |           `8/8` | `healthy`            |
+
+The exact prompts are recorded in:
+
+- `redteam-generation-pii-social-live-before-after.md`
+
+### Reflection
+
+1. The per-test metadata was necessary for local explainability, but not
+   sufficient for operator ergonomics.
+2. A top-level diagnostic summary is a better review surface for:
+   - generated config diffs
+   - QA automation
+   - future report UI work
+3. Deduplicating copied frontier summaries before persisting them keeps the
+   artifact compact and avoids overcounting one portfolio as many frontiers.
+
+### New Hypotheses
+
+1. The next useful product step is a human-facing renderer that surfaces the
+   same summary in CLI/report output.
+2. The real-generation before/after comparison should now include both:
+   - the prompts themselves
+   - the top-level frontier health summary
+3. If multiple contexts or languages share the same structural diagnosis, the
+   compact summary may be enough; if not, we may eventually need optional
+   context labels in the diagnostic rows.
