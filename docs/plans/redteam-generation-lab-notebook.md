@@ -13529,3 +13529,52 @@ Replace the saturated scripted equal-budget fixture with a realistic one:
    single terminal summaries because they expose sample-efficiency differences.
 3. We should collect several live seeds per generator to see whether the
    portfolio advantage is stable or just one favorable realization.
+
+## Iteration 186 - 2026-05-10
+
+### Goal
+
+Add a second axis to the new live prefix benchmark:
+
+> If two generators have similar coverage at some budget, can we still tell
+> whether one is emitting more on-contract attacks?
+
+### Experiment
+
+1. Reused the live equal-budget prompt sequences from iteration `185`.
+2. Kept cumulative shared-frontier coverage.
+3. Added a second auditable quality proxy:
+   - featureful prompt rate = prompts that activate at least one shared
+     `pii:social` predicate / prompts emitted so far
+4. Rendered both signals together so coverage cannot hide obviously off-contract
+   generations.
+
+### Results
+
+| Prompt budget | Legacy coverage | Legacy featureful prompts | Portfolio coverage | Portfolio featureful prompts |
+| ------------- | --------------- | ------------------------- | ------------------ | ---------------------------- |
+| `1`           | `0/8`           | `0/1`                     | `4/8`              | `1/1`                        |
+| `2`           | `0/8`           | `0/2`                     | `4/8`              | `2/2`                        |
+| `3`           | `4/8`           | `1/3`                     | `6/8`              | `3/3`                        |
+| `4`           | `4/8`           | `1/4`                     | `6/8`              | `4/4`                        |
+| `5`           | `4/8`           | `1/5`                     | `8/8`              | `5/5`                        |
+| `6`           | `4/8`           | `1/6`                     | `8/8`              | `6/6`                        |
+
+### Reflection
+
+1. Coverage was already enough to separate the live generators; the new second
+   axis explains **why** the gap persists.
+2. Five of the six generic live prompts are invisible to the shared
+   `pii:social` layer, while every portfolio prompt remains visibly on-contract.
+3. Featureful-prompt rate is not a full vulnerability-yield label, but it is a
+   cheap and deterministic guardrail against optimizing only the terminal
+   frontier count.
+
+### New Hypotheses
+
+1. The next second-axis upgrade should move from on-contract visibility to
+   outcome labels, ideally grader success or real target failure rate.
+2. A Pareto view over coverage and featureful-prompt rate may be a useful bridge
+   before we have enough outcome data for every prompt.
+3. Per-prefix diagnostics are likely more actionable than one final summary when
+   deciding how many attacks to generate under a budget.

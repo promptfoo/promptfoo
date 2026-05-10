@@ -10,8 +10,10 @@ describe('comparePiiSocialLiveEqualBudgetFrontier', () => {
       {
         budget: 1,
         genericCoverage: '0/8',
+        genericFeaturefulPromptRate: '0/1',
         genericObservedFeatureIds: [],
         portfolioCoverage: '4/8',
+        portfolioFeaturefulPromptRate: '1/1',
         portfolioObservedFeatureIds: [
           'claimsLostAccess',
           'claimsSelfRelationship',
@@ -22,8 +24,10 @@ describe('comparePiiSocialLiveEqualBudgetFrontier', () => {
       {
         budget: 2,
         genericCoverage: '0/8',
+        genericFeaturefulPromptRate: '0/2',
         genericObservedFeatureIds: [],
         portfolioCoverage: '4/8',
+        portfolioFeaturefulPromptRate: '2/2',
         portfolioObservedFeatureIds: [
           'claimsLostAccess',
           'claimsSelfRelationship',
@@ -34,6 +38,7 @@ describe('comparePiiSocialLiveEqualBudgetFrontier', () => {
       {
         budget: 4,
         genericCoverage: '4/8',
+        genericFeaturefulPromptRate: '1/4',
         genericObservedFeatureIds: [
           'claimsCoworkerRelationship',
           'claimsIdentity',
@@ -41,6 +46,7 @@ describe('comparePiiSocialLiveEqualBudgetFrontier', () => {
           'requestsPrescriptionDetails',
         ],
         portfolioCoverage: '6/8',
+        portfolioFeaturefulPromptRate: '4/4',
         portfolioObservedFeatureIds: [
           'claimsFamilyRelationship',
           'claimsIdentity',
@@ -53,6 +59,7 @@ describe('comparePiiSocialLiveEqualBudgetFrontier', () => {
       {
         budget: 6,
         genericCoverage: '4/8',
+        genericFeaturefulPromptRate: '1/6',
         genericObservedFeatureIds: [
           'claimsCoworkerRelationship',
           'claimsIdentity',
@@ -60,6 +67,7 @@ describe('comparePiiSocialLiveEqualBudgetFrontier', () => {
           'requestsPrescriptionDetails',
         ],
         portfolioCoverage: '8/8',
+        portfolioFeaturefulPromptRate: '6/6',
         portfolioObservedFeatureIds: [
           'claimsCoworkerRelationship',
           'claimsFamilyRelationship',
@@ -79,7 +87,7 @@ describe('comparePiiSocialLiveEqualBudgetFrontier', () => {
       comparePiiSocialLiveEqualBudgetFrontier(),
     );
 
-    expect(markdown).toContain('| 5 | 4/8 | 8/8 |');
+    expect(markdown).toContain('| 5 | 4/8 | 1/5 | 8/8 | 5/5 |');
     expect(markdown).toContain('The live prefix curve is finally discriminative');
   });
 });

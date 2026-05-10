@@ -1,6 +1,9 @@
 import { pathToFileURL } from 'node:url';
 
-import { summarizeObservedPluginFeatureCoverage } from '../../src/redteam/generation/predicateSignatures';
+import {
+  extractPiiSocialFeatures,
+  summarizeObservedPluginFeatureCoverage,
+} from '../../src/redteam/generation/predicateSignatures';
 import { renderMarkdownTable, renderNumberedSection } from './reportRenderingShared';
 
 export const PII_SOCIAL_LIVE_GENERIC_PATH_20260510 = [
@@ -24,16 +27,23 @@ export const PII_SOCIAL_LIVE_PORTFOLIO_PATH_20260510 = [
 export type PiiSocialLiveEqualBudgetFrontierRow = {
   budget: number;
   genericCoverage: string;
+  genericFeaturefulPromptRate: string;
   genericObservedFeatureIds: string[];
   portfolioCoverage: string;
+  portfolioFeaturefulPromptRate: string;
   portfolioObservedFeatureIds: string[];
 };
 
 function summarizePrefix(prompts: readonly string[], budget: number) {
-  const coverage = summarizeObservedPluginFeatureCoverage('pii:social', prompts.slice(0, budget));
+  const prefix = prompts.slice(0, budget);
+  const coverage = summarizeObservedPluginFeatureCoverage('pii:social', prefix);
+  const featurefulPromptCount = prefix.filter(
+    (prompt) => extractPiiSocialFeatures(prompt).length > 0,
+  ).length;
 
   return {
     coverage: `${coverage.observedFeatureCount}/${coverage.featureCount}`,
+    featurefulPromptRate: `${featurefulPromptCount}/${prefix.length}`,
     observedFeatureIds: coverage.observedFeatureIds,
   };
 }
@@ -48,8 +58,10 @@ export function comparePiiSocialLiveEqualBudgetFrontier(
     return {
       budget,
       genericCoverage: generic.coverage,
+      genericFeaturefulPromptRate: generic.featurefulPromptRate,
       genericObservedFeatureIds: generic.observedFeatureIds,
       portfolioCoverage: portfolio.coverage,
+      portfolioFeaturefulPromptRate: portfolio.featurefulPromptRate,
       portfolioObservedFeatureIds: portfolio.observedFeatureIds,
     };
   });
@@ -62,9 +74,21 @@ export function renderPiiSocialLiveEqualBudgetFrontierMarkdown(
     '# PII Social Live Equal-Budget Frontier',
     '',
     ...renderMarkdownTable(
-      ['Prompt budget', 'Legacy generic path', 'Portfolio path'],
+      [
+        'Prompt budget',
+        'Legacy coverage',
+        'Legacy featureful prompts',
+        'Portfolio coverage',
+        'Portfolio featureful prompts',
+      ],
       rows.map((row) => ({
-        cells: [String(row.budget), row.genericCoverage, row.portfolioCoverage],
+        cells: [
+          String(row.budget),
+          row.genericCoverage,
+          row.genericFeaturefulPromptRate,
+          row.portfolioCoverage,
+          row.portfolioFeaturefulPromptRate,
+        ],
       })),
     ),
     ...renderNumberedSection('Legacy Generic Path', PII_SOCIAL_LIVE_GENERIC_PATH_20260510),
@@ -72,7 +96,7 @@ export function renderPiiSocialLiveEqualBudgetFrontierMarkdown(
     '',
     '## Reading',
     '',
-    'The live prefix curve is finally discriminative under equal spend. The generic path emits no recognized shared feature in its first two prompts and stalls at `4/8` even after six generated prompts, while the portfolio path reaches `4/8` on the first prompt, `6/8` by the third, and the full `8/8` frontier by the fifth. This is the benchmark shape the scripted equal-budget fixture was missing: real generic outputs do not arrive in a magically coverage-optimal order.',
+    'The live prefix curve is finally discriminative under equal spend. The generic path emits no recognized shared feature in its first two prompts, reaches only `1/6` featureful prompts overall, and stalls at `4/8` coverage even after six generated prompts because one prompt co-activates several predicates. The portfolio path keeps every emitted prompt featureful, reaches `4/8` on the first prompt, `6/8` by the third, and the full `8/8` frontier by the fifth. This is the benchmark shape the scripted equal-budget fixture was missing: real generic outputs do not arrive in a magically coverage-optimal order, and some of them are not even visibly on-contract for the plugin.',
   ].join('\n');
 }
 
