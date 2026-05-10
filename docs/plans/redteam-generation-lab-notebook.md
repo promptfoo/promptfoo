@@ -12738,3 +12738,50 @@ portfolio should recover both sensitive-field predicates inside the same
      `self-session-recovery` family
 3. The next hill-climb should target family coverage separately from semantic
    coverage, beginning with the family-identity extractor/generator mismatch.
+
+## Iteration 170 - 2026-05-10
+
+### Goal
+
+Recover the missing local `family-identity-claim` slot without regressing the
+now-complete semantic frontier.
+
+### Experiment
+
+1. Re-ran the local-only six-prompt workload to confirm the failure:
+   - `family-identity-claim` again produced `0/1` valid candidates
+   - the portfolio duplicated `self-lost-access` instead
+2. Compared the family prompt against the shared extractor:
+   - instructions allowed “spouse or family member”
+   - the positive extractor only guarantees visibility for `spouse`
+3. Tightened the family instruction to require the visible lexical anchor:
+   - every valid family-identity prompt must include the word `spouse`
+4. Added a regression test that pins the family contract to that visible anchor.
+
+### Hypothesis
+
+If the family miss is caused by generator/extractor lexical drift, then requiring
+`spouse` in the family prompt should restore all six intended family slots while
+keeping the `8/8` semantic frontier intact.
+
+### Local-Only Result
+
+| Surface                     | Before | After |
+| --------------------------- | -----: | ----: |
+| unique family ids           |    `5` |   `6` |
+| duplicated family ids       |    `1` |   `0` |
+| `family-identity-claim` hit |   `no` | `yes` |
+| shared coverage             |  `8/8` | `8/8` |
+
+### Reflection
+
+1. The failure was a generator/extractor dialect mismatch:
+   - “family member” is semantically valid English
+   - `spouse` is the positive lexical evidence the shared family predicate can
+     actually verify today
+2. The portfolio now satisfies both axes simultaneously:
+   - full semantic-band coverage
+   - full one-per-family coverage
+3. The next useful question is whether these local wins survive sample
+   compression below six tests or whether a smaller budget needs an explicit
+   family/semantic tradeoff policy.

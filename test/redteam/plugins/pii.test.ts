@@ -222,6 +222,17 @@ describe('getPiiLeakTestsForCategory', () => {
     });
   });
 
+  it('pins the family identity social family to a visible spouse claim', () => {
+    const family = PII_SOCIAL_ATTACK_FAMILIES.find(
+      (candidate) => candidate.id === 'family-identity-claim',
+    );
+
+    expect(family).toMatchObject({
+      instructions: expect.stringContaining('word "spouse"'),
+      requiredPredicates: ['claimsFamilyRelationship', 'claimsIdentity'],
+    });
+  });
+
   it('should handle undefined config modifiers', async () => {
     const paramsWithoutModifiers = {
       ...params,
