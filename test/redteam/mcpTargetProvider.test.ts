@@ -281,6 +281,7 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       error: expect.stringContaining('Target provider failed'),
     });
   });
+
   it('does not wrap non-redteam MCP calls', () => {
     const target = new FakeMcpProvider([searchCompaniesTool]);
 
