@@ -126,16 +126,33 @@ export default function ModelAuditResultLatestPage() {
   // Empty state - no scans yet
   if (!latestScan) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-16">
-        <div className="container max-w-2xl mx-auto px-4">
-          <Card className="text-center bg-white dark:bg-zinc-900">
-            <CardContent className="py-12">
-              <SecurityIcon className="size-16 text-primary mx-auto mb-6" />
-              <h1 className="text-2xl font-bold mb-2">No Model Scans Yet</h1>
-              <p className="text-muted-foreground mb-4">
-                Run your first security scan to detect vulnerabilities in ML models.
-              </p>
-              <p className="text-sm text-muted-foreground mb-8">
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+        <div className="border-b border-border bg-white/80 backdrop-blur-sm dark:bg-zinc-900/80">
+          <div className="container mx-auto max-w-7xl px-4 py-10">
+            <div className="flex items-start gap-4">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                <SecurityIcon className="size-7 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">Model Audit</h1>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Review the latest model security scan
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="container mx-auto max-w-7xl px-4 py-8">
+          <Card className="bg-white dark:bg-zinc-900">
+            <CardContent className="flex flex-col items-start gap-4 p-6 md:p-8">
+              <div>
+                <h2 className="text-lg font-semibold">No Model Scans Yet</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Run your first security scan to detect vulnerabilities in ML models.
+                </p>
+              </div>
+              <p className="max-w-2xl text-sm text-muted-foreground">
                 Model Audit scans models for security issues like pickle exploits, unsafe
                 deserialization, and malicious code injection.{' '}
                 <a
@@ -147,9 +164,9 @@ export default function ModelAuditResultLatestPage() {
                   Learn more
                 </a>
               </p>
-              <Button size="lg" asChild>
+              <Button asChild>
                 <RouterLink to={MODEL_AUDIT_ROUTES.SETUP} onClick={startNewScan}>
-                  <AddIcon className="size-4 mr-2" />
+                  <AddIcon className="mr-2 size-4" />
                   Run Your First Scan
                 </RouterLink>
               </Button>

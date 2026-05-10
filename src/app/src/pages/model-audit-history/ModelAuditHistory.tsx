@@ -296,15 +296,17 @@ export default function ModelAuditHistory() {
               <p className="text-sm text-muted-foreground">{historyError}</p>
             </div>
           ) : totalCount === 0 && historicalScans.length === 0 && !isLoadingHistory ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
-              <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center md:p-8">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                 <SearchIcon className="size-6" />
               </div>
-              <h3 className="text-lg font-semibold">No scan history found</h3>
-              <p className="text-sm text-muted-foreground">
-                Run your first model security scan to see results here
-              </p>
-              <Button asChild>
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold">No scan history found</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Run your first model security scan to see results here
+                </p>
+              </div>
+              <Button asChild className="sm:ml-auto">
                 <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
                   <AddIcon className="size-4 mr-2" />
                   New Scan
