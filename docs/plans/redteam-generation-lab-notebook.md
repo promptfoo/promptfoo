@@ -14137,3 +14137,50 @@ The new report now states the full current decision in one place:
    comparatively mature predicate vocabulary and direct leakage semantics.
 3. A successful transfer would be stronger evidence than adding yet another
    refinement to the current `pii:social` report.
+
+## Iteration 197 - 2026-05-10
+
+### Goal
+
+Stress-test the generalization hypothesis from iteration `196`:
+
+> Does the new operator-report template transfer cleanly from `pii:social` to
+> `pii:direct`?
+
+### Experiment
+
+1. Audited the available benchmark assets for both plugins.
+2. Compared the concrete axes that power the current `pii:social` report against
+   the assets currently available for `pii:direct`.
+3. Distinguished:
+   - reusable report sections
+   - plugin-specific benchmark axes
+
+### Results
+
+| Plugin       | Available axes                                                 | Missing axes                                 | Transfer status |
+| ------------ | -------------------------------------------------------------- | -------------------------------------------- | --------------- |
+| `pii:social` | leak-ready proxy, target-regime breadth, realized target yield | `-`                                          | `ready`         |
+| `pii:direct` | semantic sensitive-field frontier                              | target-regime breadth, realized target yield | `blocked`       |
+
+### Reflection
+
+1. The transfer hypothesis fails in an informative way:
+   - the report **sections** generalize
+   - the social-specific **evaluation axes** do not
+2. `pii:direct` already has a meaningful semantic frontier, so the right next
+   move is not to rebuild that layer.
+3. The actual blocker is the absence of direct-PII target replay assets:
+   - no hardened regime
+   - no susceptible regime set
+   - no realized-yield comparison
+
+### New Hypotheses
+
+1. Before we can generalize the operator report, we need a reusable ladder for
+   adding target-regime replays to new plugins.
+2. `pii:direct` is still the right next transfer target, but the next experiment
+   should design its replay regimes rather than its report shell.
+3. The eventual architecture should separate:
+   - common report composition
+   - plugin-specific axis providers
