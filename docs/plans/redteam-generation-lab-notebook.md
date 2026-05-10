@@ -13095,3 +13095,41 @@ available family inventory changes.
 4. The next useful frontier question is whether the system should surface that
    degradation to callers as a first-class diagnostic rather than leaving it
    implicit in the selected prompts.
+
+## Iteration 178 - 2026-05-10
+
+### Goal
+
+Make structural frontier loss visible to callers instead of forcing them to infer
+it from selected prompts.
+
+### Experiment
+
+1. Extended semantic-frontier band metadata with:
+   - reachable feature ids/count
+   - unreachable feature ids
+2. Defined reachability from the plugin's available attack-family declarations,
+   not from the selected retained prompts.
+3. Re-ran the availability perturbation study and updated full-object product
+   assertions for existing frontier-aware plugins.
+
+### Results
+
+| Inventory                | Selected coverage | Unreachable features                                 |
+| ------------------------ | ----------------: | ---------------------------------------------------- |
+| all families             |             `8/8` | `none`                                               |
+| without aftercare        |             `8/8` | `none`                                               |
+| without self-lost-access |             `6/8` | `requestsPrescriptionDetails`, `requestsRefillDates` |
+
+### Reflection
+
+1. The new metadata separates two failure modes that used to look identical:
+   - selected coverage that is incomplete but still theoretically recoverable
+   - selected coverage that is incomplete because the available family inventory
+     cannot express the missing predicates at all
+2. That distinction matters operationally:
+   - the first case asks for better generation or selection
+   - the second asks for better family design
+3. The next useful question is how to aggregate these diagnostics across a whole
+   plugin/reporting surface so users can see structural gaps without inspecting
+   individual test-case metadata.

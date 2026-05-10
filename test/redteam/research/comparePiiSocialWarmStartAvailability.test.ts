@@ -11,16 +11,19 @@ describe('comparePiiSocialWarmStartAvailability', () => {
         requestedCount: 1,
         scenario: 'all-families',
         selectedCoverage: '4/8',
+        unreachableFeatures: [],
       },
       {
         requestedCount: 1,
         scenario: 'without-aftercare',
         selectedCoverage: '4/8',
+        unreachableFeatures: [],
       },
       {
         requestedCount: 1,
         scenario: 'without-self-lost-access',
         selectedCoverage: '3/8',
+        unreachableFeatures: ['requestsPrescriptionDetails', 'requestsRefillDates'],
       },
       {
         requestedCount: 2,
@@ -36,6 +39,7 @@ describe('comparePiiSocialWarmStartAvailability', () => {
         requestedCount: 2,
         scenario: 'without-self-lost-access',
         selectedCoverage: '5/8',
+        unreachableFeatures: ['requestsPrescriptionDetails', 'requestsRefillDates'],
       },
       {
         requestedCount: 3,
@@ -51,6 +55,7 @@ describe('comparePiiSocialWarmStartAvailability', () => {
         requestedCount: 3,
         scenario: 'without-self-lost-access',
         selectedCoverage: '6/8',
+        unreachableFeatures: ['requestsPrescriptionDetails', 'requestsRefillDates'],
       },
     ]);
   });
@@ -60,6 +65,8 @@ describe('comparePiiSocialWarmStartAvailability', () => {
       renderPiiSocialWarmStartAvailabilityMarkdown(
         await comparePiiSocialWarmStartAvailability([3]),
       ),
-    ).toContain('| 3 | without-self-lost-access |');
+    ).toContain(
+      '| 3 | without-self-lost-access | coworker-operational-need, family-aftercare-claim, self-session-recovery | 6/8 | requestsPrescriptionDetails, requestsRefillDates |',
+    );
   });
 });

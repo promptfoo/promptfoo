@@ -21,6 +21,9 @@ type SemanticFrontierBandSummary = {
   featureCount: number;
   observedFeatureCount: number;
   observedFeatureIds: string[];
+  reachableFeatureCount: number;
+  reachableFeatureIds: string[];
+  unreachableFeatureIds: string[];
 };
 
 export type SemanticFrontierSummary = {
@@ -286,15 +289,28 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
           .map(([predicate]) => predicate),
       ),
     );
+    const hasUndeclaredFamilies = this.attackFamilies.some(
+      (family) => !family.requiredPredicates || family.requiredPredicates.length === 0,
+    );
+    const reachablePredicates = hasUndeclaredFamilies
+      ? new Set(Object.values(config.bands).flat())
+      : new Set(this.attackFamilies.flatMap((family) => family.requiredPredicates ?? []));
     const bands = Object.fromEntries(
       Object.entries(config.bands).map(([bandId, features]) => {
         const observedFeatureIds = features.filter((feature) => observedPredicates.has(feature));
+        const reachableFeatureIds = features.filter((feature) => reachablePredicates.has(feature));
+        const unreachableFeatureIds = features.filter(
+          (feature) => !reachablePredicates.has(feature),
+        );
         return [
           bandId,
           {
             featureCount: features.length,
             observedFeatureCount: observedFeatureIds.length,
             observedFeatureIds,
+            reachableFeatureCount: reachableFeatureIds.length,
+            reachableFeatureIds,
+            unreachableFeatureIds,
           },
         ];
       }),

@@ -25,6 +25,7 @@ export type PiiSocialWarmStartAvailabilityRow = {
   scenario: AvailabilityScenario;
   selectedCoverage: string;
   selectedFamilyIds: string[];
+  unreachableFeatures: string[];
 };
 
 const PII_SOCIAL_FAMILIES: readonly ScriptedFamily[] = [
@@ -136,6 +137,16 @@ function formatSelectedCoverage(summary: SemanticFrontierSummary | undefined): s
   return `${observedFeatureCount}/${featureCount}`;
 }
 
+function getUnreachableFeatures(summary: SemanticFrontierSummary | undefined): string[] {
+  if (!summary) {
+    return [];
+  }
+
+  return Object.values(summary.bands)
+    .flatMap((band) => band.unreachableFeatureIds)
+    .sort();
+}
+
 async function benchmarkScenario(
   scenario: AvailabilityScenario,
   requestedCount: number,
@@ -143,13 +154,15 @@ async function benchmarkScenario(
   const provider = createScriptedProvider();
   const plugin = createScenarioPlugin(scenario, provider);
   const tests = await plugin.generateTests(requestedCount);
+  const semanticFrontier = getSemanticFrontierSummary(tests);
 
   return {
     generatedFamilyIds: [...new Set(provider.generatedFamilyIds)].sort(),
     requestedCount,
     scenario,
-    selectedCoverage: formatSelectedCoverage(getSemanticFrontierSummary(tests)),
+    selectedCoverage: formatSelectedCoverage(semanticFrontier),
     selectedFamilyIds: getSelectedFamilyIds(tests),
+    unreachableFeatures: getUnreachableFeatures(semanticFrontier),
   };
 }
 
@@ -158,8 +171,8 @@ export async function comparePiiSocialWarmStartAvailability(
 ): Promise<PiiSocialWarmStartAvailabilityRow[]> {
   const rows = await Promise.all(
     requestedCounts.flatMap((requestedCount) =>
-      (['all-families', 'without-aftercare', 'without-self-lost-access'] as const).map(
-        (scenario) => benchmarkScenario(scenario, requestedCount),
+      (['all-families', 'without-aftercare', 'without-self-lost-access'] as const).map((scenario) =>
+        benchmarkScenario(scenario, requestedCount),
       ),
     ),
   );
@@ -177,13 +190,21 @@ export function renderPiiSocialWarmStartAvailabilityMarkdown(
     '# PII Social Warm-Start Availability',
     '',
     ...renderMarkdownTable(
-      ['Requested', 'Scenario', 'Generated families', 'Selected coverage', 'Selected families'],
+      [
+        'Requested',
+        'Scenario',
+        'Generated families',
+        'Selected coverage',
+        'Unreachable features',
+        'Selected families',
+      ],
       rows.map((row) => ({
         cells: [
           String(row.requestedCount),
           row.scenario,
           row.generatedFamilyIds.join(', '),
           row.selectedCoverage,
+          row.unreachableFeatures.join(', ') || 'none',
           row.selectedFamilyIds.join(', '),
         ],
       })),
@@ -191,7 +212,7 @@ export function renderPiiSocialWarmStartAvailabilityMarkdown(
     '',
     '## Reading',
     '',
-    'The coverage-derived selector recovers cleanly when a redundant family disappears: removing `family-aftercare-claim` swaps in `family-identity-claim` with no shared-coverage loss. Removing `self-lost-access` is different because that family is the only declared carrier for both sensitive-field predicates; the best remaining three-family approximation falls to `3/8`, `5/8`, and `6/8` at `n=1..3`.',
+    'The coverage-derived selector recovers cleanly when a redundant family disappears: removing `family-aftercare-claim` swaps in `family-identity-claim` with no shared-coverage loss. Removing `self-lost-access` is different because that family is the only declared carrier for both sensitive-field predicates; the best remaining three-family approximation falls to `3/8`, `5/8`, and `6/8` at `n=1..3`, and the frontier metadata now names `requestsPrescriptionDetails` plus `requestsRefillDates` as structurally unreachable.',
   ].join('\n');
 }
 

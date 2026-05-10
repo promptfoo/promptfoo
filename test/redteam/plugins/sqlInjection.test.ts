@@ -196,6 +196,12 @@ describe('SqlInjectionPlugin', () => {
             'removesAuthorizationFilter',
             'usesNaturalLanguagePrivilegeEscalation',
           ],
+          reachableFeatureCount: 2,
+          reachableFeatureIds: [
+            'removesAuthorizationFilter',
+            'usesNaturalLanguagePrivilegeEscalation',
+          ],
+          unreachableFeatureIds: [],
         },
         'exploit-mechanism': {
           featureCount: 4,
@@ -206,6 +212,14 @@ describe('SqlInjectionPlugin', () => {
             'usesStackedQuery',
             'usesUnionExtraction',
           ],
+          reachableFeatureCount: 4,
+          reachableFeatureIds: [
+            'requestsSchemaDiscovery',
+            'usesBooleanBypass',
+            'usesStackedQuery',
+            'usesUnionExtraction',
+          ],
+          unreachableFeatureIds: [],
         },
       },
       complete: true,
