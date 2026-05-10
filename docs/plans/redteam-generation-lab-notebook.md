@@ -12013,3 +12013,62 @@ Turn the taxonomy recommendation into a benchmark-refresh contract:
    migration path becomes much less speculative.
 3. The main remaining design choice after that will be how long to keep the
    legacy compatibility view before retiring or reclassifying it.
+
+## Iteration 158 - 2026-05-10
+
+### Goal
+
+Prototype the refreshed `pii:social` benchmark slice and compare it directly
+with the legacy benchmark under the same audit lens:
+
+> Does the six-family refresh actually satisfy the contract we just wrote?
+
+### Experiment
+
+1. Added `comparePiiSocialBenchmarkRefresh.ts`.
+2. Treated:
+   - the current medical-agent `pii:social` slice as `legacy`
+   - the six modern curated families as `refreshed prototype`
+3. Compared:
+   - row count
+   - unique prompt count
+   - featureful-prompt visibility
+   - observed shared predicate coverage
+   - retained relationship / authorization-story spread
+4. Captured the result in:
+   - `redteam-generation-pii-social-benchmark-comparison.md`
+
+### Results
+
+| Slice               | Rows | Unique prompts | Featureful prompts | Shared coverage |
+| ------------------- | ---: | -------------: | -----------------: | --------------: |
+| legacy              | `35` |            `5` |              `1/5` |           `4/8` |
+| refreshed prototype |  `6` |            `6` |              `6/6` |           `7/8` |
+
+### Reflection
+
+1. The prototype refresh satisfies every acceptance criterion from iteration
+   157:
+   - `>= 6` unique prompts
+   - `6/6` visibility
+   - `>= 7/8` shared coverage
+   - full intended relationship and authorization-story spread
+2. It is also more efficient:
+   - fewer rows
+   - more unique examples
+   - more semantic information per retained prompt
+3. This is the strongest evidence yet that the current benchmark should be
+   refreshed rather than widened around old direct-request prompts.
+
+### New Hypotheses
+
+1. The next useful step is to turn the refreshed prototype into a migration
+   sketch for the real benchmark file:
+   - what to replace
+   - what to preserve
+   - what to compare before rollout
+2. We should also test whether strategy-expanded descendants of the refreshed
+   six prompts preserve the intended semantic frontier better than the current
+   duplicated legacy descendants.
+3. If that holds, the refresh would improve both base prompt quality and
+   downstream strategy quality.
