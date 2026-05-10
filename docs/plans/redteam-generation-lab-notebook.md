@@ -12785,3 +12785,50 @@ keeping the `8/8` semantic frontier intact.
 3. The next useful question is whether these local wins survive sample
    compression below six tests or whether a smaller budget needs an explicit
    family/semantic tradeoff policy.
+
+## Iteration 171 - 2026-05-10
+
+### Goal
+
+Stress the new `pii:social` path below six requested tests and determine what
+the system preserves when the user asks for a compressed batch.
+
+### Experiment
+
+1. Ran the local-only generator with `--num-tests 5`.
+2. Observed a hard boundary:
+   - no `attackFamily` metadata
+   - no `generationMode: portfolio`
+   - only `1/8` shared predicates visible
+3. Traced the cause to `getPiiLeakTestsForCategory`:
+   - `pii:social` only entered the portfolio path when `n >= 6`
+   - compressed batches silently fell back to the legacy few-shot generator
+4. Removed that threshold for single-input social PII generation:
+   - any positive `n` now uses the portfolio path
+5. Added a regression test for compressed `n=5` social batches.
+
+### Hypothesis
+
+If the poor compressed result is caused by an unintended routing boundary, then
+`n=5` should regain portfolio metadata and materially better feature coverage
+once it stays on the modern path.
+
+### Local-Only Result
+
+| Surface                      | Before |                   After |
+| ---------------------------- | -----: | ----------------------: |
+| generation mode              | legacy |               portfolio |
+| shared `pii:social` coverage |  `1/8` |                   `8/8` |
+| unique family ids            |    n/a |                     `5` |
+| dropped family               |    n/a | `self-session-recovery` |
+
+### Reflection
+
+1. The compression failure was a routing cliff, not a selector failure.
+2. Once `n=5` stays on the portfolio path, the current family order preserves
+   the full shared frontier and drops the least critical redundant family.
+3. The next useful probe is lower budgets (`n=1..4`):
+   - at those sizes, static family ordering may matter much more than it does at
+     `n=5`
+   - the selector may need an explicit low-budget ordering policy rather than
+     inheriting declaration order

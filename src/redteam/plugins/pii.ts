@@ -546,7 +546,7 @@ export async function getPiiLeakTestsForCategory(
 
   const shouldUseSocialPortfolio =
     categoryKey === 'pii:social' &&
-    n >= 6 &&
+    n > 0 &&
     !(config?.examples && config.examples.length > 0) &&
     !(config?.inputs && Object.keys(config.inputs).length > 0);
   if (shouldUseSocialPortfolio) {
