@@ -651,6 +651,13 @@ export class CustomProvider implements ApiProvider {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }
+        if (error instanceof RedteamProviderError && error.tokenUsage) {
+          accumulateResponseTokenUsage(
+            totalTokenUsage,
+            { tokenUsage: error.tokenUsage },
+            { countAsRequest: false },
+          );
+        }
         logger.error(`[Custom] Error Running custom step: ${error}`);
       }
     }

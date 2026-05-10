@@ -1258,7 +1258,7 @@ describe('CustomProvider', () => {
     expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
   });
 
-  it('should preserve refusal and eval helper usage when scoring returns errors', async () => {
+  it('should preserve refusal helper usage when refusal scoring throws', async () => {
     const testProvider = new CustomProvider({
       injectVar: 'objective',
       maxTurns: 1,
@@ -1280,15 +1280,12 @@ describe('CustomProvider', () => {
       output: 'target response',
       tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1 },
     });
-    mockScoringProvider.callApi
-      .mockResolvedValueOnce({
-        error: 'refusal failed',
-        tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
-      })
-      .mockResolvedValueOnce({
-        error: 'eval failed',
-        tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
-      });
+    // Refusal scoring throws RedteamProviderError, which exits the round before eval scoring runs.
+    // Helper tokens from the failed refusal call should still be accumulated.
+    mockScoringProvider.callApi.mockResolvedValueOnce({
+      error: 'refusal failed',
+      tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
+    });
 
     const result = await testProvider.callApi('test prompt', {
       originalProvider: mockTargetProvider,
@@ -1297,9 +1294,9 @@ describe('CustomProvider', () => {
     });
 
     expect(result.tokenUsage).toMatchObject({
-      total: 200,
-      prompt: 90,
-      completion: 110,
+      total: 180,
+      prompt: 80,
+      completion: 100,
       numRequests: 1,
     });
   });

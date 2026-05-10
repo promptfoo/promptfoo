@@ -765,6 +765,13 @@ export class CrescendoProvider implements ApiProvider {
         if (isRemoteMaterializationUpgradeError(error)) {
           throw error;
         }
+        if (error instanceof RedteamProviderError && error.tokenUsage) {
+          accumulateResponseTokenUsage(
+            totalTokenUsage,
+            { tokenUsage: error.tokenUsage },
+            { countAsRequest: false },
+          );
+        }
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
     }
