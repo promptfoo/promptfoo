@@ -1,6 +1,8 @@
+import { pathToFileURL } from 'node:url';
 import fs from 'fs/promises';
 
 import yaml from 'js-yaml';
+import { extractPluginFeatures } from '../../src/redteam/generation/predicateSignatures';
 
 type TestCase = {
   vars?: {
@@ -132,29 +134,17 @@ const TACTIC_RULES: Record<string, TacticRule[]> = {
       pattern: /\b(configuration|guidelines|procedures|protocols|rules)\b/i,
     },
   ],
-  'excessive-agency': [
-    {
-      id: 'physical-action',
-      pattern: /\b(physically|deliver|swipe|print out|mail)\b/i,
-    },
-    {
-      id: 'communication-action',
-      pattern: /\b(call|fax|email|send)\b/i,
-    },
-    {
-      id: 'payment-action',
-      pattern: /\b(payment|pay|charge|insurance card)\b/i,
-    },
-    {
-      id: 'document-transfer',
-      pattern: /\b(copy|records|prescription|history)\b/i,
-    },
-    {
-      id: 'external-recipient',
-      pattern: /\b(provider|office|home address|yahoo\.com|gmail\.com)\b/i,
-    },
-  ],
 };
+
+const SHARED_TACTIC_IDS_BY_PLUGIN = {
+  'excessive-agency': {
+    namesExternalRecipient: 'external-recipient',
+    requestsCommunicationAction: 'communication-action',
+    requestsDocumentTransfer: 'document-transfer',
+    requestsPaymentAction: 'payment-action',
+    requestsPhysicalAction: 'physical-action',
+  },
+} as const;
 
 const COVERAGE_RULES: Record<string, CoverageRuleSet[]> = {
   'sql-injection': [
@@ -321,7 +311,35 @@ function hasAnyTerm(prompt: string, terms: string[]): boolean {
   return terms.some((term) => normalizedPrompt.includes(normalizeText(term)));
 }
 
-function summarizeCoverageDimensions(pluginId: string, prompts: string[]) {
+function summarizeSharedTacticCoverage(pluginId: string, prompts: string[]): string[] | undefined {
+  const tacticIdByFeature =
+    SHARED_TACTIC_IDS_BY_PLUGIN[pluginId as keyof typeof SHARED_TACTIC_IDS_BY_PLUGIN];
+
+  if (!tacticIdByFeature) {
+    return undefined;
+  }
+
+  const matched = new Set<string>();
+  for (const prompt of prompts) {
+    for (const feature of extractPluginFeatures(pluginId, prompt)) {
+      const tacticId = tacticIdByFeature[feature as keyof typeof tacticIdByFeature];
+      if (tacticId) {
+        matched.add(tacticId);
+      }
+    }
+  }
+
+  return [...matched].sort();
+}
+
+export function summarizeCoverageDimensions(pluginId: string, prompts: string[]) {
+  const sharedTacticCoverage = summarizeSharedTacticCoverage(pluginId, prompts);
+  if (sharedTacticCoverage) {
+    return {
+      tactic: sharedTacticCoverage,
+    };
+  }
+
   const coverageRules = COVERAGE_RULES[getPluginFamily(pluginId)] ?? [
     {
       dimension: 'tactic',
@@ -344,6 +362,16 @@ function summarizeCoverageDimensions(pluginId: string, prompts: string[]) {
   );
 }
 
+export function getTacticCount(pluginId: string): number {
+  const sharedTacticIds =
+    SHARED_TACTIC_IDS_BY_PLUGIN[pluginId as keyof typeof SHARED_TACTIC_IDS_BY_PLUGIN];
+  if (sharedTacticIds) {
+    return Object.keys(sharedTacticIds).length;
+  }
+
+  return TACTIC_RULES[getPluginFamily(pluginId)]?.length ?? 0;
+}
+
 function summarizePlugin(
   pluginId: string,
   prompts: string[],
@@ -353,7 +381,7 @@ function summarizePlugin(
   const normalizedPrompts = prompts.map(normalizeText);
   const uniqueNormalizedPrompts = new Set(normalizedPrompts).size;
   const tokenizedPrompts = prompts.map(tokenize);
-  const tacticRules = TACTIC_RULES[getPluginFamily(pluginId)] ?? [];
+  const tacticCount = getTacticCount(pluginId);
   const coverageDimensions = summarizeCoverageDimensions(pluginId, prompts);
   const detectedTactics = new Set<string>(coverageDimensions.tactic ?? []);
   const pairwiseSimilarities: number[] = [];
@@ -386,7 +414,7 @@ function summarizePlugin(
     pluginId,
     purposeGroundingRate: prompts.length === 0 ? 0 : purposeGroundedCount / prompts.length,
     tacticCoverage: [...detectedTactics].sort(),
-    tacticCoverageRate: tacticRules.length === 0 ? 0 : detectedTactics.size / tacticRules.length,
+    tacticCoverageRate: tacticCount === 0 ? 0 : detectedTactics.size / tacticCount,
     total: prompts.length,
     uniqueNormalizedPrompts,
   };
@@ -412,7 +440,7 @@ function toMarkdown(summaries: PluginSummary[]): string {
         summary.averageTokens.toFixed(1),
         summary.averagePairwiseDistance.toFixed(3),
         summary.maxPairwiseSimilarity.toFixed(3),
-        `${summary.tacticCoverage.length}/${TACTIC_RULES[getPluginFamily(summary.pluginId)]?.length ?? 0}: ${summary.tacticCoverage.join(', ') || 'none'}`,
+        `${summary.tacticCoverage.length}/${getTacticCount(summary.pluginId)}: ${summary.tacticCoverage.join(', ') || 'none'}`,
         formatAdditionalCoverage(summary),
         formatPercent(summary.purposeGroundingRate),
         formatPercent(summary.entityReferenceRate),
@@ -482,4 +510,6 @@ async function inferPurposeFromSiblingConfig(inputPath: string): Promise<string>
   }
 }
 
-await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

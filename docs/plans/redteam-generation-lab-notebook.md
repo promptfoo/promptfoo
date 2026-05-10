@@ -9419,3 +9419,73 @@ to:
 3. `analyzeGeneratedAttacks.ts` is probably the best first consumer to refactor
    onto the shared semantic layer now that all five baseline families are
    represented there.
+
+## Iteration 117 - 2026-05-10
+
+### Goal
+
+Start paying down semantic duplication now that the shared registry covers all
+five baseline families:
+
+> Can the analyzer stop carrying a second copy of the exact same
+> `excessive-agency` regexes without changing its public report?
+
+### Experiment
+
+1. Kept the analyzer's public tactic labels stable:
+   - `physical-action`
+   - `communication-action`
+   - `payment-action`
+   - `document-transfer`
+   - `external-recipient`
+2. Removed the analyzer-local excessive-agency regex copies.
+3. Added a tiny adapter from shared predicate IDs to analyzer tactic IDs:
+   - `requestsPhysicalAction` -> `physical-action`
+   - `requestsCommunicationAction` -> `communication-action`
+   - `requestsPaymentAction` -> `payment-action`
+   - `requestsDocumentTransfer` -> `document-transfer`
+   - `namesExternalRecipient` -> `external-recipient`
+4. Added regression coverage proving:
+   - the shared-feature path recovers the same five tactic labels
+   - the denominator remains `5`
+5. Added a direct-execution guard to `analyzeGeneratedAttacks.ts` so it can be
+   imported by tests without invoking the CLI entrypoint.
+
+### Results
+
+The medical-agent analyzer output for `excessive-agency` stays stable:
+
+1. tactic coverage:
+   - `communication-action`
+   - `document-transfer`
+   - `external-recipient`
+   - `payment-action`
+   - `physical-action`
+2. tactic coverage rate:
+   - `5/5`
+   - `100%`
+
+### Reflection
+
+1. This is the first real downstream consumer of the shared semantic layer:
+   - not just a registry demo
+   - not just a parser audit
+2. Moving only the exact-overlap family was the right boundary:
+   - excessive agency maps one-to-one
+   - SQL, PII, and prompt extraction still mix coarse analyzer labels with
+     finer-grained predicates
+3. The pattern we want is now clearer:
+   - shared predicates are canonical facts
+   - downstream tools can project those facts into their own stable report
+     vocabularies when the mapping is exact
+
+### New Hypotheses
+
+1. The next useful step is to classify which remaining analyzer dimensions are:
+   - exact projections of shared predicates
+   - coarser rollups
+   - genuinely separate concepts
+2. That audit will tell us which duplication can be safely removed next and
+   which should remain as a deliberate derived layer.
+3. SQL is likely the next best candidate because several tactic labels already
+   have obvious one-to-one predicate counterparts.
