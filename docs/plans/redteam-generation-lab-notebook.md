@@ -8416,3 +8416,74 @@ The first draft of this experiment also surfaced a benchmark-design guardrail:
    summary metric with preservation-rate and truncation-rate outputs.
 3. Once preservation is measurable, we can decide whether to surface it in
    product generation reports alongside family coverage.
+
+## Iteration 102 - 2026-05-10
+
+### Goal
+
+Turn preservation drift into a benchmark metric rather than a qualitative note:
+
+> Can we summarize parser fidelity with a small set of stable numbers that sit
+> beside generation count, diversity, and family coverage?
+
+### Experiment
+
+1. Extended the preservation harness with:
+   - `exactPreservedPromptCount`
+   - `exactPreservationRate`
+   - `truncatedPromptCount`
+   - `truncationRate`
+2. Reported metrics:
+   - per category
+   - across the whole sampled harness
+3. Kept the metric local to the focused preservation script for now rather than
+   prematurely merging it into the broader corpus analyzer.
+
+### Results
+
+On the representative historical parser comparison:
+
+| Metric                  |  Value |
+| ----------------------- | -----: |
+| Sampled prompts         |    `6` |
+| Exact preserved prompts |    `0` |
+| Exact preservation rate |   `0%` |
+| Truncated prompts       |    `6` |
+| Truncation rate         | `100%` |
+
+Per-category rates were the same in this small slice:
+
+1. `pii:social`
+   - exact preservation: `0/2`
+   - truncation: `2/2`
+2. `shell-injection`
+   - exact preservation: `0/2`
+   - truncation: `2/2`
+3. `sql-injection`
+   - exact preservation: `0/2`
+   - truncation: `2/2`
+
+### Reflection
+
+1. A preservation metric changes the conversation:
+   - the old parser was not merely "a bit lossy"
+   - it was `0%` exact on this deliberately punctuation-rich slice
+2. Exact preservation is the right first diagnostic because:
+   - it is deterministic
+   - it catches both exploit loss and ordinary-text loss
+3. But exactness alone will not be enough forever:
+   - some future transformations may be semantics-preserving without being
+     byte-identical
+   - feature-retention metrics will still matter for transformed attacks
+
+### New Hypotheses
+
+1. The next useful split is:
+   - exact preservation for formatter integrity
+   - exploit-feature retention for semantically equivalent rewrites
+2. A formatter-health section should eventually report:
+   - preservation rate
+   - truncation rate
+   - changed-prompt examples
+3. The next experiment should prototype feature-retention checks for the three
+   sampled categories.

@@ -31,12 +31,22 @@ function auditPromptBlock(generatedPrompts: string) {
       },
     ];
   });
+  const promptCount = currentPrompts.length;
+  const exactPreservedPromptCount = promptCount - changedPrompts.length;
+  const truncatedPromptCount = changedPrompts.filter(
+    ({ currentPrompt, legacyPrompt }) =>
+      legacyPrompt.length < currentPrompt.length && currentPrompt.startsWith(legacyPrompt),
+  ).length;
 
   return {
     changedPromptCount: changedPrompts.length,
     changedPrompts,
     currentPromptCount: currentPrompts.length,
+    exactPreservationRate: promptCount === 0 ? 1 : exactPreservedPromptCount / promptCount,
+    exactPreservedPromptCount,
     legacyPromptCount: legacyPrompts.length,
+    truncatedPromptCount,
+    truncationRate: promptCount === 0 ? 0 : truncatedPromptCount / promptCount,
   };
 }
 
@@ -56,12 +66,35 @@ const representativeOutputs = {
 } as const;
 
 async function main() {
+  const audits = {
+    piiSocial: auditPromptBlock(representativeOutputs.piiSocial),
+    shellInjection: auditPromptBlock(representativeOutputs.shellInjection),
+    sqlInjection: auditPromptBlock(representativeOutputs.sqlInjection),
+  };
+  const promptCount = Object.values(audits).reduce(
+    (total, audit) => total + audit.currentPromptCount,
+    0,
+  );
+  const exactPreservedPromptCount = Object.values(audits).reduce(
+    (total, audit) => total + audit.exactPreservedPromptCount,
+    0,
+  );
+  const truncatedPromptCount = Object.values(audits).reduce(
+    (total, audit) => total + audit.truncatedPromptCount,
+    0,
+  );
+
   console.log(
     JSON.stringify(
       {
-        piiSocial: auditPromptBlock(representativeOutputs.piiSocial),
-        shellInjection: auditPromptBlock(representativeOutputs.shellInjection),
-        sqlInjection: auditPromptBlock(representativeOutputs.sqlInjection),
+        audits,
+        summary: {
+          exactPreservationRate: promptCount === 0 ? 1 : exactPreservedPromptCount / promptCount,
+          exactPreservedPromptCount,
+          promptCount,
+          truncatedPromptCount,
+          truncationRate: promptCount === 0 ? 0 : truncatedPromptCount / promptCount,
+        },
       },
       null,
       2,
