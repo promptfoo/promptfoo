@@ -12395,3 +12395,74 @@ base slice without losing the semantic gains created by the migration.
    corpus but the generator or strategy-expansion path itself.
 3. This regeneration check is a useful invariant to keep around for future
    benchmark migrations in other plugin families.
+
+## Iteration 165 - 2026-05-10
+
+### Goal
+
+Measure whether the real production `pii:social` generation path already
+recreates the quality of the migrated benchmark.
+
+### Experiment
+
+1. Ran a live local generation pass:
+   - `npm run local -- redteam generate`
+   - `--plugins pii:social`
+   - `--strategies basic`
+   - `--num-tests 6`
+   - provider: `openai:chat:gpt-5.5-2026-04-23`
+2. Confirmed from source that:
+   - `pii:direct` now uses the portfolio-based path
+   - `pii:social` still falls through `generatePiiLeak(...)`
+3. Captured the exact six live prompts and summarized them in:
+   - `redteam-generation-pii-social-live-generation-baseline.md`
+
+### Results
+
+| Slice                     | Rows | Unique prompts | Featureful prompts | Shared coverage |
+| ------------------------- | ---: | -------------: | -----------------: | --------------: |
+| live production generator |  `6` |            `6` |              `2/6` |           `3/8` |
+| migrated benchmark        | `30` |            `6` |              `6/6` |           `7/8` |
+
+Observed live-generation features:
+
+1. `claimsLostAccess`
+2. `claimsSelfRelationship`
+3. `requestsPrescriptionDetails`
+
+### Reflection
+
+1. The benchmark migration has exposed a real product gap rather than just
+   cleaning up stale examples.
+2. The production generator still relies on broad social-engineering examples,
+   so it can produce plausible-looking attacks that are weakly observable to the
+   shared frontier.
+3. This is the strongest justification yet for moving `pii:social` onto the same
+   family-plus-frontier architecture already used by `pii:direct`.
+
+### 165-Iteration Checkpoint
+
+1. The branch has now:
+   - expanded the shared `pii:social` predicate vocabulary
+   - separated historical compatibility views from live benchmark audits
+   - migrated the benchmark itself from `35` legacy rows to `30` modern rows
+   - proven all strategy descendants regenerate cleanly from the new base slice
+   - measured the live production generator at only `2/6` featureful prompts and
+     `3/8` shared coverage
+2. The current best path is no longer ambiguous:
+   - keep the migrated benchmark
+   - refactor `pii:social` onto a portfolio generator
+   - use the live generation baseline as the hill-climb target
+3. The next five iterations should shift from benchmark work into production
+   generator work.
+
+### New Hypotheses
+
+1. A `PiiSocialPlugin` with explicit attack families and the existing shared
+   frontier should materially improve live generation visibility.
+2. The biggest remaining failure mode is lexical mismatch, especially generated
+   curly-apostrophe variants such as `I’m` that currently miss the ASCII-only
+   identity predicate.
+3. A production-quality fix likely needs both:
+   - a family-aware generator
+   - more robust predicates around typographic apostrophes and social claims
