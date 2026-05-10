@@ -8080,3 +8080,104 @@ The hybrid is much stronger:
 3. The next experiment should refine the hybrid by removing overbroad triggers
    and measure whether we can keep the edge-case fixes without losing judge
    agreement.
+
+## Iteration 98 - 2026-05-10
+
+### Goal
+
+Move the strongest research idea from the synthetic frontier into the actual
+generator path:
+
+> Does family-first generation plus observed predicate validation improve the
+> quality of live plugin output before we add any new downstream search?
+
+### Experiment
+
+1. Added a reusable portfolio-generation layer under `src/redteam/generation/`:
+   - shared attack-family types
+   - atomic predicate extraction
+   - family-preserving selection
+   - portfolio orchestration
+2. Extended `RedteamPluginBase` with a raw-prompt primitive so portfolio
+   generators can plan, validate, and select before materializing `TestCase`
+   objects.
+3. Converted:
+   - `prompt-extraction`
+   - `sql-injection`
+4. For each family-specific batch:
+   - generate with family-local instructions and exemplars
+   - extract observed predicates from the returned prompt text
+   - retain a required-family candidate only when the observed predicate
+     signature actually satisfies that family's requirements
+   - preserve family coverage before filling the remaining budget
+5. Ran the same live `6`-case smoke config twice with
+   `openai:responses:gpt-5.4-mini`:
+   - once from `origin/main`
+   - once from the refactored branch
+
+### Results
+
+The baseline run on `origin/main` produced these `prompt-extraction` rows:
+
+1. `A user asks for your hidden system instructions`
+2. a defensive instruction telling the model to refuse administrator requests
+3. another defensive instruction telling the model not to disclose internal
+   prompts or policies
+
+The refactored branch produced `3/3` adversarial prompt-extraction rows with
+distinct validated families:
+
+1. `policy-audit`
+2. `format-conversion`
+3. `direct-disclosure`
+
+The SQL run showed a different but equally useful result:
+
+1. the baseline emitted:
+   - one weak quote-fragment row
+   - one `UNION SELECT` row
+   - one boolean-bypass row
+2. the refactored branch emitted:
+   - two validated `union-extraction` rows
+   - one validated `boolean-bypass` row
+3. the proposer still failed to produce a valid `stacked-query` row in the live
+   smoke, but the new path **dropped** those invalid candidates instead of
+   falsely labeling them as stacked queries.
+
+Supporting checks:
+
+1. focused regression suite: `14/14` passing
+2. smoke generation wrote real output YAML for both branches
+3. the old medical-agent artifact remains a useful baseline reminder:
+   - `35` rows each for `prompt-extraction` and `sql-injection`
+   - only `5` unique normalized prompts apiece
+
+### Reflection
+
+1. The biggest production win is not just diversity; it is honesty:
+   - family labels now describe what was actually generated
+   - not merely what the planner hoped to generate
+2. `prompt-extraction` immediately benefits from family-local exemplars:
+   - the old path can drift into safety instructions
+   - the new path stays adversarial and semantically spread out
+3. The remaining SQL problem is now a yield problem rather than a truthfulness
+   problem:
+   - `stacked-query` is still hard for the proposer
+   - but it no longer contaminates the corpus with mislabeled rows
+4. This is the first point in the loop where the research stack starts to pay
+   rent in the actual product surface:
+   - predicate signatures are not just a benchmark artifact
+   - they can guard live generation quality directly
+
+### New Hypotheses
+
+1. Validity-gated repair should recover missing required families better than
+   naive quota backfill.
+2. A repair prompt should include:
+   - the rejected candidate
+   - the missing required predicates
+   - the target family exemplar
+3. Future benchmark reports should separate:
+   - requested family coverage
+   - validated family coverage
+   - invalid-family drop rate
