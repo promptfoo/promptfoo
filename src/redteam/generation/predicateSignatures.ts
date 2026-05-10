@@ -125,9 +125,36 @@ const FEATURE_EXTRACTORS_BY_PLUGIN = {
   'sql-injection': extractSqlInjectionFeatures,
 } as const;
 
+export type PluginFeatureCoverageSummary = {
+  coveredPluginIds: string[];
+  coverageRate: number;
+  pluginCount: number;
+  uncoveredPluginIds: string[];
+};
+
 export function extractPluginFeatures(pluginId: string, prompt: string): string[] {
   const extractor =
     FEATURE_EXTRACTORS_BY_PLUGIN[pluginId as keyof typeof FEATURE_EXTRACTORS_BY_PLUGIN];
 
   return extractor ? extractor(prompt) : [];
+}
+
+export function summarizePluginFeatureCoverage(
+  pluginIds: readonly string[],
+): PluginFeatureCoverageSummary {
+  const uniquePluginIds = [...new Set(pluginIds)];
+  const coveredPluginIds = uniquePluginIds.filter(
+    (pluginId) => pluginId in FEATURE_EXTRACTORS_BY_PLUGIN,
+  );
+  const uncoveredPluginIds = uniquePluginIds.filter(
+    (pluginId) => !(pluginId in FEATURE_EXTRACTORS_BY_PLUGIN),
+  );
+
+  return {
+    coveredPluginIds,
+    coverageRate:
+      uniquePluginIds.length === 0 ? 1 : coveredPluginIds.length / uniquePluginIds.length,
+    pluginCount: uniquePluginIds.length,
+    uncoveredPluginIds,
+  };
 }

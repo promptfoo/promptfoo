@@ -9174,3 +9174,67 @@ The registry now serves three plugin families:
    empirical plugins or claiming broad parser-quality coverage.
 3. Longer term, semantic-coverage ratio may be as important as prompt-count
    coverage for understanding benchmark maturity.
+
+## Iteration 114 - 2026-05-10
+
+### Goal
+
+Turn registry membership into an explicit benchmark signal:
+
+> Among the five baseline medical-agent plugin families, how many now expose a
+> shared semantic vocabulary?
+
+### Experiment
+
+1. Added `summarizePluginFeatureCoverage()` to the shared predicate registry.
+2. Taught the empirical parser audit to report semantic coverage for the five
+   baseline medical-agent plugin families:
+   - `sql-injection`
+   - `pii:direct`
+   - `pii:social`
+   - `prompt-extraction`
+   - `excessive-agency`
+3. Added focused coverage proving the summary:
+   - deduplicates repeated plugin IDs
+   - distinguishes covered from uncovered families
+
+### Results
+
+The baseline semantic-coverage report is now:
+
+1. covered:
+   - `sql-injection`
+   - `pii:social`
+   - `prompt-extraction`
+2. uncovered:
+   - `pii:direct`
+   - `excessive-agency`
+3. coverage:
+   - `3/5`
+   - `60%`
+
+### Reflection
+
+1. This is a more honest maturity metric than raw prompt count:
+   - all five families had baseline examples
+   - only three had reusable semantic observability
+2. The two uncovered families are meaningfully different:
+   - `pii:direct` likely needs a small, concrete vocabulary similar to
+     `pii:social`
+   - `excessive-agency` may need a richer agent/action model before a useful
+     semantic layer exists
+3. Reporting the gap explicitly prevents us from pretending parser-quality
+   measurements generalize to every empirical plugin equally well.
+
+### New Hypotheses
+
+1. The next useful step is to add the smallest defensible `pii:direct`
+   predicate vocabulary and see whether it closes one of the two coverage gaps.
+2. `excessive-agency` should probably wait until we define what counts as an
+   observable semantic unit for agent/tool misuse rather than inventing labels
+   from thin air.
+3. Future benchmark summaries should report:
+   - prompt-count coverage
+   - semantic-coverage ratio
+   - parser-retention quality
+     as separate maturity axes.

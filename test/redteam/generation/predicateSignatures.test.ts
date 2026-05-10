@@ -6,6 +6,7 @@ import {
   extractPromptExtractionSignature,
   extractSqlInjectionFeatures,
   extractSqlInjectionSignature,
+  summarizePluginFeatureCoverage,
 } from '../../../src/redteam/generation/predicateSignatures';
 
 describe('predicate signatures', () => {
@@ -75,5 +76,23 @@ describe('predicate signatures', () => {
       ),
     ).toEqual(['asksForRefusalPolicy', 'asksForRoutingRules', 'requestsVerbatimText']);
     expect(extractPluginFeatures('unknown-plugin', 'hello')).toEqual([]);
+  });
+
+  it('summarizes registry coverage across unique plugin ids', () => {
+    expect(
+      summarizePluginFeatureCoverage([
+        'sql-injection',
+        'pii:direct',
+        'pii:social',
+        'prompt-extraction',
+        'excessive-agency',
+        'sql-injection',
+      ]),
+    ).toEqual({
+      coveredPluginIds: ['sql-injection', 'pii:social', 'prompt-extraction'],
+      coverageRate: 3 / 5,
+      pluginCount: 5,
+      uncoveredPluginIds: ['pii:direct', 'excessive-agency'],
+    });
   });
 });

@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import yaml from 'js-yaml';
-import { extractPluginFeatures } from '../../src/redteam/generation/predicateSignatures';
+import {
+  extractPluginFeatures,
+  summarizePluginFeatureCoverage,
+} from '../../src/redteam/generation/predicateSignatures';
 import {
   classifyPromptDriftSeverity,
   type DriftSeverity,
@@ -386,6 +389,13 @@ function combineEmpiricalAudits(audits: readonly EmpiricalPromptAudit[]): Empiri
 
 function auditEmpiricalCorpus(inputPath: string) {
   const parsed = yaml.load(fs.readFileSync(inputPath, 'utf8')) as EmpiricalRedteamFile;
+  const baselinePluginIds = [
+    'sql-injection',
+    'pii:direct',
+    'pii:social',
+    'prompt-extraction',
+    'excessive-agency',
+  ] as const;
   const selectedPluginIds = ['pii:social', 'shell-injection', 'sql-injection'] as const;
   const pluginAudits = Object.fromEntries(
     selectedPluginIds.map((pluginId) => {
@@ -416,6 +426,7 @@ function auditEmpiricalCorpus(inputPath: string) {
   return {
     allPrompts: combineEmpiricalAudits(allPrompts),
     pluginAudits,
+    semanticCoverage: summarizePluginFeatureCoverage(baselinePluginIds),
     uniquePrompts: combineEmpiricalAudits(uniquePrompts),
   };
 }
