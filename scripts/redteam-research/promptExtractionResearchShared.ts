@@ -2,6 +2,7 @@ import {
   extractPromptExtractionFeatures,
   getPluginFeatureBands,
 } from '../../src/redteam/generation/predicateSignatures';
+import { selectGreedyPortfolio } from './semanticBandSelectionShared';
 import {
   extractEntities,
   jaccardSimilarity,
@@ -176,45 +177,14 @@ export function selectDiversePromptExtractionPortfolio(
   candidates: PromptExtractionAttack[],
   count: number,
 ): PromptExtractionAttack[] {
-  return selectPromptExtractionPortfolio(candidates, count, scoreNoveltyOnlyCandidate);
+  return selectGreedyPortfolio(candidates, count, scoreNoveltyOnlyCandidate);
 }
 
 export function selectSemanticBandAwarePromptExtractionPortfolio(
   candidates: PromptExtractionAttack[],
   count: number,
 ): PromptExtractionAttack[] {
-  return selectPromptExtractionPortfolio(candidates, count, scoreSemanticBandAwareCandidate);
-}
-
-function selectPromptExtractionPortfolio(
-  candidates: PromptExtractionAttack[],
-  count: number,
-  scoreCandidate: (
-    candidate: PromptExtractionAttack,
-    selected: readonly PromptExtractionAttack[],
-  ) => number,
-): PromptExtractionAttack[] {
-  const selected: PromptExtractionAttack[] = [];
-  const remaining = [...candidates];
-
-  while (selected.length < count && remaining.length > 0) {
-    let bestIndex = 0;
-    let bestScore = Number.NEGATIVE_INFINITY;
-
-    for (let index = 0; index < remaining.length; index += 1) {
-      const candidate = remaining[index];
-      const score = scoreCandidate(candidate, selected);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = index;
-      }
-    }
-
-    selected.push(remaining.splice(bestIndex, 1)[0]);
-  }
-
-  return selected;
+  return selectGreedyPortfolio(candidates, count, scoreSemanticBandAwareCandidate);
 }
 
 function scoreSemanticBandAwareCandidate(

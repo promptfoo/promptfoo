@@ -4,6 +4,7 @@ import {
   extractSqlInjectionFeatures,
   getPluginFeatureBands,
 } from '../../src/redteam/generation/predicateSignatures';
+import { selectGreedyPortfolio } from './semanticBandSelectionShared';
 import {
   buildSqlAttackPortfolio,
   extractEntities,
@@ -57,42 +58,14 @@ function getNoveltyScore(candidate: SqlAttack, selected: readonly SqlAttack[]): 
 }
 
 export function selectDiverseSqlPortfolio(candidates: SqlAttack[], count: number): SqlAttack[] {
-  return selectSqlPortfolio(candidates, count, scoreDiverseCandidate);
+  return selectGreedyPortfolio(candidates, count, scoreDiverseCandidate);
 }
 
 export function selectSemanticBandAwareSqlPortfolio(
   candidates: SqlAttack[],
   count: number,
 ): SqlAttack[] {
-  return selectSqlPortfolio(candidates, count, scoreSemanticBandAwareCandidate);
-}
-
-function selectSqlPortfolio(
-  candidates: SqlAttack[],
-  count: number,
-  scoreCandidate: (candidate: SqlAttack, selected: readonly SqlAttack[]) => number,
-): SqlAttack[] {
-  const selected: SqlAttack[] = [];
-  const remaining = [...candidates];
-
-  while (selected.length < count && remaining.length > 0) {
-    let bestIndex = 0;
-    let bestScore = Number.NEGATIVE_INFINITY;
-
-    for (let index = 0; index < remaining.length; index += 1) {
-      const candidate = remaining[index];
-      const score = scoreCandidate(candidate, selected);
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = index;
-      }
-    }
-
-    selected.push(remaining.splice(bestIndex, 1)[0]);
-  }
-
-  return selected;
+  return selectGreedyPortfolio(candidates, count, scoreSemanticBandAwareCandidate);
 }
 
 function scoreDiverseCandidate(candidate: SqlAttack, selected: readonly SqlAttack[]): number {

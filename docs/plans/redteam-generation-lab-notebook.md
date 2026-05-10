@@ -10709,3 +10709,56 @@ The perturbed pool changes the answer:
    - SQL injection
 3. The next iteration should prototype that shared selector carefully and prove
    it preserves both plugin-specific frontiers.
+
+## Iteration 137 - 2026-05-10
+
+### Goal
+
+Extract the repeated selection machinery now that two plugins justify it:
+
+> Can we share the greedy portfolio-selection loop without weakening either
+> plugin's frontier guarantees?
+
+### Experiment
+
+1. Added `semanticBandSelectionShared.ts` with a generic greedy selector.
+2. Rewired:
+   - prompt-extraction diversity selection
+   - prompt-extraction semantic-band-aware selection
+   - SQL diversity selection
+   - SQL semantic-band-aware selection
+3. Kept the plugin-specific scoring functions local.
+4. Re-ran both plugin frontier proofs plus the perturbed SQL stress test.
+
+### Results
+
+The refactor preserves the important guarantees:
+
+| Surface                         | Expected result | Observed result |
+| ------------------------------- | --------------: | --------------: |
+| prompt extraction semantic five |           `7/7` |           `7/7` |
+| current SQL diversity five      |           `2/2` |           `2/2` |
+| perturbed SQL semantic five     |           `2/2` |           `2/2` |
+
+### Reflection
+
+1. This is the right abstraction boundary:
+   - the iteration loop is generic
+   - the meaning of "good" remains plugin-specific
+2. Extracting only the shared control flow avoids prematurely standardizing:
+   - feature weights
+   - novelty terms
+   - auxiliary dimensions such as artifact or pretext
+3. We now have a reusable primitive that future plugins can adopt without losing
+   their local semantics.
+
+### New Hypotheses
+
+1. The next worthwhile abstraction is probably not another selector primitive.
+2. It is a reusable report renderer or selector benchmark harness that keeps:
+   - JSON summaries
+   - Markdown snapshots
+   - live corpus comparisons
+     aligned across plugins.
+3. Before that, it may be useful to port the shared greedy selector into the
+   production generation layer rather than leaving it only in research scripts.
