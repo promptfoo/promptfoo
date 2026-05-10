@@ -124,6 +124,82 @@ describe('NavigationMenu', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('animates open/close via data-state since no shared viewport is present', async () => {
+    const user = userEvent.setup();
+    render(
+      <NavigationMenu>
+        <NavigationMenuList>
+          <NavigationMenuItem>
+            <NavigationMenuTrigger>Products</NavigationMenuTrigger>
+            <NavigationMenuContent>
+              <NavigationMenuLink href="/product1">Product 1</NavigationMenuLink>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>,
+    );
+
+    await user.click(screen.getByText('Products'));
+
+    const content = (await screen.findByRole('link', { name: 'Product 1' })).parentElement;
+    expect(content).toHaveAttribute('data-state', 'open');
+    // First open has no data-motion (Radix only sets it when transitioning between siblings),
+    // so the open/close zoom+fade must come from data-state classes.
+    expect(content).toHaveClass(
+      'data-[state=open]:animate-in',
+      'data-[state=closed]:animate-out',
+      'data-[state=open]:fade-in-0',
+      'data-[state=closed]:fade-out-0',
+      'data-[state=open]:zoom-in-95',
+      'data-[state=closed]:zoom-out-95',
+    );
+  });
+
+  it('supports end alignment to right-anchor the dropdown', async () => {
+    const user = userEvent.setup();
+    render(
+      <NavigationMenu>
+        <NavigationMenuList>
+          <NavigationMenuItem>
+            <NavigationMenuTrigger>Account</NavigationMenuTrigger>
+            <NavigationMenuContent align="end">
+              <NavigationMenuLink href="/profile">Profile</NavigationMenuLink>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>,
+    );
+
+    await user.click(screen.getByText('Account'));
+
+    const content = (await screen.findByRole('link', { name: 'Profile' })).parentElement;
+    expect(content).toHaveClass('right-0');
+    expect(content).not.toHaveClass('left-0');
+  });
+
+  it('supports center alignment to center the dropdown over the trigger', async () => {
+    const user = userEvent.setup();
+    render(
+      <NavigationMenu>
+        <NavigationMenuList>
+          <NavigationMenuItem>
+            <NavigationMenuTrigger>Help</NavigationMenuTrigger>
+            <NavigationMenuContent align="center">
+              <NavigationMenuLink href="/docs">Docs</NavigationMenuLink>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>,
+    );
+
+    await user.click(screen.getByText('Help'));
+
+    const content = (await screen.findByRole('link', { name: 'Docs' })).parentElement;
+    expect(content).toHaveClass('left-1/2', '-translate-x-1/2');
+    expect(content).not.toHaveClass('left-0');
+    expect(content).not.toHaveClass('right-0');
+  });
+
   it('applies custom className to menu', () => {
     render(
       <NavigationMenu className="custom-nav">
