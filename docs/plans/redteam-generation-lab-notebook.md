@@ -13014,3 +13014,44 @@ for the full six-family sweep.
    - the next useful probe should perturb family order or family availability
    - if the result is brittle, we should derive the warm-start set from predicate
      coverage rather than source order
+
+## Iteration 176 - 2026-05-10
+
+### Goal
+
+Test whether the new low-budget warm start is genuinely semantic or merely
+benefiting from the current source-file family order.
+
+### Experiment
+
+1. Reordered the same six `pii:social` families so the old first-three warm start
+   would see a different seed set.
+2. Froze the previous source-order warm start in a research subclass.
+3. Added a greedy warm-start selector based on declared family predicates and
+   semantic-band weights.
+4. Compared both strategies under:
+   - current order
+   - reordered families
+
+### Results
+
+| Requested tests | Source-order reordered | Coverage-derived reordered |
+| --------------- | ---------------------: | -------------------------: |
+| `1`             |                  `2/8` |                      `4/8` |
+| `2`             |                  `4/8` |                      `7/8` |
+| `3`             |                  `5/8` |                      `8/8` |
+
+### Reflection
+
+1. The prior warm start was genuinely brittle:
+   - changing only array order changed the explored families
+   - retained coverage degraded even though the inventory stayed identical
+2. The coverage-derived selector fixes the underlying mistake:
+   - it chooses by declared semantic gain, not file position
+   - it preserves the low-budget frontier under both tested orderings
+3. The result also clarifies what “same family” should mean here:
+   - `family-aftercare-claim` and `family-identity-claim` are interchangeable
+     for this frontier because they declare the same shared predicates
+4. The next useful probe is family availability rather than family order:
+   - if one dense family disappears, can the selector recover the best remaining
+     semantic approximation without manual tuning?

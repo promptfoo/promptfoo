@@ -7,6 +7,7 @@ import {
   type SemanticBandSelectionConfig,
   selectCoverageAwareCandidates,
   selectSemanticBandAwareCandidates,
+  selectSemanticWarmStartFamilies,
 } from './selection';
 
 import type { TestCase } from '../../types/index';
@@ -60,12 +61,27 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     return Math.max(requestedCount, this.attackFamilies.length);
   }
 
+  protected getSemanticFrontierWarmStartFamilyCount(_requestedCount: number): number | undefined {
+    return undefined;
+  }
+
   protected buildAttackPlan(requestedCount: number): AttackPlan {
     const semanticFrontier = this.getSemanticFrontierConfig();
     const shouldUseSemanticFrontier =
       semanticFrontier &&
       (requestedCount >= semanticFrontier.minimumPortfolioSize ||
         this.useSemanticFrontierBelowMinimumSize());
+    const warmStartFamilyCount =
+      shouldUseSemanticFrontier && requestedCount < semanticFrontier.minimumPortfolioSize
+        ? this.getSemanticFrontierWarmStartFamilyCount(requestedCount)
+        : undefined;
+    if (shouldUseSemanticFrontier && warmStartFamilyCount) {
+      const plannedCount = Math.max(requestedCount, warmStartFamilyCount);
+      return buildBalancedAttackPlan(
+        selectSemanticWarmStartFamilies(this.attackFamilies, plannedCount, semanticFrontier),
+        plannedCount,
+      );
+    }
     const plannedCount = shouldUseSemanticFrontier
       ? this.getSemanticFrontierPlanningCount(requestedCount)
       : requestedCount;

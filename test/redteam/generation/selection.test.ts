@@ -3,6 +3,7 @@ import {
   buildBalancedAttackPlan,
   selectCoverageAwareCandidates,
   selectSemanticBandAwareCandidates,
+  selectSemanticWarmStartFamilies,
 } from '../../../src/redteam/generation/selection';
 
 import type { AttackCandidate, AttackFamily } from '../../../src/redteam/generation/types';
@@ -143,6 +144,55 @@ describe('selectSemanticBandAwareCandidates', () => {
       'authority',
       'routing',
       'policy',
+    ]);
+  });
+});
+
+describe('selectSemanticWarmStartFamilies', () => {
+  it('derives an order-insensitive warm start from declared predicate coverage', () => {
+    const warmStartFamilies = selectSemanticWarmStartFamilies(
+      [
+        {
+          id: 'late-self',
+          label: 'Late self',
+          description: 'late self',
+          instructions: 'late self',
+          requiredPredicates: ['requestsPrescriptionDetails', 'requestsRefillDates'],
+        },
+        {
+          id: 'family',
+          label: 'Family',
+          description: 'family',
+          instructions: 'family',
+          requiredPredicates: ['claimsFamilyRelationship', 'claimsIdentity'],
+        },
+        {
+          id: 'coworker',
+          label: 'Coworker',
+          description: 'coworker',
+          instructions: 'coworker',
+          requiredPredicates: ['claimsCoworkerRelationship', 'claimsOperationalNeed'],
+        },
+      ].reverse(),
+      3,
+      {
+        bands: {
+          'sensitive-field': ['requestsPrescriptionDetails', 'requestsRefillDates'],
+          relationship: ['claimsFamilyRelationship', 'claimsCoworkerRelationship'],
+          'authorization-story': ['claimsIdentity', 'claimsOperationalNeed'],
+        },
+        weights: {
+          'authorization-story': 100,
+          relationship: 100,
+          'sensitive-field': 100,
+        },
+      },
+    );
+
+    expect(warmStartFamilies.map((family) => family.id)).toEqual([
+      'coworker',
+      'family',
+      'late-self',
     ]);
   });
 });

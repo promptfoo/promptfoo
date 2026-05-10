@@ -113,6 +113,67 @@ export function buildBalancedAttackPlan(
   };
 }
 
+function getDeclaredSemanticBandGain(
+  family: AttackFamily,
+  selectedPredicates: ReadonlySet<string>,
+  config: SemanticBandSelectionConfig,
+): number {
+  const requiredPredicates = new Set(family.requiredPredicates ?? []);
+
+  return Object.entries(config.bands).reduce((score, [bandId, predicates]) => {
+    const newlyCoveredPredicates = predicates.filter(
+      (predicate) => requiredPredicates.has(predicate) && !selectedPredicates.has(predicate),
+    ).length;
+
+    return score + newlyCoveredPredicates * (config.weights[bandId] ?? 1);
+  }, 0);
+}
+
+export function selectSemanticWarmStartFamilies(
+  families: readonly AttackFamily[],
+  familyCount: number,
+  config: SemanticBandSelectionConfig,
+): AttackFamily[] {
+  if (familyCount <= 0) {
+    return [];
+  }
+
+  const remaining = [...families];
+  const selected: AttackFamily[] = [];
+  const selectedPredicates = new Set<string>();
+
+  while (selected.length < familyCount && remaining.length > 0) {
+    remaining.sort((left, right) => {
+      const semanticDelta =
+        getDeclaredSemanticBandGain(right, selectedPredicates, config) -
+        getDeclaredSemanticBandGain(left, selectedPredicates, config);
+      if (semanticDelta !== 0) {
+        return semanticDelta;
+      }
+
+      const requiredPredicateDelta =
+        (right.requiredPredicates?.length ?? 0) - (left.requiredPredicates?.length ?? 0);
+      if (requiredPredicateDelta !== 0) {
+        return requiredPredicateDelta;
+      }
+
+      return left.id.localeCompare(right.id);
+    });
+
+    const next = remaining.shift();
+    if (!next) {
+      break;
+    }
+
+    selected.push(next);
+    for (const predicate of next.requiredPredicates ?? []) {
+      selectedPredicates.add(predicate);
+    }
+  }
+
+  return selected;
+}
+
 export function selectCoverageAwareCandidates(
   candidates: readonly AttackCandidate[],
   requestedCount: number,

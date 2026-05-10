@@ -4,6 +4,7 @@ import { PII_SOCIAL_ATTACK_FAMILIES, PiiSocialPlugin } from '../../src/redteam/p
 import { renderMarkdownTable } from './reportRenderingShared';
 
 import type { SemanticFrontierSummary } from '../../src/redteam/generation/portfolio';
+import type { AttackFamily } from '../../src/redteam/generation/types';
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
 type ScriptedFamily = {
@@ -14,20 +15,18 @@ type ScriptedFamily = {
 
 type ScriptedProvider = ApiProvider & {
   generatedFamilyIds: string[];
-  requestedPromptCount: number;
 };
 
-type PiiSocialLowBudgetStrategy = 'legacy-order' | 'semantic-low-budget';
+type WarmStartOrder = 'current-order' | 'reordered';
+type WarmStartStrategy = 'coverage-derived' | 'source-order';
 
-export type PiiSocialLowBudgetEfficiencyRow = {
-  generatedFamilyCount: number;
+export type PiiSocialWarmStartOrderSensitivityRow = {
   generatedFamilyIds: string[];
+  order: WarmStartOrder;
   requestedCount: number;
-  requestedPromptCount: number;
   selectedCoverage: string;
   selectedFamilyIds: string[];
-  selectedTestCount: number;
-  strategy: PiiSocialLowBudgetStrategy;
+  strategy: WarmStartStrategy;
 };
 
 const PII_SOCIAL_FAMILIES: readonly ScriptedFamily[] = [
@@ -69,13 +68,16 @@ const PII_SOCIAL_FAMILIES: readonly ScriptedFamily[] = [
   },
 ] as const;
 
-class LegacyLowBudgetPiiSocialPlugin extends PiiSocialPlugin {
-  protected override useSemanticFrontierBelowMinimumSize(): boolean {
-    return false;
-  }
+const REORDERED_ATTACK_FAMILIES: readonly AttackFamily[] = [
+  ...PII_SOCIAL_ATTACK_FAMILIES.slice(3),
+  ...PII_SOCIAL_ATTACK_FAMILIES.slice(0, 3),
+];
+
+class ReorderedWarmStartPiiSocialPlugin extends PiiSocialPlugin {
+  protected override readonly attackFamilies = REORDERED_ATTACK_FAMILIES;
 }
 
-class FullSweepLowBudgetPiiSocialPlugin extends PiiSocialPlugin {
+class SourceOrderWarmStartPiiSocialPlugin extends PiiSocialPlugin {
   protected override getSemanticFrontierWarmStartFamilyCount(
     _requestedCount: number,
   ): number | undefined {
@@ -83,19 +85,23 @@ class FullSweepLowBudgetPiiSocialPlugin extends PiiSocialPlugin {
   }
 
   protected override getSemanticFrontierPlanningCount(requestedCount: number): number {
-    return Math.max(requestedCount, PII_SOCIAL_ATTACK_FAMILIES.length);
+    if (requestedCount >= this.getSemanticFrontierConfig().minimumPortfolioSize) {
+      return super.getSemanticFrontierPlanningCount(requestedCount);
+    }
+
+    return Math.max(requestedCount, 3);
   }
+}
+
+class ReorderedSourceOrderWarmStartPiiSocialPlugin extends SourceOrderWarmStartPiiSocialPlugin {
+  protected override readonly attackFamilies = REORDERED_ATTACK_FAMILIES;
 }
 
 function createScriptedProvider(): ScriptedProvider {
   const generatedFamilyIds: string[] = [];
-  let requestedPromptCount = 0;
 
   return {
     generatedFamilyIds,
-    get requestedPromptCount() {
-      return requestedPromptCount;
-    },
     id: () => 'scripted-provider',
     async callApi(prompt: string): Promise<ProviderResponse> {
       const family = PII_SOCIAL_FAMILIES.find((candidate) =>
@@ -105,10 +111,7 @@ function createScriptedProvider(): ScriptedProvider {
         throw new Error(`Unable to match scripted family for prompt: ${prompt}`);
       }
 
-      const requestedCount = prompt.match(/Generate a list of (\d+) test prompts/)?.[1];
-      requestedPromptCount += Number(requestedCount ?? 0);
       generatedFamilyIds.push(family.id);
-
       return {
         output: family.output,
       };
@@ -143,59 +146,70 @@ function formatSelectedCoverage(summary: SemanticFrontierSummary | undefined): s
   return `${observedFeatureCount}/${featureCount}`;
 }
 
-async function benchmarkStrategy(
-  strategy: PiiSocialLowBudgetStrategy,
+async function benchmarkOrder(
+  strategy: WarmStartStrategy,
+  order: WarmStartOrder,
   requestedCount: number,
-): Promise<PiiSocialLowBudgetEfficiencyRow> {
+): Promise<PiiSocialWarmStartOrderSensitivityRow> {
   const provider = createScriptedProvider();
   const plugin =
-    strategy === 'semantic-low-budget'
-      ? new FullSweepLowBudgetPiiSocialPlugin(provider, 'medical assistant', 'prompt', {})
-      : new LegacyLowBudgetPiiSocialPlugin(provider, 'medical assistant', 'prompt', {});
+    strategy === 'coverage-derived'
+      ? order === 'current-order'
+        ? new PiiSocialPlugin(provider, 'medical assistant', 'prompt', {})
+        : new ReorderedWarmStartPiiSocialPlugin(provider, 'medical assistant', 'prompt', {})
+      : order === 'current-order'
+        ? new SourceOrderWarmStartPiiSocialPlugin(provider, 'medical assistant', 'prompt', {})
+        : new ReorderedSourceOrderWarmStartPiiSocialPlugin(
+            provider,
+            'medical assistant',
+            'prompt',
+            {},
+          );
   const tests = await plugin.generateTests(requestedCount);
-  const semanticFrontier = getSemanticFrontierSummary(tests);
 
   return {
-    generatedFamilyCount: new Set(provider.generatedFamilyIds).size,
     generatedFamilyIds: [...new Set(provider.generatedFamilyIds)].sort(),
+    order,
     requestedCount,
-    requestedPromptCount: provider.requestedPromptCount,
-    selectedCoverage: formatSelectedCoverage(semanticFrontier),
+    selectedCoverage: formatSelectedCoverage(getSemanticFrontierSummary(tests)),
     selectedFamilyIds: getSelectedFamilyIds(tests),
-    selectedTestCount: tests.length,
     strategy,
   };
 }
 
-export async function comparePiiSocialLowBudgetEfficiency(
-  requestedCounts: readonly number[] = [1, 2, 3, 4, 5, 6],
-): Promise<PiiSocialLowBudgetEfficiencyRow[]> {
+export async function comparePiiSocialWarmStartOrderSensitivity(
+  requestedCounts: readonly number[] = [1, 2, 3],
+): Promise<PiiSocialWarmStartOrderSensitivityRow[]> {
   const rows = await Promise.all(
     requestedCounts.flatMap((requestedCount) =>
-      (['legacy-order', 'semantic-low-budget'] as const).map((strategy) =>
-        benchmarkStrategy(strategy, requestedCount),
+      (['coverage-derived', 'source-order'] as const).flatMap((strategy) =>
+        (['current-order', 'reordered'] as const).map((order) =>
+          benchmarkOrder(strategy, order, requestedCount),
+        ),
       ),
     ),
   );
 
   return rows.sort(
     (left, right) =>
-      left.requestedCount - right.requestedCount || left.strategy.localeCompare(right.strategy),
+      left.requestedCount - right.requestedCount ||
+      left.strategy.localeCompare(right.strategy) ||
+      left.order.localeCompare(right.order),
   );
 }
 
-export function renderPiiSocialLowBudgetEfficiencyMarkdown(
-  rows: readonly PiiSocialLowBudgetEfficiencyRow[],
+export function renderPiiSocialWarmStartOrderSensitivityMarkdown(
+  rows: readonly PiiSocialWarmStartOrderSensitivityRow[],
 ): string {
   return [
-    '# PII Social Low-Budget Efficiency',
+    '# PII Social Warm-Start Order Sensitivity',
     '',
     ...renderMarkdownTable(
       [
         'Requested',
         'Strategy',
+        'Order',
         'Generated families',
-        'Generator prompts requested',
         'Selected coverage',
         'Selected families',
       ],
@@ -203,8 +217,8 @@ export function renderPiiSocialLowBudgetEfficiencyMarkdown(
         cells: [
           String(row.requestedCount),
           row.strategy,
-          String(row.generatedFamilyCount),
-          String(row.requestedPromptCount),
+          row.order,
+          row.generatedFamilyIds.join(', '),
           row.selectedCoverage,
           row.selectedFamilyIds.join(', '),
         ],
@@ -213,13 +227,15 @@ export function renderPiiSocialLowBudgetEfficiencyMarkdown(
     '',
     '## Reading',
     '',
-    'The semantic low-budget policy buys better tiny-batch coverage by paying the full six-family generation cost early. At `n=1`, it improves from `2/8` to `4/8` while increasing generator prompts from `2` to `12`; at `n=2`, it improves from `4/8` to `7/8` while increasing prompts from `4` to `12`. Once the frontier saturates at `n=3`, the quality gap disappears but the extra work remains until the normal six-test threshold.',
+    'The source-order warm start is brittle: reordering the same family set drops `n=1` from `4/8` to `2/8`, `n=2` from `7/8` to `4/8`, and `n=3` from `8/8` to `5/8`. The coverage-derived warm start keeps the same three semantic roles and preserves `4/8`, `7/8`, and `8/8` under both orderings.',
   ].join('\n');
 }
 
 async function main() {
   console.log(
-    renderPiiSocialLowBudgetEfficiencyMarkdown(await comparePiiSocialLowBudgetEfficiency()),
+    renderPiiSocialWarmStartOrderSensitivityMarkdown(
+      await comparePiiSocialWarmStartOrderSensitivity(),
+    ),
   );
 }
 
