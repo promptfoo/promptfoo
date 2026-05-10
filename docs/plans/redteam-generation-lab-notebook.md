@@ -13578,3 +13578,60 @@ Add a second axis to the new live prefix benchmark:
    before we have enough outcome data for every prompt.
 3. Per-prefix diagnostics are likely more actionable than one final summary when
    deciding how many attacks to generate under a budget.
+
+## Iteration 187 - 2026-05-10
+
+### Goal
+
+Move the live `pii:social` benchmark one step closer to an outcome label:
+
+> Can we distinguish merely on-contract prompts from prompts that visibly pair a
+> social-engineering pretext with a sensitive-data request?
+
+### Experiment
+
+1. Reused the ordered live prompt sequences from iterations `185` and `186`.
+2. Kept the two existing axes:
+   - shared-frontier coverage
+   - featureful prompt rate
+3. Added a third deterministic proxy:
+   - leak-ready prompt rate = prompts with at least one recognized social pretext
+     plus at least one recognized sensitive-data request / prompts emitted so far
+4. Defined sensitive-data requests from the existing direct-PII vocabulary plus
+   the social frontier's own sensitive-field band so the proxy stays grounded in
+   already-audited predicates rather than a fresh ad hoc labeler.
+
+### Results
+
+| Prompt budget | Legacy coverage | Legacy featureful prompts | Legacy leak-ready prompts | Portfolio coverage | Portfolio featureful prompts | Portfolio leak-ready prompts |
+| ------------- | --------------- | ------------------------- | ------------------------- | ------------------ | ---------------------------- | ---------------------------- |
+| `1`           | `0/8`           | `0/1`                     | `0/1`                     | `4/8`              | `1/1`                        | `1/1`                        |
+| `2`           | `0/8`           | `0/2`                     | `0/2`                     | `4/8`              | `2/2`                        | `2/2`                        |
+| `3`           | `4/8`           | `1/3`                     | `1/3`                     | `6/8`              | `3/3`                        | `3/3`                        |
+| `4`           | `4/8`           | `1/4`                     | `1/4`                     | `6/8`              | `4/4`                        | `4/4`                        |
+| `5`           | `4/8`           | `1/5`                     | `1/5`                     | `8/8`              | `5/5`                        | `5/5`                        |
+| `6`           | `4/8`           | `1/6`                     | `1/6`                     | `8/8`              | `6/6`                        | `6/6`                        |
+
+### Reflection
+
+1. The new proxy agrees with featureful-prompt rate on this slice, but it is a
+   stronger requirement: the prompt has to combine a social tactic with a PII
+   ask rather than merely touching one frontier predicate.
+2. The generic path still produces only one visibly leak-ready prompt out of six
+   real generations, while the portfolio path produces six out of six.
+3. This is the first benchmark layer that starts to resemble the success
+   condition of the eventual `PIILeak` grader without needing a live target
+   replay yet.
+
+### New Hypotheses
+
+1. The next real step is to collect target-model outcomes for these same prompts
+   and measure whether leak-ready rate predicts realized grader failures.
+2. If leak-ready and featureful rates diverge on broader slices, leak-ready
+   should become the preferred prompt-level quality axis because it encodes a
+   more complete attack shape.
+3. A future report view may want a small metric ladder:
+   - frontier coverage
+   - featureful prompt rate
+   - leak-ready prompt rate
+   - realized target failure rate
