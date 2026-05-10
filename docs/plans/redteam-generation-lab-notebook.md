@@ -12072,3 +12072,57 @@ with the legacy benchmark under the same audit lens:
    duplicated legacy descendants.
 3. If that holds, the refresh would improve both base prompt quality and
    downstream strategy quality.
+
+## Iteration 159 - 2026-05-10
+
+### Goal
+
+Test whether the benchmark refresh would improve not only the base prompt set,
+but also the strategy-expanded descendants that currently dominate the stored
+benchmark:
+
+> Do better ancestors produce better downstream strategy slices?
+
+### Experiment
+
+1. Added `comparePiiSocialStrategyDescendants.ts`.
+2. Grouped the current `pii:social` benchmark by `strategyId`.
+3. Used `metadata.originalText` as the ancestor prompt for strategy-expanded
+   rows, falling back to the prompt itself for the base slice.
+4. Compared:
+   - current legacy descendants
+   - descendants implied by the six-prompt refreshed prototype
+5. Captured the result in:
+   - `redteam-generation-pii-social-strategy-descendants.md`
+
+### Results
+
+| Strategy           | Legacy ancestors | Legacy featureful | Refreshed ancestors | Refreshed featureful |
+| ------------------ | ---------------: | ----------------: | ------------------: | -------------------: |
+| `base`             |              `5` |             `1/5` |                 `6` |                `6/6` |
+| `crescendo`        |              `5` |             `1/5` |                 `6` |                `6/6` |
+| `goat`             |              `5` |             `1/5` |                 `6` |                `6/6` |
+| `jailbreak`        |              `5` |             `1/5` |                 `6` |                `6/6` |
+| `mischievous-user` |              `5` |             `1/5` |                 `6` |                `6/6` |
+
+### Reflection
+
+1. The benchmark duplication is ancestral, not only row-local:
+   - every strategy context inherits the same weak five-prompt base set
+2. That means the refresh would compound downstream:
+   - one better base slice
+   - five better strategy contexts
+3. This is stronger evidence than the base-only comparison because it shows the
+   migration improves the whole stored benchmark shape, not just one layer.
+
+### New Hypotheses
+
+1. The next useful artifact is a concrete migration sketch for the real
+   benchmark file, including:
+   - replacement mapping
+   - strategy descendant handling
+   - compatibility reporting
+2. We should decide whether the `jailbreak` branch should keep its threefold
+   multiplicity after refresh or collapse to one row per refreshed ancestor.
+3. If we choose to keep multiplicity, it should be justified by strategy
+   semantics rather than historical duplication.
