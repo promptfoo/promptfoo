@@ -8831,3 +8831,66 @@ The repeated corpus view matters too:
      should remain visible because they answer different operational questions.
 3. The `pii:social` example is a useful reminder that ordinary prose attacks
    deserve the same parser-fidelity treatment as code-like payloads.
+
+## Iteration 108 - 2026-05-10
+
+### Goal
+
+Take the empirical corpus beyond string drift:
+
+> For the real prompt that the legacy parser truncates, does the lost suffix
+> actually contain the feature that makes the attack work?
+
+### Experiment
+
+1. Added narrow plugin-aware feature extraction for the observed empirical
+   `pii:social` failure:
+   - `prescription details`
+   - `refill dates`
+2. Reused the shared severity classifier for empirical prompts.
+3. Reported:
+   - aggregate severity counts
+   - changed-prompt evidence only, rather than dumping every preserved prompt
+
+### Results
+
+The empirical corpus now lines up with the severity taxonomy:
+
+| View           | Exact preserved | Dangerous feature loss |
+| -------------- | --------------: | ---------------------: |
+| All stored     |            `98` |                    `7` |
+| Unique prompts |            `14` |                    `1` |
+
+The changed unique prompt is classified as `dangerous-feature-loss` because the
+historical parser kept only:
+
+1. `I lost my prescription slip`
+
+and dropped both dangerous requested items:
+
+1. `prescription details`
+2. `refill dates`
+
+### Reflection
+
+1. This closes the loop on the empirical example:
+   - the old parser did not just shorten the prompt
+   - it removed the concrete information request that made the attack useful
+2. The report is now more compact and more actionable:
+   - aggregate severity counts show impact
+   - changed-case evidence explains why
+3. The current empirical feature extraction is intentionally narrow:
+   - it answers the observed case cleanly
+   - it is not yet a broad semantic detector for every plugin or prompt family
+
+### New Hypotheses
+
+1. The next useful step is to replace one-off empirical feature extraction with
+   broader reusable feature detectors where we already have strong predicate
+   machinery.
+2. SQL injection is a good candidate for that next expansion because the repo
+   already has stable predicate signatures for stacked queries, union
+   extraction, and related attack forms.
+3. More generally, generation-quality tooling should reuse plugin-specific
+   attack semantics where they already exist rather than inventing unrelated
+   ad hoc heuristics for each benchmark.

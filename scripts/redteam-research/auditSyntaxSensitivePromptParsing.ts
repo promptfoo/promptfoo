@@ -44,10 +44,17 @@ type EmpiricalRedteamFile = {
 
 type EmpiricalPromptAudit = {
   changedPromptCount: number;
+  changedPromptFeatureAudits: {
+    currentPrompt: string;
+    expectedFeatures: string[];
+    legacyPrompt: string;
+    severity: DriftSeverity;
+  }[];
   exactPreservedPromptCount: number;
   exactPreservationRate: number;
   promptCount: number;
   semicolonPromptCount: number;
+  severityCounts: Record<DriftSeverity, number>;
   truncatedPromptCount: number;
   truncationRate: number;
 };
@@ -255,7 +262,21 @@ function auditSeverityCalibration() {
   };
 }
 
-function auditEmpiricalPromptSet(prompts: readonly string[]): EmpiricalPromptAudit {
+function extractEmpiricalFeatures(pluginId: string, prompt: string): string[] {
+  if (pluginId === 'pii:social') {
+    const features = ['prescription details', 'refill dates'].filter((feature) =>
+      prompt.includes(feature),
+    );
+    return features.length > 0 ? features : [];
+  }
+
+  return [];
+}
+
+function auditEmpiricalPromptSet(
+  pluginId: string,
+  prompts: readonly string[],
+): EmpiricalPromptAudit {
   const legacyPrompts = prompts.map(
     (prompt) => parseGeneratedPromptsLegacy(`Prompt: ${prompt}`)[0],
   );
@@ -268,13 +289,44 @@ function auditEmpiricalPromptSet(prompts: readonly string[]): EmpiricalPromptAud
   }).length;
   const promptCount = prompts.length;
   const exactPreservedPromptCount = promptCount - changedPromptCount;
+  const featureAudits = prompts.map((currentPrompt, index) => {
+    const expectedFeatures = extractEmpiricalFeatures(pluginId, currentPrompt);
+    const legacyPrompt = legacyPrompts[index] ?? '';
+
+    return {
+      currentPrompt,
+      expectedFeatures,
+      legacyPrompt,
+      severity: classifyPromptDriftSeverity({
+        currentPrompt,
+        expectedFeatures,
+        legacyPrompt,
+      }),
+    };
+  });
+  const severityCounts = featureAudits.reduce(
+    (counts, audit) => ({
+      ...counts,
+      [audit.severity]: counts[audit.severity] + 1,
+    }),
+    {
+      'benign-rewrite': 0,
+      'dangerous-feature-loss': 0,
+      'exact-preserved': 0,
+      'non-dangerous-truncation': 0,
+    } satisfies Record<DriftSeverity, number>,
+  );
 
   return {
     changedPromptCount,
+    changedPromptFeatureAudits: featureAudits.filter(
+      ({ currentPrompt, legacyPrompt }) => currentPrompt !== legacyPrompt,
+    ),
     exactPreservedPromptCount,
     exactPreservationRate: promptCount === 0 ? 1 : exactPreservedPromptCount / promptCount,
     promptCount,
     semicolonPromptCount: prompts.filter((prompt) => prompt.includes(';')).length,
+    severityCounts,
     truncatedPromptCount,
     truncationRate: promptCount === 0 ? 0 : truncatedPromptCount / promptCount,
   };
@@ -291,6 +343,22 @@ function combineEmpiricalAudits(audits: readonly EmpiricalPromptAudit[]): Empiri
     (total, audit) => total + audit.semicolonPromptCount,
     0,
   );
+  const severityCounts = audits.reduce(
+    (counts, audit) => ({
+      'benign-rewrite': counts['benign-rewrite'] + audit.severityCounts['benign-rewrite'],
+      'dangerous-feature-loss':
+        counts['dangerous-feature-loss'] + audit.severityCounts['dangerous-feature-loss'],
+      'exact-preserved': counts['exact-preserved'] + audit.severityCounts['exact-preserved'],
+      'non-dangerous-truncation':
+        counts['non-dangerous-truncation'] + audit.severityCounts['non-dangerous-truncation'],
+    }),
+    {
+      'benign-rewrite': 0,
+      'dangerous-feature-loss': 0,
+      'exact-preserved': 0,
+      'non-dangerous-truncation': 0,
+    } satisfies Record<DriftSeverity, number>,
+  );
   const truncatedPromptCount = audits.reduce(
     (total, audit) => total + audit.truncatedPromptCount,
     0,
@@ -298,10 +366,12 @@ function combineEmpiricalAudits(audits: readonly EmpiricalPromptAudit[]): Empiri
 
   return {
     changedPromptCount,
+    changedPromptFeatureAudits: audits.flatMap((audit) => audit.changedPromptFeatureAudits),
     exactPreservedPromptCount,
     exactPreservationRate: promptCount === 0 ? 1 : exactPreservedPromptCount / promptCount,
     promptCount,
     semicolonPromptCount,
+    severityCounts,
     truncatedPromptCount,
     truncationRate: promptCount === 0 ? 0 : truncatedPromptCount / promptCount,
   };
@@ -321,8 +391,8 @@ function auditEmpiricalCorpus(inputPath: string) {
       return [
         pluginId,
         {
-          allPrompts: auditEmpiricalPromptSet(prompts),
-          uniquePrompts: auditEmpiricalPromptSet(uniquePrompts),
+          allPrompts: auditEmpiricalPromptSet(pluginId, prompts),
+          uniquePrompts: auditEmpiricalPromptSet(pluginId, uniquePrompts),
         },
       ];
     }),
