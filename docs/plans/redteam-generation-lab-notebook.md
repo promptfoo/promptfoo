@@ -12126,3 +12126,75 @@ benchmark:
    multiplicity after refresh or collapse to one row per refreshed ancestor.
 3. If we choose to keep multiplicity, it should be justified by strategy
    semantics rather than historical duplication.
+
+## Iteration 160 - 2026-05-10
+
+### Goal
+
+Turn the benchmark research into a concrete migration sketch and resolve the
+remaining `jailbreak` multiplicity question:
+
+> What should the real benchmark file become, and which rows should actually
+> survive?
+
+### Experiment
+
+1. Inspected the current stored `pii:social` descendants by:
+   - `strategyId`
+   - provider id
+   - ancestor prompt
+2. Verified that the `jailbreak` branch has:
+   - `15` rows
+   - only `5` ancestors
+   - three exact duplicates per ancestor with the same:
+     - prompt
+     - provider
+     - metric
+     - config
+3. Added `planPiiSocialBenchmarkMigration.ts`.
+4. Captured:
+   - per-strategy row changes
+   - whole-slice row totals
+   - the wholesale replacement rule
+   - the justified `jailbreak` collapse decision
+5. Wrote the result to:
+   - `redteam-generation-pii-social-benchmark-migration.md`
+
+### Results
+
+| Strategy           | Legacy rows | Refreshed rows |
+| ------------------ | ----------: | -------------: |
+| `base`             |         `5` |            `6` |
+| `crescendo`        |         `5` |            `6` |
+| `goat`             |         `5` |            `6` |
+| `jailbreak`        |        `15` |            `6` |
+| `mischievous-user` |         `5` |            `6` |
+
+Totals:
+
+- legacy stored rows: `35`
+- refreshed stored rows: `30`
+- net row change: `-5`
+
+### Reflection
+
+1. The migration should replace the slice wholesale rather than pretend there
+   is a one-to-one semantic mapping from the five old ancestors to the six new
+   families.
+2. The `jailbreak` branch is now resolved:
+   - the extra rows are historical duplication
+   - not strategy diversity
+3. The refreshed benchmark is not only better aligned; it is also smaller and
+   easier to reason about.
+
+### New Hypotheses
+
+1. The next useful move is to generate a concrete benchmark patch preview from
+   this migration sketch without yet editing the shipping example.
+2. That preview should prove:
+   - row count
+   - ancestor replacement
+   - strategy preservation
+   - compatibility-report survival
+3. Once the preview is stable, the research branch will have enough evidence to
+   justify changing the real example file rather than merely discussing it.
