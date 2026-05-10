@@ -9636,3 +9636,103 @@ The mixed-path synthetic check also succeeds:
    - no retained rollup is needed
 3. After that, the remaining duplication should mostly be intentional derived
    structure rather than accidental copy-paste.
+
+## Iteration 120 - 2026-05-10
+
+### Goal
+
+Apply the cleanest exact-axis migration left:
+
+> Can `pii:direct` reuse shared predicates for `sensitive-field` coverage while
+> leaving its genuinely separate analyzer dimensions alone?
+
+### Experiment
+
+1. Added a shared-coverage projection map for:
+   - `pii:direct`
+   - `sensitive-field`
+2. Reused exact shared predicates for:
+   - `requestsContactDetails` -> `contact`
+   - `requestsInsuranceDetails` -> `insurance`
+   - `requestsLabResults` -> `lab-results`
+   - `requestsMedicalRecord` -> `medical-record`
+   - `requestsPrescriptionDetails` -> `prescription`
+   - `requestsSsn` -> `ssn`
+3. Kept the broader analyzer dimensions local:
+   - `tactic`
+   - `relationship`
+   - `authorization-story`
+4. Added regression coverage proving direct-PII field summaries can be derived
+   from shared predicates alone.
+
+### Results
+
+The baseline medical-agent `pii:direct` report improves slightly:
+
+1. `sensitive-field`:
+   - `contact`
+   - `insurance`
+   - `lab-results`
+   - `medical-record`
+   - `prescription`
+   - `ssn`
+2. `tactic`:
+   - unchanged
+3. `relationship`:
+   - unchanged
+4. `authorization-story`:
+   - unchanged
+
+The extra `prescription` field is a real bug fix:
+
+1. the previous analyzer-local regex only matched singular `prescription`
+2. the baseline prompt uses plural `prescriptions`
+3. the shared predicate already handled both forms correctly
+
+### Iteration 120 Status Checkpoint
+
+Since iteration `116`, the shared semantic layer has moved from “coverage is
+complete” to “downstream reuse is systematic”:
+
+1. `116`
+   - added `excessive-agency`
+   - reached `5/5` baseline semantic coverage
+2. `117`
+   - made the analyzer reuse exact excessive-agency projections
+3. `118`
+   - classified analyzer dimensions into exact, rollup, and separate concepts
+4. `119`
+   - migrated SQL exact projections while preserving a deliberate rollup
+5. `120`
+   - migrated direct-PII sensitive fields as a pure exact axis
+
+The emerging design rule is now fairly crisp:
+
+1. canonicalize concrete predicate facts once
+2. let analyzers keep richer derived dimensions where they add meaning
+3. migrate only where the alignment is exact or explicitly modeled as a rollup
+
+### Reflection
+
+1. This is the tidiest migration so far:
+   - no denominator issue
+   - no mixed rollup path
+   - just one analyzer dimension moving onto canonical facts
+   - plus one small pluralization false negative removed as a side effect
+2. The remaining duplication is now much less suspicious:
+   - `pii:social` still has meaningful rollup and social-context axes
+   - `prompt-extraction` still measures framing rather than protected-fact
+     semantics
+3. The architecture is starting to look deliberate instead of accreted.
+
+### New Hypotheses
+
+1. The next useful step is to handle the `pii:social` sensitive-field rollup:
+   - keep it coarse
+   - but derive it from shared predicates rather than duplicate matching
+2. That would give us a third migration pattern:
+   - exact axis
+   - exact-plus-rollup tactic mix
+   - pure rollup projection
+3. After that, the remaining separate dimensions may deserve documentation more
+   than refactoring.

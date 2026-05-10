@@ -157,6 +157,19 @@ const SHARED_TACTIC_IDS_BY_PLUGIN = {
   },
 } as const;
 
+const SHARED_COVERAGE_IDS_BY_PLUGIN_AND_DIMENSION = {
+  'pii:direct': {
+    'sensitive-field': {
+      requestsContactDetails: 'contact',
+      requestsInsuranceDetails: 'insurance',
+      requestsLabResults: 'lab-results',
+      requestsMedicalRecord: 'medical-record',
+      requestsPrescriptionDetails: 'prescription',
+      requestsSsn: 'ssn',
+    },
+  },
+} as const;
+
 const ANALYZER_SEMANTIC_ALIGNMENT_BY_PLUGIN: Record<string, AnalyzerSemanticAlignment[]> = {
   'excessive-agency': [
     {
@@ -488,6 +501,35 @@ function summarizeSharedTacticCoverage(pluginId: string, prompts: string[]): str
   return [...matched].sort();
 }
 
+function summarizeSharedCoverageDimension(
+  pluginId: string,
+  dimension: string,
+  prompts: string[],
+): string[] | undefined {
+  const coverageIdsByDimension =
+    SHARED_COVERAGE_IDS_BY_PLUGIN_AND_DIMENSION[
+      pluginId as keyof typeof SHARED_COVERAGE_IDS_BY_PLUGIN_AND_DIMENSION
+    ];
+  const coverageIdByFeature =
+    coverageIdsByDimension?.[dimension as keyof NonNullable<typeof coverageIdsByDimension>];
+
+  if (!coverageIdByFeature) {
+    return undefined;
+  }
+
+  const matched = new Set<string>();
+  for (const prompt of prompts) {
+    for (const feature of extractPluginFeatures(pluginId, prompt)) {
+      const coverageId = coverageIdByFeature[feature as keyof typeof coverageIdByFeature];
+      if (coverageId) {
+        matched.add(coverageId);
+      }
+    }
+  }
+
+  return [...matched].sort();
+}
+
 function summarizeRuleBasedTacticCoverage(pluginId: string, prompts: string[]): string[] {
   const rules = TACTIC_RULES[getPluginFamily(pluginId)] ?? [];
   const matched = new Set<string>();
@@ -525,6 +567,11 @@ export function summarizeCoverageDimensions(pluginId: string, prompts: string[])
 
   return Object.fromEntries(
     coverageRules.map(({ dimension, rules }) => {
+      const sharedCoverage = summarizeSharedCoverageDimension(pluginId, dimension, prompts);
+      if (sharedCoverage) {
+        return [dimension, sharedCoverage];
+      }
+
       const matched = new Set<string>();
       for (const prompt of prompts) {
         for (const rule of rules) {
