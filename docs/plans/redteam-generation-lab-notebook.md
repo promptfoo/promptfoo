@@ -13863,3 +13863,62 @@ Updated suite summary:
 3. Expected-yield optimization should likely remain multi-objective:
    - do not collapse leak-readiness, target breadth, and raw failure count into a
      single scalar too early.
+
+## Iteration 192 - 2026-05-10
+
+### Goal
+
+Use the new three-regime suite to test the next research question from iteration
+`191`:
+
+> Which aggregation policy preserves the generator ordering we actually care
+> about when raw yield and cross-regime breadth disagree?
+
+### Experiment
+
+1. Reused the three observed regime outputs from iterations `188`-`191`.
+2. Compared two scalar objectives:
+   - uniform mean over all target regimes
+   - vulnerable-only mean over the two susceptible regimes
+3. Added two stress profiles that are intentionally not additional observed
+   generators:
+   - `family-overfit`: `6/6` on `permissive-family`, `0/6` elsewhere
+   - `balanced-breadth`: `2/6` on both susceptible regimes, `0/6` on the
+     hardened target
+4. Compared those scalar objectives with a breadth-first ordering:
+   - first maximize regimes with any realized failure
+   - then break ties with uniform mean failure rate
+
+### Results
+
+| Candidate          | Source         | Uniform mean | Vulnerable-only mean | Regimes with any failure | Breadth-first rank |
+| ------------------ | -------------- | ------------ | -------------------- | ------------------------ | ------------------ |
+| `legacy-generic`   | observed       | `0%`         | `0%`                 | `0/3`                    | `4`                |
+| `portfolio`        | observed       | `44%`        | `67%`                | `2/3`                    | `1`                |
+| `family-overfit`   | stress profile | `33%`        | `50%`                | `1/3`                    | `3`                |
+| `balanced-breadth` | stress profile | `22%`        | `33%`                | `2/3`                    | `2`                |
+
+### Reflection
+
+1. The real cohorts still agree under every reasonable policy, so the stress
+   profiles are necessary to expose policy disagreement.
+2. Both scalar means prefer `family-overfit` to `balanced-breadth`, even though
+   the latter reaches more distinct regimes.
+3. A breadth-first ordering is a better fit for the research goal than either
+   scalar mean:
+   - preserve distinct exposed regimes first
+   - optimize realized yield second
+4. This echoes the earlier retained-frontier work: scalar compression keeps
+   finding ways to erase the diversity signal we care about.
+
+### New Hypotheses
+
+1. The next benchmark artifact should likely be a Pareto report, not another
+   scalar leaderboard.
+2. The first Pareto axes worth trying are:
+   - leak-ready prompt rate
+   - regimes with any realized failure
+   - mean realized failure rate across regimes
+3. The selector should only collapse to one scalar after a policy decision has
+   been made explicitly, not because one metric happens to be convenient to
+   sort.
