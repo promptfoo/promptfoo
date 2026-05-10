@@ -1,15 +1,16 @@
 import { pathToFileURL } from 'node:url';
 
-import { getAnalyzerSemanticAlignment } from './analyzeGeneratedAttacks';
-import { buildPiiPortfolio, loadPiiContext } from './piiResearchShared';
-import { renderMarkdownTable } from './reportRenderingShared';
 import {
   extractPiiSocialFeatures,
   summarizeObservedPluginFeatureCoverage,
 } from '../../src/redteam/generation/predicateSignatures';
+import { getAnalyzerSemanticAlignment } from './analyzeGeneratedAttacks';
+import { buildPiiPortfolio, loadPiiContext } from './piiResearchShared';
+import { renderMarkdownTable } from './reportRenderingShared';
 
 export type PiiSocialFrontierReadinessAudit = {
   recommendation: 'expand shared vocabulary first' | 'ready to onboard';
+  sharedFeatureVocabularyCount: number;
   sharedFeatureCount: number;
   sharedFeatureCoverage: ReturnType<typeof summarizeObservedPluginFeatureCoverage>;
   sharedFeatureIds: string[];
@@ -35,7 +36,9 @@ export async function auditPiiSocialFrontierReadiness(
     'pii:social',
     attacks.map((attack) => attack.prompt),
   );
-  const sharedFeatureIds = [...new Set(attacks.flatMap((attack) => extractPiiSocialFeatures(attack.prompt)))];
+  const sharedFeatureIds = [
+    ...new Set(attacks.flatMap((attack) => extractPiiSocialFeatures(attack.prompt))),
+  ];
   const recommendation =
     sharedDimensionCount === 0 || separateConceptDimensionIds.length > sharedDimensionCount
       ? 'expand shared vocabulary first'
@@ -49,6 +52,7 @@ export async function auditPiiSocialFrontierReadiness(
     sharedFeatureCount: sharedFeatureIds.length,
     sharedFeatureCoverage,
     sharedFeatureIds,
+    sharedFeatureVocabularyCount: sharedFeatureCoverage.featureCount,
   };
 }
 
@@ -60,7 +64,8 @@ export function renderPiiSocialFrontierReadinessMarkdown(
     '',
     ...renderMarkdownTable(
       [
-        'Shared features',
+        'Observed shared features',
+        'Shared predicate vocabulary',
         'Shared dimensions',
         'Separate-concept dimensions',
         'Observed shared coverage',
@@ -70,6 +75,7 @@ export function renderPiiSocialFrontierReadinessMarkdown(
         {
           cells: [
             String(audit.sharedFeatureCount),
+            String(audit.sharedFeatureVocabularyCount),
             String(audit.sharedDimensionCount),
             String(audit.separateConceptDimensionCount),
             `${audit.sharedFeatureCoverage.observedFeatureCount}/${audit.sharedFeatureCoverage.featureCount}`,
@@ -86,7 +92,7 @@ export function renderPiiSocialFrontierReadinessMarkdown(
     '',
     '## Reading',
     '',
-    '`pii:social` is the most informative next frontier shape, but it is not production-ready yet. The shared layer currently defines only two predicates, the current research portfolio exercises just one of them, and both are tied to one coarse sensitive-field rollup while tactic, relationship, and authorization-story remain analyzer-only concepts. The next honest step is to expand the shared vocabulary before attempting a production frontier migration.',
+    '`pii:social` is still not production-ready, but it is no longer almost blank: the shared layer now exposes eight predicates and the current research portfolio exercises seven of them. The remaining gap is semantic rather than lexical: sensitive-field has a coarse rollup, while tactic, relationship, and authorization-story still lack complete analyzer-aligned mappings because `unknown-third-party` and `direct-request` remain default states without equally clean positive predicates.',
   ].join('\n');
 }
 

@@ -11698,3 +11698,70 @@ predicates:
      until we have better positive evidence.
 3. After the first expansion, we should rerun the readiness audit to see whether
    social PII becomes production-ready or merely less under-modeled.
+
+## Iteration 153 - 2026-05-10
+
+### Goal
+
+Promote the six low-drift social-PII candidates into the shared signature layer
+without pretending the analyzer now has complete semantic parity:
+
+> Does richer shared vocabulary make `pii:social` materially more observable
+> while preserving the distinction between positive predicates and default
+> analyzer states?
+
+### Experiment
+
+1. Added six shared social-PII predicates:
+   - `claimsFamilyRelationship`
+   - `claimsCoworkerRelationship`
+   - `claimsSelfRelationship`
+   - `claimsIdentity`
+   - `claimsOperationalNeed`
+   - `claimsLostAccess`
+2. Grouped the social predicates into shared feature bands:
+   - `sensitive-field`
+   - `relationship`
+   - `authorization-story`
+3. Kept analyzer alignment unchanged for:
+   - `relationship`
+   - `authorization-story`
+     because the portfolio still lacks equally clean positive predicates for
+     `unknown-third-party` and `direct-request`.
+4. Tightened the readiness report so it distinguishes:
+   - observed shared features
+   - total shared predicate vocabulary
+
+### Results
+
+| Metric                      | Before | After |
+| --------------------------- | -----: | ----: |
+| Observed shared features    |    `1` |   `7` |
+| Shared predicate vocabulary |    `2` |   `8` |
+| Observed shared coverage    |  `1/2` | `7/8` |
+| Shared dimensions           |    `1` |   `1` |
+| Separate-concept dimensions |    `3` |   `3` |
+
+### Reflection
+
+1. The social corpus is now much easier to inspect from shared predicates alone:
+   - relationship claims are no longer invisible
+   - authorization stories are no longer invisible
+2. This is real progress, but not a production migration:
+   - lexical observability improved
+   - semantic completeness did not
+3. The remaining hard cases are still the default buckets:
+   - `unknown-third-party`
+   - `direct-request`
+     They are absences of stronger claims, not yet positive atomic predicates.
+
+### New Hypotheses
+
+1. The next useful experiment is to test whether those default buckets should
+   remain analyzer-only, become explicit negative-derived labels, or be split
+   into richer positive predicates from a larger corpus.
+2. `pii:social` may need a two-stage frontier:
+   - production-safe shared bands for positive claims
+   - analyzer-only residual labels for default states
+3. A before/after example report over real generated prompts would now be more
+   illuminating because the new predicates materially change what is visible.

@@ -1,14 +1,14 @@
 # PII Social Frontier Readiness
 
-| Shared features | Shared dimensions | Separate-concept dimensions | Observed shared coverage | Recommendation |
-| --- | ---: | ---: | ---: | ---: |
-| 1 | 1 | 3 | 1/2 | expand shared vocabulary first |
+| Observed shared features | Shared predicate vocabulary | Shared dimensions | Separate-concept dimensions | Observed shared coverage |                 Recommendation |
+| ------------------------ | --------------------------: | ----------------: | --------------------------: | -----------------------: | -----------------------------: |
+| 7                        |                           8 |                 1 |                           3 |                      7/8 | expand shared vocabulary first |
 
 ## Details
 
-- shared feature ids: requestsRefillDates
+- shared feature ids: claimsFamilyRelationship, claimsIdentity, claimsCoworkerRelationship, claimsOperationalNeed, requestsRefillDates, claimsSelfRelationship, claimsLostAccess
 - separate-concept dimensions: authorization-story, relationship, tactic
 
 ## Reading
 
-`pii:social` is the most informative next frontier shape, but it is not production-ready yet. The shared layer currently defines only two predicates, the current research portfolio exercises just one of them, and both are tied to one coarse sensitive-field rollup while tactic, relationship, and authorization-story remain analyzer-only concepts. The next honest step is to expand the shared vocabulary before attempting a production frontier migration.
+`pii:social` is still not production-ready, but it is no longer almost blank: the shared layer now exposes eight predicates and the current research portfolio exercises seven of them. The remaining gap is semantic rather than lexical: sensitive-field has a coarse rollup, while tactic, relationship, and authorization-story still lack complete analyzer-aligned mappings because `unknown-third-party` and `direct-request` remain default states without equally clean positive predicates.

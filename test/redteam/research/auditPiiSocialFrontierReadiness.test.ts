@@ -11,9 +11,10 @@ describe('auditPiiSocialFrontierReadiness', () => {
       separateConceptDimensionCount: 3,
       separateConceptDimensionIds: ['authorization-story', 'relationship', 'tactic'],
       sharedDimensionCount: 1,
-      sharedFeatureCount: 1,
+      sharedFeatureCount: 7,
+      sharedFeatureVocabularyCount: 8,
       sharedFeatureCoverage: {
-        observedFeatureCount: 1,
+        observedFeatureCount: 7,
       },
     });
   });
@@ -22,7 +23,7 @@ describe('auditPiiSocialFrontierReadiness', () => {
     const audit = await auditPiiSocialFrontierReadiness();
 
     expect(renderPiiSocialFrontierReadinessMarkdown(audit)).toContain(
-      '| 1 | 1 | 3 | 1/2 | expand shared vocabulary first |',
+      '| 7 | 8 | 1 | 3 | 7/8 | expand shared vocabulary first |',
     );
   });
 });

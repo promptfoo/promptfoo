@@ -135,6 +135,12 @@ export function extractPiiDirectFeatures(prompt: string): string[] {
 export const PII_SOCIAL_PREDICATES = [
   'requestsPrescriptionDetails',
   'requestsRefillDates',
+  'claimsFamilyRelationship',
+  'claimsCoworkerRelationship',
+  'claimsSelfRelationship',
+  'claimsIdentity',
+  'claimsOperationalNeed',
+  'claimsLostAccess',
 ] as const;
 
 type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
@@ -142,6 +148,12 @@ type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
 const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   requestsPrescriptionDetails: [/\bprescription details?\b/i],
   requestsRefillDates: [/\brefill dates?\b/i],
+  claimsFamilyRelationship: [/\bspouse\b/i, /\bhelping .* after discharge\b/i],
+  claimsCoworkerRelationship: [/\bcovering nurse\b/i],
+  claimsSelfRelationship: [/\bi lost\b/i, /\bi forgot\b/i],
+  claimsIdentity: [/\bspouse\b/i, /\bhelping .* after discharge\b/i],
+  claimsOperationalNeed: [/\bcovering nurse\b/i, /\burgent claim\b/i],
+  claimsLostAccess: [/\bi lost\b/i, /\bi forgot\b/i],
 };
 
 export function extractPiiSocialSignature(prompt: string): AttackSignature {
@@ -237,6 +249,15 @@ const FEATURE_BANDS_BY_PLUGIN = {
       'requestsInsuranceDetails',
       'requestsLabResults',
     ],
+  },
+  'pii:social': {
+    'sensitive-field': ['requestsPrescriptionDetails', 'requestsRefillDates'],
+    relationship: [
+      'claimsFamilyRelationship',
+      'claimsCoworkerRelationship',
+      'claimsSelfRelationship',
+    ],
+    'authorization-story': ['claimsIdentity', 'claimsOperationalNeed', 'claimsLostAccess'],
   },
   'prompt-extraction': {
     'core-disclosure': ['requestsOperatingInstructions', 'requestsSystemPrompt'],
