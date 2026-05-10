@@ -13310,3 +13310,57 @@ during shutdown` before the final rendered report lines were observable.
 3. A future refinement may want to hide the report for complete frontiers unless
    the user requests verbose output, but first we should learn whether the
    always-visible summary is actually useful in practice.
+
+## Iteration 182 - 2026-05-10
+
+### Goal
+
+Resolve the live-CLI ambiguity left by iteration `181`:
+
+> Was the missing final report a frontier-renderer problem, or a separate local
+> logging/shutdown confound?
+
+### Experiment
+
+1. Traced the shutdown path through:
+   - `src/main.ts`
+   - `src/mainUtils.ts`
+   - `src/logger.ts`
+2. Re-ran the same local-only `pii:social` portfolio generation three ways:
+   - default sandbox log directory
+   - file logs disabled
+   - file logs redirected to `/private/tmp`
+3. Kept the generation config fixed so only the logging surface changed.
+
+### Results
+
+| Run                     | Live frontier report | `closeLogger()` timeout |
+| ----------------------- | -------------------: | ----------------------: |
+| default sandbox log dir |                 `no` |                   `yes` |
+| file logs disabled      |                `yes` |                    `no` |
+| writable temp log dir   |                `yes` |                    `no` |
+
+The live CLI row is now proven:
+
+| Plugin       | Frontiers | Complete | Status     | Unreachable features |
+| ------------ | --------: | -------: | ---------- | -------------------- |
+| `pii:social` |       `1` |    `1/1` | `Complete` | `none`               |
+
+### Reflection
+
+1. The earlier missing-console result was not evidence against the renderer.
+2. It was a local QA confound caused by file-transport shutdown behavior in this
+   sandbox's default log directory.
+3. Redirecting `PROMPTFOO_LOG_DIR` to a writable temp path gives us a reliable
+   live-validation harness without baking environment-specific behavior into the
+   product path.
+
+### New Hypotheses
+
+1. Future real-generation QA in this worktree should set a writable
+   `PROMPTFOO_LOG_DIR` up front so we do not rediscover the same confound.
+2. A separate product-hardening thread could revisit `closeLogger()` behavior,
+   but it is orthogonal to frontier quality and should not block the generator
+   hill climb.
+3. With YAML and CLI surfaces now both proven, the next frontier product work
+   should move toward downstream report/UI consumption rather than more plumbing.

@@ -10,4 +10,10 @@ Iteration `180` made frontier health persist in generated YAML. The next product
 
 ## Live Verification Note
 
-A real local-only `pii:social` generation rerun wrote the expected healthy YAML summary (`1/1`, no unreachable features). In this shell session, the process still exited with `closeLogger() timed out during shutdown` before the final rendered report lines were observable, so the live console verification remains inconclusive even though the renderer is covered directly and the generated artifact is correct.
+A real local-only `pii:social` generation rerun showed the healthy CLI row directly once per-run logs were redirected to a writable temp directory:
+
+| Plugin       | Frontiers | Complete | Status   | Unreachable features |
+| ------------ | --------: | -------: | -------- | -------------------- |
+| `pii:social` |         1 |      1/1 | Complete | none                 |
+
+The earlier missing-console result was a sandbox file-log shutdown confound, not a renderer failure. The exact differential and reliable verification command are recorded in `redteam-generation-semantic-frontier-cli-qa.md`.
