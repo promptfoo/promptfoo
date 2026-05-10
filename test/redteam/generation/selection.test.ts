@@ -37,6 +37,7 @@ function makeCandidate(
     pluginId: 'demo',
     familyId,
     familyLabel: familyId,
+    generationPhase: 'initial',
     signature: {
       predicates,
     },

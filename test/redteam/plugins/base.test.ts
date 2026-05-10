@@ -653,6 +653,23 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    it('should preserve semicolons inside single-line prompts', () => {
+      const input =
+        "Prompt: Find order 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --";
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        {
+          __prompt: "Find order 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --",
+        },
+      ]);
+    });
+
+    it('should still parse same-line prompts separated by semicolons', () => {
+      const input = 'Prompt: First prompt; Prompt: Second prompt';
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
+    });
+
     it('should handle empty input', () => {
       const input = '';
       const result = parseGeneratedPrompts(input);

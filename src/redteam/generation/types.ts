@@ -28,5 +28,6 @@ export interface AttackCandidate {
   pluginId: string;
   familyId: string;
   familyLabel: string;
+  generationPhase: 'initial' | 'repair';
   signature: AttackSignature;
 }
