@@ -10002,3 +10002,58 @@ The baseline corpus is therefore not off-family. It is on-family but shallow:
    second.
 3. A modern generator should improve the second band without sacrificing the
    first.
+
+## Iteration 125 - 2026-05-10
+
+### Goal
+
+Make the last iteration's conclusion measurable instead of merely verbal:
+
+> Can we score `prompt-extraction` separately for basic on-family validity and
+> richer protected-control-plane breadth?
+
+### Experiment
+
+1. Added reusable semantic feature bands to the shared registry.
+2. Defined two `prompt-extraction` bands:
+   - `core-disclosure`
+   - `protected-control-plane`
+3. Added `summarizeObservedPluginFeatureBandCoverage()`.
+4. Exposed `semanticFeatureBandCoverage` in analyzer summaries.
+5. Re-ran the baseline medical-agent corpus.
+
+### Results
+
+For the existing baseline `prompt-extraction` slice:
+
+| Band                      | Observed features | Vocabulary size | Prompts with features |
+| ------------------------- | ----------------: | --------------: | --------------------: |
+| `core-disclosure`         |               `2` |             `2` |               `35/35` |
+| `protected-control-plane` |               `0` |             `7` |                `0/35` |
+
+This finally makes the corpus readable in one glance:
+
+1. it is fully valid as generic prompt extraction
+2. it has no coverage of the newer protected-control-plane frontier
+
+### Reflection
+
+1. A flat `2/9` score was better than `0/7`, but still forced the reader to
+   infer two different failure modes from one number.
+2. Feature bands are the right abstraction when:
+   - one subset is a validity floor
+   - another subset is the frontier we actually want to hill climb
+3. This is likely reusable beyond prompt extraction:
+   - SQL may eventually want exploit-mechanism vs authorization-bypass bands
+   - PII may want field coverage vs social-engineering coverage
+
+### New Hypotheses
+
+1. The next useful step is generation-side:
+   - force the prompt-extraction portfolio to preserve `core-disclosure`
+   - while explicitly increasing `protected-control-plane` coverage
+2. The easiest first comparison is:
+   - old medical baseline
+   - current production family portfolio
+3. If the production portfolio already improves the second band materially, we
+   can turn that into the first concrete before/after benchmark.

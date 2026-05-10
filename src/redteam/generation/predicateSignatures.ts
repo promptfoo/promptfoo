@@ -222,6 +222,21 @@ const FEATURE_VOCABULARY_BY_PLUGIN = {
   'sql-injection': SQL_INJECTION_PREDICATES,
 } as const;
 
+const FEATURE_BANDS_BY_PLUGIN = {
+  'prompt-extraction': {
+    'core-disclosure': ['requestsOperatingInstructions', 'requestsSystemPrompt'],
+    'protected-control-plane': [
+      'asksForAuthorityChecks',
+      'asksForClassificationRules',
+      'asksForEscalationGuidance',
+      'asksForRefusalPolicy',
+      'asksForRoutingRules',
+      'invokesLegalAuthority',
+      'requestsVerbatimText',
+    ],
+  },
+} as const;
+
 export type PluginFeatureCoverageSummary = {
   coveredPluginIds: string[];
   coverageRate: number;
@@ -239,6 +254,11 @@ export type ObservedPluginFeatureCoverageSummary = {
   promptsWithFeaturesCount: number;
 };
 
+export type ObservedPluginFeatureBandCoverageSummary = Record<
+  string,
+  ObservedPluginFeatureCoverageSummary
+>;
+
 export function extractPluginFeatures(pluginId: string, prompt: string): string[] {
   const extractor =
     FEATURE_EXTRACTORS_BY_PLUGIN[pluginId as keyof typeof FEATURE_EXTRACTORS_BY_PLUGIN];
@@ -248,6 +268,11 @@ export function extractPluginFeatures(pluginId: string, prompt: string): string[
 
 export function getPluginFeatureVocabulary(pluginId: string): readonly string[] {
   return FEATURE_VOCABULARY_BY_PLUGIN[pluginId as keyof typeof FEATURE_VOCABULARY_BY_PLUGIN] ?? [];
+}
+
+export function getPluginFeatureBands(pluginId: string): Record<string, readonly string[]> {
+  return (FEATURE_BANDS_BY_PLUGIN[pluginId as keyof typeof FEATURE_BANDS_BY_PLUGIN] ??
+    {}) as Record<string, readonly string[]>;
 }
 
 export function summarizePluginFeatureCoverage(
@@ -274,8 +299,30 @@ export function summarizeObservedPluginFeatureCoverage(
   pluginId: string,
   prompts: readonly string[],
 ): ObservedPluginFeatureCoverageSummary {
-  const vocabulary = getPluginFeatureVocabulary(pluginId);
-  const promptFeatures = prompts.map((prompt) => extractPluginFeatures(pluginId, prompt));
+  return summarizeObservedFeatureCoverage(pluginId, prompts, getPluginFeatureVocabulary(pluginId));
+}
+
+export function summarizeObservedPluginFeatureBandCoverage(
+  pluginId: string,
+  prompts: readonly string[],
+): ObservedPluginFeatureBandCoverageSummary {
+  return Object.fromEntries(
+    Object.entries(getPluginFeatureBands(pluginId)).map(([bandId, vocabulary]) => [
+      bandId,
+      summarizeObservedFeatureCoverage(pluginId, prompts, vocabulary),
+    ]),
+  );
+}
+
+function summarizeObservedFeatureCoverage(
+  pluginId: string,
+  prompts: readonly string[],
+  vocabulary: readonly string[],
+): ObservedPluginFeatureCoverageSummary {
+  const vocabularySet = new Set(vocabulary);
+  const promptFeatures = prompts.map((prompt) =>
+    extractPluginFeatures(pluginId, prompt).filter((feature) => vocabularySet.has(feature)),
+  );
   const observedFeatureIds = [...new Set(promptFeatures.flat())].sort();
 
   return {

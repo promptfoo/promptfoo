@@ -4,7 +4,9 @@ import fs from 'fs/promises';
 import yaml from 'js-yaml';
 import {
   extractPluginFeatures,
+  type ObservedPluginFeatureBandCoverageSummary,
   type ObservedPluginFeatureCoverageSummary,
+  summarizeObservedPluginFeatureBandCoverage,
   summarizeObservedPluginFeatureCoverage,
 } from '../../src/redteam/generation/predicateSignatures';
 
@@ -64,6 +66,7 @@ type PluginSummary = {
   maxPairwiseSimilarity: number;
   pluginId: string;
   purposeGroundingRate: number;
+  semanticFeatureBandCoverage: ObservedPluginFeatureBandCoverageSummary;
   semanticFeatureCoverage: ObservedPluginFeatureCoverageSummary;
   tacticCoverage: string[];
   tacticCoverageRate: number;
@@ -712,6 +715,7 @@ function summarizePlugin(
       pairwiseSimilarities.length === 0 ? 0 : Math.max(...pairwiseSimilarities),
     pluginId,
     purposeGroundingRate: prompts.length === 0 ? 0 : purposeGroundedCount / prompts.length,
+    semanticFeatureBandCoverage: summarizeObservedPluginFeatureBandCoverage(pluginId, prompts),
     semanticFeatureCoverage: summarizeObservedPluginFeatureCoverage(pluginId, prompts),
     tacticCoverage: [...detectedTactics].sort(),
     tacticCoverageRate: tacticCount === 0 ? 0 : detectedTactics.size / tacticCount,
