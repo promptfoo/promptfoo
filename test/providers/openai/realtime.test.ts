@@ -1536,6 +1536,103 @@ describe('OpenAI Realtime Provider', () => {
       provider.cleanup();
     });
 
+    it('detaches the persistent message handler when iteration cap fires and preserves partial tool results', async () => {
+      // Regression: hitting maxToolIterations on the persistent path used to
+      // reject without removing the message-handler listener. On a shared
+      // socket reused across turns, that stale listener would re-fire for
+      // every subsequent event, recreating the handler-interleaving race
+      // this PR was meant to prevent. Also asserts partial functionCallResults
+      // are preserved in the rejected error's metadata so users can audit
+      // what the model exchanged before the cap fired.
+      const functionCallHandler = vi.fn().mockResolvedValue('{"called":true}');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          maintainContext: true,
+          maxToolIterations: 2,
+          tools: [
+            { type: 'function', name: 'loop', parameters: { type: 'object', properties: {} } },
+          ],
+          tool_choice: 'auto',
+          functionCallHandler,
+        },
+      });
+
+      provider.persistentConnection = {
+        on: vi.fn((event: string, h: Function) => {
+          mockHandlers[event].push(h);
+        }),
+        once: vi.fn((event: string, h: Function) => {
+          mockHandlers[event].push(h);
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn((event: string, h: Function) => {
+          const arr = mockHandlers[event];
+          const idx = arr.indexOf(h);
+          if (idx !== -1) {
+            arr.splice(idx, 1);
+          }
+        }),
+        readyState: 1,
+      } as unknown as WebSocket;
+
+      const responsePromise = provider.callApi('go', {
+        test: { metadata: { conversationId: 'cap-cleanup' } },
+      } as any);
+
+      await flushMicrotasks();
+      const handler = mockHandlers.message[mockHandlers.message.length - 1];
+      expect(mockHandlers.message).toContain(handler);
+
+      handler(
+        Buffer.from(
+          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+        ),
+      );
+
+      const fireToolRound = async () => {
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: { type: 'function_call', call_id: 'c', name: 'loop', arguments: '{}' },
+            }),
+          ),
+        );
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        );
+        await flushMicrotasks();
+      };
+
+      await fireToolRound();
+      await fireToolRound();
+      await fireToolRound();
+
+      const result = await responsePromise;
+
+      // Cap fired with diagnostic message.
+      expect(result.error).toMatch(/maxToolIterations=2/);
+
+      // I2: partial tool exchange is preserved in the error metadata, not
+      // dropped on the floor.
+      expect(result.metadata?.functionCallOccurred).toBe(true);
+      expect(Array.isArray(result.metadata?.functionCallResults)).toBe(true);
+      expect((result.metadata?.functionCallResults as string[]).length).toBeGreaterThan(0);
+
+      // C2: the message handler must be detached so subsequent turns on the
+      // shared socket don't fire stale listeners.
+      expect(mockHandlers.message).not.toContain(handler);
+
+      provider.cleanup();
+    });
+
     it('should reset the persistent request timeout before a tool follow-up response', async () => {
       vi.useFakeTimers();
 
@@ -2440,90 +2537,96 @@ describe('OpenAI Realtime Provider', () => {
       // code. A slow handler could be killed by the outer timeout before the
       // redacted function_call_output reached the model, masking the real
       // cause and making toolCallTimeout > websocketTimeout configurations
-      // silently broken. Real timers here because the path mixes setTimeout
-      // with handler microtasks; tiny websocketTimeout (50ms) and a handler
-      // we hold longer than that proves the pause/restart is wired up.
-      let resolveHandler: ((value: string) => void) | undefined;
-      const functionCallHandler = vi.fn(
-        () =>
-          new Promise<string>((resolve) => {
-            resolveHandler = resolve;
-          }),
-      );
-      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
-        config: {
-          modalities: ['text'],
-          maintainContext: false,
-          websocketTimeout: 50,
-          toolCallTimeout: 5000,
-          tools: [
-            {
-              type: 'function',
-              name: 'slow',
-              parameters: { type: 'object', properties: {} },
-            },
-          ],
-          tool_choice: 'auto',
-          functionCallHandler,
-        },
-      });
+      // silently broken. We use fake timers (per test/AGENTS.md) and advance
+      // past websocketTimeout while the handler promise is still pending —
+      // if the production code didn't pause the outer timer, the request
+      // would have rejected by now.
+      vi.useFakeTimers();
+      try {
+        let resolveHandler: ((value: string) => void) | undefined;
+        const functionCallHandler = vi.fn(
+          () =>
+            new Promise<string>((resolve) => {
+              resolveHandler = resolve;
+            }),
+        );
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: false,
+            websocketTimeout: 50,
+            toolCallTimeout: 5000,
+            tools: [
+              {
+                type: 'function',
+                name: 'slow',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+            tool_choice: 'auto',
+            functionCallHandler,
+          },
+        });
 
-      let settled = false;
-      const responsePromise = provider.callApi('slow tool please').finally(() => {
-        settled = true;
-      });
+        let settled = false;
+        const responsePromise = provider.callApi('slow tool please').finally(() => {
+          settled = true;
+        });
 
-      await flushMicrotasks();
-      mockHandlers.open.forEach((h) => h());
-      await flushMicrotasks();
+        await vi.advanceTimersByTimeAsync(0);
+        mockHandlers.open.forEach((h) => h());
+        await vi.advanceTimersByTimeAsync(0);
 
-      const h = mockHandlers.message[mockHandlers.message.length - 1];
-      h(
-        Buffer.from(
-          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
-        ),
-      );
-      h(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.output_item.added',
-            item: { type: 'function_call', call_id: 'c1', name: 'slow', arguments: '{}' },
-          }),
-        ),
-      );
-      h(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-          }),
-        ),
-      );
-      await flushMicrotasks();
-      expect(functionCallHandler).toHaveBeenCalledWith('slow', '{}');
+        const h = mockHandlers.message[mockHandlers.message.length - 1];
+        h(
+          Buffer.from(
+            JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+          ),
+        );
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: { type: 'function_call', call_id: 'c1', name: 'slow', arguments: '{}' },
+            }),
+          ),
+        );
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(functionCallHandler).toHaveBeenCalledWith('slow', '{}');
 
-      // Sleep longer than websocketTimeout while the handler is still pending.
-      // Without the pause/restart, the outer timeout would fire and reject
-      // the request mid-tool execution.
-      await new Promise((r) => setTimeout(r, 150));
-      expect(settled).toBe(false);
+        // Advance past websocketTimeout while the handler is still pending.
+        // Without the pause/restart, the outer timeout would fire and reject
+        // the request mid-tool execution.
+        await vi.advanceTimersByTimeAsync(150);
+        expect(settled).toBe(false);
 
-      // Resolve the handler and complete the follow-up turn.
-      resolveHandler?.('{"ok":true}');
-      await flushMicrotasks();
-      h(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'tool done' })));
-      h(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
-          }),
-        ),
-      );
+        // Resolve the handler and complete the follow-up turn.
+        resolveHandler?.('{"ok":true}');
+        await vi.advanceTimersByTimeAsync(0);
+        h(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'tool done' })));
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
+            }),
+          ),
+        );
 
-      const result = await responsePromise;
-      expect(result.error).toBeUndefined();
-      expect(result.output).toContain('tool done');
+        const result = await responsePromise;
+        expect(result.error).toBeUndefined();
+        expect(result.output).toContain('tool done');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

@@ -167,7 +167,20 @@ interface RealtimeResponse {
   metadata: any;
   functionCallOccurred?: boolean;
   functionCallResults?: string[];
+  // Names of function_calls the model emitted but for which no
+  // functionCallHandler was configured. Surfaced in the empty-response error
+  // metadata so users can debug *which* tool the model tried to call.
+  attemptedFunctionCalls?: { name: string }[];
 }
+
+// Partial state attached to a rejection so callApi() can preserve it in the
+// returned ProviderResponse error metadata. Without this, hitting the iteration
+// cap mid-chain throws away the redacted tool outputs already exchanged.
+interface RealtimeErrorPartial {
+  functionCallOccurred?: boolean;
+  functionCallResults?: string[];
+}
+type RealtimeErrorWithPartial = Error & { partial?: RealtimeErrorPartial };
 
 type RealtimeUserContent =
   | {
@@ -544,11 +557,22 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   // The error thrown when a tool→follow-up loop exceeds the configured cap.
   // Centralized so the message stays consistent across all three socket paths.
-  private toolIterationCapError(max: number): Error {
-    return new Error(
+  // Accepts the partial in-flight state so callApi() can keep the redacted
+  // tool outputs in the returned ProviderResponse metadata instead of dropping
+  // them on the floor — without this, the user sees an error with empty
+  // metadata even though several tool rounds successfully exchanged.
+  private toolIterationCapError(
+    max: number,
+    partial?: RealtimeErrorPartial,
+  ): RealtimeErrorWithPartial {
+    const err: RealtimeErrorWithPartial = new Error(
       `Realtime tool-call loop exceeded maxToolIterations=${max}; ` +
         'increase config.maxToolIterations if your evaluation legitimately requires deeper chains.',
     );
+    if (partial) {
+      err.partial = partial;
+    }
+    return err;
   }
 
   /**
@@ -968,7 +992,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 if (toolIterations >= maxToolIterations) {
                   clearTimeout(timeout);
                   ws.close();
-                  reject(this.toolIterationCapError(maxToolIterations));
+                  reject(
+                    this.toolIterationCapError(maxToolIterations, {
+                      functionCallOccurred,
+                      functionCallResults: [...functionCallResults],
+                    }),
+                  );
                   return;
                 }
                 toolIterations++;
@@ -1104,6 +1133,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 functionCallOccurred,
                 functionCallResults:
                   functionCallResults.length > 0 ? functionCallResults : undefined,
+                // When the model emitted function_calls but no handler ran
+                // (no functionCallHandler configured), surface the names so
+                // the empty-response error in callApi() tells the user *which*
+                // tools the model tried to invoke.
+                attemptedFunctionCalls:
+                  functionCallOccurred && functionCallResults.length === 0
+                    ? pendingFunctionCalls.map((c) => ({ name: c.name }))
+                    : undefined,
               });
               break;
 
@@ -1223,14 +1260,27 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       // as a ProviderResponse error so assertions fail with a useful message
       // instead of silently passing/failing against a placeholder string.
       if (finalOutput.length === 0 && !hasAudio && !hasFunctionResults) {
-        const hint = result.functionCallOccurred
+        const attemptedNames = result.attemptedFunctionCalls
+          ?.map((c) => c.name)
+          .filter((name): name is string => Boolean(name));
+        const baseHint = result.functionCallOccurred
           ? 'A function_call was emitted by the model but no functionCallHandler was configured to respond.'
           : 'No text, audio, or function-call output was returned. This often indicates a wire-shape mismatch with the Realtime API.';
+        // Naming the attempted tool(s) makes this error actionable — without
+        // it the user has to dig through debug logs to find which function
+        // the model picked.
+        const hint =
+          attemptedNames && attemptedNames.length > 0
+            ? `${baseHint} Attempted: ${attemptedNames.join(', ')}.`
+            : baseHint;
         return {
           error: `OpenAI Realtime returned an empty response. ${hint}`,
           metadata: {
             ...(result.metadata ?? {}),
             functionCallOccurred: result.functionCallOccurred,
+            ...(result.attemptedFunctionCalls && {
+              attemptedFunctionCalls: result.attemptedFunctionCalls,
+            }),
           },
           tokenUsage: result.tokenUsage,
         };
@@ -1322,9 +1372,21 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         - Checking your OpenAI API key permissions
         - Verifying you have access to the Realtime API`);
       }
+      // Preserve any partial state the in-flight request attached to the
+      // error (e.g., the redacted tool outputs already exchanged when the
+      // iteration cap fired). Without this, users see an error with empty
+      // metadata even though several tool rounds had completed.
+      const partial = (err as RealtimeErrorWithPartial)?.partial;
+      const metadata: Record<string, unknown> = {};
+      if (partial?.functionCallOccurred !== undefined) {
+        metadata.functionCallOccurred = partial.functionCallOccurred;
+      }
+      if (partial?.functionCallResults && partial.functionCallResults.length > 0) {
+        metadata.functionCallResults = partial.functionCallResults;
+      }
       return {
         error: errorMessage,
-        metadata: {},
+        metadata,
       };
     }
   }
@@ -1611,7 +1673,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 if (toolIterations >= maxToolIterations) {
                   clearTimeout(timeout);
                   ws.close();
-                  reject(this.toolIterationCapError(maxToolIterations));
+                  reject(
+                    this.toolIterationCapError(maxToolIterations, {
+                      functionCallOccurred,
+                      functionCallResults: [...functionCallResults],
+                    }),
+                  );
                   return;
                 }
                 toolIterations++;
@@ -1747,6 +1814,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 functionCallOccurred,
                 functionCallResults:
                   functionCallResults.length > 0 ? functionCallResults : undefined,
+                // When the model emitted function_calls but no handler ran
+                // (no functionCallHandler configured), surface the names so
+                // the empty-response error in callApi() tells the user *which*
+                // tools the model tried to invoke.
+                attemptedFunctionCalls:
+                  functionCallOccurred && functionCallResults.length === 0
+                    ? pendingFunctionCalls.map((c) => ({ name: c.name }))
+                    : undefined,
               });
               break;
 
@@ -1819,8 +1894,13 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
    * setupMessageHandlers finds persistentConnection === null and the turn
    * fails with "persistent WebSocket is not set" instead of reconnecting.
    *
-   * Resetting inflightTurn keeps the queue from being permanently chained to
-   * a poisoned promise, so subsequent turns aren't blocked behind a dead one.
+   * We deliberately do NOT reset `inflightTurn` here. `persistentWebSocketRequest`
+   * always re-anchors `inflightTurn` to a `.catch(() => undefined)` wrapper, so
+   * the queue never holds a rejecting promise — already-queued turns will
+   * naturally proceed once the failed turn settles. Resetting `inflightTurn`
+   * to `Promise.resolve()` here would let a brand-new turn arriving after
+   * teardown bypass turns still awaiting the failed one, which reintroduces
+   * the same handler-interleaving race this PR aims to prevent.
    */
   private tearDownPersistentConnection(reason: string): void {
     if (this.persistentConnection != null) {
@@ -1828,7 +1908,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
     this.persistentConnection = null;
     this.connectionReady = null;
-    this.inflightTurn = Promise.resolve();
   }
 
   // Treat CONNECTING/OPEN as live; CLOSING/CLOSED (or undefined readyState on
@@ -2110,6 +2189,14 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         }),
         functionCallOccurred,
         functionCallResults,
+        // When the model emitted function_calls but no handler ran (no
+        // functionCallHandler configured), surface the names so the
+        // empty-response error in callApi() tells the user *which* tools the
+        // model tried to invoke.
+        attemptedFunctionCalls:
+          functionCallOccurred && functionCallResults.length === 0
+            ? pendingFunctionCalls.map((c) => ({ name: c.name }))
+            : undefined,
       });
     };
 
@@ -2231,7 +2318,19 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             if (pendingFunctionCalls.length > 0 && this.config.functionCallHandler) {
               if (toolIterations >= maxToolIterations) {
                 clearRequestTimeout();
-                reject(this.toolIterationCapError(maxToolIterations));
+                // Detach our message/error/close listeners — without this, the
+                // shared persistent socket keeps invoking this stale handler
+                // for every event on every subsequent turn, recreating the
+                // event-interleaving bug this PR was meant to fix.
+                if (cleanupMessageHandler) {
+                  cleanupMessageHandler();
+                }
+                reject(
+                  this.toolIterationCapError(maxToolIterations, {
+                    functionCallOccurred,
+                    functionCallResults: [...functionCallResults],
+                  }),
+                );
                 return;
               }
               toolIterations++;
@@ -2274,6 +2373,11 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             logger.error(`WebSocket error: ${responseError}`);
             clearRequestTimeout();
             this.resetAudioState();
+            // Detach our listeners on the shared socket; otherwise this stale
+            // handler keeps firing for events from later turns.
+            if (cleanupMessageHandler) {
+              cleanupMessageHandler();
+            }
             reject(new Error(responseError));
             break;
         }
