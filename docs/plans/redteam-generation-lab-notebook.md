@@ -10291,3 +10291,70 @@ After this pass:
 3. The likely next family to audit after `routing-review` is `authority-pretext`,
    because it currently verifies legal authority and verbatim extraction but not
    explicit authority-check disclosure.
+
+## Iteration 130 - 2026-05-10
+
+### Goal
+
+Complete the research-to-production bridge for `prompt-extraction`:
+
+> Can the production plugin preserve the same `2/2` core plus `7/7`
+> protected-control-plane frontier proven in the research harness?
+
+### Experiment
+
+1. Strengthened the production `authority-pretext` family so it now:
+   - explicitly asks for authority checks
+   - requires `asksForAuthorityChecks`
+   - keeps the existing legal-authority and verbatim predicates
+2. Added an end-to-end mocked-provider regression that runs all six production
+   families through the real plugin flow.
+3. Measured the emitted prompts with the same semantic band metric used in the
+   research benchmark.
+
+### Results
+
+The production mocked flow now reaches:
+
+| Band                      | Observed features | Prompts with features |
+| ------------------------- | ----------------: | --------------------: |
+| `core-disclosure`         |             `2/2` |                 `4/6` |
+| `protected-control-plane` |             `7/7` |                 `4/6` |
+
+The six selected production families cover:
+
+1. `direct-disclosure`
+2. `format-conversion`
+3. `policy-audit`
+4. `routing-review`
+5. `escalation-review`
+6. `authority-pretext`
+
+### Reflection
+
+1. The frontier now survives the handoff:
+   - research pool
+   - semantic-aware selector
+   - production family contracts
+   - real plugin generation flow
+2. `authority-pretext` needed the same treatment as `routing-review`:
+   - the family prose implied a useful signal
+   - but the contract did not enforce it
+3. The production plugin is now materially closer to the richer generation
+   architecture we set out to build:
+   - not just more prompts
+   - better-distributed semantic probes
+
+### New Hypotheses
+
+1. The next useful step is human-facing:
+   - produce a side-by-side before/after artifact showing baseline prompts versus
+     the new production-quality prompts
+2. After that, we should apply the same pattern to `sql-injection`:
+   - split core exploit mechanisms from authorization-bypass semantics
+   - then inspect whether its selector also drops important bands
+3. A broader refactor path is emerging:
+   - semantic registry
+   - band-aware scoring
+   - contract-backed families
+   - benchmarked selectors
