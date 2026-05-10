@@ -1188,6 +1188,8 @@ describe('DataTable', () => {
         'sm:pointer-events-none',
         'sm:group-hover:opacity-100',
         'sm:group-hover:pointer-events-auto',
+        'sm:focus-within:opacity-100',
+        'sm:focus-within:pointer-events-auto',
       );
       expect(actionGroup).toHaveClass(shouldBeRightAligned ? 'sm:left-0' : 'sm:right-0');
 

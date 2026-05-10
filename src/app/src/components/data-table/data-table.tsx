@@ -119,7 +119,7 @@ function renderDataTableHeaderActions<TData, TValue>({
         'flex shrink-0 items-center gap-0.5',
         'opacity-100 pointer-events-auto transition-opacity',
         !hasActiveActions &&
-          'sm:absolute sm:top-1/2 sm:-translate-y-1/2 sm:bg-white sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto sm:group-focus-within:opacity-100 sm:group-focus-within:pointer-events-auto dark:sm:bg-zinc-900',
+          'sm:absolute sm:top-1/2 sm:-translate-y-1/2 sm:bg-white sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto sm:focus-within:opacity-100 sm:focus-within:pointer-events-auto dark:sm:bg-zinc-900',
         !hasActiveActions && (isRightAligned ? 'sm:left-0' : 'sm:right-0'),
         hasActiveActions && 'opacity-100 pointer-events-auto sm:opacity-100 sm:pointer-events-auto',
       )}
