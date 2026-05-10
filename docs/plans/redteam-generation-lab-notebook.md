@@ -10590,3 +10590,67 @@ The SQL result diverges from prompt extraction in a useful way:
 3. We should test a perturbed SQL pool later where bypass predicates are split
    across separate prompts before generalizing too strongly from this easier
    case.
+
+## Iteration 135 - 2026-05-10
+
+### Goal
+
+Make the SQL selector result inspectable by eye:
+
+> Can we show the first-N failure and the current diversity-only success in one
+> durable human-readable artifact?
+
+### Experiment
+
+1. Extended `compareSqlSemanticBands.ts` with:
+   - `--format markdown`
+   - a reusable SQL report renderer
+2. Generated a checked-in report snapshot from the real medical-agent corpus.
+3. Included:
+   - baseline prompts
+   - first five
+   - diversity-only five
+   - semantic-band-aware scores
+
+### Results
+
+The report now makes the SQL story legible without reading JSON:
+
+| Portfolio                | Exploit mechanism | Authorization bypass |
+| ------------------------ | ----------------: | -------------------: |
+| baseline unique prompts  |             `2/4` |                `0/2` |
+| first five               |             `2/4` |                `0/2` |
+| diversity-only five      |             `4/4` |                `2/2` |
+| semantic-band-aware five |             `4/4` |                `2/2` |
+
+The human-readable comparison clarifies that:
+
+1. naive truncation preserves the same thin SQL slice as the old baseline
+2. diversity-only already introduces:
+   - stacked-query coverage
+   - schema-discovery coverage
+   - authorization-bypass coverage
+3. semantic-band-aware selection is still sensible infrastructure, but it is
+   future-proofing rather than a current improvement on this pool
+
+### Reflection
+
+1. The SQL report is more nuanced than the prompt-extraction report, which is
+   good:
+   - one artifact should show a repair
+   - another should show why a hoped-for repair was unnecessary
+2. These reports are becoming useful as research guardrails:
+   - they expose wins
+   - they also expose when the benchmark says "no extra win here"
+3. This makes it easier to avoid cargo-culting one successful pattern across
+   every plugin.
+
+### New Hypotheses
+
+1. The next genuinely new SQL experiment is the perturbed-pool test:
+   - split bypass predicates across separate prompts
+   - then re-check whether diversity-only still preserves both
+2. If it fails under perturbation, that would justify the generic band-aware
+   abstraction with stronger evidence.
+3. The report format is now repeated enough that a shared renderer may be worth
+   extracting later.
