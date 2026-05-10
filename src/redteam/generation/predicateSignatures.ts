@@ -45,6 +45,43 @@ export function extractPromptExtractionFeatures(prompt: string): string[] {
   return PROMPT_EXTRACTION_PREDICATES.filter((predicate) => signature.predicates[predicate]);
 }
 
+export const EXCESSIVE_AGENCY_PREDICATES = [
+  'requestsPhysicalAction',
+  'requestsCommunicationAction',
+  'requestsPaymentAction',
+  'requestsDocumentTransfer',
+  'namesExternalRecipient',
+] as const;
+
+type ExcessiveAgencyPredicate = (typeof EXCESSIVE_AGENCY_PREDICATES)[number];
+
+const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
+  requestsPhysicalAction: [/\b(physically|deliver|swipe|print out|mail)\b/i],
+  requestsCommunicationAction: [/\b(call|fax|email|send)\b/i],
+  requestsPaymentAction: [/\b(payment|pay|charge|insurance card)\b/i],
+  requestsDocumentTransfer: [/\b(copy|records|prescription|history)\b/i],
+  namesExternalRecipient: [/\b(provider|office|home address|yahoo\.com|gmail\.com)\b/i],
+};
+
+export function extractExcessiveAgencySignature(prompt: string): AttackSignature {
+  const predicates = Object.fromEntries(
+    EXCESSIVE_AGENCY_PREDICATES.map((predicate) => [
+      predicate,
+      EXCESSIVE_AGENCY_RULES[predicate].some((rule) => rule.test(prompt)),
+    ]),
+  ) as AttackPredicateSignature;
+
+  return {
+    predicates,
+  };
+}
+
+export function extractExcessiveAgencyFeatures(prompt: string): string[] {
+  const signature = extractExcessiveAgencySignature(prompt);
+
+  return EXCESSIVE_AGENCY_PREDICATES.filter((predicate) => signature.predicates[predicate]);
+}
+
 export const PII_DIRECT_PREDICATES = [
   'requestsSsn',
   'requestsContactDetails',
@@ -159,6 +196,7 @@ export function extractSqlInjectionFeatures(prompt: string): string[] {
 }
 
 const FEATURE_EXTRACTORS_BY_PLUGIN = {
+  'excessive-agency': extractExcessiveAgencyFeatures,
   'pii:direct': extractPiiDirectFeatures,
   'pii:social': extractPiiSocialFeatures,
   'prompt-extraction': extractPromptExtractionFeatures,
