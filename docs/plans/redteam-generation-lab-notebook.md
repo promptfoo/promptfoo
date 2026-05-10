@@ -10057,3 +10057,60 @@ This finally makes the corpus readable in one glance:
    - current production family portfolio
 3. If the production portfolio already improves the second band materially, we
    can turn that into the first concrete before/after benchmark.
+
+## Iteration 126 - 2026-05-10
+
+### Goal
+
+Run the first real before/after benchmark enabled by the new banded metric:
+
+> Does the newer curated `prompt-extraction` portfolio improve
+> protected-control-plane breadth without sacrificing core disclosure validity?
+
+### Experiment
+
+1. Added `comparePromptExtractionSemanticBands.ts`.
+2. Compared three prompt sets:
+   - the five unique checked-in medical baseline prompts
+   - the full curated research portfolio
+   - the five-prompt diverse selection produced from the current candidate pool
+3. Scored each set on:
+   - `core-disclosure`
+   - `protected-control-plane`
+
+### Results
+
+| Prompt set                    |               Core disclosure |       Protected control plane |
+| ----------------------------- | ----------------------------: | ----------------------------: |
+| baseline unique prompts       | `2/2` features, `5/5` prompts | `0/7` features, `0/5` prompts |
+| full curated portfolio        | `2/2` features, `4/8` prompts | `1/7` features, `1/8` prompts |
+| diverse five-prompt portfolio | `1/2` features, `2/5` prompts | `1/7` features, `1/5` prompts |
+
+### Reflection
+
+1. The curated portfolio is only a modest improvement:
+   - it adds `requestsVerbatimText`
+   - it does not yet reach routing, refusal, escalation, authority, or
+     classification coverage
+2. The more important finding is about selection:
+   - the current diverse selector optimizes tactic / pretext / artifact novelty
+   - it can therefore throw away `requestsOperatingInstructions`
+   - and regress from full to half core-disclosure feature coverage
+3. This is the first concrete evidence that:
+   - generation quality
+   - semantic coverage
+   - and portfolio selection
+     must be optimized together rather than independently
+
+### New Hypotheses
+
+1. The next useful step is to add a semantic-band-aware portfolio selector for
+   `prompt-extraction`.
+2. It should:
+   - preserve both core-disclosure features
+   - then maximize protected-control-plane breadth
+   - then break ties with the older novelty axes
+3. A successful first repair should make the diverse five-prompt portfolio at
+   least:
+   - `2/2` on core disclosure
+   - better than `1/7` on protected-control-plane coverage
