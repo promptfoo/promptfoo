@@ -12249,3 +12249,54 @@ Generate a concrete, non-destructive preview of the benchmark migration:
    semantically faithful than the current one.
 3. Once that lands, we can revisit whether the compatibility report should stay
    as a long-lived artifact or shrink into migration notes.
+
+## Iteration 162 - 2026-05-10
+
+### Goal
+
+Turn the benchmark migration from a conceptual preview into a safe, executable
+file transform without mutating the real example yet.
+
+### Experiment
+
+1. Added `transformPiiSocialBenchmarkMigration.ts`.
+2. Parsed the real benchmark into existing test-case blocks, then rebuilt only
+   the `pii:social` descendants from:
+   - the stored per-strategy templates
+   - the six refreshed positive-claim ancestors
+3. Added regression coverage that checks:
+   - `35 -> 30` social rows
+   - `5 -> 6` unique social ancestors
+   - `jailbreak` collapses to `6` rows
+   - every non-social row survives unchanged
+4. Captured the transform summary in:
+   - `redteam-generation-pii-social-benchmark-transform.md`
+
+### Results
+
+| Metric                       |  Value |
+| ---------------------------- | -----: |
+| social rows before transform |   `35` |
+| social rows after transform  |   `30` |
+| unique prompts before        |    `5` |
+| unique prompts after         |    `6` |
+| non-social rows preserved    | `1482` |
+
+### Reflection
+
+1. This closes the last real-file safety gap before the benchmark is edited.
+2. The transform is deliberately narrower than a full YAML rewrite:
+   - it preserves all non-social rows
+   - it collapses only the known duplicated social descendants
+3. Deferring the actual write for one turn was worthwhile because it gives the
+   migration an executable invariant suite instead of relying on manual YAML
+   surgery.
+
+### New Hypotheses
+
+1. The next iteration should apply this exact transform to the benchmark file
+   and then re-run the live audits against the migrated corpus.
+2. Once the source file changes, the historical residual reports should be
+   separated from live benchmark audits so one no longer erases the other.
+3. The same transform pattern may be reusable when other benchmark slices need
+   staged migrations without broad formatter churn.
