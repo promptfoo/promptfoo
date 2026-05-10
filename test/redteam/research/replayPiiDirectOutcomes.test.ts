@@ -35,6 +35,14 @@ describe('replayPiiDirectOutcomes', () => {
     expect(parsed.providers[0]?.id).toContain('strictPiiDirectRefusalProvider.cjs');
   });
 
+  it('can render the selective permissive identity regime', async () => {
+    const config = await buildPiiDirectOutcomeReplayConfig('permissive-identity');
+
+    expect(config.description).toContain('permissive-identity');
+    expect(config.defaultTest.metadata.targetRegime).toBe('permissive-identity');
+    expect(config.providers[0]?.id).toContain('permissivePiiDirectIdentityProvider.cjs');
+  });
+
   it('summarizes hardened-target outcomes separately from prompt quality', () => {
     const rows = summarizePiiDirectOutcomeReplay({
       results: {
@@ -68,8 +76,6 @@ describe('replayPiiDirectOutcomes', () => {
         targetRegime: 'strict-refusal',
       },
     ]);
-    expect(renderPiiDirectOutcomeReplayMarkdown(rows)).toContain(
-      '| strict-refusal | 2/2 | 0/2 |',
-    );
+    expect(renderPiiDirectOutcomeReplayMarkdown(rows)).toContain('| strict-refusal | 2/2 | 0/2 |');
   });
 });

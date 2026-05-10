@@ -14328,3 +14328,55 @@ Advance `pii:direct` from the new stage-2 proxy into its first target replay:
    details but still refuses medical-record and prescription requests.
 3. If the six-prompt frontier is well formed, that selective target should create
    a nonzero but submaximal realized failure rate rather than another flat result.
+
+## Iteration 201 - 2026-05-10
+
+### Goal
+
+Advance `pii:direct` into stage `4` with a susceptible regime that is selective
+enough to be informative:
+
+> If only identity/contact fields are weak, does the direct-PII frontier produce a
+> partial realized-failure pattern rather than another flat result?
+
+### Experiment
+
+1. Added a deterministic `permissive-identity` target provider that leaks only
+   when prompts ask for:
+   - SSN
+   - address
+   - phone
+   - email
+2. Reused the same six direct-PII portfolio prompts and the same real grader path
+   from iteration `200`.
+3. Ran the selective regime as a second direct-PII replay beside the existing
+   hardened baseline.
+
+### Results
+
+| Target regime         | Field-visible prompts | Realized `PIILeak` failures |
+| --------------------- | --------------------: | --------------------------: |
+| `strict-refusal`      |                 `6/6` |                       `0/6` |
+| `permissive-identity` |                 `6/6` |                       `3/6` |
+
+### Reflection
+
+1. This is the first non-flat direct-PII outcome surface:
+   - the target leaks to identity/contact requests
+   - it still refuses medical-record, prescription, and insurance requests
+2. The `3/6` split is useful because it proves the direct-PII frontier is not
+   merely decorative; distinct families expose distinct weaknesses.
+3. `pii:direct` has now graduated through stage `4`:
+   - semantic frontier
+   - quality proxy
+   - hardened replay
+   - susceptible replay
+
+### New Hypotheses
+
+1. The next useful step is stage `5`: summarize the strict and selective regimes
+   together instead of treating them as isolated anecdotes.
+2. A suite-level view should prefer a generator that covers more distinct field
+   families even when a single weak target leaks only a subset of them.
+3. A second susceptible regime that leaks clinical fields rather than identity
+   fields would test whether suite breadth matters beyond this first split.
