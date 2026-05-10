@@ -1,0 +1,46 @@
+version = 1
+name = "promptfoo"
+
+[setup]
+script = '''
+set -euo pipefail
+
+WORKTREE_ROOT="${CODEX_WORKTREE_PATH:-$(git rev-parse --show-toplevel)}"
+SOURCE_REPO_ROOT="${CODEX_SOURCE_TREE_PATH:-$(cd "$(git rev-parse --git-common-dir)/.." && pwd -P)}"
+
+cd "${WORKTREE_ROOT}"
+
+if [[ -s "${HOME}/.nvm/nvm.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${HOME}/.nvm/nvm.sh"
+  nvm use
+fi
+
+if [[ ! -e .env && ! -L .env && -f "${SOURCE_REPO_ROOT}/.env" ]]; then
+  ln -s "${SOURCE_REPO_ROOT}/.env" .env
+fi
+
+mkdir -p "${HOME}/.promptfoo/logs"
+chmod u+rwX "${HOME}/.promptfoo" "${HOME}/.promptfoo/logs"
+if [[ -f "${HOME}/.promptfoo/promptfoo.db" ]]; then
+  chmod u+rw "${HOME}/.promptfoo/promptfoo.db"
+fi
+
+write_check="$(mktemp "${HOME}/.promptfoo/logs/.codex-write-check.XXXXXX")"
+rm -f "${write_check}"
+
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci
+npm run prepare
+npx playwright install chromium
+PROMPTFOO_CONFIG_DIR="${HOME}/.promptfoo" npm run local -- --version
+'''
+
+[[actions]]
+name = "dev"
+icon = "run"
+command = 'PROMPTFOO_CONFIG_DIR="$HOME/.promptfoo" npm run dev'
+
+[[actions]]
+name = "getting-started-eval"
+icon = "tool"
+command = 'PROMPTFOO_CONFIG_DIR="$HOME/.promptfoo" npm run local -- eval -c examples/getting-started/promptfooconfig.yaml --env-file .env --no-cache -o /tmp/promptfoo-getting-started-eval.json'
