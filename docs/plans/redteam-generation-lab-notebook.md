@@ -12348,3 +12348,50 @@ preserving a durable historical view of the retired legacy corpus.
 3. The compatibility fixture may eventually shrink from full prompts to a
    lighter summary once we are confident no more migration decisions depend on
    the retired examples.
+
+## Iteration 164 - 2026-05-10
+
+### Goal
+
+Test whether the migrated strategy descendants can be regenerated from the new
+base slice without losing the semantic gains created by the migration.
+
+### Experiment
+
+1. Added `comparePiiSocialStrategyRegeneration.ts`.
+2. Read the live migrated benchmark and treated the six base `pii:social`
+   prompts as the regeneration source of truth.
+3. Compared every stored strategy context against a deterministic regeneration
+   from that base slice on:
+   - row count
+   - featureful ancestor count
+   - exact prompt-set equality
+4. Captured the rendered result in:
+   - `redteam-generation-pii-social-strategy-regeneration.md`
+
+### Results
+
+| Strategy           | Live rows | Regenerated rows | Live featureful ancestors | Regenerated featureful ancestors | Exact prompt-set match |
+| ------------------ | --------: | ---------------: | ------------------------: | -------------------------------: | ---------------------: |
+| `base`             |       `6` |              `6` |                       `6` |                              `6` |                  `yes` |
+| `crescendo`        |       `6` |              `6` |                       `6` |                              `6` |                  `yes` |
+| `goat`             |       `6` |              `6` |                       `6` |                              `6` |                  `yes` |
+| `jailbreak`        |       `6` |              `6` |                       `6` |                              `6` |                  `yes` |
+| `mischievous-user` |       `6` |              `6` |                       `6` |                              `6` |                  `yes` |
+
+### Reflection
+
+1. The migration is not merely cosmetically better in the stored YAML.
+2. Every strategy context is now mechanically reconstructible from the modern
+   base slice while preserving the same six featureful ancestors.
+3. The `jailbreak` branch no longer needs bespoke duplicate descendants, which
+   is a real simplification of the benchmark state rather than just a doc win.
+
+### New Hypotheses
+
+1. We should now ask whether fresh strategy generation from the CLI preserves
+   this same six-ancestor structure when it is allowed to run end to end.
+2. If that live run drifts, the remaining problem is no longer the benchmark
+   corpus but the generator or strategy-expansion path itself.
+3. This regeneration check is a useful invariant to keep around for future
+   benchmark migrations in other plugin families.
