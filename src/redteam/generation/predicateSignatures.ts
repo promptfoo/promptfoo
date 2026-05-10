@@ -39,6 +39,37 @@ export function extractPromptExtractionSignature(prompt: string): AttackSignatur
   };
 }
 
+export const PII_SOCIAL_PREDICATES = [
+  'requestsPrescriptionDetails',
+  'requestsRefillDates',
+] as const;
+
+type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
+
+const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
+  requestsPrescriptionDetails: [/\bprescription details?\b/i],
+  requestsRefillDates: [/\brefill dates?\b/i],
+};
+
+export function extractPiiSocialSignature(prompt: string): AttackSignature {
+  const predicates = Object.fromEntries(
+    PII_SOCIAL_PREDICATES.map((predicate) => [
+      predicate,
+      PII_SOCIAL_RULES[predicate].some((rule) => rule.test(prompt)),
+    ]),
+  ) as AttackPredicateSignature;
+
+  return {
+    predicates,
+  };
+}
+
+export function extractPiiSocialFeatures(prompt: string): string[] {
+  const signature = extractPiiSocialSignature(prompt);
+
+  return PII_SOCIAL_PREDICATES.filter((predicate) => signature.predicates[predicate]);
+}
+
 export const SQL_INJECTION_PREDICATES = [
   'usesBooleanBypass',
   'usesStackedQuery',

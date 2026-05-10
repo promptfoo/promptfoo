@@ -9005,3 +9005,57 @@ On the current empirical corpus:
      across real parser drift.
 3. Long term, predicate deltas may be the more durable abstraction than raw
    textual feature lists for most plugin families.
+
+## Iteration 111 - 2026-05-10
+
+### Goal
+
+Remove the last bespoke semantic rule from the observed real empirical failure:
+
+> Can `pii:social` expose reusable predicates so the parser audit reports real
+> predicate loss instead of benchmark-only string loss?
+
+### Experiment
+
+1. Added a minimal reusable `pii:social` predicate vocabulary:
+   - `requestsPrescriptionDetails`
+   - `requestsRefillDates`
+2. Added direct coverage proving the observed empirical prompt activates both
+   predicates.
+3. Rewired the empirical audit so `pii:social` uses the shared extractor for:
+   - feature retention
+   - predicate deltas
+
+### Results
+
+The observed changed empirical prompt now reports:
+
+1. current predicates:
+   - `requestsPrescriptionDetails`
+   - `requestsRefillDates`
+2. legacy predicates:
+   - none
+3. lost predicates:
+   - `requestsPrescriptionDetails`
+   - `requestsRefillDates`
+
+### Reflection
+
+1. The PII empirical case is no longer a special-case benchmark hack:
+   - it now uses the same shared-semantic pattern we established for SQL
+2. The new predicate names are intentionally narrow:
+   - they fit the evidence we have
+   - they do not pretend to fully taxonomy-map every PII social attack yet
+3. This is a useful refactor pattern for the rest of the system:
+   - stabilize the smallest real semantic unit first
+   - widen only when additional evidence demands it
+
+### New Hypotheses
+
+1. The next useful step is to factor predicate extraction behind a plugin-aware
+   registry instead of making the audit script dispatch on plugin IDs itself.
+2. Once the registry exists, both generation-quality and parser-quality tools
+   can ask the same question:
+   - "which active predicates does this plugin expose for this prompt?"
+3. That should reduce future benchmark drift and make new plugin adoption more
+   systematic.

@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import yaml from 'js-yaml';
-import { extractSqlInjectionFeatures } from '../../src/redteam/generation/predicateSignatures';
+import {
+  extractPiiSocialFeatures,
+  extractSqlInjectionFeatures,
+} from '../../src/redteam/generation/predicateSignatures';
 import {
   classifyPromptDriftSeverity,
   type DriftSeverity,
@@ -269,10 +272,7 @@ function auditSeverityCalibration() {
 
 function extractEmpiricalFeatures(pluginId: string, prompt: string): string[] {
   if (pluginId === 'pii:social') {
-    const features = ['prescription details', 'refill dates'].filter((feature) =>
-      prompt.includes(feature),
-    );
-    return features.length > 0 ? features : [];
+    return extractPiiSocialFeatures(prompt);
   }
 
   if (pluginId === 'sql-injection') {
@@ -283,6 +283,10 @@ function extractEmpiricalFeatures(pluginId: string, prompt: string): string[] {
 }
 
 function extractEmpiricalPredicates(pluginId: string, prompt: string): string[] {
+  if (pluginId === 'pii:social') {
+    return extractPiiSocialFeatures(prompt);
+  }
+
   if (pluginId === 'sql-injection') {
     return extractSqlInjectionFeatures(prompt);
   }
