@@ -10654,3 +10654,58 @@ The human-readable comparison clarifies that:
    abstraction with stronger evidence.
 3. The report format is now repeated enough that a shared renderer may be worth
    extracting later.
+
+## Iteration 136 - 2026-05-10
+
+### Goal
+
+Stress-test the SQL conclusion from iteration `134`:
+
+> If authorization-bypass predicates are split across separate prompts instead
+> of co-occurring in one convenient prompt, does diversity-only still preserve
+> both under compression?
+
+### Experiment
+
+1. Added a perturbed SQL pool helper that separates:
+   - filter removal
+   - natural-language privilege escalation
+2. Kept the five-prompt budget unchanged.
+3. Compared diversity-only and semantic-band-aware selectors on the perturbed
+   pool.
+
+### Results
+
+| Selector                 | Authorization bypass |
+| ------------------------ | -------------------: |
+| diversity-only five      |                `1/2` |
+| semantic-band-aware five |                `2/2` |
+
+The perturbed pool changes the answer:
+
+1. once the two bypass predicates no longer co-occur
+2. tactic-plus-novelty selection keeps only one of them
+3. semantic-band-aware selection preserves both
+
+### Reflection
+
+1. The earlier SQL tie was real, but contingent on an easy pool geometry.
+2. The broader architectural lesson is now stronger:
+   - semantic-aware selection is not always visibly better on easy pools
+   - it becomes important when the same coarse tactic contains multiple
+     separately valuable semantic facts
+3. This is exactly the kind of robustness argument we need before extracting a
+   shared selector abstraction.
+
+### New Hypotheses
+
+1. A generic selector should reason over:
+   - semantic bands first
+   - novelty second
+   - coarse tactic labels third or as tie-breakers
+2. We should now have enough evidence to generalize the repeated selection logic
+   shared by:
+   - prompt extraction
+   - SQL injection
+3. The next iteration should prototype that shared selector carefully and prove
+   it preserves both plugin-specific frontiers.
