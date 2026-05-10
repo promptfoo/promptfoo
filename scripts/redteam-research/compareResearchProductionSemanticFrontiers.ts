@@ -24,7 +24,7 @@ import { buildSqlAttackPortfolio, extractEntities } from './sqlResearchShared';
 
 type PluginId = 'pii:direct' | 'prompt-extraction' | 'sql-injection';
 
-type ResearchProductionSemanticFrontierComparison = {
+export type ResearchProductionSemanticFrontierComparison = {
   pluginId: PluginId;
   productionBandCoverage: ObservedPluginFeatureBandCoverageSummary;
   productionComplete: boolean;

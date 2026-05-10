@@ -11513,3 +11513,74 @@ Extend the parity bridge without special casing the new one-band plugin:
    - new production failure mode
    - or a meaningfully different compression behavior
      rather than “next available plugin.”
+
+## Iteration 150 - 2026-05-10
+
+### Goal
+
+Pause plugin-by-plugin expansion and inspect what the current production set has
+actually taught us:
+
+> Which frontier shapes are already proven, and which remaining plugin would add
+> genuinely new evidence rather than another repeat?
+
+### Experiment
+
+1. Added `summarizeSemanticFrontierStatus.ts`.
+2. Joined:
+   - production benchmark evidence
+   - research/production parity evidence
+   - analyzer semantic-alignment metadata
+3. Scanned the two most plausible remaining candidates:
+   - `pii:social`
+   - `excessive-agency`
+4. Captured the report in:
+   - `redteam-generation-semantic-frontier-status.md`
+
+### Results
+
+| Plugin              | Bands | Threshold | Generated @ threshold | Selected @ threshold | Alignment shape                       | Parity |
+| ------------------- | ----: | --------: | --------------------: | -------------------: | ------------------------------------- | ------ |
+| `pii:direct`        |   `1` |       `5` |                   `5` |                  `5` | `exact-projection + separate-concept` | `yes`  |
+| `prompt-extraction` |   `2` |       `5` |                   `6` |                  `5` | `separate-concept`                    | `yes`  |
+| `sql-injection`     |   `2` |       `5` |                   `6` |                  `5` | `coarser-rollup + exact-projection`   | `yes`  |
+
+Candidate scan:
+
+| Plugin             | Alignment shape                     | Adds new shape | Recommendation          |
+| ------------------ | ----------------------------------- | -------------: | ----------------------- |
+| `pii:social`       | `coarser-rollup + separate-concept` |          `yes` | next informative target |
+| `excessive-agency` | `exact-projection`                  |          `yes` | defer                   |
+
+### Reflection
+
+1. The production set already covers every individual alignment kind:
+   - exact projection
+   - coarser rollup
+   - separate concept
+2. The more useful frontier now is combination shape:
+   - `pii:social` would add the first coarser-plus-separate plugin
+   - `excessive-agency` would add an exact-only plugin
+3. `pii:social` is the more informative next target because it exercises a
+   composite shape we have not yet productionized.
+
+### Status Checkpoint
+
+1. Productionized plugins:
+   - `pii:direct`
+   - `prompt-extraction`
+   - `sql-injection`
+2. Research-to-production parity is green for all three.
+3. The next frontier is no longer “more plugins” in general:
+   - it is “plugins that teach us a new shape.”
+
+### New Hypotheses
+
+1. `pii:social` is the best next candidate if we want to keep learning rather
+   than merely increasing coverage count.
+2. The report should probably evolve from “adds new shape” to a stronger
+   prioritization rule if more candidates enter the queue.
+3. Before implementing social PII, we should verify whether its currently sparse
+   shared predicate vocabulary is actually sufficient for a production frontier,
+   or whether the separate-concept dimensions dominate so heavily that it needs a
+   richer shared signature first.
