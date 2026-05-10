@@ -62,12 +62,14 @@ export function buildEvalUrlWithSearchParams(
   mutateSearchParams(nextSearchParams);
   const nextSearch = nextSearchParams.toString();
 
-  const hash =
-    source.hash !== undefined
-      ? source.hash
-      : typeof window === 'undefined'
-        ? ''
-        : window.location.hash;
+  let hash: string;
+  if (source.hash !== undefined) {
+    hash = source.hash;
+  } else if (typeof window === 'undefined') {
+    hash = '';
+  } else {
+    hash = window.location.hash;
+  }
 
   return {
     pathname: source.pathname,
@@ -116,7 +118,7 @@ export function setEvalDetailsHash(hash: string): void {
   if (typeof window === 'undefined') {
     return;
   }
-  const next = !hash ? '' : hash.startsWith('#') ? hash : `#${hash}`;
+  const next = hash ? (hash.startsWith('#') ? hash : `#${hash}`) : '';
   if (window.location.hash === next) {
     return;
   }
