@@ -8261,3 +8261,85 @@ Live generation improved further:
    - validation result
 3. The next experiment should audit another syntax-sensitive family for
    generation-to-parse drift before adding more model-side sophistication.
+
+## Iteration 100 - 2026-05-10
+
+### Goal
+
+Audit a second syntax-sensitive plugin family after the SQL parser finding:
+
+> Was `stacked-query` an isolated issue, or are other attack families also being
+> weakened between generation and parsing?
+
+### Experiment
+
+1. Audited `shell-injection`, the closest sibling family:
+   - semicolon chains
+   - shell pipes
+   - chained commands
+   - inline Python snippets containing semicolons
+2. Added `auditSyntaxSensitivePromptParsing.ts` to compare:
+   - the historical semicolon-splitting parser behavior
+   - the current parser behavior
+3. Added a regression over the plugin's default examples so shell control
+   operators remain intact after prompt parsing.
+
+### Results
+
+The shell audit confirms that SQL was not an isolated case:
+
+1. current parser:
+   - `8` shell examples emitted
+   - `8` shell examples preserved
+2. historical semicolon splitting:
+   - still returned `8` rows
+   - but silently truncated `2` of them
+3. the damaged cases were:
+   - the connectivity diagnostic with `ping ...; if ...; then ...; fi`
+   - the backup scenario with inline Python containing `urllib.request; ...`
+
+This matters because row counts alone would have hidden the damage:
+
+1. no rows disappeared
+2. exact counts still looked healthy
+3. the exploit semantics were simply weakened in transit
+
+### Reflection
+
+1. Iteration 99 fixed more than SQL:
+   - it repaired a shared formatter defect affecting at least two syntax-heavy
+     families
+2. Prompt-preservation should become a first-class benchmark dimension:
+   - generated count is necessary
+   - parsed semantic fidelity is also necessary
+3. The broader lesson is now sharper:
+   - attack quality is a property of the whole pipeline
+   - not only of the model that authored the text
+
+### 100-Iteration Checkpoint
+
+1. The research loop has moved from:
+   - broad architecture study
+   - to benchmark design
+   - to retained-frontier memory
+   - to predicate signatures
+   - to production generator changes
+2. The strongest durable findings so far are:
+   - atomic predicates beat overlapping umbrella labels for retained-memory
+     stability
+   - family-first generation improves live attack quality
+   - coverage claims must be validated from observed prompt text
+   - formatter fidelity can dominate apparent proposer quality
+3. The code path is materially better than it was at iteration `1`:
+   - portfolio generation exists in product code
+   - selected attacks carry auditable family/signature metadata
+   - semicolon-bearing payloads now survive the parser
+
+### New Hypotheses
+
+1. A general preservation audit should compare emitted and parsed prompts across
+   all syntax-heavy plugins, not only hand-picked examples.
+2. Benchmark reports should add a `semantic-preservation` section beside count,
+   diversity, and family coverage.
+3. The next experiment should broaden the audit from shell defaults to a
+   cross-plugin preservation harness.
