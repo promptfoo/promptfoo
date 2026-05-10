@@ -12198,3 +12198,54 @@ Totals:
    - compatibility-report survival
 3. Once the preview is stable, the research branch will have enough evidence to
    justify changing the real example file rather than merely discussing it.
+
+## Iteration 161 - 2026-05-10
+
+### Goal
+
+Generate a concrete, non-destructive preview of the benchmark migration:
+
+> If we applied the migration tomorrow, what exact benchmark shape would appear
+> on disk?
+
+### Experiment
+
+1. Added `previewPiiSocialBenchmarkMigration.ts`.
+2. Reused the existing stored strategy contexts from the real benchmark.
+3. Materialized:
+   - six refreshed ancestors
+   - one row per refreshed ancestor in each surviving strategy context
+4. Kept the preview non-destructive:
+   - no edit to the real example file yet
+   - legacy prompt texts still listed for compatibility review
+5. Captured the rendered preview in:
+   - `redteam-generation-pii-social-benchmark-preview.md`
+
+### Results
+
+| Metric                              | Value |
+| ----------------------------------- | ----: |
+| legacy rows replaced                |  `35` |
+| preview rows emitted                |  `30` |
+| net row change                      |  `-5` |
+| refreshed strategy contexts         |   `5` |
+| rows per refreshed strategy context |   `6` |
+
+### Reflection
+
+1. The migration is now executable as a file-level change, not just a research
+   concept.
+2. The preview keeps the right separation:
+   - refreshed rows for the future benchmark
+   - legacy prompt texts for compatibility review only
+3. This is a useful last safety rail before editing the real example because we
+   can inspect the exact intended shape while the source file remains untouched.
+
+### New Hypotheses
+
+1. The next meaningful step is to actually patch the benchmark example and run
+   the same audits against the edited file.
+2. The preview suggests the resulting example should be both smaller and more
+   semantically faithful than the current one.
+3. Once that lands, we can revisit whether the compatibility report should stay
+   as a long-lived artifact or shrink into migration notes.
