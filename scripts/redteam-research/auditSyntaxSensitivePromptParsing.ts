@@ -1,5 +1,7 @@
+import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+import yaml from 'js-yaml';
 import {
   classifyPromptDriftSeverity,
   type DriftSeverity,
@@ -27,6 +29,27 @@ type SeverityCalibrationCase = {
   expectedFeatures: readonly string[];
   expectedSeverity: DriftSeverity;
   legacyPrompt: string;
+};
+
+type EmpiricalRedteamFile = {
+  tests?: {
+    metadata?: {
+      pluginId?: string;
+    };
+    vars?: {
+      prompt?: string;
+    };
+  }[];
+};
+
+type EmpiricalPromptAudit = {
+  changedPromptCount: number;
+  exactPreservedPromptCount: number;
+  exactPreservationRate: number;
+  promptCount: number;
+  semicolonPromptCount: number;
+  truncatedPromptCount: number;
+  truncationRate: number;
 };
 
 function parseGeneratedPromptsLegacy(generatedPrompts: string): string[] {
@@ -232,6 +255,94 @@ function auditSeverityCalibration() {
   };
 }
 
+function auditEmpiricalPromptSet(prompts: readonly string[]): EmpiricalPromptAudit {
+  const legacyPrompts = prompts.map(
+    (prompt) => parseGeneratedPromptsLegacy(`Prompt: ${prompt}`)[0],
+  );
+  const changedPromptCount = prompts.filter(
+    (currentPrompt, index) => legacyPrompts[index] !== currentPrompt,
+  ).length;
+  const truncatedPromptCount = prompts.filter((currentPrompt, index) => {
+    const legacyPrompt = legacyPrompts[index] ?? '';
+    return legacyPrompt.length < currentPrompt.length && currentPrompt.startsWith(legacyPrompt);
+  }).length;
+  const promptCount = prompts.length;
+  const exactPreservedPromptCount = promptCount - changedPromptCount;
+
+  return {
+    changedPromptCount,
+    exactPreservedPromptCount,
+    exactPreservationRate: promptCount === 0 ? 1 : exactPreservedPromptCount / promptCount,
+    promptCount,
+    semicolonPromptCount: prompts.filter((prompt) => prompt.includes(';')).length,
+    truncatedPromptCount,
+    truncationRate: promptCount === 0 ? 0 : truncatedPromptCount / promptCount,
+  };
+}
+
+function combineEmpiricalAudits(audits: readonly EmpiricalPromptAudit[]): EmpiricalPromptAudit {
+  const changedPromptCount = audits.reduce((total, audit) => total + audit.changedPromptCount, 0);
+  const exactPreservedPromptCount = audits.reduce(
+    (total, audit) => total + audit.exactPreservedPromptCount,
+    0,
+  );
+  const promptCount = audits.reduce((total, audit) => total + audit.promptCount, 0);
+  const semicolonPromptCount = audits.reduce(
+    (total, audit) => total + audit.semicolonPromptCount,
+    0,
+  );
+  const truncatedPromptCount = audits.reduce(
+    (total, audit) => total + audit.truncatedPromptCount,
+    0,
+  );
+
+  return {
+    changedPromptCount,
+    exactPreservedPromptCount,
+    exactPreservationRate: promptCount === 0 ? 1 : exactPreservedPromptCount / promptCount,
+    promptCount,
+    semicolonPromptCount,
+    truncatedPromptCount,
+    truncationRate: promptCount === 0 ? 0 : truncatedPromptCount / promptCount,
+  };
+}
+
+function auditEmpiricalCorpus(inputPath: string) {
+  const parsed = yaml.load(fs.readFileSync(inputPath, 'utf8')) as EmpiricalRedteamFile;
+  const selectedPluginIds = ['pii:social', 'shell-injection', 'sql-injection'] as const;
+  const pluginAudits = Object.fromEntries(
+    selectedPluginIds.map((pluginId) => {
+      const prompts = (parsed.tests ?? [])
+        .filter((test) => test.metadata?.pluginId === pluginId)
+        .map((test) => test.vars?.prompt)
+        .filter((prompt): prompt is string => typeof prompt === 'string');
+      const uniquePrompts = [...new Set(prompts)];
+
+      return [
+        pluginId,
+        {
+          allPrompts: auditEmpiricalPromptSet(prompts),
+          uniquePrompts: auditEmpiricalPromptSet(uniquePrompts),
+        },
+      ];
+    }),
+  ) as Record<
+    (typeof selectedPluginIds)[number],
+    {
+      allPrompts: EmpiricalPromptAudit;
+      uniquePrompts: EmpiricalPromptAudit;
+    }
+  >;
+  const allPrompts = Object.values(pluginAudits).flatMap((audit) => audit.allPrompts);
+  const uniquePrompts = Object.values(pluginAudits).flatMap((audit) => audit.uniquePrompts);
+
+  return {
+    allPrompts: combineEmpiricalAudits(allPrompts),
+    pluginAudits,
+    uniquePrompts: combineEmpiricalAudits(uniquePrompts),
+  };
+}
+
 async function main() {
   const audits = {
     piiSocial: auditPromptBlock(representativeOutputs.piiSocial, representativeFeatures.piiSocial),
@@ -290,6 +401,7 @@ async function main() {
       {
         audits,
         calibration: auditSeverityCalibration(),
+        empiricalCorpus: auditEmpiricalCorpus('examples/redteam-medical-agent/redteam.yaml'),
         summary: {
           exactPreservationRate: promptCount === 0 ? 1 : exactPreservedPromptCount / promptCount,
           exactPreservedPromptCount,
