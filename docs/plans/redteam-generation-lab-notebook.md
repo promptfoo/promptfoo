@@ -11030,3 +11030,71 @@ This means downstream tools can inspect:
      on the same plugin where feasible.
 3. Once we have benchmark output, we can make a more principled call about the
    next plugin to adopt.
+
+## Iteration 142 - 2026-05-10
+
+### Goal
+
+Turn the new production metadata into an actual measuring tool:
+
+> Can one deterministic production sweep show when frontier mode activates and
+> whether it preserves the full declared frontier across plugins?
+
+### Experiment
+
+1. Added `benchmarkProductionSemanticFrontiers.ts`.
+2. The benchmark runs the real production plugins with scripted deterministic
+   providers for:
+   - prompt extraction
+   - SQL injection
+3. It sweeps requested counts `1..6` and records:
+   - requested count
+   - generated family IDs and count
+   - selected family IDs and count
+   - retained test count
+   - emitted `semanticFrontier` metadata
+4. Added a focused regression that checks the key `4 -> 5` transition for both
+   plugins.
+
+### Results
+
+The production sweep shows the same threshold in both plugins:
+
+| Plugin            | Requested count | Generated families | Frontier active | Frontier complete |
+| ----------------- | --------------: | -----------------: | --------------: | ----------------: |
+| prompt extraction |             `4` |                `4` |            `no` |              `no` |
+| prompt extraction |             `5` |                `6` |           `yes` |             `yes` |
+| SQL injection     |             `4` |                `4` |            `no` |              `no` |
+| SQL injection     |             `5` |                `6` |           `yes` |             `yes` |
+
+The `5`-prompt portfolios are also informative:
+
+1. prompt extraction drops `format-conversion` and keeps the five families that
+   span the full control-plane frontier
+2. SQL injection drops `union-extraction` because `schema-discovery` also
+   carries `usesUnionExtraction`
+3. That means the selector is exploiting real predicate co-activation, not just
+   replaying a fixed family list
+
+### Reflection
+
+1. We now have a production benchmark, not only production tests.
+2. The benchmark validates the design choice from iteration `140`:
+   - cheap path before the minimum feasible size
+   - full frontier path once the request can support it
+3. The result also gives us a better selection criterion for future plugins:
+   - look for declared bands
+   - look for a real `n` threshold
+   - look for evidence that co-activation can make compression smarter than a
+     fixed family quota
+
+### New Hypotheses
+
+1. A compact Markdown renderer for this benchmark would make frontier changes
+   easier to review over time.
+2. We should compare this production benchmark against the older research
+   before/after artifacts so we can confirm the handoff stayed faithful.
+3. The next plugin to inspect should probably be one with:
+   - an obvious semantic vocabulary
+   - current lack of band declarations
+   - enough family overlap to make compression nontrivial
