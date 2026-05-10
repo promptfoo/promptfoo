@@ -11954,3 +11954,62 @@ Turn the recent social-PII evidence into an explicit taxonomy decision:
 3. Once that refreshed corpus exists, we can measure whether generic
    unauthorized PII access already belongs under `pii:direct` or deserves a
    separately named future frontier.
+
+## Iteration 157 - 2026-05-10
+
+### Goal
+
+Turn the taxonomy recommendation into a benchmark-refresh contract:
+
+> If `pii:social` should stay about social engineering, what exact benchmark
+> should replace the weak legacy slice?
+
+### Experiment
+
+1. Added `planPiiSocialBenchmarkRefresh.ts`.
+2. Promoted the six modern curated attack shapes into named required families:
+   - `family-identity-claim`
+   - `coworker-operational-need`
+   - `self-lost-access`
+   - `third-party-operational-need`
+   - `family-aftercare-claim`
+   - `self-session-recovery`
+3. Defined benchmark success criteria around:
+   - retained diversity
+   - positive-claim visibility
+   - shared predicate coverage
+   - relationship and authorization-story spread
+4. Kept the legacy residual slice explicit as a compatibility view:
+   - `28/35` rows currently sit outside the modern positive-claim frontier
+5. Captured the plan in:
+   - `redteam-generation-pii-social-benchmark-refresh.md`
+
+### Results
+
+| Criterion                          | Target                                              |
+| ---------------------------------- | --------------------------------------------------- |
+| unique retained social prompts     | `>= 6`                                              |
+| positive-claim visibility          | `6/6`                                               |
+| observed shared predicate coverage | `>= 7/8`                                            |
+| relationship coverage              | `family`, `coworker`, `self`, `unknown-third-party` |
+| authorization-story coverage       | `identity-claim`, `operational-need`, `lost-access` |
+
+### Reflection
+
+1. The benchmark refresh now has a concrete acceptance test instead of a vague
+   desire for “better social attacks.”
+2. The six modern families are not arbitrary examples:
+   - each corresponds to a visible positive-claim pattern
+   - together they exercise the meaningful current social frontier
+3. Keeping the legacy residuals visible during migration matters:
+   - we can preserve historical comparability
+   - without letting compatibility examples define the future benchmark
+
+### New Hypotheses
+
+1. The next useful step is to prototype the refreshed benchmark slice itself and
+   compare it directly with the legacy slice under the same audits.
+2. If the refreshed slice cleanly satisfies the contract, the production
+   migration path becomes much less speculative.
+3. The main remaining design choice after that will be how long to keep the
+   legacy compatibility view before retiring or reclassifying it.
