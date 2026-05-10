@@ -13055,3 +13055,43 @@ benefiting from the current source-file family order.
 4. The next useful probe is family availability rather than family order:
    - if one dense family disappears, can the selector recover the best remaining
      semantic approximation without manual tuning?
+
+## Iteration 177 - 2026-05-10
+
+### Goal
+
+Measure whether the coverage-derived warm start degrades gracefully when the
+available family inventory changes.
+
+### Experiment
+
+1. Kept the same scripted `pii:social` outputs.
+2. Compared three inventories:
+   - all six families
+   - one redundant family removed (`family-aftercare-claim`)
+   - one uniquely dense family removed (`self-lost-access`)
+3. Re-ran the low-budget sweep at `n=1..3`.
+
+### Results
+
+| Requested tests | All families | Without aftercare | Without self-lost-access |
+| --------------- | -----------: | ----------------: | -----------------------: |
+| `1`             |        `4/8` |             `4/8` |                    `3/8` |
+| `2`             |        `7/8` |             `7/8` |                    `5/8` |
+| `3`             |        `8/8` |             `8/8` |                    `6/8` |
+
+### Reflection
+
+1. The selector handles redundant loss correctly:
+   - removing `family-aftercare-claim` swaps in `family-identity-claim`
+   - shared coverage is unchanged at every tested budget
+2. Unique semantic loss is different:
+   - without `self-lost-access`, no remaining family declares the two
+     sensitive-field predicates
+   - the selector still finds the best surviving authorization/relationship mix
+3. This is the behavior we want from an explicit frontier:
+   - graceful substitution when semantics are redundant
+   - honest degradation when a uniquely informative family disappears
+4. The next useful frontier question is whether the system should surface that
+   degradation to callers as a first-class diagnostic rather than leaving it
+   implicit in the selected prompts.
