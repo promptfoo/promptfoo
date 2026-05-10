@@ -13478,3 +13478,54 @@ axis:
 3. A future benchmark should pair frontier coverage with attack-quality or
    vulnerability-yield signals so two equally covered portfolios are not treated
    as equivalent automatically.
+
+## Iteration 185 - 2026-05-10
+
+### Goal
+
+Replace the saturated scripted equal-budget fixture with a realistic one:
+
+> If we reuse actual live `pii:social` generations in arrival order, does the
+> portfolio path separate from the generic path under the same generated-prompt
+> budget?
+
+### Experiment
+
+1. Reused the two real six-prompt slices from the live before/after study:
+   - the pre-portfolio generic path
+   - the portfolio path
+2. Treated each slice as an ordered generation sequence rather than a bag of
+   prompts.
+3. Compared cumulative prefix coverage at budgets `1..6`, preserving the spend
+   interpretation from iteration `184` while removing the scripted-fixture
+   optimism.
+
+### Results
+
+| Prompt budget | Legacy generic path | Portfolio path |
+| ------------- | ------------------- | -------------- |
+| `1`           | `0/8`               | `4/8`          |
+| `2`           | `0/8`               | `4/8`          |
+| `3`           | `4/8`               | `6/8`          |
+| `4`           | `4/8`               | `6/8`          |
+| `5`           | `4/8`               | `8/8`          |
+| `6`           | `4/8`               | `8/8`          |
+
+### Reflection
+
+1. The live benchmark fixes the saturation problem from iteration `184`.
+2. Under equal generated-prompt budgets, the portfolio path is strictly ahead at
+   every observed prefix and reaches the full frontier on prompt `5` while the
+   generic path remains stuck at `4/8`.
+3. Ordered real artifacts are a much better hill-climb target than tidy family
+   fixtures when the research question is generation quality rather than
+   selector mechanics.
+
+### New Hypotheses
+
+1. The next benchmark layer should add quality or vulnerability-yield labels to
+   the live prompts so the system does not optimize coverage alone.
+2. Real-artifact prefix curves may be a better default dashboard shape than
+   single terminal summaries because they expose sample-efficiency differences.
+3. We should collect several live seeds per generator to see whether the
+   portfolio advantage is stable or just one favorable realization.
