@@ -1,5 +1,6 @@
 {
   "publicFacade": "src/index.ts",
+  "leafLayers": ["contracts"],
   "layers": [
     {
       "name": "facade",
@@ -45,8 +46,12 @@
       "roots": ["src/assertions", "src/matchers", "src/prompts", "src/scheduler", "src/testCase"]
     },
     {
-      "name": "contracts",
+      "name": "legacy-contracts",
       "roots": ["src/types", "src/validators"]
+    },
+    {
+      "name": "contracts",
+      "roots": ["src/contracts"]
     }
   ]
 }

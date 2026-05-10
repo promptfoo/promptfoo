@@ -12,6 +12,7 @@ export interface LayerDefinition {
 
 export interface LayerConfig {
   publicFacade: string;
+  leafLayers?: string[];
   layers: LayerDefinition[];
 }
 
@@ -111,17 +112,19 @@ export function extractModuleSpecifiers(sourceText: string, filePath: string): s
   return specifiers;
 }
 
-export function resolveRelativeModule(
+export function resolveInternalModule(
   repoRoot: string,
   importerRelativePath: string,
   specifier: string,
 ): string | undefined {
-  if (!specifier.startsWith('.')) {
+  if (!specifier.startsWith('.') && specifier !== 'src' && !specifier.startsWith('src/')) {
     return undefined;
   }
 
-  const importerDir = path.dirname(path.join(repoRoot, importerRelativePath));
-  const unresolvedPath = path.resolve(importerDir, specifier);
+  const unresolvedPath = specifier.startsWith('.')
+    ? path.resolve(path.dirname(path.join(repoRoot, importerRelativePath)), specifier)
+    : path.resolve(repoRoot, specifier);
+
   const runtimeExtension = path.extname(unresolvedPath);
   const runtimeSourceCandidates = (
     SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION[runtimeExtension] ?? []
@@ -158,4 +161,72 @@ export function getPackageName(specifier: string): string | undefined {
   }
 
   return packageName;
+}
+
+export type BoundaryViolationKind = 'facade' | 'leaf';
+
+export interface BoundaryViolation {
+  kind: BoundaryViolationKind;
+  importer: string;
+  importerLayer: string;
+  specifier: string;
+  /** Resolved import target. Set for both kinds. */
+  imported: string;
+  /** Layer of the resolved import. Set for both kinds; equals 'facade' when kind === 'facade'. */
+  importedLayer: string;
+}
+
+/**
+ * Walks the source tree under `repoRoot` and returns every layer-boundary
+ * violation, given a `LayerConfig`. Pure function: no I/O beyond the file
+ * reads required to scan source files; no `process.exit`. Exposed so the
+ * pipeline can be unit-tested against fixture trees.
+ */
+export function findViolations(repoRoot: string, config: LayerConfig): BoundaryViolation[] {
+  const publicFacade = normalizePath(config.publicFacade);
+  const leafLayers = new Set(config.leafLayers ?? []);
+  const violations: BoundaryViolation[] = [];
+
+  for (const importer of getSourceFiles(repoRoot)) {
+    if (normalizePath(importer) === publicFacade) {
+      continue;
+    }
+
+    const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
+    const importerLayer = getLayerForFile(importer, config);
+
+    for (const specifier of extractModuleSpecifiers(sourceText, importer)) {
+      const resolvedImport = resolveInternalModule(repoRoot, importer, specifier);
+      if (!resolvedImport) {
+        continue;
+      }
+
+      if (resolvedImport === publicFacade) {
+        violations.push({
+          kind: 'facade',
+          importer,
+          importerLayer,
+          specifier,
+          imported: resolvedImport,
+          importedLayer: getLayerForFile(resolvedImport, config),
+        });
+      }
+
+      if (leafLayers.has(importerLayer)) {
+        const importedLayer = getLayerForFile(resolvedImport, config);
+        if (importedLayer !== importerLayer) {
+          violations.push({
+            kind: 'leaf',
+            importer,
+            importerLayer,
+            specifier,
+            imported: resolvedImport,
+            importedLayer,
+          });
+        }
+      }
+    }
+  }
+
+  return violations;
 }
