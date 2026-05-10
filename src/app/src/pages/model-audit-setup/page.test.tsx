@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import ModelAuditSetup from './page';
@@ -8,7 +8,7 @@ vi.mock('./ModelAuditSetupPage', () => ({
 }));
 
 describe('ModelAuditSetup', () => {
-  it('renders the ModelAuditSetupPage component', () => {
+  it('renders the ModelAuditSetupPage component', async () => {
     render(
       <MemoryRouter>
         <ModelAuditSetup />
@@ -16,5 +16,6 @@ describe('ModelAuditSetup', () => {
     );
     expect(screen.getByTestId('model-audit-setup-page')).toBeInTheDocument();
     expect(screen.getByText('Mocked Model Audit Setup Page')).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe('Model Audit Setup | promptfoo'));
   });
 });

@@ -36,6 +36,7 @@ describe('ModelAuditHistoryPage', () => {
 
     // The page should have the main heading (level 1)
     expect(screen.getByRole('heading', { name: 'Scan History', level: 1 })).toBeInTheDocument();
+    expect(document.title).toBe('Model Audit History | promptfoo');
   });
 
   it('renders no rows message when history is empty', () => {
