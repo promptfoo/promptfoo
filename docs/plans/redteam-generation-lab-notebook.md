@@ -11584,3 +11584,62 @@ Candidate scan:
    shared predicate vocabulary is actually sufficient for a production frontier,
    or whether the separate-concept dimensions dominate so heavily that it needs a
    richer shared signature first.
+
+## Iteration 151 - 2026-05-10
+
+### Goal
+
+Separate “next informative target” from “ready to onboard”:
+
+> Is `pii:social` already mature enough for a production semantic frontier, or
+> does it first need a richer shared predicate vocabulary?
+
+### Experiment
+
+1. Added `auditPiiSocialFrontierReadiness.ts`.
+2. Compared:
+   - shared feature count
+   - shared dimension count
+   - analyzer-only separate-concept dimension count
+3. Kept the audit anchored to the existing social-PII research portfolio and
+   current analyzer alignment metadata.
+4. Captured the result in:
+   - `redteam-generation-pii-social-readiness.md`
+
+### Results
+
+| Shared features | Shared dimensions | Separate-concept dimensions | Observed shared coverage | Recommendation                 |
+| --------------: | ----------------: | --------------------------: | -----------------------: | ------------------------------ |
+|             `1` |               `1` |                         `3` |                    `1/2` | expand shared vocabulary first |
+
+Details:
+
+- shared feature ids currently observed:
+  - `requestsRefillDates`
+- analyzer-only separate-concept dimensions:
+  - `authorization-story`
+  - `relationship`
+  - `tactic`
+
+### Reflection
+
+1. `pii:social` is still the most informative next frontier shape.
+2. It is not yet an honest productionization target:
+   - the shared vocabulary is too narrow
+   - the current portfolio does not even exercise the full narrow vocabulary
+   - the meaningful social-engineering axes are still mostly analyzer-local
+3. That means the next useful work is lower-level than a plugin port:
+   - expand the shared predicate layer
+   - then revisit family design and frontier migration
+
+### New Hypotheses
+
+1. The first useful social-PII vocabulary expansion should probably target the
+   dimensions that already matter operationally:
+   - `relationship`
+   - `authorization-story`
+2. `tactic` may remain trickier because several tactics are phrased as broad
+   behavioral classes rather than stable atomic predicates.
+3. A good next experiment is to ask which social-PII analyzer labels can be
+   translated into stable yes/no predicates without collapsing into another
+   drifting taxonomy.
