@@ -1163,7 +1163,7 @@ describe('DataTable', () => {
       const headerLabel = screen.getByText(headerText);
       const headerContent = headerLabel.closest('div');
       expect(headerContent).not.toBeNull();
-      expect(headerContent).toHaveClass('flex', 'min-w-0', 'items-center');
+      expect(headerContent).toHaveClass('relative', 'flex', 'min-w-0', 'items-center');
       expect(headerContent).not.toHaveClass('gap-1');
       expect(headerContent).toHaveClass('overflow-hidden');
 
@@ -1181,12 +1181,15 @@ describe('DataTable', () => {
       expect(actionGroup).toHaveClass(
         'opacity-100',
         'pointer-events-auto',
+        'sm:absolute',
+        'sm:top-1/2',
+        'sm:-translate-y-1/2',
         'sm:opacity-0',
         'sm:pointer-events-none',
         'sm:group-hover:opacity-100',
         'sm:group-hover:pointer-events-auto',
       );
-      expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
+      expect(actionGroup).toHaveClass(shouldBeRightAligned ? 'sm:left-0' : 'sm:right-0');
 
       const sortButton = headerContent?.querySelector('button');
       expect(sortButton).toHaveAttribute('aria-label', `Sort ${headerText} ascending`);

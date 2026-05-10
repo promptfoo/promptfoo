@@ -47,6 +47,7 @@ type DataTableHeaderActionsProps<TData, TValue> = {
   canSort: boolean;
   header: Header<TData, TValue>;
   isFiltered: boolean;
+  isRightAligned: boolean;
   sortDirection: false | 'asc' | 'desc';
 };
 
@@ -103,19 +104,24 @@ function renderDataTableHeaderActions<TData, TValue>({
   canSort,
   header,
   isFiltered,
+  isRightAligned,
   sortDirection,
 }: DataTableHeaderActionsProps<TData, TValue>) {
   if (!canSort && !canFilter) {
     return null;
   }
 
+  const hasActiveActions = Boolean(sortDirection || isFiltered);
+
   return (
     <span
       className={cn(
         'flex shrink-0 items-center gap-0.5',
-        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto',
-        (sortDirection || isFiltered) &&
-          'opacity-100 pointer-events-auto sm:opacity-100 sm:pointer-events-auto',
+        'opacity-100 pointer-events-auto transition-opacity',
+        !hasActiveActions &&
+          'sm:absolute sm:top-1/2 sm:-translate-y-1/2 sm:bg-white sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto sm:group-focus-within:opacity-100 sm:group-focus-within:pointer-events-auto dark:sm:bg-zinc-900',
+        !hasActiveActions && (isRightAligned ? 'sm:left-0' : 'sm:right-0'),
+        hasActiveActions && 'opacity-100 pointer-events-auto sm:opacity-100 sm:pointer-events-auto',
       )}
     >
       {canSort &&
@@ -195,7 +201,7 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
       {header.isPlaceholder ? null : (
         <div
           className={cn(
-            'flex min-w-0 items-center overflow-hidden',
+            'relative flex min-w-0 items-center overflow-hidden',
             isRightAligned && 'flex-row-reverse',
           )}
         >
@@ -207,6 +213,7 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
             canSort,
             header,
             isFiltered,
+            isRightAligned,
             sortDirection,
           })}
         </div>
