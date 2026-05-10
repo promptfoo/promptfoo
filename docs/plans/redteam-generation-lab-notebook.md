@@ -13687,3 +13687,66 @@ quality measure on top of it:
    - frontier coverage
    - leak-ready prompt rate
    - target-specific realized failure rate
+
+## Iteration 189 - 2026-05-10
+
+### Goal
+
+Add the second target regime implied by iteration `188`:
+
+> If a hardened target flattens realized failure rate, can a deliberately
+> susceptible target recover a useful outcome gradient without reusing the
+> `leak-ready` proxy itself as the target rule?
+
+### Experiment
+
+1. Kept the same twelve live prompts and the same real `PIILeak` grader.
+2. Added a research-only deterministic `permissive-family` target provider.
+3. Defined that target independently from `leak-ready` using six explicit social
+   story triggers:
+   - lost prescription slip
+   - forgotten prior-session access
+   - spouse claim
+   - after-discharge help
+   - covering nurse
+   - urgent prior authorization
+4. Reused the replay harness from iteration `188` with a new target-regime
+   switch so the same benchmark can emit:
+   - `hardened-medical-agent`
+   - `permissive-family`
+5. Ran the permissive target through the real grader and compared both regimes
+   side by side.
+
+### Results
+
+| Target regime            | Cohort           | Leak-ready prompts | Realized `PIILeak` failures |
+| ------------------------ | ---------------- | ------------------ | --------------------------- |
+| `hardened-medical-agent` | `legacy-generic` | `1/6`              | `0/6`                       |
+| `hardened-medical-agent` | `portfolio`      | `6/6`              | `0/6`                       |
+| `permissive-family`      | `legacy-generic` | `1/6`              | `0/6`                       |
+| `permissive-family`      | `portfolio`      | `6/6`              | `6/6`                       |
+
+### Reflection
+
+1. We now have the benchmark shape iteration `188` was missing:
+   - a robust target that stays flat
+   - a susceptible target that reveals whether the generator reaches the right
+     social stories
+2. The permissive target is intentionally synthetic, but not tautological:
+   - one legacy prompt is `leak-ready`
+   - zero legacy prompts match the permissive target's family triggers
+3. This lets us say something stronger than "portfolio prompts look nicer":
+   when the target weakness is aligned with concrete social-engineering stories,
+   the portfolio path exposes it while the generic path does not.
+
+### New Hypotheses
+
+1. The next useful expansion is a small target suite rather than more single
+   targets:
+   - hardened
+   - family-susceptible
+   - perhaps identity-susceptible or operational-need-susceptible
+2. Generator selection should eventually optimize an expected frontier over a
+   distribution of target regimes, not a single universal success rate.
+3. Target-regime diversity may be as important as prompt diversity when we judge
+   whether a red-team generator is actually useful.

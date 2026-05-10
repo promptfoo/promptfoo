@@ -15,6 +15,7 @@ describe('replayPiiSocialLiveOutcomes', () => {
     expect(config.defaultTest.metadata).toMatchObject({
       pluginId: 'pii:social',
       purpose: expect.stringContaining('medical agent'),
+      targetRegime: 'hardened-medical-agent',
     });
     expect(config.tests[0]).toMatchObject({
       description: 'legacy-generic prompt 1',
@@ -37,7 +38,15 @@ describe('replayPiiSocialLiveOutcomes', () => {
     const parsed = yaml.load(rendered) as ReturnType<typeof buildPiiSocialLiveOutcomeReplayConfig>;
 
     expect(parsed.tests).toHaveLength(12);
-    expect(parsed.providers[0]?.config.url).toBe('http://localhost:3090/api/chat');
+    expect(parsed.providers[0]?.config?.url).toBe('http://localhost:3090/api/chat');
+  });
+
+  it('can render the deterministic permissive-family target regime', () => {
+    const config = buildPiiSocialLiveOutcomeReplayConfig('permissive-family');
+
+    expect(config.description).toContain('permissive-family');
+    expect(config.defaultTest.metadata.targetRegime).toBe('permissive-family');
+    expect(config.providers[0]?.id).toContain('permissivePiiSocialFamilyProvider.cjs');
   });
 
   it('summarizes realized failures beside the leak-ready proxy', () => {
@@ -46,19 +55,43 @@ describe('replayPiiSocialLiveOutcomes', () => {
         results: [
           {
             success: true,
-            testCase: { metadata: { cohort: 'legacy-generic', leakReady: false } },
+            testCase: {
+              metadata: {
+                cohort: 'legacy-generic',
+                leakReady: false,
+                targetRegime: 'permissive-family',
+              },
+            },
           },
           {
             success: false,
-            testCase: { metadata: { cohort: 'legacy-generic', leakReady: true } },
+            testCase: {
+              metadata: {
+                cohort: 'legacy-generic',
+                leakReady: true,
+                targetRegime: 'permissive-family',
+              },
+            },
           },
           {
             success: false,
-            testCase: { metadata: { cohort: 'portfolio', leakReady: true } },
+            testCase: {
+              metadata: {
+                cohort: 'portfolio',
+                leakReady: true,
+                targetRegime: 'permissive-family',
+              },
+            },
           },
           {
             success: true,
-            testCase: { metadata: { cohort: 'portfolio', leakReady: true } },
+            testCase: {
+              metadata: {
+                cohort: 'portfolio',
+                leakReady: true,
+                targetRegime: 'permissive-family',
+              },
+            },
           },
         ],
       },
@@ -69,17 +102,19 @@ describe('replayPiiSocialLiveOutcomes', () => {
         cohort: 'legacy-generic',
         leakReadyPrompts: '1/2',
         realizedFailures: '1/2',
+        targetRegime: 'permissive-family',
         totalPrompts: 2,
       },
       {
         cohort: 'portfolio',
         leakReadyPrompts: '2/2',
         realizedFailures: '1/2',
+        targetRegime: 'permissive-family',
         totalPrompts: 2,
       },
     ]);
     expect(renderPiiSocialLiveOutcomeReplayMarkdown(rows)).toContain(
-      '| legacy-generic | 1/2 | 1/2 |',
+      '| permissive-family | legacy-generic | 1/2 | 1/2 |',
     );
   });
 });

@@ -10,6 +10,7 @@ import {
 import { renderMarkdownTable } from './reportRenderingShared';
 
 type CohortId = 'legacy-generic' | 'portfolio';
+export type ReplayTargetRegime = 'hardened-medical-agent' | 'permissive-family';
 
 type ReplayPrompt = {
   cohort: CohortId;
@@ -24,6 +25,7 @@ type ReplayResult = {
     metadata?: {
       cohort?: CohortId;
       leakReady?: boolean;
+      targetRegime?: ReplayTargetRegime;
     };
   };
 };
@@ -38,6 +40,7 @@ type ReplaySummaryRow = {
   cohort: CohortId;
   leakReadyPrompts: string;
   realizedFailures: string;
+  targetRegime: ReplayTargetRegime;
   totalPrompts: number;
 };
 
@@ -60,27 +63,37 @@ function buildReplayPrompts(): ReplayPrompt[] {
   ];
 }
 
-export function buildPiiSocialLiveOutcomeReplayConfig() {
+function buildProvider(targetRegime: ReplayTargetRegime) {
+  if (targetRegime === 'permissive-family') {
+    return {
+      id: new URL('./permissivePiiSocialFamilyProvider.cjs', import.meta.url).href,
+    };
+  }
+
   return {
-    description: 'PII Social live outcome replay',
-    prompts: ['{{message}}'],
-    providers: [
-      {
-        id: 'http',
-        config: {
-          url: 'http://localhost:3090/api/chat',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-promptfoo-session': '{{sessionId}}',
-          },
-          body: {
-            message: '{{prompt}}',
-          },
-          transformResponse: 'json.message',
-        },
+    id: 'http',
+    config: {
+      url: 'http://localhost:3090/api/chat',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-promptfoo-session': '{{sessionId}}',
       },
-    ],
+      body: {
+        message: '{{prompt}}',
+      },
+      transformResponse: 'json.message',
+    },
+  };
+}
+
+export function buildPiiSocialLiveOutcomeReplayConfig(
+  targetRegime: ReplayTargetRegime = 'hardened-medical-agent',
+) {
+  return {
+    description: `PII Social live outcome replay (${targetRegime})`,
+    prompts: ['{{message}}'],
+    providers: [buildProvider(targetRegime)],
     defaultTest: {
       options: {
         transformVars: '{ ...vars, sessionId: context.uuid }',
@@ -88,6 +101,7 @@ export function buildPiiSocialLiveOutcomeReplayConfig() {
       metadata: {
         purpose: MEDICAL_AGENT_PURPOSE,
         pluginId: 'pii:social',
+        targetRegime,
       },
     },
     tests: buildReplayPrompts().map(({ cohort, leakReady, prompt, promptIndex }) => ({
@@ -109,8 +123,10 @@ export function buildPiiSocialLiveOutcomeReplayConfig() {
   };
 }
 
-export function renderPiiSocialLiveOutcomeReplayConfigYaml(): string {
-  return yaml.dump(buildPiiSocialLiveOutcomeReplayConfig(), {
+export function renderPiiSocialLiveOutcomeReplayConfigYaml(
+  targetRegime: ReplayTargetRegime = 'hardened-medical-agent',
+): string {
+  return yaml.dump(buildPiiSocialLiveOutcomeReplayConfig(targetRegime), {
     lineWidth: 120,
     noRefs: true,
   });
@@ -118,6 +134,9 @@ export function renderPiiSocialLiveOutcomeReplayConfigYaml(): string {
 
 export function summarizePiiSocialLiveOutcomeReplay(output: ReplayOutput): ReplaySummaryRow[] {
   const results = output.results?.results ?? [];
+  const targetRegime =
+    results.find((result) => result.testCase?.metadata?.targetRegime)?.testCase?.metadata
+      ?.targetRegime ?? 'hardened-medical-agent';
 
   return (['legacy-generic', 'portfolio'] as const).map((cohort) => {
     const cohortResults = results.filter((result) => result.testCase?.metadata?.cohort === cohort);
@@ -130,19 +149,22 @@ export function summarizePiiSocialLiveOutcomeReplay(output: ReplayOutput): Repla
       cohort,
       leakReadyPrompts: `${leakReadyCount}/${cohortResults.length}`,
       realizedFailures: `${failureCount}/${cohortResults.length}`,
+      targetRegime,
       totalPrompts: cohortResults.length,
     };
   });
 }
 
-export function renderPiiSocialLiveOutcomeReplayMarkdown(rows: readonly ReplaySummaryRow[]): string {
+export function renderPiiSocialLiveOutcomeReplayMarkdown(
+  rows: readonly ReplaySummaryRow[],
+): string {
   return [
     '# PII Social Live Outcome Replay',
     '',
     ...renderMarkdownTable(
-      ['Cohort', 'Leak-ready prompts', 'Realized PIILeak failures'],
+      ['Target regime', 'Cohort', 'Leak-ready prompts', 'Realized PIILeak failures'],
       rows.map((row) => ({
-        cells: [row.cohort, row.leakReadyPrompts, row.realizedFailures],
+        cells: [row.targetRegime, row.cohort, row.leakReadyPrompts, row.realizedFailures],
       })),
     ),
   ].join('\n');
@@ -150,14 +172,20 @@ export function renderPiiSocialLiveOutcomeReplayMarkdown(rows: readonly ReplaySu
 
 async function main() {
   const resultsPath = process.argv[2] === '--results' ? process.argv[3] : undefined;
+  const regimeArgIndex = process.argv.indexOf('--regime');
+  const targetRegime = (
+    regimeArgIndex >= 0 ? process.argv[regimeArgIndex + 1] : 'hardened-medical-agent'
+  ) as ReplayTargetRegime;
 
   if (resultsPath) {
     const parsed = JSON.parse(await fs.readFile(resultsPath, 'utf8')) as ReplayOutput;
-    console.log(renderPiiSocialLiveOutcomeReplayMarkdown(summarizePiiSocialLiveOutcomeReplay(parsed)));
+    console.log(
+      renderPiiSocialLiveOutcomeReplayMarkdown(summarizePiiSocialLiveOutcomeReplay(parsed)),
+    );
     return;
   }
 
-  console.log(renderPiiSocialLiveOutcomeReplayConfigYaml());
+  console.log(renderPiiSocialLiveOutcomeReplayConfigYaml(targetRegime));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
