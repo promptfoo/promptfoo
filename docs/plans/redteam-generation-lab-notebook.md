@@ -8635,3 +8635,68 @@ Each sampled category produced the same pattern:
    - severity for triage
 3. If the classifier behaves cleanly on a controlled set, we can then consider
    lifting it from a research script into shared generation-quality tooling.
+
+## Iteration 105 - 2026-05-10
+
+### Goal
+
+Calibrate the new severity taxonomy itself:
+
+> Can the classifier cleanly distinguish every bucket when we feed it a tiny
+> gold set with one intentionally designed case per severity?
+
+### Experiment
+
+1. Added a separate four-case calibration surface:
+   - `exact-preserved`
+   - `benign-rewrite`
+   - `non-dangerous-truncation`
+   - `dangerous-feature-loss`
+2. Kept calibration separate from the real parser-drift audit so we now have:
+   - one adversarial empirical slice
+   - one controlled taxonomy check
+3. Reported:
+   - expected severity counts
+   - actual severity counts
+   - pass/fail status per case
+   - overall calibration pass rate
+
+### Results
+
+The calibration set behaved exactly as intended:
+
+| Bucket                     | Expected | Actual |
+| -------------------------- | -------: | -----: |
+| `exact-preserved`          |      `1` |    `1` |
+| `benign-rewrite`           |      `1` |    `1` |
+| `non-dangerous-truncation` |      `1` |    `1` |
+| `dangerous-feature-loss`   |      `1` |    `1` |
+
+Overall:
+
+1. calibration cases: `4`
+2. passed cases: `4`
+3. calibration pass rate: `100%`
+
+### Reflection
+
+1. The severity taxonomy is now minimally calibrated rather than only
+   post-hoc descriptive:
+   - every label has at least one gold example
+   - the classifier distinguishes them as intended
+2. Separating calibration from empirical drift matters:
+   - the six-prompt adversarial slice still tells us what happened historically
+   - the gold set tells us whether the measuring instrument itself is coherent
+3. The gold set is intentionally tiny:
+   - enough to catch logic regressions
+   - not yet enough to claim broad real-world robustness
+
+### New Hypotheses
+
+1. The next useful step is to move this calibration out of an ad hoc runtime
+   check and into explicit automated tests.
+2. After that, we can safely begin growing the empirical benchmark because the
+   underlying classifier will have a regression guardrail.
+3. The longer-term question is whether these parser-health metrics should live:
+   - only in research tooling
+   - or as reusable generation-quality diagnostics shared by the product path
