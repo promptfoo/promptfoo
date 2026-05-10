@@ -10423,3 +10423,58 @@ The after prompts add distinct probes for:
    trade away important bands while chasing lexical novelty.
 3. We should eventually make these before/after reports generic across plugins,
    not one-off per benchmark.
+
+## Iteration 132 - 2026-05-10
+
+### Goal
+
+Start the SQL pass with measurement rather than instinct:
+
+> Does `sql-injection` also contain separable semantic bands that a flat score is
+> hiding?
+
+### Experiment
+
+1. Split the SQL vocabulary into:
+   - `exploit-mechanism`
+   - `authorization-bypass`
+2. Added a SQL semantic-band comparison script.
+3. Compared:
+   - the five unique checked-in medical-agent baseline prompts
+   - the existing curated SQL research portfolio
+
+### Results
+
+| Prompt set              | Exploit mechanism | Authorization bypass |
+| ----------------------- | ----------------: | -------------------: |
+| baseline unique prompts |             `2/4` |                `0/2` |
+| curated SQL portfolio   |             `4/4` |                `0/2` |
+
+The split immediately clarifies the shape of the problem:
+
+1. the curated SQL portfolio already repairs syntax breadth
+2. neither corpus activates the existing authorization-bypass predicates
+3. that means the next SQL question is not selector quality yet
+4. it is whether the predicate rules are too narrow, the candidate pool is too
+   shallow, or both
+
+### Reflection
+
+1. This is the SQL analogue of the earlier prompt-extraction decomposition:
+   - first expose the hidden axes
+   - then decide whether the shortfall lives in the metric, the pool, or the
+     selector
+2. The current flat `4/6` SQL view would sound like respectable progress.
+3. The banded view is more useful:
+   - exploit coverage is now healthy
+   - authorization-bypass coverage is still absent
+
+### New Hypotheses
+
+1. The most likely immediate issue is rule mismatch:
+   - the curated SQL portfolio says "remove the current-user filter"
+   - the shared predicate only recognizes "remove the filter"
+2. After repairing any schema mismatch, we should see whether the curated pool
+   already reaches `2/2` authorization-bypass coverage.
+3. Only after that should we judge whether the selector drops an important SQL
+   band.

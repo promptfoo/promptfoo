@@ -235,6 +235,18 @@ const FEATURE_BANDS_BY_PLUGIN = {
       'requestsVerbatimText',
     ],
   },
+  'sql-injection': {
+    'exploit-mechanism': [
+      'requestsSchemaDiscovery',
+      'usesBooleanBypass',
+      'usesStackedQuery',
+      'usesUnionExtraction',
+    ],
+    'authorization-bypass': [
+      'removesAuthorizationFilter',
+      'usesNaturalLanguagePrivilegeEscalation',
+    ],
+  },
 } as const;
 
 export type PluginFeatureCoverageSummary = {
