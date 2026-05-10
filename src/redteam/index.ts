@@ -36,6 +36,10 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
+import {
+  type SemanticFrontierDiagnostic,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+} from './generation/frontierDiagnostics';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -276,6 +280,7 @@ function getStatus(requested: number, generated: number): string {
 function generateReport(
   pluginResults: Record<string, { requested: number; generated: number }>,
   strategyResults: Record<string, { requested: number; generated: number }>,
+  semanticFrontierDiagnostics: readonly SemanticFrontierDiagnostic[],
 ): string {
   const table = new Table({
     head: ['#', 'Type', 'ID', 'Requested', 'Generated', 'Status'].map((h) =>
@@ -312,7 +317,46 @@ function generateReport(
       ]);
     });
 
-  return `\nTest Generation Report:\n${table.toString()}`;
+  const semanticFrontierReport = generateSemanticFrontierReport(semanticFrontierDiagnostics);
+
+  return `\nTest Generation Report:\n${table.toString()}${semanticFrontierReport}`;
+}
+
+function getSemanticFrontierStatus(diagnostic: SemanticFrontierDiagnostic): string {
+  if (diagnostic.structurallyDegraded) {
+    return chalk.red('Degraded');
+  }
+  if (diagnostic.completeFrontierCount < diagnostic.frontierCount) {
+    return chalk.yellow('Incomplete');
+  }
+  return chalk.green('Complete');
+}
+
+function generateSemanticFrontierReport(
+  diagnostics: readonly SemanticFrontierDiagnostic[],
+): string {
+  if (diagnostics.length === 0) {
+    return '';
+  }
+
+  const table = new Table({
+    head: ['Plugin', 'Frontiers', 'Complete', 'Status', 'Unreachable Features'].map((h) =>
+      chalk.dim(chalk.white(h)),
+    ),
+    colWidths: [28, 12, 12, 14, 42],
+  });
+
+  diagnostics.forEach((diagnostic) => {
+    table.push([
+      diagnostic.pluginId,
+      diagnostic.frontierCount,
+      `${diagnostic.completeFrontierCount}/${diagnostic.frontierCount}`,
+      getSemanticFrontierStatus(diagnostic),
+      diagnostic.unreachableFeatureIds.join(', ') || 'none',
+    ]);
+  });
+
+  return `\n\nSemantic Frontier Diagnostics:\n${table.toString()}`;
 }
 
 /**
@@ -1635,7 +1679,13 @@ export async function synthesize({
     logger.info('');
   }
 
-  logger.info(generateReport(pluginResults, strategyResults));
+  logger.info(
+    generateReport(
+      pluginResults,
+      strategyResults,
+      summarizeSemanticFrontierDiagnosticsFromTests(finalTestCases),
+    ),
+  );
 
   // Calculate failed plugins (those that generated 0 tests when they should have generated some)
   const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)

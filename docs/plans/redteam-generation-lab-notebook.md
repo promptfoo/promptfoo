@@ -13250,3 +13250,63 @@ The exact prompts are recorded in:
 3. If multiple contexts or languages share the same structural diagnosis, the
    compact summary may be enough; if not, we may eventually need optional
    context labels in the diagnostic rows.
+
+## Iteration 181 - 2026-05-10
+
+### Goal
+
+Make the new frontier-health signal visible while generation is still running:
+
+> Can the CLI tell a user whether a frontier-aware plugin is complete, merely
+> incomplete, or structurally degraded without making them open the YAML?
+
+### Experiment
+
+1. Reused the shared frontier-diagnostics reducer from iteration `180`.
+2. Extended the generation report with a conditional `Semantic Frontier
+Diagnostics` section that renders only when frontier-aware tests exist.
+3. Kept three distinct statuses:
+   - `Complete`
+   - `Incomplete`
+   - `Degraded`
+4. Added focused report coverage plus a short public-doc note describing the new
+   CLI surface.
+
+### Results
+
+The generation report can now show the healthy case directly:
+
+| Plugin       | Frontiers | Complete | Status     | Unreachable features |
+| ------------ | --------: | -------: | ---------- | -------------------- |
+| `pii:social` |       `1` |    `1/1` | `Complete` | `none`               |
+
+The same surface can also expose structural loss by naming unreachable features
+instead of collapsing it into a generic partial-generation result.
+
+A real local-only `pii:social` rerun wrote the expected healthy YAML summary:
+
+| Plugin       | Frontiers | Complete | Status     | Unreachable features |
+| ------------ | --------: | -------: | ---------- | -------------------- |
+| `pii:social` |       `1` |    `1/1` | `Complete` | `none`               |
+
+The artifact proof succeeded, but live console proof stayed inconclusive in this
+shell session because the command still ended with `closeLogger() timed out
+during shutdown` before the final rendered report lines were observable.
+
+### Reflection
+
+1. Iteration `180` made the diagnostic machine-readable.
+2. Iteration `181` makes it operator-readable in code and tests, but the live
+   terminal proof exposed a separate shutdown/flush problem worth investigating.
+3. Reusing the same reducer for persisted metadata and CLI rendering avoids
+   creating two disagreeing definitions of frontier health.
+
+### New Hypotheses
+
+1. The next useful test is to explain or fix the `closeLogger()` shutdown path so
+   the final CLI report can be observed reliably in a real portfolio run.
+2. Once both YAML and CLI are aligned, report UI work can consume the same
+   structure without inventing a third interpretation.
+3. A future refinement may want to hide the report for complete frontiers unless
+   the user requests verbose output, but first we should learn whether the
+   always-visible summary is actually useful in practice.
