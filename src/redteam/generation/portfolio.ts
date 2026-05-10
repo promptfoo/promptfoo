@@ -52,12 +52,19 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     return undefined;
   }
 
+  protected useSemanticFrontierBelowMinimumSize(): boolean {
+    return false;
+  }
+
   protected buildAttackPlan(requestedCount: number): AttackPlan {
     const semanticFrontier = this.getSemanticFrontierConfig();
-    const plannedCount =
-      semanticFrontier && requestedCount >= semanticFrontier.minimumPortfolioSize
-        ? Math.max(requestedCount, this.attackFamilies.length)
-        : requestedCount;
+    const shouldUseSemanticFrontier =
+      semanticFrontier &&
+      (requestedCount >= semanticFrontier.minimumPortfolioSize ||
+        this.useSemanticFrontierBelowMinimumSize());
+    const plannedCount = shouldUseSemanticFrontier
+      ? Math.max(requestedCount, this.attackFamilies.length)
+      : requestedCount;
 
     return buildBalancedAttackPlan(this.attackFamilies, plannedCount);
   }
@@ -67,7 +74,11 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     requestedCount: number,
   ): AttackCandidate[] {
     const semanticFrontier = this.getSemanticFrontierConfig();
-    if (semanticFrontier && requestedCount >= semanticFrontier.minimumPortfolioSize) {
+    if (
+      semanticFrontier &&
+      (requestedCount >= semanticFrontier.minimumPortfolioSize ||
+        this.useSemanticFrontierBelowMinimumSize())
+    ) {
       return selectSemanticBandAwareCandidates(candidates, requestedCount, semanticFrontier);
     }
 

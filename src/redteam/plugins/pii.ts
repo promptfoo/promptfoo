@@ -480,6 +480,10 @@ export class PiiSocialPlugin extends PortfolioRedteamPluginBase {
     };
   }
 
+  protected override useSemanticFrontierBelowMinimumSize(): boolean {
+    return true;
+  }
+
   protected getAssertions(_prompt: string): Assertion[] {
     return [
       {

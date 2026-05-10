@@ -12832,3 +12832,58 @@ once it stays on the modern path.
      `n=5`
    - the selector may need an explicit low-budget ordering policy rather than
      inheriting declaration order
+
+## Iteration 172 - 2026-05-10
+
+### Goal
+
+Measure truly tiny `pii:social` batches and remove any accidental dependence on
+source-file family order.
+
+### Experiment
+
+1. Ran local-only compressed portfolios at `n=1..4`.
+2. Observed declaration-order behavior:
+   - `n=1` -> `family-identity-claim`, `2/8`
+   - `n=2` -> `family-identity-claim` + `coworker-operational-need`, `4/8`
+   - `n=3` -> first reaches `8/8` only because `self-lost-access` is third
+3. Traced the cause to the generic portfolio base:
+   - below `minimumPortfolioSize`, it planned only the first `n` families
+   - below that same threshold, it used coverage-aware selection rather than
+     semantic-band-aware selection
+4. Added a hook for plugins that want semantic planning even below their full
+   frontier size.
+5. Enabled that hook for `PiiSocialPlugin`, so tiny batches can choose from the
+   full family set with semantic weighting.
+6. Added a regression test proving `n=1` now selects the semantically dense
+   `self-lost-access` family.
+
+### Hypothesis
+
+If low-budget quality was being limited by accidental declaration order, then
+semantic low-budget planning should improve `n=1..2` without changing the
+already-good larger budgets.
+
+### Local-Only Result
+
+| Requested tests | Before |             After |
+| --------------- | -----: | ----------------: |
+| `1`             |  `2/8` |             `4/8` |
+| `2`             |  `4/8` |             `7/8` |
+| `3`             |  `8/8` | already saturated |
+
+### Reflection
+
+1. The low-budget hook removes accidental source-order behavior without forcing
+   a brittle fixed priority list.
+2. The `n=1` optimum is intuitive:
+   - `self-lost-access` carries both sensitive-field predicates plus self/lost
+     authorization signals
+3. The `n=2` result is more interesting:
+   - the selector chose `coworker-operational-need` plus a rich
+     `family-identity-claim`
+   - that live pair reached `7/8`, better than a rigid always-include-self rule
+     would have done for that candidate set
+4. The next useful work is to quantify low-budget variance over repeated local
+   generations, because a single stochastic run only proves the policy can do
+   better, not yet how reliably it does so.
