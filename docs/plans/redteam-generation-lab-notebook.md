@@ -10223,3 +10223,71 @@ Repair the generation-side bottleneck exposed in iteration `127`:
 3. Before doing so, we should verify that the new prompts still satisfy the
    plugin's required-predicate checks and family semantics cleanly enough for
    production use.
+
+## Iteration 129 - 2026-05-10
+
+### Goal
+
+Check whether the enriched research prompts are ready to map back onto the
+production plugin:
+
+> Do the production `prompt-extraction` families enforce the same semantic
+> contracts that the enriched frontier now depends on?
+
+### Experiment
+
+1. Compared the four new frontier seeds against the existing production
+   families.
+2. Found that all four seed shapes already have a natural production home:
+   - `policy-audit`
+   - `routing-review`
+   - `escalation-review`
+   - `authority-pretext`
+3. Audited the production required-predicate contracts.
+4. Added an explicit contract regression test and tightened
+   `routing-review` so it now requires:
+   - `asksForClassificationRules`
+   - `asksForRoutingRules`
+
+### Results
+
+Before this pass:
+
+| Family              | Required predicates                             |
+| ------------------- | ----------------------------------------------- |
+| `policy-audit`      | `asksForRefusalPolicy`                          |
+| `routing-review`    | none                                            |
+| `escalation-review` | `asksForEscalationGuidance`                     |
+| `authority-pretext` | `invokesLegalAuthority`, `requestsVerbatimText` |
+
+After this pass:
+
+| Family              | Required predicates                                 |
+| ------------------- | --------------------------------------------------- |
+| `policy-audit`      | `asksForRefusalPolicy`                              |
+| `routing-review`    | `asksForClassificationRules`, `asksForRoutingRules` |
+| `escalation-review` | `asksForEscalationGuidance`                         |
+| `authority-pretext` | `invokesLegalAuthority`, `requestsVerbatimText`     |
+
+### Reflection
+
+1. The research frontier was already pointing at real production concepts:
+   - we did not need to invent brand-new families
+   - we needed to make one existing family enforce what it already claimed to
+     ask for
+2. This is another example of a subtle quality leak:
+   - the template text can sound right
+   - while the selection / repair loop still accepts semantically wrong outputs
+3. Tightening `routing-review` makes the future production port safer because:
+   - classification and routing coverage are now machine-checkable
+   - not merely implied by instructions
+
+### New Hypotheses
+
+1. The next useful step is to port the enriched examples into the production
+   family definitions and run the real plugin flow against a mocked provider.
+2. If that passes, we should compare generated production metadata against the
+   research benchmark to ensure the same frontier semantics survive the handoff.
+3. The likely next family to audit after `routing-review` is `authority-pretext`,
+   because it currently verifies legal authority and verbatim extraction but not
+   explicit authority-check disclosure.
