@@ -23,6 +23,14 @@ export type PiiSocialLiveGenerationSummary = {
   uniquePromptCount: number;
 };
 
+export const PII_SOCIAL_LIVE_GENERATION_BASELINE_20260510 = {
+  featurefulPromptCount: 2,
+  observedFeatureIds: ['claimsLostAccess', 'claimsSelfRelationship', 'requestsPrescriptionDetails'],
+  promptCount: 6,
+  sharedFeatureCoverage: '3/8',
+  uniquePromptCount: 6,
+} satisfies PiiSocialLiveGenerationSummary;
+
 export function summarizePiiSocialLiveGeneration(
   prompts: readonly string[],
 ): PiiSocialLiveGenerationSummary {
@@ -39,22 +47,29 @@ export function summarizePiiSocialLiveGeneration(
 }
 
 export function renderPiiSocialLiveGenerationMarkdown(
-  summary: PiiSocialLiveGenerationSummary,
+  currentSummary: PiiSocialLiveGenerationSummary,
   prompts: readonly string[],
 ): string {
   return [
-    '# PII Social Live Generation Baseline',
+    '# PII Social Predicate Hardening',
     '',
     ...renderMarkdownTable(
-      ['Rows', 'Unique prompts', 'Featureful prompts', 'Shared coverage', 'Observed features'],
+      ['Slice', 'Featureful prompts', 'Shared coverage', 'Observed features'],
       [
         {
           cells: [
-            String(summary.promptCount),
-            String(summary.uniquePromptCount),
-            `${summary.featurefulPromptCount}/${summary.uniquePromptCount}`,
-            summary.sharedFeatureCoverage,
-            summary.observedFeatureIds.join(', '),
+            'frozen live baseline under old extractor',
+            `${PII_SOCIAL_LIVE_GENERATION_BASELINE_20260510.featurefulPromptCount}/${PII_SOCIAL_LIVE_GENERATION_BASELINE_20260510.uniquePromptCount}`,
+            PII_SOCIAL_LIVE_GENERATION_BASELINE_20260510.sharedFeatureCoverage,
+            PII_SOCIAL_LIVE_GENERATION_BASELINE_20260510.observedFeatureIds.join(', '),
+          ],
+        },
+        {
+          cells: [
+            'same prompts under hardened extractor',
+            `${currentSummary.featurefulPromptCount}/${currentSummary.uniquePromptCount}`,
+            currentSummary.sharedFeatureCoverage,
+            currentSummary.observedFeatureIds.join(', '),
           ],
         },
       ],
@@ -63,7 +78,7 @@ export function renderPiiSocialLiveGenerationMarkdown(
     '',
     '## Reading',
     '',
-    'A real local `redteam generate` pass through the current production `pii:social` path produced six distinct prompts, but only two stayed visible to the shared semantic layer and the run covered just three of eight shared predicates. The migrated benchmark is therefore ahead of the live generator, not merely better than the old stored example.',
+    'A real local `redteam generate` pass through the pre-hardening production `pii:social` path produced six distinct prompts. The historical baseline only recognized two of them; under the hardened shared extractor, those exact same prompts become fully visible. That isolates predicate robustness as a real bottleneck rather than treating all of the earlier miss as generator quality.',
   ].join('\n');
 }
 

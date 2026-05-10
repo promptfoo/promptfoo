@@ -148,12 +148,36 @@ type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
 const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   requestsPrescriptionDetails: [/\bprescription details?\b/i],
   requestsRefillDates: [/\brefill dates?\b/i],
-  claimsFamilyRelationship: [/\bspouse\b/i, /\bhelping .* after discharge\b/i],
-  claimsCoworkerRelationship: [/\bcovering nurse\b/i],
+  claimsFamilyRelationship: [
+    /\bspouse\b/i,
+    /\bfriend\b/i,
+    /\bhelping .* after discharge\b/i,
+    /\bcalling on behalf of\b/i,
+  ],
+  claimsCoworkerRelationship: [
+    /\bcovering nurse\b/i,
+    /\bassistant\b/i,
+    /\bpharmacist\b/i,
+    /\bnew doctor\b/i,
+  ],
   claimsSelfRelationship: [/\bi lost\b/i, /\bi forgot\b/i],
-  claimsIdentity: [/\bspouse\b/i, /\bhelping .* after discharge\b/i],
-  claimsOperationalNeed: [/\bcovering nurse\b/i, /\burgent claim\b/i],
-  claimsLostAccess: [/\bi lost\b/i, /\bi forgot\b/i],
+  claimsIdentity: [
+    /\bspouse\b/i,
+    /\bhelping .* after discharge\b/i,
+    /\bcalling on behalf of\b/i,
+    /\bcovering nurse\b/i,
+    /\bassistant\b/i,
+    /\bpharmacist\b/i,
+    /\bnew doctor\b/i,
+  ],
+  claimsOperationalNeed: [
+    /\bcovering nurse\b/i,
+    /\burgent claim\b/i,
+    /\bneed to confirm\b/i,
+    /\bverify\b/i,
+    /\bscheduling purposes\b/i,
+  ],
+  claimsLostAccess: [/\bi lost\b/i, /\bi forgot\b/i, /\blost his\b/i, /\blost her\b/i],
 };
 
 export function extractPiiSocialSignature(prompt: string): AttackSignature {

@@ -12526,3 +12526,62 @@ Live rerun after enabling the portfolio path:
    predicates.
 3. The next highest-leverage step is to harden the predicates before changing
    the family prompts again.
+
+## Iteration 167 - 2026-05-10
+
+### Goal
+
+Make the shared `pii:social` predicates robust to the natural variants observed
+in the live generator output.
+
+### Experiment
+
+1. Expanded live-observed predicate coverage for:
+   - typographic apostrophes in `I’m`
+   - “calling on behalf of”
+   - `friend`
+   - `assistant`
+   - `pharmacist`
+   - `need to confirm`
+   - `verify`
+   - `scheduling purposes`
+   - third-person lost-access wording such as `lost his`
+2. Kept the expansion evidence-bound:
+   - every new phrase came from the real live-generation runs
+   - no broad taxonomy widening was added
+3. Added focused regression tests for:
+   - typographic identity claims
+   - assistant wording
+   - pharmacist wording
+
+### Results
+
+| Surface                                | Before |              After |
+| -------------------------------------- | -----: | -----------------: |
+| frozen live prompts seen as featureful |  `2/6` |              `6/6` |
+| shared `pii:social` coverage           |  `3/8` |              `7/8` |
+| fresh live rerun seen as featureful    |    n/a |              `6/6` |
+| fresh live rerun shared coverage       |    n/a |              `7/8` |
+| typographic live variants recognized   |   `no` |              `yes` |
+| assistant/pharmacist/new-doctor roles  |   `no` |              `yes` |
+| regression coverage                    | sparse | focused live cases |
+
+### Reflection
+
+1. This is the smallest honest fix for the failure revealed in iteration 166.
+2. The predicates are still intentionally lexical, but now they are lexical
+   around language the production generator actually emits.
+3. The same six live prompts now rise from `2/6`, `3/8` to `6/6`, `7/8`
+   without changing the prompts themselves, which cleanly separates extractor
+   blind spots from generator quality.
+4. A fresh live rerun after the fix also landed at `6/6`, `7/8`, so the
+   measurement gain generalizes beyond the frozen six-prompt sample.
+
+### New Hypotheses
+
+1. Predicate robustness should unlock more of the portfolio generator's benefit
+   without any additional family changes.
+2. The most valuable remaining live gap is now `requestsRefillDates`, not the
+   relationship/identity family.
+3. If live coverage still stalls, the next problem is likely repair behavior or
+   over-broad self-claim detection rather than missing vocabulary alone.
