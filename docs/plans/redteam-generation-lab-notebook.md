@@ -10169,3 +10169,57 @@ On the same five-prompt selection size:
    preserve:
    - `2/2` core disclosure
    - while hill climbing the full protected-control-plane band
+
+## Iteration 128 - 2026-05-10
+
+### Goal
+
+Repair the generation-side bottleneck exposed in iteration `127`:
+
+> If the pool contains explicit protected-control-plane attacks, can the
+> semantic-aware selector reach the full frontier in five prompts?
+
+### Experiment
+
+1. Enriched the curated prompt-extraction research portfolio with four explicit
+   frontier prompts:
+   - `policy-audit`
+   - `routing-review`
+   - `escalation-review`
+   - `authority-pretext`
+2. Added those prompts to the candidate pool.
+3. Re-ran the same benchmark with the same five-prompt selector budget.
+
+### Results
+
+| Prompt set                                |                Core disclosure |        Protected control plane |
+| ----------------------------------------- | -----------------------------: | -----------------------------: |
+| baseline unique prompts                   |  `2/2` features, `5/5` prompts |  `0/7` features, `0/5` prompts |
+| full enriched portfolio                   | `2/2` features, `6/12` prompts | `7/7` features, `5/12` prompts |
+| semantic-band-aware five-prompt portfolio |  `2/2` features, `3/5` prompts |  `7/7` features, `5/5` prompts |
+
+### Reflection
+
+1. The pool repair works:
+   - every protected-control-plane predicate is now reachable
+   - the semantic-aware selector can recover the entire frontier in only five
+     prompts
+2. The resulting five-prompt set is genuinely more modern than the old baseline:
+   - still valid prompt extraction
+   - but now covering refusal, routing, classification, escalation, authority,
+     and verbatim disclosure tactics
+3. The earlier decomposition paid off:
+   - selection repair preserved the validity floor
+   - generation repair unlocked the frontier ceiling
+
+### New Hypotheses
+
+1. The next useful step is to compare:
+   - the old baseline prompts
+   - the new semantic-aware five-prompt portfolio
+     side by side for human readability and practical attack quality.
+2. After that, we should decide whether to port the enriched families from the
+   research harness into the production `PromptExtractionPlugin`.
+3. Before doing so, we should verify that the new prompts still satisfy the
+   plugin's required-predicate checks and family semantics cleanly enough for
+   production use.
