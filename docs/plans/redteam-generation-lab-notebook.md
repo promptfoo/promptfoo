@@ -13364,3 +13364,64 @@ The live CLI row is now proven:
    hill climb.
 3. With YAML and CLI surfaces now both proven, the next frontier product work
    should move toward downstream report/UI consumption rather than more plumbing.
+
+## Iteration 183 - 2026-05-10
+
+### Goal
+
+Move the frontier-health signal into the report path without broadening the
+persistence footprint:
+
+> Can the report UI derive the same frontier diagnosis from evaluated rows that
+> the YAML and CLI already expose during generation?
+
+### Experiment
+
+1. Traced report inputs from `Report.tsx` down through the selected-target
+   summaries.
+2. Confirmed the top-level generated-config diagnostic is not naturally carried
+   into the report view, while each evaluated row still retains
+   `testCase.metadata.semanticFrontier`.
+3. Reused the shared frontier reducer against the selected target's rows instead
+   of inventing a third diagnostic implementation.
+4. Added a compact `SemanticFrontierDiagnostics` report section plus focused
+   tests for:
+   - hidden state when no frontier metadata exists
+   - complete vs structurally limited rendering
+   - target-specific derivation when an eval contains multiple prompts
+
+### Results
+
+The three product surfaces are now aligned:
+
+| Surface            | Diagnostic source                        | Status |
+| ------------------ | ---------------------------------------- | ------ |
+| generated YAML     | emitted top-level summary                | proven |
+| generation CLI     | shared reducer over generated tests      | proven |
+| red-team report UI | shared reducer over selected result rows | proven |
+
+The downstream design deliberately avoids a new eval-level metadata channel.
+Rows already preserve the original portfolio summary, and the report already
+recomputes target-specific aggregates from those rows. Frontier diagnostics now
+follow that same path.
+
+### Reflection
+
+1. The useful abstraction boundary is not "generation artifact vs report
+   artifact"; it is the shared semantic-health reducer.
+2. Reusing row metadata keeps report diagnostics naturally scoped to the
+   selected target, which would have been awkward with a single top-level copy.
+3. The remaining frontier gap is no longer observability. It is comparative
+   decision quality: deciding which frontier-aware generator actually produces
+   better attacks under equal budget.
+
+### New Hypotheses
+
+1. The next hill-climbing benchmark should compare generators on retained
+   frontier coverage, attack quality, and vulnerability yield under the same
+   token/request budget.
+2. Frontier diagnostics may become more useful if paired with "what changed
+   across runs" deltas rather than only single-run status.
+3. A future report refinement can link each unreachable feature back to example
+   missed families, but that should wait until we have stronger benchmark
+   evidence about which misses matter most.
