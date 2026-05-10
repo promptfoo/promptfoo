@@ -74,6 +74,7 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 }).partial();
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
+export type TestSuiteTransform = (testSuite: TestSuite) => void | Promise<void>;
 
 export class EvalRunError extends Error {
   readonly exitCode: number;
@@ -173,6 +174,7 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
+  testSuiteTransform?: TestSuiteTransform,
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
@@ -382,6 +384,10 @@ export async function doEval(
         basePath: _basePath,
         commandLineOptions,
       } = await resolveConfigs(cmdObj, defaultConfig));
+    }
+
+    if (!resumeEval && testSuiteTransform) {
+      await testSuiteTransform(testSuite);
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
@@ -762,8 +768,11 @@ export async function doEval(
       return ret;
     }
 
-    // Clear results from memory to avoid memory issues
-    evalRecord.clearResults();
+    // Clear results from memory for the terminal CLI, which has already rendered its report.
+    // Reusable callers such as MCP need the in-memory rows to build structured responses.
+    if (isCliInvocation) {
+      evalRecord.clearResults();
+    }
 
     // Determine sharing using shared utility (DRY - same logic as retry command)
     const wantsToShare = shouldShareResults({

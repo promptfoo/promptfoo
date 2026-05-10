@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
 vi.mock('../../../../src/logger', () => ({
@@ -29,8 +29,8 @@ vi.mock('../../../../src/util/config/load', async (importOriginal) => ({
   }),
 }));
 
-vi.mock('../../../../src/commands/eval', () => ({
-  doEval: vi.fn().mockResolvedValue({
+function createMockEvalResult() {
+  return {
     id: 'test-eval-123',
     toEvaluateSummary: vi.fn().mockResolvedValue({
       version: 3,
@@ -52,12 +52,150 @@ vi.mock('../../../../src/commands/eval', () => ({
       ],
       prompts: [{ label: 'test-prompt', provider: 'test-provider', metrics: {} }],
     }),
-  }),
+  };
+}
+
+function createMockTestSuite() {
+  return {
+    prompts: [{ label: 'test-prompt', raw: 'What is 2+2?' }],
+    providers: [{ id: 'test-provider' }],
+    tests: [{ vars: { input: 'test' } }],
+  };
+}
+
+vi.mock('../../../../src/commands/eval', () => ({
+  doEval: vi
+    .fn()
+    .mockImplementation(
+      async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, testSuiteTransform) => {
+        const testSuite = createMockTestSuite();
+        await testSuiteTransform?.(testSuite);
+        return createMockEvalResult();
+      },
+    ),
 }));
 
 describe('runEvaluation tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('shared execution path', () => {
+    it('should route filtered evals through doEval with the requested runtime options', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: 0,
+        maxConcurrency: 2,
+        timeoutMs: 1234,
+        repeat: 2,
+        delay: 50,
+        cache: false,
+        write: true,
+        share: true,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(doEval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: ['test.yaml'],
+          maxConcurrency: 2,
+          repeat: 2,
+          delay: 50,
+          cache: false,
+          write: true,
+          share: true,
+        }),
+        {},
+        'promptfooconfig.yaml',
+        expect.objectContaining({
+          maxConcurrency: 2,
+          timeoutMs: 1234,
+          eventSource: 'mcp',
+          showProgressBar: false,
+        }),
+        expect.any(Function),
+      );
+    });
+
+    it('should pass timeoutMs through the unfiltered doEval path', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        timeoutMs: 4321,
+      });
+
+      expect(result.isError).toBe(false);
+      expect(doEval).toHaveBeenCalledWith(
+        expect.any(Object),
+        {},
+        'promptfooconfig.yaml',
+        expect.objectContaining({
+          timeoutMs: 4321,
+        }),
+        expect.any(Function),
+      );
+    });
+
+    it('should return the same suite metadata shape for unfiltered evals', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 1,
+        filtered: 1,
+        filters: {},
+      });
+      expect(payload.data.configuration.prompts).toEqual({
+        total: 1,
+        filtered: 1,
+        labels: ['test-prompt'],
+      });
+      expect(payload.data.configuration.providers).toEqual({
+        total: 1,
+        filtered: 1,
+        ids: ['test-provider'],
+      });
+    });
   });
 
   describe('result formatting', () => {
@@ -257,17 +395,6 @@ describe('runEvaluation tool', () => {
     });
 
     it('should return error when all prompts are filtered out', async () => {
-      const { resolveConfigs } = await import('../../../../src/util/config/load');
-
-      vi.mocked(resolveConfigs).mockResolvedValueOnce({
-        config: {},
-        testSuite: {
-          prompts: [{ label: 'test-prompt', raw: 'test' }],
-          providers: [{ id: 'test-provider' }],
-          tests: [{ vars: { input: 'test' } }],
-        },
-      } as any);
-
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
       );
@@ -289,19 +416,6 @@ describe('runEvaluation tool', () => {
     });
 
     it('should return error when all providers are filtered out', async () => {
-      const { resolveConfigs } = await import('../../../../src/util/config/load');
-
-      vi.mocked(resolveConfigs).mockResolvedValueOnce({
-        config: {},
-        testSuite: {
-          prompts: [{ label: 'test-prompt', raw: 'test' }],
-          providers: [
-            { id: () => 'openai:gpt-4', callApi: async () => ({ output: 'test' }) },
-          ] as any,
-          tests: [{ vars: { input: 'test' } }],
-        },
-      } as any);
-
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'
       );
@@ -323,11 +437,10 @@ describe('runEvaluation tool', () => {
     });
 
     it('should return an error when config resolution fails instead of terminating the host', async () => {
-      const { ConfigResolutionError, resolveConfigs } = await import(
-        '../../../../src/util/config/load'
-      );
+      const { ConfigResolutionError } = await import('../../../../src/util/config/load');
+      const { doEval } = await import('../../../../src/commands/eval');
 
-      vi.mocked(resolveConfigs).mockRejectedValueOnce(
+      vi.mocked(doEval).mockRejectedValueOnce(
         new ConfigResolutionError('You must provide at least 1 prompt'),
       );
 

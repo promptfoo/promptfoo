@@ -260,6 +260,52 @@ describe('evaluateOptions behavior', () => {
   });
 
   describe('Edge cases and interactions', () => {
+    it('should preserve in-memory results for non-CLI callers', async () => {
+      const clearResultsSpy = vi.spyOn(Eval.prototype, 'clearResults');
+
+      await doEval(
+        {
+          config: [configPath],
+          table: false,
+          write: false,
+        },
+        {},
+        undefined,
+        {
+          eventSource: 'mcp',
+        },
+      );
+
+      expect(clearResultsSpy).not.toHaveBeenCalled();
+      clearResultsSpy.mockRestore();
+    });
+
+    it('should apply a test suite transform before evaluation', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-transform.yaml', {
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'first' } }, { vars: { input: 'second' } }],
+      });
+
+      await doEval(
+        {
+          config: [tempConfig],
+          table: false,
+          write: false,
+        },
+        {},
+        undefined,
+        {},
+        (testSuite) => {
+          testSuite.tests = testSuite.tests?.slice(0, 1);
+        },
+      );
+
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(testSuite.tests).toHaveLength(1);
+      expect(testSuite.tests?.[0].vars).toEqual({ input: 'first' });
+    });
+
     it('should handle delay >0 forcing concurrency to 1 even with CLI override', async () => {
       const options = await runEvalAndGetOptions({
         config: [configPath],
