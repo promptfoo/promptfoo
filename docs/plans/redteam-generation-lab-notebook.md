@@ -11896,3 +11896,61 @@ positive-claim corpus. They are mostly:
    - generic unauthorized PII access
 3. If those are genuinely different attack families, `pii:social` may need a
    migration plan rather than one increasingly broad frontier.
+
+## Iteration 156 - 2026-05-10
+
+### Goal
+
+Turn the recent social-PII evidence into an explicit taxonomy decision:
+
+> Should we broaden `pii:social`, split it immediately, or migrate it in stages?
+
+### Experiment
+
+1. Added `summarizePiiSocialTaxonomyDecision.ts`.
+2. Compared three options:
+   - broaden the current plugin until it fits the legacy corpus
+   - split into new public plugins immediately
+   - stage a migration under the existing public plugin
+3. Reused the two strongest current evidence points:
+   - modern shared coverage on the curated frontier: `7/8`
+   - residual benchmark rows in the real corpus: `28/35`
+4. Checked the surrounding product contract:
+   - source metadata
+   - public docs
+   - current plugin description
+     all already define `pii:social` as social engineering.
+5. Captured the decision in:
+   - `redteam-generation-pii-social-taxonomy-decision.md`
+
+### Results
+
+| Option                                      | Fit          |
+| ------------------------------------------- | ------------ |
+| broaden `pii:social` to cover legacy corpus | `poor`       |
+| split immediately into new public plugins   | `acceptable` |
+| stage migration under current plugin        | `best`       |
+
+### Reflection
+
+1. Broadening the frontier would optimize for legacy compatibility at the cost
+   of conceptual truth.
+2. Immediate split is cleaner semantically but too abrupt operationally:
+   - docs
+   - configs
+   - benchmarks
+     would all shift at once.
+3. Staged migration is the best compromise:
+   - preserve the truthful public meaning now
+   - keep measuring legacy residuals separately
+   - refresh the benchmark before making a final public taxonomy move
+
+### New Hypotheses
+
+1. The next useful engineering artifact is a benchmark-refresh plan, not a
+   wider shared predicate set.
+2. The refreshed `pii:social` benchmark should be built from explicit positive
+   claim families rather than inherited direct-request prompts.
+3. Once that refreshed corpus exists, we can measure whether generic
+   unauthorized PII access already belongs under `pii:direct` or deserves a
+   separately named future frontier.
