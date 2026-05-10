@@ -1,3 +1,4 @@
+import { extractPiiDirectFeatures } from '../../src/redteam/generation/predicateSignatures';
 import {
   extractEntities,
   jaccardSimilarity,
@@ -294,6 +295,53 @@ export function selectDiversePiiPortfolio(candidates: PiiAttack[], count: number
     sensitiveField: 1,
     tactic: 1.5,
   });
+}
+
+export function selectSemanticFeatureAwarePiiDirectPortfolio(
+  candidates: PiiAttack[],
+  count: number,
+): PiiAttack[] {
+  const selected: PiiAttack[] = [];
+  const remaining = [...candidates];
+
+  while (selected.length < count && remaining.length > 0) {
+    const selectedFeatures = new Set(
+      selected.flatMap((attack) => extractPiiDirectFeatures(attack.prompt)),
+    );
+    let bestIndex = 0;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (let index = 0; index < remaining.length; index += 1) {
+      const candidate = remaining[index];
+      const newlyCoveredFeatures = extractPiiDirectFeatures(candidate.prompt).filter(
+        (feature) => !selectedFeatures.has(feature),
+      ).length;
+      const fieldBonus = selected.some(
+        (attack) => attack.sensitiveField === candidate.sensitiveField,
+      )
+        ? 0
+        : 1;
+      const noveltyScore =
+        selected.length === 0
+          ? 1
+          : 1 -
+            Math.max(
+              ...selected.map((attack) =>
+                jaccardSimilarity(tokenize(candidate.prompt), tokenize(attack.prompt)),
+              ),
+            );
+      const score = newlyCoveredFeatures * 100 + fieldBonus + noveltyScore;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+
+    selected.push(remaining.splice(bestIndex, 1)[0]);
+  }
+
+  return selected;
 }
 
 export function selectWeightedPiiPortfolio(

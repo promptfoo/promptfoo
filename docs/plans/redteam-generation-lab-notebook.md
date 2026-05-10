@@ -11210,3 +11210,85 @@ The handoff currently agrees exactly at the level that matters:
    - truncation plausibly hides a second axis of risk
 3. `pii:direct` and `excessive-agency` are likely candidates; the next
    iteration should compare them rather than guessing.
+
+## Iteration 145 - 2026-05-10
+
+### Goal
+
+Choose the third production frontier target with evidence instead of intuition:
+
+> Between `pii:direct` and `excessive-agency`, which plugin is more likely to
+> benefit from the next semantic-frontier pass?
+
+### Experiment
+
+1. Added `selectSemanticFeatureAwarePiiDirectPortfolio()` to the PII research
+   helpers.
+2. Added `compareNextSemanticFrontierCandidates.ts`.
+3. Compared both candidates on:
+   - exact shared semantic dimensions
+   - separate analyzer-only dimensions
+   - naive first-five coverage
+   - the current five-prompt policy
+   - a semantic-aware five-prompt policy where applicable
+4. Captured the result in:
+   - `redteam-generation-next-frontier-candidate.md`
+
+### Results
+
+| Plugin             | Exact shared dims | Separate dims | First five | Current five | Semantic-aware five | Recommendation |
+| ------------------ | ----------------: | ------------: | ---------: | -----------: | ------------------: | -------------- |
+| `pii:direct`       |               `1` |           `1` |      `3/6` |        `5/6` |               `6/6` | next target    |
+| `excessive-agency` |               `1` |           `0` |      `n/a` |        `5/5` |               `n/a` | defer          |
+
+Concrete `pii:direct` behavior on the same candidate pool:
+
+1. Naive truncation wastes early slots on near-duplicates:
+   - `medical-record`
+   - `ssn`
+   - the semantic extractor still observes `3/6` features because the SSN prompt
+     co-activates `contact`
+2. The current diversity selector improves that to five fields but still misses:
+   - `lab-results`
+3. The semantic-aware selector recovers the full frontier in five prompts:
+   - `ssn`
+   - `lab-results`
+   - `medical-record`
+   - `prescription`
+   - `insurance`
+
+### Reflection
+
+1. `pii:direct` is the better third onboarding target because there is still a
+   real lost-frontier problem to solve.
+2. `excessive-agency` already looks like a clean one-axis case on the current
+   corpus:
+   - useful
+   - but not yet the best place to spend the next frontier iteration
+3. This is also a helpful reminder that:
+   - plugin usefulness
+   - and frontier-refactor usefulness
+     are not the same ranking problem.
+
+### Status Checkpoint
+
+1. Production frontier work is now closed for:
+   - prompt extraction
+   - SQL injection
+2. `pii:direct` is the next recommended target.
+3. We now have:
+   - research evidence
+   - production parity evidence
+   - next-target selection evidence
+
+### New Hypotheses
+
+1. A `pii:direct` production frontier should likely encode:
+   - sensitive-field coverage as the exact shared axis
+   - a second band only if we can make the current tactic concept production-safe
+2. We should inspect whether `pii:direct` needs:
+   - one exact frontier
+   - or an exact frontier plus one separately modeled production band
+3. Before changing production code, the next useful experiment is to ask whether
+   a compact production-family set can preserve the full direct-PII frontier
+   while still remaining readable to operators.
