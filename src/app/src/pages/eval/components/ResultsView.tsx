@@ -272,17 +272,22 @@ export default function ResultsView({
   const [searchInputValue, setSearchInputValue] = React.useState(initialSearchText); // local, for responsive input
   const [debouncedSearchText, setDebouncedSearchText] = React.useState(initialSearchText); // debounced, for table/URL/pill
 
-  // Debounced update for URL, table, and pill
+  // Debounced update for URL, table, and pill. Omit `hash` so the helper reads
+  // `window.location.hash` live — React Router's `location.hash` is stale w.r.t.
+  // `history.replaceState` mutations made by the eval-output dialog deep-link code.
   const debouncedUpdate = useDebouncedCallback((text: string) => {
     setDebouncedSearchText(text);
     navigate(
-      buildEvalUrlWithSearchParams({ ...location, hash: window.location.hash }, (params) => {
-        if (text) {
-          params.set('search', text);
-        } else {
-          params.delete('search');
-        }
-      }),
+      buildEvalUrlWithSearchParams(
+        { pathname: location.pathname, search: location.search },
+        (params) => {
+          if (text) {
+            params.set('search', text);
+          } else {
+            params.delete('search');
+          }
+        },
+      ),
       { replace: true },
     );
   }, 300);
@@ -292,9 +297,12 @@ export default function ResultsView({
     debouncedUpdate.cancel();
     setDebouncedSearchText('');
     navigate(
-      buildEvalUrlWithSearchParams({ ...location, hash: window.location.hash }, (params) => {
-        params.delete('search');
-      }),
+      buildEvalUrlWithSearchParams(
+        { pathname: location.pathname, search: location.search },
+        (params) => {
+          params.delete('search');
+        },
+      ),
       { replace: true },
     );
   };
@@ -313,17 +321,20 @@ export default function ResultsView({
   const setActiveView = React.useCallback(
     (view: ActiveView) => {
       navigate(
-        buildEvalUrlWithSearchParams({ ...location, hash: window.location.hash }, (params) => {
-          if (view === 'results') {
-            params.delete('view');
-          } else {
-            params.set('view', view);
-          }
-        }),
+        buildEvalUrlWithSearchParams(
+          { pathname: location.pathname, search: location.search },
+          (params) => {
+            if (view === 'results') {
+              params.delete('view');
+            } else {
+              params.set('view', view);
+            }
+          },
+        ),
         { replace: true },
       );
     },
-    [location, navigate],
+    [location.pathname, location.search, navigate],
   );
   const [reportActions, setReportActions] = React.useState<React.ReactNode>(null);
 

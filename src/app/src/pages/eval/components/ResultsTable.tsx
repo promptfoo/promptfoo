@@ -64,7 +64,12 @@ import { NumberInput } from '@app/components/ui/number-input';
 import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
-import { getNamedMetricTotals, parseEvalOutputPromptHash } from './utils';
+import {
+  getNamedMetricTotals,
+  parseEvalOutputPromptHash,
+  setEvalDetailsHash,
+  useEvalDetailsHash,
+} from './utils';
 
 /**
  * Audio player component that handles both storage refs and base64 data
@@ -1477,7 +1482,7 @@ function ResultsTable({
 
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const [locationHash, setLocationHash] = React.useState(() => window.location.hash);
+  const locationHash = useEvalDetailsHash();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
@@ -1511,12 +1516,6 @@ function ResultsTable({
       pageSize: filteredResultsCount > 10 ? 50 : 10,
     });
   }, [filteredResultsCount]);
-
-  React.useEffect(() => {
-    const handleHashChange = () => setLocationHash(window.location.hash);
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
@@ -2031,11 +2030,18 @@ function ResultsTable({
 
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
-  const clearRowIdFromUrl = React.useCallback(() => {
+  // Clears any deep-link the user navigated to — both the legacy `?rowId=` query param
+  // and the new `#details-row-X-prompt-Y` hash. This MUST clear both: the row-jump effect
+  // below reads from each, and if either source still resolves to a row, the next paginate
+  // tick would bounce the user back to the deep-linked page.
+  const clearRowDeepLink = React.useCallback(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.has('rowId')) {
       url.searchParams.delete('rowId');
       navigate({ pathname: url.pathname, search: url.search, hash: url.hash }, { replace: true });
+    }
+    if (parseEvalOutputPromptHash(window.location.hash)) {
+      setEvalDetailsHash('');
     }
   }, [navigate]);
 
@@ -2344,7 +2350,7 @@ function ResultsTable({
                     ...prev,
                     pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
                   }));
-                  clearRowIdFromUrl();
+                  clearRowDeepLink();
                 }
               }}
               className="w-[60px] h-8 text-center"
@@ -2367,7 +2373,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.max(prev.pageIndex - 1, 0),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex === 0}
@@ -2384,7 +2390,7 @@ function ResultsTable({
                   ...prev,
                   pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
                 }));
-                clearRowIdFromUrl();
+                clearRowDeepLink();
                 window.scrollTo(0, 0);
               }}
               disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}

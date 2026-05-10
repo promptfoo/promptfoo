@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
@@ -46,20 +48,86 @@ export function parseEvalOutputPromptHash(hash: string): EvalOutputPromptHashTar
 
 /**
  * Builds router location parts after mutating search params while preserving the current hash.
+ *
+ * If `source.hash` is omitted, reads the live `window.location.hash`. The dialog deep-link
+ * code mutates the hash via `history.replaceState`, which doesn't update React Router's
+ * `useLocation()`, so callers that read `location` from React Router must pass the hash
+ * explicitly or omit it (in which case we read live).
  */
 export function buildEvalUrlWithSearchParams(
-  location: EvalUrlParts,
+  source: { pathname: string; search: string; hash?: string },
   mutateSearchParams: (params: URLSearchParams) => void,
 ): EvalUrlParts {
-  const nextSearchParams = new URLSearchParams(location.search);
+  const nextSearchParams = new URLSearchParams(source.search);
   mutateSearchParams(nextSearchParams);
   const nextSearch = nextSearchParams.toString();
 
+  const hash =
+    source.hash !== undefined
+      ? source.hash
+      : typeof window === 'undefined'
+        ? ''
+        : window.location.hash;
+
   return {
-    pathname: location.pathname,
+    pathname: source.pathname,
     search: nextSearch ? `?${nextSearch}` : '',
-    hash: location.hash,
+    hash,
   };
+}
+
+/**
+ * Shared subscription for the URL hash that the eval-output details dialogs use as a deep
+ * link. We need a single source of truth because:
+ *   1. `history.replaceState` (used by the dialog open/close handlers) does not fire
+ *      `hashchange`, so per-component listeners would go stale silently.
+ *   2. Tables can render thousands of cells; one global listener is much cheaper than one
+ *      listener per cell.
+ *
+ * Components subscribe via `useEvalDetailsHash()`. Code that mutates the hash should call
+ * `setEvalDetailsHash()`, which performs the `replaceState` and notifies subscribers.
+ */
+const evalDetailsHashListeners = new Set<() => void>();
+
+function notifyEvalDetailsHashListeners(): void {
+  for (const cb of evalDetailsHashListeners) {
+    cb();
+  }
+}
+
+if (typeof window !== 'undefined') {
+  // Covers direct address-bar edits and back/forward navigation. `replaceState` is handled
+  // explicitly by `setEvalDetailsHash`.
+  window.addEventListener('hashchange', notifyEvalDetailsHashListeners);
+}
+
+function subscribeEvalDetailsHash(callback: () => void): () => void {
+  evalDetailsHashListeners.add(callback);
+  return () => {
+    evalDetailsHashListeners.delete(callback);
+  };
+}
+
+function getCurrentEvalDetailsHash(): string {
+  return typeof window === 'undefined' ? '' : window.location.hash;
+}
+
+export function setEvalDetailsHash(hash: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const next = !hash ? '' : hash.startsWith('#') ? hash : `#${hash}`;
+  if (window.location.hash === next) {
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.hash = next;
+  window.history.replaceState({}, '', url);
+  notifyEvalDetailsHashListeners();
+}
+
+export function useEvalDetailsHash(): string {
+  return useSyncExternalStore(subscribeEvalDetailsHash, getCurrentEvalDetailsHash, () => '');
 }
 
 /**

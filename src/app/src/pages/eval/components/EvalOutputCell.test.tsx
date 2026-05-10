@@ -835,11 +835,12 @@ describe('EvalOutputCell', () => {
     expect(container.querySelectorAll('img')).toHaveLength(0);
   });
 
-  it('allows copying row link to clipboard', async () => {
+  it('allows copying a cell deep-link to clipboard', async () => {
     const user = userEvent.setup();
     const clipboard = mockClipboardWriteText();
     const expectedUrl = new URL(window.location.href);
-    expectedUrl.searchParams.set('rowId', '1');
+    expectedUrl.searchParams.delete('rowId');
+    expectedUrl.hash = '#details-row-1-prompt-1';
 
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
 
@@ -851,6 +852,27 @@ describe('EvalOutputCell', () => {
     await waitFor(() => {
       expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
     });
+  });
+
+  it('drops a legacy rowId query param when copying a cell deep-link', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    window.history.replaceState({}, '', '/eval/test-eval?rowId=99&filter=foo');
+
+    const expectedUrl = new URL(window.location.href);
+    expectedUrl.searchParams.delete('rowId');
+    expectedUrl.hash = '#details-row-1-prompt-1';
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    await user.click(screen.getByLabelText('Copy link to output'));
+
+    await waitFor(() => {
+      expect(clipboard.writeText).toHaveBeenCalledWith(expectedUrl.toString());
+    });
+    const written = clipboard.writeText.mock.calls[0]?.[0];
+    expect(written).toContain('filter=foo');
+    expect(written).not.toContain('rowId');
   });
 
   it('shows checkmark after copying link', async () => {
