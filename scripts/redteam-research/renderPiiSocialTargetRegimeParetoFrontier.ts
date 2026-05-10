@@ -4,8 +4,8 @@ import { pathToFileURL } from 'node:url';
 import {
   buildPiiSocialTargetRegimeProfiles,
   countPiiSocialRegimesWithAnyFailure,
-  PII_SOCIAL_TARGET_REGIMES,
   PII_SOCIAL_TARGET_REGIME_STRESS_PROFILES,
+  PII_SOCIAL_TARGET_REGIMES,
 } from './comparePiiSocialTargetRegimeAggregationPolicies';
 import { renderMarkdownTable } from './reportRenderingShared';
 
@@ -18,6 +18,7 @@ import type { ReplayTargetRegime } from './replayPiiSocialLiveOutcomes';
 export type PiiSocialTargetRegimeParetoRow = {
   candidate: CandidateProfile['candidate'];
   dominatedBy: CandidateProfile['candidate'][];
+  dominanceGap: string;
   leakReadyPromptRate: string;
   meanFailureRateAcrossRegimes: string;
   onFrontier: boolean;
@@ -56,6 +57,30 @@ function dominates(left: CandidateProfile, right: CandidateProfile): boolean {
   );
 }
 
+function summarizeDominanceGap(
+  dominantProfile: CandidateProfile | undefined,
+  profile: CandidateProfile,
+): string {
+  if (!dominantProfile) {
+    return '-';
+  }
+
+  const leakReadyGap = Math.round(
+    (divide(dominantProfile.leakReadyPrompts) - divide(profile.leakReadyPrompts)) * 100,
+  );
+  const breadthGap =
+    countPiiSocialRegimesWithAnyFailure(dominantProfile) -
+    countPiiSocialRegimesWithAnyFailure(profile);
+  const yieldGap = Math.round((meanFailureRate(dominantProfile) - meanFailureRate(profile)) * 100);
+  const parts = [
+    leakReadyGap > 0 ? `leak-ready +${leakReadyGap}pp` : undefined,
+    breadthGap > 0 ? `breadth +${breadthGap}` : undefined,
+    yieldGap > 0 ? `yield +${yieldGap}pp` : undefined,
+  ].filter(Boolean);
+
+  return parts.join(', ') || '-';
+}
+
 function formatRate({ failures, prompts }: CandidateProfile['leakReadyPrompts']): string {
   return `${failures}/${prompts}`;
 }
@@ -74,12 +99,18 @@ export function renderPiiSocialTargetRegimeParetoFrontier(
 
   return profiles.map((profile) => {
     const dominatedBy = profiles
-      .filter((candidate) => candidate.candidate !== profile.candidate && dominates(candidate, profile))
+      .filter(
+        (candidate) => candidate.candidate !== profile.candidate && dominates(candidate, profile),
+      )
       .map((candidate) => candidate.candidate);
+    const firstDominatingProfile = profiles.find(
+      (candidate) => candidate.candidate === dominatedBy[0],
+    );
 
     return {
       candidate: profile.candidate,
       dominatedBy,
+      dominanceGap: summarizeDominanceGap(firstDominatingProfile, profile),
       leakReadyPromptRate: formatRate(profile.leakReadyPrompts),
       meanFailureRateAcrossRegimes: formatPercent(meanFailureRate(profile)),
       onFrontier: dominatedBy.length === 0,
@@ -104,6 +135,7 @@ export function renderPiiSocialTargetRegimeParetoFrontierMarkdown(
         'Mean failure rate',
         'On frontier',
         'Dominated by',
+        'Dominance gap',
       ],
       rows.map((row) => ({
         cells: [
@@ -114,6 +146,7 @@ export function renderPiiSocialTargetRegimeParetoFrontierMarkdown(
           row.meanFailureRateAcrossRegimes,
           row.onFrontier ? 'yes' : 'no',
           row.dominatedBy.join(', ') || '-',
+          row.dominanceGap,
         ],
       })),
     ),
@@ -131,8 +164,8 @@ async function main() {
   }
 
   const [hardened, permissiveFamily, permissiveSelfRecovery] = await Promise.all(
-    [hardenedResultsPath, permissiveFamilyResultsPath, selfRecoveryResultsPath].map(
-      async (path) => JSON.parse(await fs.readFile(path, 'utf8')),
+    [hardenedResultsPath, permissiveFamilyResultsPath, selfRecoveryResultsPath].map(async (path) =>
+      JSON.parse(await fs.readFile(path, 'utf8')),
     ),
   );
 

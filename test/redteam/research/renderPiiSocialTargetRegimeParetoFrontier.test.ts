@@ -91,6 +91,7 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
       {
         candidate: 'legacy-generic',
         dominatedBy: ['portfolio', 'family-overfit', 'balanced-breadth'],
+        dominanceGap: 'leak-ready +100pp, breadth +2, yield +67pp',
         leakReadyPromptRate: '0/1',
         meanFailureRateAcrossRegimes: '0%',
         onFrontier: false,
@@ -100,6 +101,7 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
       {
         candidate: 'portfolio',
         dominatedBy: [],
+        dominanceGap: '-',
         leakReadyPromptRate: '1/1',
         meanFailureRateAcrossRegimes: '67%',
         onFrontier: true,
@@ -109,6 +111,7 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
       {
         candidate: 'family-overfit',
         dominatedBy: ['portfolio'],
+        dominanceGap: 'breadth +1, yield +33pp',
         leakReadyPromptRate: '6/6',
         meanFailureRateAcrossRegimes: '33%',
         onFrontier: false,
@@ -118,6 +121,7 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
       {
         candidate: 'balanced-breadth',
         dominatedBy: ['portfolio'],
+        dominanceGap: 'yield +44pp',
         leakReadyPromptRate: '6/6',
         meanFailureRateAcrossRegimes: '22%',
         onFrontier: false,
@@ -132,7 +136,9 @@ describe('renderPiiSocialTargetRegimeParetoFrontier', () => {
       renderPiiSocialTargetRegimeParetoFrontier(outputsByRegime),
     );
 
-    expect(markdown).toContain('| portfolio | observed | 1/1 | 2/3 | 67% | yes | - |');
-    expect(markdown).toContain('| family-overfit | stress-profile | 6/6 | 1/3 | 33% | no | portfolio |');
+    expect(markdown).toContain('| portfolio | observed | 1/1 | 2/3 | 67% | yes | - | - |');
+    expect(markdown).toContain(
+      '| family-overfit | stress-profile | 6/6 | 1/3 | 33% | no | portfolio | breadth +1, yield +33pp |',
+    );
   });
 });

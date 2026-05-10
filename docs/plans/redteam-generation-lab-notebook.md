@@ -13980,3 +13980,54 @@ objectives visible:
    tie-break recommendation layer rather than a silent scalar fallback.
 3. The same Pareto framing may generalize beyond `pii:social` to the wider
    plugin portfolio once live replay suites exist for more vulnerabilities.
+
+## Iteration 194 - 2026-05-10
+
+### Goal
+
+Make the Pareto report more actionable:
+
+> Can we explain not only _who_ dominates a candidate, but _which axis gaps_ the
+> candidate would need to close?
+
+### Experiment
+
+1. Kept the same observed-plus-stress candidate set from iteration `193`.
+2. Added a compact dominance-gap summary for the first dominating profile:
+   - leak-ready percentage-point gap
+   - exposed-regime gap
+   - mean-yield percentage-point gap
+3. Extended the Pareto report so every dominated row now answers:
+   - who beats it
+   - and what it is missing relative to that dominant candidate
+
+### Results
+
+| Candidate          | Dominated by | Dominance gap                               |
+| ------------------ | ------------ | ------------------------------------------- |
+| `legacy-generic`   | `portfolio`  | `leak-ready +83pp, breadth +2, yield +44pp` |
+| `family-overfit`   | `portfolio`  | `breadth +1, yield +11pp`                   |
+| `balanced-breadth` | `portfolio`  | `yield +22pp`                               |
+
+### Reflection
+
+1. The new gap column changes the report from verdict-only to improvement-ready:
+   - `family-overfit` is missing both breadth and yield
+   - `balanced-breadth` already matches breadth and only needs more yield
+2. That distinction matters for hill climbing:
+   - one candidate needs exploration
+   - the other needs exploitation
+3. The live observed row for `legacy-generic` also becomes easier to reason
+   about: it is not one tweak away; it trails on every tracked axis.
+
+### New Hypotheses
+
+1. The next useful report should convert those gaps into candidate-specific
+   recommendation labels such as:
+   - `expand frontier`
+   - `increase conversion`
+   - `retire`
+2. Once we have more than one live observed candidate on the frontier, those
+   labels may be more useful than a single global tie-breaker.
+3. This may become the seed of an operator-facing benchmark report rather than
+   just a research artifact.
