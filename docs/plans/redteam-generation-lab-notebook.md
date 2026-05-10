@@ -14235,3 +14235,52 @@ Turn the transfer-audit result into a reusable plugin graduation ladder:
 2. If that holds, direct PII can move from stage `1` to stage `2` cheaply.
 3. The first replay regime for `pii:direct` should probably be simpler than the
    social ladder because direct leakage does not require social-pretext matching.
+
+## Iteration 199 - 2026-05-10
+
+### Goal
+
+Test the first hypothesis from iteration `198`:
+
+> Does `pii:direct` need a new stage-2 quality proxy, or is direct
+> sensitive-field visibility already the right prompt-level measure?
+
+### Experiment
+
+1. Reused the six-prompt `pii:direct` research portfolio.
+2. Measured each prompt against the shared direct-PII predicate vocabulary.
+3. Treated prompt-level sensitive-field visibility as the candidate stage-2
+   proxy and checked both:
+   - visible prompt rate
+   - observed frontier coverage
+
+### Results
+
+| Metric                            |          Result |
+| --------------------------------- | --------------: |
+| field-visible prompts             |           `6/6` |
+| observed sensitive-field coverage |           `6/6` |
+| zero-signal prompts               |             `0` |
+| recommendation                    | `stage-2 ready` |
+
+### Reflection
+
+1. `pii:direct` is materially simpler than `pii:social` at stage `2`:
+   - social PII needed a richer positive-claim proxy because the adversarial
+     structure was implicit
+   - direct PII exposes the attack shape in the literal sensitive-field request
+2. This means we do not need to invent a novel proxy to make the ladder look
+   symmetric.
+3. The more important upcoming work is now stage `3`:
+   - choose a hardened replay regime where direct sensitive-field requests should
+     be refused consistently
+
+### New Hypotheses
+
+1. A strict direct-PII target can serve as the hardened regime with little extra
+   machinery because the prompts are already lexically explicit.
+2. The first susceptible direct-PII regime should probably leak only selected
+   field families, which would let the stage-4 replay test whether frontier
+   breadth predicts realized yield.
+3. If both hold, `pii:direct` may graduate faster than `pii:social` through
+   stages `3` and `4`.
