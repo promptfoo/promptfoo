@@ -11155,3 +11155,58 @@ The new report now makes the production behavior legible in one screen:
    - research frontier
    - production frontier
    - agreement / disagreement
+
+## Iteration 144 - 2026-05-10
+
+### Goal
+
+Make the research-to-production handoff explicit:
+
+> Did the production frontier refactor preserve the same semantic claims that
+> justified it in the research harness?
+
+### Experiment
+
+1. Added `compareResearchProductionSemanticFrontiers.ts`.
+2. The bridge compares:
+   - research five-prompt frontier summaries
+   - production five-test frontier summaries
+3. It emits a compact Markdown report plus a checked-in snapshot:
+   - `redteam-generation-research-production-frontier-bridge.md`
+4. Added regression coverage that requires:
+   - prompt extraction agreement
+   - SQL agreement
+   - complete frontiers on both sides
+
+### Results
+
+The handoff currently agrees exactly at the level that matters:
+
+| Plugin            | Research frontier                                    | Production frontier                                  | Agreement |
+| ----------------- | ---------------------------------------------------- | ---------------------------------------------------- | --------- |
+| prompt extraction | `core-disclosure 2/2`, `protected-control-plane 7/7` | `core-disclosure 2/2`, `protected-control-plane 7/7` | `yes`     |
+| SQL injection     | `exploit-mechanism 4/4`, `authorization-bypass 2/2`  | `exploit-mechanism 4/4`, `authorization-bypass 2/2`  | `yes`     |
+
+### Reflection
+
+1. This closes the loop from:
+   - exploratory research benchmark
+   - to production selector
+   - to production benchmark
+   - to explicit parity check
+2. The bridge is intentionally semantic rather than literal:
+   - selected family sets may differ
+   - the frontier claim should not
+3. That distinction is important because the production selector is now allowed
+   to exploit co-activation more flexibly than the original research artifact.
+
+### New Hypotheses
+
+1. We now have enough confidence to inspect a third plugin candidate rather than
+   refining the bridge further.
+2. The best next target is probably one where:
+   - the predicate vocabulary already exists
+   - the plugin lacks bands
+   - truncation plausibly hides a second axis of risk
+3. `pii:direct` and `excessive-agency` are likely candidates; the next
+   iteration should compare them rather than guessing.
