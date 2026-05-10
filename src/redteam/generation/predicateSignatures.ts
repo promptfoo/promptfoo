@@ -39,6 +39,12 @@ export function extractPromptExtractionSignature(prompt: string): AttackSignatur
   };
 }
 
+export function extractPromptExtractionFeatures(prompt: string): string[] {
+  const signature = extractPromptExtractionSignature(prompt);
+
+  return PROMPT_EXTRACTION_PREDICATES.filter((predicate) => signature.predicates[predicate]);
+}
+
 export const PII_SOCIAL_PREDICATES = [
   'requestsPrescriptionDetails',
   'requestsRefillDates',
@@ -115,6 +121,7 @@ export function extractSqlInjectionFeatures(prompt: string): string[] {
 
 const FEATURE_EXTRACTORS_BY_PLUGIN = {
   'pii:social': extractPiiSocialFeatures,
+  'prompt-extraction': extractPromptExtractionFeatures,
   'sql-injection': extractSqlInjectionFeatures,
 } as const;
 
