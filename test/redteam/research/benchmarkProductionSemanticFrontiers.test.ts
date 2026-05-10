@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { runProductionSemanticFrontierBenchmark } from '../../../scripts/redteam-research/benchmarkProductionSemanticFrontiers';
+import {
+  renderProductionSemanticFrontierBenchmarkMarkdown,
+  runProductionSemanticFrontierBenchmark,
+} from '../../../scripts/redteam-research/benchmarkProductionSemanticFrontiers';
 
 describe('benchmarkProductionSemanticFrontiers', () => {
   it('sweeps production plugins across inactive and active frontier regimes', async () => {
@@ -43,5 +46,16 @@ describe('benchmarkProductionSemanticFrontiers', () => {
         },
       ],
     });
+  });
+
+  it('renders a compact markdown report at the compression threshold', async () => {
+    const benchmark = await runProductionSemanticFrontierBenchmark([4, 5]);
+
+    expect(renderProductionSemanticFrontierBenchmarkMarkdown(benchmark)).toContain(
+      '| prompt-extraction | 5 | 6 | 5 | yes | yes |',
+    );
+    expect(renderProductionSemanticFrontierBenchmarkMarkdown(benchmark)).toContain(
+      '- selected: authority-pretext, direct-disclosure, escalation-review, policy-audit, routing-review',
+    );
   });
 });

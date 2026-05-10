@@ -11098,3 +11098,60 @@ The `5`-prompt portfolios are also informative:
    - an obvious semantic vocabulary
    - current lack of band declarations
    - enough family overlap to make compression nontrivial
+
+## Iteration 143 - 2026-05-10
+
+### Goal
+
+Make the new production benchmark easy to review by eye:
+
+> Can we turn the JSON sweep into a compact human-readable artifact without
+> drifting away from executable benchmark output?
+
+### Experiment
+
+1. Added `--format markdown` support to
+   `benchmarkProductionSemanticFrontiers.ts`.
+2. Added a checked-in snapshot:
+   - `redteam-generation-production-frontier-benchmark.md`
+3. Kept the report focused on:
+   - the `4 -> 5` threshold transition
+   - the exact generated versus selected family sets at the compression point
+4. Added regression coverage for the renderer and diffed the live renderer
+   output against the checked-in snapshot.
+
+### Results
+
+The new report now makes the production behavior legible in one screen:
+
+1. both plugins stay cheap and incomplete at `n = 4`
+2. both expand to six generated families and become complete at `n = 5`
+3. the compression sets reveal the semantic decisions:
+   - prompt extraction drops `format-conversion`
+   - SQL drops `union-extraction` because `schema-discovery` already preserves
+     the relevant exploit predicate
+
+### Reflection
+
+1. This is the production analogue of the earlier before/after artifacts:
+   - one benchmark for generator quality
+   - one benchmark for production frontier retention
+2. Keeping the snapshot generated from the executable renderer is worthwhile:
+   - the first pass immediately caught a harmless-but-real formatting drift
+   - now there is one source of truth
+3. Human-readable artifacts continue to be a useful forcing function:
+   - if a behavior is important
+   - it should be explainable in a short report, not only in JSON
+
+### New Hypotheses
+
+1. The next useful comparison is between:
+   - the older research before/after reports
+   - the new production frontier benchmark
+     to confirm the production handoff preserved the same semantic story.
+2. Once that link is explicit, we can more confidently choose a third plugin to
+   onboard.
+3. Another useful follow-up is a machine-readable bridge report that says:
+   - research frontier
+   - production frontier
+   - agreement / disagreement
