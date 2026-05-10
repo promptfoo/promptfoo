@@ -14086,3 +14086,54 @@ Translate the Pareto diagnostics into operator guidance:
    - known benchmark limitations
 3. Once packaged, we can ask whether the same report template generalizes cleanly
    to another plugin family.
+
+## Iteration 196 - 2026-05-10
+
+### Goal
+
+Package the last five iterations into one operator-facing artifact:
+
+> Can we give a future evaluator one report that contains the recommendation,
+> the frontier evidence, the regime evidence, and the limits of the benchmark?
+
+### Experiment
+
+1. Reused the existing Pareto and suite reducers rather than hand-copying their
+   output into a new static report.
+2. Added a generated operator report with four sections:
+   - executive summary
+   - frontier
+   - per-regime evidence
+   - known limitations
+3. Kept the report intentionally narrow:
+   - one plugin family
+   - one concrete current recommendation
+   - explicit caveats about synthetic susceptible targets
+
+### Results
+
+The new report now states the full current decision in one place:
+
+1. retain `portfolio`
+2. retire `legacy-generic`
+3. send `family-overfit` back for frontier expansion
+4. send `balanced-breadth` back for conversion work
+
+### Reflection
+
+1. This is a meaningful packaging improvement, not just prose cleanup:
+   a future reader no longer has to assemble the benchmark state from five
+   separate artifacts.
+2. The report still preserves the evidence trail beneath the recommendation,
+   which keeps it auditable.
+3. The known-limitations section matters. Without it, the report would look more
+   mature than the benchmark really is.
+
+### New Hypotheses
+
+1. The next useful test is whether this report template generalizes to another
+   plugin family without becoming awkward or overfit to `pii:social`.
+2. `pii:direct` may be the best next transfer target because it already has a
+   comparatively mature predicate vocabulary and direct leakage semantics.
+3. A successful transfer would be stronger evidence than adding yet another
+   refinement to the current `pii:social` report.
