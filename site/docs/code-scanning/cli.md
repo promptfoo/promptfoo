@@ -100,6 +100,10 @@ promptfoo code-scans run --sarif > promptfoo-code-scan.sarif
 
 Upload the SARIF file to GitHub to show findings in repository code scanning alerts and the Security tab.
 
+:::note
+`--json` and `--sarif` are separate machine-readable output modes and cannot be used together.
+:::
+
 ## Configuration File
 
 Create a `.promptfoo-code-scan.yaml` file in your repository root:
@@ -240,6 +244,14 @@ When using `--json`, the scan outputs a JSON object to stdout with the following
 ## SARIF Output
 
 When using `--sarif`, the scan writes [SARIF 2.1.0](https://docs.github.com/en/code-security/concepts/code-scanning/sarif-files) to stdout. Findings with file locations become SARIF results, severity is mapped for GitHub Code Scanning, and suggested fixes are included in the SARIF metadata when available.
+
+Promptfoo's SARIF contract is stable for downstream integrations:
+
+- `critical` and `high` findings map to `error`
+- `medium` findings map to `warning`
+- `low` and `none` findings map to `note`
+- rule IDs and fingerprints are generated consistently so GitHub can track alerts across runs
+- findings without file locations are retained in the SARIF metadata, but only findings with file locations become GitHub Code Scanning alerts
 
 Use GitHub's SARIF upload flow to publish the results:
 

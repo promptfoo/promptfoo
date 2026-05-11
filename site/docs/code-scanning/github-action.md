@@ -9,7 +9,7 @@ description: Automatically scan pull requests for LLM security vulnerabilities w
 
 Automatically scan pull requests for LLM security vulnerabilities with promptfoo's [code scanning GitHub action.](/code-scanning/github-action/)
 
-The scanner analyzes code changes for prompt injection, PII exposure, excessive agency, and other LLM-specific risks. After scanning, findings are posted with severity levels and suggested fixes as PR review comments.
+The scanner analyzes code changes for prompt injection, PII exposure, excessive agency, and other LLM-specific risks. After scanning, findings are posted with severity levels and suggested fixes as PR review comments. You can also publish the same findings to GitHub Code Scanning and the repository Security tab by enabling SARIF output.
 
 <img src="/img/docs/code-scanning/github.png" alt="Code Scan Action results on PR" style={{borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)'}} />
 <br/>
@@ -132,6 +132,8 @@ guidance: |
 ## GitHub Code Scanning Alerts
 
 The action can write SARIF 2.1.0 results that GitHub turns into code scanning alerts in the repository Security tab. Set `sarif-output-path`, then upload the file with GitHub's SARIF upload action.
+
+The action still posts PR review comments normally when SARIF output is enabled; the SARIF file is an additional artifact for GitHub Code Scanning.
 
 ```yaml
 name: Promptfoo Code Scan

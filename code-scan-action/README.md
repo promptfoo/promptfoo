@@ -8,7 +8,7 @@ Promptfoo Code Scanning uses AI agents to find LLM-related vulnerabilities in yo
 
 The scanner examines code changes for common LLM security risks including prompt injection, PII exposure, and excessive agency. Rather than just analyzing the surface-level diff, it traces data flows deep into your codebase to understand how user inputs reach LLM prompts, how outputs are used, and what capabilities your LLM has access to.
 
-After scanning, the action posts findings with severity levels and suggested fixes as PR review comments. It can also write SARIF 2.1.0 output for upload into GitHub Code Scanning alerts and the repository Security tab.
+After scanning, the action posts findings with severity levels and suggested fixes as PR review comments. It can also write SARIF 2.1.0 output for upload into GitHub Code Scanning alerts and the repository Security tab without changing the PR comment workflow.
 
 ## Quick Start
 
