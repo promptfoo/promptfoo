@@ -183,7 +183,7 @@ An attacker who can flood retrieval with irrelevant text can crowd out more impo
 
 ## Mitigating Controls for RAG
 
-Start by testing the complete retrieval path, not just the base model. A [Promptfoo red team eval](https://www.promptfoo.dev/docs/guides/evaluate-rag/) configured for your RAG environment can help expose the highest-risk failure modes.
+Start by testing the complete retrieval path, not just the base model. A [promptfoo red team eval](https://www.promptfoo.dev/docs/guides/evaluate-rag/) configured for your RAG environment can help expose the highest-risk failure modes.
 
 The most important controls are concrete:
 
