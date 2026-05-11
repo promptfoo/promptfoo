@@ -383,15 +383,15 @@ function getFetchCacheKey(
     return null;
   }
 
+  const repeatSuffix = repeatIndex != null && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
   return getScopedCacheKey(
     `fetch:v3:${hashFetchCacheKey({
       format,
       headers: getHeadersForCacheKey(url, options),
       method,
       options: optionsForCacheKey.identity,
-      ...(repeatIndex != null && repeatIndex > 0 ? { repeatIndex } : {}),
       url: url instanceof Request ? url.url : String(url),
-    })}`,
+    })}${repeatSuffix}`,
   );
 }
 

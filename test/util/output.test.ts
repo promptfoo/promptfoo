@@ -1,12 +1,14 @@
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
+import { XMLParser } from 'fast-xml-parser';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
+import { createJunitXml } from '../../src/util/junit';
 import { createOutputMetadata, writeMultipleOutputs, writeOutput } from '../../src/util/output';
 import { mockConsole, mockProcessEnv } from './utils';
 
@@ -389,6 +391,508 @@ describe('writeOutput', () => {
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes compact JUnit XML grouped by provider and prompt', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 1250,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Hello {{name}}', label: 'Hello prompt' },
+      response: { output: 'Hello Alice' },
+      vars: { name: 'Alice' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: { description: 'passing test' },
+      promptId: 'prompt-1',
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0.5,
+      namedScores: {},
+      latencyMs: 2500,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Hello {{name}}', label: 'Hello prompt' },
+      response: { output: 'SECRET MODEL OUTPUT' },
+      vars: { name: 'Bob' },
+      promptIdx: 0,
+      testIdx: 1,
+      testCase: { description: 'failing test' },
+      gradingResult: {
+        pass: false,
+        score: 0.5,
+        reason: 'Expected output to contain Bob',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Assertion passed',
+            assertion: { type: 'contains', value: 'Hello' },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Expected output to contain Bob',
+            assertion: { type: 'contains', value: 'Bob' },
+          },
+        ],
+      },
+      promptId: 'prompt-1',
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 500,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Hello {{name}}', label: 'Hello prompt' },
+      response: { output: '' },
+      error: 'provider request failed',
+      vars: { name: 'Carol' },
+      promptIdx: 0,
+      testIdx: 2,
+      testCase: {},
+      promptId: 'prompt-1',
+    });
+
+    await writeOutput('promptfoo.junit.xml', eval_, null);
+
+    const xml = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    expect(xml).toMatch(/^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+    expect(parsed.testsuites).toMatchObject({
+      '@_errors': '1',
+      '@_failures': '1',
+      '@_name': 'promptfoo',
+      '@_skipped': '0',
+      '@_tests': '3',
+      '@_time': '4.25',
+    });
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_errors': '1',
+      '@_failures': '1',
+      '@_name': '[echo] prompt 1',
+      '@_skipped': '0',
+      '@_tests': '3',
+      '@_time': '4.25',
+    });
+    expect(parsed.testsuites.testsuite.testcase).toEqual([
+      expect.objectContaining({
+        '@_classname': '[echo] prompt 1',
+        '@_name': 'test 1: passing test',
+        '@_time': '1.25',
+      }),
+      expect.objectContaining({
+        '@_classname': '[echo] prompt 1',
+        '@_name': 'test 2: failing test',
+        '@_time': '2.5',
+        failure: expect.objectContaining({
+          '#text': 'Score: 0.5\nReason: Assertion failed\nFailed assertions:\n- contains',
+          '@_message': 'Assertion failed',
+          '@_type': 'assertion',
+        }),
+      }),
+      expect.objectContaining({
+        '@_classname': '[echo] prompt 1',
+        '@_name': 'test 3',
+        '@_time': '0.5',
+        error: expect.objectContaining({
+          '#text': 'Reason: Evaluation error',
+          '@_message': 'Evaluation error',
+          '@_type': 'error',
+        }),
+      }),
+    ]);
+    expect(xml).not.toContain('SECRET MODEL OUTPUT');
+    expect(xml).not.toContain('Alice');
+    expect(xml).not.toContain('Carol');
+  });
+
+  it('keeps Promptfoo XML separate from JUnit XML', async () => {
+    const eval_ = new Eval({});
+
+    await writeOutput('output.xml', eval_, null);
+    await writeOutput('output.junit.xml', eval_, null);
+
+    const promptfooXml = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const junitXml = vi.mocked(fsPromises.writeFile).mock.calls[1][1] as string;
+    expect(promptfooXml).toContain('<promptfoo>');
+    expect(junitXml).toContain('<testsuites');
+  });
+
+  it('serializes legacy eval results into JUnit XML', async () => {
+    const legacyResult: EvaluateResult = {
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 0,
+      provider: { label: 'legacy provider' },
+      prompt: { raw: 'Legacy raw prompt', label: '' },
+      response: { output: '' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'legacy-prompt',
+    };
+    const eval_ = {
+      createdAt: 'not-a-date',
+      fetchResultsBatched: vi.fn(),
+      getResults: vi.fn().mockResolvedValue([legacyResult]),
+      persisted: false,
+      results: [],
+      useOldResults: () => true,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(eval_.getResults).toHaveBeenCalledTimes(1);
+    expect(eval_.fetchResultsBatched).not.toHaveBeenCalled();
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_name': '[legacy provider] prompt 1',
+    });
+    expect(parsed.testsuites.testsuite).not.toHaveProperty('@_timestamp');
+    expect(parsed.testsuites.testsuite.testcase.failure).toMatchObject({
+      '#text': 'Score: 0\nReason: Assertion failed',
+      '@_message': 'Assertion failed',
+    });
+  });
+
+  it('keeps legacy prompts without ids in separate suites', async () => {
+    const makeLegacyResult = (promptIdx: number, raw: string): EvaluateResult => ({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 0,
+      provider: { id: 'echo' },
+      prompt: { raw, label: '' },
+      response: { output: '' },
+      vars: {},
+      promptIdx,
+      testIdx: 0,
+      testCase: {},
+      promptId: '',
+    });
+    const eval_ = {
+      createdAt: '2026-05-03T15:00:00.000Z',
+      fetchResultsBatched: vi.fn(),
+      getResults: vi
+        .fn()
+        .mockResolvedValue([makeLegacyResult(0, 'Prompt A'), makeLegacyResult(1, 'Prompt B')]),
+      persisted: false,
+      results: [],
+      useOldResults: () => true,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite).toEqual([
+      expect.objectContaining({ '@_name': '[echo] prompt 1' }),
+      expect.objectContaining({ '@_name': '[echo] prompt 2' }),
+    ]);
+  });
+
+  it('does not use prompt text or labels as JUnit suite names', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 0,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Sensitive system prompt', label: 'Sensitive label' },
+      response: { output: '' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'sensitive-prompt',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_name': '[echo] prompt 1',
+    });
+    expect(xml).not.toContain('Sensitive system prompt');
+    expect(xml).not.toContain('Sensitive label');
+  });
+
+  it('serializes persisted batched eval results into JUnit XML', async () => {
+    const persistedResult: EvaluateResult = {
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: Number.NaN,
+      provider: { id: '', label: '' },
+      prompt: { raw: '', label: '' },
+      response: { output: '' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'grader unavailable',
+      },
+      promptId: 'persisted-prompt',
+    };
+    const eval_ = {
+      createdAt: '2026-05-03T15:00:00.000Z',
+      async *fetchResultsBatched() {
+        yield [persistedResult];
+      },
+      getResults: vi.fn(),
+      persisted: true,
+      results: [],
+      useOldResults: () => false,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(eval_.getResults).not.toHaveBeenCalled();
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_name': '[unknown provider] prompt 1',
+      '@_time': '0',
+      '@_timestamp': '2026-05-03T15:00:00.000Z',
+    });
+    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
+      '#text': 'Reason: Evaluation error',
+      '@_message': 'Evaluation error',
+    });
+  });
+
+  it('keeps JUnit failure messages compact when raw assertion reasons are long', async () => {
+    const longReason = 'x'.repeat(600);
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 0,
+      provider: { id: 'echo' },
+      prompt: { raw: 'Prompt', label: 'Prompt' },
+      response: { output: '' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: longReason,
+      },
+      promptId: 'long-message',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.failure['@_message']).toBe('Assertion failed');
+    expect(xml).not.toContain(longReason);
+  });
+
+  it('separates JUnit suites for providers that share an id but differ by label', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo', label: 'target-A' },
+      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
+      response: { output: '' },
+      vars: { name: 'Alice' },
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'prompt-shared',
+    });
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 200,
+      provider: { id: 'echo', label: 'target-B' },
+      prompt: { raw: 'Greet {{name}}', label: 'Greet prompt' },
+      response: { output: '' },
+      vars: { name: 'Alice' },
+      promptIdx: 1,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: { pass: false, score: 0, reason: 'B failed' },
+      promptId: 'prompt-shared',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite).toEqual([
+      expect.objectContaining({ '@_name': '[target-A] prompt 1', '@_tests': '1' }),
+      expect.objectContaining({
+        '@_name': '[target-B] prompt 1',
+        '@_tests': '1',
+        '@_failures': '1',
+      }),
+    ]);
+  });
+
+  it('keeps JUnit testcase classnames consistent within a suite when promptIdx varies', async () => {
+    const baseResult = (promptIdx: number, testIdx: number, promptId: string): EvaluateResult => ({
+      success: true,
+      failureReason: ResultFailureReason.NONE,
+      score: 1,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: `prompt ${promptId}`, label: '' },
+      response: { output: '' },
+      vars: {},
+      promptIdx,
+      testIdx,
+      testCase: {},
+      promptId,
+    });
+    const eval_ = {
+      createdAt: '2026-05-03T15:00:00.000Z',
+      fetchResultsBatched: vi.fn(),
+      // Same promptId across non-contiguous promptIdx values would previously
+      // produce mixed classnames inside a single suite.
+      getResults: vi
+        .fn()
+        .mockResolvedValue([baseResult(0, 0, 'shared'), baseResult(2, 1, 'shared')]),
+      persisted: false,
+      results: [],
+      useOldResults: () => true,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite).toMatchObject({
+      '@_name': '[echo] prompt 1',
+      '@_tests': '2',
+    });
+    for (const testcase of parsed.testsuites.testsuite.testcase) {
+      expect(testcase['@_classname']).toBe('[echo] prompt 1');
+    }
+  });
+
+  it('omits raw JUnit error text when it matches the inline reason', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: 'p', label: '' },
+      response: { output: '' },
+      error: 'request failed: 500',
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'collapsed-error',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
+      '#text': 'Reason: Evaluation error',
+      '@_message': 'Evaluation error',
+    });
+    expect(xml).not.toContain('request failed: 500');
+  });
+
+  it('omits multiline raw JUnit error payloads', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ERROR,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: 'p', label: '' },
+      response: { output: '' },
+      error: 'API error: 401\n{"code":"invalid_api_key"}',
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      promptId: 'multiline-error',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.error).toMatchObject({
+      '#text': 'Reason: Evaluation error',
+      '@_message': 'Evaluation error',
+    });
+    expect(xml).not.toContain('invalid_api_key');
+  });
+
+  it('omits raw model outputs from JUnit assertion details', async () => {
+    const eval_ = new Eval({});
+    await eval_.addResult({
+      success: false,
+      failureReason: ResultFailureReason.ASSERT,
+      score: 0,
+      namedScores: {},
+      latencyMs: 100,
+      provider: { id: 'echo' },
+      prompt: { raw: 'p', label: '' },
+      response: { output: 'TOP_SECRET_OUTPUT_42' },
+      vars: {},
+      promptIdx: 0,
+      testIdx: 0,
+      testCase: {},
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Expected output "TOP_SECRET_OUTPUT_42" to equal "safe"',
+        componentResults: [
+          {
+            pass: false,
+            score: 0,
+            reason: 'Expected output "TOP_SECRET_OUTPUT_42" to equal "safe"',
+            assertion: { type: 'equals', value: 'safe' },
+          },
+        ],
+      },
+      promptId: 'output-leak',
+    });
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite.testcase.failure).toMatchObject({
+      '#text': 'Score: 0\nReason: Assertion failed\nFailed assertions:\n- equals',
+      '@_message': 'Assertion failed',
+    });
+    expect(xml).not.toContain('TOP_SECRET_OUTPUT_42');
   });
 
   it('does not sanitize config for CSV output', async () => {

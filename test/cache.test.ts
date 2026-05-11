@@ -1253,6 +1253,21 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
     });
 
+    it('should append repeat suffixes to repeated fetch cache keys', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 1 });
+      await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 2 });
+
+      const cacheKeys = vi.mocked(getCache().set).mock.calls.map(([cacheKey]) => String(cacheKey));
+      expect(cacheKeys).toEqual([
+        expect.stringMatching(/:repeat1$/),
+        expect.stringMatching(/:repeat2$/),
+      ]);
+    });
+
     it('should return cached response for same repeatIndex', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
