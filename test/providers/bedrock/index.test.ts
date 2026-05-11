@@ -2369,6 +2369,25 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
       });
     });
 
+    it('should extract seeded DeepSeek thinking that closes without a repeated opening tag', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            text: 'Let me think about this problem...</think>\nThe answer is 42.',
+          },
+        ],
+      };
+
+      expect(modelHandler.output({ showThinking: true }, mockResponse)).toEqual({
+        output: 'The answer is 42.',
+        reasoning: [{ type: 'think', content: 'Let me think about this problem...' }],
+      });
+      expect(modelHandler.output({ showThinking: false }, mockResponse)).toEqual({
+        output: 'The answer is 42.',
+        reasoning: undefined,
+      });
+    });
+
     it('should extract multiple thinking blocks from DeepSeek responses', async () => {
       const mockResponse = {
         choices: [

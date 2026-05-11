@@ -633,11 +633,32 @@ export function parseValue(value: string | number, defaultValue: any) {
  * Returns output with think blocks removed and reasoning content separately.
  */
 function parseThinkBlocks(content: string, showThinking: boolean): BedrockModelOutputResult {
-  const thinkingContents = [...content.matchAll(/<think>([\s\S]*?)<\/think>/g)]
-    .map((match) => match[1].trim())
-    .filter(Boolean);
+  let output = content;
+  const thinkingContents: string[] = [];
+
+  // DeepSeek prompts are seeded with an opening <think> tag, so some responses
+  // continue directly with "reasoning</think>final" instead of repeating the
+  // opening tag in the returned text.
+  const firstCloseTagIndex = output.indexOf('</think>');
+  const firstOpenTagIndex = output.indexOf('<think>');
+  if (
+    firstCloseTagIndex !== -1 &&
+    (firstOpenTagIndex === -1 || firstCloseTagIndex < firstOpenTagIndex)
+  ) {
+    const seededThinking = output.slice(0, firstCloseTagIndex).trim();
+    if (seededThinking) {
+      thinkingContents.push(seededThinking);
+    }
+    output = output.slice(firstCloseTagIndex + '</think>'.length);
+  }
+
+  thinkingContents.push(
+    ...[...output.matchAll(/<think>([\s\S]*?)<\/think>/g)]
+      .map((match) => match[1].trim())
+      .filter(Boolean),
+  );
   if (thinkingContents.length > 0) {
-    const output = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    output = output.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
     return {
       output,
       reasoning: showThinking
@@ -648,7 +669,7 @@ function parseThinkBlocks(content: string, showThinking: boolean): BedrockModelO
         : undefined,
     };
   }
-  return { output: content };
+  return { output };
 }
 
 function isBedrockModelOutputResult(modelOutput: any): modelOutput is BedrockModelOutputResult {
