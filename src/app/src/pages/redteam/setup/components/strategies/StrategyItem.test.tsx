@@ -156,6 +156,19 @@ describe('StrategyItem', () => {
         'false',
       );
     });
+
+    it('exposes disabled state on the card selection target', () => {
+      renderStrategyItem({
+        isDisabled: true,
+        isRemoteGenerationDisabled: true,
+        strategy: baseStrategy,
+        isSelected: false,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+      });
+
+      expect(screen.getByRole('button', { name: 'Test Strategy' })).toBeDisabled();
+    });
   });
 
   describe('Labels and Pills', () => {

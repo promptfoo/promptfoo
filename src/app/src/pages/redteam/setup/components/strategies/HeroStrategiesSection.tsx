@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useCallback } from 'react';
+import { useCallback } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
@@ -95,25 +95,9 @@ function HeroStrategyCard({
     onToggle(strategy.id);
   }, [strategy.id, onToggle, isDisabled]);
 
-  const handleCardKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.target !== event.currentTarget || isDisabled) {
-        return;
-      }
-
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onToggle(strategy.id);
-      }
-    },
-    [isDisabled, onToggle, strategy.id],
-  );
-
   const cardClassName = cn(
     'relative flex select-none flex-col gap-3 p-4 transition-all',
     isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
-    !isDisabled &&
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
     !isDisabled && 'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
     !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
     isSelected &&
@@ -131,44 +115,47 @@ function HeroStrategyCard({
   );
 
   return (
-    <Card
-      role="button"
-      tabIndex={isDisabled ? -1 : 0}
-      aria-label={strategy.name}
-      aria-pressed={isSelected}
-      onClick={handleToggle}
-      onKeyDown={handleCardKeyDown}
-      className={cardClassName}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <span className="text-base font-semibold">{strategy.name}</span>
-          <p className="mt-0.5 text-sm font-medium text-muted-foreground">{strategy.subtitle}</p>
+    <Card className={cardClassName}>
+      <button
+        type="button"
+        aria-label={strategy.name}
+        aria-pressed={isSelected}
+        disabled={isDisabled}
+        onClick={handleToggle}
+        className="absolute inset-0 rounded-[inherit] focus-visible:outline-none"
+      />
+
+      <div className="pointer-events-none relative z-10 flex flex-1 flex-col gap-3">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <span className="text-base font-semibold">{strategy.name}</span>
+            <p className="mt-0.5 text-sm font-medium text-muted-foreground">{strategy.subtitle}</p>
+          </div>
+          <Checkbox
+            checked={isSelected}
+            disabled={isDisabled}
+            onCheckedChange={handleToggle}
+            onClick={(e) => e.stopPropagation()}
+            aria-hidden="true"
+            tabIndex={-1}
+            className="mt-0.5"
+          />
         </div>
-        <Checkbox
-          checked={isSelected}
-          disabled={isDisabled}
-          onCheckedChange={handleToggle}
-          onClick={(e) => e.stopPropagation()}
-          aria-hidden="true"
-          tabIndex={-1}
-          className="mt-0.5"
-        />
+
+        {/* Description */}
+        <p className="text-sm text-muted-foreground">{strategy.description}</p>
+
+        {/* Remote generation warning */}
+        {isDisabled && isRemoteGenerationDisabled && (
+          <div className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+            Requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION to enable.
+          </div>
+        )}
       </div>
 
-      {/* Description */}
-      <p className="text-sm text-muted-foreground">{strategy.description}</p>
-
-      {/* Remote generation warning */}
-      {isDisabled && isRemoteGenerationDisabled && (
-        <div className="rounded border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
-          Requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION to enable.
-        </div>
-      )}
-
       {/* Actions */}
-      <div className="mt-auto flex items-center gap-2">
+      <div className="relative z-10 mt-auto flex items-center gap-2">
         <TestCaseGenerateButton
           onClick={handleTestCaseGeneration}
           disabled={isDisabled || isGenerating || requiresConfig}
