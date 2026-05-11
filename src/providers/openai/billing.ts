@@ -1,10 +1,4 @@
-import {
-  OPENAI_CHAT_MODELS,
-  OPENAI_COMPLETION_MODELS,
-  OPENAI_DEEP_RESEARCH_MODELS,
-  OPENAI_REALTIME_MODELS,
-  OPENAI_RESPONSES_ONLY_MODELS,
-} from './util';
+import { OPENAI_BILLING_MODELS } from './util';
 
 import type { ProviderConfig } from '../shared';
 
@@ -348,13 +342,7 @@ const EMBEDDING_RATES = buildRateTable<OpenAITextRates>([
   },
 ]);
 
-const ALL_TEXT_MODELS = [
-  ...OPENAI_CHAT_MODELS,
-  ...OPENAI_COMPLETION_MODELS,
-  ...OPENAI_REALTIME_MODELS,
-  ...OPENAI_RESPONSES_ONLY_MODELS,
-  ...OPENAI_DEEP_RESEARCH_MODELS,
-];
+const ALL_TEXT_MODELS = OPENAI_BILLING_MODELS;
 
 const TEXT_MODELS_BY_ID = new Map(ALL_TEXT_MODELS.map((model) => [model.id, model]));
 

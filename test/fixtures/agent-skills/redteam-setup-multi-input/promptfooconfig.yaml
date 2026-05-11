@@ -37,4 +37,4 @@ redteam:
     - id: rbac
       numTests: 1
   strategies:
-    - basic
+    - jailbreak:meta

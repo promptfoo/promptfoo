@@ -67,7 +67,12 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-5">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Intent file format help"
+            className="size-5"
+          >
             <Info className="size-4" />
           </Button>
         </TooltipTrigger>
@@ -412,7 +417,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       <div className="mb-6 w-full">
         <TestCaseGenerationProvider redTeamConfig={config}>
           <Tabs value={activeTab} onValueChange={handleTabChange}>
-            <TabsList>
+            <TabsList className="!h-auto w-full max-w-full flex-wrap justify-start gap-1 overflow-visible sm:!h-10 sm:w-auto sm:flex-nowrap sm:gap-0">
               <TabsTrigger value="plugins">Plugins ({selectedPlugins.size})</TabsTrigger>
               <TabsTrigger value="intents">Custom Intents ({customIntentsCount})</TabsTrigger>
               <TabsTrigger value="policies">Custom Policies ({customPoliciesCount})</TabsTrigger>

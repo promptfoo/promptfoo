@@ -35,6 +35,25 @@ describe('AdvancedOptionsDialog', () => {
     expect(screen.getByRole('switch', { name: /Strict Mode/ })).not.toBeChecked();
   });
 
+  it('keeps actions visible while advanced options scroll independently', () => {
+    render(
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={mockOnClose}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={mockOnOptionsChange}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen.getByTestId('advanced-options-dialog-scroll-body');
+    const footer = screen.getByTestId('advanced-options-dialog-footer');
+
+    expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
+  });
+
   it('initializes with provided scanOptions', () => {
     const initialOptions = {
       blacklist: ['test-pattern'],

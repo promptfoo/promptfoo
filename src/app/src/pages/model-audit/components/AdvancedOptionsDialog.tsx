@@ -114,13 +114,16 @@ export default function AdvancedOptionsDialog({
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Advanced Scan Options</DialogTitle>
           <DialogDescription>Configure additional options for your security scan</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div
+          data-testid="advanced-options-dialog-scroll-body"
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto py-4"
+        >
           {/* Blacklist Patterns */}
           <div className="space-y-3">
             <div>
@@ -302,7 +305,7 @@ export default function AdvancedOptionsDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter data-testid="advanced-options-dialog-footer" className="shrink-0">
           <Button onClick={onClose} variant="outline">
             Cancel
           </Button>
