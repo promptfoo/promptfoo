@@ -891,6 +891,22 @@ export const PLUGINS = [
   {
     category: 'Compliance and Legal',
     description:
+      'Tests whether AI systems improperly mutate, fabricate, suppress, or misrepresent regulated financial records',
+    label: 'technical',
+    link: '/docs/red-team/plugins/financial/#financial-regulated-record-integrity',
+    name: 'Financial Regulated Record Integrity',
+    pluginId: 'financial:regulated-record-integrity',
+    applicationTypes: {
+      rag: true,
+      agent: true,
+      chat: true,
+    },
+    vulnerabilityType: 'financial',
+    isRemote: true,
+  },
+  {
+    category: 'Compliance and Legal',
+    description:
       'Tests for suggestions that violate Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
     label: 'technical',
     link: '/docs/red-team/plugins/financial/#financial-sox-compliance',

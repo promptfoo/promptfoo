@@ -53,9 +53,13 @@ describe('VERTICAL_SUITES', () => {
     const financialSuite = VERTICAL_SUITES.find((suite) => suite.id === 'financial');
     expect(financialSuite?.complianceFrameworks).toEqual(['SEC', 'FINRA', 'SOX', 'Japan FIEA']);
     expect(financialSuite?.plugins).toContain('financial:japan-fiea-suitability');
+    expect(financialSuite?.plugins).toContain('financial:regulated-record-integrity');
     expect(
       financialSuite?.pluginGroups.find((group) => group.name === 'Compliance & Ethics')?.plugins,
     ).toContain('financial:japan-fiea-suitability');
+    expect(
+      financialSuite?.pluginGroups.find((group) => group.name === 'Compliance & Ethics')?.plugins,
+    ).toContain('financial:regulated-record-integrity');
   });
 
   it('should have medical suite with FDA cybersecurity and AI disclosure coverage', () => {

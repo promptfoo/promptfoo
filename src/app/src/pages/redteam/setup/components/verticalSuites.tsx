@@ -43,7 +43,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
     description:
       'Trading systems, risk assessment, credit scoring, and customer advisory platforms',
     longDescription:
-      'Comprehensive testing for financial services AI including trading systems, robo-advisors, risk assessment, credit scoring, and customer service. Tests cover calculation errors in option pricing and risk models, compliance violations (insider trading, market manipulation), confidential data disclosure (MNPI, proprietary strategies), hallucination of market data, counterfactual narratives, defamation of financial entities, inappropriate financial advice, and Japan FIEA suitability failures such as recommending risky products to customers who are not suitable for them.',
+      'Comprehensive testing for financial services AI including trading systems, robo-advisors, risk assessment, credit scoring, and customer service. Tests cover calculation errors in option pricing and risk models, compliance violations (insider trading, market manipulation), confidential data disclosure (MNPI, proprietary strategies), hallucination of market data, counterfactual narratives, defamation of financial entities, inappropriate financial advice, regulated record integrity failures across KYC/AML, complaints, credit, audit, and approval workflows, and Japan FIEA suitability failures such as recommending risky products to customers who are not suitable for them.',
     color: 'primary',
     complianceFrameworks: ['SEC', 'FINRA', 'SOX', 'Japan FIEA'],
     requiresEnterprise: true,
@@ -58,6 +58,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
       'financial:impartiality',
       'financial:japan-fiea-suitability',
       'financial:misconduct',
+      'financial:regulated-record-integrity',
       'financial:sycophancy',
     ] as Plugin[],
     pluginGroups: [
@@ -80,6 +81,7 @@ export const VERTICAL_SUITES: VerticalSuite[] = [
           'financial:misconduct',
           'financial:impartiality',
           'financial:japan-fiea-suitability',
+          'financial:regulated-record-integrity',
         ] as Plugin[],
       },
       {

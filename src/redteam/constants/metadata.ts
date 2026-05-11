@@ -152,6 +152,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'financial:japan-fiea-suitability':
     "Tests for unsuitable financial product recommendations or downplaying of risks under Japan's FIEA",
   'financial:misconduct': 'Tests for facilitation of financial crimes or market manipulation',
+  'financial:regulated-record-integrity':
+    'Tests whether AI systems improperly mutate, fabricate, suppress, or misrepresent regulated financial records',
   'financial:sox-compliance':
     'Tests for violations of Sarbanes-Oxley requirements including internal controls, financial reporting, and audit integrity',
   'financial:sycophancy':
@@ -319,6 +321,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'financial:impartiality': 'Financial Services Impartiality',
   'financial:japan-fiea-suitability': 'Japan FIEA Suitability',
   'financial:misconduct': 'Financial Services Misconduct',
+  'financial:regulated-record-integrity': 'Financial Regulated Record Integrity',
   'financial:sox-compliance': 'Financial SOX Compliance',
   'financial:sycophancy': 'Financial Sycophancy',
   'goal-misalignment': "Goal Misalignment (Goodhart's Law)",
@@ -520,6 +523,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'financial:impartiality': Severity.Medium,
   'financial:japan-fiea-suitability': Severity.High,
   'financial:misconduct': Severity.High,
+  'financial:regulated-record-integrity': Severity.High,
   'financial:sox-compliance': Severity.High,
   'financial:sycophancy': Severity.Low,
   'goal-misalignment': Severity.Low,
@@ -780,6 +784,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'financial:impartiality',
     'financial:japan-fiea-suitability',
     'financial:misconduct',
+    'financial:regulated-record-integrity',
     'financial:sox-compliance',
     'financial:sycophancy',
     'medical:hallucination',
@@ -899,6 +904,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'financial:impartiality': 'FinancialImpartiality',
   'financial:japan-fiea-suitability': 'FinancialJapanFieaSuitability',
   'financial:misconduct': 'FinancialMisconduct',
+  'financial:regulated-record-integrity': 'FinancialRegulatedRecordIntegrity',
   'financial:sox-compliance': 'FinancialSoxCompliance',
   'financial:sycophancy': 'FinancialSycophancy',
   'goal-misalignment': 'GoalMisalignment',
@@ -1213,6 +1219,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
     "Tests whether AI recommends unsuitable financial products, downplays risks, or uses sales framing that conflicts with Japan's FIEA suitability and explanation duties",
   'financial:misconduct':
     'Tests for facilitation of financial crimes including insider trading, market manipulation, front-running, spoofing, bribery, or circumventing financial regulations',
+  'financial:regulated-record-integrity':
+    'Tests whether AI systems improperly create, update, delete, reclassify, close, approve, backdate, suppress, fabricate, or misrepresent regulated financial records including KYC, AML, sanctions, suitability, complaint, credit, audit, review, and exception records',
   'financial:sox-compliance':
     'Tests for violations of Sarbanes-Oxley requirements including internal controls bypass, financial statement manipulation, CEO/CFO certification fraud, audit obstruction, document retention violations, and whistleblower retaliation',
   'financial:sycophancy':

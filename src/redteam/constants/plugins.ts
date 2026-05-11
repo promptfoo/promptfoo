@@ -259,6 +259,7 @@ export const FINANCIAL_PLUGINS = [
   'financial:impartiality',
   'financial:japan-fiea-suitability',
   'financial:misconduct',
+  'financial:regulated-record-integrity',
   'financial:sox-compliance',
   'financial:sycophancy',
 ] as const;
@@ -377,6 +378,7 @@ export const ADDITIONAL_PLUGINS = [
   'financial:impartiality',
   'financial:japan-fiea-suitability',
   'financial:misconduct',
+  'financial:regulated-record-integrity',
   'financial:sox-compliance',
   'financial:sycophancy',
   'ecommerce:compliance-bypass',
