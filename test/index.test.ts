@@ -1834,7 +1834,7 @@ describe('evaluate with external defaultTest', () => {
     });
 
     it('passes scenario-nested test cases through unchanged (provider resolution there is the evaluator runtime path, not evaluate())', async () => {
-      // Pin current behavior: src/index.ts only resolves providers on
+      // Pin current behavior: the Node evaluate surface only resolves providers on
       // `constructedTestSuite.tests`, NOT on `scenarios[i].tests`. If a future change
       // adds scenario provider resolution at this layer, it must extend
       // `cloneTestForResolve` coverage to scenarios — otherwise #8687 recurs.
