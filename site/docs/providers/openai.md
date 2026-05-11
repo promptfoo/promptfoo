@@ -677,9 +677,15 @@ providers:
   - id: openai:chat:my-custom-reasoning-model
     config:
       isReasoningModel: true
-      reasoning:
-        effort: 'medium' # Can be "low", "medium", or "high"
+      reasoning_effort: medium
       max_completion_tokens: 25000 # Can also be set via OPENAI_MAX_COMPLETION_TOKENS env var
+
+  - id: openai:responses:my-custom-reasoning-model
+    config:
+      isReasoningModel: true
+      reasoning:
+        effort: medium
+      max_output_tokens: 25000
 ```
 
 Set `isReasoningModel: false` for OpenAI-compatible deployments whose names look like o-series or GPT-5 models but still accept standard `temperature` and token parameters.
