@@ -500,6 +500,7 @@ interface Cache {
 ### `fetchWithCache(url, options?, timeout?, format?, bustOrOptions?, maxRetries?)`
 
 Fetch with caching enabled.
+The fifth argument accepts either the legacy boolean cache-bust flag or an options object.
 
 ```typescript
 export async function fetchWithCache<T>(

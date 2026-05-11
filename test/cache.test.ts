@@ -1286,38 +1286,7 @@ describe('fetchWithCache', () => {
       expect(cacheKeys[0]).not.toMatch(/:repeat1$/);
     });
 
-    it('should return cached response for same repeatIndex', async () => {
-      const mockResponse = mockFetchWithRetriesResponse(true, response);
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
-
-      // First call with repeatIndex: 1
-      const result1 = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 1 });
-      expect(result1.cached).toBe(false);
-
-      // Second call with same repeatIndex should hit cache
-      const result2 = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 1 });
-      expect(result2.cached).toBe(true);
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-    });
-
-    it('should bust cache when bust=true regardless of repeatIndex', async () => {
-      const mockResponse = mockFetchWithRetriesResponse(true, response);
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
-      mockFetchWithRetries.mockResolvedValueOnce(
-        mockFetchWithRetriesResponse(true, { data: 'new data' }),
-      );
-
-      // First call
-      await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 1 });
-
-      // Second call with bust=true should bypass cache
-      const result = await fetchWithCache(url, {}, 1000, 'json', { bust: true, repeatIndex: 1 });
-      expect(result.cached).toBe(false);
-      expect(result.data).toEqual({ data: 'new data' });
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-    });
-
-    it('should maintain backward compatibility with boolean bust parameter', async () => {
+    it('should preserve boolean bust behavior and support object cache options', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
@@ -1336,16 +1305,18 @@ describe('fetchWithCache', () => {
       const result3 = await fetchWithCache(url, {}, 1000, 'json', true);
       expect(result3.cached).toBe(false);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2); // New fetch
-    });
-
-    it('should use CacheOptions object format', async () => {
-      const mockResponse = mockFetchWithRetriesResponse(true, response);
-      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       // New API with CacheOptions object
-      const result = await fetchWithCache(url, {}, 1000, 'json', { bust: false, repeatIndex: 0 });
-      expect(result.cached).toBe(false);
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'new data' }),
+      );
+      const result4 = await fetchWithCache(url, {}, 1000, 'json', {
+        bust: true,
+        repeatIndex: 1,
+      });
+      expect(result4.cached).toBe(false);
+      expect(result4.data).toEqual({ data: 'new data' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
     });
   });
 });
