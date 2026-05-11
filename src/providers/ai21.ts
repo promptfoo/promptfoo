@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { calculateCost, getCacheOptions, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -197,8 +197,6 @@ export class AI21ChatCompletionProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
-        'json',
-        getCacheOptions(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {

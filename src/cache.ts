@@ -163,7 +163,7 @@ function currentNamespaceIncludesRepeatIndex(repeatIndex: number) {
   );
 }
 
-export function shouldApplyRepeatCacheSuffix(repeatIndex?: number) {
+function shouldApplyRepeatCacheSuffix(repeatIndex?: number) {
   return (
     repeatIndex != null && repeatIndex > 0 && !currentNamespaceIncludesRepeatIndex(repeatIndex)
   );

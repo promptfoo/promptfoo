@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getCacheOptions, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -243,8 +243,6 @@ export class HyperbolicImageProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
-        'json',
-        getCacheOptions(context),
       ));
 
       if (status < 200 || status >= 300) {

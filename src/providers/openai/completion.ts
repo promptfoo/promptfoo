@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getCacheOptions, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
@@ -86,7 +86,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        getCacheOptions(context),
+        context?.bustCache ?? context?.debug,
         this.config.maxRetries,
       )) as unknown as any);
     } catch (err) {

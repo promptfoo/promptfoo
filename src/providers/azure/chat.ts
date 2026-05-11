@@ -19,7 +19,7 @@ import { isClaudeOpus47Model } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { getCacheOptions, getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -356,7 +356,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        getCacheOptions(context),
+        context?.bustCache ?? context?.debug,
       );
 
       cached = isCached;

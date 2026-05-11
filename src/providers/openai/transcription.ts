@@ -3,7 +3,7 @@ import path from 'path';
 
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { getCacheOptions, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TRANSCRIPTION_MODELS } from './util';
 
@@ -146,7 +146,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           },
           getRequestTimeoutMs(),
           'json',
-          getCacheOptions(context),
+          context?.bustCache ?? context?.debug,
         ));
 
         if (status < 200 || status >= 300) {

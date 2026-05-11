@@ -44,7 +44,6 @@ import {
   type TransformResponseContext,
 } from './httpTransforms';
 import {
-  getCacheOptions,
   getRequestTimeoutMs,
   type ToolFormat,
   transformToolChoice,
@@ -2451,7 +2450,7 @@ export class HttpProvider implements ApiProvider {
         fetchOptions,
         getRequestTimeoutMs(),
         'text',
-        multipartBody ? true : getCacheOptions(context),
+        multipartBody ? true : (context?.bustCache ?? context?.debug),
         this.config.maxRetries,
       ));
     } catch (err) {
@@ -2682,7 +2681,7 @@ export class HttpProvider implements ApiProvider {
         fetchOptions,
         getRequestTimeoutMs(),
         'text',
-        getCacheOptions(context),
+        context?.bustCache ?? context?.debug,
         this.config.maxRetries,
       ));
     } catch (err) {

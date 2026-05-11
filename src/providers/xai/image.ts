@@ -7,7 +7,7 @@ import {
   formatOutput,
   OpenAiImageProvider,
 } from '../openai/image';
-import { getCacheOptions, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { getXAICostInUsd } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -164,17 +164,12 @@ export class XAIImageProvider extends OpenAiImageProvider {
     let cached = false;
     let latencyMs: number | undefined;
     try {
-      const imageApiArgs: Parameters<typeof callOpenAiImageApi> = [
+      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
         getRequestTimeoutMs(),
-      ];
-      const cacheOptions = getCacheOptions(context);
-      if (cacheOptions) {
-        imageApiArgs.push(cacheOptions);
-      }
-      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(...imageApiArgs));
+      ));
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,

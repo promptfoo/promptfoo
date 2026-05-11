@@ -90,8 +90,6 @@ describe('LlamaProvider', () => {
           }),
         },
         getRequestTimeoutMs(),
-        'json',
-        undefined,
       );
     });
     it('should return the correct response on success', async () => {

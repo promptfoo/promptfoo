@@ -3,7 +3,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
-import { getCacheOptions, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
   getGoogleClient,
@@ -89,7 +89,7 @@ export class GoogleImageProvider implements ApiProvider {
     return await resolveProjectId(this.config, this.env);
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!prompt) {
       return {
         error: 'Prompt is required for image generation',
@@ -112,7 +112,7 @@ export class GoogleImageProvider implements ApiProvider {
     // Otherwise, try Google AI Studio with API key
     const apiKey = this.getApiKey();
     if (apiKey) {
-      return this.callGeminiApi(prompt, context);
+      return this.callGeminiApi(prompt);
     }
 
     // If neither is available, provide helpful error
@@ -195,10 +195,7 @@ export class GoogleImageProvider implements ApiProvider {
     }
   }
 
-  private async callGeminiApi(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  private async callGeminiApi(prompt: string): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
@@ -251,7 +248,6 @@ export class GoogleImageProvider implements ApiProvider {
             } as RequestInit,
             getRequestTimeoutMs(),
             'json',
-            getCacheOptions(context),
           ),
         'Google AI Studio API call',
       );

@@ -11,7 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getCache, isCacheEnabled, shouldApplyRepeatCacheSuffix } from '../cache';
+import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { safeResolve } from '../util/pathUtils';
 
@@ -120,8 +120,6 @@ export interface AgenticCacheOptions {
   mcp?: unknown;
   /** When true, enables caching even when MCP is configured */
   cacheMcp?: boolean;
-  /** Repeat index for per-repeat cache isolation */
-  repeatIndex?: number;
 }
 
 /**
@@ -149,15 +147,10 @@ export interface CacheCheckResult {
  * @param data - Data to hash for the cache key
  * @returns Prefixed SHA-256 hash cache key
  */
-export function generateCacheKey(
-  prefix: string,
-  data: Record<string, unknown>,
-  repeatIndex?: number,
-): string {
+export function generateCacheKey(prefix: string, data: Record<string, unknown>): string {
   const stringified = JSON.stringify(data);
   const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-  const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
-  return `${prefix}:${hash}${repeatSuffix}`;
+  return `${prefix}:${hash}`;
 }
 
 /**
@@ -217,15 +210,11 @@ export async function initializeAgenticCache(
   }
 
   const cache = await getCache();
-  const cacheKey = generateCacheKey(
-    options.cacheKeyPrefix,
-    {
-      ...cacheKeyData,
-      workingDirFingerprint,
-      ...(options.mcp ? { mcp: options.mcp } : {}),
-    },
-    options.repeatIndex,
-  );
+  const cacheKey = generateCacheKey(options.cacheKeyPrefix, {
+    ...cacheKeyData,
+    workingDirFingerprint,
+    ...(options.mcp ? { mcp: options.mcp } : {}),
+  });
 
   return {
     shouldCache: true,

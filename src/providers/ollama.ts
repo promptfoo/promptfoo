@@ -3,7 +3,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { getCacheOptions, getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
+import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
 
 import type {
   ApiProvider,
@@ -184,13 +184,10 @@ export class OllamaCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
   }
 
-  private async callApiInternal(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
     const params = {
       model: this.modelName,
       prompt,
@@ -233,7 +230,6 @@ export class OllamaCompletionProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'text',
-        getCacheOptions(context),
       );
     } catch (err) {
       return {
@@ -391,7 +387,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'text',
-        getCacheOptions(context),
+        context?.bustCache ?? context?.debug,
       );
     } catch (err) {
       return {

@@ -3,7 +3,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { getCacheOptions, getRequestTimeoutMs } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type {
   ApiProvider,
@@ -213,21 +213,14 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       return {};
     };
 
-    return withGenAISpan(
-      spanContext,
-      () => this.callInferenceApi(prompt, context),
-      resultExtractor,
-    );
+    return withGenAISpan(spanContext, () => this.callInferenceApi(prompt), resultExtractor);
   }
 
   async cleanup(): Promise<void> {
     await this.chatProvider?.cleanup();
   }
 
-  private async callInferenceApi(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  private async callInferenceApi(prompt: string): Promise<ProviderResponse> {
     const url = this.config.apiEndpoint
       ? this.config.apiEndpoint
       : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
@@ -262,8 +255,6 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
           body: JSON.stringify(params),
         },
         getRequestTimeoutMs(),
-        'json',
-        getCacheOptions(context),
       );
 
       logger.debug('Huggingface Inference API response', { data: response.data });

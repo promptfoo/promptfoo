@@ -22,7 +22,6 @@ import {
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import {
-  getCacheOptions,
   getRequestTimeoutMs,
   parseChatPrompt,
   transformToolChoice,
@@ -509,7 +508,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         },
         getRequestTimeoutMs(),
         'json',
-        getCacheOptions(context),
+        context?.bustCache ?? context?.debug,
         this.config.maxRetries,
       ));
 

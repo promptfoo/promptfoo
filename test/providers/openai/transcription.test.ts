@@ -617,7 +617,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        { bust: true, repeatIndex: undefined },
+        true,
       );
     });
 
@@ -639,7 +639,7 @@ describe('OpenAiTranscriptionProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        { bust: true, repeatIndex: undefined },
+        true,
       );
     });
   });

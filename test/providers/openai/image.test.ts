@@ -62,8 +62,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"prompt":"Generate a cat"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
 
       expect(result).toEqual({
@@ -345,8 +343,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"response_format":"b64_json"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -419,8 +415,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"size":"1024x1024"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
   });
@@ -461,8 +455,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"quality":"hd"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -471,8 +463,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"style":"vivid"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -494,8 +484,6 @@ describe('OpenAiImageProvider', () => {
           }),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -519,8 +507,6 @@ describe('OpenAiImageProvider', () => {
           }),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -546,8 +532,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"n":2'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -568,8 +552,6 @@ describe('OpenAiImageProvider', () => {
         `${customApiUrl}/images/generations`,
         expect.any(Object),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
   });
@@ -968,8 +950,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"quality":"high"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -986,8 +966,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"background":"transparent"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1018,8 +996,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"output_format":"jpeg"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
       expect(result).toMatchObject({
         output: 'data:image/jpeg;base64,base64EncodedImageData',
@@ -1040,8 +1016,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"output_compression":80'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1058,8 +1032,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"moderation":"low"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1087,8 +1059,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"size":"auto"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1170,8 +1140,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"quality":"high"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1188,8 +1156,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"background":"transparent"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1217,8 +1183,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"size":"auto"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1308,8 +1272,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"quality":"high"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1326,8 +1288,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"background":"transparent"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1344,8 +1304,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"output_format":"jpeg"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
       expect(result).toMatchObject({
         output: 'data:image/jpeg;base64,base64EncodedImageData',
@@ -1366,8 +1324,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"output_compression":80'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1384,8 +1340,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"moderation":"low"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 
@@ -1413,8 +1367,6 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"size":"auto"'),
         }),
         expect.any(Number),
-        'json',
-        undefined,
       );
     });
 

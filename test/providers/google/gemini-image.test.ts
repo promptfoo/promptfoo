@@ -110,7 +110,7 @@ describe('GeminiImageProvider', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      false,
     );
 
     // Text + image: text as output, images in structured field
@@ -343,7 +343,7 @@ describe('GeminiImageProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        false,
       );
 
       const callArgs = mockFetchWithCache.mock.calls[0];
@@ -772,7 +772,7 @@ describe('GeminiImageProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        false,
       );
       expect(result.output).toContain('data:image/png;base64,');
     });
@@ -820,7 +820,7 @@ describe('GeminiImageProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        false,
       );
     });
   });
@@ -852,7 +852,7 @@ describe('GeminiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        undefined,
+        false,
       );
     });
 
@@ -882,7 +882,7 @@ describe('GeminiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        undefined,
+        false,
       );
     });
 
@@ -912,7 +912,7 @@ describe('GeminiImageProvider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        undefined,
+        false,
       );
     });
   });

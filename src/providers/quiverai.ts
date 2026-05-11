@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProxy } from '../util/fetch';
-import { getCacheOptions, getRequestTimeoutMs } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -218,7 +218,7 @@ export class QuiverAiProvider implements ApiProvider {
       },
       getRequestTimeoutMs(),
       'json',
-      getCacheOptions(context),
+      context?.bustCache ?? context?.debug,
     );
 
     if (status < 200 || status >= 300) {

@@ -9,7 +9,7 @@ import {
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { getCacheOptions, getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
@@ -289,7 +289,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         },
         timeout,
         'json',
-        getCacheOptions(context),
+        context?.bustCache ?? context?.debug,
       ));
 
       if (status < 200 || status >= 300) {

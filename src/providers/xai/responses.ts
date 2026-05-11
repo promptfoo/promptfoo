@@ -8,7 +8,7 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { getCacheOptions, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { calculateXAICost, GROK_4_MODELS, getXAICostInUsd } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -525,7 +525,7 @@ export class XAIResponsesProvider implements ApiProvider {
           },
           getRequestTimeoutMs(),
           'json',
-          getCacheOptions(context),
+          context?.bustCache ?? context?.debug,
           this.config.maxRetries,
         );
 

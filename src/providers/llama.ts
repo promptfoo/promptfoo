@@ -1,8 +1,8 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
-import { getCacheOptions, getRequestTimeoutMs } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
+import type { ApiProvider, ProviderResponse } from '../types/index';
 
 interface LlamaCompletionOptions {
   n_predict?: number;
@@ -43,7 +43,7 @@ export class LlamaProvider implements ApiProvider {
     return `[Llama Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string): Promise<ProviderResponse> {
     const body = {
       prompt,
       n_predict: this.config?.n_predict || 512,
@@ -85,8 +85,6 @@ export class LlamaProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
-        'json',
-        getCacheOptions(context),
       ));
     } catch (err) {
       return {

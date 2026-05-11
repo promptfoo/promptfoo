@@ -1,12 +1,6 @@
 import { createHmac } from 'crypto';
 
-import {
-  fetchWithCache,
-  getCache,
-  getScopedCacheKey,
-  isCacheEnabled,
-  shouldApplyRepeatCacheSuffix,
-} from '../cache';
+import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
@@ -614,12 +608,9 @@ export class MistralChatCompletionProvider implements ApiProvider {
       : undefined;
     const params = buildMistralChatParams(this.modelName, messages, config, loadedTools);
 
-    const repeatSuffix = shouldApplyRepeatCacheSuffix(context?.repeatIndex)
-      ? `:repeat${context?.repeatIndex}`
-      : '';
     const cacheKey = `mistral:chat:${this.modelName}:${this.getCacheIdentityHash(
       apiUrl,
-    )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(params)}${repeatSuffix}`;
+    )}:${getMistralAuthCacheNamespace(apiKey)}:${hashMistralCacheValue(params)}`;
     if (isCacheEnabled()) {
       const cache = getCache();
       if (cache) {

@@ -84,7 +84,6 @@ describe('GoogleImageProvider', async () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
     );
     expect(result.output).toContain('data:image/png;base64,base64data');
     expect(result.images).toEqual([
@@ -312,7 +311,6 @@ describe('GoogleImageProvider', async () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
       );
 
       // First image as output for blob externalization
@@ -384,7 +382,6 @@ describe('GoogleImageProvider', async () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
       );
       expect(result.output).toContain('data:image/png;base64,base64data');
     });

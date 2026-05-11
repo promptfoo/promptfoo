@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { getCacheOptions, getRequestTimeoutMs } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -136,17 +136,12 @@ export class CohereChatCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(prompt, config, context),
-      resultExtractor,
-    );
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, config), resultExtractor);
   }
 
   private async callApiInternal(
     prompt: string,
     config: CohereChatOptions,
-    context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
@@ -202,8 +197,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
           body: JSON.stringify(body),
         },
         getRequestTimeoutMs(),
-        'json',
-        getCacheOptions(context),
       )) as unknown as { data: any; cached: boolean });
 
       if (data.message) {

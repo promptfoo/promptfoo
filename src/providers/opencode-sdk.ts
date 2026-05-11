@@ -1437,7 +1437,6 @@ export class OpenCodeSDKProvider implements ApiProvider {
         cacheKeyPrefix: 'opencode:sdk',
         workingDir: config.working_dir ? workingDir : undefined,
         bustCache: context?.bustCache,
-        repeatIndex: context?.repeatIndex,
         mcp: mcpConfig,
         cacheMcp: config.cache_mcp,
       },

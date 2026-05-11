@@ -69,7 +69,6 @@ describe('WebhookProvider', () => {
         },
         300000,
         'json',
-        undefined,
       );
 
       expect(result).toEqual({
@@ -111,7 +110,6 @@ describe('WebhookProvider', () => {
         },
         300000,
         'json',
-        undefined,
       );
     });
 

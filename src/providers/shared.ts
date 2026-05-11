@@ -1,9 +1,7 @@
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
 
-import type { CacheOptions } from '../types/cache';
 import type { ApiProvider } from '../types/index';
-import type { CallApiContextParams } from '../types/providers';
 
 /**
  * The default timeout for API requests in milliseconds.
@@ -167,15 +165,6 @@ export function toTitleCase(str: string) {
 export function isPromptfooSampleTarget(provider: ApiProvider) {
   const url = provider.config?.url;
   return url?.includes('promptfoo.app') || url?.includes('promptfoo.dev');
-}
-
-export function getCacheOptions(context?: CallApiContextParams): CacheOptions | undefined {
-  const bust = context?.bustCache ?? context?.debug;
-  const repeatIndex = context?.repeatIndex;
-  if (bust == null && repeatIndex == null) {
-    return undefined;
-  }
-  return { bust, repeatIndex };
 }
 
 // ==================

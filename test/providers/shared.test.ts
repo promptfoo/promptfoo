@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
-  getCacheOptions,
   getRequestTimeoutMs,
   isOpenAIToolArray,
   isOpenAIToolChoice,
@@ -147,54 +146,6 @@ describe('Shared Provider Functions', () => {
 
     it('should handle single word', () => {
       expect(toTitleCase('word')).toBe('Word');
-    });
-  });
-
-  describe('getCacheOptions', () => {
-    const createContext = (overrides: Record<string, unknown> = {}) => ({
-      prompt: { raw: 'test', label: 'test' },
-      vars: {},
-      ...overrides,
-    });
-
-    it('should return undefined when no cache options are present', () => {
-      expect(getCacheOptions(undefined)).toBeUndefined();
-      expect(getCacheOptions(createContext())).toBeUndefined();
-    });
-
-    it('should extract bustCache from context', () => {
-      expect(getCacheOptions(createContext({ bustCache: true }))).toEqual({
-        bust: true,
-        repeatIndex: undefined,
-      });
-    });
-
-    it('should fall back to debug for bust when bustCache is undefined', () => {
-      expect(getCacheOptions(createContext({ debug: true }))).toEqual({
-        bust: true,
-        repeatIndex: undefined,
-      });
-    });
-
-    it('should prefer bustCache over debug', () => {
-      expect(getCacheOptions(createContext({ bustCache: false, debug: true }))).toEqual({
-        bust: false,
-        repeatIndex: undefined,
-      });
-    });
-
-    it('should extract repeatIndex from context', () => {
-      expect(getCacheOptions(createContext({ repeatIndex: 2 }))).toEqual({
-        bust: undefined,
-        repeatIndex: 2,
-      });
-    });
-
-    it('should return all cache options from context', () => {
-      expect(getCacheOptions(createContext({ bustCache: true, repeatIndex: 3 }))).toEqual({
-        bust: true,
-        repeatIndex: 3,
-      });
     });
   });
 

@@ -407,7 +407,7 @@ describe('QuiverAI Provider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        { bust: true, repeatIndex: undefined },
+        true,
       );
     });
 
@@ -427,27 +427,7 @@ describe('QuiverAI Provider', () => {
         expect.any(Object),
         expect.any(Number),
         'json',
-        { bust: true, repeatIndex: undefined },
-      );
-    });
-
-    it('should pass repeatIndex to fetchWithCache', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: makeSvgResponse(['<svg></svg>']),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      } as any);
-
-      const provider = createProvider({ stream: false });
-      await provider.callApi('test', { repeatIndex: 2 } as any);
-
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Object),
-        expect.any(Number),
-        'json',
-        { bust: undefined, repeatIndex: 2 },
+        true,
       );
     });
 

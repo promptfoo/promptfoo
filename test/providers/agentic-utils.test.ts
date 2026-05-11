@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCache, isCacheEnabled, withCacheNamespace } from '../../src/cache';
+import { getCache, isCacheEnabled } from '../../src/cache';
 import {
   type CacheCheckResult,
   cacheResponse,
@@ -10,11 +10,7 @@ import {
   resolveAgenticWorkingDir,
 } from '../../src/providers/agentic-utils';
 
-vi.mock('../../src/cache', async () => ({
-  ...(await vi.importActual<typeof import('../../src/cache')>('../../src/cache')),
-  getCache: vi.fn(),
-  isCacheEnabled: vi.fn(),
-}));
+vi.mock('../../src/cache');
 
 describe('agentic-utils', () => {
   let mockCache: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
@@ -253,40 +249,6 @@ describe('agentic-utils', () => {
       expect(result.shouldCache).toBe(true);
       expect(result.shouldReadCache).toBe(false);
       expect(result.shouldWriteCache).toBe(true);
-    });
-
-    it('should isolate cache keys by repeatIndex when repeatIndex is greater than zero', async () => {
-      vi.mocked(isCacheEnabled).mockReturnValue(true);
-
-      const firstRepeat = await initializeAgenticCache(
-        { cacheKeyPrefix: 'test', repeatIndex: 0 },
-        { prompt: 'test prompt' },
-      );
-      const secondRepeat = await initializeAgenticCache(
-        { cacheKeyPrefix: 'test', repeatIndex: 1 },
-        { prompt: 'test prompt' },
-      );
-
-      expect(firstRepeat.cacheKey).toMatch(/^test:[a-f0-9]{64}$/);
-      expect(secondRepeat.cacheKey).toBe(`${firstRepeat.cacheKey}:repeat1`);
-    });
-
-    it('should not add a repeat suffix when the active namespace already isolates the repeat', async () => {
-      vi.mocked(isCacheEnabled).mockReturnValue(true);
-
-      const baseRepeat = await withCacheNamespace('repeat:1', () =>
-        initializeAgenticCache({ cacheKeyPrefix: 'test' }, { prompt: 'test prompt' }),
-      );
-      const namespacedRepeat = await withCacheNamespace('repeat:1', () =>
-        initializeAgenticCache(
-          { cacheKeyPrefix: 'test', repeatIndex: 1 },
-          { prompt: 'test prompt' },
-        ),
-      );
-
-      expect(baseRepeat.cacheKey).toMatch(/^test:[a-f0-9]{64}$/);
-      expect(namespacedRepeat.cacheKey).toBe(baseRepeat.cacheKey);
-      expect(namespacedRepeat.cacheKey).not.toMatch(/:repeat1$/);
     });
 
     it('should disable caching when mcp is provided without cacheMcp', async () => {

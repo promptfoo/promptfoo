@@ -2,7 +2,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
-import { getCacheOptions, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -184,17 +184,12 @@ export class NscaleImageProvider extends OpenAiImageProvider {
     let data: any, status: number, statusText: string;
     let cached = false;
     try {
-      const imageApiArgs: Parameters<typeof callOpenAiImageApi> = [
+      ({ data, cached, status, statusText } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
         getRequestTimeoutMs(),
-      ];
-      const cacheOptions = getCacheOptions(context);
-      if (cacheOptions) {
-        imageApiArgs.push(cacheOptions);
-      }
-      ({ data, cached, status, statusText } = await callOpenAiImageApi(...imageApiArgs));
+      ));
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,

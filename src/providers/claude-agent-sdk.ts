@@ -1225,7 +1225,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             cacheKeyPrefix: 'anthropic:claude-agent-sdk',
             workingDir,
             bustCache: context?.bustCache,
-            repeatIndex: context?.repeatIndex,
             mcp: config.mcp?.servers?.length ? config.mcp : undefined,
             cacheMcp: config.cache_mcp,
           },

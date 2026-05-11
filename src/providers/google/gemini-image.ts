@@ -2,7 +2,7 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
-import { getCacheOptions, getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
@@ -159,7 +159,7 @@ export class GeminiImageProvider implements ApiProvider {
         } as RequestInit,
         getRequestTimeoutMs(),
         'json',
-        getCacheOptions(context),
+        false,
       )) as { data: any; cached: boolean };
       const latencyMs = Date.now() - startTime;
 
