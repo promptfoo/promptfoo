@@ -76,6 +76,8 @@ describe('Scanner - No Files to Scan', () => {
 
 describe('Scanner machine-readable output', () => {
   function mockNoFilesScanner() {
+    let currentLogLevel = 'info';
+
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: vi.fn().mockResolvedValue([]),
     }));
@@ -121,8 +123,10 @@ describe('Scanner machine-readable output', () => {
     }));
     vi.doMock('../../src/logger', () => ({
       default: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
-      getLogLevel: vi.fn().mockReturnValue('info'),
-      setLogLevel: vi.fn(),
+      getLogLevel: vi.fn().mockImplementation(() => currentLogLevel),
+      setLogLevel: vi.fn().mockImplementation((level: string) => {
+        currentLogLevel = level;
+      }),
     }));
     vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
       registerCleanupHandlers: vi.fn(),
@@ -153,7 +157,7 @@ describe('Scanner machine-readable output', () => {
 
     const { executeScan } = await import('../../src/codeScan/scanner/index');
     const { displayScanResults } = await import('../../src/codeScan/scanner/output');
-    const { setLogLevel } = await import('../../src/logger');
+    const { getLogLevel, setLogLevel } = await import('../../src/logger');
 
     await executeScan('/test/repo', options);
 
@@ -163,5 +167,7 @@ describe('Scanner machine-readable output', () => {
       { format: expectedFormat, githubPr: undefined },
     );
     expect(setLogLevel).toHaveBeenCalledWith('error');
+    expect(setLogLevel).toHaveBeenLastCalledWith('info');
+    expect(getLogLevel()).toBe('info');
   });
 });

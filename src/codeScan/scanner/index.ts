@@ -89,6 +89,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
+  const originalLogLevel = getLogLevel();
 
   const startTime = Date.now();
 
@@ -360,6 +361,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       }
     };
   } finally {
+    if (outputFormat !== CodeScanOutputFormat.TEXT && getLogLevel() !== originalLogLevel) {
+      setLogLevel(originalLogLevel);
+    }
+
     // Cleanup: Stop MCP bridge and server, disconnect client
     if (mcpBridge) {
       await mcpBridge.disconnect().catch(() => {
