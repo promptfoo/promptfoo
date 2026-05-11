@@ -8,10 +8,28 @@ import type { ProviderConfig } from '../shared';
 
 const ajv = getAjv();
 
-const GPT_5_4_LONG_CONTEXT_THRESHOLD = 272_000;
+const GPT_5_LONG_CONTEXT_THRESHOLD = 272_000;
+
+type OpenAIModelCost = {
+  input: number;
+  output: number;
+  audioInput?: number;
+  audioOutput?: number;
+  longContext?: {
+    threshold: number;
+    input: number;
+    output: number;
+  };
+};
+
+type OpenAIModelInfo = {
+  id: string;
+  type?: string;
+  cost?: OpenAIModelCost;
+};
 
 // see https://platform.openai.com/docs/models
-export const OPENAI_CHAT_MODELS = [
+export const OPENAI_CHAT_MODELS: OpenAIModelInfo[] = [
   // TTS model (text input + audio output costs)
   ...['gpt-4o-mini-tts', 'gpt-4o-mini-tts-2025-12-15'].map((model) => ({
     id: model,
@@ -114,29 +132,6 @@ export const OPENAI_CHAT_MODELS = [
     cost: {
       input: 1.1 / 1e6,
       output: 4.4 / 1e6,
-    },
-  })),
-  ...[
-    'gpt-4o-audio-preview',
-    'gpt-4o-audio-preview-2024-12-17',
-    'gpt-4o-audio-preview-2024-10-01',
-    'gpt-4o-audio-preview-2025-06-03',
-  ].map((model) => ({
-    id: model,
-    cost: {
-      input: 2.5 / 1e6,
-      output: 10 / 1e6,
-      audioInput: 40 / 1e6,
-      audioOutput: 80 / 1e6,
-    },
-  })),
-  ...['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'].map((model) => ({
-    id: model,
-    cost: {
-      input: 0.15 / 1e6,
-      output: 0.6 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
     },
   })),
   ...['gpt-4o', 'gpt-4o-2024-11-20', 'gpt-4o-2024-08-06'].map((model) => ({
@@ -274,6 +269,13 @@ export const OPENAI_CHAT_MODELS = [
       output: 10 / 1e6,
     },
   })),
+  ...['gpt-5-codex-mini'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.5 / 1e6,
+      output: 2 / 1e6,
+    },
+  })),
   ...['gpt-5-pro', 'gpt-5-pro-2025-10-06'].map((model) => ({
     id: model,
     cost: {
@@ -296,7 +298,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 0.4 / 1e6,
     },
   })),
-  ...['gpt-5.1-mini'].map((model) => ({
+  ...['gpt-5.1-mini', 'gpt-5.1-codex-mini'].map((model) => ({
     id: model,
     cost: {
       input: 0.25 / 1e6,
@@ -321,8 +323,8 @@ export const OPENAI_CHAT_MODELS = [
   ...['gpt-5.2-pro', 'gpt-5.2-pro-2025-12-11'].map((model) => ({
     id: model,
     cost: {
-      input: 15 / 1e6,
-      output: 120 / 1e6,
+      input: 21 / 1e6,
+      output: 168 / 1e6,
     },
   })),
   // GPT-5.3 models
@@ -340,6 +342,19 @@ export const OPENAI_CHAT_MODELS = [
       output: 4 / 1e6,
     },
   })),
+  // GPT-5.5 models
+  ...['gpt-5.5', 'gpt-5.5-2026-04-23'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6,
+      output: 30 / 1e6,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 10 / 1e6,
+        output: 45 / 1e6,
+      },
+    },
+  })),
   // GPT-5.4 models
   ...['gpt-5.4', 'gpt-5.4-2026-03-05'].map((model) => ({
     id: model,
@@ -347,7 +362,7 @@ export const OPENAI_CHAT_MODELS = [
       input: 2.5 / 1e6,
       output: 15 / 1e6,
       longContext: {
-        threshold: GPT_5_4_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 5 / 1e6,
         output: 22.5 / 1e6,
       },
@@ -397,14 +412,27 @@ export const OPENAI_CHAT_MODELS = [
   })),
 ];
 
-export const OPENAI_RESPONSES_ONLY_MODELS = [
+export const OPENAI_RESPONSES_ONLY_MODELS: OpenAIModelInfo[] = [
   ...['gpt-5.4-pro', 'gpt-5.4-pro-2026-03-05'].map((model) => ({
     id: model,
     cost: {
       input: 30 / 1e6,
       output: 180 / 1e6,
       longContext: {
-        threshold: GPT_5_4_LONG_CONTEXT_THRESHOLD,
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
+        input: 60 / 1e6,
+        output: 270 / 1e6,
+      },
+    },
+  })),
+  // GPT-5.5 Pro is Responses-only
+  ...['gpt-5.5-pro', 'gpt-5.5-pro-2026-04-23'].map((model) => ({
+    id: model,
+    cost: {
+      input: 30 / 1e6,
+      output: 180 / 1e6,
+      longContext: {
+        threshold: GPT_5_LONG_CONTEXT_THRESHOLD,
         input: 60 / 1e6,
         output: 270 / 1e6,
       },
@@ -412,8 +440,34 @@ export const OPENAI_RESPONSES_ONLY_MODELS = [
   })),
 ];
 
+const RETIRED_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
+  ...[
+    'gpt-4o-audio-preview',
+    'gpt-4o-audio-preview-2024-12-17',
+    'gpt-4o-audio-preview-2024-10-01',
+    'gpt-4o-audio-preview-2025-06-03',
+  ].map((model) => ({
+    id: model,
+    cost: {
+      input: 2.5 / 1e6,
+      output: 10 / 1e6,
+      audioInput: 40 / 1e6,
+      audioOutput: 80 / 1e6,
+    },
+  })),
+  ...['gpt-4o-mini-audio-preview', 'gpt-4o-mini-audio-preview-2024-12-17'].map((model) => ({
+    id: model,
+    cost: {
+      input: 0.15 / 1e6,
+      output: 0.6 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  })),
+];
+
 // Deep research models for Responses API
-export const OPENAI_DEEP_RESEARCH_MODELS = [
+export const OPENAI_DEEP_RESEARCH_MODELS: OpenAIModelInfo[] = [
   ...['o3-deep-research', 'o3-deep-research-2025-06-26'].map((model) => ({
     id: model,
     cost: {
@@ -431,7 +485,7 @@ export const OPENAI_DEEP_RESEARCH_MODELS = [
 ];
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
-export const OPENAI_COMPLETION_MODELS = [
+export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
@@ -448,7 +502,7 @@ export const OPENAI_COMPLETION_MODELS = [
 ];
 
 // Realtime models for WebSocket API
-export const OPENAI_REALTIME_MODELS = [
+export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   // GA gpt-realtime models
   ...['gpt-realtime', 'gpt-realtime-2025-08-28', 'gpt-realtime-1.5'].map((model) => ({
     id: model,
@@ -460,7 +514,43 @@ export const OPENAI_REALTIME_MODELS = [
       audioOutput: 64 / 1e6,
     },
   })),
-  // Legacy gpt-4o realtime preview models
+  {
+    id: 'gpt-realtime-2',
+    type: 'chat',
+    cost: {
+      input: 4 / 1e6,
+      output: 24 / 1e6,
+      audioInput: 32 / 1e6,
+      audioOutput: 64 / 1e6,
+    },
+  },
+  // Deprecated preview snapshot that remains available until July 23, 2026.
+  {
+    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
+    type: 'chat',
+    cost: {
+      input: 0.6 / 1e6,
+      output: 2.4 / 1e6,
+      audioInput: 10 / 1e6,
+      audioOutput: 20 / 1e6,
+    },
+  },
+  // gpt-realtime-mini models
+  ...['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15', 'gpt-realtime-mini-2025-10-06'].map(
+    (model) => ({
+      id: model,
+      type: 'chat',
+      cost: {
+        input: 0.6 / 1e6,
+        output: 2.4 / 1e6,
+        audioInput: 10 / 1e6,
+        audioOutput: 20 / 1e6,
+      },
+    }),
+  ),
+];
+
+const RETIRED_OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-4o-realtime-preview',
     type: 'chat',
@@ -491,7 +581,6 @@ export const OPENAI_REALTIME_MODELS = [
       audioOutput: 200 / 1e6,
     },
   },
-  // gpt-4o-mini realtime models
   {
     id: 'gpt-4o-mini-realtime-preview',
     type: 'chat',
@@ -502,29 +591,16 @@ export const OPENAI_REALTIME_MODELS = [
       audioOutput: 20 / 1e6,
     },
   },
-  {
-    id: 'gpt-4o-mini-realtime-preview-2024-12-17',
-    type: 'chat',
-    cost: {
-      input: 0.6 / 1e6,
-      output: 2.4 / 1e6,
-      audioInput: 10 / 1e6,
-      audioOutput: 20 / 1e6,
-    },
-  },
-  // gpt-realtime-mini models
-  ...['gpt-realtime-mini', 'gpt-realtime-mini-2025-12-15', 'gpt-realtime-mini-2025-10-06'].map(
-    (model) => ({
-      id: model,
-      type: 'chat',
-      cost: {
-        input: 0.6 / 1e6,
-        output: 2.4 / 1e6,
-        audioInput: 10 / 1e6,
-        audioOutput: 20 / 1e6,
-      },
-    }),
-  ),
+];
+
+export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
+  ...OPENAI_CHAT_MODELS,
+  ...RETIRED_OPENAI_AUDIO_MODELS,
+  ...OPENAI_COMPLETION_MODELS,
+  ...OPENAI_REALTIME_MODELS,
+  ...RETIRED_OPENAI_REALTIME_MODELS,
+  ...OPENAI_RESPONSES_ONLY_MODELS,
+  ...OPENAI_DEEP_RESEARCH_MODELS,
 ];
 
 // Transcription models for /v1/audio/transcriptions endpoint
@@ -577,13 +653,7 @@ export function calculateOpenAICost(
   audioCompletionTokens?: number,
 ): number | undefined {
   if (!audioPromptTokens && !audioCompletionTokens) {
-    return calculateCost(modelName, config, promptTokens, completionTokens, [
-      ...OPENAI_CHAT_MODELS,
-      ...OPENAI_COMPLETION_MODELS,
-      ...OPENAI_REALTIME_MODELS,
-      ...OPENAI_RESPONSES_ONLY_MODELS,
-      ...OPENAI_DEEP_RESEARCH_MODELS,
-    ]);
+    return calculateCost(modelName, config, promptTokens, completionTokens, OPENAI_BILLING_MODELS);
   }
 
   // Calculate with audio tokens
@@ -600,13 +670,7 @@ export function calculateOpenAICost(
     return undefined;
   }
 
-  const model = [
-    ...OPENAI_CHAT_MODELS,
-    ...OPENAI_COMPLETION_MODELS,
-    ...OPENAI_REALTIME_MODELS,
-    ...OPENAI_RESPONSES_ONLY_MODELS,
-    ...OPENAI_DEEP_RESEARCH_MODELS,
-  ].find((m) => m.id === modelName);
+  const model = OPENAI_BILLING_MODELS.find((m) => m.id === modelName);
   if (!model || !model.cost) {
     return undefined;
   }
@@ -654,6 +718,10 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       // Cached responses don't count as a new request
       return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
     } else {
+      const cachedInputTokens =
+        data.usage.prompt_tokens_details?.cached_tokens ??
+        data.usage.input_tokens_details?.cached_tokens ??
+        0;
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
@@ -665,9 +733,16 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
                 reasoning: data.usage.completion_tokens_details.reasoning_tokens,
                 acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
                 rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+                ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
               },
             }
-          : {}),
+          : cachedInputTokens > 0
+            ? {
+                completionDetails: {
+                  cacheReadInputTokens: cachedInputTokens,
+                },
+              }
+            : {}),
       };
     }
   }

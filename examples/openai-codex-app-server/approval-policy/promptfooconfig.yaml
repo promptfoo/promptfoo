@@ -5,7 +5,7 @@ prompts:
   - 'Explain what command you would run to list files. Do not run it.'
 
 providers:
-  - id: openai:codex-app-server:gpt-5.4
+  - id: openai:codex-app-server:gpt-5.5
     config:
       sandbox_mode: read-only
       approval_policy: on-request

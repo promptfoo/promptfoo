@@ -2117,6 +2117,107 @@ describe('calculateTotalTests', () => {
     });
   });
 
+  it('should count custom intents instead of numTests for intent plugins', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 1,
+        config: { intent: ['intent1', 'intent2', 'intent3'] },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result).toEqual({
+      totalTests: 3,
+      totalPluginTests: 3,
+      effectiveStrategyCount: 0,
+      includeBasicTests: true,
+    });
+  });
+
+  it('should multiply intent count by language count for multilingual intent plugins', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 1,
+        config: {
+          intent: ['intent1', 'intent2'],
+          language: ['en', 'es', 'fr'],
+        },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result).toEqual({
+      totalTests: 6,
+      totalPluginTests: 6,
+      effectiveStrategyCount: 0,
+      includeBasicTests: true,
+    });
+  });
+
+  it('should resolve file:// intents from a JSON array for pre-generation totals', () => {
+    // fs is mocked at the module level (see vi.mock('fs') below). Stub readFileSync
+    // so maybeLoadFromExternalFile sees a JSON array of intents.
+    const readFileSyncSpy = vi
+      .spyOn(fs, 'readFileSync')
+      .mockReturnValue(JSON.stringify(['do thing 1', 'do thing 2', 'do thing 3', 'do thing 4']));
+
+    try {
+      const plugins = [
+        {
+          id: 'intent',
+          numTests: 1,
+          config: { intent: 'file://intents.json' },
+        },
+      ];
+
+      const result = calculateTotalTests(plugins, []);
+
+      expect(result).toEqual({
+        totalTests: 4,
+        totalPluginTests: 4,
+        effectiveStrategyCount: 0,
+        includeBasicTests: true,
+      });
+    } finally {
+      readFileSyncSpy.mockRestore();
+    }
+  });
+
+  it('should fall back to count of 1 when file:// intent path is unreadable', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 1,
+        config: { intent: 'file:///definitely/does/not/exist/intents.txt' },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    // The file can't be read, so the helper falls back to treating the literal
+    // string as a single intent. This matches the pre-fix behavior and keeps
+    // the helper from throwing during early UI calculations.
+    expect(result.totalPluginTests).toBe(1);
+  });
+
+  it('should report 0 plugin tests when an intent plugin is missing config.intent', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 5,
+        config: {},
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result.totalPluginTests).toBe(0);
+  });
+
   it('should handle retry strategy with default numTests', () => {
     const strategies = [{ id: 'retry' }];
     const result = calculateTotalTests(mockPlugins, strategies);
