@@ -501,6 +501,23 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
   },
 ];
 
+/**
+ * Realtime model IDs that exist on a different endpoint family from the conversational
+ * Realtime API and therefore must NOT be routed through `openai:realtime:<model>`.
+ *
+ * - `gpt-realtime-translate` uses a dedicated translation-session endpoint.
+ * - `gpt-realtime-whisper` is a transcription-only model intended to be passed as
+ *   `input_audio_transcription.model` inside a conversational session, not used as a
+ *   standalone provider.
+ *
+ * Used by the provider routing layer to fail-fast with a clear error rather than
+ * silently exchanging an empty response over the wrong wire shape.
+ */
+export const NON_CONVERSATIONAL_REALTIME_MODELS: readonly string[] = [
+  'gpt-realtime-translate',
+  'gpt-realtime-whisper',
+];
+
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
   // GA gpt-realtime models

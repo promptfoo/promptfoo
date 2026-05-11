@@ -24,6 +24,19 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
+/**
+ * Flush enough microtasks to advance past the persistent-path serialization
+ * queue. The provider chains: `await previousTurn` → `await openPersistentConnection`
+ * → `setupMessageHandlers` (which itself awaits tool config) → message handler
+ * is attached. Tests that need to invoke the attached handler synchronously
+ * after callApi() must wait for all of those hops to settle.
+ */
+const flushMicrotasks = async () => {
+  for (let i = 0; i < 8; i++) {
+    await Promise.resolve();
+  }
+};
+
 describe('OpenAI Realtime Provider', () => {
   let mockWs: any;
   let mockHandlers: { [key: string]: Function[] };
@@ -54,6 +67,16 @@ describe('OpenAI Realtime Provider', () => {
       close: vi.fn(),
       once: vi.fn((event: string, handler: Function) => {
         mockHandlers[event].push(handler);
+      }),
+      removeListener: vi.fn((event: string, handler: Function) => {
+        const arr = mockHandlers[event];
+        if (!arr) {
+          return;
+        }
+        const idx = arr.indexOf(handler);
+        if (idx !== -1) {
+          arr.splice(idx, 1);
+        }
       }),
     };
 
@@ -118,6 +141,83 @@ describe('OpenAI Realtime Provider', () => {
       expect(logger.debug).toHaveBeenCalledWith(
         'Using unknown OpenAI realtime model: unknown-model',
       );
+    });
+
+    it('rejects gpt-realtime-translate as a conversational realtime provider', () => {
+      expect(() => new OpenAiRealtimeProvider('gpt-realtime-translate')).toThrow(
+        /not a conversational Realtime model/,
+      );
+    });
+
+    it('rejects gpt-realtime-whisper used as a standalone realtime provider', () => {
+      expect(() => new OpenAiRealtimeProvider('gpt-realtime-whisper')).toThrow(
+        /input_audio_transcription\.model/,
+      );
+    });
+
+    it('returns ProviderResponse.error instead of a placeholder when the API yields nothing', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { modalities: ['text'], maintainContext: false },
+      });
+
+      const responsePromise = provider.directWebSocketRequest('hi');
+      // Allow ws constructor + handler registration to settle.
+      await flushMicrotasks();
+      mockHandlers.open.forEach((h) => h());
+      await flushMicrotasks();
+
+      const handler = mockHandlers.message[mockHandlers.message.length - 1];
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.created',
+            item: { id: 'u1', role: 'user' },
+          }),
+        ),
+      );
+      // No deltas, no audio, no function call — just response.done.
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+
+      const inner = await responsePromise;
+      expect(inner.output).toBe('');
+
+      // Now drive a full callApi flow to assert the outer error wrapping.
+      // Reset mocks for a clean second call.
+      mockHandlers.open = [];
+      mockHandlers.message = [];
+
+      const callApiPromise = provider.callApi('hi');
+      await flushMicrotasks();
+      mockHandlers.open.forEach((h) => h());
+      await flushMicrotasks();
+      const handler2 = mockHandlers.message[mockHandlers.message.length - 1];
+      handler2(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.created',
+            item: { id: 'u2', role: 'user' },
+          }),
+        ),
+      );
+      handler2(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+
+      const outer = await callApiPromise;
+      expect(outer.error).toMatch(/empty response/i);
+      expect(outer.output).toBeUndefined();
     });
 
     it('should use default missing API key error message', async () => {
@@ -489,7 +589,7 @@ describe('OpenAI Realtime Provider', () => {
       const responsePromise = provider.callApi('Hello', context);
 
       // Wait for microtask to process so handler is registered
-      await Promise.resolve();
+      await flushMicrotasks();
 
       // Get the message handler
       const messageHandlers = mockHandlers.message;
@@ -694,7 +794,7 @@ describe('OpenAI Realtime Provider', () => {
       // First message
       const firstResponsePromise = provider.callApi('First message', context);
       // Wait for microtask to process so handler is registered
-      await Promise.resolve();
+      await flushMicrotasks();
       await simulateMessageSequence('msg_1', 'assistant_1', 'resp_1', 'First response');
       const firstResponse = await firstResponsePromise;
 
@@ -707,7 +807,7 @@ describe('OpenAI Realtime Provider', () => {
       const secondResponsePromise = provider.callApi('Second message', context);
 
       // Wait for microtask to process so handler is registered
-      await Promise.resolve();
+      await flushMicrotasks();
 
       // Skip the WebSocket send assertion as it's not reliable in the test
 
@@ -758,7 +858,7 @@ describe('OpenAI Realtime Provider', () => {
       const responsePromise = provider.callApi('Hello', context);
 
       // Wait for microtask to process so handler is registered
-      await Promise.resolve();
+      await flushMicrotasks();
 
       // Get the error handler and simulate a WebSocket error
       const errorHandlers = mockHandlers.error;
@@ -808,7 +908,7 @@ describe('OpenAI Realtime Provider', () => {
       const responsePromise = provider.callApi('Hello', context);
 
       // Wait for microtask to process so handler is registered
-      await Promise.resolve();
+      await flushMicrotasks();
 
       // Get the message handler
       const messageHandlers = mockHandlers.message;
@@ -1129,6 +1229,432 @@ describe('OpenAI Realtime Provider', () => {
         cached: 0,
         numRequests: 1,
       });
+    });
+
+    it('redacts handler errors before sending function_call_output to the model', async () => {
+      const sensitive = new Error('connect ECONNREFUSED /var/run/secret.sock 127.0.0.1:5432');
+      const functionCallHandler = vi.fn().mockRejectedValue(sensitive);
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          maintainContext: true,
+          tools: [
+            {
+              type: 'function',
+              name: 'lookup',
+              parameters: { type: 'object', properties: {} },
+            },
+          ],
+          tool_choice: 'auto',
+          functionCallHandler,
+        },
+      });
+
+      const persistentConnection = {
+        on: vi.fn((event: string, h: Function) => {
+          mockHandlers[event].push(h);
+        }),
+        once: vi.fn((event: string, h: Function) => {
+          mockHandlers[event].push(h);
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+        readyState: 1,
+      } as unknown as WebSocket;
+      provider.persistentConnection = persistentConnection;
+
+      const responsePromise = provider.callApi('go', {
+        test: { metadata: { conversationId: 'redact' } },
+      } as any);
+
+      await flushMicrotasks();
+      const handler = mockHandlers.message[mockHandlers.message.length - 1];
+
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.added',
+            item: { id: 'u1', role: 'user' },
+          }),
+        ),
+      );
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.output_item.added',
+            item: { type: 'function_call', call_id: 'c1', name: 'lookup', arguments: '{}' },
+          }),
+        ),
+      );
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.function_call_arguments.done',
+            call_id: 'c1',
+            arguments: '{}',
+          }),
+        ),
+      );
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+
+      // Let the for-await-loop in response.done resolve.
+      await flushMicrotasks();
+
+      const sentPayloads = vi
+        .mocked(provider.persistentConnection!.send as Mock)
+        .mock.calls.map(([raw]) => JSON.parse(raw as string));
+      const toolOutput = sentPayloads.find(
+        (e) => e.type === 'conversation.item.create' && e.item?.type === 'function_call_output',
+      );
+      expect(toolOutput).toBeDefined();
+      // Generic redacted payload — no leaked path or error message.
+      expect(toolOutput.item.output).toBe('{"error":"Tool execution failed"}');
+      expect(toolOutput.item.output).not.toContain('ECONNREFUSED');
+      expect(toolOutput.item.output).not.toContain('/var/run/secret.sock');
+
+      // Resolve the follow-up response so the test promise settles cleanly.
+      handler(Buffer.from(JSON.stringify({ type: 'response.output_text.delta', delta: 'tried' })));
+      handler(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'tried' })));
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
+          }),
+        ),
+      );
+
+      await responsePromise;
+      provider.cleanup();
+    });
+
+    it('keeps lifecycle listeners on idle persistent sockets', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+
+      const persistentConnection = {
+        on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn((event: string, h: Function) => {
+          const handlers = mockHandlers[event];
+          const idx = handlers.indexOf(h);
+          if (idx !== -1) {
+            handlers.splice(idx, 1);
+          }
+        }),
+        readyState: WebSocket.OPEN,
+      } as unknown as WebSocket;
+      provider.persistentConnection = persistentConnection;
+
+      const responsePromise = provider.callApi('hi', {
+        test: { metadata: { conversationId: 'idle-lifecycle' } },
+      } as any);
+      await flushMicrotasks();
+      const h = mockHandlers.message[mockHandlers.message.length - 1];
+
+      h(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.output_text.done',
+            text: 'hello',
+          }),
+        ),
+      );
+      h(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 3, input_tokens: 1, output_tokens: 2 } },
+          }),
+        ),
+      );
+
+      await expect(responsePromise).resolves.toMatchObject({ output: 'hello' });
+
+      // Turn-scoped cleanup removes its listener, but the idle lifecycle guard
+      // must remain so a later socket failure is handled instead of becoming an
+      // unhandled EventEmitter error.
+      expect(mockHandlers.error.length).toBeGreaterThan(0);
+      const idleErrorHandler = mockHandlers.error[mockHandlers.error.length - 1];
+      idleErrorHandler(new Error('idle disconnect'));
+
+      expect(provider.persistentConnection).toBeNull();
+      expect((provider as any).connectionReady).toBeNull();
+    });
+
+    it('rejects when handler exceeds toolCallTimeout', async () => {
+      vi.useFakeTimers();
+      try {
+        const functionCallHandler = vi.fn().mockImplementation(() => new Promise(() => {}));
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            toolCallTimeout: 50,
+            tools: [
+              { type: 'function', name: 'hang', parameters: { type: 'object', properties: {} } },
+            ],
+            tool_choice: 'auto',
+            functionCallHandler,
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, h: Function) => {
+            mockHandlers[event].push(h);
+          }),
+          once: vi.fn((event: string, h: Function) => {
+            mockHandlers[event].push(h);
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+          readyState: 1,
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('go', {
+          test: { metadata: { conversationId: 'timeout' } },
+        } as any);
+
+        // Need to flush in real-timer mode before the handler attaches.
+        await vi.advanceTimersByTimeAsync(0);
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        const handler = mockHandlers.message[mockHandlers.message.length - 1];
+
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'conversation.item.added',
+              item: { id: 'u1', role: 'user' },
+            }),
+          ),
+        );
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: { type: 'function_call', call_id: 'c1', name: 'hang', arguments: '{}' },
+            }),
+          ),
+        );
+        const responseDoneFire = handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        );
+
+        // Fire the timeout.
+        await vi.advanceTimersByTimeAsync(60);
+        // Allow the catch + redacted send to flush.
+        await responseDoneFire;
+
+        const sentPayloads = vi
+          .mocked(provider.persistentConnection!.send as Mock)
+          .mock.calls.map(([raw]) => JSON.parse(raw as string));
+        const toolOutput = sentPayloads.find(
+          (e) => e.type === 'conversation.item.create' && e.item?.type === 'function_call_output',
+        );
+        expect(toolOutput).toBeDefined();
+        expect(toolOutput.item.output).toBe('{"error":"Tool execution failed"}');
+        provider.cleanup();
+        // Don't await responsePromise — the follow-up response never completes
+        // in this test; relying on cleanup to release.
+        responsePromise.catch(() => {});
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('rejects when tool-call iterations exceed maxToolIterations', async () => {
+      const functionCallHandler = vi.fn().mockResolvedValue('{}');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          maintainContext: true,
+          maxToolIterations: 2,
+          tools: [
+            { type: 'function', name: 'loop', parameters: { type: 'object', properties: {} } },
+          ],
+          tool_choice: 'auto',
+          functionCallHandler,
+        },
+      });
+
+      const persistentConnection = {
+        on: vi.fn((event: string, h: Function) => {
+          mockHandlers[event].push(h);
+        }),
+        once: vi.fn((event: string, h: Function) => {
+          mockHandlers[event].push(h);
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+        readyState: 1,
+      } as unknown as WebSocket;
+      provider.persistentConnection = persistentConnection;
+
+      const responsePromise = provider.callApi('go', {
+        test: { metadata: { conversationId: 'cap' } },
+      } as any);
+
+      await flushMicrotasks();
+      const handler = mockHandlers.message[mockHandlers.message.length - 1];
+
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.added',
+            item: { id: 'u1', role: 'user' },
+          }),
+        ),
+      );
+
+      const fireToolRound = async () => {
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: { type: 'function_call', call_id: 'c', name: 'loop', arguments: '{}' },
+            }),
+          ),
+        );
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        );
+        await flushMicrotasks();
+      };
+
+      await fireToolRound();
+      await fireToolRound();
+      await fireToolRound();
+
+      const result = await responsePromise;
+      expect(result.error).toMatch(/maxToolIterations=2/);
+      provider.cleanup();
+    });
+
+    it('detaches the persistent message handler when iteration cap fires and preserves partial tool results', async () => {
+      // Regression: hitting maxToolIterations on the persistent path used to
+      // reject without removing the message-handler listener. On a shared
+      // socket reused across turns, that stale listener would re-fire for
+      // every subsequent event, recreating the handler-interleaving race
+      // this PR was meant to prevent. Also asserts partial functionCallResults
+      // are preserved in the rejected error's metadata so users can audit
+      // what the model exchanged before the cap fired.
+      const functionCallHandler = vi.fn().mockResolvedValue('{"called":true}');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          maintainContext: true,
+          maxToolIterations: 2,
+          tools: [
+            { type: 'function', name: 'loop', parameters: { type: 'object', properties: {} } },
+          ],
+          tool_choice: 'auto',
+          functionCallHandler,
+        },
+      });
+
+      const persistentConnection = {
+        on: vi.fn((event: string, h: Function) => {
+          mockHandlers[event].push(h);
+        }),
+        once: vi.fn((event: string, h: Function) => {
+          mockHandlers[event].push(h);
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn((event: string, h: Function) => {
+          const arr = mockHandlers[event];
+          const idx = arr.indexOf(h);
+          if (idx !== -1) {
+            arr.splice(idx, 1);
+          }
+        }),
+        readyState: 1,
+      } as unknown as WebSocket;
+      provider.persistentConnection = persistentConnection;
+
+      const responsePromise = provider.callApi('go', {
+        test: { metadata: { conversationId: 'cap-cleanup' } },
+      } as any);
+
+      await flushMicrotasks();
+      const handler = mockHandlers.message[mockHandlers.message.length - 1];
+      expect(mockHandlers.message).toContain(handler);
+
+      handler(
+        Buffer.from(
+          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+        ),
+      );
+
+      const fireToolRound = async () => {
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: { type: 'function_call', call_id: 'c', name: 'loop', arguments: '{}' },
+            }),
+          ),
+        );
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        );
+        await flushMicrotasks();
+      };
+
+      await fireToolRound();
+      await fireToolRound();
+      await fireToolRound();
+
+      const result = await responsePromise;
+
+      // Cap fired with diagnostic message.
+      expect(result.error).toMatch(/maxToolIterations=2/);
+
+      // I2: partial tool exchange is preserved in the error metadata, not
+      // dropped on the floor.
+      expect(result.metadata?.functionCallOccurred).toBe(true);
+      expect(Array.isArray(result.metadata?.functionCallResults)).toBe(true);
+      expect((result.metadata?.functionCallResults as string[]).length).toBeGreaterThan(0);
+
+      // C2: the message handler must be detached so subsequent turns on the
+      // shared socket don't fire stale listeners.
+      expect(mockHandlers.message).not.toContain(handler);
+      // The cap leaves an unresolved function_call on the server-side session,
+      // so the persistent socket itself must be discarded before the next turn.
+      expect(provider.persistentConnection).toBeNull();
+      expect(vi.mocked(persistentConnection.close)).toHaveBeenCalledTimes(1);
+
+      provider.cleanup();
     });
 
     it('should reset the persistent request timeout before a tool follow-up response', async () => {
@@ -1677,6 +2203,540 @@ describe('OpenAI Realtime Provider', () => {
       // Clean up
       provider.cleanup();
     });
+
+    it('serializes concurrent persistent-path turns and waits for OPEN before sending', async () => {
+      // Regression test for the concurrency race that caused the shipped
+      // promptfooconfig-conversation.yaml example to fail 100% at default
+      // concurrency=4 with "WebSocket is not open: readyState 0 (CONNECTING)".
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+
+      // Pre-set persistentConnection so openPersistentConnection() takes the
+      // pre-existing-connection fast path and returns Promise.resolve().
+      provider.persistentConnection = {
+        on: vi.fn((event: string, handler: Function) => {
+          mockHandlers[event].push(handler);
+        }),
+        once: vi.fn((event: string, handler: Function) => {
+          mockHandlers[event].push(handler);
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+        readyState: 1, // OPEN
+      } as unknown as WebSocket;
+
+      const ctx = (id: string) => ({ test: { metadata: { conversationId: id } } }) as any;
+
+      const drainTurn = async (text: string) => {
+        await flushMicrotasks();
+        const handler = mockHandlers.message[mockHandlers.message.length - 1];
+        if (typeof handler !== 'function') {
+          throw new Error('expected message handler attached');
+        }
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'conversation.item.added',
+              item: { id: `item_${text}`, role: 'user' },
+            }),
+          ),
+        );
+        handler(Buffer.from(JSON.stringify({ type: 'response.created', response: { id: text } })));
+        handler(Buffer.from(JSON.stringify({ type: 'response.output_text.delta', delta: text })));
+        handler(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text })));
+        handler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: {
+                usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 },
+              },
+            }),
+          ),
+        );
+      };
+
+      // Kick off two concurrent turns. Without serialization, both would
+      // attach message handlers and interleave their session.update /
+      // conversation.item.create events on the same socket.
+      const p1 = provider.callApi('first', ctx('t1'));
+      const p2 = provider.callApi('second', ctx('t1'));
+
+      await drainTurn('first');
+      const r1 = await p1;
+      expect(r1.output).toBe('first');
+
+      await drainTurn('second');
+      const r2 = await p2;
+      expect(r2.output).toBe('second');
+
+      provider.cleanup();
+    });
+
+    it("reopens the persistent socket after cleanup() so a re-used provider isn't poisoned", async () => {
+      // Regression: after a teardown, connectionReady stayed cached as a
+      // resolved promise even though persistentConnection was nulled. Subsequent
+      // turns then took the openPersistentConnection() fast path and failed in
+      // sendEvent with "persistent WebSocket is not set", making the provider
+      // permanently unusable for maintain-context flows after the first drop.
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+
+      // Pre-set persistentConnection so the first openPersistentConnection()
+      // takes the pre-existing-connection branch and caches connectionReady.
+      const firstWs = {
+        on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+        readyState: 1,
+      } as unknown as WebSocket;
+      provider.persistentConnection = firstWs;
+
+      const ctx = { test: { metadata: { conversationId: 'reopen' } } } as any;
+      const p1 = provider.callApi('first', ctx);
+      await flushMicrotasks();
+
+      // Drive a successful first turn so connectionReady is now cached.
+      const lastHandler = () => mockHandlers.message[mockHandlers.message.length - 1];
+      lastHandler()(
+        Buffer.from(
+          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+        ),
+      );
+      lastHandler()(
+        Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'first' })),
+      );
+      lastHandler()(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+      const r1 = await p1;
+      expect(r1.output).toBe('first');
+
+      // Simulate a server-initiated disconnect mid-life — fire a close event
+      // on the live socket. The mid-turn close listener tearing down state is
+      // covered by the existing turn-error pathway; here we just need the
+      // cleanup helper to clear connectionReady so the next call reconnects.
+      provider.cleanup();
+      expect(provider.persistentConnection).toBeNull();
+      expect((provider as any).connectionReady).toBeNull();
+
+      // The next persistent turn must construct a new WebSocket. The mock
+      // constructor was registered in the outer beforeEach; reset its call
+      // count and prove a fresh socket is opened.
+      (MockWebSocket as any).mockClear();
+      mockHandlers.open = [];
+      mockHandlers.error = [];
+      mockHandlers.close = [];
+      mockHandlers.message = [];
+
+      const p2 = provider.callApi('second', ctx);
+      await flushMicrotasks();
+      // openPersistentConnection() must have called the WebSocket constructor.
+      expect(MockWebSocket).toHaveBeenCalled();
+      // Settle the new socket so the test doesn't leak.
+      mockHandlers.open.forEach((h) => h());
+      await flushMicrotasks();
+      const h2 = mockHandlers.message[mockHandlers.message.length - 1];
+      h2(
+        Buffer.from(
+          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u2', role: 'user' } }),
+        ),
+      );
+      h2(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'second' })));
+      h2(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+      const r2 = await p2;
+      expect(r2.output).toBe('second');
+
+      provider.cleanup();
+    });
+
+    it('rejects the in-flight turn and tears down state when the socket closes mid-turn', async () => {
+      // Regression: setupMessageHandlers had no 'close' listener, so an
+      // unexpected disconnect during a turn would let the caller's promise
+      // dangle until the request timeout fired and would also leave
+      // connectionReady cached so subsequent turns skipped reconnection.
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+
+      const firstWs = {
+        on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+        readyState: 1,
+      } as unknown as WebSocket;
+      provider.persistentConnection = firstWs;
+
+      const ctx = { test: { metadata: { conversationId: 'mid-turn-close' } } } as any;
+      const turnPromise = provider.callApi('mid-turn close please', ctx);
+      await flushMicrotasks();
+
+      // Send a partial-turn signal so the handler is mid-stream when close fires.
+      const messageHandler = mockHandlers.message[mockHandlers.message.length - 1];
+      messageHandler(
+        Buffer.from(
+          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+        ),
+      );
+
+      // Fire the mid-turn 'close' on the same socket. The setupMessageHandlers
+      // close listener must (a) reject the in-flight turn, (b) clear cached
+      // lifecycle state. Pre-fix this listener didn't exist.
+      const closeHandlers = mockHandlers.close;
+      expect(closeHandlers.length).toBeGreaterThan(0);
+      // The setupMessageHandlers listener is registered AFTER any
+      // before-OPEN listeners; pick the last one to fire it.
+      const midTurnClose = closeHandlers[closeHandlers.length - 1];
+      midTurnClose(1011, Buffer.from('server policy violation'));
+
+      const result = await turnPromise;
+      expect(result.error).toMatch(/closed mid-turn|code=1011/i);
+      // tearDown must run so the next turn reconnects.
+      expect(provider.persistentConnection).toBeNull();
+      expect((provider as any).connectionReady).toBeNull();
+    });
+
+    it('rejects connectionReady and clears state when the socket closes before OPEN', async () => {
+      // Regression: openPersistentConnection() only listened for 'error', so
+      // a handshake rejection that surfaces as 'close' (without a preceding
+      // 'error') would leave connectionReady pending forever and freeze every
+      // concurrent caller awaiting OPEN.
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+
+      const ctx = { test: { metadata: { conversationId: 'close-before-open' } } } as any;
+      const responsePromise = provider.callApi('hi', ctx);
+
+      // Allow the WebSocket constructor + listener registration to settle.
+      await flushMicrotasks();
+      expect(mockHandlers.close.length).toBeGreaterThan(0);
+
+      // Fire close without ever firing open.
+      const closeHandler = mockHandlers.close[0];
+      closeHandler(1006, Buffer.from('handshake failed'));
+
+      const result = await responsePromise;
+      expect(result.error).toMatch(/closed before OPEN/i);
+      expect(provider.persistentConnection).toBeNull();
+      expect((provider as any).connectionReady).toBeNull();
+    });
+
+    it('records redacted output in functionCallResults when the handler throws', async () => {
+      // Regression: runToolCallRound() only pushed successful tool outputs,
+      // so a handler that throws produced functionCallResults=[] even though
+      // a redacted function_call_output had been sent to the model. callApi()
+      // would then surface "no functionCallHandler was configured" as the
+      // empty-response hint — wrong, since one was configured and ran.
+      const functionCallHandler = vi
+        .fn()
+        .mockRejectedValue(new Error('connect ECONNREFUSED /var/secret/db.sock'));
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          maintainContext: true,
+          tools: [
+            {
+              type: 'function',
+              name: 'lookup',
+              parameters: { type: 'object', properties: {} },
+            },
+          ],
+          tool_choice: 'auto',
+          functionCallHandler,
+        },
+      });
+
+      provider.persistentConnection = {
+        on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+        readyState: 1,
+      } as unknown as WebSocket;
+
+      const responsePromise = provider.callApi('lookup something', {
+        test: { metadata: { conversationId: 'handler-throw' } },
+      } as any);
+      await flushMicrotasks();
+      const h = mockHandlers.message[mockHandlers.message.length - 1];
+
+      h(
+        Buffer.from(
+          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+        ),
+      );
+      h(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.output_item.added',
+            item: { type: 'function_call', call_id: 'c1', name: 'lookup', arguments: '{}' },
+          }),
+        ),
+      );
+      h(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.function_call_arguments.done',
+            call_id: 'c1',
+            arguments: '{}',
+          }),
+        ),
+      );
+      await Promise.resolve(
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        ),
+      );
+      // Drain microtasks until the handler-throw branch has executed.
+      await flushMicrotasks();
+
+      // The model's follow-up turn produces a normal text response after
+      // seeing the redacted error.
+      h(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.output_text.done',
+            text: 'I had trouble looking that up.',
+          }),
+        ),
+      );
+      h(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 4, input_tokens: 2, output_tokens: 2 } },
+          }),
+        ),
+      );
+
+      const result = await responsePromise;
+      // The output must still resolve normally (not be wrapped in the
+      // empty-response error) and the redacted error must be reported in
+      // functionCallResults so users can audit what the model saw.
+      expect(result.error).toBeUndefined();
+      expect(result.metadata?.functionCallOccurred).toBe(true);
+      expect(result.metadata?.functionCallResults).toEqual(['{"error":"Tool execution failed"}']);
+      // Critical: the redacted output must NOT contain the leaky details.
+      const sentPayloads = vi
+        .mocked(provider.persistentConnection!.send as Mock)
+        .mock.calls.map(([raw]) => JSON.parse(raw as string));
+      const toolOutput = sentPayloads.find(
+        (e) => e.type === 'conversation.item.create' && e.item?.type === 'function_call_output',
+      );
+      expect(toolOutput.item.output).toBe('{"error":"Tool execution failed"}');
+      expect(JSON.stringify(toolOutput)).not.toMatch(/ECONNREFUSED|var\/secret/);
+
+      provider.cleanup();
+    });
+
+    it('pauses the direct-path request timeout while a tool handler is running', async () => {
+      // Regression: in webSocketRequest / directWebSocketRequest the outer
+      // websocketTimeout kept ticking while runToolCallRound() awaited user
+      // code. A slow handler could be killed by the outer timeout before the
+      // redacted function_call_output reached the model, masking the real
+      // cause and making toolCallTimeout > websocketTimeout configurations
+      // silently broken. We use fake timers (per test/AGENTS.md) and advance
+      // past websocketTimeout while the handler promise is still pending —
+      // if the production code didn't pause the outer timer, the request
+      // would have rejected by now.
+      vi.useFakeTimers();
+      try {
+        let resolveHandler: ((value: string) => void) | undefined;
+        const functionCallHandler = vi.fn(
+          () =>
+            new Promise<string>((resolve) => {
+              resolveHandler = resolve;
+            }),
+        );
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: false,
+            websocketTimeout: 50,
+            toolCallTimeout: 5000,
+            tools: [
+              {
+                type: 'function',
+                name: 'slow',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+            tool_choice: 'auto',
+            functionCallHandler,
+          },
+        });
+
+        let settled = false;
+        const responsePromise = provider.callApi('slow tool please').finally(() => {
+          settled = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(0);
+        mockHandlers.open.forEach((h) => h());
+        await vi.advanceTimersByTimeAsync(0);
+
+        const h = mockHandlers.message[mockHandlers.message.length - 1];
+        h(
+          Buffer.from(
+            JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+          ),
+        );
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: { type: 'function_call', call_id: 'c1', name: 'slow', arguments: '{}' },
+            }),
+          ),
+        );
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(functionCallHandler).toHaveBeenCalledWith('slow', '{}');
+
+        // Advance past websocketTimeout while the handler is still pending.
+        // Without the pause/restart, the outer timeout would fire and reject
+        // the request mid-tool execution.
+        await vi.advanceTimersByTimeAsync(150);
+        expect(settled).toBe(false);
+
+        // Resolve the handler and complete the follow-up turn.
+        resolveHandler?.('{"ok":true}');
+        await vi.advanceTimersByTimeAsync(0);
+        h(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'tool done' })));
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
+            }),
+          ),
+        );
+
+        const result = await responsePromise;
+        expect(result.error).toBeUndefined();
+        expect(result.output).toContain('tool done');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('pauses the client-secret request timeout while a tool handler is running', async () => {
+      vi.useFakeTimers();
+      try {
+        let resolveHandler: ((value: string) => void) | undefined;
+        const functionCallHandler = vi.fn(
+          () =>
+            new Promise<string>((resolve) => {
+              resolveHandler = resolve;
+            }),
+        );
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            websocketTimeout: 50,
+            toolCallTimeout: 5000,
+            tools: [
+              {
+                type: 'function',
+                name: 'slow',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+            tool_choice: 'auto',
+            functionCallHandler,
+          },
+        });
+
+        let settled = false;
+        const responsePromise = provider
+          .webSocketRequest('secret123', 'slow tool please')
+          .finally(() => {
+            settled = true;
+          });
+
+        await vi.advanceTimersByTimeAsync(0);
+        mockHandlers.open.forEach((h) => h());
+        await vi.advanceTimersByTimeAsync(0);
+
+        const h = mockHandlers.message[mockHandlers.message.length - 1];
+        h(
+          Buffer.from(
+            JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+          ),
+        );
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: { type: 'function_call', call_id: 'c1', name: 'slow', arguments: '{}' },
+            }),
+          ),
+        );
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(functionCallHandler).toHaveBeenCalledWith('slow', '{}');
+
+        await vi.advanceTimersByTimeAsync(150);
+        expect(settled).toBe(false);
+
+        resolveHandler?.('{"ok":true}');
+        await vi.advanceTimersByTimeAsync(0);
+        h(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'tool done' })));
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
+            }),
+          ),
+        );
+
+        const result = await responsePromise;
+        expect(result.output).toContain('tool done');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('Cleanup', () => {
@@ -1992,8 +3052,8 @@ describe('OpenAI Realtime Provider', () => {
       try {
         const promise = provider.directWebSocketRequest('hi');
 
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushMicrotasks();
+        await flushMicrotasks();
         expect(unhandledRejections).toEqual([]);
 
         mockHandlers.open.forEach((handler) => handler());
