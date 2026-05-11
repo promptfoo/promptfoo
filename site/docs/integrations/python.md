@@ -76,6 +76,7 @@ defaultTest:
 client = OpenAI()
 
 def call_api(prompt, options, context):
+    # The Responses API exposes combined text through output_text.
     response = client.responses.create(
         model="gpt-5.1-mini",
         input=prompt,

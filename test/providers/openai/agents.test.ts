@@ -32,6 +32,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
     model?: string;
     modelSettings: Record<string, unknown>;
     handoffDescription: string;
+    handoffOutputTypeWarningEnabled?: boolean;
     outputType?: unknown;
     tools: any[];
     handoffs: any[];
@@ -48,6 +49,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
       this.model = config.model;
       this.modelSettings = config.modelSettings ?? {};
       this.handoffDescription = config.handoffDescription ?? '';
+      this.handoffOutputTypeWarningEnabled = config.handoffOutputTypeWarningEnabled;
       this.outputType = config.outputType;
       this.tools = config.tools ?? [];
       this.handoffs = config.handoffs ?? [];
@@ -90,6 +92,7 @@ vi.mock('@openai/agents', async (importOriginal) => {
     })),
     retryPolicies: mockRetryPolicies,
     run: mockRun,
+    setTraceProcessors: vi.fn(),
     startTraceExportLoop: vi.fn(),
     tool: vi.fn((options: Record<string, any>) => ({
       type: 'function',
@@ -125,11 +128,25 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-import { Agent, handoff, tool } from '@openai/agents';
+import {
+  Agent,
+  addTraceProcessor,
+  handoff,
+  MemorySession,
+  OpenAIConversationsSession,
+  OpenAIResponsesCompactionSession,
+  setTraceProcessors,
+  tool,
+} from '@openai/agents';
+import { Manifest, SandboxAgent } from '@openai/agents/sandbox';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
-import { loadAgentDefinition } from '../../../src/providers/openai/agents-loader';
+import {
+  loadAgentDefinition,
+  loadSandboxConfig,
+  loadSessionDefinition,
+} from '../../../src/providers/openai/agents-loader';
 
 function resetOpenAiAgentsMocks() {
   mockRun.mockReset().mockResolvedValue({
@@ -325,6 +342,7 @@ describe('OpenAiAgentsProvider', () => {
         handoffs: 'file:///tmp/handoffs.ts',
         inputGuardrails: 'file:///tmp/input-guardrails.ts',
         outputGuardrails: 'file:///tmp/output-guardrails.ts',
+        model: 'gpt-5-mini',
         modelSettings: {
           retry: {
             maxRetries: 2,
@@ -434,6 +452,54 @@ describe('OpenAiAgentsProvider', () => {
     expect(result.cost).toBeUndefined();
   });
 
+  it('preserves extended SDK usage details from modern Agents SDK runs', async () => {
+    mockRun.mockResolvedValue({
+      finalOutput: 'Agent answer',
+      runContext: {
+        usage: {
+          requests: 2,
+          inputTokens: 11,
+          outputTokens: 7,
+          totalTokens: 18,
+          inputTokensDetails: [{ cached_tokens: 3 }],
+          outputTokensDetails: [
+            {
+              reasoning_tokens: 2,
+              accepted_prediction_tokens: 1,
+              rejected_prediction_tokens: 4,
+            },
+          ],
+        },
+      },
+      newItems: [],
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    const result = await provider.callApi('Where is my order?');
+
+    expect(result.tokenUsage).toEqual({
+      total: 18,
+      prompt: 11,
+      completion: 7,
+      cached: 3,
+      numRequests: 2,
+      completionDetails: {
+        reasoning: 2,
+        acceptedPrediction: 1,
+        rejectedPrediction: 4,
+        cacheReadInputTokens: 3,
+      },
+    });
+  });
+
   it('preserves an explicit maxTurns value of 0 in run options', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {
@@ -452,6 +518,315 @@ describe('OpenAiAgentsProvider', () => {
       'Where is my order?',
       expect.objectContaining({ maxTurns: 0 }),
     );
+  });
+
+  it('passes SDK run options plus top-level session and sandbox configs to run()', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: {
+          type: 'memory',
+          sessionId: 'session-1',
+        },
+        sandbox: {
+          type: 'unix-local',
+          clientOptions: {
+            workspaceBaseDir: '/tmp/promptfoo-agents-sdk',
+          },
+        },
+        runOptions: {
+          previousResponseId: 'resp_123',
+          conversationId: 'conv_123',
+          reasoningItemIdPolicy: 'omit',
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    const runOptions = mockRun.mock.calls[0][2];
+    expect(runOptions.previousResponseId).toBe('resp_123');
+    expect(runOptions.conversationId).toBe('conv_123');
+    expect(runOptions.reasoningItemIdPolicy).toBe('omit');
+    expect(runOptions.session).toBeInstanceOf(MemorySession);
+    expect(await runOptions.session.getSessionId()).toBe('session-1');
+    expect(runOptions.sandbox.client.backendId).toBe('unix_local');
+  });
+
+  it('drops reserved streaming mode from configured run options', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        runOptions: {
+          stream: true,
+        } as any,
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(mockRun.mock.calls[0][2].stream).toBeUndefined();
+  });
+
+  it('does not treat the provider label as a model override', async () => {
+    const provider = new OpenAiAgentsProvider('support-agent', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(mockRun.mock.calls[0][2].model).toBeUndefined();
+  });
+
+  it('passes Promptfoo vars through the SDK local run context', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    await provider.callApi(
+      'What customer tier am I on?',
+      {
+        prompt: {
+          raw: 'What customer tier am I on?',
+          label: 'prompt',
+        } as any,
+        vars: {
+          customer_tier: 'gold',
+        },
+      },
+      undefined,
+    );
+
+    expect(mockRun.mock.calls[0][2].context).toEqual({
+      customer_tier: 'gold',
+    });
+  });
+
+  it('re-runs file-exported session factories for each provider call', async () => {
+    const createSession = vi.fn(async () => new MemorySession());
+    mockImportModule.mockResolvedValue({
+      default: createSession,
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: 'file://./sessions/support-session.ts',
+      },
+    });
+
+    await provider.callApi('first');
+    await provider.callApi('second');
+
+    expect(createSession).toHaveBeenCalledTimes(2);
+    expect(mockRun.mock.calls[0][2].session).not.toBe(mockRun.mock.calls[1][2].session);
+  });
+
+  it('serializes calls that intentionally reuse one shared configured session', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: {
+          type: 'memory',
+          sessionId: 'shared-session',
+        },
+      },
+    });
+
+    let releaseFirstRun: () => void = () => {};
+    const firstRunStarted = new Promise<void>((resolve) => {
+      mockRun.mockImplementationOnce(async () => {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseFirstRun = release;
+        });
+        return { finalOutput: 'first', newItems: [], usage: undefined };
+      });
+    });
+    mockRun.mockImplementationOnce(async () => ({
+      finalOutput: 'second',
+      newItems: [],
+      usage: undefined,
+    }));
+
+    const firstCall = provider.callApi('first');
+    await firstRunStarted;
+    const secondCall = provider.callApi('second');
+
+    await Promise.resolve();
+    expect(mockRun).toHaveBeenCalledTimes(1);
+
+    releaseFirstRun();
+    await Promise.all([firstCall, secondCall]);
+
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    expect(mockRun.mock.calls[0][2].session).toBe(mockRun.mock.calls[1][2].session);
+  });
+
+  it('serializes calls when a session factory reuses one Session instance', async () => {
+    const sharedSession = new MemorySession({ sessionId: 'shared-session' });
+    const createSession = vi.fn(async () => sharedSession);
+    mockImportModule.mockResolvedValue({
+      default: createSession,
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: 'file://./sessions/support-session.ts',
+      },
+    });
+
+    let releaseFirstRun: () => void = () => {};
+    const firstRunStarted = new Promise<void>((resolve) => {
+      mockRun.mockImplementationOnce(async () => {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseFirstRun = release;
+        });
+        return { finalOutput: 'first', newItems: [], usage: undefined };
+      });
+    });
+    mockRun.mockImplementationOnce(async () => ({
+      finalOutput: 'second',
+      newItems: [],
+      usage: undefined,
+    }));
+
+    const firstCall = provider.callApi('first');
+    await firstRunStarted;
+    const secondCall = provider.callApi('second');
+
+    await Promise.resolve();
+    expect(mockRun).toHaveBeenCalledTimes(1);
+
+    releaseFirstRun();
+    await Promise.all([firstCall, secondCall]);
+
+    expect(createSession).toHaveBeenCalledTimes(2);
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    expect(mockRun.mock.calls[0][2].session).toBe(sharedSession);
+    expect(mockRun.mock.calls[1][2].session).toBe(sharedSession);
+  });
+
+  it('reuses one configured session when the first calls start concurrently', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        session: {
+          type: 'memory',
+          sessionId: 'shared-session',
+        },
+      },
+    });
+
+    await Promise.all([provider.callApi('first'), provider.callApi('second')]);
+
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    expect(mockRun.mock.calls[0][2].session).toBe(mockRun.mock.calls[1][2].session);
+  });
+
+  it('loads file-exported executable run options', async () => {
+    const sessionInputCallback = vi.fn();
+    mockImportModule.mockResolvedValue({
+      default: sessionInputCallback,
+    });
+
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        runOptions: {
+          sessionInputCallback: 'file://./callbacks/session-input.ts',
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(mockRun.mock.calls[0][2].sessionInputCallback).toBe(sessionInputCallback);
+  });
+
+  it('joins SDK tracing to the evaluator trace when traceparent is provided', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    await provider.callApi(
+      'Where is my order?',
+      {
+        evaluationId: 'eval-1',
+        prompt: {
+          raw: 'Where is my order?',
+          label: 'prompt',
+        } as any,
+        testCaseId: 'case-1',
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        vars: {},
+      },
+      undefined,
+    );
+
+    expect(mockGetOrCreateTrace).toHaveBeenCalledWith(expect.any(Function), {
+      traceId: 'trace_0123456789abcdef0123456789abcdef',
+      metadata: {
+        'evaluation.id': 'eval-1',
+        'test.case.id': 'case-1',
+        'promptfoo.parent_span_id': '0123456789abcdef',
+      },
+    });
+  });
+
+  it('adds the Promptfoo trace exporter without replacing existing processors', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+        tracing: true,
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(addTraceProcessor).toHaveBeenCalledTimes(1);
+    expect(setTraceProcessors).not.toHaveBeenCalled();
   });
 
   it('passes structured multimodal JSON prompts to the SDK as agent input items', async () => {
@@ -737,5 +1112,74 @@ describe('loadAgentDefinition', () => {
     await expect(loadAgentDefinition([] as any)).rejects.toThrow(
       'Invalid agent configuration: expected Agent instance, file:// URL, or inline definition',
     );
+  });
+
+  it('creates inline sandbox agents with normalized manifests', async () => {
+    const agent = await loadAgentDefinition({
+      type: 'sandbox',
+      name: 'Inline Workspace Agent',
+      instructions: 'Inspect the workspace.',
+      defaultManifest: {
+        entries: {},
+      },
+    });
+
+    expect(agent).toBeInstanceOf(SandboxAgent);
+    expect((agent as SandboxAgent).defaultManifest).toBeInstanceOf(Manifest);
+  });
+
+  it('preserves inline agent handoff output warning settings', async () => {
+    const agent = await loadAgentDefinition({
+      name: 'Inline Agent',
+      instructions: 'Help the user.',
+      handoffOutputTypeWarningEnabled: false,
+    });
+
+    expect((agent as any).handoffOutputTypeWarningEnabled).toBe(false);
+  });
+});
+
+describe('session and sandbox loaders', () => {
+  it('creates built-in OpenAI session definitions', async () => {
+    await expect(
+      loadSessionDefinition({
+        type: 'openai-conversations',
+        conversationId: 'conv_123',
+      }),
+    ).resolves.toBeInstanceOf(OpenAIConversationsSession);
+
+    await expect(
+      loadSessionDefinition({
+        type: 'openai-responses-compaction',
+        client: {} as any,
+        model: 'gpt-5-mini',
+        underlyingSession: {
+          type: 'memory',
+          sessionId: 'session-1',
+        },
+      }),
+    ).resolves.toBeInstanceOf(OpenAIResponsesCompactionSession);
+  });
+
+  it('creates built-in local and docker sandbox configs', async () => {
+    await expect(
+      loadSandboxConfig({
+        type: 'unix-local',
+      }),
+    ).resolves.toMatchObject({
+      client: expect.objectContaining({ backendId: 'unix_local' }),
+    });
+
+    await expect(
+      loadSandboxConfig({
+        type: 'docker',
+        manifest: {
+          entries: {},
+        },
+      }),
+    ).resolves.toMatchObject({
+      client: expect.objectContaining({ backendId: 'docker' }),
+      manifest: expect.any(Manifest),
+    });
   });
 });

@@ -104,7 +104,7 @@ class RedteamMcpTargetProvider implements ApiProvider {
           }
         : undefined;
 
-      return this.target.callApi(materializedPrompt, materializedContext, options);
+      return await this.target.callApi(materializedPrompt, materializedContext, options);
     } catch (error) {
       return {
         error: `Failed to materialize MCP target prompt: ${
