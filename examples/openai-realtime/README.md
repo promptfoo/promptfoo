@@ -341,7 +341,7 @@ providers:
 
 If you reuse a Chat Completions-style tools file that wraps those fields under `function:`, promptfoo still accepts it as a compatibility input and normalizes only that legacy shape before sending it to the Realtime API.
 
-When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to your handler. Validate the function name and parse or validate the arguments before side effects in your application code.
+When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to your handler. Use `toolCallTimeout` to bound each handler invocation and `maxToolIterations` to cap chained tool-follow-up rounds in one turn. Validate the function name and parse or validate the arguments before side effects in your application code.
 
 #### Implementing a Custom Function Handler
 
