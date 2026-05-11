@@ -236,7 +236,7 @@
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@openai/codex-sdk": "^0.128.0",
     "@playwright/browser-chromium": "^1.59.1",
-    "@rollup/rollup-linux-x64-gnu": "^4.59.0",
+    "@rollup/rollup-linux-x64-gnu": "^4.60.3",
     "@slack/web-api": "^7.15.0",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.15.18",
