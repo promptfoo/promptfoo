@@ -45,6 +45,91 @@ describe('OpenAI Realtime Provider', () => {
   const originalOpenAiApiBaseUrl = process.env.OPENAI_API_BASE_URL;
   const originalOpenAiBaseUrl = process.env.OPENAI_BASE_URL;
 
+  const trackMockHandler = (event: string, handler: Function) => {
+    (mockHandlers[event] ??= []).push(handler);
+  };
+
+  const removeMockHandler = (event: string, handler: Function) => {
+    const arr = mockHandlers[event];
+    if (!arr) {
+      return;
+    }
+    const idx = arr.indexOf(handler);
+    if (idx !== -1) {
+      arr.splice(idx, 1);
+    }
+  };
+
+  const createPersistentMockWebSocket = (owner?: OpenAiRealtimeProvider) =>
+    ({
+      on: vi.fn((event: string, handler: Function) => {
+        trackMockHandler(event, handler);
+        return owner?.persistentConnection;
+      }),
+      once: vi.fn((event: string, handler: Function) => {
+        trackMockHandler(event, handler);
+        return owner?.persistentConnection;
+      }),
+      send: vi.fn(),
+      close: vi.fn(),
+      removeListener: vi.fn(removeMockHandler),
+      readyState: WebSocket.OPEN,
+    }) as unknown as WebSocket;
+
+  const lastMessageHandler = () => {
+    const handler = mockHandlers.message[mockHandlers.message.length - 1];
+    if (typeof handler !== 'function') {
+      throw new Error('expected message handler attached');
+    }
+    return handler;
+  };
+
+  const emitRealtimeEvent = (handler: Function, event: Record<string, unknown>) =>
+    handler(Buffer.from(JSON.stringify(event)));
+
+  const emitUserItem = (handler: Function, id = 'u1') =>
+    emitRealtimeEvent(handler, { type: 'conversation.item.added', item: { id, role: 'user' } });
+
+  const emitFunctionCall = (handler: Function, name: string, callId = 'c1') =>
+    emitRealtimeEvent(handler, {
+      type: 'response.output_item.added',
+      item: { type: 'function_call', call_id: callId, name, arguments: '{}' },
+    });
+
+  const emitFunctionCallArgumentsDone = (handler: Function, callId = 'c1') =>
+    emitRealtimeEvent(handler, {
+      type: 'response.function_call_arguments.done',
+      call_id: callId,
+      arguments: '{}',
+    });
+
+  const emitOutputTextDone = (handler: Function, text: string) =>
+    emitRealtimeEvent(handler, { type: 'response.output_text.done', text });
+
+  const emitResponseDone = (
+    handler: Function,
+    usage = { total_tokens: 1, input_tokens: 1, output_tokens: 0 },
+  ) => emitRealtimeEvent(handler, { type: 'response.done', response: { usage } });
+
+  const sentWebSocketEvents = (connection: WebSocket) =>
+    vi.mocked(connection.send as Mock).mock.calls.map(([raw]) => JSON.parse(raw as string));
+
+  const createDeferredString = () => {
+    let resolveDeferred: ((value: string) => void) | undefined;
+    const promise = new Promise<string>((resolve) => {
+      resolveDeferred = resolve;
+    });
+
+    const resolve = (value: string) => {
+      if (!resolveDeferred) {
+        throw new Error('expected deferred string to be initialized');
+      }
+      resolveDeferred(value);
+    };
+
+    return { promise, resolve };
+  };
+
   beforeEach(() => {
     vi.resetAllMocks();
     disableCache();
@@ -61,23 +146,14 @@ describe('OpenAI Realtime Provider', () => {
     // Create a mock WebSocket instance
     mockWs = {
       on: vi.fn((event: string, handler: Function) => {
-        mockHandlers[event].push(handler);
+        trackMockHandler(event, handler);
       }),
       send: vi.fn(),
       close: vi.fn(),
       once: vi.fn((event: string, handler: Function) => {
-        mockHandlers[event].push(handler);
+        trackMockHandler(event, handler);
       }),
-      removeListener: vi.fn((event: string, handler: Function) => {
-        const arr = mockHandlers[event];
-        if (!arr) {
-          return;
-        }
-        const idx = arr.indexOf(handler);
-        if (idx !== -1) {
-          arr.splice(idx, 1);
-        }
-      }),
+      removeListener: vi.fn(removeMockHandler),
     };
 
     // Mock WebSocket constructor
@@ -2287,15 +2363,7 @@ describe('OpenAI Realtime Provider', () => {
 
       // Pre-set persistentConnection so the first openPersistentConnection()
       // takes the pre-existing-connection branch and caches connectionReady.
-      const firstWs = {
-        on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
-        once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
-        send: vi.fn(),
-        close: vi.fn(),
-        removeListener: vi.fn(),
-        readyState: 1,
-      } as unknown as WebSocket;
-      provider.persistentConnection = firstWs;
+      provider.persistentConnection = createPersistentMockWebSocket();
 
       const ctx = { test: { metadata: { conversationId: 'reopen' } } } as any;
       const p1 = provider.callApi('first', ctx);
@@ -2391,12 +2459,7 @@ describe('OpenAI Realtime Provider', () => {
       await flushMicrotasks();
 
       // Send a partial-turn signal so the handler is mid-stream when close fires.
-      const messageHandler = mockHandlers.message[mockHandlers.message.length - 1];
-      messageHandler(
-        Buffer.from(
-          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
-        ),
-      );
+      emitUserItem(lastMessageHandler());
 
       // Fire the mid-turn 'close' on the same socket. The setupMessageHandlers
       // close listener must (a) reject the in-flight turn, (b) clear cached
@@ -2466,74 +2529,28 @@ describe('OpenAI Realtime Provider', () => {
         },
       });
 
-      provider.persistentConnection = {
-        on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
-        once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
-        send: vi.fn(),
-        close: vi.fn(),
-        removeListener: vi.fn(),
-        readyState: 1,
-      } as unknown as WebSocket;
+      const persistentConnection = createPersistentMockWebSocket();
+      provider.persistentConnection = persistentConnection;
 
       const responsePromise = provider.callApi('lookup something', {
         test: { metadata: { conversationId: 'handler-throw' } },
       } as any);
       await flushMicrotasks();
-      const h = mockHandlers.message[mockHandlers.message.length - 1];
+      const h = lastMessageHandler();
 
-      h(
-        Buffer.from(
-          JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
-        ),
-      );
-      h(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.output_item.added',
-            item: { type: 'function_call', call_id: 'c1', name: 'lookup', arguments: '{}' },
-          }),
-        ),
-      );
-      h(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.function_call_arguments.done',
-            call_id: 'c1',
-            arguments: '{}',
-          }),
-        ),
-      );
+      emitUserItem(h);
+      emitFunctionCall(h, 'lookup');
+      emitFunctionCallArgumentsDone(h);
       await Promise.resolve(
-        h(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-            }),
-          ),
-        ),
+        emitResponseDone(h, { total_tokens: 1, input_tokens: 1, output_tokens: 0 }),
       );
       // Drain microtasks until the handler-throw branch has executed.
       await flushMicrotasks();
 
       // The model's follow-up turn produces a normal text response after
       // seeing the redacted error.
-      h(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.output_text.done',
-            text: 'I had trouble looking that up.',
-          }),
-        ),
-      );
-      h(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 4, input_tokens: 2, output_tokens: 2 } },
-          }),
-        ),
-      );
+      emitOutputTextDone(h, 'I had trouble looking that up.');
+      emitResponseDone(h, { total_tokens: 4, input_tokens: 2, output_tokens: 2 });
 
       const result = await responsePromise;
       // The output must still resolve normally (not be wrapped in the
@@ -2543,9 +2560,7 @@ describe('OpenAI Realtime Provider', () => {
       expect(result.metadata?.functionCallOccurred).toBe(true);
       expect(result.metadata?.functionCallResults).toEqual(['{"error":"Tool execution failed"}']);
       // Critical: the redacted output must NOT contain the leaky details.
-      const sentPayloads = vi
-        .mocked(provider.persistentConnection!.send as Mock)
-        .mock.calls.map(([raw]) => JSON.parse(raw as string));
+      const sentPayloads = sentWebSocketEvents(persistentConnection);
       const toolOutput = sentPayloads.find(
         (e) => e.type === 'conversation.item.create' && e.item?.type === 'function_call_output',
       );
@@ -2567,13 +2582,8 @@ describe('OpenAI Realtime Provider', () => {
       // would have rejected by now.
       vi.useFakeTimers();
       try {
-        let resolveHandler: ((value: string) => void) | undefined;
-        const functionCallHandler = vi.fn(
-          () =>
-            new Promise<string>((resolve) => {
-              resolveHandler = resolve;
-            }),
-        );
+        const deferredToolResult = createDeferredString();
+        const functionCallHandler = vi.fn(() => deferredToolResult.promise);
         const provider = new OpenAiRealtimeProvider('gpt-realtime', {
           config: {
             modalities: ['text'],
@@ -2601,28 +2611,10 @@ describe('OpenAI Realtime Provider', () => {
         mockHandlers.open.forEach((h) => h());
         await vi.advanceTimersByTimeAsync(0);
 
-        const h = mockHandlers.message[mockHandlers.message.length - 1];
-        h(
-          Buffer.from(
-            JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
-          ),
-        );
-        h(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.output_item.added',
-              item: { type: 'function_call', call_id: 'c1', name: 'slow', arguments: '{}' },
-            }),
-          ),
-        );
-        h(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-            }),
-          ),
-        );
+        const h = lastMessageHandler();
+        emitUserItem(h);
+        emitFunctionCall(h, 'slow');
+        emitResponseDone(h, { total_tokens: 1, input_tokens: 1, output_tokens: 0 });
         await vi.advanceTimersByTimeAsync(0);
         expect(functionCallHandler).toHaveBeenCalledWith('slow', '{}');
 
@@ -2633,17 +2625,10 @@ describe('OpenAI Realtime Provider', () => {
         expect(settled).toBe(false);
 
         // Resolve the handler and complete the follow-up turn.
-        resolveHandler?.('{"ok":true}');
+        deferredToolResult.resolve('{"ok":true}');
         await vi.advanceTimersByTimeAsync(0);
-        h(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'tool done' })));
-        h(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
-            }),
-          ),
-        );
+        emitOutputTextDone(h, 'tool done');
+        emitResponseDone(h, { total_tokens: 2, input_tokens: 1, output_tokens: 1 });
 
         const result = await responsePromise;
         expect(result.error).toBeUndefined();
@@ -2656,13 +2641,8 @@ describe('OpenAI Realtime Provider', () => {
     it('pauses the client-secret request timeout while a tool handler is running', async () => {
       vi.useFakeTimers();
       try {
-        let resolveHandler: ((value: string) => void) | undefined;
-        const functionCallHandler = vi.fn(
-          () =>
-            new Promise<string>((resolve) => {
-              resolveHandler = resolve;
-            }),
-        );
+        const deferredToolResult = createDeferredString();
+        const functionCallHandler = vi.fn(() => deferredToolResult.promise);
         const provider = new OpenAiRealtimeProvider('gpt-realtime', {
           config: {
             modalities: ['text'],
@@ -2691,45 +2671,20 @@ describe('OpenAI Realtime Provider', () => {
         mockHandlers.open.forEach((h) => h());
         await vi.advanceTimersByTimeAsync(0);
 
-        const h = mockHandlers.message[mockHandlers.message.length - 1];
-        h(
-          Buffer.from(
-            JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
-          ),
-        );
-        h(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.output_item.added',
-              item: { type: 'function_call', call_id: 'c1', name: 'slow', arguments: '{}' },
-            }),
-          ),
-        );
-        h(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
-            }),
-          ),
-        );
+        const h = lastMessageHandler();
+        emitUserItem(h);
+        emitFunctionCall(h, 'slow');
+        emitResponseDone(h, { total_tokens: 1, input_tokens: 1, output_tokens: 0 });
         await vi.advanceTimersByTimeAsync(0);
         expect(functionCallHandler).toHaveBeenCalledWith('slow', '{}');
 
         await vi.advanceTimersByTimeAsync(150);
         expect(settled).toBe(false);
 
-        resolveHandler?.('{"ok":true}');
+        deferredToolResult.resolve('{"ok":true}');
         await vi.advanceTimersByTimeAsync(0);
-        h(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'tool done' })));
-        h(
-          Buffer.from(
-            JSON.stringify({
-              type: 'response.done',
-              response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
-            }),
-          ),
-        );
+        emitOutputTextDone(h, 'tool done');
+        emitResponseDone(h, { total_tokens: 2, input_tokens: 1, output_tokens: 1 });
 
         const result = await responsePromise;
         expect(result.output).toContain('tool done');

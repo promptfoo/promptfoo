@@ -513,10 +513,10 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
  * Used by the provider routing layer to fail-fast with a clear error rather than
  * silently exchanging an empty response over the wrong wire shape.
  */
-export const NON_CONVERSATIONAL_REALTIME_MODELS: readonly string[] = [
+export const NON_CONVERSATIONAL_REALTIME_MODELS: ReadonlySet<string> = new Set([
   'gpt-realtime-translate',
   'gpt-realtime-whisper',
-];
+]);
 
 // Realtime models for WebSocket API
 export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [

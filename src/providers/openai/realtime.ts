@@ -490,7 +490,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     modelName: string,
     options: { config?: OpenAiRealtimeOptions; id?: string; env?: EnvOverrides } = {},
   ) {
-    if (NON_CONVERSATIONAL_REALTIME_MODELS.includes(modelName)) {
+    if (NON_CONVERSATIONAL_REALTIME_MODELS.has(modelName)) {
       throw new Error(
         `OpenAI ${modelName} is not a conversational Realtime model and cannot be used as ` +
           `openai:realtime:${modelName}. ` +
