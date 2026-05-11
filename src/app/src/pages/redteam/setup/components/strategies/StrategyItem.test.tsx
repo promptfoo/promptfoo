@@ -96,7 +96,7 @@ describe('StrategyItem', () => {
       expect(screen.getByText('Test description')).toBeInTheDocument();
     });
 
-    it('renders checkbox with correct state', () => {
+    it('renders selection state on the card', () => {
       const { rerender } = renderStrategyItem({
         isDisabled: false,
         isRemoteGenerationDisabled: false,
@@ -106,8 +106,8 @@ describe('StrategyItem', () => {
         onConfigClick: mockOnConfigClick,
       });
 
-      const checkbox = screen.getByRole('checkbox');
-      expect(checkbox).not.toBeChecked();
+      const card = screen.getByRole('button', { name: 'Test Strategy' });
+      expect(card).toHaveAttribute('aria-pressed', 'false');
 
       const redTeamConfig = {
         description: 'Test config',
@@ -138,7 +138,23 @@ describe('StrategyItem', () => {
         </QueryClientProvider>,
       );
 
-      expect(checkbox).toBeChecked();
+      expect(card).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('exposes the card as the named selection target', () => {
+      renderStrategyItem({
+        isDisabled: false,
+        isRemoteGenerationDisabled: false,
+        strategy: baseStrategy,
+        isSelected: false,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+      });
+
+      expect(screen.getByRole('button', { name: 'Test Strategy' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
     });
   });
 
@@ -233,9 +249,9 @@ describe('StrategyItem', () => {
         onConfigClick: mockOnConfigClick,
       });
 
-      // Should only have test case generation button, not settings button
-      const buttons = screen.getAllByRole('button');
-      expect(buttons).toHaveLength(1); // Only test case generation button
+      expect(
+        screen.queryByRole('button', { name: 'Configure Test Strategy' }),
+      ).not.toBeInTheDocument();
       expect(screen.queryByTestId('SettingsOutlinedIcon')).not.toBeInTheDocument();
     });
 
@@ -254,9 +270,7 @@ describe('StrategyItem', () => {
         onConfigClick: mockOnConfigClick,
       });
 
-      // Should have test case generation button + settings button
-      const buttons = screen.getAllByRole('button');
-      expect(buttons).toHaveLength(2); // Test case generation + settings buttons
+      expect(screen.getByRole('button', { name: 'Configure Test Strategy' })).toBeInTheDocument();
     });
 
     it('shows settings button for hydra when selected and enabled', () => {
@@ -314,9 +328,9 @@ describe('StrategyItem', () => {
         onConfigClick: mockOnConfigClick,
       });
 
-      // Should only have test case generation button, no settings button
-      const buttons = screen.queryAllByRole('button');
-      expect(buttons).toHaveLength(1); // Only test case generation button
+      expect(
+        screen.queryByRole('button', { name: 'Configure Test Strategy' }),
+      ).not.toBeInTheDocument();
       expect(screen.queryByTestId('SettingsOutlinedIcon')).not.toBeInTheDocument();
     });
 
@@ -361,7 +375,7 @@ describe('StrategyItem', () => {
       expect(mockOnToggle).toHaveBeenCalledWith('basic');
     });
 
-    it('calls onToggle when checkbox is clicked', async () => {
+    it('calls onToggle when the card is activated from the keyboard', async () => {
       const user = userEvent.setup();
       renderStrategyItem({
         isDisabled: false,
@@ -372,8 +386,9 @@ describe('StrategyItem', () => {
         onConfigClick: mockOnConfigClick,
       });
 
-      const checkbox = screen.getByRole('checkbox');
-      await user.click(checkbox);
+      const card = screen.getByRole('button', { name: 'Test Strategy' });
+      card.focus();
+      await user.keyboard('{Enter}');
 
       expect(mockOnToggle).toHaveBeenCalledWith('basic');
     });

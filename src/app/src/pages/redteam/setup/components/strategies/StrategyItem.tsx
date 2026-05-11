@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { type KeyboardEvent, useCallback, useMemo } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
@@ -73,7 +73,7 @@ export function StrategyItem({
     return `Generate an example test case using the ${strategy.name} Strategy.`;
   }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
 
-  const settingsTooltipTitle = requiresConfig ? tooltipTitle : 'Configure strategy settings';
+  const settingsTooltipTitle = requiresConfig ? tooltipTitle : `Configure ${strategy.name}`;
 
   const handleToggle = useCallback(() => {
     if (isDisabled) {
@@ -82,12 +82,34 @@ export function StrategyItem({
     onToggle(strategy.id);
   }, [strategy.id, onToggle, isDisabled]);
 
+  const handleCardKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget || isDisabled) {
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onToggle(strategy.id);
+      }
+    },
+    [isDisabled, onToggle, strategy.id],
+  );
+
   return (
     <Card
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+      aria-label={strategy.name}
+      aria-pressed={isSelected}
       onClick={handleToggle}
+      onKeyDown={handleCardKeyDown}
       className={cn(
         'relative flex select-none flex-col gap-3 p-4 transition-all',
         isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+        !isDisabled &&
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        !isDisabled && 'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
         !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
         isSelected &&
           !requiresConfig &&
@@ -153,6 +175,8 @@ export function StrategyItem({
           disabled={isDisabled}
           onCheckedChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
+          aria-hidden="true"
+          tabIndex={-1}
           className="mt-0.5"
         />
       </div>
@@ -176,7 +200,7 @@ export function StrategyItem({
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Configure strategy settings"
+                aria-label={`Configure ${strategy.name}`}
                 className={cn(
                   'size-8',
                   requiresConfig

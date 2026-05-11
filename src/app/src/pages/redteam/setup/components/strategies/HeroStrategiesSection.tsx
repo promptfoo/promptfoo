@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { type KeyboardEvent, useCallback } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
@@ -86,7 +86,7 @@ function HeroStrategyCard({
 
   const settingsTooltipTitle = requiresConfig
     ? 'Configuration required. Click the settings icon to configure.'
-    : 'Configure strategy settings';
+    : `Configure ${strategy.name}`;
 
   const handleToggle = useCallback(() => {
     if (isDisabled) {
@@ -95,9 +95,26 @@ function HeroStrategyCard({
     onToggle(strategy.id);
   }, [strategy.id, onToggle, isDisabled]);
 
+  const handleCardKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget || isDisabled) {
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onToggle(strategy.id);
+      }
+    },
+    [isDisabled, onToggle, strategy.id],
+  );
+
   const cardClassName = cn(
     'relative flex select-none flex-col gap-3 p-4 transition-all',
     isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+    !isDisabled &&
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    !isDisabled && 'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
     !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
     isSelected &&
       !requiresConfig &&
@@ -114,7 +131,15 @@ function HeroStrategyCard({
   );
 
   return (
-    <Card onClick={handleToggle} className={cardClassName}>
+    <Card
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+      aria-label={strategy.name}
+      aria-pressed={isSelected}
+      onClick={handleToggle}
+      onKeyDown={handleCardKeyDown}
+      className={cardClassName}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -126,6 +151,8 @@ function HeroStrategyCard({
           disabled={isDisabled}
           onCheckedChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
+          aria-hidden="true"
+          tabIndex={-1}
           className="mt-0.5"
         />
       </div>
@@ -156,7 +183,7 @@ function HeroStrategyCard({
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Configure strategy settings"
+                aria-label={`Configure ${strategy.name}`}
                 className={cn(
                   'size-8',
                   requiresConfig

@@ -334,5 +334,29 @@ describe('Strategies', () => {
       await user.click(metaAgentCard!);
       expect(mockUpdateConfig).toHaveBeenCalled();
     });
+
+    it('labels hero strategy cards with the visible strategy names', () => {
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: 'Meta Agent' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+      expect(screen.getByRole('button', { name: 'Hydra Multi-Turn' })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      );
+    });
+
+    it('toggles hero strategy cards from the keyboard', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const hydraCard = screen.getByRole('button', { name: 'Hydra Multi-Turn' });
+      hydraCard.focus();
+      await user.keyboard('{Enter}');
+
+      expect(mockUpdateConfig).toHaveBeenCalled();
+    });
   });
 });
