@@ -24,7 +24,7 @@ export function runCommand(program: Command): void {
     .option('--api-host <url>', 'Promptfoo API host URL (default: https://api.promptfoo.app)')
     .option('--diffs-only', 'Scan only PR diffs, skip filesystem exploration')
     .option('--json', 'Output results as JSON')
-    .option('--sarif', 'Output results as SARIF 2.1.0')
+    .option('-f, --format <format>', 'Output format (text|json|sarif)', 'text')
     .option('--github-pr <owner/repo#number>', 'GitHub PR to post comments to')
     .option('--min-severity <level>', 'Minimum severity level (low|medium|high|critical)')
     .option('--minimum-severity <level>', 'Alias for min-severity (low|medium|high|critical)')

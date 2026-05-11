@@ -87,6 +87,62 @@ describe('MCPProvider', () => {
     });
   });
 
+  it('should use deprecated responseParser when transformResponse is not configured', async () => {
+    const rawResult = {
+      structuredContent: { answer: 'legacy response' },
+    };
+    mcpClientMock.callTool.mockResolvedValue({
+      content: 'normalized response',
+      raw: rawResult,
+    });
+
+    const provider = new MCPProvider({
+      config: {
+        enabled: true,
+        responseParser:
+          '({ output: result.structuredContent.answer, metadata: { parser: "legacy" } })',
+      },
+    });
+
+    await expect(provider.callTool('lookup_user', { id: '123' })).resolves.toEqual({
+      output: 'legacy response',
+      raw: rawResult,
+      metadata: {
+        parser: 'legacy',
+        toolName: 'lookup_user',
+        toolArgs: { id: '123' },
+      },
+    });
+  });
+
+  it('should prefer transformResponse over deprecated responseParser when both are configured', async () => {
+    const rawResult = {
+      structuredContent: { answer: 'structured response' },
+    };
+    mcpClientMock.callTool.mockResolvedValue({
+      content: 'normalized response',
+      raw: rawResult,
+    });
+
+    const provider = new MCPProvider({
+      config: {
+        enabled: true,
+        responseParser: '({ output: "legacy response", metadata: { parser: "legacy" } })',
+        transformResponse: '({ output: "new response", metadata: { parser: "transform" } })',
+      },
+    });
+
+    await expect(provider.callTool('lookup_user', { id: '123' })).resolves.toEqual({
+      output: 'new response',
+      raw: rawResult,
+      metadata: {
+        parser: 'transform',
+        toolName: 'lookup_user',
+        toolArgs: { id: '123' },
+      },
+    });
+  });
+
   it('should keep provider metadata authoritative when transforms return conflicting keys', async () => {
     const rawResult = {
       structuredContent: { answer: 'structured response' },

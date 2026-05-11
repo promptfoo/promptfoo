@@ -9,6 +9,7 @@ import ora from 'ora';
 import { TERMINAL_MAX_WIDTH } from '../../constants';
 import logger from '../../logger';
 import {
+  CodeScanOutputFormat,
   CodeScanSeverity,
   countBySeverity,
   formatSeverity,
@@ -17,15 +18,13 @@ import {
 } from '../../types/codeScan';
 import { formatDuration } from '../../util/formatDuration';
 import { printBorder } from '../../util/index';
-import { createSarifLog } from './sarif';
-
-export type OutputFormat = 'pretty' | 'json' | 'sarif';
+import { scanResponseToSarif } from '../util/sarif';
 
 /**
  * Options for output display
  */
 export interface OutputOptions {
-  format: OutputFormat;
+  format: CodeScanOutputFormat;
   githubPr?: string;
 }
 
@@ -33,33 +32,9 @@ export interface OutputOptions {
  * Options for spinner creation
  */
 export interface SpinnerOptions {
-  format: OutputFormat;
+  format: CodeScanOutputFormat;
   isWebUI: boolean;
   logLevel: string;
-}
-
-export function resolveOutputFormat(options: { json?: boolean; sarif?: boolean }): OutputFormat {
-  if (options.json && options.sarif) {
-    throw new Error('Cannot specify both --json and --sarif options');
-  }
-
-  if (options.sarif) {
-    return 'sarif';
-  }
-
-  if (options.json) {
-    return 'json';
-  }
-
-  return 'pretty';
-}
-
-export function formatMachineReadableScanResults(
-  response: ScanResponse,
-  format: Exclude<OutputFormat, 'pretty'>,
-): string {
-  const output = format === 'sarif' ? createSarifLog(response) : response;
-  return JSON.stringify(output, null, 2);
 }
 
 /**
@@ -70,7 +45,9 @@ export function formatMachineReadableScanResults(
  */
 export function createSpinner(options: SpinnerOptions): ReturnType<typeof ora> | undefined {
   const showSpinner =
-    !options.isWebUI && options.format === 'pretty' && options.logLevel !== 'debug';
+    !options.isWebUI &&
+    options.format === CodeScanOutputFormat.TEXT &&
+    options.logLevel !== 'debug';
 
   if (showSpinner) {
     return ora({ text: '', color: 'green' }).start();
@@ -91,7 +68,12 @@ export function displayScanResults(
   duration: number,
   options: OutputOptions,
 ): void {
-  if (options.format === 'pretty') {
+  if (options.format === CodeScanOutputFormat.JSON) {
+    // Output full scan response to stdout for programmatic consumption
+    console.log(JSON.stringify(response, null, 2));
+  } else if (options.format === CodeScanOutputFormat.SARIF) {
+    console.log(JSON.stringify(scanResponseToSarif(response), null, 2));
+  } else {
     // Pretty-print results for human consumption
     const { comments, review } = response;
     const severityCounts = countBySeverity(comments || []);
@@ -181,8 +163,5 @@ export function displayScanResults(
         printBorder();
       }
     }
-  } else {
-    // Output full scan response to stdout for programmatic consumption
-    console.log(formatMachineReadableScanResults(response, options.format));
   }
 }

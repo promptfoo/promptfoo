@@ -298,6 +298,21 @@ describe('discoverTokenEndpoint', () => {
     );
   });
 
+  it('should ignore token endpoints with unsupported protocols during discovery', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'ftp://auth.example.com/token' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+    });
+
+    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
+      'https://auth.example.com/token',
+    );
+  });
+
   it('should handle network errors gracefully', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'));
 

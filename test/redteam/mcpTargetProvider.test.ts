@@ -3,7 +3,7 @@ import { MCPProvider } from '../../src/providers/mcp';
 import { maybeWrapMcpProviderForRedteam } from '../../src/redteam/mcpTargetProvider';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
-import type { CallApiContextParams, ProviderResponse } from '../../src/types';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../src/types';
 
 const providerManagerMocks = vi.hoisted(() => ({
   getProvider: vi.fn(),
@@ -15,21 +15,8 @@ vi.mock('../../src/redteam/providers/shared', () => ({
   },
 }));
 
-const searchCompaniesTool: MCPTool = {
-  name: 'search_companies',
-  description: 'Search sample company records.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string' },
-      limit: { type: 'integer', default: 10 },
-    },
-    required: ['query'],
-  },
-};
-
 class FakeMcpProvider extends MCPProvider {
-  calls: { context?: CallApiContextParams; prompt: string }[] = [];
+  calls: { context?: CallApiContextParams; options?: CallApiOptionsParams; prompt: string }[] = [];
   cleanupCalls = 0;
 
   constructor(private readonly tools: MCPTool[]) {
@@ -40,8 +27,12 @@ class FakeMcpProvider extends MCPProvider {
     return this.tools;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    this.calls.push({ prompt, context });
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    this.calls.push({ prompt, context, options });
     return { output: 'ok' };
   }
 
@@ -51,6 +42,19 @@ class FakeMcpProvider extends MCPProvider {
 }
 
 describe('maybeWrapMcpProviderForRedteam', () => {
+  const searchCompaniesTool: MCPTool = {
+    name: 'search_companies',
+    description: 'Search sample company records.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        limit: { type: 'integer', default: 10 },
+      },
+      required: ['query'],
+    },
+  };
+
   beforeEach(() => {
     providerManagerMocks.getProvider.mockReset();
   });
@@ -146,11 +150,13 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       },
     });
 
-    const response = await wrapped.callApi('Plain prompt', undefined, { includeLogProbs: true });
+    const options = { includeLogProbs: true };
+
+    const response = await wrapped.callApi('Plain prompt', undefined, options);
 
     expect(response).toEqual({ output: 'ok' });
     expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
-    expect(target.calls).toEqual([{ prompt: 'Plain prompt', context: undefined }]);
+    expect(target.calls).toEqual([{ prompt: 'Plain prompt', context: undefined, options }]);
   });
 
   it('preserves provider identity helpers and cleanup behavior', async () => {
