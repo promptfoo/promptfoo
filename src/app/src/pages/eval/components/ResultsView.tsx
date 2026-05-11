@@ -828,7 +828,7 @@ export default function ResultsView({
                       value={String(resultsTableZoom)}
                       onValueChange={(val) => setResultsTableZoom(Number(val))}
                     >
-                      <SelectTrigger className="w-[115px] h-8 text-xs">
+                      <SelectTrigger aria-label="Results zoom" className="w-[115px] h-8 text-xs">
                         <span>
                           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                             ZOOM

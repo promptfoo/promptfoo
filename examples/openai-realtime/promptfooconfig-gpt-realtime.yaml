@@ -9,10 +9,8 @@ providers:
       modalities: ['text', 'audio']
       voice: 'cedar' # Voice available with gpt-realtime-1.5
       instructions: 'You are a helpful assistant. Keep your responses concise and informative.'
-      temperature: 0.7
       # Increase WebSocket timeout to handle potential slow connections
       websocketTimeout: 60000 # 60 seconds
-      # The required beta header is automatically added to all requests
       # Tools definition for function calling
       # In a real implementation, you would implement a functionCallHandler in JavaScript
       # to process these function calls and return results to the model

@@ -1,6 +1,6 @@
 ---
 title: OpenAI Agents
-description: Test multi-turn OpenAI Agents with tools, handoffs, and tracing in promptfoo.
+description: Test OpenAI Agents with tools, handoffs, sessions, sandbox workflows, and tracing in promptfoo.
 keywords:
   [
     openai agents,
@@ -16,12 +16,12 @@ sidebar_label: OpenAI Agents
 
 # OpenAI Agents
 
-Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. Evaluate agents that use tools, hand off between specialists, and handle multi-step tasks.
+Test multi-turn agentic workflows built with the [@openai/agents](https://github.com/openai/openai-agents-js) SDK. Evaluate agents that use tools, persist session history, hand off between specialists, or run inside the SDK's sandbox runtime.
 
 :::note
 This page covers the JavaScript `@openai/agents` SDK and the built-in `openai:agents:*` provider.
 
-If you are using the Python `openai-agents` SDK, including SDK 0.14 `SandboxAgent` workflows or the experimental Python `codex_tool`, use the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) and the [`openai-agents` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) instead.
+If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python) and the [`openai-agents` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents) instead.
 :::
 
 ## Prerequisites
@@ -55,10 +55,13 @@ providers:
 | `modelSettings`    | SDK `ModelSettings` overrides, including reasoning, verbosity, and retry settings   | -                     |
 | `inputGuardrails`  | Additional input guardrails (inline array or `file://`)                             | -                     |
 | `outputGuardrails` | Additional output guardrails (inline array or `file://`)                            | -                     |
+| `session`          | Persistent SDK session definition, instance, factory, or `file://` export           | -                     |
+| `sandbox`          | Sandbox runtime config, local client definition, factory, or `file://` export       | -                     |
+| `runOptions`       | Additional non-streaming SDK `run()` options such as `conversationId` or filters    | -                     |
 | `executeTools`     | Execute function tools normally (`real`) or replace them with mocked results        | `real`                |
 | `toolMocks`        | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false | -                     |
-| `tracing`          | Enable OpenTelemetry OTLP tracing                                                   | false                 |
-| `otlpEndpoint`     | Custom OTLP endpoint URL for tracing                                                | http://localhost:4318 |
+| `tracing`          | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
+| `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
 
 ## File-Based Configuration
 
@@ -75,6 +78,10 @@ providers:
 ```
 
 Top-level `tools`, `handoffs`, `inputGuardrails`, and `outputGuardrails` augment whatever is already defined on the loaded agent.
+
+Any SDK `Tool` instance is accepted when it comes from a JavaScript/TypeScript file export. That includes function tools, hosted tools, `computerTool`, `shellTool`, and `applyPatchTool`. Inline YAML tool definitions are for function tools only.
+
+Inline agent definitions follow the SDK `AgentOptions` surface for fields such as dynamic `instructions`, dynamic `prompt`, `handoffOutputTypeWarningEnabled`, `toolUseBehavior`, and `resetToolChoice`. Use a file-exported SDK agent when those options need executable code.
 
 ## Multimodal Input
 
@@ -179,6 +186,181 @@ providers:
 
 Guardrails run validation logic before tool execution (input) and after (output), enabling content filtering, PII detection, or custom business rules.
 
+## Sessions
+
+OpenAI Agents SDK sessions keep conversation history across agent runs. Promptfoo supports the SDK session classes directly and also provides YAML-friendly shortcuts for the built-in session types:
+
+```yaml
+providers:
+  - openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      session:
+        type: memory
+        sessionId: support-demo
+```
+
+Supported inline session types are:
+
+| Type                          | Use case                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `memory`                      | Local in-memory demo or test session                                     |
+| `openai-conversations`        | Server-managed OpenAI Conversations API history                          |
+| `openai-responses-compaction` | Responses API history with automatic compaction over an underlying store |
+
+For more control, export an SDK `Session` instance or a factory from a file:
+
+```yaml
+providers:
+  - openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      session: file://./sessions/support-session.ts
+```
+
+Inline session definitions and exported session instances stay attached to the provider for later turns. Export a factory when you want Promptfoo to create a fresh session for each call.
+
+If you need the full `run()` surface, use `runOptions`. Promptfoo reserves `context`, `maxTurns`, `signal`, and streaming mode, but passes through the remaining non-streaming SDK options:
+
+```yaml
+providers:
+  - openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      runOptions:
+        previousResponseId: resp_123
+        conversationId: conv_123
+        reasoningItemIdPolicy: omit
+```
+
+When an option needs executable code, such as `sessionInputCallback`, `callModelInputFilter`, `toolErrorFormatter`, or `errorHandlers`, point it at a `file://` export.
+
+## Local Context
+
+Promptfoo passes the current test vars into the SDK's local `context` object for each run. Tools and callbacks can read those values through `runContext.context`:
+
+```typescript
+export const lookupCustomerContext = tool({
+  name: 'lookup_customer_context',
+  description: 'Read the current customer tier from local run context.',
+  parameters: z.object({}),
+  execute: async (_args, runContext) => ({
+    customer_tier: (runContext?.context as { customer_tier?: string }).customer_tier,
+  }),
+});
+```
+
+Use this for local application state that should be available to tools and hooks. It is separate from conversation history; use `session`, `conversationId`, or `previousResponseId` when you want to carry turns forward.
+
+## Stateful Red Team Runs
+
+Stateful red-team strategies such as [`crescendo`](/docs/red-team/strategies/multi-turn) and [`hydra`](/docs/red-team/strategies/hydra) need two things at once:
+
+- all turns within one attack should share history
+- separate tests should not share the same session
+
+Use `transformVars` to stamp each test with a stable per-test session ID, then export a session factory that reuses sessions by that ID:
+
+```yaml
+providers:
+  - openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      session: file://./sessions/redteam-session.ts
+
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+
+redteam:
+  strategies:
+    - id: crescendo
+      config:
+        stateful: true
+```
+
+```typescript title="sessions/redteam-session.ts"
+import { MemorySession } from '@openai/agents';
+
+const sessions = new Map<string, MemorySession>();
+
+export default async function createSession(context?: {
+  vars?: {
+    sessionId?: string;
+  };
+}) {
+  const sessionId = context?.vars?.sessionId ?? 'default-session';
+  const existing = sessions.get(sessionId);
+  if (existing) {
+    return existing;
+  }
+
+  const session = new MemorySession({ sessionId });
+  sessions.set(sessionId, session);
+  return session;
+}
+```
+
+This keeps each multi-turn attack stateful while still isolating one generated test case from another. With Hydra, set `stateful: true` only after configuring this session factory so Hydra can send just the newest turn while the SDK session preserves earlier turns. The same pattern is useful for [`agentic:memory-poisoning`](/docs/red-team/plugins/memory-poisoning), which also depends on persistent state across turns.
+
+## Sandbox Agents
+
+`@openai/agents` v0.9 added beta `SandboxAgent` support in the JavaScript SDK. File-exported sandbox agents work with the same provider:
+
+```typescript
+import { Manifest, SandboxAgent, file } from '@openai/agents/sandbox';
+
+export default new SandboxAgent({
+  name: 'Workspace Assistant',
+  instructions: 'Inspect the workspace before answering.',
+  defaultManifest: new Manifest({
+    entries: {
+      'task.md': file({ content: 'Ticket PF-42: update the release note.' }),
+    },
+  }),
+});
+```
+
+```yaml
+providers:
+  - openai:agents:workspace-agent
+    config:
+      agent: file://./agents/workspace-agent.ts
+      sandbox:
+        type: unix-local
+      maxTurns: 12
+```
+
+Use `type: unix-local` for the SDK's local sandbox client or `type: docker` for the Docker client. You can also pass a full SDK `SandboxRunConfig`, a file export, or a factory if you need custom sessions, snapshots, manifests, or clients.
+
+Inline agent definitions can opt into the sandbox runtime with `type: sandbox`, but file-exported SDK agents are the better fit once you need custom capability objects such as `skills()` or non-default manifests.
+
+## Skills and Shell Tools
+
+The JavaScript SDK exposes local skills through `shellTool` and sandbox capability objects. Because these require executable SDK objects, define them in TypeScript/JavaScript and load them from `file://` rather than trying to express them as YAML:
+
+```typescript
+import { shellTool } from '@openai/agents';
+
+export default [
+  shellTool({
+    shell: myShellImplementation,
+    environment: {
+      type: 'local',
+      skills: [
+        {
+          name: 'ticket-summary',
+          description: 'Summarize ticket files',
+          path: './skills/ticket-summary',
+        },
+      ],
+    },
+  }),
+];
+```
+
+For `SandboxAgent` workflows, use the SDK's sandbox capability helpers in the exported agent file. Prefer an explicit capability list such as `shell()` plus `skills({ ... })` when you know the model only needs those tools; the SDK's broader default capability set can expose tools that a particular model does not support.
+
 ## Retry Policies
 
 OpenAI Agents SDK v0.7 added opt-in retry settings on `modelSettings.retry`. Promptfoo supports YAML-friendly retry policy presets and passes them to the SDK as runtime callbacks.
@@ -255,7 +437,9 @@ export PROMPTFOO_TRACING_ENABLED=true
 npx promptfoo eval
 ```
 
-Traces include agent execution spans, tool invocations, model calls, handoff events, and token usage.
+Traces include agent execution spans, tool invocations, model calls, handoff events, token usage, and sandbox lifecycle spans. Promptfoo normalizes SDK tool spans into `tool.name`, `tool.arguments`, and `tool.output`, and sandbox command spans into command trajectory steps so the standard `trajectory:*` assertions work on both regular and sandbox runs.
+
+When Promptfoo tracing is enabled, the provider adds Promptfoo OTLP export alongside any tracing processors already registered in the SDK. If Promptfoo tracing is disabled, the SDK's own tracing behavior still applies; set `OPENAI_AGENTS_DISABLE_TRACING=1` if you also want to suppress the SDK exporter.
 
 Once Promptfoo is collecting those traces, you can assert on the agent's path instead of only its final message:
 
@@ -326,6 +510,21 @@ Try the interactive example: `npx promptfoo@latest init --example openai-agents-
 
 :::
 
+## Example: Advanced TypeScript Features
+
+For sessions, tracing assertions, sandbox agents, and skills, see the runnable [`openai-agents-advanced`](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-advanced) example:
+
+```bash
+npx promptfoo@latest init --example openai-agents-advanced
+cd openai-agents-advanced
+npx promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
+npx promptfoo eval -c promptfooconfig.sandbox.yaml --no-cache
+```
+
+## Scope
+
+This provider targets non-streaming text and sandbox `run()` workflows. Use `openai:realtime:*` for Realtime API evals. Serialized human-in-the-loop `RunState` resume flows are application state, so test those through a custom JavaScript provider wrapper instead of passing them as prompt text.
+
 ## Environment Variables
 
 | Variable                    | Description                |
@@ -350,7 +549,10 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 ## Related Documentation
 
 - [OpenAI Provider](/docs/providers/openai) - Standard OpenAI completions and chat
-- [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing, Sandbox Agents, and Codex tool span mapping
+- [OpenAI Agents Python SDK Guide](/docs/guides/evaluate-openai-agents-python) - Python SDK example with Promptfoo tracing and framework-specific provider wrapping
+- [Tracing](/docs/tracing) - OTLP ingestion and trajectory assertions
 - [Red Team Guide](/docs/red-team/quickstart) - Test agent safety
+- [Multi-turn Jailbreaks](/docs/red-team/strategies/multi-turn) - Stateful red-team strategy guidance
+- [Multi-turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions) - Provider-specific session setup
 - [Assertions](/docs/configuration/expected-outputs) - Validate agent responses
 - [OpenAI Agents SDK](https://github.com/openai/openai-agents-js) - Official SDK documentation

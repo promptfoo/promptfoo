@@ -26,6 +26,7 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
@@ -834,13 +835,17 @@ async function callActiveProvider({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
-  const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
+  const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
+  const activeProvider = maybeWrapMcpProviderForRedteam(
+    isApiProvider(test.provider) ? test.provider : originalProvider,
+    test,
+  );
   logger.debug(`Provider type: ${activeProvider.id()}`);
 
   const callApiContext = buildCallApiContext({
     evalId,
     filters,
-    originalProvider: provider,
+    originalProvider,
     promptForRender,
     repeatIndex,
     test,

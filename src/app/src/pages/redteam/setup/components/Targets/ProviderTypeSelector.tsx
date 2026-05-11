@@ -1108,7 +1108,7 @@ export default function ProviderTypeSelector({
   return (
     <div className="space-y-4">
       {/* Filter bar - chips on left, search on right */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
