@@ -213,6 +213,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
   // callers wait on this promise rather than racing each other to send on a
   // socket whose state is still CONNECTING.
   private connectionReady: Promise<void> | null = null;
+  private persistentConnectionLifecycleCleanup: (() => void) | null = null;
   // Per-provider serialization queue. Concurrent calls on the same provider
   // instance share one socket; the OpenAI Realtime wire shape is not designed
   // to multiplex unrelated turns over a single connection (events for one
@@ -1906,6 +1907,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     if (this.persistentConnection != null) {
       logger.debug(`Tearing down persistent connection: ${reason}`);
     }
+    this.persistentConnectionLifecycleCleanup?.();
+    this.persistentConnectionLifecycleCleanup = null;
     this.persistentConnection = null;
     this.connectionReady = null;
   }
@@ -1923,6 +1926,37 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       return true;
     }
     return ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN;
+  }
+
+  /**
+   * Keep lifecycle listeners attached while the shared socket is idle between
+   * turns. Turn-specific listeners are intentionally removed after each
+   * response, but Node treats an unhandled EventEmitter `error` as a process
+   * exception.
+   */
+  private installPersistentConnectionLifecycleHandlers(ws: WebSocket): void {
+    this.persistentConnectionLifecycleCleanup?.();
+
+    const onIdleError = (error: Error) => {
+      logger.error(`Persistent WebSocket error while idle: ${error}`);
+      if (this.persistentConnection === ws) {
+        this.tearDownPersistentConnection(`idle socket error: ${error.message}`);
+      }
+    };
+    const onIdleClose = (code: number, reason: Buffer) => {
+      const message = formatCloseMessage('Persistent WebSocket closed while idle', code, reason);
+      logger.debug(message);
+      if (this.persistentConnection === ws) {
+        this.tearDownPersistentConnection(`idle socket close: code=${code}`);
+      }
+    };
+
+    ws.on('error', onIdleError);
+    ws.on('close', onIdleClose);
+    this.persistentConnectionLifecycleCleanup = () => {
+      ws.removeListener('error', onIdleError);
+      ws.removeListener('close', onIdleClose);
+    };
   }
 
   /**
@@ -1950,6 +1984,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     // request, or a mock injected by a unit test) is treated as ready. The
     // sendEvent guard inside setupMessageHandlers is the runtime safety net.
     if (this.persistentConnection != null) {
+      this.installPersistentConnectionLifecycleHandlers(this.persistentConnection);
       this.connectionReady = Promise.resolve();
       return this.connectionReady;
     }
@@ -1977,6 +2012,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       };
       const onOpen = () => {
         removeBeforeOpenListeners();
+        this.installPersistentConnectionLifecycleHandlers(ws);
         logger.debug('Persistent WebSocket reached OPEN');
         resolve();
       };

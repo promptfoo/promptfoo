@@ -52,6 +52,7 @@ You can also use environment variables like `OPENAI_API_BASE_URL` or `OPENAI_BAS
 
 - `promptfooconfig.yaml`: Configuration file defining the providers and tests
 - `promptfooconfig-gpt-realtime.yaml`: Comprehensive gpt-realtime-1.5 model demonstration with audio support
+- `promptfooconfig-function-calling.js`: Runnable function-calling example with a local handler
 - `test-webui-audio.yaml`: Simple audio test for WebUI playback
 - `realtime-input.json`: JSON template for the realtime input prompt
 - `promptfooconfig-conversation.yaml`: Configuration for multi-turn conversation tests
@@ -345,7 +346,7 @@ When you provide a custom `functionCallHandler`, promptfoo forwards the model-em
 
 #### Implementing a Custom Function Handler
 
-To use function calling in your application, you would implement a function call handler. Here's an example of how you might implement a weather function handler in JavaScript:
+To use function calling in your application, implement a function call handler. The runnable `promptfooconfig-function-calling.js` example includes one end to end; here is the same core pattern:
 
 ```javascript
 // In your application code

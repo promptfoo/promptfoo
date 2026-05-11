@@ -1375,6 +1375,62 @@ describe('OpenAI Realtime Provider', () => {
       provider.cleanup();
     });
 
+    it('keeps lifecycle listeners on idle persistent sockets', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { modalities: ['text'], maintainContext: true },
+      });
+
+      provider.persistentConnection = {
+        on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn((event: string, h: Function) => {
+          const handlers = mockHandlers[event];
+          const idx = handlers.indexOf(h);
+          if (idx !== -1) {
+            handlers.splice(idx, 1);
+          }
+        }),
+        readyState: WebSocket.OPEN,
+      } as unknown as WebSocket;
+
+      const responsePromise = provider.callApi('hi', {
+        test: { metadata: { conversationId: 'idle-lifecycle' } },
+      } as any);
+      await flushMicrotasks();
+      const h = mockHandlers.message[mockHandlers.message.length - 1];
+
+      h(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.output_text.done',
+            text: 'hello',
+          }),
+        ),
+      );
+      h(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 3, input_tokens: 1, output_tokens: 2 } },
+          }),
+        ),
+      );
+
+      await expect(responsePromise).resolves.toMatchObject({ output: 'hello' });
+
+      // Turn-scoped cleanup removes its listener, but the idle lifecycle guard
+      // must remain so a later socket failure is handled instead of becoming an
+      // unhandled EventEmitter error.
+      expect(mockHandlers.error.length).toBeGreaterThan(0);
+      const idleErrorHandler = mockHandlers.error[mockHandlers.error.length - 1];
+      idleErrorHandler(new Error('idle disconnect'));
+
+      expect(provider.persistentConnection).toBeNull();
+      expect((provider as any).connectionReady).toBeNull();
+    });
+
     it('rejects when handler exceeds toolCallTimeout', async () => {
       vi.useFakeTimers();
       try {
