@@ -3563,6 +3563,103 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(result.output).toBe('Done');
   });
 
+  it('keeps aggregating command output deltas after command completion', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Run a command with delayed output');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_delayed_output' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_delayed_output', status: 'inProgress' } },
+    });
+
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_delayed_output',
+        turnId: 'turn_delayed_output',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_delayed_output',
+          command: 'printf "line one\\nline two"',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: null,
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_delayed_output',
+        turnId: 'turn_delayed_output',
+        itemId: 'cmd_delayed_output',
+        delta: 'line one\n',
+      },
+    });
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_delayed_output',
+        turnId: 'turn_delayed_output',
+        itemId: 'cmd_delayed_output',
+        delta: 'line two',
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_delayed_output',
+        turnId: 'turn_delayed_output',
+        itemId: 'msg_delayed_output',
+        delta: 'Done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_delayed_output',
+        turn: { id: 'turn_delayed_output', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    const raw = JSON.parse(result.raw as string);
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'line one\nline two',
+        }),
+      ]),
+    );
+    expect(result.metadata?.codexAppServer.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'commandExecution',
+          aggregatedOutput: 'line one\nline two',
+        }),
+      ]),
+    );
+  });
+
   it('emits SDK-compatible raw items for coding-agent verifiers', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);

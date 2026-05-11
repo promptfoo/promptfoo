@@ -2323,7 +2323,11 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     const completedItem = state.items.find(
       (item) => item?.type === 'commandExecution' && String(item.id) === params.itemId,
     );
-    if (completedItem && typeof completedItem.aggregatedOutput !== 'string') {
+    if (
+      completedItem &&
+      (typeof completedItem.aggregatedOutput !== 'string' ||
+        completedItem.aggregatedOutput === existing)
+    ) {
       completedItem.aggregatedOutput = aggregatedOutput;
     }
   }
