@@ -18,9 +18,9 @@ All graders MUST use these standardized tags:
 
 **NEVER use these deprecated tags:**
 
-- `<UserPrompt>` → use `<UserQuery>`
-- `<UserInput>` → use `<UserQuery>`
-- `<prompt>` (lowercase) → use `<UserQuery>`
+- `<UserPrompt>` -> use `<UserQuery>`
+- `<UserInput>` -> use `<UserQuery>`
+- `<prompt>` (lowercase) -> use `<UserQuery>`
 
 ## Grader Rubric Structure
 

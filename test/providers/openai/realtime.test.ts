@@ -3,6 +3,7 @@ import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
+import * as util from '../../../src/util/index';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
@@ -161,14 +162,26 @@ describe('OpenAI Realtime Provider', () => {
       const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
+        type: 'realtime',
         model: 'gpt-4o-realtime-preview',
-        modalities: ['text'],
-        voice: 'echo',
+        output_modalities: ['text'],
         instructions: 'Test instructions',
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        temperature: 0.7,
-        max_response_output_tokens: 100,
+        audio: {
+          input: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+          },
+          output: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+            voice: 'echo',
+          },
+        },
+        max_output_tokens: 100,
       });
     });
 
@@ -192,19 +205,229 @@ describe('OpenAI Realtime Provider', () => {
       const body = await provider.getRealtimeSessionBody();
 
       expect(body).toEqual({
+        type: 'realtime',
         model: 'gpt-4o-realtime-preview',
-        modalities: ['text', 'audio'],
-        voice: 'alloy',
+        output_modalities: ['audio'],
         instructions: 'Test instructions',
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        input_audio_transcription: {
-          model: 'whisper-1',
-          language: 'en',
-          prompt: 'Transcribe the following audio',
+        audio: {
+          input: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+            transcription: {
+              model: 'whisper-1',
+              language: 'en',
+              prompt: 'Transcribe the following audio',
+            },
+          },
+          output: {
+            format: {
+              type: 'audio/pcm',
+              rate: 24000,
+            },
+            voice: 'alloy',
+          },
         },
-        temperature: 0.8,
-        max_response_output_tokens: 'inf',
+        max_output_tokens: 'inf',
+      });
+    });
+
+    it('should pass through realtime 2 reasoning options and realtime whisper transcription config', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', {
+        config: {
+          input_audio_transcription: {
+            model: 'gpt-realtime-whisper',
+            language: 'en',
+            delay: 'low',
+          },
+          parallel_tool_calls: true,
+          reasoning: {
+            effort: 'high',
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body).toMatchObject({
+        type: 'realtime',
+        model: 'gpt-realtime-2',
+        audio: {
+          input: {
+            transcription: {
+              model: 'gpt-realtime-whisper',
+              language: 'en',
+              delay: 'low',
+            },
+          },
+        },
+        parallel_tool_calls: true,
+        reasoning: {
+          effort: 'high',
+        },
+      });
+    });
+
+    it('should pass through semantic VAD configuration', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', {
+        config: {
+          turn_detection: {
+            type: 'semantic_vad',
+            eagerness: 'high',
+            create_response: true,
+            interrupt_response: false,
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body).toMatchObject({
+        audio: {
+          input: {
+            turn_detection: {
+              type: 'semantic_vad',
+              eagerness: 'high',
+              create_response: true,
+              interrupt_response: false,
+            },
+          },
+        },
+      });
+    });
+
+    it('should preserve native Realtime tools and tool choices in session payloads', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              name: 'get_weather',
+              description: 'Get the weather',
+              parameters: {
+                type: 'object',
+                properties: {
+                  location: { type: 'string' },
+                },
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            name: 'get_weather',
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body.tools).toEqual([
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get the weather',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+            },
+          },
+        },
+      ]);
+      expect(body.tool_choice).toEqual({
+        type: 'function',
+        name: 'get_weather',
+      });
+    });
+
+    it('should normalize chat-style tools for Realtime session payloads', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get the weather',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    location: { type: 'string' },
+                  },
+                },
+              },
+            },
+          ],
+          tool_choice: 'auto',
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body.tools).toEqual([
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get the weather',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: { type: 'string' },
+            },
+          },
+        },
+      ]);
+      expect(body.tool_choice).toBe('auto');
+    });
+
+    it('should normalize chat-style forced tool choices to the native Realtime shape', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get the weather',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+            {
+              type: 'function',
+              function: {
+                name: 'get_time',
+                description: 'Get the time',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            function: { name: 'get_weather' },
+          },
+        },
+      });
+
+      const body = await provider.getRealtimeSessionBody();
+
+      expect(body.tools).toEqual([
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get the weather',
+          parameters: { type: 'object', properties: {} },
+        },
+        {
+          type: 'function',
+          name: 'get_time',
+          description: 'Get the time',
+          parameters: { type: 'object', properties: {} },
+        },
+      ]);
+      expect(body.tool_choice).toEqual({
+        type: 'function',
+        name: 'get_weather',
       });
     });
 
@@ -228,7 +451,7 @@ describe('OpenAI Realtime Provider', () => {
 
       const body = await provider.getRealtimeSessionBody();
 
-      expect(body.max_response_output_tokens).toBe(expected);
+      expect(body.max_output_tokens).toBe(expected);
     });
 
     it('should handle basic text response with persistent connection', async () => {
@@ -694,6 +917,751 @@ describe('OpenAI Realtime Provider', () => {
       expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
     });
 
+    it('should configure tools and handle function calls in persistent connections', async () => {
+      const functionCallHandler = vi.fn().mockResolvedValue('{"call_status":"callback"}');
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          maintainContext: true,
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'end_of_dialog_tool',
+                description: 'End the dialog',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    call_status: { type: 'string' },
+                  },
+                },
+              },
+            },
+          ],
+          tool_choice: 'auto',
+          functionCallHandler,
+        },
+      });
+
+      provider.persistentConnection = {
+        on: vi.fn((event: string, handler: Function) => {
+          mockHandlers[event].push(handler);
+          return provider.persistentConnection;
+        }),
+        once: vi.fn((event: string, handler: Function) => {
+          mockHandlers[event].push(handler);
+          return provider.persistentConnection;
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+        removeListener: vi.fn(),
+      } as unknown as WebSocket;
+
+      const responsePromise = provider.callApi('Can you call me back later?', {
+        test: {
+          metadata: { conversationId: 'loan-application-flow' },
+        },
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(provider.persistentConnection?.send).toHaveBeenCalled();
+      });
+
+      const sentEvents = vi
+        .mocked(provider.persistentConnection.send as Mock)
+        .mock.calls.map(([payload]) => JSON.parse(payload as string));
+
+      expect(sentEvents[0]).toMatchObject({
+        type: 'session.update',
+        session: {
+          tools: [
+            {
+              type: 'function',
+              name: 'end_of_dialog_tool',
+            },
+          ],
+          tool_choice: 'auto',
+        },
+      });
+
+      const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'conversation.item.created',
+              item: { id: 'msg_1', role: 'user' },
+            }),
+          ),
+        ),
+      );
+
+      const responseCreate = vi
+        .mocked(provider.persistentConnection.send as Mock)
+        .mock.calls.map(([payload]) => JSON.parse(payload as string))
+        .find((event) => event.type === 'response.create' && event.response);
+
+      expect(responseCreate.response).toMatchObject({
+        tools: [
+          {
+            type: 'function',
+            name: 'end_of_dialog_tool',
+          },
+        ],
+        tool_choice: 'auto',
+      });
+
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.text.done',
+              text: 'Let me check that.',
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: {
+                type: 'function_call',
+                call_id: 'call_1',
+                name: 'end_of_dialog_tool',
+                arguments: '{}',
+              },
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.function_call_arguments.done',
+              call_id: 'call_1',
+              arguments: '{"call_status":"callback"}',
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: {
+                usage: {
+                  total_tokens: 8,
+                  input_tokens: 5,
+                  output_tokens: 3,
+                },
+              },
+            }),
+          ),
+        ),
+      );
+
+      expect(functionCallHandler).toHaveBeenCalledWith(
+        'end_of_dialog_tool',
+        '{"call_status":"callback"}',
+      );
+
+      const followupEvents = vi
+        .mocked(provider.persistentConnection.send as Mock)
+        .mock.calls.map(([payload]) => JSON.parse(payload as string));
+
+      expect(followupEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'conversation.item.create',
+            item: {
+              type: 'function_call_output',
+              call_id: 'call_1',
+              output: '{"call_status":"callback"}',
+            },
+          }),
+          expect.objectContaining({
+            type: 'response.create',
+          }),
+        ]),
+      );
+
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.text.done',
+              text: 'We will call you back later.',
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: {
+                usage: {
+                  total_tokens: 11,
+                  input_tokens: 7,
+                  output_tokens: 4,
+                },
+              },
+            }),
+          ),
+        ),
+      );
+
+      const response = await responsePromise;
+
+      expect(response.output).toContain('We will call you back later.');
+      expect(response.output).not.toContain('Let me check that.');
+      expect(response.metadata?.functionCallOccurred).toBe(true);
+      expect(response.metadata?.functionCallResults).toEqual(['{"call_status":"callback"}']);
+      expect(response.tokenUsage).toEqual({
+        total: 11,
+        prompt: 7,
+        completion: 4,
+        cached: 0,
+        numRequests: 1,
+      });
+    });
+
+    it('should reset the persistent request timeout before a tool follow-up response', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const functionCallHandler = vi.fn().mockResolvedValue('{"call_status":"callback"}');
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 1000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    call_status: { type: 'string' },
+                  },
+                },
+              },
+            ],
+            functionCallHandler,
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('Can you call me back later?', {
+          test: {
+            metadata: { conversationId: 'loan-application-flow' },
+          },
+        } as any);
+
+        await vi.waitFor(() => {
+          expect(mockHandlers.message.length).toBeGreaterThan(0);
+        });
+        const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
+
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'conversation.item.created',
+                item: { id: 'msg_1', role: 'user' },
+              }),
+            ),
+          ),
+        );
+
+        await vi.advanceTimersByTimeAsync(900);
+
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.output_item.added',
+                item: {
+                  type: 'function_call',
+                  call_id: 'call_1',
+                  name: 'end_of_dialog_tool',
+                  arguments: '{}',
+                },
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.function_call_arguments.done',
+                call_id: 'call_1',
+                arguments: '{"call_status":"callback"}',
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.done',
+                response: {
+                  usage: {
+                    total_tokens: 8,
+                    input_tokens: 5,
+                    output_tokens: 3,
+                  },
+                },
+              }),
+            ),
+          ),
+        );
+
+        await vi.advanceTimersByTimeAsync(200);
+
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.text.done',
+                text: 'We will call you back later.',
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.done',
+                response: {
+                  usage: {
+                    total_tokens: 11,
+                    input_tokens: 7,
+                    output_tokens: 4,
+                  },
+                },
+              }),
+            ),
+          ),
+        );
+
+        await expect(responsePromise).resolves.toMatchObject({
+          output: expect.stringContaining('We will call you back later.'),
+          metadata: {
+            functionCallOccurred: true,
+            functionCallResults: ['{"call_status":"callback"}'],
+          },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should pause the persistent request timeout while a tool handler is running', async () => {
+      vi.useFakeTimers();
+
+      try {
+        let resolveFunctionCall: ((value: string) => void) | undefined;
+        const functionCallHandler = vi.fn(
+          () =>
+            new Promise<string>((resolve) => {
+              resolveFunctionCall = resolve;
+            }),
+        );
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 1000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    call_status: { type: 'string' },
+                  },
+                },
+              },
+            ],
+            functionCallHandler,
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        let responseSettled = false;
+        const responsePromise = provider
+          .callApi('Can you call me back later?', {
+            test: {
+              metadata: { conversationId: 'loan-application-flow' },
+            },
+          } as any)
+          .finally(() => {
+            responseSettled = true;
+          });
+
+        await vi.waitFor(() => {
+          expect(mockHandlers.message.length).toBeGreaterThan(0);
+        });
+        const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
+
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'conversation.item.created',
+                item: { id: 'msg_1', role: 'user' },
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.output_item.added',
+                item: {
+                  type: 'function_call',
+                  call_id: 'call_1',
+                  name: 'end_of_dialog_tool',
+                  arguments: '{}',
+                },
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.function_call_arguments.done',
+                call_id: 'call_1',
+                arguments: '{"call_status":"callback"}',
+              }),
+            ),
+          ),
+        );
+
+        const toolTurnPromise = Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.done',
+                response: {
+                  usage: {
+                    total_tokens: 8,
+                    input_tokens: 5,
+                    output_tokens: 3,
+                  },
+                },
+              }),
+            ),
+          ),
+        );
+
+        await vi.waitFor(() => {
+          expect(functionCallHandler).toHaveBeenCalledWith(
+            'end_of_dialog_tool',
+            '{"call_status":"callback"}',
+          );
+        });
+
+        await vi.advanceTimersByTimeAsync(1200);
+        expect(responseSettled).toBe(false);
+
+        resolveFunctionCall?.('{"call_status":"callback"}');
+        await toolTurnPromise;
+
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.text.done',
+                text: 'We will call you back later.',
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.done',
+                response: {
+                  usage: {
+                    total_tokens: 11,
+                    input_tokens: 7,
+                    output_tokens: 4,
+                  },
+                },
+              }),
+            ),
+          ),
+        );
+
+        await expect(responsePromise).resolves.toMatchObject({
+          output: expect.stringContaining('We will call you back later.'),
+          metadata: {
+            functionCallOccurred: true,
+          },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should start the persistent request timeout after tool config loads', async () => {
+      vi.useFakeTimers();
+
+      try {
+        let resolveTools: ((value: unknown[]) => void) | undefined;
+        const toolsPromise = new Promise<unknown[]>((resolve) => {
+          resolveTools = resolve;
+        });
+        const loadToolsSpy = vi
+          .spyOn(util, 'maybeLoadToolsFromExternalFile')
+          .mockReturnValue(toolsPromise as any);
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 2000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('Can you call me back later?', {
+          test: {
+            metadata: { conversationId: 'loan-application-flow' },
+          },
+        } as any);
+        let settled = false;
+        void responsePromise.finally(() => {
+          settled = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(1500);
+
+        expect(settled).toBe(false);
+        expect(provider.persistentConnection!.send).not.toHaveBeenCalled();
+
+        resolveTools?.([]);
+        await vi.waitFor(() => {
+          expect(provider.persistentConnection!.send).toHaveBeenCalled();
+        });
+
+        const lastHandler = mockHandlers.message[mockHandlers.message.length - 1];
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'conversation.item.created',
+                item: { id: 'msg_1', role: 'user' },
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.text.done',
+                text: 'We will call you back later.',
+              }),
+            ),
+          ),
+        );
+        await Promise.resolve(
+          lastHandler(
+            Buffer.from(
+              JSON.stringify({
+                type: 'response.done',
+                response: {
+                  usage: {
+                    total_tokens: 11,
+                    input_tokens: 7,
+                    output_tokens: 4,
+                  },
+                },
+              }),
+            ),
+          ),
+        );
+
+        await expect(responsePromise).resolves.toMatchObject({
+          output: expect.stringContaining('We will call you back later.'),
+        });
+        loadToolsSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not leak a persistent request timeout when tool config loading fails', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const loadToolsSpy = vi
+          .spyOn(util, 'maybeLoadToolsFromExternalFile')
+          .mockRejectedValue(new Error('tools failed'));
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 1000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('Can you call me back later?', {
+          test: {
+            metadata: { conversationId: 'loan-application-flow' },
+          },
+        } as any);
+
+        await expect(responsePromise).resolves.toMatchObject({
+          error: expect.stringContaining('tools failed'),
+        });
+        await vi.advanceTimersByTimeAsync(1500);
+
+        expect(vi.getTimerCount()).toBe(0);
+        loadToolsSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should reject persistent requests when tool config loading times out', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const loadToolsSpy = vi
+          .spyOn(util, 'maybeLoadToolsFromExternalFile')
+          .mockReturnValue(new Promise<unknown[]>(() => undefined) as any);
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            maintainContext: true,
+            websocketTimeout: 1000,
+            tools: [
+              {
+                type: 'function',
+                name: 'end_of_dialog_tool',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+          },
+        });
+
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
+          }),
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
+
+        const responsePromise = provider.callApi('Can you call me back later?', {
+          test: {
+            metadata: { conversationId: 'loan-application-flow' },
+          },
+        } as any);
+
+        await vi.advanceTimersByTimeAsync(1000);
+
+        await expect(responsePromise).resolves.toMatchObject({
+          error: expect.stringContaining('Realtime tool configuration timed out after 1000ms'),
+        });
+        expect(provider.persistentConnection!.send).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+        loadToolsSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should reuse existing connection for subsequent requests', async () => {
       // Skip this test since it's difficult to mock properly and causes flakey results
       // The functionality is tested in other tests
@@ -766,6 +1734,33 @@ describe('OpenAI Realtime Provider', () => {
       );
     };
 
+    const simulateGaFlow = () => {
+      const messageHandlers = mockHandlers.message;
+      const lastHandler = messageHandlers[messageHandlers.length - 1];
+
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'conversation.item.added',
+            item: { id: 'msg_ga', role: 'user' },
+          }),
+        ),
+      );
+      lastHandler(
+        Buffer.from(JSON.stringify({ type: 'response.created', response: { id: 'r_ga' } })),
+      );
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.output_text.delta', delta: 'ok' })));
+      lastHandler(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'ok' })));
+      lastHandler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+          }),
+        ),
+      );
+    };
+
     it('uses default OpenAI base for direct WebSocket', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
       const promise = provider.directWebSocketRequest('hi');
@@ -782,6 +1777,155 @@ describe('OpenAI Realtime Provider', () => {
       );
     });
 
+    it('uses the GA realtime wire shape without the beta header', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          tools: [
+            {
+              type: 'function',
+              name: 'get_weather',
+              parameters: { type: 'object', properties: {} },
+            },
+          ],
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+
+      await vi.waitFor(() => {
+        expect(mockWs.send).toHaveBeenCalled();
+      });
+
+      const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(sessionUpdate.session).toMatchObject({
+        type: 'realtime',
+        model: 'gpt-realtime',
+        output_modalities: ['text'],
+        tools: [{ type: 'function', name: 'get_weather' }],
+      });
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers).not.toHaveProperty('OpenAI-Beta');
+
+      simulateGaFlow();
+      await expect(promise).resolves.toMatchObject({
+        output: 'ok',
+      });
+
+      const responseCreate = JSON.parse(mockWs.send.mock.calls[2][0]);
+      expect(responseCreate.response).toMatchObject({
+        output_modalities: ['text'],
+        tools: [{ type: 'function', name: 'get_weather' }],
+      });
+    });
+
+    it('rejects direct WebSocket requests if the socket closes before a tool follow-up completes', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          modalities: ['text'],
+          functionCallHandler: vi.fn().mockResolvedValue('{"ok":true}'),
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((handler) => handler());
+
+      const lastMessageHandler = mockHandlers.message[mockHandlers.message.length - 1];
+      await Promise.resolve(
+        lastMessageHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'conversation.item.created',
+              item: { id: 'msg_tool', role: 'user' },
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastMessageHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: {
+                type: 'function_call',
+                call_id: 'call_tool',
+                name: 'get_weather',
+                arguments: '{}',
+              },
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastMessageHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.function_call_arguments.done',
+              call_id: 'call_tool',
+              arguments: '{}',
+            }),
+          ),
+        ),
+      );
+      await Promise.resolve(
+        lastMessageHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        ),
+      );
+
+      mockHandlers.close[mockHandlers.close.length - 1](1006, Buffer.from('aborted'));
+
+      await expect(promise).rejects.toThrow('WebSocket closed unexpectedly with code 1006');
+    });
+
+    it('preserves structured multimodal user content for direct WebSocket requests', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', {
+        config: {
+          modalities: ['text'],
+        },
+      });
+      const promise = provider.directWebSocketRequest(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: [
+              { type: 'input_text', text: 'Describe these inputs.' },
+              { type: 'input_audio', audio: 'ZmFrZS1hdWRpbw==' },
+              { type: 'input_image', image_url: 'data:image/jpeg;base64,ZmFrZS1pbWFnZQ==' },
+            ],
+          },
+        ]),
+      );
+
+      mockHandlers.open.forEach((handler) => handler());
+
+      await vi.waitFor(() => {
+        expect(mockWs.send).toHaveBeenCalledTimes(2);
+      });
+
+      expect(JSON.parse(mockWs.send.mock.calls[1][0])).toMatchObject({
+        type: 'conversation.item.create',
+        item: {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'Describe these inputs.' },
+            { type: 'input_audio', audio: 'ZmFrZS1hdWRpbw==' },
+            { type: 'input_image', image_url: 'data:image/jpeg;base64,ZmFrZS1pbWFnZQ==' },
+          ],
+        },
+      });
+
+      simulateGaFlow();
+      await expect(promise).resolves.toMatchObject({ output: 'ok' });
+    });
+
     it('normalizes invalid max_response_output_tokens in session.update', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: { max_response_output_tokens: -1 },
@@ -790,8 +1934,12 @@ describe('OpenAI Realtime Provider', () => {
 
       mockHandlers.open.forEach((h) => h());
 
+      await vi.waitFor(() => {
+        expect(mockWs.send).toHaveBeenCalled();
+      });
+
       const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
-      expect(sessionUpdate.session.max_response_output_tokens).toBe('inf');
+      expect(sessionUpdate.session.max_output_tokens).toBe('inf');
 
       const messageHandlers = mockHandlers.message;
       const lastHandler = messageHandlers[messageHandlers.length - 1];
@@ -817,6 +1965,42 @@ describe('OpenAI Realtime Provider', () => {
       );
 
       await promise;
+    });
+
+    it('rejects direct WebSocket requests when loading tools fails during open', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { tools: 'file://missing-tools.yaml' as any },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((handler) => handler());
+
+      await expect(promise).rejects.toThrow('File does not exist');
+      expect(mockWs.close).toHaveBeenCalled();
+    });
+
+    it('handles direct WebSocket tool config preload rejections before open', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: { tools: 'file://missing-tools.yaml' as any },
+      });
+      const unhandledRejections: unknown[] = [];
+      const onUnhandledRejection = (reason: unknown) => {
+        unhandledRejections.push(reason);
+      };
+      process.on('unhandledRejection', onUnhandledRejection);
+
+      try {
+        const promise = provider.directWebSocketRequest('hi');
+
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(unhandledRejections).toEqual([]);
+
+        mockHandlers.open.forEach((handler) => handler());
+        await expect(promise).rejects.toThrow('File does not exist');
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+      }
     });
 
     it('converts custom https apiBaseUrl to wss for direct WebSocket', async () => {
@@ -876,6 +2060,67 @@ describe('OpenAI Realtime Provider', () => {
           encodeURIComponent('secret123'),
       );
       expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
+    });
+
+    it('normalizes response-level tools for client-secret requests', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                description: 'Get the weather',
+                parameters: { type: 'object', properties: {} },
+              },
+            },
+          ],
+          tool_choice: {
+            type: 'function',
+            function: { name: 'get_weather' },
+          },
+        },
+      });
+      const promise = provider.webSocketRequest('secret123', 'hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+
+      await promise;
+      await vi.waitFor(() => {
+        expect(
+          mockWs.send.mock.calls
+            .map(
+              ([payload]: [string]) =>
+                JSON.parse(payload) as {
+                  type: string;
+                  response?: { tools?: Record<string, unknown>[] };
+                },
+            )
+            .some((event: { type: string }) => event.type === 'response.create'),
+        ).toBe(true);
+      });
+
+      const sentEvents = mockWs.send.mock.calls.map(
+        ([payload]: [string]) =>
+          JSON.parse(payload) as { type: string; response?: { tools?: Record<string, unknown>[] } },
+      );
+      const responseCreate = sentEvents.find(
+        (event: { type: string }) => event.type === 'response.create',
+      );
+
+      expect(responseCreate.response.tools).toEqual([
+        {
+          type: 'function',
+          name: 'get_weather',
+          description: 'Get the weather',
+          parameters: { type: 'object', properties: {} },
+        },
+      ]);
+      expect(responseCreate.response.tool_choice).toEqual({
+        type: 'function',
+        name: 'get_weather',
+      });
     });
   });
 });
