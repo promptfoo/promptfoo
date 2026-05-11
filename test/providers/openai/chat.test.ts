@@ -2800,6 +2800,38 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
     });
 
+    it('should run function tool callbacks in streaming mode', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_123","function":{"name":"get_weather"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"location\\":\\"NYC\\"}"}}]}}]}\n\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+      mockIsCacheEnabled.mockReturnValue(true);
+
+      const mockWeatherFunction = vi.fn().mockResolvedValue('Sunny, 25C');
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          stream: true,
+          functionToolCallbacks: {
+            get_weather: mockWeatherFunction,
+          },
+        },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather in NYC?' }]),
+      );
+
+      expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"NYC"}');
+      expect(result.output).toBe('Sunny, 25C');
+      expect(mockGetCache).not.toHaveBeenCalled();
+    });
+
     it('should handle streaming API error response', async () => {
       mockFetchWithProxy.mockResolvedValue({
         ok: false,

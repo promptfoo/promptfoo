@@ -66,6 +66,15 @@ type OpenAiStreamingToolCall = {
   function: OpenAiStreamingFunctionCall;
 };
 
+type OpenAiFunctionCallLike = {
+  name?: string;
+  arguments?: string;
+  function?: {
+    name?: string;
+    arguments?: string;
+  };
+};
+
 type OpenAiStreamingState = {
   content: string;
   finishReason: string | null;
@@ -345,6 +354,38 @@ function getOpenAiStreamingHttpMetadata(response: Response): ProviderResponse['m
   };
 }
 
+function normalizeMcpContent(content: any): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as any).text != null) {
+            return String((part as any).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as any).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as any).data);
+          }
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
+
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
@@ -489,6 +530,78 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error; // Re-throw so caller can handle fallback behavior
+    }
+  }
+
+  private async resolveFunctionToolCallbacks(
+    functionCalls: OpenAiFunctionCallLike[] | undefined,
+    config: OpenAiCompletionOptions,
+  ): Promise<string | undefined> {
+    if (!functionCalls || (!config.functionToolCallbacks && !this.mcpClient)) {
+      return undefined;
+    }
+
+    const results = [];
+    let hasSuccessfulCallback = false;
+    for (const functionCall of functionCalls) {
+      const functionName = functionCall.name || functionCall.function?.name;
+      if (!functionName) {
+        continue;
+      }
+
+      const mcpResult = await this.resolveMcpToolCallback(functionName, functionCall);
+      if (mcpResult !== undefined) {
+        results.push(mcpResult);
+        hasSuccessfulCallback = true;
+        continue;
+      }
+
+      if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
+        try {
+          const functionResult = await this.executeFunctionCallback(
+            functionName,
+            functionCall.arguments || functionCall.function?.arguments || '{}',
+            config,
+          );
+          results.push(functionResult);
+          hasSuccessfulCallback = true;
+        } catch (error) {
+          logger.debug(
+            `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
+          );
+          hasSuccessfulCallback = false;
+          break;
+        }
+      }
+    }
+
+    return hasSuccessfulCallback && results.length > 0 ? results.join('\n') : undefined;
+  }
+
+  private async resolveMcpToolCallback(
+    functionName: string,
+    functionCall: OpenAiFunctionCallLike,
+  ): Promise<string | undefined> {
+    if (!this.mcpClient) {
+      return undefined;
+    }
+
+    const mcpTool = this.mcpClient.getAllTools().find((tool) => tool.name === functionName);
+    if (!mcpTool) {
+      return undefined;
+    }
+
+    try {
+      const args = functionCall.arguments || functionCall.function?.arguments || '{}';
+      const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+      const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
+      if (mcpResult?.error) {
+        return `MCP Tool Error (${functionName}): ${mcpResult.error}`;
+      }
+      return `MCP Tool Result (${functionName}): ${normalizeMcpContent(mcpResult?.content)}`;
+    } catch (error) {
+      logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
+      return `MCP Tool Error (${functionName}): ${error}`;
     }
   }
 
@@ -981,114 +1094,28 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const functionCalls: any = message.function_call
         ? [message.function_call]
         : message.tool_calls;
-      if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
-        const results = [];
-        let hasSuccessfulCallback = false;
-        for (const functionCall of functionCalls) {
-          const functionName = functionCall.name || functionCall.function?.name;
-
-          // Try MCP first if available
-          if (this.mcpClient) {
-            const mcpTools = this.mcpClient.getAllTools();
-            const mcpTool = mcpTools.find((tool) => tool.name === functionName);
-            if (mcpTool) {
-              try {
-                const args = functionCall.arguments || functionCall.function?.arguments || '{}';
-                const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
-                const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
-
-                if (mcpResult?.error) {
-                  results.push(`MCP Tool Error (${functionName}): ${mcpResult.error}`);
-                } else {
-                  // Normalize MCP content to a readable string
-                  const normalizeContent = (content: any): string => {
-                    if (content == null) {
-                      return '';
-                    }
-                    if (typeof content === 'string') {
-                      return content;
-                    }
-                    if (Array.isArray(content)) {
-                      return content
-                        .map((part) => {
-                          if (typeof part === 'string') {
-                            return part;
-                          }
-                          if (part && typeof part === 'object') {
-                            if ('text' in part && (part as any).text != null) {
-                              return String((part as any).text);
-                            }
-                            if ('json' in part) {
-                              return JSON.stringify((part as any).json);
-                            }
-                            if ('data' in part) {
-                              return JSON.stringify((part as any).data);
-                            }
-                            return JSON.stringify(part);
-                          }
-                          return String(part);
-                        })
-                        .join('\n');
-                    }
-                    return JSON.stringify(content);
-                  };
-
-                  const content = normalizeContent(mcpResult?.content);
-                  results.push(`MCP Tool Result (${functionName}): ${content}`);
-                }
-                hasSuccessfulCallback = true;
-                continue; // Skip to next function call
-              } catch (error) {
-                logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
-                results.push(`MCP Tool Error (${functionName}): ${error}`);
-                hasSuccessfulCallback = true;
-                continue; // Skip to next function call
-              }
-            }
-          }
-
-          // Fall back to regular function callbacks
-          if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
-            try {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                functionCall.arguments || functionCall.function?.arguments,
-                config,
-              );
-              results.push(functionResult);
-              hasSuccessfulCallback = true;
-            } catch (error) {
-              // If callback fails, fall back to original behavior (return the function call)
-              logger.debug(
-                `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
-              );
-              hasSuccessfulCallback = false;
-              break;
-            }
-          }
-        }
-        if (hasSuccessfulCallback && results.length > 0) {
-          return {
-            output: results.join('\n'),
-            tokenUsage: getTokenUsage(data, cached),
-            cached,
-            latencyMs,
-            logProbs,
-            ...(finishReason && { finishReason }),
-            cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-              cachedResponse: cached,
-              serviceTier: data.service_tier ?? config.service_tier,
-            }),
-            guardrails: { flagged: contentFiltered },
-            metadata: {
-              http: {
-                status,
-                statusText,
-                headers: responseHeaders ?? {},
-              },
+      const callbackOutput = await this.resolveFunctionToolCallbacks(functionCalls, config);
+      if (callbackOutput !== undefined) {
+        return {
+          output: callbackOutput,
+          tokenUsage: getTokenUsage(data, cached),
+          cached,
+          latencyMs,
+          logProbs,
+          ...(finishReason && { finishReason }),
+          cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+            cachedResponse: cached,
+            serviceTier: data.service_tier ?? config.service_tier,
+          }),
+          guardrails: { flagged: contentFiltered },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
             },
-          };
-        }
+          },
+        };
       }
 
       // Handle DeepSeek reasoning model's reasoning_content by prepending it to the output
@@ -1178,7 +1205,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const startTime = Date.now();
-    const shouldUseCache = isCacheEnabled() && !context?.bustCache && !context?.debug;
+    const hasLocalToolExecution = Boolean(config.functionToolCallbacks) || Boolean(this.mcpClient);
+    const shouldUseCache =
+      isCacheEnabled() && !context?.bustCache && !context?.debug && !hasLocalToolExecution;
     const cacheKey = getOpenAiStreamingCacheKey(this.id(), this.getApiUrl(), body);
     const cache = shouldUseCache ? getCache() : undefined;
 
@@ -1251,6 +1280,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         config,
         latencyMs,
       );
+      const callbackOutput = await this.resolveFunctionToolCallbacks(
+        streamingState.functionCall ? [streamingState.functionCall] : streamingState.toolCalls,
+        config,
+      );
+      if (callbackOutput !== undefined) {
+        providerResponse.output = callbackOutput;
+      }
       providerResponse.metadata = metadata;
 
       // Cache the successful response

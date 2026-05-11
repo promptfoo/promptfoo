@@ -189,6 +189,19 @@ interface OpenAiConfig {
 }
 ```
 
+### Streaming chat completions
+
+Set `stream: true` on an `openai:chat:*` provider to use Chat Completions streaming.
+Promptfoo automatically requests `stream_options.include_usage: true` so token usage and
+cost stay populated from the final usage chunk. To pass additional OpenAI streaming
+options, add them under `passthrough.stream_options`; Promptfoo preserves those values
+and still requests usage.
+
+Streaming keeps the same function-tool callback behavior as non-streaming chat
+completions. When local `functionToolCallbacks` or MCP tools are configured, Promptfoo
+does not cache the final streaming provider response because callback results may depend
+on local or external state.
+
 ### Generating Multiple Responses
 
 Use `passthrough` to set OpenAI's `n` parameter for generating multiple responses in a single request:
