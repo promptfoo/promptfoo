@@ -71,7 +71,7 @@ providers:
       region: 'us-east-1'
       max_tokens: 2048
       temperature: 0.5
-      showThinking: true # Include thinking process in output
+      showThinking: true # Include thinking content in response.reasoning
 
   # OpenAI models via Bedrock inference profile
   - id: bedrock:arn:aws:bedrock:us-west-2:123456789012:application-inference-profile/openai-gpt-profile
