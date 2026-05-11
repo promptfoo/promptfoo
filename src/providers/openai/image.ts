@@ -1,4 +1,4 @@
-import { type CacheOptions, fetchWithCache } from '../../cache';
+import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
 import { getCacheOptions, getRequestTimeoutMs } from '../shared';
@@ -6,6 +6,7 @@ import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import { formatOpenAiError } from './util';
 
+import type { CacheOptions } from '../../types/cache';
 import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,

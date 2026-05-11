@@ -497,7 +497,7 @@ interface Cache {
 
 ---
 
-### `fetchWithCache(url, options?, timeout?, format?, bust?, maxRetries?)`
+### `fetchWithCache(url, options?, timeout?, format?, bustOrOptions?, maxRetries?)`
 
 Fetch with caching enabled.
 
@@ -507,7 +507,7 @@ export async function fetchWithCache<T>(
   options?: RequestInit,
   timeout?: number,
   format?: 'json' | 'text',
-  bust?: boolean,
+  bustOrOptions?: boolean | { bust?: boolean; repeatIndex?: number },
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>>;
 ```

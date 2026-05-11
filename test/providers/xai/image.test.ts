@@ -193,6 +193,34 @@ describe('XAI Image Provider', () => {
       expect(result.cost).toBe(0.07);
     });
 
+    it('passes cache options through to the shared image API helper', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image', {
+        config: { apiKey: mockApiKey },
+      });
+
+      await provider.callApi('Generate a cat', {
+        prompt: { raw: 'Generate a cat', label: 'image' },
+        vars: {},
+        repeatIndex: 2,
+      });
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/generations',
+        {
+          model: 'grok-imagine-image',
+          prompt: 'Generate a cat',
+          n: 1,
+          response_format: 'url',
+        },
+        {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${mockApiKey}`,
+        },
+        getRequestTimeoutMs(),
+        { repeatIndex: 2 },
+      );
+    });
+
     it('uses the edits endpoint when image inputs are provided', async () => {
       const provider = new XAIImageProvider('grok-imagine-image', {
         config: {

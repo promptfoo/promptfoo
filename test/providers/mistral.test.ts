@@ -491,6 +491,58 @@ describe('Mistral', () => {
       expect(cacheGet.mock.calls[0]?.[0]).toMatch(/:repeat1$/);
     });
 
+    it('should not double-isolate chat cache keys inside a matching repeat namespace', async () => {
+      const cacheGet = vi.fn().mockResolvedValue(null);
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockReturnValue({
+        get: cacheGet,
+        set: vi.fn(),
+        wrap: vi.fn(),
+        del: vi.fn(),
+        clear: vi.fn(),
+        mget: vi.fn(),
+        mset: vi.fn(),
+        mdel: vi.fn(),
+        ttl: vi.fn(),
+        stores: [],
+        on: vi.fn(),
+        off: vi.fn(),
+        disconnect: vi.fn(),
+        cacheId: vi.fn(),
+        listeners: vi.fn(),
+        listenerCount: vi.fn(),
+        eventNames: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        once: vi.fn(),
+        prependListener: vi.fn(),
+        prependOnceListener: vi.fn(),
+        removeAllListeners: vi.fn(),
+      } as any);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'Fresh output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await withCacheNamespace('repeat:1', () =>
+        provider.callApi('Repeat prompt', {
+          prompt: { raw: 'Repeat prompt', label: 'repeat' },
+          vars: {},
+          repeatIndex: 1,
+        }),
+      );
+
+      expect(cacheGet.mock.calls[0]?.[0]).toMatch(
+        /^mistral:chat:mistral-tiny:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheGet.mock.calls[0]?.[0]).not.toMatch(/:repeat1$/);
+    });
+
     it('should isolate hashed cache keys by resolved API key', async () => {
       const cacheGet = vi.fn().mockResolvedValue(null);
       const cacheSet = vi.fn();

@@ -1268,6 +1268,24 @@ describe('fetchWithCache', () => {
       ]);
     });
 
+    it('should not add a repeat suffix when the active namespace already isolates the repeat', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await withCacheNamespace('repeat:1', async () => {
+        const firstResult = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 1 });
+        const secondResult = await fetchWithCache(url, {}, 1000, 'json', false);
+
+        expect(firstResult.cached).toBe(false);
+        expect(secondResult.cached).toBe(true);
+      });
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      const cacheKeys = vi.mocked(getCache().set).mock.calls.map(([cacheKey]) => String(cacheKey));
+      expect(cacheKeys).toEqual([expect.stringMatching(/^repeat:1:fetch:v3:/)]);
+      expect(cacheKeys[0]).not.toMatch(/:repeat1$/);
+    });
+
     it('should return cached response for same repeatIndex', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);

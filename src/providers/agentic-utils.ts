@@ -11,7 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getCache, isCacheEnabled } from '../cache';
+import { getCache, isCacheEnabled, shouldApplyRepeatCacheSuffix } from '../cache';
 import logger from '../logger';
 import { safeResolve } from '../util/pathUtils';
 
@@ -156,7 +156,7 @@ export function generateCacheKey(
 ): string {
   const stringified = JSON.stringify(data);
   const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-  const repeatSuffix = repeatIndex != null && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
+  const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   return `${prefix}:${hash}${repeatSuffix}`;
 }
 

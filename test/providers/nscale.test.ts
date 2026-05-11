@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { createNscaleProvider } from '../../src/providers/nscale';
 import { NscaleImageProvider } from '../../src/providers/nscale/image';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
