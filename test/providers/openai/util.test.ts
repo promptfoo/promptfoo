@@ -581,6 +581,12 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo(expectedCost, 6);
   });
 
+  it('should calculate audio token costs for gpt-realtime-2', () => {
+    const cost = calculateOpenAICost('gpt-realtime-2', {}, 1000, 500, 200, 100);
+    const expectedCost = (1000 * 4 + 500 * 24 + 200 * 32 + 100 * 64) / 1e6;
+    expect(cost).toBeCloseTo(expectedCost, 6);
+  });
+
   it('should calculate audio token costs for gpt-realtime-mini-2025-12-15', () => {
     const cost = calculateOpenAICost('gpt-realtime-mini-2025-12-15', {}, 1000, 500, 200, 100);
     const expectedCost = (1000 * 0.6 + 500 * 2.4 + 200 * 10 + 100 * 20) / 1e6;

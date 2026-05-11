@@ -520,6 +520,26 @@ describe('OpenAiAgentsProvider', () => {
     );
   });
 
+  it('preserves an explicit maxTurns value of null in run options', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        maxTurns: null,
+        agent: {
+          name: 'Inline Support Agent',
+          instructions: 'Help the user.',
+        },
+      },
+    });
+
+    await provider.callApi('Where is my order?');
+
+    expect(mockRun).toHaveBeenCalledWith(
+      expect.any(Agent),
+      'Where is my order?',
+      expect.objectContaining({ maxTurns: null }),
+    );
+  });
+
   it('passes SDK run options plus top-level session and sandbox configs to run()', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {

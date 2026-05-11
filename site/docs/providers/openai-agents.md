@@ -43,6 +43,8 @@ providers:
       maxTurns: 10
 ```
 
+For repeatable eval baselines, set a model explicitly on the exported SDK agent or with `config.model`. In `@openai/agents` v0.10+, agents without a model use the SDK default model, currently `gpt-5.4-mini`, and that upstream default can change over time.
+
 ## Configuration Options
 
 | Parameter          | Description                                                                         | Default               |
@@ -50,7 +52,7 @@ providers:
 | `agent`            | Agent definition (inline object or `file://path`)                                   | -                     |
 | `tools`            | Additional tool definitions (inline array or `file://path`)                         | -                     |
 | `handoffs`         | Additional handoff definitions (inline array or `file://path`)                      | -                     |
-| `maxTurns`         | Maximum conversation turns                                                          | 10                    |
+| `maxTurns`         | Maximum conversation turns; set `null` to disable the SDK turn limit                | 10                    |
 | `model`            | Override model specified in agent definition                                        | -                     |
 | `modelSettings`    | SDK `ModelSettings` overrides, including reasoning, verbosity, and retry settings   | -                     |
 | `inputGuardrails`  | Additional input guardrails (inline array or `file://`)                             | -                     |
@@ -544,7 +546,7 @@ Tools must be async functions. Synchronous tools will cause runtime errors.
 
 - Agent definition files must be TypeScript or JavaScript
 - File paths require `file://` prefix (relative paths resolve from config file location)
-- Default maximum: 10 turns (configure with `maxTurns`)
+- Default maximum: 10 turns (configure with `maxTurns`, or set `null` to disable the SDK turn limit)
 
 ## Related Documentation
 
