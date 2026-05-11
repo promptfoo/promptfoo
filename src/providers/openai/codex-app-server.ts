@@ -2288,6 +2288,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     const completedItem = this.withCommandExecutionOutput(state, item);
+    if (
+      completedItem?.type === 'commandExecution' &&
+      typeof completedItem.id === 'string' &&
+      typeof completedItem.aggregatedOutput === 'string' &&
+      !state.commandExecutionOutputDeltasByItemId.has(completedItem.id)
+    ) {
+      state.commandExecutionOutputDeltasByItemId.set(
+        completedItem.id,
+        completedItem.aggregatedOutput,
+      );
+    }
     state.items.push(completedItem);
     const itemId = completedItem.id ? String(completedItem.id) : crypto.randomUUID();
     const span =

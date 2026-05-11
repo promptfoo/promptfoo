@@ -3660,6 +3660,94 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it('continues completed command output when later deltas extend an existing aggregate', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Run a command with late trailing output');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_trailing_output' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_trailing_output', status: 'inProgress' } },
+    });
+
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_trailing_output',
+        turnId: 'turn_trailing_output',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_trailing_output',
+          command: 'printf "line one\\nline two"',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: 'line one\n',
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_trailing_output',
+        turnId: 'turn_trailing_output',
+        itemId: 'cmd_trailing_output',
+        delta: 'line two',
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_trailing_output',
+        turnId: 'turn_trailing_output',
+        itemId: 'msg_trailing_output',
+        delta: 'Done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_trailing_output',
+        turn: { id: 'turn_trailing_output', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    const raw = JSON.parse(result.raw as string);
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'line one\nline two',
+        }),
+      ]),
+    );
+    expect(result.metadata?.codexAppServer.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'commandExecution',
+          aggregatedOutput: 'line one\nline two',
+        }),
+      ]),
+    );
+  });
+
   it('emits SDK-compatible raw items for coding-agent verifiers', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
