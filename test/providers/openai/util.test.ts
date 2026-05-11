@@ -6,6 +6,7 @@ import {
   formatOpenAiError,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
+  OPENAI_REALTIME_MODELS,
   OPENAI_RESPONSES_ONLY_MODELS,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
@@ -205,6 +206,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 4 + 500 * 16) / 1e6, 6);
   });
 
+  it('should not infer pricing for gpt-realtime-2 before OpenAI publishes it', () => {
+    const cost = calculateOpenAICost('gpt-realtime-2', {}, 1000, 500);
+    expect(cost).toBeUndefined();
+  });
+
   it('should calculate cost correctly with audio tokens', () => {
     const cost = calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, 200, 100);
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 40 + 100 * 80) / 1e6, 6);
@@ -391,6 +397,21 @@ describe('calculateOpenAICost', () => {
     ).toBe(true);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro')).toBe(false);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23')).toBe(false);
+  });
+
+  it('should exclude retired preview audio and realtime models from current routing registries', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-4o-audio-preview')).toBe(false);
+    expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
+    expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
+    expect(
+      OPENAI_REALTIME_MODELS.some(
+        (model) => model.id === 'gpt-4o-mini-realtime-preview-2024-12-17',
+      ),
+    ).toBe(true);
+    expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-4o-realtime-preview')).toBe(
+      false,
+    );
   });
 
   it('should calculate cost correctly for gpt-5-nano', () => {
@@ -594,7 +615,7 @@ describe('calculateOpenAICost', () => {
   it('should use custom audioCost from config when provided', () => {
     const audioCost = 0.05; // per 1M tokens
 
-    const promiseTokens = 1000;
+    const promptTokens = 1000;
     const completionTokens = 500;
     const audioPromptTokens = 200;
     const audioCompletionTokens = 100;
@@ -611,7 +632,7 @@ describe('calculateOpenAICost', () => {
       return;
     }
 
-    const baseInputCost = model.cost.input * promiseTokens;
+    const baseInputCost = model.cost.input * promptTokens;
     const baseOutputCost = model.cost.output * completionTokens;
 
     const audioInputCostCustom = audioCost * audioPromptTokens;
@@ -623,7 +644,7 @@ describe('calculateOpenAICost', () => {
     const cost = calculateOpenAICost(
       'gpt-4o-audio-preview',
       { audioCost },
-      promiseTokens,
+      promptTokens,
       completionTokens,
       audioPromptTokens,
       audioCompletionTokens,

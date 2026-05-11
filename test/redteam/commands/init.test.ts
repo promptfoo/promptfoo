@@ -1,14 +1,20 @@
 import fs from 'fs/promises';
 
 import confirm from '@inquirer/confirm';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import editor from '@inquirer/editor';
 import input from '@inquirer/input';
 import select from '@inquirer/select';
+import { Command } from 'commander';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readGlobalConfig } from '../../../src/globalConfig/globalConfig';
 import { doGenerateRedteam } from '../../../src/redteam/commands/generate';
-import { redteamInit, renderRedteamConfig } from '../../../src/redteam/commands/init';
+import {
+  redteamInit,
+  initCommand as redteamInitCommand,
+  renderRedteamConfig,
+} from '../../../src/redteam/commands/init';
 import { type Strategy } from '../../../src/redteam/constants';
 import { ProbeLimitExceededError } from '../../../src/redteam/types';
 
@@ -208,5 +214,31 @@ describe('redteamInit', () => {
     await expect(redteamInit(undefined)).resolves.toBeUndefined();
 
     expect(process.exitCode).toBe(1);
+  });
+
+  it('should mark prompt cancellation without hard-exiting', async () => {
+    process.exitCode = undefined;
+    vi.mocked(input).mockRejectedValueOnce(new ExitPromptError());
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const program = new Command();
+    redteamInitCommand(program);
+
+    await expect(program.parseAsync(['node', 'test', 'init', '--no-gui'])).resolves.toBe(program);
+
+    expect(process.exitCode).toBe(130);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('should mark prompt abort without hard-exiting', async () => {
+    process.exitCode = undefined;
+    vi.mocked(input).mockRejectedValueOnce(new AbortPromptError());
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const program = new Command();
+    redteamInitCommand(program);
+
+    await expect(program.parseAsync(['node', 'test', 'init', '--no-gui'])).resolves.toBe(program);
+
+    expect(process.exitCode).toBe(130);
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 });
