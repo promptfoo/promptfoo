@@ -2361,6 +2361,12 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                 if (cleanupMessageHandler) {
                   cleanupMessageHandler();
                 }
+                // The session still contains an unresolved function_call. Do
+                // not reuse that contaminated socket for later maintainContext
+                // turns; close it and force the next request to reconnect.
+                const conn = this.persistentConnection;
+                this.tearDownPersistentConnection('tool iteration cap reached');
+                conn?.close();
                 reject(
                   this.toolIterationCapError(maxToolIterations, {
                     functionCallOccurred,

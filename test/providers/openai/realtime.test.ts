@@ -1290,7 +1290,7 @@ describe('OpenAI Realtime Provider', () => {
         },
       });
 
-      provider.persistentConnection = {
+      const persistentConnection = {
         on: vi.fn((event: string, h: Function) => {
           mockHandlers[event].push(h);
         }),
@@ -1302,6 +1302,8 @@ describe('OpenAI Realtime Provider', () => {
         removeListener: vi.fn(),
         readyState: 1,
       } as unknown as WebSocket;
+      provider.persistentConnection = persistentConnection;
+      provider.persistentConnection = persistentConnection;
 
       const responsePromise = provider.callApi('go', {
         test: { metadata: { conversationId: 'redact' } },
@@ -1380,7 +1382,7 @@ describe('OpenAI Realtime Provider', () => {
         config: { modalities: ['text'], maintainContext: true },
       });
 
-      provider.persistentConnection = {
+      const persistentConnection = {
         on: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
         once: vi.fn((event: string, h: Function) => mockHandlers[event].push(h)),
         send: vi.fn(),
@@ -1394,6 +1396,7 @@ describe('OpenAI Realtime Provider', () => {
         }),
         readyState: WebSocket.OPEN,
       } as unknown as WebSocket;
+      provider.persistentConnection = persistentConnection;
 
       const responsePromise = provider.callApi('hi', {
         test: { metadata: { conversationId: 'idle-lifecycle' } },
@@ -1534,7 +1537,7 @@ describe('OpenAI Realtime Provider', () => {
         },
       });
 
-      provider.persistentConnection = {
+      const persistentConnection = {
         on: vi.fn((event: string, h: Function) => {
           mockHandlers[event].push(h);
         }),
@@ -1546,6 +1549,7 @@ describe('OpenAI Realtime Provider', () => {
         removeListener: vi.fn(),
         readyState: 1,
       } as unknown as WebSocket;
+      provider.persistentConnection = persistentConnection;
 
       const responsePromise = provider.callApi('go', {
         test: { metadata: { conversationId: 'cap' } },
@@ -1614,7 +1618,7 @@ describe('OpenAI Realtime Provider', () => {
         },
       });
 
-      provider.persistentConnection = {
+      const persistentConnection = {
         on: vi.fn((event: string, h: Function) => {
           mockHandlers[event].push(h);
         }),
@@ -1632,6 +1636,7 @@ describe('OpenAI Realtime Provider', () => {
         }),
         readyState: 1,
       } as unknown as WebSocket;
+      provider.persistentConnection = persistentConnection;
 
       const responsePromise = provider.callApi('go', {
         test: { metadata: { conversationId: 'cap-cleanup' } },
@@ -1685,6 +1690,10 @@ describe('OpenAI Realtime Provider', () => {
       // C2: the message handler must be detached so subsequent turns on the
       // shared socket don't fire stale listeners.
       expect(mockHandlers.message).not.toContain(handler);
+      // The cap leaves an unresolved function_call on the server-side session,
+      // so the persistent socket itself must be discarded before the next turn.
+      expect(provider.persistentConnection).toBeNull();
+      expect(vi.mocked(persistentConnection.close)).toHaveBeenCalledTimes(1);
 
       provider.cleanup();
     });
