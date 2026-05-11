@@ -157,7 +157,7 @@ function AppliedFilterBadges({
         <button
           type="button"
           onClick={() => onRemoveFilter(filter.id)}
-          className="ml-1 hover:bg-muted rounded-full"
+          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
         >
           <X className="size-3" />
         </button>
@@ -888,7 +888,7 @@ export default function ResultsView({
                         <button
                           type="button"
                           onClick={handleClearSearch}
-                          className="ml-1 hover:bg-muted rounded-full"
+                          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>
@@ -900,7 +900,7 @@ export default function ResultsView({
                         <button
                           type="button"
                           onClick={() => setFilterMode('all')}
-                          className="ml-1 hover:bg-muted rounded-full"
+                          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>
