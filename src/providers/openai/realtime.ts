@@ -32,18 +32,6 @@ function formatCloseMessage(prefix: string, code: number, reason: Buffer | undef
   return `${prefix} (code=${code}${reasonText ? `, reason=${reasonText}` : ''})`;
 }
 
-const REALTIME_PRICING_WARNED = new Set<string>();
-function warnUnpricedRealtimeModelOnce(modelName: string): void {
-  if (REALTIME_PRICING_WARNED.has(modelName)) {
-    return;
-  }
-  REALTIME_PRICING_WARNED.add(modelName);
-  logger.warn(
-    `OpenAI Realtime model "${modelName}" has no published pricing. Cost will be reported as undefined rather than $0.00. ` +
-      'Update OPENAI_REALTIME_MODELS once pricing is announced.',
-  );
-}
-
 /**
  * Convert PCM16 audio data to WAV format for browser playback
  * @param pcmData Raw PCM16 audio data buffer
@@ -1334,15 +1322,6 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           cachedResponse: result.cached,
         },
       );
-      // Realtime models without published pricing return undefined here. Warn
-      // once per process so users don't silently see $0.00 in their reports.
-      if (cost === undefined) {
-        const modelInfo = OPENAI_REALTIME_MODELS.find((m) => m.id === this.modelName);
-        if (modelInfo && !modelInfo.cost) {
-          warnUnpricedRealtimeModelOnce(this.modelName);
-        }
-      }
-
       return {
         output: finalOutput,
         tokenUsage: result.tokenUsage,

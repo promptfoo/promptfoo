@@ -531,11 +531,15 @@ export const OPENAI_REALTIME_MODELS: OpenAIModelInfo[] = [
       audioOutput: 64 / 1e6,
     },
   })),
-  // Pricing has not been published yet — surfaced via realtime.ts cost reporting as
-  // "unknown" rather than $0 so users see a warning instead of silent zero-billing.
   {
     id: 'gpt-realtime-2',
     type: 'chat',
+    cost: {
+      input: 4 / 1e6,
+      output: 24 / 1e6,
+      audioInput: 32 / 1e6,
+      audioOutput: 64 / 1e6,
+    },
   },
   // Deprecated preview snapshot that remains available until July 23, 2026.
   {

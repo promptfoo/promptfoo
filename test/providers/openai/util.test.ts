@@ -206,9 +206,9 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 4 + 500 * 16) / 1e6, 6);
   });
 
-  it('should not infer pricing for gpt-realtime-2 before OpenAI publishes it', () => {
+  it('should calculate cost correctly for gpt-realtime-2', () => {
     const cost = calculateOpenAICost('gpt-realtime-2', {}, 1000, 500);
-    expect(cost).toBeUndefined();
+    expect(cost).toBeCloseTo((1000 * 4 + 500 * 24) / 1e6, 6);
   });
 
   it('should calculate cost correctly with audio tokens', () => {

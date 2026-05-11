@@ -1779,7 +1779,7 @@ The Realtime API allows for real-time communication with models like `gpt-realti
 
 ### Supported Realtime Models
 
-- `gpt-realtime-2` - Reasoning-capable realtime model (pricing not yet published)
+- `gpt-realtime-2` - Reasoning-capable realtime model ($4/$24 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime-1.5` - Flagship realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime` - General-availability realtime model ($4/$16 per 1M text tokens, $32/$64 per 1M audio tokens)
 - `gpt-realtime-2025-08-28` - Dated snapshot of `gpt-realtime`

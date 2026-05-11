@@ -220,46 +220,6 @@ describe('OpenAI Realtime Provider', () => {
       expect(outer.output).toBeUndefined();
     });
 
-    it('warns once for realtime models without published pricing', async () => {
-      const warnSpy = vi.mocked(logger.warn);
-      warnSpy.mockClear();
-
-      const provider = new OpenAiRealtimeProvider('gpt-realtime-2', {
-        config: { modalities: ['text'], maintainContext: false },
-      });
-
-      const responsePromise = provider.callApi('hi');
-      await flushMicrotasks();
-      mockHandlers.open.forEach((h) => h());
-      await flushMicrotasks();
-      const handler = mockHandlers.message[mockHandlers.message.length - 1];
-      handler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'conversation.item.created',
-            item: { id: 'u1', role: 'user' },
-          }),
-        ),
-      );
-      handler(Buffer.from(JSON.stringify({ type: 'response.output_text.delta', delta: 'ok' })));
-      handler(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'ok' })));
-      handler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
-          }),
-        ),
-      );
-
-      const result = await responsePromise;
-      expect(result.cost).toBeUndefined();
-      const warnCalls = warnSpy.mock.calls.filter(([msg]) =>
-        typeof msg === 'string' ? /no published pricing/i.test(msg) : false,
-      );
-      expect(warnCalls.length).toBeGreaterThanOrEqual(1);
-    });
-
     it('should use default missing API key error message', async () => {
       mockProcessEnv({ OPENAI_API_KEY: undefined });
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
@@ -1302,7 +1262,6 @@ describe('OpenAI Realtime Provider', () => {
         removeListener: vi.fn(),
         readyState: 1,
       } as unknown as WebSocket;
-      provider.persistentConnection = persistentConnection;
       provider.persistentConnection = persistentConnection;
 
       const responsePromise = provider.callApi('go', {
@@ -2688,6 +2647,91 @@ describe('OpenAI Realtime Provider', () => {
 
         const result = await responsePromise;
         expect(result.error).toBeUndefined();
+        expect(result.output).toContain('tool done');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('pauses the client-secret request timeout while a tool handler is running', async () => {
+      vi.useFakeTimers();
+      try {
+        let resolveHandler: ((value: string) => void) | undefined;
+        const functionCallHandler = vi.fn(
+          () =>
+            new Promise<string>((resolve) => {
+              resolveHandler = resolve;
+            }),
+        );
+        const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+          config: {
+            modalities: ['text'],
+            websocketTimeout: 50,
+            toolCallTimeout: 5000,
+            tools: [
+              {
+                type: 'function',
+                name: 'slow',
+                parameters: { type: 'object', properties: {} },
+              },
+            ],
+            tool_choice: 'auto',
+            functionCallHandler,
+          },
+        });
+
+        let settled = false;
+        const responsePromise = provider
+          .webSocketRequest('secret123', 'slow tool please')
+          .finally(() => {
+            settled = true;
+          });
+
+        await vi.advanceTimersByTimeAsync(0);
+        mockHandlers.open.forEach((h) => h());
+        await vi.advanceTimersByTimeAsync(0);
+
+        const h = mockHandlers.message[mockHandlers.message.length - 1];
+        h(
+          Buffer.from(
+            JSON.stringify({ type: 'conversation.item.added', item: { id: 'u1', role: 'user' } }),
+          ),
+        );
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.output_item.added',
+              item: { type: 'function_call', call_id: 'c1', name: 'slow', arguments: '{}' },
+            }),
+          ),
+        );
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 1, input_tokens: 1, output_tokens: 0 } },
+            }),
+          ),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(functionCallHandler).toHaveBeenCalledWith('slow', '{}');
+
+        await vi.advanceTimersByTimeAsync(150);
+        expect(settled).toBe(false);
+
+        resolveHandler?.('{"ok":true}');
+        await vi.advanceTimersByTimeAsync(0);
+        h(Buffer.from(JSON.stringify({ type: 'response.output_text.done', text: 'tool done' })));
+        h(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: { usage: { total_tokens: 2, input_tokens: 1, output_tokens: 1 } },
+            }),
+          ),
+        );
+
+        const result = await responsePromise;
         expect(result.output).toContain('tool done');
       } finally {
         vi.useRealTimers();
