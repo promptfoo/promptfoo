@@ -1205,6 +1205,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const startTime = Date.now();
+    let metadata: ProviderResponse['metadata'];
     const hasLocalToolExecution = Boolean(config.functionToolCallbacks) || Boolean(this.mcpClient);
     const shouldUseCache =
       isCacheEnabled() && !context?.bustCache && !context?.debug && !hasLocalToolExecution;
@@ -1250,7 +1251,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         body: JSON.stringify(streamBody),
         signal: AbortSignal.timeout(requestTimeoutMs),
       });
-      const metadata = getOpenAiStreamingHttpMetadata(response);
+      metadata = getOpenAiStreamingHttpMetadata(response);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -1303,11 +1304,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (err instanceof Error && err.name === 'TimeoutError') {
         return {
           error: `API call timed out after ${requestTimeoutMs}ms`,
+          ...(metadata ? { metadata } : {}),
         };
       }
 
       return {
         error: `API call error: ${String(err)}`,
+        ...(metadata ? { metadata } : {}),
       };
     }
   }

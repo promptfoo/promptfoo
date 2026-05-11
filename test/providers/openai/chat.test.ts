@@ -3068,6 +3068,33 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.error).toContain('Network error');
     });
 
+    it('should preserve HTTP metadata when a stream reader fails', async () => {
+      const streamError = new Error('Stream interrupted');
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'x-request-id': 'stream-failed' }),
+        body: new ReadableStream({
+          start(controller) {
+            controller.error(streamError);
+          },
+        }),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.error).toContain('Stream interrupted');
+      expect(result.metadata?.http).toEqual({
+        status: 200,
+        statusText: 'OK',
+        headers: { 'x-request-id': 'stream-failed' },
+      });
+    });
+
     it('should handle mixed content and tool calls in streaming', async () => {
       const sseChunks = [
         'data: {"choices":[{"delta":{"content":"Let me check "}}]}\n\n',
