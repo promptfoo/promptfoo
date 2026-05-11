@@ -4,7 +4,6 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-import type { Usage as CodexSdkUsage } from '@openai/codex-sdk';
 import { type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
@@ -23,6 +22,7 @@ import { VERSION } from '../../version';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import type { Usage as CodexSdkUsage } from '@openai/codex-sdk';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
