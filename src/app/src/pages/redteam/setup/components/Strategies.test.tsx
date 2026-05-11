@@ -328,10 +328,7 @@ describe('Strategies', () => {
       const user = userEvent.setup();
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Click a hero strategy card to toggle selection
-      const metaAgentCard = screen.getByText('Meta Agent').closest('[class*="cursor-pointer"]');
-      expect(metaAgentCard).toBeInTheDocument();
-      await user.click(metaAgentCard!);
+      await user.click(screen.getByRole('button', { name: 'Meta Agent' }));
       expect(mockUpdateConfig).toHaveBeenCalled();
     });
 

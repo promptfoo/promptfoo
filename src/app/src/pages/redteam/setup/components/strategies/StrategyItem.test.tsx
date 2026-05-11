@@ -372,7 +372,7 @@ describe('StrategyItem', () => {
   describe('Interactions', () => {
     it('calls onToggle when card is clicked', async () => {
       const user = userEvent.setup();
-      const { container } = renderStrategyItem({
+      renderStrategyItem({
         isDisabled: false,
         isRemoteGenerationDisabled: false,
         strategy: baseStrategy,
@@ -381,9 +381,7 @@ describe('StrategyItem', () => {
         onConfigClick: mockOnConfigClick,
       });
 
-      // Find the Card component wrapper (has cursor-pointer class)
-      const card = container.querySelector('.cursor-pointer');
-      await user.click(card!);
+      await user.click(screen.getByRole('button', { name: 'Test Strategy' }));
 
       expect(mockOnToggle).toHaveBeenCalledWith('basic');
     });
