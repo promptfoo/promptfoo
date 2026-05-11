@@ -978,6 +978,139 @@ describe('doGenerateRedteam', () => {
     expect(mockProvider.cleanup).toHaveBeenCalledWith();
   });
 
+  it('should explain when basic is disabled without replacement strategies', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {
+          plugins: [{ id: 'intent', config: { intent: ['reservation details'] } }],
+          strategies: [{ id: 'basic', config: { enabled: false } }],
+        },
+      },
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    const result = await doGenerateRedteam(options);
+
+    expect(result).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Basic strategy is disabled and no other strategies are selected'),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Enable Basic'));
+    expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('should warn about strategy generation errors when basic is disabled alongside other strategies', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {
+          plugins: [{ id: 'intent', config: { intent: ['reservation details'] } }],
+          strategies: [{ id: 'basic', config: { enabled: false } }, { id: 'jailbreak' }],
+        },
+      },
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    const result = await doGenerateRedteam(options);
+
+    expect(result).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'plugin-generated test cases are excluded unless another selected strategy creates replacement tests',
+      ),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('review the selected strategies for generation errors'),
+    );
+    // Should NOT use the "no other strategies are selected" copy
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('no other strategies are selected'),
+    );
+    expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
+  it('should use the generic empty-results warning when basic is enabled', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {
+          plugins: [{ id: 'intent', config: { intent: ['reservation details'] } }],
+          strategies: [{ id: 'basic' }],
+        },
+      },
+    });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: ['Test entity'],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'test-output.json',
+      inRedteamRun: false,
+      cache: false,
+      defaultConfig: {},
+      write: false,
+      config: 'test-config.yaml',
+    };
+
+    const result = await doGenerateRedteam(options);
+
+    expect(result).toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'No test cases generated. Please check for errors and try again.',
+    );
+    expect(mockProvider.cleanup).toHaveBeenCalledWith();
+  });
+
   it('should cleanup provider even when --strict mode throws an exception', async () => {
     vi.mocked(synthesize).mockResolvedValue({
       testCases: [
