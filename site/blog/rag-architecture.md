@@ -1,6 +1,6 @@
 ---
 title: 'How Do You Secure RAG Applications?'
-description: 'RAG applications face unique security challenges beyond foundation models. Discover the vulnerabilities in retrieval systems and how to build secure AI architectures.'
+description: 'RAG systems add retrieval, authorization, and data-poisoning risks beyond the base model. Learn the failure modes and controls that matter.'
 image: /img/blog/rag-architecture/promptfoo_panda_rag.png
 keywords:
   [
@@ -23,57 +23,53 @@ tags: [technical-guide, best-practices, rag]
     <img src="/img/blog/rag-architecture/promptfoo_panda_rag.png" alt="red panda using rag" style={{ width: '50%' }} />
 </div>
 
-In our [previous blog post](https://www.promptfoo.dev/blog/foundation-model-security/), we discussed the security risks of foundation models. In this post, we will address the concerns around fine-tuning models and deploying RAG architecture.
+In our [previous blog post](https://www.promptfoo.dev/blog/foundation-model-security/), we covered the security risks of foundation models. That is only the first layer of the application. Once a team adds proprietary or current data through fine-tuning or retrieval, the attack surface changes.
 
-Creating an LLM as complex as Llama 3.2, Claude Opus, or gpt-4o is the culmination of years of work and millions of dollars in computational power. Most enterprises will strategically choose foundation models rather than create their own LLM from scratch. These models function like clay that can be molded to business needs through system architecture and prompt engineering. Once a foundation model has been selected, the next step is determining how the model can be applied and where proprietary data can enhance it.
+Most organizations will not train a frontier model from scratch. They will start with a foundation model, then adapt it with prompts, fine-tuning, retrieval, or some combination of the three. The security question is where that extra context comes from and who is allowed to see it.
 
 <!-- truncate -->
 
 ## Why Knowledge Cutoff Matters
 
-As we mentioned in our earlier blog post, foundation models are trained on a vast corpus of data that informs how the model will perform. This training data will also impact an LLM's factual recall, which is the process by which an LLM accesses and reproduces factual knowledge stored in its parameters.
+Foundation models encode patterns from their training data. That gives them broad knowledge, but not automatic access to later events or private enterprise data.
 
-While LLMs may contain a wide range of knowledge based on its training data, there is always a knowledge cutoff. Foundation model providers may disclose this in model cards for transparency. For example, [Llama 3.2's model card](https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/MODEL_CARD.md) states that its knowledge cutoff is August 2023. Ask the foundation model a question about an event in September 2023 and it simply won't know (though it may hallucinate to be helpful).
+Providers often disclose a knowledge cutoff in model cards. For example, [Llama 3.2's model card](https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/MODEL_CARD.md) lists August 2023. A model can still answer questions about later events, but without fresh context those answers are more likely to be incomplete or fabricated.
 
-We can see how this works through asking ChatGPT historical questions compared to questions about today's news.
+The difference is easy to see when comparing a historical question with a question about current news.
 
 ![gpt-4o napoleon question](/img/blog/rag-architecture/napoleon_question.png)
 
-In this response, gpt-4o reproduced factual knowledge based on information encoded in its neural network weights. However, the accuracy of the output can widely vary based on the prompt and any training biases in the model, therefore compromising the reliability of the LLM's factual recall. Since there is no way of "citing" the sources used by the LLM to generate the response, you cannot rely solely on the foundation model's output as the single source of truth.
+In this response, GPT-4o is drawing on information stored in its weights. The answer may be useful, but it is not a citation and it is not guaranteed to be correct. For factual workflows, the model output still needs verification.
 
-In other words, when a foundation model produces factual knowledge, you need to take it with a grain of salt. Trust, but verify.
-
-An example of a foundation model's knowledge cutoff can be seen when you ask the model about recent events. In the example below, we asked ChatGPT about the latest inflation news. You can see that the model completes a function where it searches the web and summarizes results.
+For recent events, the application needs another source of truth. In the example below, ChatGPT searches the web before summarizing the latest inflation news.
 
 ![gpt-4o CPI question](/img/blog/rag-architecture/CPI_question.png)
 
-This output relied on a type of Retrieval Augmented Generation (RAG) that searches up-to-date knowledge bases and integrates relevant information into the prompt given to the LLM. In other words, the LLM enhances its response by embedding context from a third-party source. We'll dive deeper into this structure later in this post.
+That retrieval step is the important distinction. Instead of relying only on what the model learned during training, the application fetches current context and includes it at inference time.
 
-While foundation models have their strengths, they are also limited in their usefulness for domain-specific tasks and real-time analysis. Enterprises who want to leverage LLM with their proprietary data or external sources will then need to determine whether they want to fine-tune a model and/or deploy RAG architecture. Below is a high-level overview of capabilities of each option.
+Fine-tuning and RAG solve different problems:
 
-|                                | Heavy Reliance on Prompt Engineering for Outputs | Improved Performance on Domain-Specific Tasks | Real-Time Retrieval with Citable Sources | Reduced Risk of Hallucination for Factual Recall |
-| ------------------------------ | ------------------------------------------------ | --------------------------------------------- | ---------------------------------------- | ------------------------------------------------ |
-| Foundation Model               | ✅                                               |                                               |                                          |                                                  |
-| Fine-Tuned Model               |                                                  | ✅                                            |                                          | ✅                                               |
-| Retrieval Augmented Generation | ✅                                               | ✅                                            | ✅                                       | ✅                                               |
+| Approach                       | Best For                                       | Main Limitation                                 |
+| ------------------------------ | ---------------------------------------------- | ----------------------------------------------- |
+| Foundation model               | General-purpose capability                     | No built-in access to private or current data   |
+| Fine-tuning                    | Durable behavior or domain-specific patterns   | Not a source of live or citable facts           |
+| Retrieval Augmented Generation | Current or private knowledge at inference time | Retrieval becomes part of the security boundary |
 
 ## The Case for Fine-Tuning
 
-There are scenarios when fine-tuning a model makes the most sense. Fine-tuning enhances an LLM's performance on domain-specific tasks by training it on smaller, more targeted datasets. As a result, the model's weights will be adjusted to optimize performance on that task, consequently improving the accuracy and relevance of the LLM while maintaining the model's general knowledge.
+Fine-tuning is useful when the thing you want to improve changes slowly enough to live in the model weights. It can teach a model domain terminology, output formats, or task-specific behavior without requiring that context in every prompt.
 
-Imagine your LLM graduated from college and remembers all of its knowledge from its college courses. Fine-tuning is the equivalent of sending your LLM to get its masters. It will remember everything from Calculus I from sophomore year, but it will now be able to answer questions from the masters courses it took on algebraic topology and probability theory.
-
-Fine-tuning strategies are most successful when practitioners want to enhance foundation models with a knowledge base that remains static. This is particularly helpful for domains such as medicine, where there is a wide and deep knowledge base. In a [research paper](https://arxiv.org/html/2404.14779v1) published in April 2024, researchers observed vastly improved performance in medical knowledge for fine-tuned models compared to foundation models.
+That makes it a good fit for relatively stable domains. In a [research paper](https://arxiv.org/html/2404.14779v1) published in April 2024, researchers observed improved medical knowledge performance in fine-tuned models compared with the base model.
 
 ![medical results](/img/blog/rag-architecture/finetuning_medical.png)
 
-Here we can see that the full parameter fine-tuned model demonstrated improved MMLU performance for college biology, college medicine, medical genetics, and professional medicine.
+The full-parameter fine-tuned model outperformed the base model on medical subsets of MMLU such as college biology, college medicine, medical genetics, and professional medicine.
 
-A fine-tuned model trained on medical knowledge may be particularly helpful for scientists and medical students. Yet how would a clinician in a hospital leverage a fine-tuned model when it comes to treating her patients? This is where an LLM application benefits from Retrieval Augmented Generation (RAG).
+But static knowledge is not enough for every task. A clinician may need the latest patient record, a current medication list, or hospital-specific policy. Those belong in retrieval, not in the model weights.
 
 ## The Case for Retrieval Augmented Generation
 
-At its core, Retrieval Augmented Generation (RAG) is a framework designed to augment an LLM's capabilities by incorporating external knowledge sources. Put simply, RAG-based architecture enhances an LLM's response by providing additional context to the LLM in the prompt. Think of it like attaching a file in an email.
+Retrieval Augmented Generation (RAG) adds external context at inference time. Instead of asking the model to memorize everything, the application fetches relevant documents or records and passes them with the user request.
 
 Without RAG, here's what a basic chatbot flow would look like.
 
@@ -89,39 +85,33 @@ With RAG, the flow might work like this:
     <img src="/img/blog/rag-architecture/basic_rag_flow.png" style={{ width: '65%' }} alt="basic_rag_flow" />
 </div>
 
-Using a RAG framework, the prompt generates a query to a vector database that identifies relevant information ("context") to provide to the LLM. This context is essentially "attached" to the prompt when it is sent to the foundation model.
+In a simple RAG flow, the application turns the user request into a retrieval query, fetches relevant context, and sends both the request and the context to the model.
 
-Now you may be asking—what is the difference between manually including the context in a prompt, such as attaching a PDF in a chatbot, versus implementing RAG architecture?
+The value is not just convenience. Retrieval lets an application work with data that is too large, too fresh, or too access-controlled to place in a prompt by hand.
 
-The answer comes down to scalability and access. A single user can retrieve a PDF from his local storage and attach it in a query to an LLM like ChatGPT. But the beauty of RAG is connecting heterogeneous and expansive data sources that can provide powerful context to the user—even if the user does not have direct access to that data source.
-
-Let's say that you purchased a smart thermostat for your home and are having trouble setting it up. You reach out to a support chatbot that asks how it can help, but when the chatbot asks for the model number, you have genuinely no clue. The receipt and the thermostat box have long been recycled, and since you're feeling particularly lazy, you don't want to inspect the device to find a model number.
-
-When you provide your contact information, the chatbot retrieves details about the thermostat you purchased, including the date you bought it and the model number. Then using that information, it helps you triage your issue by summarizing material from the user manual and maybe even pulling solutions from similar support tickets that were resolved with other customers.
-
-Behind the scenes is a carefully implemented RAG framework.
+Consider a support chatbot for a smart thermostat. A customer asks for help but does not know the model number. After the customer is authenticated, the application can retrieve the purchase record, identify the thermostat, pull the matching manual, and summarize relevant support history. The model is useful because the retrieval layer supplied the right facts at the right time.
 
 ## Key Components of RAG Orchestration
 
-A RAG framework will consist of a number of key components.
+A typical RAG system has four moving parts:
 
-1. **Orchestration Layer**: This acts as a central coordinator for the RAG system and manages the workflow and information flow between different components. The orchestration layer handles user input, metadata, and interactions with various tools. Popular orchestration layer tools include LangChain and LlamaIndex.
-2. **Retrieval Tools**: These are responsible for retrieving relevant context from knowledge bases or APIs. Examples include vector databases and semantic search engines, like Pinecone, Weaviate, or Azure AI Search.
-3. **Embedding Model**: The model that creates vector representations (embeddings) based on the data provided. These vectors are stored in the vector database that will be used to retrieve relevant information.
-4. **Large Language Model**: This is the foundation model that will process the user input and context to produce an output.
+1. **Orchestration layer**: Coordinates user input, retrieval, metadata, and downstream tools. LangChain and LlamaIndex are common examples.
+2. **Retrieval tools**: Fetch relevant context from vector stores, search systems, APIs, or databases.
+3. **Embedding model**: Converts documents into vectors for similarity search.
+4. **Large language model**: Produces the final answer from the user input and retrieved context.
 
-Okay, so we've got a rough understanding of how a RAG framework could work, but what are the misconfigurations that could lead to security issues?
+Security problems usually appear in how those parts are connected, not in any one component by itself.
 
 ## Security Concerns for RAG Architecture
 
 ### Proper Authentication and Authorization Flows
 
-Depending on your LLM application's use case, you may want to require authentication. From a security perspective, there are two major benefits to this:
+If the application exposes non-public data, authentication is the starting point. It gives you two things:
 
 - Enforces accountability and logging
 - Partially mitigates risk of Denial of Wallet (DoW) and Denial of Service (DoS)
 
-If you need to restrict access to certain data within the application, then authentication will be a prerequisite to authorization flows. There are several ways to implement authorization in RAG frameworks:
+Authentication alone is not enough. Retrieval still needs authorization controls that decide which documents each user may access:
 
 1. **Document Classification**: Assign categories or access levels to documents during ingestion
 2. **User-Document Mapping**: Create relationships between users/roles and document categories
@@ -129,34 +119,32 @@ If you need to restrict access to certain data within the application, then auth
 4. **Metadata Tagging**: Include authorization metadata with document embeddings
 5. **Secure Embedding Storage**: Ensure that vector databases support access controls
 
-There are also a number of methods for configuring authorization lists:
+Those controls can be expressed through standard authorization models:
 
 1. **Role-Based Access Control (RBAC)**: Users are assigned roles (e.g. admin, editor, viewer) and permissions are granted based on those roles.
 2. **Attribute-Based Access Control (ABAC)**: Users can access resources based on attributes of the users themselves, the resources, and the environment.
 3. **Relationship-Based Access Control (ReBAC)**: Access is defined based on the relationship between users and resources.
 
-The beauty of RAG frameworks is that you can consolidate disparate and heterogeneous data sources into a unified source—the vector database. However, this also means that you will need to establish a unified permission schema that can map disparate access control models from different sources. You will also need to store permission metadata alongside vector embeddings in the vector DB.
+RAG often centralizes documents from systems with different permission models. That means you need a common authorization schema and permission metadata stored alongside the indexed content.
 
-Once a user sends a prompt, there would subsequently need to be a two-pronged approach:
+At query time, use both:
 
 1. **Pre-Query Filtering**: Enforce permission filters for vector search queries before execution
 2. **Post-Query Filtering**: Ensure that search results map to authorized documents
 
 ### Never Trust the User
 
-You should assume that whatever is stored in a vector database can be retrieved and returned to a user through an LLM. Whenever possible, you should never even index PII or sensitive data in your vector database.
+Assume that anything stored in the retrieval layer may eventually reach a model response. If the application does not need sensitive data in the index, do not put it there.
 
-In the event that sensitive data needs to be indexed, then access should be enforced at the database level, and queries should be performed with the user token rather than with global authorization.
+If sensitive data must be indexed, enforce access at the storage layer and query with user-scoped credentials rather than a global service credential.
 
-The authorization flow should never rely on the prompt itself. Instead, a separate function should be called that verifies what the user is allowed to access and retrieves relevant information based on the user's authorization.
+Never rely on a prompt instruction to enforce authorization. The application should verify access before retrieval and only pass authorized context to the model.
 
 ## What Could Go Wrong?
 
-Without authorization flows in a RAG-based LLM application, a user can access any information they desire. There are some use cases where this might make sense, such as a chatbot solely intended to help users comb through Help Center articles.
+If retrieval ignores authorization, the LLM endpoint becomes another path to cross-tenant access. That may be acceptable for a public help-center bot. It is not acceptable for a multi-tenant product or any system handling PII, PHI, or internal documents.
 
-However, if you are deploying a multi-tenant application or are exposing sensitive data, such as PII or PHI, then proper RAG implementation is crucial.
-
-In a traditional pentest, we could test authorization flows by creating a map of tenants, entities, and users. Then we would test against these entities to see if we could interact with resources that we are not intended to interact with. We could ostensibly create the same matrix for testing RAG architecture within a single injection point—the LLM endpoint.
+The test strategy is familiar from traditional application security. Build a matrix of tenants, users, and documents, then verify that every retrieval path respects those boundaries. In a RAG application, the LLM endpoint is simply another way to exercise that access control surface.
 
 ![threat model diagram](/img/blog/rag-architecture/RAG_threat_model.png)
 
@@ -164,51 +152,45 @@ User prompts should never be trusted within an authorization flow, and you shoul
 
 ### Prompt Injection
 
-LLM applications using RAG are still susceptible to [prompt injection](https://www.promptfoo.dev/blog/prompt-injection/) and jailbreaking. If an LLM application relies on system prompts to restrict LLM outputs, then the LLM application could still be vulnerable to traditional prompt injection and jailbreaking attacks.
-
-These vulnerabilities can be mitigated through refined prompt engineering, as well as content guardrails for input and output.
+RAG does not remove the usual [prompt injection](https://www.promptfoo.dev/blog/prompt-injection/) risk. If the application relies on system prompts alone to restrict behavior, a malicious user can still try to override those instructions directly.
 
 ### Context Injection
 
-Context injection attacks involve manipulating the input or context provided to an LLM to alter its behavior or output in unintended ways. By carefully crafting prompts or injecting misleading content, an attack can force the LLM to generate inappropriate or harmful content.
-
-Context injection attacks are similar to prompt injection, but the malicious content is inserted into the retrieved context rather than the user input. There are [excellent research papers](https://arxiv.org/html/2405.20234v1) that outline context injection techniques.
+Context injection is the retrieval-side version of the same problem. The malicious instructions arrive through retrieved content instead of through the user's message. A poisoned web page, document, or support ticket can influence the model once it is added to context. There are [research papers](https://arxiv.org/html/2405.20234v1) that outline these techniques in detail.
 
 ### Data Poisoning
 
-In some cases, users might be able to upload files into an LLM application, where those files are subsequently retrieved by other users. When uploaded data is stored within a vector database, it blends in and becomes indistinguishable from credible data. If a user has permission to upload data, then an attack vector exists where the data could be poisoned, thereby causing the LLM to generate inaccurate or misleading information.
+If users can upload content that later becomes retrievable by others, the index becomes a poisoning target. Malicious documents can introduce false facts, misleading instructions, or retrieval spam that looks no different from trusted content once embedded.
 
 ### Sensitive Data Exfiltration
 
-LLM applications are at risk for the same authorization misconfigurations as any other application. In web applications, we can test broken authorization through cross-testing actions with separate session cookies or headers, or attempting to retrieve unauthorized information through IDOR attacks. With LLMs, the injection point to retrieve unauthorized sensitive data is the prompt. It is critical to test that there are robust access controls for objects based on user access and object attributes.
+RAG systems can leak sensitive data for the same reason any application can: broken authorization. The difference is that the prompt becomes one more interface for probing those boundaries.
 
-It is possible to enforce content guardrails that restrict the exposure of sensitive data such as PII or PHI. Yet relying on content guardrails to restrict returning PII in output is a single point of failure. Like WAFs, content guardrails can be bypassed through unique payloads or techniques. Instead, it is highly recommended that all PII is scrubbed before even touching the vector database, in addition to enforcing content guardrails. We will discuss implementing content guardrails in a later post.
+Output guardrails can reduce accidental exposure, but they are not a substitute for access control. If a system should never reveal a field, the safest design is to avoid indexing it in the first place and enforce object-level permissions before retrieval.
 
 ### Context Window Overflows
 
-All LLMs have a context window, which functions like its working memory. It determines how much preceding context the model can use to generate coherent and relevant responses. For applications, the context window must be large enough to accommodate the following:
+Every LLM has a finite context window. A RAG application has to fit at least four things into it:
 
 1. System instructions
 2. Retrieved context
 3. User input
 4. Generated output
 
-## Mitigating Controls for RAG
+An attacker who can flood retrieval with irrelevant text can crowd out more important instructions or evidence. Larger context windows make this less likely, but they do not remove the need to rank, limit, and inspect retrieved content.
 
-By overloading a context window with irrelevant information, an attack can push out important context or instructions. As a consequence, the LLM can "forget" its instructions and go rogue.
-
-This type of attack is more common for smaller models with shorter context windows. For a model like Google's Gemini 1.5 Pro, where the context window has more than one million tokens, the likelihood of a context window overflow is reduced. The risk might be more pronounced for a model like [Llama 3.2](https://huggingface.co/meta-llama/Llama-3.2-1B), where the maximum content window is 128,000 tokens.
+<a id="mitigating-controls-for-rag-1"></a>
 
 ## Mitigating Controls for RAG
 
-With careful implementation and secure by design controls, an LLM application using a RAG framework can produce extraordinary results.
+Start by testing the complete retrieval path, not just the base model. A [Promptfoo red team eval](https://www.promptfoo.dev/docs/guides/evaluate-rag/) configured for your RAG environment can help expose the highest-risk failure modes.
 
-You can gain a baseline understanding of your LLM application's risk by [running a Promptfoo red team evaluation](https://www.promptfoo.dev/docs/guides/evaluate-rag/) configured to your RAG environment. Once you have an understanding of what vulnerabilities exist in your application, then there are a number of controls that can be enforced to allow a user to safely interact with the LLM application.
+The most important controls are concrete:
 
-1. **Input and Output Validation and Sanitization**: Implement robust input validation to filter out potentially harmful or manipulative prompts
-2. **Context Locking**: Limit how much conversation history or context the model can access at any given time
-3. **Prompt Engineering**: Use prompt delineation to clearly separate user inputs from system prompts
-4. **Enhanced Filtering**: Analyze the entire input context, not just the user message, to detect harmful content
-5. **Continuous Research and Improvement**: Stay updated on new attack vectors and defense mechanisms and run continuous scans against your LLM applications to identify new vulnerabilities
+1. **Enforce authorization before retrieval**: Filter by tenant, role, and object permissions before documents reach the model.
+2. **Keep unnecessary secrets out of the index**: Avoid storing PII or other sensitive fields unless the use case truly requires them.
+3. **Treat retrieved text as untrusted input**: Separate instructions from content and inspect the full assembled context, not just the user message.
+4. **Constrain retrieval**: Limit, rank, and deduplicate context so poisoned or irrelevant documents cannot dominate the prompt.
+5. **Test realistic abuse cases**: Include cross-tenant access, indirect prompt injection, poisoned uploads, and retrieval flooding in your evals.
 
-In our next blog post, we'll cover the exciting world of AI agents and how to prevent them from going rogue. Happy prompting!
+RAG can make LLM applications much more useful, but it also turns data access into a security boundary. Test that boundary directly before you trust it in production.

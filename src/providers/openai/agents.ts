@@ -12,12 +12,15 @@ import {
   loadHandoffs,
   loadInputGuardrails,
   loadOutputGuardrails,
+  loadSandboxConfig,
+  loadSessionDefinition,
   loadTools,
+  loadValueFromFile,
 } from './agents-loader';
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent, AgentInputItem } from '@openai/agents';
+import type { Agent, AgentInputItem, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -25,7 +28,7 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { OpenAiAgentsOptions } from './agents-types';
+import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
 
 /**
  * OpenAI Agents Provider
@@ -36,7 +39,9 @@ import type { OpenAiAgentsOptions } from './agents-types';
 export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
-  private tracingExporter?: OTLPTracingExporter;
+  private session?: Session;
+  private sessionInitialization?: Promise<Session>;
+  private sessionQueues = new WeakMap<Session, Promise<void>>();
 
   constructor(
     modelName: string,
@@ -152,45 +157,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     logger.debug('[AgentsProvider] Setting up tracing');
 
     try {
-      // Create OTLP exporter
-      this.tracingExporter = new OTLPTracingExporter({
-        otlpEndpoint: this.agentConfig.otlpEndpoint,
-        evaluationId: context?.evaluationId,
-        testCaseId: context?.testCaseId,
-      });
-
-      // Register with agent's tracing system
-      await this.registerTracingExporter(this.tracingExporter);
-
-      // Start the trace export loop
-      startTraceExportLoop();
+      await ensureTracingExporterRegistered();
 
       logger.debug('[AgentsProvider] Tracing setup complete');
     } catch (error) {
       logger.error('[AgentsProvider] Failed to setup tracing', { error });
       // Don't throw - tracing failure shouldn't block agent execution
-    }
-  }
-
-  /**
-   * Register tracing exporter with openai-agents-js tracing system
-   */
-  private async registerTracingExporter(exporter: OTLPTracingExporter): Promise<void> {
-    try {
-      // Create batch processor with our exporter
-      const processor = new BatchTraceProcessor(exporter, {
-        maxQueueSize: 100,
-        maxBatchSize: 10,
-        scheduleDelay: 1000,
-      });
-
-      // Register processor
-      addTraceProcessor(processor);
-
-      logger.debug('[AgentsProvider] Tracing processor registered');
-    } catch (error) {
-      logger.error('[AgentsProvider] Failed to register tracing processor', { error });
-      throw error;
     }
   }
 
@@ -208,16 +180,17 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         maxTurns: this.agentConfig.maxTurns ?? 10,
       });
 
-      // Build run options
       const runOptions: any = {
+        ...(await this.resolveRunOptions(context)),
         context: context?.vars,
         maxTurns: this.agentConfig.maxTurns ?? 10,
         signal: callApiOptions?.abortSignal,
       };
 
-      // Override model if specified in config
-      if (this.agentConfig.model || this.modelName) {
-        runOptions.model = this.agentConfig.model || this.modelName;
+      // Override the agent's model only when the provider config explicitly asks to.
+      // The provider suffix is an agent label, not a model identifier.
+      if (this.agentConfig.model) {
+        runOptions.model = this.agentConfig.model;
       }
 
       // Override model settings if specified
@@ -225,10 +198,28 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         runOptions.modelSettings = resolveModelSettings(this.agentConfig.modelSettings);
       }
 
-      // Run the agent within a trace context to ensure proper trace ID generation
-      const result = await getOrCreateTrace(async () => {
-        return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
-      });
+      const traceContext = parseTraceparent(context?.traceparent);
+      const traceMetadata = buildTraceMetadata(
+        context,
+        this.agentConfig.otlpEndpoint,
+        traceContext,
+      );
+
+      // Run the agent within the evaluator trace when Promptfoo supplied one so
+      // nested agent spans stay attached to trajectory assertions and UI traces.
+      const executeRun = () =>
+        getOrCreateTrace(
+          async () => {
+            return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
+          },
+          {
+            ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
+            ...(Object.keys(traceMetadata).length ? { metadata: traceMetadata } : {}),
+          },
+        );
+      const result = runOptions.session
+        ? await this.withSessionLock(runOptions.session, executeRun)
+        : await executeRun();
 
       logger.debug('[AgentsProvider] Agent run result', {
         hasOutput: !!result.finalOutput,
@@ -253,17 +244,38 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   /**
    * Extract token usage from agent result
    */
-  private extractTokenUsage(result: any): { total?: number; prompt?: number; completion?: number } {
-    if (!result.usage) {
+  private extractTokenUsage(result: any): NonNullable<ProviderResponse['tokenUsage']> {
+    const usage = result.runContext?.usage ?? result.state?.usage ?? result.usage;
+    if (!usage) {
       return {};
     }
 
-    const usage = result.usage;
+    const inputDetails = summarizeUsageDetails(usage.inputTokensDetails);
+    const outputDetails = summarizeUsageDetails(usage.outputTokensDetails);
+    const cachedInputTokens =
+      inputDetails.cached_tokens ??
+      inputDetails.cache_read_input_tokens ??
+      inputDetails.cacheReadInputTokens;
+    const completionDetails = {
+      ...(outputDetails.reasoning_tokens === undefined
+        ? {}
+        : { reasoning: outputDetails.reasoning_tokens }),
+      ...(outputDetails.accepted_prediction_tokens === undefined
+        ? {}
+        : { acceptedPrediction: outputDetails.accepted_prediction_tokens }),
+      ...(outputDetails.rejected_prediction_tokens === undefined
+        ? {}
+        : { rejectedPrediction: outputDetails.rejected_prediction_tokens }),
+      ...(cachedInputTokens === undefined ? {} : { cacheReadInputTokens: cachedInputTokens }),
+    };
 
     return {
       total: usage.totalTokens ?? undefined,
-      prompt: usage.promptTokens ?? undefined,
-      completion: usage.completionTokens ?? undefined,
+      prompt: usage.inputTokens ?? usage.promptTokens ?? undefined,
+      completion: usage.outputTokens ?? usage.completionTokens ?? undefined,
+      ...(cachedInputTokens === undefined ? {} : { cached: cachedInputTokens }),
+      ...(usage.requests === undefined ? {} : { numRequests: usage.requests }),
+      ...(Object.keys(completionDetails).length ? { completionDetails } : {}),
     };
   }
 
@@ -310,6 +322,119 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
     return prompt;
   }
+
+  private async resolveRunOptions(
+    context?: CallApiContextParams,
+  ): Promise<Record<string, unknown>> {
+    const runOptions = { ...(this.agentConfig.runOptions ?? {}) } as Record<string, any>;
+    delete runOptions.stream;
+
+    if (typeof runOptions.sessionInputCallback === 'string') {
+      runOptions.sessionInputCallback = await loadValueFromFile(
+        runOptions.sessionInputCallback,
+        'session input callback',
+      );
+    }
+
+    if (typeof runOptions.callModelInputFilter === 'string') {
+      runOptions.callModelInputFilter = await loadValueFromFile(
+        runOptions.callModelInputFilter,
+        'call model input filter',
+      );
+    }
+
+    if (typeof runOptions.toolErrorFormatter === 'string') {
+      runOptions.toolErrorFormatter = await loadValueFromFile(
+        runOptions.toolErrorFormatter,
+        'tool error formatter',
+      );
+    }
+
+    if (typeof runOptions.errorHandlers === 'string') {
+      runOptions.errorHandlers = await loadValueFromFile(
+        runOptions.errorHandlers,
+        'run error handlers',
+      );
+    }
+
+    if (runOptions.session) {
+      runOptions.session = await loadSessionDefinition(runOptions.session, context);
+    } else if (this.agentConfig.session) {
+      runOptions.session = await this.resolveConfiguredSession(context);
+    }
+
+    if (runOptions.sandbox) {
+      runOptions.sandbox = await loadSandboxConfig(runOptions.sandbox, context);
+    } else if (this.agentConfig.sandbox) {
+      runOptions.sandbox = await loadSandboxConfig(this.agentConfig.sandbox, context);
+    }
+
+    return runOptions;
+  }
+
+  private async resolveConfiguredSession(context?: CallApiContextParams): Promise<Session> {
+    if (typeof this.agentConfig.session === 'function') {
+      const session = await loadSessionDefinition(this.agentConfig.session, context);
+      if (!session) {
+        throw new Error('Failed to initialize configured session');
+      }
+      return session;
+    }
+
+    if (
+      typeof this.agentConfig.session === 'string' &&
+      this.agentConfig.session.startsWith('file://')
+    ) {
+      const exportedSession = await loadValueFromFile<unknown>(this.agentConfig.session, 'session');
+      if (typeof exportedSession === 'function') {
+        const session = await loadSessionDefinition(
+          exportedSession as OpenAiAgentsSessionFactory,
+          context,
+        );
+        if (!session) {
+          throw new Error('Failed to initialize configured session');
+        }
+        return session;
+      }
+    }
+
+    if (!this.session) {
+      this.sessionInitialization ??= loadSessionDefinition(this.agentConfig.session, context)
+        .then((session) => {
+          if (!session) {
+            throw new Error('Failed to initialize configured session');
+          }
+          this.session = session;
+          return session;
+        })
+        .catch((error) => {
+          this.sessionInitialization = undefined;
+          throw error;
+        });
+      return await this.sessionInitialization;
+    }
+
+    return this.session;
+  }
+
+  private async withSessionLock<T>(session: Session, callback: () => Promise<T>): Promise<T> {
+    const previousRun = this.sessionQueues.get(session) ?? Promise.resolve();
+    let release: () => void = () => {};
+    const currentRun = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.sessionQueues.set(session, currentRun);
+
+    await previousRun;
+    try {
+      return await callback();
+    } finally {
+      release();
+      if (this.sessionQueues.get(session) === currentRun) {
+        this.sessionQueues.delete(session);
+      }
+    }
+  }
 }
 
 function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
@@ -318,6 +443,79 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   }
 
   return [...(existing ?? []), ...(additions ?? [])];
+}
+
+let tracingProcessorRegistration: Promise<void> | undefined;
+
+async function ensureTracingExporterRegistered(): Promise<void> {
+  if (!tracingProcessorRegistration) {
+    tracingProcessorRegistration = Promise.resolve().then(() => {
+      const processor = new BatchTraceProcessor(new OTLPTracingExporter(), {
+        maxQueueSize: 100,
+        maxBatchSize: 10,
+        scheduleDelay: 1000,
+      });
+
+      addTraceProcessor(processor);
+      startTraceExportLoop();
+      logger.debug('[AgentsProvider] Tracing processor registered');
+    });
+  }
+
+  await tracingProcessorRegistration;
+}
+
+function parseTraceparent(
+  traceparent?: string,
+): { traceId: string; parentSpanId: string } | undefined {
+  if (!traceparent) {
+    return undefined;
+  }
+
+  const match = traceparent
+    .trim()
+    .toLowerCase()
+    .match(/^[\da-f]{2}-([\da-f]{32})-([\da-f]{16})-[\da-f]{2}$/);
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    traceId: match[1],
+    parentSpanId: match[2],
+  };
+}
+
+function buildTraceMetadata(
+  context?: CallApiContextParams,
+  otlpEndpoint?: string,
+  traceContext?: { traceId: string; parentSpanId: string },
+): Record<string, string> {
+  return {
+    ...(context?.evaluationId ? { 'evaluation.id': context.evaluationId } : {}),
+    ...(context?.testCaseId ? { 'test.case.id': context.testCaseId } : {}),
+    ...(traceContext?.parentSpanId
+      ? { 'promptfoo.parent_span_id': traceContext.parentSpanId }
+      : {}),
+    ...(otlpEndpoint ? { 'promptfoo.otlp_endpoint': otlpEndpoint } : {}),
+  };
+}
+
+function summarizeUsageDetails(
+  details: Array<Record<string, number>> | Record<string, number> | undefined,
+): Record<string, number> {
+  const entries = Array.isArray(details) ? details : details ? [details] : [];
+  const summary: Record<string, number> = {};
+
+  for (const entry of entries) {
+    for (const [key, value] of Object.entries(entry)) {
+      if (typeof value === 'number') {
+        summary[key] = (summary[key] ?? 0) + value;
+      }
+    }
+  }
+
+  return summary;
 }
 
 function parseAgentInputItems(value: unknown): AgentInputItem[] | undefined {

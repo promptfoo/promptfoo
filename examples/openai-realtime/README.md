@@ -1,6 +1,6 @@
 # openai-realtime (OpenAI Realtime API Example)
 
-This example demonstrates how to use promptfoo to test OpenAI's Realtime API capabilities. The Realtime API allows for real-time communication with `gpt-realtime` and `gpt-realtime-1.5` using WebSockets, supporting both text and audio inputs/outputs.
+This example demonstrates how to use promptfoo to test OpenAI's Realtime API capabilities. The Realtime API allows for real-time communication with `gpt-realtime-2`, `gpt-realtime-1.5`, and `gpt-realtime` using WebSockets, supporting text, audio, and model-dependent image inputs plus text/audio outputs.
 
 ## Quick Start
 
@@ -34,7 +34,6 @@ providers:
       # Custom hosted gateway
       apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
       modalities: ['text']
-      temperature: 0.7
 ```
 
 For local development:
@@ -235,7 +234,7 @@ Each thread maintains its own independent context while tests are evaluated.
 The provider implementation in promptfoo creates a direct WebSocket connection with the OpenAI Realtime API, following the official protocol:
 
 1. **WebSocket Connection**: Establishes a secure WebSocket connection to `wss://api.openai.com/v1/realtime?model=MODEL_ID`
-2. **Authentication**: Authenticates using the API key in the request headers, including the required beta header
+2. **Authentication**: Authenticates using the API key in the request headers
 3. **Conversation Management**: Implements the full conversation protocol:
    - Creates user messages
    - Processes model responses
@@ -252,7 +251,6 @@ const wsUrl = `wss://api.openai.com/v1/realtime?model=${modelName}`;
 const ws = new WebSocket(wsUrl, {
   headers: {
     Authorization: `Bearer ${apiKey}`,
-    'OpenAI-Beta': 'realtime=v1',
     // Other headers...
   },
 });
@@ -286,17 +284,64 @@ const config = {
 };
 ```
 
-**Important Note**: The OpenAI Realtime API is in beta and the format requirements may change. The implementation in promptfoo follows the current requirements as of the latest API version.
+Structured Realtime prompts can also preserve the native multimodal user-content items documented by OpenAI:
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "input_text",
+        "text": "Describe these inputs."
+      },
+      {
+        "type": "input_audio",
+        "audio": "<base64-encoded audio>"
+      },
+      {
+        "type": "input_image",
+        "image_url": "data:image/jpeg;base64,..."
+      }
+    ]
+  }
+]
+```
+
+Use `input_image` only with Realtime models that support image input, such as the current `gpt-realtime*` family.
+
+Promptfoo keeps the existing `modalities` config key for compatibility, but sends the current GA Realtime wire shape to OpenAI under the hood.
 
 ### Function Calling Support
 
-The implementation supports the Realtime API's function calling capabilities:
+The provider supports the Realtime API's function calling capabilities:
 
 1. **Tool Definition**: You can define tools (functions) in the configuration
 2. **Function Arguments**: When the model decides to use a function, the implementation captures the arguments
 3. **Function Result Handling**: Results from function calls are sent back to the model for further processing
 
-In this example, we've configured a simple weather function to demonstrate the capability. In a real implementation, you would connect this to actual weather data.
+Realtime function tools use the native OpenAI Realtime shape with top-level `name`, `description`, and `parameters` fields:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-realtime-1.5
+    config:
+      tools:
+        - type: function
+          name: get_weather
+          description: Get the current weather for a location
+          parameters:
+            type: object
+            properties:
+              location:
+                type: string
+            required: ['location']
+      tool_choice: auto
+```
+
+If you reuse a Chat Completions-style tools file that wraps those fields under `function:`, promptfoo still accepts it as a compatibility input and normalizes only that legacy shape before sending it to the Realtime API.
+
+When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to your handler. Validate the function name and parse or validate the arguments before side effects in your application code.
 
 #### Implementing a Custom Function Handler
 
@@ -338,6 +383,7 @@ The Realtime API supports both text and audio interactions. promptfoo now includ
 
 ### Supported Models and Features
 
+- **gpt-realtime-2**: Reasoning-capable realtime model with text and audio support
 - **gpt-realtime-1.5**: Flagship audio model for voice agents and customer support
 - **gpt-realtime**: General-availability realtime model with text and audio support
   - Supports new voices: `cedar` and `marin` (in addition to existing voices)
@@ -353,7 +399,7 @@ providers:
   - id: openai:realtime:gpt-realtime-1.5
     config:
       modalities: ['text', 'audio']
-      voice: 'cedar' # or 'marin', 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'
+      voice: 'cedar' # or 'marin', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'
       instructions: 'Please respond with audio.'
 ```
 
@@ -378,8 +424,8 @@ If you encounter a "WebSocket error: Unexpected server response: 403" error, thi
    - Try running the example from a different network (e.g., mobile hotspot)
    - Check if your company network blocks WebSocket connections
 
-2. **API Access**: Your OpenAI API key may not have access to the Realtime API beta.
-   - Verify that you have been granted access to the Realtime API beta
+2. **API Access**: Your OpenAI API key may not have access to the Realtime API.
+   - Verify that your project has access to the Realtime API
    - Check your OpenAI dashboard for any access restrictions
 
 3. **Rate Limits**: You may have hit rate limits or quotas for the Realtime API.

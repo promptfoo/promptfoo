@@ -328,6 +328,7 @@
         "src/redteam/**/*",
         "src/util/**/*",
         "src/commands/**/*",
+        "src/contracts/**/*",
         "src/types/**/*",
         "src/tracing/**/*"
       ],
