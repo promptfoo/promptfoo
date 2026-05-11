@@ -5,7 +5,7 @@ description: Diagnose common RAG failure modes and map each one to concrete Prom
 
 # RAG failure modes
 
-When a RAG system fails, the first question is usually not "did the model fail?" but "*which* part failed?"
+When a RAG system fails, the first question is usually not "did the model fail?" but "_which_ part failed?"
 
 This guide is a practical checklist for mapping common RAG failures to Promptfoo evals. Use it alongside the main [Evaluating RAG pipelines](/docs/guides/evaluate-rag) guide.
 
