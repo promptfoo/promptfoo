@@ -182,7 +182,7 @@ This example compares two versions of the same Claude Agent SDK skill against id
 This example demonstrates loading skills from a [plugin](https://code.claude.com/docs/en/plugins) instead of from `setting_sources`. Plugins are self-contained directories that bundle skills, agents, hooks, and MCP servers together.
 
 - **Plugin loading**: Uses `plugins: [{type: local, path: ./sample-plugin}]` to load a local plugin
-- **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
+- **Skill filtering**: Uses `skills: all` to load plugin skills and auto-allow the `Skill` tool
 - **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
 - **Sample skill**: A standards-check skill verifies the project has a README.md
 
