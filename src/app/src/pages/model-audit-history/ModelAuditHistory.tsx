@@ -320,6 +320,7 @@ export default function ModelAuditHistory() {
               getRowId={(row) => row.id}
               rowDisplayMode="server-virtualized"
               maxHeight="70vh"
+              globalFilterLabel="Search scans"
               manualSorting
               sorting={tableSorting}
               onSortingChange={handleSortingChange}

@@ -286,15 +286,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       return typeof policy.text === 'string' && policy.text.trim().length > 0;
     });
 
-    // Check custom intents with actual content
-    const hasIntents = config.plugins.some(
-      (p) =>
-        typeof p === 'object' &&
-        p.id === 'intent' &&
-        p.config?.intent &&
-        Array.isArray(p.config.intent) &&
-        p.config.intent.length > 0,
-    );
+    const hasIntents = countSelectedCustomIntents({ plugins: config.plugins }) > 0;
 
     return hasPolicies || hasIntents;
   }, [selectedPlugins, config.plugins]);

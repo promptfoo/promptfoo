@@ -222,7 +222,11 @@ describe('Telemetry', () => {
             if (
               data.meta.test === 'value' &&
               data.meta.packageVersion === '1.0.0' &&
-              typeof data.meta.isRunningInCi === 'boolean'
+              typeof data.meta.isRunningInCi === 'boolean' &&
+              data.meta.nodeVersion === process.version &&
+              data.meta.nodeMajor === Number.parseInt(process.versions.node, 10) &&
+              data.meta.platform === process.platform &&
+              data.meta.arch === process.arch
             ) {
               foundExpectedProperties = true;
               break;
@@ -539,6 +543,10 @@ describe('Telemetry', () => {
           test: 'value',
           packageVersion: '1.0.0',
           isRunningInCi: false,
+          nodeVersion: process.version,
+          nodeMajor: Number.parseInt(process.versions.node, 10),
+          platform: process.platform,
+          arch: process.arch,
           $set: {
             email: 'test@example.com',
             isLoggedIntoCloud: false,
@@ -583,6 +591,10 @@ describe('Telemetry', () => {
           test: 'value',
           packageVersion: '1.0.0',
           isRunningInCi: false,
+          nodeVersion: process.version,
+          nodeMajor: Number.parseInt(process.versions.node, 10),
+          platform: process.platform,
+          arch: process.arch,
           $set: {
             email: 'new@example.com',
             isLoggedIntoCloud: true,

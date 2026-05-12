@@ -5,6 +5,7 @@
  */
 
 import * as path from 'node:path';
+import type { Stats } from 'node:fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileChangeStatus } from '../../src/types/codeScan';
@@ -482,6 +483,7 @@ describe('code-scan-action main', () => {
 
       expect(mocks.fs.mkdirSync).toHaveBeenCalledWith(expectedDir, { recursive: true });
       const [, sarifJson] = mocks.fs.writeFileSync.mock.calls[0];
+      expect(sarifJson).toEqual(expect.stringMatching(/\n$/));
       expect(JSON.parse(sarifJson as string)).toMatchObject({
         $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
         version: '2.1.0',
@@ -619,7 +621,7 @@ describe('code-scan-action main', () => {
     });
 
     it('refuses to overwrite an existing symlink at the target path', async () => {
-      mocks.fs.lstatSync.mockReturnValue({ isSymbolicLink: () => true });
+      mocks.fs.lstatSync.mockReturnValue({ isSymbolicLink: () => true } as Stats);
 
       await triggerSarifAction('promptfoo-code-scan.sarif');
 
