@@ -114,7 +114,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       input = prompt;
     }
 
-    const isReasoningModel = this.isReasoningModel();
+    const hasReasoningConfig =
+      config.reasoning !== undefined || config.reasoning_effort !== undefined;
+    const isReasoningModel = this.isReasoningModel() || hasReasoningConfig;
     const maxOutputTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
@@ -131,12 +133,16 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature()
-      ? (config.temperature ?? temperatureDefault)
-      : undefined;
-    const reasoningEffort = isReasoningModel
+    const temperature = isReasoningModel ? undefined : (config.temperature ?? temperatureDefault);
+    const renderedReasoning = renderVarsInObject(
+      config.reasoning,
+      context?.vars,
+    ) as typeof config.reasoning;
+    const renderedReasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
+    const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
+    const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
 
     const instructions = config.instructions;
 
@@ -207,6 +213,10 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...('store' in config ? { store: Boolean(config.store) } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (renderedReasoning && isReasoningModel) {
+      body.reasoning = { ...body.reasoning, ...renderedReasoning };
+    }
 
     logger.debug('Azure Responses API request body', { body });
     return body;

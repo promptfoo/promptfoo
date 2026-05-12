@@ -333,6 +333,58 @@ describe('AzureResponsesProvider', () => {
       expect('max_output_tokens' in body).toBe(true);
     });
 
+    it('should include reasoning summary config for Azure Responses reasoning models', async () => {
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: {
+          reasoning: {
+            summary: 'auto',
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({ summary: 'auto' });
+      expect(body.temperature).toBeUndefined();
+    });
+
+    it('should merge reasoning_effort with reasoning summary config', async () => {
+      const provider = new AzureResponsesProvider('o3-mini', {
+        config: {
+          reasoning_effort: 'high',
+          reasoning: {
+            summary: 'detailed',
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({
+        effort: 'high',
+        summary: 'detailed',
+      });
+    });
+
+    it('should let reasoning.effort override reasoning_effort', async () => {
+      const provider = new AzureResponsesProvider('o3-mini', {
+        config: {
+          reasoning_effort: 'high',
+          reasoning: {
+            effort: 'low',
+            summary: 'concise',
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.reasoning).toEqual({
+        effort: 'low',
+        summary: 'concise',
+      });
+    });
+
     it('should include verbosity for reasoning models when configured', async () => {
       const provider = new AzureResponsesProvider('gpt-5', {
         config: { verbosity: 'high' },

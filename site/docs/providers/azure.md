@@ -321,8 +321,10 @@ providers:
   - id: azure:responses:o3-mini-deployment
     label: azure-reasoning
     config:
-      reasoning_effort: medium
-      max_completion_tokens: 4000
+      reasoning:
+        effort: medium
+        summary: auto
+      max_output_tokens: 4000
 
 prompts:
   - 'Analyze this data and provide insights: {{data}}'
@@ -702,7 +704,8 @@ These properties can be set under the provider `config` key:
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
 | isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
 | max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. For custom chat/completion deployments, set `isReasoningModel`                            |
+| reasoning             | Responses API reasoning object, including `effort` and optional `summary` for visible reasoning summaries                                       |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
 | max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
 | top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |
@@ -722,7 +725,8 @@ Azure OpenAI now supports reasoning models like `o1`, `o3`, `o3-mini`, and `o4-m
 
 1. They use `max_completion_tokens` instead of `max_tokens`
 2. They don't support `temperature` (it's ignored)
-3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high')
+3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high') on chat and completion endpoints
+4. The Responses API uses a `reasoning` object for `effort` and optional reasoning `summary`
 
 Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, you must explicitly set the `isReasoningModel` flag to `true` in your configuration when using reasoning models. This works with both chat and completion endpoints:
 
@@ -750,6 +754,22 @@ providers:
 ```
 
 > Note: The `o1` flag is still supported for backward compatibility, but `isReasoningModel` is preferred as it more clearly indicates its purpose.
+
+### Showing Reasoning Summaries
+
+Azure OpenAI does not expose raw hidden reasoning steps for reasoning models. With the Responses API, you can request a provider-generated reasoning summary:
+
+```yaml
+providers:
+  - id: azure:responses:my-o4-mini-deployment
+    config:
+      reasoning:
+        effort: 'medium'
+        summary: 'auto' # auto, concise, or detailed
+      max_output_tokens: 25000
+```
+
+Promptfoo includes returned reasoning summary items in the output as `Reasoning: ...`. The summary is not the model's raw chain-of-thought.
 
 ### Using Variables with Reasoning Effort
 
@@ -1155,6 +1175,7 @@ Supported per-request settings:
 | `functionToolCallbacks` | Callback implementations for `function_call` outputs                                |
 | `modelName`             | Optional per-request model override                                                 |
 | `reasoning_effort`      | Sent as `reasoning.effort`                                                          |
+| `reasoning`             | Responses API reasoning object, including `effort` and `summary`                    |
 | `verbosity`             | Passed through to the Responses text config                                         |
 | `metadata`              | Request metadata                                                                    |
 | `passthrough`           | Additional raw Responses API fields                                                 |
