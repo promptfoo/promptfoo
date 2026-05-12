@@ -12,7 +12,10 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
+import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
+import { ResultFailureReason } from '../../src/types/index';
+import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
@@ -314,6 +317,53 @@ describe('evaluator', () => {
       expect(evaluation.author).toBe(mockAuthor);
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(mockAuthor);
+    });
+
+    it('preserves trace linkage when results are inserted during eval creation', async () => {
+      const tracedResult = createEvaluateResult({
+        traceId: 'create-trace-id',
+        evaluationId: 'create-evaluation-id',
+        metadata: { source: 'create-path' },
+      });
+
+      const evaluation = await Eval.create({ description: 'Trace linkage create coverage' }, [], {
+        results: [tracedResult as unknown as EvalResult],
+      });
+
+      const [persistedResult] = await EvalResult.findManyByEvalId(evaluation.id);
+      expect(persistedResult.toEvaluateResult()).toMatchObject({
+        traceId: 'create-trace-id',
+        evaluationId: 'create-evaluation-id',
+        metadata: { source: 'create-path' },
+      });
+    });
+  });
+
+  describe('setResults', () => {
+    it('preserves trace linkage when results are appended to an existing eval', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const tracedResult = createEvaluateResult({
+        traceId: 'append-trace-id',
+        evaluationId: 'append-evaluation-id',
+        metadata: { source: 'set-results-path' },
+      });
+
+      await eval_.setResults([
+        {
+          id: 'append-trace-result',
+          evalId: eval_.id,
+          ...tracedResult,
+          failureReason: ResultFailureReason.NONE,
+          persisted: false,
+        } as unknown as EvalResult,
+      ]);
+
+      const [persistedResult] = await EvalResult.findManyByEvalId(eval_.id);
+      expect(persistedResult.toEvaluateResult()).toMatchObject({
+        traceId: 'append-trace-id',
+        evaluationId: 'append-evaluation-id',
+        metadata: { source: 'set-results-path' },
+      });
     });
   });
 

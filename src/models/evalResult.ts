@@ -287,7 +287,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function persistTraceMetadata(
+export function persistTraceMetadata(
   metadata: EvaluateResult['metadata'],
   traceId: EvaluateResult['traceId'],
   evaluationId: EvaluateResult['evaluationId'],

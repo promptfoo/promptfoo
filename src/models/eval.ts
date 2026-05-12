@@ -48,7 +48,7 @@ import {
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
-import EvalResult from './evalResult';
+import EvalResult, { persistTraceMetadata } from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -531,7 +531,14 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
+          .values(
+            opts.results?.map((r) => ({
+              ...r,
+              metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              evalId,
+              id: crypto.randomUUID(),
+            })),
+          )
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
@@ -1232,7 +1239,13 @@ export default class Eval {
     this.results = results;
     if (this.persisted) {
       const db = getDb();
-      await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+      await db.insert(evalResultsTable).values(
+        results.map((r) => ({
+          ...r,
+          metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+          evalId: this.id,
+        })),
+      );
     }
     this._resultsLoaded = true;
   }
