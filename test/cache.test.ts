@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 
 import {
   afterAll,
@@ -244,8 +245,9 @@ describe('cache configuration', () => {
     // In production, stores array should have at least one store (disk cache)
     expect(cache.stores.length).toBeGreaterThan(0);
     expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
-    expect(fs.existsSync).toHaveBeenCalledWith('/mock/config/path/cache');
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/mock/config/path/cache', { recursive: true });
+    const expectedCachePath = path.join('/mock/config/path', 'cache');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
+    expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
 
   it('should respect custom cache path', async () => {
