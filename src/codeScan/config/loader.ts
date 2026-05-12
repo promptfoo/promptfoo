@@ -11,6 +11,8 @@ import yaml from 'js-yaml';
 import { ConfigLoadError, validateSeverity } from '../../types/codeScan';
 import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 
+const DEFAULT_CONFIG_FILENAME = '.promptfoo-code-scan.yaml';
+
 /**
  * Load configuration from a YAML file
  * @param configPath Path to the configuration file
@@ -77,8 +79,15 @@ export function loadConfig(configPath: string): Config {
  * If no config path provided, returns default configuration
  * Returns a clone to prevent mutation of the singleton default
  */
-export function loadConfigOrDefault(configPath?: string): Config {
+export function loadConfigOrDefault(configPath?: string, repoPath?: string): Config {
   if (!configPath) {
+    if (repoPath) {
+      const defaultConfigPath = path.join(repoPath, DEFAULT_CONFIG_FILENAME);
+      if (fs.existsSync(defaultConfigPath)) {
+        return loadConfig(defaultConfigPath);
+      }
+    }
+
     return { ...DEFAULT_CONFIG }; // Return clone to prevent singleton mutation
   }
 

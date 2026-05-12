@@ -113,15 +113,16 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     setLogLevel('error');
   }
 
-  // Load and merge configuration
-  const baseConfig: Config = loadConfigOrDefault(options.config);
+  // Resolve repository path
+  const absoluteRepoPath = path.resolve(repoPath);
+
+  // Load and merge configuration. When --config is omitted, prefer the repository's
+  // conventional code-scan config before falling back to built-in defaults.
+  const baseConfig: Config = loadConfigOrDefault(options.config, absoluteRepoPath);
   const config = mergeConfigWithOptions(baseConfig, options);
 
   // Resolve guidance (CLI options take precedence)
   const guidance = resolveGuidance(options, config);
-
-  // Resolve repository path
-  const absoluteRepoPath = path.resolve(repoPath);
 
   // Display startup messages (skipped for non-text formats to keep stdout clean for parsing)
   if (outputFormat === CodeScanOutputFormat.TEXT) {

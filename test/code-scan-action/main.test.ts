@@ -97,6 +97,7 @@ const mocks = vi.hoisted(() => {
   };
 
   const fs = {
+    existsSync: vi.fn(),
     unlinkSync: vi.fn(),
     writeFileSync: vi.fn(),
     mkdirSync: vi.fn(),
@@ -132,6 +133,7 @@ vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
   return {
     ...actual,
+    existsSync: mocks.fs.existsSync,
     unlinkSync: mocks.fs.unlinkSync,
     writeFileSync: mocks.fs.writeFileSync,
     mkdirSync: mocks.fs.mkdirSync,
@@ -194,6 +196,7 @@ function setupMocks() {
   mocks.core.getBooleanInput.mockReturnValue(false);
   mocks.core.getIDToken.mockResolvedValue('fake-oidc-token');
 
+  mocks.fs.existsSync.mockReturnValue(false);
   mocks.fs.realpathSync.mockImplementation((p: string) => p);
   // Default: target file does not exist yet, so writeSarifFile won't trip the symlink check.
   mocks.fs.lstatSync.mockImplementation(() => {
@@ -371,6 +374,89 @@ describe('code-scan-action main', () => {
       const { options } = await importActionAndGetNpmInstallCall();
 
       expectSanitizedExecEnv(options);
+    });
+
+    it('should generate and clean up a temporary config when config-path is omitted', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity') {
+          return 'high';
+        }
+        if (name === 'guidance') {
+          return 'Review auth flows closely';
+        }
+        return '';
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith(
+        'high',
+        'Review auth flows closely',
+        false,
+      );
+      expectCliArg(args, '--config', '/tmp/test-config.yaml');
+      await vi.waitFor(() => {
+        expect(mocks.fs.unlinkSync).toHaveBeenCalledWith('/tmp/test-config.yaml');
+      });
+    });
+
+    it('should use the repository code-scan config before generating a temporary config', async () => {
+      const repositoryConfigPath = path.resolve('/test/workspace', '.promptfoo-code-scan.yaml');
+      mocks.fs.existsSync.mockImplementation((candidatePath: string) => {
+        return candidatePath === repositoryConfigPath;
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', repositoryConfigPath);
+      expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
+      expect(mocks.fs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('should pass an explicit config-path through without generating or deleting a temp config', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'minimum-severity') {
+          return 'critical';
+        }
+        if (name === 'config-path') {
+          return 'configs/code-scan.yaml';
+        }
+        return '';
+      });
+
+      const { args } = await importActionAndGetPromptfooCall();
+
+      expectCliArg(args, '--config', 'configs/code-scan.yaml');
+      expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
+      expect(mocks.fs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('should prefer min-severity and warn when both severity aliases conflict', async () => {
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity') {
+          return 'high';
+        }
+        if (name === 'minimum-severity') {
+          return 'low';
+        }
+        return '';
+      });
+
+      await importActionAndGetPromptfooCall();
+
+      expect(mocks.core.warning).toHaveBeenCalledWith(
+        'Both min-severity and minimum-severity were provided; using min-severity.',
+      );
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('high', undefined, false);
     });
   });
 

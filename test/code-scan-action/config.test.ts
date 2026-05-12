@@ -37,6 +37,13 @@ describe('generateConfigFile', () => {
     );
   });
 
+  it('writes diffs-only configs when the action requests them', () => {
+    const configPath = generateConfigFile('medium', undefined, true);
+    generatedPaths.push(configPath);
+
+    expect(fs.readFileSync(configPath, 'utf8')).toBe('minimumSeverity: medium\ndiffsOnly: true\n');
+  });
+
   it('rejects invalid severities', () => {
     let thrown: unknown;
 
