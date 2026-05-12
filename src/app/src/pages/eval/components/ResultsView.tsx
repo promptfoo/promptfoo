@@ -758,6 +758,7 @@ export default function ResultsView({
         Edit name
       </DropdownMenuItem>
       <DropdownMenuItem
+        disabled={!config}
         onClick={() => {
           if (!config) {
             return;
