@@ -78,8 +78,8 @@ This example demonstrates evaluating a local Codex skill stored under `.agents/s
 (cd skills && promptfoo eval -c promptfooconfig.tracing.yaml)
 ```
 
-If you run the config from a different working directory, set `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` to absolute paths before invoking `promptfoo eval`.
-The default relative paths in these configs are intentionally subdirectory-relative for the `(cd skills && promptfoo eval)` workflow above.
+Relative `working_dir` values resolve from the config file's directory, so the sample project path stays stable regardless of where you invoke `promptfoo eval`. Codex resolves `CODEX_HOME` itself, so set `CODEX_HOME_OVERRIDE` to an absolute path when you run these configs from another working directory or need Codex to use a different home directory.
+The checked-in relative paths stay local to the config directory so the examples remain self-contained.
 
 The checked-in `sample-codex-home` fixture is intentionally empty of auth state. Use it with `OPENAI_API_KEY`/`CODEX_API_KEY`, or point `CODEX_HOME_OVERRIDE` at `$HOME/.codex` when you want to reuse a local Codex login.
 

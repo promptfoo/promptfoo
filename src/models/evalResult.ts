@@ -29,6 +29,48 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   }) as ProviderConfig;
 }
 
+function projectProviderResponse(
+  response: ProviderResponse | undefined,
+  options: { stripMetadata: boolean; stripOutput: boolean },
+): ProviderResponse | undefined {
+  if (!response) {
+    return response;
+  }
+
+  if (!options.stripMetadata && !options.stripOutput) {
+    return response;
+  }
+
+  const projectedResponse = options.stripMetadata
+    ? (({ metadata: _metadata, ...rest }) => rest)(response)
+    : { ...response };
+
+  if (options.stripOutput) {
+    projectedResponse.output = '[output stripped]';
+  }
+
+  return projectedResponse;
+}
+
+function projectTestCase(
+  testCase: AtomicTestCase,
+  options: { stripMetadata: boolean; stripVars: boolean },
+): AtomicTestCase {
+  if (!options.stripMetadata && !options.stripVars) {
+    return testCase;
+  }
+
+  const projectedTestCase = options.stripMetadata
+    ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
+    : { ...testCase };
+
+  if (options.stripVars) {
+    projectedTestCase.vars = undefined;
+  }
+
+  return projectedTestCase;
+}
+
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
@@ -687,13 +729,10 @@ export default class EvalResult {
     const shouldStripGradingResult = getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false);
     const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
 
-    const response =
-      shouldStripResponseOutput && this.response
-        ? {
-            ...this.response,
-            output: '[output stripped]',
-          }
-        : this.response;
+    const response = projectProviderResponse(this.response, {
+      stripMetadata: shouldStripMetadata,
+      stripOutput: shouldStripResponseOutput,
+    });
 
     const prompt = shouldStripPromptText
       ? {
@@ -702,12 +741,10 @@ export default class EvalResult {
         }
       : this.prompt;
 
-    const testCase = shouldStripTestVars
-      ? {
-          ...this.testCase,
-          vars: undefined,
-        }
-      : this.testCase;
+    const testCase = projectTestCase(this.testCase, {
+      stripMetadata: shouldStripMetadata,
+      stripVars: shouldStripTestVars,
+    });
 
     return {
       cost: this.cost,
