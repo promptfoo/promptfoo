@@ -75,6 +75,11 @@ const EvalCommandSchema = CommandLineOptionsSchema.extend({
 
 type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 export type TestSuiteTransform = (testSuite: TestSuite) => void | Promise<void>;
+export interface EvalRunCustomization {
+  beforeFilterTestSuite?: TestSuiteTransform;
+  afterFilterTestSuite?: TestSuiteTransform;
+  evaluateOptionOverrides?: Partial<InternalEvaluateOptions>;
+}
 
 export class EvalRunError extends Error {
   readonly exitCode: number;
@@ -174,7 +179,7 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
-  testSuiteTransform?: TestSuiteTransform,
+  customization: EvalRunCustomization = {},
 ): Promise<Eval> {
   // Phase 1: Load environment from CLI args (preserves existing behavior)
   setupEnv(cmdObj.envPath);
@@ -386,8 +391,8 @@ export async function doEval(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
-    if (!resumeEval && testSuiteTransform) {
-      await testSuiteTransform(testSuite);
+    if (!resumeEval && customization.beforeFilterTestSuite) {
+      await customization.beforeFilterTestSuite(testSuite);
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
@@ -422,6 +427,13 @@ export async function doEval(
       evaluateOptions = {
         ...evaluateOptions,
         ...config.evaluateOptions,
+        eventSource: evaluateOptions.eventSource,
+      };
+    }
+    if (customization.evaluateOptionOverrides) {
+      evaluateOptions = {
+        ...evaluateOptions,
+        ...customization.evaluateOptionOverrides,
         eventSource: evaluateOptions.eventSource,
       };
     }
@@ -638,6 +650,10 @@ export async function doEval(
       }
     }
 
+    if (!resumeEval && customization.afterFilterTestSuite) {
+      await customization.afterFilterTestSuite(testSuite);
+    }
+
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
       logger.warn(
@@ -768,8 +784,8 @@ export async function doEval(
       return ret;
     }
 
-    // Clear results from memory for the terminal CLI, which has already rendered its report.
-    // Reusable callers such as MCP need the in-memory rows to build structured responses.
+    // Preserve the terminal CLI's existing memory behavior while keeping rows available
+    // for reusable callers such as MCP that serialize structured responses afterward.
     if (isCliInvocation) {
       evalRecord.clearResults();
     }

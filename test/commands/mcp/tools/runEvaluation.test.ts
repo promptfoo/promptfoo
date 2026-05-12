@@ -67,9 +67,10 @@ vi.mock('../../../../src/commands/eval', () => ({
   doEval: vi
     .fn()
     .mockImplementation(
-      async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, testSuiteTransform) => {
+      async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
         const testSuite = createMockTestSuite();
-        await testSuiteTransform?.(testSuite);
+        await customization?.beforeFilterTestSuite?.(testSuite);
+        await customization?.afterFilterTestSuite?.(testSuite);
         return createMockEvalResult();
       },
     ),
@@ -129,7 +130,13 @@ describe('runEvaluation tool', () => {
           eventSource: 'mcp',
           showProgressBar: false,
         }),
-        expect.any(Function),
+        expect.objectContaining({
+          beforeFilterTestSuite: expect.any(Function),
+          afterFilterTestSuite: expect.any(Function),
+          evaluateOptionOverrides: {
+            timeoutMs: 1234,
+          },
+        }),
       );
     });
 
@@ -159,7 +166,13 @@ describe('runEvaluation tool', () => {
         expect.objectContaining({
           timeoutMs: 4321,
         }),
-        expect.any(Function),
+        expect.objectContaining({
+          beforeFilterTestSuite: expect.any(Function),
+          afterFilterTestSuite: expect.any(Function),
+          evaluateOptionOverrides: {
+            timeoutMs: 4321,
+          },
+        }),
       );
     });
 
@@ -194,6 +207,49 @@ describe('runEvaluation tool', () => {
         total: 1,
         filtered: 1,
         ids: ['test-provider'],
+      });
+    });
+
+    it('should summarize the final filtered test surface after doEval applies later filtering', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: [
+              { vars: { input: 'first' } },
+              { vars: { input: 'second' } },
+              { vars: { input: 'third' } },
+            ],
+          };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any);
+          testSuite.tests = testSuite.tests.slice(1, 2);
+          await customization?.afterFilterTestSuite?.(testSuite as any);
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 3,
+        filtered: 1,
+        filters: {},
       });
     });
   });
@@ -413,6 +469,31 @@ describe('runEvaluation tool', () => {
 
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('No prompts found after applying filter');
+    });
+
+    it('should return a filter error when promptFilter is an invalid regex', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: '[invalid',
+      });
+
+      expect(result.isError).toBe(true);
+      const payload = JSON.parse(result.content[0].text);
+      expect(payload.error).toContain('Invalid regex pattern for --filter-prompts: "[invalid"');
+
+      const logger = (await import('../../../../src/logger')).default;
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('should return error when all providers are filtered out', async () => {

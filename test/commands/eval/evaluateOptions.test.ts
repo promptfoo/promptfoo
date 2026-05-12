@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
@@ -125,6 +125,10 @@ describe('evaluateOptions behavior', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   afterAll(() => {
@@ -277,7 +281,6 @@ describe('evaluateOptions behavior', () => {
       );
 
       expect(clearResultsSpy).not.toHaveBeenCalled();
-      clearResultsSpy.mockRestore();
     });
 
     it('should apply a test suite transform before evaluation', async () => {
@@ -296,14 +299,82 @@ describe('evaluateOptions behavior', () => {
         {},
         undefined,
         {},
-        (testSuite) => {
-          testSuite.tests = testSuite.tests?.slice(0, 1);
+        {
+          beforeFilterTestSuite: (testSuite) => {
+            testSuite.tests = testSuite.tests?.slice(0, 1);
+          },
         },
       );
 
       const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
       expect(testSuite.tests).toHaveLength(1);
       expect(testSuite.tests?.[0].vars).toEqual({ input: 'first' });
+    });
+
+    it('should apply evaluate option overrides after config evaluateOptions', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-timeout-override.yaml', {
+        evaluateOptions: {
+          timeoutMs: 9999,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'timeout' } }],
+      });
+
+      await doEval(
+        {
+          config: [tempConfig],
+          table: false,
+          write: false,
+        },
+        {},
+        undefined,
+        {
+          timeoutMs: 1234,
+        },
+        {
+          evaluateOptionOverrides: {
+            timeoutMs: 1234,
+          },
+        },
+      );
+
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(options.timeoutMs).toBe(1234);
+    });
+
+    it('should observe the test suite after later config filtering is applied', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-after-filter-suite.yaml', {
+        evaluateOptions: {
+          filterRange: '1:2',
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [
+          { vars: { input: 'first' } },
+          { vars: { input: 'second' } },
+          { vars: { input: 'third' } },
+        ],
+      });
+
+      const observedTestCounts: number[] = [];
+      await doEval(
+        {
+          config: [tempConfig],
+          table: false,
+          write: false,
+        },
+        {},
+        undefined,
+        {},
+        {
+          afterFilterTestSuite: (testSuite) => {
+            observedTestCounts.push(testSuite.tests?.length || 0);
+          },
+        },
+      );
+
+      expect(observedTestCounts).toEqual([1]);
     });
 
     it('should handle delay >0 forcing concurrency to 1 even with CLI override', async () => {

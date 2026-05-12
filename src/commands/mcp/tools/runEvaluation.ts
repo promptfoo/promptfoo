@@ -94,7 +94,13 @@ function applyPromptFilter(testSuite: TestSuite, promptFilter?: string | string[
   }
 
   const filterPattern = Array.isArray(promptFilter) ? promptFilter.join('|') : promptFilter;
-  testSuite.prompts = filterPrompts(testSuite.prompts, filterPattern);
+  try {
+    testSuite.prompts = filterPrompts(testSuite.prompts, filterPattern);
+  } catch (error) {
+    throw new McpEvaluationFilterError(
+      error instanceof Error ? error.message : 'Failed to filter prompts',
+    );
+  }
 
   if (testSuite.prompts.length === 0) {
     throw new McpEvaluationFilterError(
@@ -434,12 +440,8 @@ export function registerRunEvaluationTool(server: McpServer) {
         logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
 
         const startTime = Date.now();
-        const evalResult = await doEval(
-          cmdObj,
-          defaultConfig,
-          defaultConfigPath,
-          evaluateOptions,
-          (testSuite) => {
+        const evalResult = await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, {
+          beforeFilterTestSuite: (testSuite) => {
             suiteSummary = applyMcpEvaluationFilters(testSuite, {
               testCaseIndices,
               promptFilter,
@@ -451,7 +453,20 @@ export function registerRunEvaluationTool(server: McpServer) {
               );
             }
           },
-        );
+          afterFilterTestSuite: (testSuite) => {
+            if (!suiteSummary) {
+              throw new Error('Failed to summarize evaluation suite before finalization');
+            }
+            suiteSummary = summarizeFilteredSuite(testSuite, {
+              testCases: suiteSummary.testCases.total,
+              prompts: suiteSummary.prompts.total,
+              providers: suiteSummary.providers.total,
+            });
+          },
+          evaluateOptionOverrides: {
+            timeoutMs,
+          },
+        });
         const endTime = Date.now();
         if (!suiteSummary) {
           throw new Error('Failed to summarize evaluation suite');
