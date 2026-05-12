@@ -52,11 +52,14 @@ vi.mock('cache-manager', () => ({
   createCache: vi.fn().mockImplementation(({ stores }) => {
     const cache = new Map<string, unknown>();
     const expiresAt = new Map<string, number>();
-    const inflight = new Map();
+    const inflight = new Map<string, Promise<unknown>>();
     const memoryStore = {
-      iterator: vi.fn().mockImplementation(async function* (_namespace?: string) {
+      iterator: vi.fn().mockImplementation(async function* (namespace?: string) {
+        const prefix = namespace ? `${namespace}:` : undefined;
         for (const [key, value] of cache.entries()) {
-          yield [key, value];
+          if (!prefix || key.startsWith(prefix)) {
+            yield [key, value];
+          }
         }
       }),
       delete: vi.fn().mockImplementation((key: string) => {
@@ -226,6 +229,12 @@ describe('cache configuration', () => {
     const cache = cacheModule.getCache();
     // In test environment, promptfoo falls back to an in-memory store instead of disk.
     expect(cache.stores.length).toBeGreaterThan(0);
+    expect(cache.stores[0]).toMatchObject({
+      iterator: expect.any(Function),
+      delete: expect.any(Function),
+      clear: expect.any(Function),
+    });
+    expect(cache.stores[0]?.constructor?.name).not.toBe('MockKeyv');
   });
 
   it('should use disk cache in non-test environment', async () => {
@@ -234,6 +243,9 @@ describe('cache configuration', () => {
     const cache = cacheModule.getCache();
     // In production, stores array should have at least one store (disk cache)
     expect(cache.stores.length).toBeGreaterThan(0);
+    expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
+    expect(fs.existsSync).toHaveBeenCalledWith('/mock/config/path/cache');
+    expect(fs.mkdirSync).toHaveBeenCalledWith('/mock/config/path/cache', { recursive: true });
   });
 
   it('should respect custom cache path', async () => {
@@ -1222,11 +1234,11 @@ describe('fetchWithCache', () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
-      // First call with repeatIndex: 0
+      // First call uses the CacheOptions object API with repeatIndex: 0.
       const result1 = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 0 });
       expect(result1.cached).toBe(false);
 
-      // Second call with no repeatIndex should hit the same cache
+      // Second call uses the legacy API with no repeatIndex and should hit the same cache.
       const result2 = await fetchWithCache(url, {}, 1000, 'json', false);
       expect(result2.cached).toBe(true);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
