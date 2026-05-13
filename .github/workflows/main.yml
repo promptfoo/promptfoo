@@ -71,7 +71,8 @@ jobs:
   test:
     needs: ci-config
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
-    timeout-minutes: 15
+    # Cold-cache installs for newer Node/native-addon combinations can consume most of the old 15m budget.
+    timeout-minutes: 25
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -141,8 +142,8 @@ jobs:
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
-    # Keep enough headroom for slow PR merge-ref checkout and npm install on GitHub-hosted runners.
-    timeout-minutes: 10
+    # Keep enough headroom for slow PR merge-ref checkout plus cold-cache installs on GitHub-hosted runners.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
