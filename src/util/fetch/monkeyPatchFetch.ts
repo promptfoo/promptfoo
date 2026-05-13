@@ -82,10 +82,8 @@ export async function monkeyPatchFetch(
     // monkey patches of global fetch so tests and external instrumentation keep
     // observing requests.
     const useUndiciFetch = shouldUseUndiciFetch(options);
-    const response: Response = useUndiciFetch
-      ? ((await undiciFetch(url as never, opts as never)) as unknown as Response)
-      : // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
-        await fetch(url, opts);
+    const activeFetch = useUndiciFetch ? undiciFetch : globalThis.fetch;
+    const response = (await activeFetch(url as never, opts as never)) as unknown as Response;
 
     if (logEnabled) {
       void logRequestResponse({
