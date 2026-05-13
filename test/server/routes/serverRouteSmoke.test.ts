@@ -825,7 +825,7 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
   return response;
 }
 
-describe.sequential('server route end-to-end smoke coverage', () => {
+describe('server route end-to-end smoke coverage', { concurrent: false }, () => {
   let app: Express;
 
   beforeAll(() => {
