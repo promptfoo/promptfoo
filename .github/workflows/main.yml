@@ -117,10 +117,12 @@ jobs:
 
       - name: Install Dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        # Node 26 ships with newer npm; npm@11.11.0 repeatedly stalled in CI on the Node 26 lanes.
+        # Node 26 hosted installs stall when lifecycle scripts run during npm ci.
+        # Install the tree without scripts, then rebuild the native addon tests need.
         run: |
           if [ "${{ matrix.node }}" = "26.x" ]; then
-            npm ci
+            npm ci --ignore-scripts
+            npm rebuild better-sqlite3
           else
             npx -y npm@11.11.0 ci
           fi
