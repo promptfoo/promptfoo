@@ -834,6 +834,32 @@ describe('fetchWithProxy', () => {
     }
   });
 
+  it('should preserve a monkey-patched global fetch for dispatcher-backed requests', async () => {
+    const undiciModule = await import('undici');
+    const undiciFetch = undiciModule.fetch;
+
+    await fetchWithProxy('https://example.com/api');
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(undiciFetch).not.toHaveBeenCalled();
+  });
+
+  it('should keep native multipart request bodies on global fetch', async () => {
+    const undiciModule = await import('undici');
+    const undiciFetch = undiciModule.fetch;
+    const nativeFetch = globalThis.fetch;
+    vi.restoreAllMocks();
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(nativeFetch);
+    const body = new FormData();
+    body.append('file', new Blob(['hello']), 'hello.txt');
+
+    await fetchWithProxy('data:text/plain,ok', { method: 'POST', body });
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(undiciFetch).not.toHaveBeenCalled();
+  });
+
   it('should reuse a dedicated Agent dispatcher per maxConcurrency value', async () => {
     const dispatchers: unknown[] = [];
     const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
