@@ -138,8 +138,8 @@ describe('Telemetry', () => {
 
   it('should not track events with PostHog when telemetry is disabled', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
-    const _telemetry = new Telemetry();
-    _telemetry.record('eval_ran', { foo: 'bar' });
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
     expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
   });
 
@@ -160,8 +160,8 @@ describe('Telemetry', () => {
 
   it('should include version in telemetry events', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
-    const _telemetry = new Telemetry();
-    _telemetry.record('eval_ran', { foo: 'bar' });
+    const telemetry = new Telemetry();
+    telemetry.record('eval_ran', { foo: 'bar' });
 
     expect(sendEventSpy).toHaveBeenCalledWith('eval_ran', { foo: 'bar' });
     expect(fetchWithProxySpy).toHaveBeenCalledWith(
@@ -200,8 +200,8 @@ describe('Telemetry', () => {
     isCIMock.mockReturnValue(true);
     fetchWithProxySpy.mockClear();
 
-    const _telemetry = new Telemetry();
-    _telemetry.record('feature_used', { test: 'value' });
+    const telemetry = new Telemetry();
+    telemetry.record('feature_used', { test: 'value' });
 
     await vi.waitFor(() => {
       expect(fetchWithProxySpy.mock.calls.length).toBeGreaterThan(0);
@@ -252,9 +252,9 @@ describe('Telemetry', () => {
 
   it('should save consent successfully', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
-    const _telemetry = new Telemetry();
+    const telemetry = new Telemetry();
 
-    await _telemetry.saveConsent('test@example.com', { source: 'test' });
+    await telemetry.saveConsent('test@example.com', { source: 'test' });
 
     expect(fetchWithTimeout).toHaveBeenCalledWith(
       'https://api.promptfoo.dev/consent',
@@ -271,9 +271,9 @@ describe('Telemetry', () => {
 
   it('should handle failed consent save', async () => {
     vi.mocked(fetchWithTimeout).mockResolvedValue({ ok: false, statusText: 'Not Found' } as any);
-    const _telemetry = new Telemetry();
+    const telemetry = new Telemetry();
 
-    await _telemetry.saveConsent('test@example.com', { source: 'test' });
+    await telemetry.saveConsent('test@example.com', { source: 'test' });
 
     expect(fetchWithTimeout).toHaveBeenCalledWith(
       'https://api.promptfoo.dev/consent',
@@ -341,9 +341,9 @@ describe('Telemetry', () => {
       }));
 
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      await _telemetry.identify();
+      await telemetry.identify();
 
       expect(mockPostHog).toHaveBeenCalledWith('test-posthog-key', {
         host: 'https://a.promptfoo.app',
@@ -374,9 +374,9 @@ describe('Telemetry', () => {
       }));
 
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      await expect(_telemetry.identify()).resolves.not.toThrow();
+      await expect(telemetry.identify()).resolves.not.toThrow();
     });
   });
 
@@ -486,15 +486,17 @@ describe('Telemetry', () => {
       }));
     });
 
-    it('should call PostHog identify when telemetry is enabled', async () => {
+    it('should call PostHog identify via constructor when telemetry is enabled', async () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '0' });
       mockProcessEnv({ IS_TESTING: undefined });
       mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      await _telemetry.identify();
+      expect(telemetry).toBeDefined();
+      await Promise.resolve();
+      await Promise.resolve();
 
       expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
         distinctId: 'test-user-id',
@@ -520,9 +522,9 @@ describe('Telemetry', () => {
       const { default: logger } = await import('../src/logger');
       const loggerSpy = vi.spyOn(logger, 'debug');
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      await expect(_telemetry.identify()).resolves.not.toThrow();
+      await expect(telemetry.identify()).resolves.not.toThrow();
       expect(loggerSpy).toHaveBeenCalledWith('PostHog identify error: Error: Identify failed');
     });
 
@@ -532,9 +534,9 @@ describe('Telemetry', () => {
       mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      _telemetry.record('eval_ran', { test: 'value' });
+      telemetry.record('eval_ran', { test: 'value' });
 
       expect(mockPostHogInstance.capture).toHaveBeenCalledWith({
         distinctId: 'test-user-id',
@@ -572,16 +574,32 @@ describe('Telemetry', () => {
       });
 
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
+
+      await vi.waitFor(() => {
+        expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
+          distinctId: 'test-user-id',
+          properties: {
+            email: 'old@example.com',
+            isLoggedIntoCloud: false,
+            authMethod: 'email',
+            isRunningInCi: false,
+          },
+        });
+      });
 
       getUserAuthInfoMock.mockClear();
+      mockPostHogInstance.identify.mockClear();
+      mockPostHogInstance.capture.mockClear();
+      mockPostHogInstance.flush.mockClear();
+
       getUserAuthInfoMock.mockReturnValue({
         email: 'new@example.com',
         isLoggedIntoCloud: true,
         authMethod: 'api-key',
       });
 
-      _telemetry.record('eval_ran', { test: 'value' });
+      telemetry.record('eval_ran', { test: 'value' });
 
       expect(getUserAuthInfoMock).toHaveBeenCalledTimes(1);
       expect(mockPostHogInstance.capture).toHaveBeenCalledWith({
@@ -627,9 +645,9 @@ describe('Telemetry', () => {
       const { default: logger } = await import('../src/logger');
       const loggerSpy = vi.spyOn(logger, 'debug');
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      expect(() => _telemetry.record('eval_ran', { test: 'value' })).not.toThrow();
+      expect(() => telemetry.record('eval_ran', { test: 'value' })).not.toThrow();
       expect(loggerSpy).toHaveBeenCalledWith('PostHog capture error: Error: Capture failed');
     });
 
@@ -641,9 +659,9 @@ describe('Telemetry', () => {
       mockPostHogInstance.flush.mockRejectedValue(new Error('Flush failed'));
 
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      await expect(_telemetry.identify()).resolves.not.toThrow();
+      await expect(telemetry.identify()).resolves.not.toThrow();
     });
 
     it('should call PostHog shutdown when telemetry shutdown is called', async () => {
@@ -654,9 +672,9 @@ describe('Telemetry', () => {
       mockPostHogInstance.shutdown = vi.fn().mockResolvedValue(undefined);
 
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      await _telemetry.shutdown();
+      await telemetry.shutdown();
 
       expect(mockPostHogInstance.shutdown).toHaveBeenCalled();
     });
@@ -671,9 +689,9 @@ describe('Telemetry', () => {
       const { default: logger } = await import('../src/logger');
       const loggerSpy = vi.spyOn(logger, 'debug');
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      await expect(_telemetry.shutdown()).resolves.not.toThrow();
+      await expect(telemetry.shutdown()).resolves.not.toThrow();
       expect(loggerSpy).toHaveBeenCalledWith('PostHog shutdown error: Error: Shutdown failed');
     });
 
@@ -681,23 +699,23 @@ describe('Telemetry', () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
 
       const telemetryModule = await import('../src/telemetry');
-      const _telemetry = new telemetryModule.Telemetry();
+      const telemetry = new telemetryModule.Telemetry();
 
-      await expect(_telemetry.shutdown()).resolves.not.toThrow();
+      await expect(telemetry.shutdown()).resolves.not.toThrow();
     });
   });
 
   describe('telemetry disabled recording', () => {
     it('should record telemetry disabled event only once', () => {
       mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
-      const _telemetry = new Telemetry();
+      const telemetry = new Telemetry();
 
-      _telemetry.record('eval_ran', { foo: 'bar' });
+      telemetry.record('eval_ran', { foo: 'bar' });
       expect(sendEventSpy).toHaveBeenCalledWith('feature_used', { feature: 'telemetry disabled' });
       expect(sendEventSpy).toHaveBeenCalledTimes(1);
 
       sendEventSpy.mockClear();
-      _telemetry.record('command_used', { name: 'test' });
+      telemetry.record('command_used', { name: 'test' });
       expect(sendEventSpy).not.toHaveBeenCalled();
     });
   });
@@ -710,7 +728,7 @@ describe('Telemetry', () => {
       vi.resetModules();
 
       // Re-mock fetchWithTimeout
-      vi.doMock('../src/util/fetch', () => ({
+      vi.doMock('../src/util/fetch/index.ts', () => ({
         fetchWithTimeout: vi.fn().mockRejectedValue(mockError),
       }));
 
@@ -725,17 +743,17 @@ describe('Telemetry', () => {
       const { default: logger } = await import('../src/logger');
       const { Telemetry: TelemetryClass } = await import('../src/telemetry');
 
-      const _telemetry = new TelemetryClass();
-      await _telemetry.saveConsent('test@example.com');
+      const telemetry = new TelemetryClass();
+      await telemetry.saveConsent('test@example.com');
 
       expect(logger.debug).toHaveBeenCalledWith('Failed to save consent: Network error');
     });
 
     it('should save consent without metadata', async () => {
       vi.mocked(fetchWithTimeout).mockResolvedValue({ ok: true } as any);
-      const _telemetry = new Telemetry();
+      const telemetry = new Telemetry();
 
-      await _telemetry.saveConsent('test@example.com');
+      await telemetry.saveConsent('test@example.com');
 
       expect(fetchWithTimeout).toHaveBeenCalledWith(
         'https://api.promptfoo.dev/consent',
