@@ -46,6 +46,41 @@ export type OpenAiJsonRequestMetadata = {
   statusText?: string;
 };
 
+export function getOpenAiHttpMetadata({
+  headers,
+  status,
+  statusText,
+}: {
+  headers?: Record<string, string>;
+  status: number;
+  statusText: string;
+}) {
+  return {
+    http: {
+      status,
+      statusText,
+      headers: headers ?? {},
+    },
+  };
+}
+
+export function getOpenAiInvalidPromptCode(errorData: unknown): unknown {
+  if (typeof errorData !== 'object' || errorData === null) {
+    return undefined;
+  }
+
+  if (
+    'error' in errorData &&
+    typeof errorData.error === 'object' &&
+    errorData.error !== null &&
+    'code' in errorData.error
+  ) {
+    return errorData.error.code;
+  }
+
+  return 'code' in errorData ? errorData.code : undefined;
+}
+
 export function createJsonCachedOpenAiClient(options: JsonCachedOpenAiClientOptions) {
   const requestMetadata: OpenAiJsonRequestMetadata = {
     cached: false,

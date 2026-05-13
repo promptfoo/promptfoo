@@ -19,7 +19,12 @@ import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, transformToolChoice, transformTools } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
+import {
+  callJsonCachedOpenAi,
+  getOpenAiHttpMetadata,
+  getOpenAiInvalidPromptCode,
+  unwrapOpenAiTransportError,
+} from './client';
 import {
   isOpenAiGpt5Model,
   isOpenAiOSeriesReasoningModel,
@@ -62,42 +67,9 @@ type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
   };
 };
 
-type ChatHttpMetadata = {
-  headers?: Record<string, string>;
-  status: number;
-  statusText: string;
-};
-
 type ChatCallbackResult = {
   output?: string;
 };
-
-function getChatHttpMetadata({ headers, status, statusText }: ChatHttpMetadata) {
-  return {
-    http: {
-      status,
-      statusText,
-      headers: headers ?? {},
-    },
-  };
-}
-
-function getInvalidPromptCode(errorData: unknown): unknown {
-  if (typeof errorData !== 'object' || errorData === null) {
-    return undefined;
-  }
-
-  if (
-    'error' in errorData &&
-    typeof errorData.error === 'object' &&
-    errorData.error !== null &&
-    'code' in errorData.error
-  ) {
-    return errorData.error.code;
-  }
-
-  return 'code' in errorData ? errorData.code : undefined;
-}
 
 function getChatApiErrorResponse({
   cached,
@@ -118,7 +90,7 @@ function getChatApiErrorResponse({
     typeof data === 'string' ? data : JSON.stringify(data)
   }`;
 
-  if (getInvalidPromptCode(data) === 'invalid_prompt') {
+  if (getOpenAiInvalidPromptCode(data) === 'invalid_prompt') {
     return {
       output: errorMessage,
       tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
@@ -128,13 +100,13 @@ function getChatApiErrorResponse({
         flagged: true,
         flaggedInput: true,
       },
-      metadata: getChatHttpMetadata({ headers, status, statusText }),
+      metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
     };
   }
 
   return {
     error: errorMessage,
-    metadata: getChatHttpMetadata({ headers, status, statusText }),
+    metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
   };
 }
 
@@ -167,7 +139,7 @@ async function getChatTransportErrorResponse({
 
   return {
     error: `API call error: ${String(apiCallError)}`,
-    metadata: getChatHttpMetadata({
+    metadata: getOpenAiHttpMetadata({
       headers: responseHeaders,
       status: 0,
       statusText: 'Error',
@@ -593,7 +565,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       isRefusal: true,
       ...(finishReason && { finishReason }),
       guardrails: { flagged: true },
-      metadata: getChatHttpMetadata({ headers, status, statusText }),
+      metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
     };
   }
 
@@ -622,7 +594,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       isRefusal: true,
       finishReason: FINISH_REASON_MAP.content_filter,
       guardrails: { flagged: true },
-      metadata: getChatHttpMetadata({ headers, status, statusText }),
+      metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
     };
   }
 
@@ -732,7 +704,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return results.length > 0 ? { output: results.join('\n') } : {};
   }
 
-  private getSuccessResponse({
+  private getSuccessResponseFields({
     cached,
     config,
     contentFiltered,
@@ -741,7 +713,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     headers,
     latencyMs,
     logProbs,
-    output,
     status,
     statusText,
   }: {
@@ -753,12 +724,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     headers?: Record<string, string>;
     latencyMs?: number;
     logProbs?: number[];
-    output: any;
     status: number;
     statusText: string;
-  }): ProviderResponse {
+  }) {
     return {
-      output,
       tokenUsage: getTokenUsage(data, cached),
       cached,
       latencyMs,
@@ -769,7 +738,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         serviceTier: data.service_tier ?? config.service_tier,
       }),
       guardrails: { flagged: contentFiltered },
-      metadata: getChatHttpMetadata({ headers, status, statusText }),
+      metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
+    };
+  }
+
+  private getSuccessResponse({
+    output,
+    ...responseOptions
+  }: Parameters<OpenAiChatCompletionProvider['getSuccessResponseFields']>[0] & {
+    output: any;
+  }): ProviderResponse {
+    return {
+      output,
+      ...this.getSuccessResponseFields(responseOptions),
     };
   }
 
@@ -807,17 +788,18 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         transcript: message.audio!.transcript,
         format: message.audio!.format || 'wav',
       },
-      tokenUsage: getTokenUsage(data, cached),
-      cached,
-      latencyMs,
-      logProbs,
-      ...(finishReason && { finishReason }),
-      cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
-        cachedResponse: cached,
-        serviceTier: data.service_tier ?? config.service_tier,
+      ...this.getSuccessResponseFields({
+        cached,
+        config,
+        contentFiltered,
+        data,
+        finishReason,
+        headers,
+        latencyMs,
+        logProbs,
+        status,
+        statusText,
       }),
-      guardrails: { flagged: contentFiltered },
-      metadata: getChatHttpMetadata({ headers, status, statusText }),
     };
   }
 

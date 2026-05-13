@@ -15,6 +15,8 @@ import {
   callJsonCachedOpenAi,
   createJsonCachedOpenAiClient,
   createOpenAiClient,
+  getOpenAiHttpMetadata,
+  getOpenAiInvalidPromptCode,
   unwrapOpenAiTransportError,
 } from './client';
 import {
@@ -506,25 +508,13 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         output: errorMessage,
         tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
         isRefusal: true,
-        metadata: {
-          http: {
-            status,
-            statusText,
-            headers: responseHeaders ?? {},
-          },
-        },
+        metadata: getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
       };
     }
 
     return {
       error: errorMessage,
-      metadata: {
-        http: {
-          status,
-          statusText,
-          headers: responseHeaders ?? {},
-        },
-      },
+      metadata: getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
     };
   }
 
@@ -546,7 +536,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       const errorMessage = `API error: ${status} ${statusText}\n${
         typeof errorData === 'string' ? errorData : JSON.stringify(errorData)
       }`;
-      return getInvalidPromptCode(errorData) === 'invalid_prompt'
+      return getOpenAiInvalidPromptCode(errorData) === 'invalid_prompt'
         ? {
             output: errorMessage,
             isRefusal: true,
@@ -689,13 +679,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
-        metadata: {
-          http: {
-            status,
-            statusText,
-            headers: responseHeaders ?? {},
-          },
-        },
+        metadata: getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
       };
     }
 
@@ -708,11 +692,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...billedResult,
       metadata: {
         ...billedResult.metadata,
-        http: {
-          status,
-          statusText,
-          headers: responseHeaders ?? {},
-        },
+        ...getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
       },
     };
   }
@@ -750,23 +730,6 @@ function getErrorData(error: unknown): unknown {
   return typeof error === 'object' && error !== null && 'error' in error
     ? error.error
     : undefined;
-}
-
-function getInvalidPromptCode(errorData: unknown): unknown {
-  if (typeof errorData !== 'object' || errorData === null) {
-    return undefined;
-  }
-
-  if (
-    'error' in errorData &&
-    typeof errorData.error === 'object' &&
-    errorData.error !== null &&
-    'code' in errorData.error
-  ) {
-    return errorData.error.code;
-  }
-
-  return 'code' in errorData ? errorData.code : undefined;
 }
 
 function isResponsesTransportFailure(error: unknown): error is ResponsesTransportFailure {
