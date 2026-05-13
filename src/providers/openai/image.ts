@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { ellipsize } from '../../util/text';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
+import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
 import { formatOpenAiError } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -816,24 +816,29 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);
 
-    let data: OpenAI.ImagesResponse;
     let status = 200;
     let statusText = 'OK';
     let cached = false;
     let latencyMs: number | undefined;
-    const { client, requestMetadata } = createJsonCachedOpenAiClient({
-      apiKey: this.getApiKey(),
-      allowMissingApiKey: !this.requiresApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
-      headers: config.headers,
-      bustCache: context?.bustCache ?? context?.debug,
-      maxRetries: this.config.maxRetries,
-    });
-    try {
-      data = (await client.images.generate(
-        body as OpenAI.ImageGenerateParamsNonStreaming,
-      )) as OpenAI.ImagesResponse;
+    const request = await callJsonCachedOpenAi(
+      {
+        apiKey: this.getApiKey(),
+        allowMissingApiKey: !this.requiresApiKey(),
+        organization: this.getOrganization(),
+        baseURL: this.getApiUrl(),
+        headers: config.headers,
+        bustCache: context?.bustCache ?? context?.debug,
+        maxRetries: this.config.maxRetries,
+      },
+      (client) =>
+        client.images.generate(
+          body as OpenAI.ImageGenerateParamsNonStreaming,
+        ) as Promise<OpenAI.ImagesResponse>,
+    );
+    const { requestMetadata } = request;
+
+    if (request.ok) {
+      const { data } = request;
       if (requestMetadata.deleteFromCache) {
         Object.assign(data, { deleteFromCache: requestMetadata.deleteFromCache });
       }
@@ -847,39 +852,38 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
-    } catch (err) {
-      const apiCallError = unwrapOpenAiTransportError(err);
-      const errorData = requestMetadata.data;
-      const statusFromError = requestMetadata.status;
-      const statusTextFromError = requestMetadata.statusText ?? 'Error';
+      return processApiResponse(
+        data,
+        prompt,
+        responseFormat,
+        cached,
+        model,
+        size,
+        latencyMs,
+        config.quality,
+        config.n ?? 1,
+        'output_format' in config ? config.output_format : undefined,
+        config,
+      );
+    }
 
-      if (statusFromError && statusFromError >= 400) {
-        return {
-          error: `API error: ${statusFromError} ${statusTextFromError}\n${
-            typeof errorData === 'string' ? errorData : JSON.stringify(errorData)
-          }`,
-        };
-      }
+    const apiCallError = unwrapOpenAiTransportError(request.error);
+    const errorData = requestMetadata.data;
+    const statusFromError = requestMetadata.status;
+    const statusTextFromError = requestMetadata.statusText ?? 'Error';
 
-      logger.error(`API call error: ${String(apiCallError)}`);
-      await requestMetadata.deleteFromCache?.();
+    if (statusFromError && statusFromError >= 400) {
       return {
-        error: `API call error: ${String(apiCallError)}`,
+        error: `API error: ${statusFromError} ${statusTextFromError}\n${
+          typeof errorData === 'string' ? errorData : JSON.stringify(errorData)
+        }`,
       };
     }
 
-    return processApiResponse(
-      data,
-      prompt,
-      responseFormat,
-      cached,
-      model,
-      size,
-      latencyMs,
-      config.quality,
-      config.n ?? 1,
-      'output_format' in config ? config.output_format : undefined,
-      config,
-    );
+    logger.error(`API call error: ${String(apiCallError)}`);
+    await requestMetadata.deleteFromCache?.();
+    return {
+      error: `API call error: ${String(apiCallError)}`,
+    };
   }
 }

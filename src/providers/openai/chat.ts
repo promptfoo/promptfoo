@@ -1,8 +1,4 @@
-import path from 'path';
-
-import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -10,7 +6,6 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
-import { isJavascriptFile } from '../../util/fileExtensions';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
   maybeLoadFromExternalFileWithVars,
@@ -18,12 +13,18 @@ import {
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { parseChatPrompt, transformToolChoice, transformTools } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
-import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
+import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
+import {
+  isOpenAiGpt5Model,
+  isOpenAiOSeriesReasoningModel,
+  isOpenAiReasoningModel,
+} from './modelCapabilities';
 import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 import type OpenAI from 'openai';
 
@@ -43,7 +44,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   config: OpenAiCompletionOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
-  private loadedFunctionCallbacks: Record<string, Function> = {};
+  private functionCallbackHandler = new FunctionCallbackHandler();
 
   constructor(
     modelName: string,
@@ -73,130 +74,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
-  /**
-   * Loads a function from an external file
-   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
-   * @returns The loaded function
-   */
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
-
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
-    }
-  }
-
-  /**
-   * Executes a function callback with proper error handling
-   */
-  private async executeFunctionCallback(
-    functionName: string,
-    args: string,
-    config: OpenAiCompletionOptions,
-  ): Promise<string> {
-    try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        const callbackRef = config.functionToolCallbacks?.[functionName];
-
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
-          } else {
-            callback = new Function('return ' + callbackStr)();
-          }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-        }
-      }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
-
-      // Format the result
-      if (result === undefined || result === null) {
-        return '';
-      } else if (typeof result === 'object') {
-        try {
-          return JSON.stringify(result);
-        } catch (error) {
-          logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-          return String(result);
-        }
-      } else {
-        return String(result);
-      }
-    } catch (error: any) {
-      logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
-      throw error; // Re-throw so caller can handle fallback behavior
-    }
-  }
-
   protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+    return isOpenAiGpt5Model(this.modelName);
   }
 
   protected isReasoningModel(): boolean {
-    return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.isGPT5Model()
-    );
+    return isOpenAiReasoningModel(this.modelName);
   }
 
   protected supportsTemperature(): boolean {
@@ -322,15 +205,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.reasoning_effort = config.reasoning_effort;
     }
 
-    if (
-      config.reasoning &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.includes('/o1') ||
-        this.modelName.includes('/o3') ||
-        this.modelName.includes('/o4'))
-    ) {
+    if (config.reasoning && isOpenAiOSeriesReasoningModel(this.modelName)) {
       body.reasoning = config.reasoning;
     }
 
@@ -473,70 +348,29 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     };
 
-    let data: OpenAIChatCompletionResponse;
-    let status = 200;
-    let statusText = 'OK';
-    let cached = false;
-    let latencyMs: number | undefined;
-    let deleteFromCache: (() => Promise<void>) | undefined;
-    let responseHeaders: Record<string, string> | undefined;
-    const { client, requestMetadata } = createJsonCachedOpenAiClient({
-      apiKey: this.getApiKey(),
-      allowMissingApiKey: !this.requiresApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
-      headers: config.headers,
-      bustCache: context?.bustCache ?? context?.debug,
-      maxRetries: this.config.maxRetries,
-    });
-    try {
-      data = (await client.chat.completions.create(
-        body as OpenAI.ChatCompletionCreateParamsNonStreaming,
-      )) as OpenAIChatCompletionResponse;
-      cached = requestMetadata.cached;
-      latencyMs = requestMetadata.latencyMs;
-      deleteFromCache = requestMetadata.deleteFromCache;
-      status = requestMetadata.status ?? status;
-      statusText = requestMetadata.statusText ?? statusText;
-      responseHeaders = requestMetadata.headers;
+    const request = await callJsonCachedOpenAi(
+      {
+        apiKey: this.getApiKey(),
+        allowMissingApiKey: !this.requiresApiKey(),
+        organization: this.getOrganization(),
+        baseURL: this.getApiUrl(),
+        headers: config.headers,
+        bustCache: context?.bustCache ?? context?.debug,
+        maxRetries: this.config.maxRetries,
+      },
+      (client) =>
+        client.chat.completions.create(
+          body as OpenAI.ChatCompletionCreateParamsNonStreaming,
+        ) as Promise<OpenAIChatCompletionResponse>,
+    );
+    const { requestMetadata } = request;
+    const cached = requestMetadata.cached;
+    const latencyMs = requestMetadata.latencyMs;
+    const deleteFromCache = requestMetadata.deleteFromCache;
+    const responseHeaders = requestMetadata.headers;
 
-      if (status < 200 || status >= 300) {
-        const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
-
-        // Check if this is an invalid_prompt error code (indicates refusal)
-        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
-          return {
-            output: errorMessage,
-            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
-            latencyMs,
-            isRefusal: true,
-            guardrails: {
-              flagged: true,
-              flaggedInput: true, // This error specifically indicates input was rejected
-            },
-            metadata: {
-              http: {
-                status,
-                statusText,
-                headers: responseHeaders ?? {},
-              },
-            },
-          };
-        }
-
-        return {
-          error: errorMessage,
-          metadata: {
-            http: {
-              status,
-              statusText,
-              headers: responseHeaders ?? {},
-            },
-          },
-        };
-      }
-    } catch (err) {
-      const apiCallError = unwrapOpenAiTransportError(err);
+    if (!request.ok) {
+      const apiCallError = unwrapOpenAiTransportError(request.error);
       const errorData = requestMetadata.data;
       const statusFromError = requestMetadata.status;
       const statusTextFromError = requestMetadata.statusText ?? 'Error';
@@ -618,6 +452,45 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           http: {
             status: 0,
             statusText: 'Error',
+            headers: responseHeaders ?? {},
+          },
+        },
+      };
+    }
+    const { data } = request;
+    const status = requestMetadata.status ?? 200;
+    const statusText = requestMetadata.statusText ?? 'OK';
+
+    if (status < 200 || status >= 300) {
+      const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
+
+      // Check if this is an invalid_prompt error code (indicates refusal)
+      if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+        return {
+          output: errorMessage,
+          tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+          latencyMs,
+          isRefusal: true,
+          guardrails: {
+            flagged: true,
+            flaggedInput: true, // This error specifically indicates input was rejected
+          },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
+        };
+      }
+
+      return {
+        error: errorMessage,
+        metadata: {
+          http: {
+            status,
+            statusText,
             headers: responseHeaders ?? {},
           },
         },
@@ -781,22 +654,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
           // Fall back to regular function callbacks
           if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
-            try {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                functionCall.arguments || functionCall.function?.arguments,
-                config,
-              );
-              results.push(functionResult);
-              hasSuccessfulCallback = true;
-            } catch (error) {
+            const callbackResult = await this.functionCallbackHandler.processCall(
+              functionCall,
+              config.functionToolCallbacks,
+            );
+            if (callbackResult.isError) {
               // If callback fails, fall back to original behavior (return the function call)
               logger.debug(
-                `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
+                `Function callback failed for ${functionName}, falling back to original output`,
               );
               hasSuccessfulCallback = false;
               break;
             }
+            results.push(callbackResult.output);
+            hasSuccessfulCallback = true;
           }
         }
         if (hasSuccessfulCallback && results.length > 0) {

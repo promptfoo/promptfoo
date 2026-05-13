@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
+import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
 import { getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -48,19 +48,19 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       ...(this.config.passthrough || {}),
     };
 
-    const { client, requestMetadata } = createJsonCachedOpenAiClient({
-      apiKey: this.getApiKey(),
-      allowMissingApiKey: !this.requiresApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
-      headers: this.config.headers,
-      maxRetries: this.config.maxRetries,
-    });
-
-    let data: any;
-    try {
-      data = await client.embeddings.create(body);
-    } catch (err) {
+    const request = await callJsonCachedOpenAi(
+      {
+        apiKey: this.getApiKey(),
+        allowMissingApiKey: !this.requiresApiKey(),
+        organization: this.getOrganization(),
+        baseURL: this.getApiUrl(),
+        headers: this.config.headers,
+        maxRetries: this.config.maxRetries,
+      },
+      (client) => client.embeddings.create(body),
+    );
+    const { requestMetadata } = request;
+    if (!request.ok) {
       const { data: errorData, status, statusText } = requestMetadata;
 
       if (status && (status < 200 || status >= 300)) {
@@ -69,13 +69,14 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         };
       }
 
-      const apiCallError = unwrapOpenAiTransportError(err);
+      const apiCallError = unwrapOpenAiTransportError(request.error);
       logger.error(`API call error: ${String(apiCallError)}`);
       await requestMetadata.deleteFromCache?.();
       return {
         error: `API call error: ${String(apiCallError)}`,
       };
     }
+    const { data } = request;
 
     try {
       const embedding = data?.data?.[0]?.embedding;

@@ -12,10 +12,16 @@ import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
 import {
+  callJsonCachedOpenAi,
   createJsonCachedOpenAiClient,
   createOpenAiClient,
   unwrapOpenAiTransportError,
 } from './client';
+import {
+  isAzureOpenAiEndpoint,
+  isOpenAiGpt5Model,
+  isOpenAiReasoningModel,
+} from './modelCapabilities';
 import { formatOpenAiError, getTokenUsage } from './util';
 import type OpenAI from 'openai';
 
@@ -151,21 +157,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   protected isGPT5Model(): boolean {
-    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
-    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+    return isOpenAiGpt5Model(this.modelName);
   }
 
   protected isReasoningModel(): boolean {
-    return (
-      this.modelName.startsWith('o1') ||
-      this.modelName.startsWith('o3') ||
-      this.modelName.startsWith('o4') ||
-      this.modelName.includes('/o1') ||
-      this.modelName.includes('/o3') ||
-      this.modelName.includes('/o4') ||
-      this.modelName === 'codex-mini-latest' ||
-      this.isGPT5Model()
-    );
+    return isOpenAiReasoningModel(this.modelName, { includeCodexMiniLatest: true });
   }
 
   protected supportsTemperature(): boolean {
@@ -210,23 +206,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
-  private isAzureOpenAiEndpoint(value: string | undefined): boolean {
-    if (!value) {
-      return false;
-    }
-
-    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
-    try {
-      const hostname = new URL(endpoint).hostname.toLowerCase();
-      return hostname === 'openai.azure.com' || hostname.endsWith('.openai.azure.com');
-    } catch {
-      return false;
-    }
-  }
-
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
     const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
-      (endpoint) => this.isAzureOpenAiEndpoint(endpoint),
+      (endpoint) => isAzureOpenAiEndpoint(endpoint),
     );
     const isAzureResponsesDeploymentWithReasoningConfig =
       hasAzureCustomDeploymentHost &&
@@ -400,11 +382,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body.reasoning = { ...body.reasoning, ...renderedReasoning };
     }
 
-    // The Responses API uses max_output_tokens; prevent passthrough from reintroducing max_tokens.
-    if ('max_tokens' in body) {
-      delete body.max_tokens;
-    }
-
     // Sanitize body: strip max_tokens if it leaked via passthrough or YAML anchors.
     // The responses API uses max_output_tokens, never max_tokens.
     if ('max_tokens' in body) {
@@ -502,20 +479,27 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         responseHeaders = Object.fromEntries(response.headers.entries());
         data = await getTerminalResponsesStreamData(stream);
       } else {
-        const cachedClient = createJsonCachedOpenAiClient({
-          apiKey: this.getApiKey(),
-          allowMissingApiKey: !this.requiresApiKey(),
-          organization: this.getOrganization(),
-          baseURL: this.getApiUrl(),
-          headers: config.headers,
-          bustCache: context?.bustCache ?? context?.debug,
-          maxRetries: this.config.maxRetries,
-          timeout,
-        });
-        requestMetadata = cachedClient.requestMetadata;
-        data = (await cachedClient.client.responses.create(
-          body as OpenAI.Responses.ResponseCreateParamsNonStreaming,
-        )) as typeof data;
+        const request = await callJsonCachedOpenAi(
+          {
+            apiKey: this.getApiKey(),
+            allowMissingApiKey: !this.requiresApiKey(),
+            organization: this.getOrganization(),
+            baseURL: this.getApiUrl(),
+            headers: config.headers,
+            bustCache: context?.bustCache ?? context?.debug,
+            maxRetries: this.config.maxRetries,
+            timeout,
+          },
+          (client) =>
+            client.responses.create(
+              body as OpenAI.Responses.ResponseCreateParamsNonStreaming,
+            ) as Promise<typeof data>,
+        );
+        requestMetadata = request.requestMetadata;
+        if (!request.ok) {
+          throw request.error;
+        }
+        data = request.data;
         cached = requestMetadata.cached;
         deleteFromCache = requestMetadata.deleteFromCache;
         status = requestMetadata.status ?? status;

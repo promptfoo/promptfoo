@@ -24,6 +24,18 @@ type OpenAiClientOptions = {
   timeout?: number;
 };
 
+export type JsonCachedOpenAiRequestResult<T> =
+  | {
+      ok: true;
+      data: T;
+      requestMetadata: OpenAiJsonRequestMetadata;
+    }
+  | {
+      ok: false;
+      error: unknown;
+      requestMetadata: OpenAiJsonRequestMetadata;
+    };
+
 export type OpenAiJsonRequestMetadata = {
   cached: boolean;
   data?: unknown;
@@ -88,6 +100,27 @@ export function createJsonCachedOpenAiClient(options: JsonCachedOpenAiClientOpti
     client,
     requestMetadata,
   };
+}
+
+export async function callJsonCachedOpenAi<T>(
+  options: JsonCachedOpenAiClientOptions,
+  request: (client: OpenAI) => Promise<T>,
+): Promise<JsonCachedOpenAiRequestResult<T>> {
+  const { client, requestMetadata } = createJsonCachedOpenAiClient(options);
+
+  try {
+    return {
+      ok: true,
+      data: await request(client),
+      requestMetadata,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error,
+      requestMetadata,
+    };
+  }
 }
 
 export function createOpenAiClient(options: OpenAiClientOptions) {

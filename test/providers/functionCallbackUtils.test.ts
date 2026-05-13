@@ -82,7 +82,7 @@ describe('FunctionCallbackHandler', () => {
         output: 'callback result',
         isError: false,
       });
-      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}', undefined);
+      expect(mockCallback).toHaveBeenCalledWith('{"param": "value"}');
     });
 
     it('should pass context to callback', async () => {
@@ -121,7 +121,7 @@ describe('FunctionCallbackHandler', () => {
         output: 'tool result',
         isError: false,
       });
-      expect(mockCallback).toHaveBeenCalledWith('{"toolParam": "toolValue"}', undefined);
+      expect(mockCallback).toHaveBeenCalledWith('{"toolParam": "toolValue"}');
     });
 
     it('should stringify non-string callback results', async () => {
@@ -280,7 +280,7 @@ describe('FunctionCallbackHandler', () => {
       expect(mockImportModule).toHaveBeenCalledWith(
         path.resolve('/test/basePath', 'path/to/function.js'),
       );
-      expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "value"}', undefined);
+      expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "value"}');
     });
 
     it('should load specific function from external file', async () => {
@@ -302,7 +302,7 @@ describe('FunctionCallbackHandler', () => {
         output: 'specific result',
         isError: false,
       });
-      expect(mockSpecificFunction).toHaveBeenCalledWith('{}', undefined);
+      expect(mockSpecificFunction).toHaveBeenCalledWith('{}');
     });
 
     it('should handle inline function strings', async () => {

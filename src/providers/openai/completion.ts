@@ -2,7 +2,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
+import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
 import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
 import type OpenAI from 'openai';
 
@@ -68,32 +68,33 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.passthrough || {}),
     };
 
-    const { client, requestMetadata } = createJsonCachedOpenAiClient({
-      apiKey: this.getApiKey(),
-      allowMissingApiKey: !this.requiresApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
-      headers: this.config.headers,
-      bustCache: context?.bustCache ?? context?.debug,
-      maxRetries: this.config.maxRetries,
-    });
-
-    let data;
-    try {
-      data = await client.completions.create(body as OpenAI.CompletionCreateParamsNonStreaming);
-    } catch (err) {
+    const request = await callJsonCachedOpenAi(
+      {
+        apiKey: this.getApiKey(),
+        allowMissingApiKey: !this.requiresApiKey(),
+        organization: this.getOrganization(),
+        baseURL: this.getApiUrl(),
+        headers: this.config.headers,
+        bustCache: context?.bustCache ?? context?.debug,
+        maxRetries: this.config.maxRetries,
+      },
+      (client) => client.completions.create(body as OpenAI.CompletionCreateParamsNonStreaming),
+    );
+    const { requestMetadata } = request;
+    if (!request.ok) {
       if (isOpenAiErrorResponse(requestMetadata.data)) {
         return {
           error: formatOpenAiError(requestMetadata.data),
         };
       }
 
-      const apiCallError = unwrapOpenAiTransportError(err);
+      const apiCallError = unwrapOpenAiTransportError(request.error);
       logger.error(`API call error: ${String(apiCallError)}`);
       return {
         error: `API call error: ${String(apiCallError)}`,
       };
     }
+    const { data } = request;
 
     if (isOpenAiErrorResponse(data)) {
       return {

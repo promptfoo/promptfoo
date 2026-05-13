@@ -4,7 +4,7 @@ import path from 'path';
 import OpenAI from 'openai';
 import logger from '../../logger';
 import { OpenAiGenericProvider } from './';
-import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
+import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
 import { OPENAI_TRANSCRIPTION_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -114,33 +114,26 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
             }),
       };
 
-      let data: any;
       let status = 200;
       let statusText = 'OK';
       let cached = false;
-      const { client, requestMetadata } = createJsonCachedOpenAiClient({
-        apiKey: this.getApiKey(),
-        organization: this.getOrganization(),
-        baseURL: this.getApiUrl(),
-        bustCache: context?.bustCache ?? context?.debug,
-        maxRetries: this.config.maxRetries,
-      });
+      const request = await callJsonCachedOpenAi<any>(
+        {
+          apiKey: this.getApiKey(),
+          organization: this.getOrganization(),
+          baseURL: this.getApiUrl(),
+          bustCache: context?.bustCache ?? context?.debug,
+          maxRetries: this.config.maxRetries,
+        },
+        (client) =>
+          client.audio.transcriptions.create(
+            requestBody as OpenAI.Audio.TranscriptionCreateParamsNonStreaming,
+          ) as Promise<any>,
+      );
+      const { requestMetadata } = request;
 
-      try {
-        data = await client.audio.transcriptions.create(
-          requestBody as OpenAI.Audio.TranscriptionCreateParamsNonStreaming,
-        );
-        cached = requestMetadata.cached;
-        status = requestMetadata.status ?? status;
-        statusText = requestMetadata.statusText ?? statusText;
-
-        if (status < 200 || status >= 300) {
-          return {
-            error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-          };
-        }
-      } catch (err) {
-        const apiCallError = unwrapOpenAiTransportError(err);
+      if (!request.ok) {
+        const apiCallError = unwrapOpenAiTransportError(request.error);
         const errorData = requestMetadata.data;
         const statusFromError = requestMetadata.status;
         const statusTextFromError = requestMetadata.statusText ?? 'Error';
@@ -156,6 +149,16 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         logger.error('API call error', { error: apiCallError });
         return {
           error: `API call error: ${String(apiCallError)}`,
+        };
+      }
+      const data = request.data;
+      cached = requestMetadata.cached;
+      status = requestMetadata.status ?? status;
+      statusText = requestMetadata.statusText ?? statusText;
+
+      if (status < 200 || status >= 300) {
+        return {
+          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
 
