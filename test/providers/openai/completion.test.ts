@@ -172,7 +172,7 @@ describe('OpenAI Provider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
-      expect(result.error).toContain('Cannot destructure property');
+      expect(result.error).toContain('Cannot read properties of undefined');
     });
 
     it('should pass custom headers from config', async () => {
@@ -193,16 +193,18 @@ describe('OpenAI Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'X-Test-Header': 'test-value',
-          }),
+          method: 'POST',
         }),
         expect.any(Number),
         'json',
-        undefined,
+        false,
         undefined,
       );
+
+      const [, requestOptions] = mockFetchWithCache.mock.calls[0];
+      const requestHeaders = requestOptions?.headers as Headers;
+      expect(requestHeaders.get('content-type')).toBe('application/json');
+      expect(requestHeaders.get('x-test-header')).toBe('test-value');
     });
 
     it('should pass passthrough config fields in body', async () => {
@@ -219,6 +221,17 @@ describe('OpenAI Provider', () => {
       const actualCall = mockFetchWithCache.mock.calls[0];
       const body = JSON.parse(actualCall[1]?.body as string);
       expect(body.logprobs).toBe(3);
+    });
+
+    it('should translate includeLogProbs into the numeric completions API parameter', async () => {
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      await provider.callApi('Test prompt', undefined, { includeLogProbs: true });
+
+      const actualCall = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(actualCall[1]?.body as string);
+      expect(body.logprobs).toBe(1);
     });
 
     it('should handle response parsing errors', async () => {

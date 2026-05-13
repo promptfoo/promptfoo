@@ -1,5 +1,7 @@
 import fs from 'fs/promises';
+import path from 'path';
 
+import OpenAI from 'openai';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -14,6 +16,7 @@ import {
   storeCacheMapping,
 } from '../video';
 import { OpenAiGenericProvider } from '.';
+import { createOpenAiClient, unwrapOpenAiTransportError } from './client';
 
 import type { MediaStorageRef } from '../../storage/types';
 import type { EnvOverrides } from '../../types/env';
@@ -107,6 +110,71 @@ export function calculateVideoCost(
   return costPerSecond * seconds;
 }
 
+type OpenAiVideoErrorDetails = {
+  rawError: unknown;
+  status?: number;
+  message: string;
+};
+
+function getOpenAiVideoErrorDetails(err: unknown): OpenAiVideoErrorDetails {
+  const rawError = unwrapOpenAiTransportError(err);
+
+  if (typeof rawError === 'object' && rawError !== null) {
+    const status =
+      'status' in rawError && typeof rawError.status === 'number' ? rawError.status : undefined;
+    const nestedError = 'error' in rawError ? rawError.error : undefined;
+    const nestedMessage =
+      typeof nestedError === 'object' &&
+      nestedError !== null &&
+      'message' in nestedError &&
+      typeof nestedError.message === 'string'
+        ? nestedError.message
+        : undefined;
+    const fallbackMessage = rawError instanceof Error ? rawError.message : String(rawError);
+
+    return {
+      rawError,
+      status,
+      message: stripStatusPrefix(status, nestedMessage ?? fallbackMessage),
+    };
+  }
+
+  return {
+    rawError,
+    message: String(rawError),
+  };
+}
+
+function stripStatusPrefix(status: number | undefined, message: string): string {
+  if (status === undefined) {
+    return message;
+  }
+
+  const prefix = `${status} `;
+  return message.startsWith(prefix) ? message.slice(prefix.length) : message;
+}
+
+function formatCreateVideoError(err: unknown): string {
+  const details = getOpenAiVideoErrorDetails(err);
+  return details.status === undefined
+    ? `Failed to create video job: ${String(details.rawError)}`
+    : `API error ${details.status}: ${details.message}`;
+}
+
+function formatPollVideoError(err: unknown): string {
+  const details = getOpenAiVideoErrorDetails(err);
+  return details.status === undefined
+    ? `Polling error: ${String(details.rawError)}`
+    : `Status check failed: ${details.message}`;
+}
+
+function formatDownloadVideoError(variant: OpenAiVideoVariant, err: unknown): string {
+  const details = getOpenAiVideoErrorDetails(err);
+  return details.status === undefined
+    ? `Download error for ${variant}: ${String(details.rawError)}`
+    : `Failed to download ${variant}: ${details.status} ${details.message}`;
+}
+
 // =============================================================================
 // OpenAiVideoProvider
 // =============================================================================
@@ -143,15 +211,18 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     return `[OpenAI Video Provider ${this.modelName}]`;
   }
 
-  /**
-   * Build authorization headers for API requests
-   */
-  private getAuthHeaders(): Record<string, string> {
-    const organization = this.getOrganization();
-    return {
-      Authorization: `Bearer ${this.getApiKey()}`,
-      ...(organization ? { 'OpenAI-Organization': organization } : {}),
-    };
+  private createClient(headers?: Record<string, string>) {
+    return createOpenAiClient({
+      apiKey: this.getApiKey(),
+      allowMissingApiKey: !this.requiresApiKey(),
+      organization: this.getOrganization(),
+      baseURL: this.getApiUrl(),
+      headers,
+      // `fetchWithProxy` already owns transient retry behavior for this transport.
+      // Keep SDK retries off here so create/remix requests do not multiply attempts.
+      maxRetries: 0,
+      fetch: (url, init) => fetchWithProxy(url instanceof URL ? url.toString() : url, init),
+    });
   }
 
   /**
@@ -161,30 +232,26 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     prompt: string,
     config: OpenAiVideoOptions,
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
-    const url = config.remix_video_id
-      ? `${this.getApiUrl()}/videos/${config.remix_video_id}/remix`
-      : `${this.getApiUrl()}/videos`;
-
-    const body: Record<string, unknown> = {
-      model: this.modelName,
+    const client = this.createClient(config.headers);
+    const body: OpenAI.VideoCreateParams = {
+      model: this.modelName as OpenAI.VideoModel,
       prompt,
     };
 
     // Only include these for new videos (not remix)
     if (!config.remix_video_id) {
-      body.size = config.size || DEFAULT_SIZE;
+      body.size = (config.size || DEFAULT_SIZE) as OpenAI.VideoSize;
       // API requires seconds as a string ("4", "8", or "12")
-      body.seconds = String(config.seconds || DEFAULT_SECONDS);
+      body.seconds = String(config.seconds || DEFAULT_SECONDS) as OpenAI.VideoSeconds;
     }
 
     // Handle input_reference (image-to-video)
     if (config.input_reference) {
-      let imageData = config.input_reference;
       if (config.input_reference.startsWith('file://')) {
         const filePath = config.input_reference.slice(7);
         try {
           const buffer = await fs.readFile(filePath);
-          imageData = buffer.toString('base64');
+          body.input_reference = new File([buffer], path.basename(filePath));
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw error;
@@ -194,41 +261,36 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
             error: `Input reference file not found: ${filePath}`,
           };
         }
+      } else if (
+        config.input_reference.startsWith('http://') ||
+        config.input_reference.startsWith('https://') ||
+        config.input_reference.startsWith('data:')
+      ) {
+        body.input_reference = { image_url: config.input_reference };
+      } else {
+        body.input_reference = new File(
+          [Buffer.from(config.input_reference, 'base64')],
+          'input-reference.png',
+        );
       }
-      body.input_reference = imageData;
     }
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...this.getAuthHeaders(),
-      ...config.headers,
-    };
-
     try {
-      logger.debug('[OpenAI Video] Creating video job', { url, model: this.modelName });
-
-      const response = await fetchWithProxy(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
+      logger.debug('[OpenAI Video] Creating video job', {
+        remixVideoId: config.remix_video_id,
+        model: this.modelName,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage =
-          (errorData as { error?: { message?: string } }).error?.message || response.statusText;
-        return {
-          job: {} as OpenAiVideoJob,
-          error: `API error ${response.status}: ${errorMessage}`,
-        };
-      }
-
-      const job = (await response.json()) as OpenAiVideoJob;
+      const job = config.remix_video_id
+        ? ((await client.videos.remix(config.remix_video_id, {
+            prompt,
+          })) as OpenAiVideoJob)
+        : ((await client.videos.create(body)) as OpenAiVideoJob);
       return { job };
     } catch (err: unknown) {
       return {
         job: {} as OpenAiVideoJob,
-        error: `Failed to create video job: ${String(err)}`,
+        error: formatCreateVideoError(err),
       };
     }
   }
@@ -242,24 +304,11 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     maxPollTimeMs: number,
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
     const startTime = Date.now();
-    const url = `${this.getApiUrl()}/videos/${videoId}`;
-    const headers = this.getAuthHeaders();
+    const client = this.createClient();
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
-        const response = await fetchWithProxy(url, { method: 'GET', headers });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          const errorMessage =
-            (errorData as { error?: { message?: string } }).error?.message || response.statusText;
-          return {
-            job: {} as OpenAiVideoJob,
-            error: `Status check failed: ${errorMessage}`,
-          };
-        }
-
-        const job: OpenAiVideoJob = (await response.json()) as OpenAiVideoJob;
+        const job = (await client.videos.retrieve(videoId)) as OpenAiVideoJob;
 
         logger.debug(
           `[OpenAI Video] Job ${videoId} status: ${job.status}, progress: ${job.progress}%`,
@@ -281,7 +330,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       } catch (err: unknown) {
         return {
           job: {} as OpenAiVideoJob,
-          error: `Polling error: ${String(err)}`,
+          error: formatPollVideoError(err),
         };
       }
     }
@@ -301,18 +350,13 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     cacheKey: string,
     evalId?: string,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
-    const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant === 'video' ? '' : `?variant=${variant}`}`;
-    const headers = this.getAuthHeaders();
+    const client = this.createClient();
 
     try {
-      const response = await fetchWithProxy(url, { method: 'GET', headers });
-
-      if (!response.ok) {
-        return {
-          error: `Failed to download ${variant}: ${response.status} ${response.statusText}`,
-        };
-      }
-
+      const response = await client.videos.downloadContent(
+        soraVideoId,
+        variant === 'video' ? {} : { variant },
+      );
       const buffer = Buffer.from(await response.arrayBuffer());
       const mimeType = VARIANT_MIME_TYPES[variant];
       const mediaType = variant === 'video' ? 'video' : 'image';
@@ -330,7 +374,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       return { storageRef: ref };
     } catch (err: unknown) {
       return {
-        error: `Download error for ${variant}: ${String(err)}`,
+        error: formatDownloadVideoError(variant, err),
       };
     }
   }

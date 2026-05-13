@@ -38,6 +38,13 @@ vi.mock('../../../../src/python/pythonUtils', async (importOriginal) => {
   };
 });
 
+vi.mock('../../../../src/util/fetch/index', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithRetries: vi.fn(),
+  };
+});
+
 const ENV_KEYS_TO_CLEAR = [
   'OPENAI_TEMPERATURE',
   'OPENAI_MAX_TOKENS',

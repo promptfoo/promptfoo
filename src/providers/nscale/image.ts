@@ -1,7 +1,8 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
+import { callOpenAiImageApi } from '../image';
+import { formatOutput, OpenAiImageProvider } from '../openai/image';
 import { getRequestTimeoutMs } from '../shared';
 
 import type { EnvOverrides } from '../../types/env';

@@ -1225,7 +1225,7 @@ describe('OpenClaw Provider', () => {
 
       await provider.callEmbeddingApi('embed this');
 
-      expect(mockFetchWithCache.mock.calls[0][1].headers['x-openclaw-model']).toBe(
+      expect(new Headers(mockFetchWithCache.mock.calls[0][1].headers).get('x-openclaw-model')).toBe(
         'openai/text-embedding-3-small',
       );
     });

@@ -175,14 +175,14 @@ describe('GroqResponsesProvider', () => {
         `${GROQ_API_BASE}/responses`,
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer test-key',
-          }),
         }),
         expect.any(Number),
         undefined,
       );
+      const [, requestOptions] = mockedFetchWithRetries.mock.calls[0];
+      const headers = new Headers(requestOptions?.headers);
+      expect(headers.get('content-type')).toBe('application/json');
+      expect(headers.get('authorization')).toBe('Bearer test-key');
 
       expect(result.error).toContain('400');
     });

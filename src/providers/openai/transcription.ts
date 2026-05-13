@@ -1,10 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { fetchWithCache } from '../../cache';
+import OpenAI from 'openai';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
+import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
 import { OPENAI_TRANSCRIPTION_MODELS } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -13,12 +13,9 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { OpenAiSharedOptions } from './types';
 
-export interface OpenAiTranscriptionOptions {
-  apiKey?: string;
-  apiKeyEnvar?: string;
-  apiBaseUrl?: string;
-  organization?: string;
+export interface OpenAiTranscriptionOptions extends OpenAiSharedOptions {
   language?: string;
   prompt?: string;
   temperature?: number;
@@ -94,60 +91,48 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       const fileName = path.basename(audioFilePath);
       const file = new File([fileBuffer], fileName);
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('model', this.modelName);
-
-      // Add optional parameters
-      if (config.language) {
-        formData.append('language', config.language);
-      }
-      if (config.prompt) {
-        formData.append('prompt', config.prompt);
-      }
-      if (config.temperature !== undefined) {
-        formData.append('temperature', config.temperature.toString());
-      }
-      if (config.timestamp_granularities && config.timestamp_granularities.length > 0) {
-        formData.append('timestamp_granularities', JSON.stringify(config.timestamp_granularities));
-      }
-
-      // Diarization-specific options (for gpt-4o-transcribe-diarize)
-      if (this.modelName.includes('diarize')) {
-        formData.append('response_format', 'diarized_json');
-
-        if (config.num_speakers !== undefined) {
-          formData.append('num_speakers', config.num_speakers.toString());
-        }
-        if (config.speaker_labels && config.speaker_labels.length > 0) {
-          formData.append('speaker_labels', JSON.stringify(config.speaker_labels));
-        }
-      } else {
-        // Use json for gpt-4o models (verbose_json not supported), verbose_json for others
-        const responseFormat = this.modelName.startsWith('gpt-4o-') ? 'json' : 'verbose_json';
-        formData.append('response_format', responseFormat);
-      }
-
-      const headers = {
-        Authorization: `Bearer ${this.getApiKey()}`,
-        ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+      const requestBody = {
+        file,
+        model: this.modelName,
+        ...(config.language ? { language: config.language } : {}),
+        ...(config.prompt ? { prompt: config.prompt } : {}),
+        ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
+        ...(config.timestamp_granularities && config.timestamp_granularities.length > 0
+          ? { timestamp_granularities: config.timestamp_granularities }
+          : {}),
+        ...(this.modelName.includes('diarize')
+          ? {
+              response_format: 'diarized_json',
+              ...(config.num_speakers === undefined ? {} : { num_speakers: config.num_speakers }),
+              ...(config.speaker_labels && config.speaker_labels.length > 0
+                ? { speaker_labels: config.speaker_labels }
+                : {}),
+            }
+          : {
+              // Use json for gpt-4o models (verbose_json not supported), verbose_json for others.
+              response_format: this.modelName.startsWith('gpt-4o-') ? 'json' : 'verbose_json',
+            }),
       };
 
-      let data: any, status: number, statusText: string;
+      let data: any;
+      let status = 200;
+      let statusText = 'OK';
       let cached = false;
+      const { client, requestMetadata } = createJsonCachedOpenAiClient({
+        apiKey: this.getApiKey(),
+        organization: this.getOrganization(),
+        baseURL: this.getApiUrl(),
+        bustCache: context?.bustCache ?? context?.debug,
+        maxRetries: this.config.maxRetries,
+      });
 
       try {
-        ({ data, cached, status, statusText } = await fetchWithCache(
-          `${this.getApiUrl()}/audio/transcriptions`,
-          {
-            method: 'POST',
-            headers,
-            body: formData,
-          },
-          getRequestTimeoutMs(),
-          'json',
-          context?.bustCache ?? context?.debug,
-        ));
+        data = await client.audio.transcriptions.create(
+          requestBody as OpenAI.Audio.TranscriptionCreateParamsNonStreaming,
+        );
+        cached = requestMetadata.cached;
+        status = requestMetadata.status ?? status;
+        statusText = requestMetadata.statusText ?? statusText;
 
         if (status < 200 || status >= 300) {
           return {
@@ -155,9 +140,22 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           };
         }
       } catch (err) {
-        logger.error('API call error', { error: err });
+        const apiCallError = unwrapOpenAiTransportError(err);
+        const errorData = requestMetadata.data;
+        const statusFromError = requestMetadata.status;
+        const statusTextFromError = requestMetadata.statusText ?? 'Error';
+
+        if (statusFromError && statusFromError >= 400) {
+          return {
+            error: `API error: ${statusFromError} ${statusTextFromError}\n${
+              typeof errorData === 'string' ? errorData : JSON.stringify(errorData)
+            }`,
+          };
+        }
+
+        logger.error('API call error', { error: apiCallError });
         return {
-          error: `API call error: ${String(err)}`,
+          error: `API call error: ${String(apiCallError)}`,
         };
       }
 

@@ -69,7 +69,7 @@ describe('OpenAiResponsesProvider tool handling', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      false,
       undefined,
     );
 
@@ -139,7 +139,7 @@ describe('OpenAiResponsesProvider tool handling', () => {
       }),
       expect.any(Number),
       'json',
-      undefined,
+      false,
       undefined,
     );
   });

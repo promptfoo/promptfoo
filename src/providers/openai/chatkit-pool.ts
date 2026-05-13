@@ -38,6 +38,11 @@ interface ChatKitPoolConfig {
   serverPort?: number;
 }
 
+type ChatKitTemplateRegistration = {
+  html: string;
+  createClientSecret?: () => Promise<string>;
+};
+
 /**
  * Singleton browser pool for ChatKit evaluations.
  * Supports high concurrency by reusing browser contexts.
@@ -53,7 +58,7 @@ export class ChatKitBrowserPool {
   private pages: PooledPage[] = [];
   private waitQueue: Array<{ templateKey: string; resolve: (page: PooledPage) => void }> = [];
   private config: ChatKitPoolConfig;
-  private templates: Map<string, string> = new Map(); // templateKey -> HTML
+  private templates: Map<string, ChatKitTemplateRegistration> = new Map();
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -163,10 +168,10 @@ export class ChatKitBrowserPool {
   /**
    * Register a template for a workflow configuration
    */
-  setTemplate(templateKey: string, html: string): void {
+  setTemplate(templateKey: string, html: string, createClientSecret?: () => Promise<string>): void {
     const existing = this.templates.get(templateKey);
-    if (existing !== html) {
-      this.templates.set(templateKey, html);
+    if (existing?.html !== html || existing?.createClientSecret !== createClientSecret) {
+      this.templates.set(templateKey, { html, createClientSecret });
       logger.debug('[ChatKitPool] Registered template', { templateKey });
       // Mark pages with this template as needing refresh if template changed
       for (const page of this.pages) {
@@ -211,8 +216,22 @@ export class ChatKitBrowserPool {
         const template = this.templates.get(templateKey);
 
         if (template) {
+          if (req.method === 'POST' && pathParts[2] === 'session' && template.createClientSecret) {
+            void template
+              .createClientSecret()
+              .then((clientSecret) => {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ client_secret: clientSecret }));
+              })
+              .catch((error) => {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: String(error) }));
+              });
+            return;
+          }
+
           res.writeHead(200, { 'Content-Type': 'text/html' });
-          res.end(template);
+          res.end(template.html);
           return;
         }
       }

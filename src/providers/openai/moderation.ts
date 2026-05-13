@@ -1,9 +1,10 @@
 import { createHmac } from 'crypto';
 
-import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
+import OpenAI from 'openai';
+import { getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
+import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
 
 import type {
   ApiModerationProvider,
@@ -74,7 +75,7 @@ const OPENAI_MODERATION_CACHE_HASH_KEY = 'promptfoo:openai:moderation-cache-key:
 const OPENAI_MODERATION_INFLIGHT_REQUESTS = new Map<string, Promise<OpenAIModerationFetchResult>>();
 
 type OpenAIModerationFetchResult = {
-  data: OpenAIModerationResponse;
+  data: unknown;
   status: number;
   statusText: string;
   cached: boolean;
@@ -265,35 +266,48 @@ export class OpenAiModerationProvider
 
     logger.debug(`Calling OpenAI moderation API with model ${this.modelName}`);
 
-    const requestBody = JSON.stringify({
-      model: this.modelName,
-      input,
-    });
-
-    const headers = {
-      'Content-Type': 'application/json',
-      'x-promptfoo-silent': 'true',
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-      ...this.config.headers,
-    };
-
     try {
       const { data, status, statusText } = await fetchOpenAIModerationWithDedupe(
         getScopedCacheKey(cacheKey),
-        async () =>
-          fetchWithCache<OpenAIModerationResponse>(
-            `${this.getApiUrl()}/moderations`,
-            {
-              method: 'POST',
-              headers,
-              body: requestBody,
+        async () => {
+          const { client, requestMetadata } = createJsonCachedOpenAiClient({
+            apiKey,
+            allowMissingApiKey: !this.requiresApiKey(),
+            organization: this.getOrganization(),
+            baseURL: this.getApiUrl(),
+            headers: {
+              'x-promptfoo-silent': 'true',
+              ...this.config.headers,
             },
-            getRequestTimeoutMs(),
-            'json',
-            true,
-            this.config.maxRetries,
-          ),
+            bustCache: true,
+            maxRetries: this.config.maxRetries,
+          });
+
+          try {
+            const response = await client.moderations.create({
+              model: this.modelName,
+              input,
+            } as OpenAI.ModerationCreateParams);
+            return {
+              data: response,
+              status: requestMetadata.status ?? 200,
+              statusText: requestMetadata.statusText ?? 'OK',
+              cached: requestMetadata.cached,
+            };
+          } catch (err) {
+            const statusFromError = requestMetadata.status;
+            if (statusFromError && statusFromError >= 400) {
+              return {
+                data: requestMetadata.data,
+                status: statusFromError,
+                statusText: requestMetadata.statusText ?? 'Error',
+                cached: requestMetadata.cached,
+              };
+            }
+
+            throw unwrapOpenAiTransportError(err);
+          }
+        },
       );
 
       if (status < 200 || status >= 300) {
@@ -305,7 +319,7 @@ export class OpenAiModerationProvider
 
       logger.debug(`\tOpenAI moderation API response: ${JSON.stringify(data)}`);
 
-      const response = parseOpenAIModerationResponse(data);
+      const response = parseOpenAIModerationResponse(data as OpenAIModerationResponse);
 
       if (useCache) {
         const cache = await getCache();

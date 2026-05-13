@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../../src/cache';
 import {
   buildStructuredImageOutputs,
   calculateImageCost,
-  callOpenAiImageApi,
   DALLE2_COSTS,
   DALLE3_COSTS,
   formatOutput,
@@ -279,37 +277,6 @@ describe('OpenAI Image Provider Functions', () => {
     it('should use default cost for models other than DALL-E 2 or 3', () => {
       expect(calculateImageCost('gpt-4', '1024x1024')).toBe(0.04);
       expect(calculateImageCost('', '1024x1024')).toBe(0.04);
-    });
-  });
-
-  describe('callOpenAiImageApi', () => {
-    it('should call fetchWithCache with correct parameters', async () => {
-      const mockResponse = {
-        data: { some: 'data' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
-
-      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
-      const url = 'https://api.openai.com/v1/images/generations';
-      const body = { model: 'dall-e-3', prompt: 'test' };
-      const headers = { 'Content-Type': 'application/json' };
-      const timeout = 30000;
-
-      const result = await callOpenAiImageApi(url, body, headers, timeout);
-
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        url,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        },
-        timeout,
-      );
-      expect(result).toEqual(mockResponse);
     });
   });
 

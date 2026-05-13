@@ -1,17 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { callOpenAiImageApi } from '../../../src/providers/openai/image';
+import { callOpenAiImageApi } from '../../../src/providers/image';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
-vi.mock('../../../src/providers/openai/image', async () => {
-  const actual = await vi.importActual('../../../src/providers/openai/image');
-  return {
-    ...actual,
-    callOpenAiImageApi: vi.fn(),
-  };
-});
+vi.mock('../../../src/providers/image', () => ({
+  callOpenAiImageApi: vi.fn(),
+}));
 
 describe('XAI Image Provider', () => {
   const mockApiKey = 'test-api-key';

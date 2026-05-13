@@ -144,7 +144,10 @@ describe('ChatKitBrowserPool', () => {
 
       instance.setTemplate(TEST_TEMPLATE_KEY, html);
 
-      expect((instance as any).templates.get(TEST_TEMPLATE_KEY)).toBe(html);
+      expect((instance as any).templates.get(TEST_TEMPLATE_KEY)).toEqual({
+        html,
+        createClientSecret: undefined,
+      });
     });
 
     it('should store multiple templates for different keys', () => {
@@ -156,8 +159,14 @@ describe('ChatKitBrowserPool', () => {
       instance.setTemplate(key2, '<html>workflow2</html>');
 
       expect((instance as any).templates.size).toBe(2);
-      expect((instance as any).templates.get(key1)).toBe('<html>workflow1</html>');
-      expect((instance as any).templates.get(key2)).toBe('<html>workflow2</html>');
+      expect((instance as any).templates.get(key1)).toEqual({
+        html: '<html>workflow1</html>',
+        createClientSecret: undefined,
+      });
+      expect((instance as any).templates.get(key2)).toEqual({
+        html: '<html>workflow2</html>',
+        createClientSecret: undefined,
+      });
     });
   });
 

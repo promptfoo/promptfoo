@@ -56,6 +56,13 @@ describe('OpenAI Provider', () => {
         numRequests: 1,
       });
       expect(result.cost).toBeCloseTo(expectedCost, 12);
+
+      const [, requestOptions] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(JSON.parse(String(requestOptions?.body))).toMatchObject({
+        input: 'test text',
+        model: 'text-embedding-3-large',
+        encoding_format: 'float',
+      });
     });
 
     it('should pass through embedding request fields', async () => {
@@ -90,18 +97,21 @@ describe('OpenAI Provider', () => {
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
         expect.objectContaining({
-          body: JSON.stringify({
-            input: 'test text',
-            model: 'text-embedding-3-small',
-            dimensions: 8,
-            encoding_format: 'float',
-          }),
+          method: 'POST',
         }),
         expect.any(Number),
         'json',
         false,
         undefined,
       );
+
+      const [, requestOptions] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(JSON.parse(String(requestOptions?.body))).toEqual({
+        input: 'test text',
+        model: 'text-embedding-3-small',
+        encoding_format: 'float',
+        dimensions: 8,
+      });
       expect(mockEmbeddingResponse.usage.completion_tokens).toBe(0);
     });
 

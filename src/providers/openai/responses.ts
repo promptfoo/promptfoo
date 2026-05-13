@@ -1,6 +1,6 @@
-import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { fetchWithRetries } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -11,7 +11,13 @@ import { ResponsesProcessor } from '../responses/index';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
+import {
+  createJsonCachedOpenAiClient,
+  createOpenAiClient,
+  unwrapOpenAiTransportError,
+} from './client';
 import { formatOpenAiError, getTokenUsage } from './util';
+import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -459,63 +465,63 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
     }
 
-    // The OpenAI SDK doesn't export a type for the /responses endpoint (it's a newer API).
-    // This interface matches the actual response structure from that endpoint.
-    interface OpenAIResponsesResponse {
-      output?: Array<{
-        content?: Array<{
-          type: string;
-          text?: string;
-          thinking?: { reasoning_text?: string };
-          refusal?: string;
-        }>;
-        tool_calls?: Array<{
-          id: string;
-          type: string;
-          function: { name: string; arguments: string };
-        }>;
-      }>;
-      usage?: {
-        input_tokens?: number;
-        output_tokens?: number;
-      };
-      error?: {
-        code?: string;
-        message?: string;
-      };
-    }
-
-    let data: OpenAIResponsesResponse;
-    let status: number;
-    let statusText: string;
+    let data: OpenAI.Responses.Response;
+    let status = 200;
+    let statusText = 'OK';
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
+    let requestMetadata:
+      | ReturnType<typeof createJsonCachedOpenAiClient>['requestMetadata']
+      | undefined;
     try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        deleteFromCache,
-        headers: responseHeaders,
-      } = await fetchWithCache<OpenAIResponsesResponse>(
-        `${this.getApiUrl()}/responses`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
-          },
-          body: JSON.stringify(body),
-        },
-        timeout,
-        'json',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
+      if (body.stream === true) {
+        const client = createOpenAiClient({
+          apiKey: this.getApiKey(),
+          allowMissingApiKey: !this.requiresApiKey(),
+          organization: this.getOrganization(),
+          baseURL: this.getApiUrl(),
+          headers: config.headers,
+          // Promptfoo's transport owns proxy, TLS, and retry semantics here.
+          maxRetries: 0,
+          timeout,
+          fetch: (url, init = {}) =>
+            fetchWithRetries(
+              url instanceof URL ? url.toString() : url,
+              init,
+              timeout,
+              this.config.maxRetries,
+            ),
+        });
+        const request = client.responses.create(
+          body as OpenAI.Responses.ResponseCreateParamsStreaming,
+        );
+        const { data: stream, response } = await request.withResponse();
+        status = response.status;
+        statusText = response.statusText;
+        responseHeaders = Object.fromEntries(response.headers.entries());
+        data = await getTerminalResponsesStreamData(stream);
+      } else {
+        const cachedClient = createJsonCachedOpenAiClient({
+          apiKey: this.getApiKey(),
+          allowMissingApiKey: !this.requiresApiKey(),
+          organization: this.getOrganization(),
+          baseURL: this.getApiUrl(),
+          headers: config.headers,
+          bustCache: context?.bustCache ?? context?.debug,
+          maxRetries: this.config.maxRetries,
+          timeout,
+        });
+        requestMetadata = cachedClient.requestMetadata;
+        data = (await cachedClient.client.responses.create(
+          body as OpenAI.Responses.ResponseCreateParamsNonStreaming,
+        )) as typeof data;
+        cached = requestMetadata.cached;
+        deleteFromCache = requestMetadata.deleteFromCache;
+        status = requestMetadata.status ?? status;
+        statusText = requestMetadata.statusText ?? statusText;
+        responseHeaders = requestMetadata.headers;
+      }
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${
@@ -550,10 +556,63 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
-      logger.error(`API call error: ${String(err)}`);
+      const statusFromError =
+        requestMetadata?.status ??
+        (typeof err === 'object' && err !== null && 'status' in err
+          ? Number(err.status)
+          : undefined);
+      const statusTextFromError = requestMetadata?.statusText ?? 'Error';
+      const errorData =
+        requestMetadata?.data ??
+        (typeof err === 'object' && err !== null && 'error' in err ? err.error : undefined);
+
+      if (statusFromError && statusFromError >= 400) {
+        const errorMessage = `API error: ${statusFromError} ${statusTextFromError}\n${
+          typeof errorData === 'string' ? errorData : JSON.stringify(errorData)
+        }`;
+        const invalidPromptCode =
+          typeof errorData === 'object' && errorData !== null
+            ? 'error' in errorData &&
+              typeof errorData.error === 'object' &&
+              errorData.error !== null &&
+              'code' in errorData.error
+              ? errorData.error.code
+              : 'code' in errorData
+                ? errorData.code
+                : undefined
+            : undefined;
+
+        if (invalidPromptCode === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            isRefusal: true,
+            metadata: {
+              http: {
+                status: statusFromError,
+                statusText: statusTextFromError,
+                headers: responseHeaders ?? requestMetadata?.headers ?? {},
+              },
+            },
+          };
+        }
+
+        return {
+          error: errorMessage,
+          metadata: {
+            http: {
+              status: statusFromError,
+              statusText: statusTextFromError,
+              headers: responseHeaders ?? requestMetadata?.headers ?? {},
+            },
+          },
+        };
+      }
+
+      const apiCallError = unwrapOpenAiTransportError(err);
+      logger.error(`API call error: ${String(apiCallError)}`);
       await deleteFromCache?.();
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${String(apiCallError)}`,
         metadata: {
           http: {
             status: 0,
@@ -595,4 +654,26 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       },
     };
   }
+}
+
+async function getTerminalResponsesStreamData(
+  stream: AsyncIterable<OpenAI.Responses.ResponseStreamEvent>,
+) {
+  let terminalResponse: OpenAI.Responses.Response | undefined;
+
+  for await (const event of stream) {
+    if (
+      event.type === 'response.completed' ||
+      event.type === 'response.failed' ||
+      event.type === 'response.incomplete'
+    ) {
+      terminalResponse = event.response;
+    }
+  }
+
+  if (!terminalResponse) {
+    throw new Error('Responses stream ended without a terminal response event');
+  }
+
+  return terminalResponse;
 }

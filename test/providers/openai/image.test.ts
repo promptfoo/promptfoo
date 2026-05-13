@@ -19,6 +19,22 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
+function getImageRequest(callIndex = 0) {
+  const [url, init, timeout, responseType, bustCache, maxRetries] =
+    vi.mocked(fetchWithCache).mock.calls[callIndex];
+  const requestInit = init as RequestInit & { body?: string };
+
+  return {
+    url: String(url),
+    timeout,
+    responseType,
+    bustCache,
+    maxRetries,
+    headers: new Headers(requestInit.headers),
+    body: JSON.parse(requestInit.body ?? '{}') as Record<string, unknown>,
+  };
+}
+
 describe('OpenAiImageProvider', () => {
   const mockFetchResponse = {
     data: {
@@ -50,19 +66,12 @@ describe('OpenAiImageProvider', () => {
       });
 
       const result = await provider.callApi('Generate a cat');
-
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('/images/generations'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer test-key',
-          }),
-          body: expect.stringContaining('"prompt":"Generate a cat"'),
-        }),
-        expect.any(Number),
-      );
+      const request = getImageRequest();
+      expect(request.url).toContain('/images/generations');
+      expect(request.body.prompt).toBe('Generate a cat');
+      expect(request.headers.get('authorization')).toBe('Bearer test-key');
+      expect(request.responseType).toBe('json');
+      expect(request.bustCache).toBe(false);
 
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.png)',
@@ -305,11 +314,11 @@ describe('OpenAiImageProvider', () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           // Invalid data structure that will cause parsing to fail
-          deleteFromCache: mockDeleteFn,
         },
         cached: false,
         status: 200,
         statusText: 'OK',
+        deleteFromCache: mockDeleteFn,
       });
 
       await provider.callApi('test prompt');
@@ -336,14 +345,8 @@ describe('OpenAiImageProvider', () => {
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
 
-      // Verify the request included the response_format parameter
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"response_format":"b64_json"'),
-        }),
-        expect.any(Number),
-      );
+      // Verify the request included the response_format parameter.
+      expect(getImageRequest().body.response_format).toBe('b64_json');
     });
 
     it('should handle missing base64 data in response', async () => {
@@ -408,14 +411,8 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      // Check that the default size for DALL-E 3 is correctly set
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"size":"1024x1024"'),
-        }),
-        expect.any(Number),
-      );
+      // Check that the default size for DALL-E 3 is correctly set.
+      expect(getImageRequest().body.size).toBe('1024x1024');
     });
   });
 
@@ -449,21 +446,9 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"quality":"hd"'),
-        }),
-        expect.any(Number),
-      );
-
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"style":"vivid"'),
-        }),
-        expect.any(Number),
-      );
+      const request = getImageRequest();
+      expect(request.body.quality).toBe('hd');
+      expect(request.body.style).toBe('vivid');
     });
 
     it('should include organization ID in headers when provided', async () => {
@@ -476,15 +461,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'OpenAI-Organization': 'test-org',
-          }),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().headers.get('openai-organization')).toBe('test-org');
     });
 
     it('should include custom headers when provided', async () => {
@@ -499,15 +476,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'X-Custom-Header': 'custom-value',
-          }),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().headers.get('x-custom-header')).toBe('custom-value');
     });
 
     it('should merge prompt config with provider config', async () => {
@@ -526,13 +495,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt', context);
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"n":2'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.n).toBe(2);
     });
 
     it('should use custom API URL when provided', async () => {
@@ -548,11 +511,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        `${customApiUrl}/images/generations`,
-        expect.any(Object),
-        expect.any(Number),
-      );
+      expect(getImageRequest().url).toBe(`${customApiUrl}/images/generations`);
     });
   });
 
@@ -944,13 +903,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"quality":"high"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.quality).toBe('high');
     });
 
     it('should handle gpt-image-1 background parameter', async () => {
@@ -960,13 +913,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"background":"transparent"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.background).toBe('transparent');
     });
 
     it('should reject transparent background with jpeg for gpt-image-1', async () => {
@@ -990,13 +937,7 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"output_format":"jpeg"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.output_format).toBe('jpeg');
       expect(result).toMatchObject({
         output: 'data:image/jpeg;base64,base64EncodedImageData',
         images: [{ data: 'data:image/jpeg;base64,base64EncodedImageData', mimeType: 'image/jpeg' }],
@@ -1010,13 +951,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"output_compression":80'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.output_compression).toBe(80);
     });
 
     it('should handle gpt-image-1 moderation parameter', async () => {
@@ -1026,13 +961,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"moderation":"low"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.moderation).toBe('low');
     });
 
     it('should validate size for gpt-image-1', async () => {
@@ -1053,13 +982,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"size":"auto"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.size).toBe('auto');
     });
 
     it('should calculate correct cost for gpt-image-1 with different quality levels', async () => {
@@ -1134,13 +1057,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"quality":"high"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.quality).toBe('high');
     });
 
     it('should handle gpt-image-1-mini background parameter', async () => {
@@ -1150,13 +1067,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"background":"transparent"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.background).toBe('transparent');
     });
 
     it('should validate size for gpt-image-1-mini', async () => {
@@ -1177,13 +1088,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"size":"auto"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.size).toBe('auto');
     });
 
     it('should calculate correct cost for gpt-image-1-mini with different quality levels', async () => {
@@ -1266,13 +1171,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"quality":"high"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.quality).toBe('high');
     });
 
     it('should handle gpt-image-1.5 background parameter', async () => {
@@ -1282,13 +1181,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"background":"transparent"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.background).toBe('transparent');
     });
 
     it('should handle gpt-image-1.5 output_format parameter', async () => {
@@ -1298,13 +1191,7 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"output_format":"jpeg"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.output_format).toBe('jpeg');
       expect(result).toMatchObject({
         output: 'data:image/jpeg;base64,base64EncodedImageData',
         images: [{ data: 'data:image/jpeg;base64,base64EncodedImageData', mimeType: 'image/jpeg' }],
@@ -1318,13 +1205,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"output_compression":80'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.output_compression).toBe(80);
     });
 
     it('should handle gpt-image-1.5 moderation parameter', async () => {
@@ -1334,13 +1215,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"moderation":"low"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.moderation).toBe('low');
     });
 
     it('should validate size for gpt-image-1.5', async () => {
@@ -1361,13 +1236,7 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('"size":"auto"'),
-        }),
-        expect.any(Number),
-      );
+      expect(getImageRequest().body.size).toBe('auto');
     });
 
     it('should calculate correct cost for gpt-image-1.5 with different quality levels', async () => {

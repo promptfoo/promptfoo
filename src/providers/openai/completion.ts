@@ -1,10 +1,10 @@
-import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
+import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
 import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
+import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -63,40 +63,39 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: 1 } : {}),
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
 
-    let data,
-      cached = false,
-      latencyMs: number | undefined;
+    const { client, requestMetadata } = createJsonCachedOpenAiClient({
+      apiKey: this.getApiKey(),
+      allowMissingApiKey: !this.requiresApiKey(),
+      organization: this.getOrganization(),
+      baseURL: this.getApiUrl(),
+      headers: this.config.headers,
+      bustCache: context?.bustCache ?? context?.debug,
+      maxRetries: this.config.maxRetries,
+    });
+
+    let data;
     try {
-      ({ data, cached, latencyMs } = (await fetchWithCache(
-        `${this.getApiUrl()}/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...this.config.headers,
-          },
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-        'json',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      )) as unknown as any);
+      data = await client.completions.create(body as OpenAI.CompletionCreateParamsNonStreaming);
     } catch (err) {
-      logger.error(`API call error: ${String(err)}`);
+      if (isOpenAiErrorResponse(requestMetadata.data)) {
+        return {
+          error: formatOpenAiError(requestMetadata.data),
+        };
+      }
+
+      const apiCallError = unwrapOpenAiTransportError(err);
+      logger.error(`API call error: ${String(apiCallError)}`);
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${String(apiCallError)}`,
       };
     }
 
-    if (data.error) {
+    if (isOpenAiErrorResponse(data)) {
       return {
         error: formatOpenAiError(data),
       };
@@ -104,12 +103,14 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     try {
       return {
         output: data.choices[0].text,
-        tokenUsage: getTokenUsage(data, cached),
-        cached,
-        latencyMs,
+        tokenUsage: getTokenUsage(data, requestMetadata.cached),
+        cached: requestMetadata.cached,
+        latencyMs: requestMetadata.latencyMs,
         cost: calculateOpenAIUsageCost(this.modelName, this.config, data.usage, {
-          cachedResponse: cached,
-          serviceTier: data.service_tier ?? this.config.service_tier,
+          cachedResponse: requestMetadata.cached,
+          serviceTier:
+            (data as { service_tier?: OpenAiCompletionOptions['service_tier'] }).service_tier ??
+            this.config.service_tier,
         }),
       };
     } catch (err) {
@@ -118,4 +119,18 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
   }
+}
+
+function isOpenAiErrorResponse(data: unknown): data is {
+  error: { message: string; type?: string; code?: string };
+} {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'error' in data &&
+    typeof data.error === 'object' &&
+    data.error !== null &&
+    'message' in data.error &&
+    typeof data.error.message === 'string'
+  );
 }

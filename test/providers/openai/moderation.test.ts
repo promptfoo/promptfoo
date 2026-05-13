@@ -14,6 +14,22 @@ import { getOpenAiMissingApiKeyMessage } from './shared';
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
 
+function getModerationRequest(callIndex = 0) {
+  const [url, init, timeout, responseType, bustCache, maxRetries] =
+    vi.mocked(fetchWithCache).mock.calls[callIndex];
+  const requestInit = init as RequestInit & { body?: string };
+
+  return {
+    url: String(url),
+    timeout,
+    responseType,
+    bustCache,
+    maxRetries,
+    headers: new Headers(requestInit.headers),
+    body: JSON.parse(requestInit.body ?? '{}') as Record<string, unknown>,
+  };
+}
+
 describe('OpenAiModerationProvider', () => {
   // Standard setup for all tests
   beforeEach(() => {
@@ -82,22 +98,13 @@ describe('OpenAiModerationProvider', () => {
         ],
       });
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('/moderations'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'x-promptfoo-silent': 'true',
-            Authorization: 'Bearer test-key',
-          }),
-          body: expect.stringContaining('"model":"text-moderation-latest"'),
-        }),
-        expect.any(Number),
-        'json',
-        true,
-        undefined,
-      );
+      const request = getModerationRequest();
+      expect(request.url).toContain('/moderations');
+      expect(request.body.model).toBe('text-moderation-latest');
+      expect(request.headers.get('authorization')).toBe('Bearer test-key');
+      expect(request.headers.get('x-promptfoo-silent')).toBe('true');
+      expect(request.responseType).toBe('json');
+      expect(request.bustCache).toBe(true);
     });
 
     it('should return empty flags for safe content', async () => {
@@ -867,19 +874,9 @@ describe('OpenAiModerationProvider', () => {
 
       await provider.callModerationApi('user', 'assistant');
 
-      expect(fetchWithCache).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Custom-Header': 'custom-value',
-            'x-promptfoo-silent': 'true',
-          }),
-        }),
-        expect.any(Number),
-        'json',
-        true,
-        undefined,
-      );
+      const request = getModerationRequest();
+      expect(request.headers.get('custom-header')).toBe('custom-value');
+      expect(request.headers.get('x-promptfoo-silent')).toBe('true');
     });
   });
 });

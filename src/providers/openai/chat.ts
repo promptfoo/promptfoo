@@ -1,6 +1,5 @@
 import path from 'path';
 
-import { fetchWithCache } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import { importModule } from '../../esm';
@@ -21,14 +20,10 @@ import {
 } from '../../util/index';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import {
-  getRequestTimeoutMs,
-  parseChatPrompt,
-  transformToolChoice,
-  transformTools,
-} from '../shared';
+import { parseChatPrompt, transformToolChoice, transformTools } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAIUsageCost } from './billing';
+import { createJsonCachedOpenAiClient, unwrapOpenAiTransportError } from './client';
 import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 import type OpenAI from 'openai';
 
@@ -479,38 +474,31 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     };
 
     let data: OpenAIChatCompletionResponse;
-    let status: number;
-    let statusText: string;
+    let status = 200;
+    let statusText = 'OK';
     let cached = false;
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
+    const { client, requestMetadata } = createJsonCachedOpenAiClient({
+      apiKey: this.getApiKey(),
+      allowMissingApiKey: !this.requiresApiKey(),
+      organization: this.getOrganization(),
+      baseURL: this.getApiUrl(),
+      headers: config.headers,
+      bustCache: context?.bustCache ?? context?.debug,
+      maxRetries: this.config.maxRetries,
+    });
     try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        latencyMs,
-        deleteFromCache,
-        headers: responseHeaders,
-      } = await fetchWithCache<OpenAIChatCompletionResponse>(
-        `${this.getApiUrl()}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
-          },
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-        'json',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
+      data = (await client.chat.completions.create(
+        body as OpenAI.ChatCompletionCreateParamsNonStreaming,
+      )) as OpenAIChatCompletionResponse;
+      cached = requestMetadata.cached;
+      latencyMs = requestMetadata.latencyMs;
+      deleteFromCache = requestMetadata.deleteFromCache;
+      status = requestMetadata.status ?? status;
+      statusText = requestMetadata.statusText ?? statusText;
+      responseHeaders = requestMetadata.headers;
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
@@ -548,28 +536,84 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
-      logger.error(`API call error: ${String(err)}`);
+      const apiCallError = unwrapOpenAiTransportError(err);
+      const errorData = requestMetadata.data;
+      const statusFromError = requestMetadata.status;
+      const statusTextFromError = requestMetadata.statusText ?? 'Error';
+
+      if (statusFromError && statusFromError >= 400) {
+        const errorMessage = `API error: ${statusFromError} ${statusTextFromError}\n${
+          typeof errorData === 'string' ? errorData : JSON.stringify(errorData)
+        }`;
+
+        if (
+          typeof errorData === 'object' &&
+          errorData !== null &&
+          'error' in errorData &&
+          typeof errorData.error === 'object' &&
+          errorData.error !== null &&
+          'code' in errorData.error &&
+          errorData.error.code === 'invalid_prompt'
+        ) {
+          return {
+            output: errorMessage,
+            tokenUsage:
+              typeof errorData === 'object' &&
+              errorData !== null &&
+              'usage' in errorData &&
+              errorData.usage
+                ? getTokenUsage(errorData, requestMetadata.cached)
+                : undefined,
+            latencyMs: requestMetadata.latencyMs,
+            isRefusal: true,
+            guardrails: {
+              flagged: true,
+              flaggedInput: true,
+            },
+            metadata: {
+              http: {
+                status: statusFromError,
+                statusText: statusTextFromError,
+                headers: requestMetadata.headers ?? {},
+              },
+            },
+          };
+        }
+
+        return {
+          error: errorMessage,
+          metadata: {
+            http: {
+              status: statusFromError,
+              statusText: statusTextFromError,
+              headers: requestMetadata.headers ?? {},
+            },
+          },
+        };
+      }
+
+      logger.error(`API call error: ${String(apiCallError)}`);
       await deleteFromCache?.();
       // Preserve the structured rate-limit signal so the scheduler honors
       // the transport-layer fail-fast contract (no retry on hard quotas)
       // and so the user-facing message stays the canonical
       // "Rate limit exceeded:" / "Quota exceeded:" form rather than being
       // wrapped in "API call error: HttpRateLimitError: ...".
-      if (err instanceof HttpRateLimitError) {
+      if (apiCallError instanceof HttpRateLimitError) {
         return {
-          error: formatRateLimitErrorMessage(err),
+          error: formatRateLimitErrorMessage(apiCallError),
           metadata: {
-            rateLimitKind: err.kind,
+            rateLimitKind: apiCallError.kind,
             http: {
-              status: err.status,
-              statusText: err.statusText,
-              headers: err.headers ?? responseHeaders ?? {},
+              status: apiCallError.status,
+              statusText: apiCallError.statusText,
+              headers: apiCallError.headers ?? responseHeaders ?? {},
             },
           },
         };
       }
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${String(apiCallError)}`,
         metadata: {
           http: {
             status: 0,

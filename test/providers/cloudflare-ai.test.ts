@@ -66,6 +66,11 @@ const defaultMockResponse = {
   },
 };
 
+function getRequestHeaders(callIndex = 0): Headers {
+  const [, requestOptions] = mockFetch.mock.calls[callIndex] as [string, RequestInit];
+  return new Headers(requestOptions.headers);
+}
+
 describe('CloudflareAi Provider', () => {
   beforeAll(() => {
     enableCache();
@@ -202,13 +207,11 @@ describe('CloudflareAi Provider', () => {
         expect.stringContaining('chat/completions'),
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer MADE_UP_API_KEY',
-          }),
           body: expect.stringContaining(testModelName),
         }),
       );
+      expect(getRequestHeaders().get('content-type')).toBe('application/json');
+      expect(getRequestHeaders().get('authorization')).toBe('Bearer MADE_UP_API_KEY');
     });
 
     it('Uses environment variables when config not provided', () => {
@@ -263,13 +266,11 @@ describe('CloudflareAi Provider', () => {
         'https://custom-cloudflare-api.example.com/v1/chat/completions',
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-key',
-            'Content-Type': 'application/json',
-          }),
           body: expect.any(String),
         }),
       );
+      expect(getRequestHeaders().get('authorization')).toBe('Bearer test-key');
+      expect(getRequestHeaders().get('content-type')).toBe('application/json');
 
       expect(result.output).toBe(responsePayload.choices[0].message.content);
     });
@@ -320,13 +321,11 @@ describe('CloudflareAi Provider', () => {
         expect.stringContaining('/chat/completions'),
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-key',
-            'Content-Type': 'application/json',
-          }),
           body: expect.stringContaining('"custom_param":"custom_value"'),
         }),
       );
+      expect(getRequestHeaders().get('authorization')).toBe('Bearer test-key');
+      expect(getRequestHeaders().get('content-type')).toBe('application/json');
 
       // Verify the request body contains passthrough parameters
       const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
@@ -523,13 +522,11 @@ describe('CloudflareAi Provider', () => {
         expect.stringContaining('completions'),
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer testApiKey',
-          }),
           body: expect.stringContaining(testModelName),
         }),
       );
+      expect(getRequestHeaders().get('content-type')).toBe('application/json');
+      expect(getRequestHeaders().get('authorization')).toBe('Bearer testApiKey');
     });
 
     it('Should return proper provider identification methods', () => {
@@ -693,12 +690,10 @@ describe('CloudflareAi Provider', () => {
         expect.stringContaining('embeddings'),
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer test-key',
-          }),
         }),
       );
+      expect(getRequestHeaders().get('content-type')).toBe('application/json');
+      expect(getRequestHeaders().get('authorization')).toBe('Bearer test-key');
 
       const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
       // Verify base embedding parameters are present
@@ -731,12 +726,10 @@ describe('CloudflareAi Provider', () => {
         expect.stringContaining('embeddings'),
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer testApiKey',
-          }),
         }),
       );
+      expect(getRequestHeaders().get('content-type')).toBe('application/json');
+      expect(getRequestHeaders().get('authorization')).toBe('Bearer testApiKey');
     });
   });
 
