@@ -81,10 +81,10 @@ export async function monkeyPatchFetch(
     // path aligned with its response decoding behavior. Preserve intentional
     // monkey patches of global fetch so tests and external instrumentation keep
     // observing requests.
-    const response = shouldUseUndiciFetch(options)
-      ? ((await undiciFetch(url as never, opts as never)) as unknown as Response)
-      : // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
-        await fetch(url, opts);
+    const fetch: typeof globalThis.fetch = shouldUseUndiciFetch(options)
+      ? (undiciFetch as unknown as typeof globalThis.fetch)
+      : globalThis.fetch;
+    const response = await fetch(url, opts);
 
     if (logEnabled) {
       void logRequestResponse({
