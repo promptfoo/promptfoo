@@ -124,6 +124,49 @@ The first case asks for a broad review covering both topics. The second is narro
 
 See [Passing Arrays to Assertions](/docs/configuration/test-cases#passing-arrays-to-assertions) for the matrix-expansion behavior `disableVarExpansion` opts out of.
 
+## Reuse Existing Skill Eval Manifests
+
+If a skill already ships an Agent Skills `evals/evals.json` manifest, keep that
+format and adapt it through a small test generator. That lets you decide how
+`expected_output`, fixture files, and authored grading notes should behave in
+your Promptfoo eval.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{prompt}}'
+
+tests: file://generate_agent_skill_tests.js
+```
+
+```javascript title="generate_agent_skill_tests.js"
+import fs from 'node:fs';
+
+export default function generateAgentSkillTests() {
+  const manifest = JSON.parse(
+    fs.readFileSync('.agents/skills/csv-analyzer/evals/evals.json', 'utf8'),
+  );
+
+  return manifest.evals.map((evalCase) => ({
+    description: `Agent Skills eval ${evalCase.id}`,
+    vars: {
+      prompt: evalCase.prompt,
+      expected_output: evalCase.expected_output,
+    },
+    metadata: {
+      agentSkills: {
+        skillName: manifest.skill_name,
+        evalId: evalCase.id,
+        files: evalCase.files ?? [],
+        assertions: evalCase.assertions ?? [],
+      },
+    },
+  }));
+}
+```
+
+Use those imported rows as the task list, then add the skill-routing,
+quality, cost, latency, or trace assertions that matter for the comparison.
+
 ## Add Assertions
 
 Assertions tell Promptfoo what "better" means for this comparison. It helps to add them one layer at a time.

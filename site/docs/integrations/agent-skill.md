@@ -16,6 +16,11 @@ skill that also works in other compatible tools.
 
 The portable skill works with [Claude Code](https://code.claude.com) and [OpenAI Codex](https://openai.com/index/codex). It follows the open [Agent Skills](https://agentskills.io) standard, so it should also work with other compatible tools.
 
+If a skill already ships an Agent Skills `evals/evals.json` manifest, use a small
+JavaScript or Python test generator to map that file into Promptfoo test cases.
+That keeps the manifest format intact while letting you choose how
+`expected_output`, fixture files, and grading notes should behave in your eval.
+
 ## Why use a skill?
 
 Without the skill, agents frequently:
