@@ -28,7 +28,6 @@ interface ActionInputs {
   apiHost: string;
   minimumSeverity: string;
   configPath: string;
-  diffsOnly: boolean;
   guidanceText: string;
   guidanceFile: string;
   githubToken: string;
@@ -53,23 +52,11 @@ function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function resolveMinimumSeverityInput(): string {
-  const minSeverity = core.getInput('min-severity');
-  const minimumSeverity = core.getInput('minimum-severity');
-
-  if (minSeverity && minimumSeverity && minSeverity !== minimumSeverity) {
-    core.warning('Both min-severity and minimum-severity were provided; using min-severity.');
-  }
-
-  return minSeverity || minimumSeverity || 'medium';
-}
-
 function getActionInputs(): ActionInputs {
   return {
     apiHost: core.getInput('api-host'),
-    minimumSeverity: resolveMinimumSeverityInput(),
+    minimumSeverity: core.getInput('min-severity') || core.getInput('minimum-severity'),
     configPath: core.getInput('config-path'),
-    diffsOnly: core.getBooleanInput('diffs-only'),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
@@ -167,31 +154,14 @@ async function authenticateWithOidc(): Promise<void> {
   }
 }
 
-interface ResolvedConfigPath {
-  path: string;
-  shouldCleanup: boolean;
-}
-
-function resolveConfigPath(
-  configPath: string,
-  minimumSeverity: string,
-  diffsOnly: boolean,
-  guidance?: string,
-): ResolvedConfigPath {
+function resolveConfigPath(configPath: string, minimumSeverity: string, guidance?: string): string {
   if (configPath) {
-    return { path: configPath, shouldCleanup: false };
+    return configPath;
   }
 
-  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-  const repositoryConfigPath = path.join(workspace, '.promptfoo-code-scan.yaml');
-  if (fs.existsSync(repositoryConfigPath)) {
-    core.info(`📝 Using repository config at ${repositoryConfigPath}`);
-    return { path: repositoryConfigPath, shouldCleanup: false };
-  }
-
-  const generatedConfigPath = generateConfigFile(minimumSeverity, guidance, diffsOnly);
+  const generatedConfigPath = generateConfigFile(minimumSeverity, guidance);
   core.info(`📝 Generated temporary config at ${generatedConfigPath}`);
-  return { path: generatedConfigPath, shouldCleanup: true };
+  return generatedConfigPath;
 }
 
 async function getBaseBranch(githubToken: string, context: PullRequestContext): Promise<string> {
@@ -623,9 +593,9 @@ function logActCommentPreview(comments: Comment[]): void {
   });
 }
 
-function cleanupConfig(configPath: ResolvedConfigPath): void {
-  if (configPath.shouldCleanup) {
-    fs.unlinkSync(configPath.path);
+function cleanupConfig(configPath: string, finalConfigPath: string): void {
+  if (!configPath) {
+    fs.unlinkSync(finalConfigPath);
   }
 }
 
@@ -659,18 +629,13 @@ async function runCodeScan(): Promise<void> {
 
   await authenticateWithOidc();
 
-  const finalConfigPath = resolveConfigPath(
-    inputs.configPath,
-    inputs.minimumSeverity,
-    inputs.diffsOnly,
-    guidance,
-  );
+  const finalConfigPath = resolveConfigPath(inputs.configPath, inputs.minimumSeverity, guidance);
 
   try {
     const baseBranch = await getBaseBranch(inputs.githubToken, context);
     await fetchBaseBranch(baseBranch);
 
-    const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath.path, baseBranch, context);
+    const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs);
 
     if (!scanResponse) {
@@ -680,7 +645,7 @@ async function runCodeScan(): Promise<void> {
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
   } finally {
-    cleanupConfig(finalConfigPath);
+    cleanupConfig(inputs.configPath, finalConfigPath);
   }
 }
 

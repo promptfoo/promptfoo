@@ -17,17 +17,13 @@ import { type ScanConfig, ScanConfigSchema, validateSeverity } from '../../src/t
  * @param guidance Optional custom guidance text
  * @returns Path to temporary config file
  */
-export function generateConfigFile(
-  minimumSeverity: string,
-  guidance?: string,
-  diffsOnly = false,
-): string {
+export function generateConfigFile(minimumSeverity: string, guidance?: string): string {
   // Validate severity input (throws ZodError if invalid)
   const validatedSeverity = validateSeverity(minimumSeverity);
 
   const config: ScanConfig = {
     minimumSeverity: validatedSeverity,
-    diffsOnly,
+    diffsOnly: false, // Always enable full repo exploration for GitHub Actions (never diffs-only)
     guidance,
   };
 

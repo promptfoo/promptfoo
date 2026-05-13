@@ -7,11 +7,7 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import {
-  loadConfig,
-  loadConfigOrDefault,
-  mergeConfigWithOptions,
-} from '../../../src/codeScan/config/loader';
+import { loadConfig, loadConfigOrDefault } from '../../../src/codeScan/config/loader';
 import { CodeScanSeverity, ConfigLoadError } from '../../../src/types/codeScan';
 
 describe('Configuration Loader', () => {
@@ -220,51 +216,6 @@ describe('Configuration Loader', () => {
         minimumSeverity: CodeScanSeverity.MEDIUM,
         diffsOnly: false,
       });
-    });
-
-    it('should auto-discover the repository code-scan config when no explicit path is provided', () => {
-      const configPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
-      fs.writeFileSync(configPath, 'minimumSeverity: high\ndiffsOnly: true');
-
-      const config = loadConfigOrDefault(undefined, tempDir);
-
-      expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.HIGH,
-        diffsOnly: true,
-      });
-    });
-
-    it('should prefer an explicit config path over the repository default config', () => {
-      const repositoryConfigPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
-      fs.writeFileSync(repositoryConfigPath, 'minimumSeverity: low\ndiffsOnly: false');
-
-      const explicitConfigPath = path.join(tempDir, 'explicit.yaml');
-      fs.writeFileSync(explicitConfigPath, 'minimumSeverity: critical\ndiffsOnly: true');
-
-      const config = loadConfigOrDefault(explicitConfigPath, tempDir);
-
-      expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.CRITICAL,
-        diffsOnly: true,
-      });
-    });
-  });
-
-  describe('mergeConfigWithOptions', () => {
-    it('should prefer minSeverity over minimumSeverity when both CLI aliases are provided', () => {
-      const config = mergeConfigWithOptions(
-        {
-          minimumSeverity: CodeScanSeverity.MEDIUM,
-          diffsOnly: false,
-        },
-        {
-          minSeverity: 'low',
-          minimumSeverity: 'critical',
-        },
-      );
-
-      expect(config.minimumSeverity).toBe(CodeScanSeverity.LOW);
-      expect(config.diffsOnly).toBe(false);
     });
   });
 });

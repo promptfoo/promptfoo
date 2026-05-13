@@ -40,23 +40,18 @@ When using the GitHub App:
 
 Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can be used as action inputs:
 
-| Input               | Description                                                      | Default                                                     |
-| ------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------- |
-| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app`                                 |
-| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                                                    |
-| `minimum-severity`  | Alias for `min-severity`                                         | `medium`                                                    |
-| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | Repo-root config when present; otherwise generated defaults |
-| `diffs-only`        | Scan only PR diffs; skip repository tracing                      | `false`                                                     |
-| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                                                        |
-| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                                                        |
-| `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                                                     |
-| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning     | None                                                        |
+| Input               | Description                                                      | Default                     |
+| ------------------- | ---------------------------------------------------------------- | --------------------------- |
+| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app` |
+| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                    |
+| `minimum-severity`  | Alias for `min-severity`                                         | `medium`                    |
+| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | Auto-detected               |
+| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                        |
+| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                        |
+| `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                     |
+| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning     | None                        |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
-
-By default, the Action starts from the PR diff and can trace relevant paths into the repository for context. That is broader than diff-only review, but it is not a literal whole-repo sweep. Set `diffs-only: true` when you want the scan constrained to the patch itself.
-
-For scan settings beyond these inputs, add `.promptfoo-code-scan.yaml` at the repository root or supply `config-path`; the config file remains the more complete customization surface.
 
 ### Triggering Additional Scans
 
@@ -85,16 +80,7 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    min-severity: medium # Report medium, high, and critical severity issues only; medium is the default
-```
-
-**Scan only PR diffs:**
-
-```yaml
-- name: Run Promptfoo Code Scan
-  uses: promptfoo/code-scan-action@v1
-  with:
-    diffs-only: true
+    min-severity: medium # Report medium, high and critical severity issues only (if omitted, all severity levels are reported)
 ```
 
 **Use custom guidance:**
@@ -117,13 +103,13 @@ To enable scanning of fork PRs by default, add `enable-fork-prs: true` to your w
     guidance-file: ./promptfoo-scan-guidance.md
 ```
 
-**Use a config file from a custom path:**
+**Use config file:**
 
 ```yaml
 - name: Run Promptfoo Code Scan
   uses: promptfoo/code-scan-action@v1
   with:
-    config-path: configs/code-scan.yaml
+    config-path: .promptfoo-code-scan.yaml
 ```
 
 **Write SARIF output for GitHub Code Scanning:**
@@ -147,13 +133,13 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ### Configuration File
 
-Create a `.promptfoo-code-scan.yaml` in your repository root to have the Action pick it up automatically. Use `config-path` when you want a different file to drive more complete customization. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
+Create a `.promptfoo-code-scan.yaml` in your repository root. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
 
 ```yaml
 # Minimum severity level to report
 minSeverity: medium
 
-# Scan only PR diffs without repository tracing (default: false)
+# Scan only PR diffs without filesystem exploration (default: false)
 diffsOnly: false
 
 # Custom guidance to tailor the scan
