@@ -54,6 +54,11 @@ import type { ResultsFilter } from './store';
 
 const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
 
+const MAX_SEARCH_BADGE_LENGTH = 5;
+
+// Default to showing charts only on sufficiently tall viewports to avoid crowding above-the-fold content.
+const MIN_VIEWPORT_HEIGHT_FOR_CHARTS = 1100;
+
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
@@ -95,8 +100,8 @@ function getAppliedFilterLabel(
     return null;
   }
 
-  const truncatedValue =
-    filter.value.length > 50 ? `${filter.value.slice(0, 50)}...` : filter.value;
+  const filterValue = filter.value ?? '';
+  const truncatedValue = filterValue.length > 50 ? `${filterValue.slice(0, 50)}...` : filterValue;
 
   if (filter.type === 'metric') {
     const operatorSymbols: Record<string, string> = {
@@ -174,7 +179,9 @@ export function ResultsChartsSection({
   children,
 }: ResultsChartsSectionProps) {
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(
-    !isRedteamEval && window.innerHeight >= 1100 && canRenderResultsCharts,
+    !isRedteamEval &&
+      window.innerHeight >= MIN_VIEWPORT_HEIGHT_FOR_CHARTS &&
+      canRenderResultsCharts,
   );
 
   if (isRedteamEval) {
@@ -753,7 +760,10 @@ export default function ResultsView({
       </DropdownMenuItem>
       <DropdownMenuItem
         onClick={() => {
-          updateConfig(config!);
+          if (!config) {
+            return;
+          }
+          updateConfig(config);
           navigate(ROUTES.SETUP);
         }}
       >
@@ -882,8 +892,8 @@ export default function ResultsView({
                     {debouncedSearchText && (
                       <Badge variant="secondary" className="text-xs h-5 gap-1">
                         Search:{' '}
-                        {debouncedSearchText.length > 5
-                          ? debouncedSearchText.substring(0, 5) + '...'
+                        {debouncedSearchText.length > MAX_SEARCH_BADGE_LENGTH
+                          ? debouncedSearchText.substring(0, MAX_SEARCH_BADGE_LENGTH) + '...'
                           : debouncedSearchText}
                         <button
                           type="button"
