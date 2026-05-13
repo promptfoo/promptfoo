@@ -23,7 +23,9 @@ function isConnectionError(error: Error) {
 
 function shouldUseUndiciFetch(options?: FetchOptions): boolean {
   const dispatcher = (options as (FetchOptions & { dispatcher?: unknown }) | undefined)?.dispatcher;
-  return Boolean(dispatcher) && globalThis.fetch === defaultFetch;
+  const hasNativeMultipartBody =
+    typeof FormData !== 'undefined' && options?.body instanceof FormData;
+  return Boolean(dispatcher) && !hasNativeMultipartBody && globalThis.fetch === defaultFetch;
 }
 
 /**
