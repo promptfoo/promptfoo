@@ -94,13 +94,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
-    // Audio models
-    'gpt-audio',
-    'gpt-audio-2025-08-28',
-    'gpt-audio-1.5',
-    'gpt-audio-mini',
-    'gpt-audio-mini-2025-12-15',
-    'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',
     'computer-use-preview-2025-03-11',
@@ -371,6 +364,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(loadedTools ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
+      ...(config.include === undefined ? {} : { include: config.include }),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
       text: textFormat,
       ...(config.truncation ? { truncation: config.truncation } : {}),
@@ -383,6 +377,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.background ? { background: config.background } : {}),
       ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
       ...(config.user ? { user: config.user } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
     };
 

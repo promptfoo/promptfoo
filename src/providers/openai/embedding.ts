@@ -5,9 +5,24 @@ import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
 import { getTokenUsage } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type { ProviderEmbeddingResponse } from '../../types/index';
+import type { OpenAiSharedOptions } from './types';
+
+type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
+  passthrough?: object;
+};
 
 export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
+  declare config: OpenAiEmbeddingOptions;
+
+  constructor(
+    modelName: string,
+    options: { config?: OpenAiEmbeddingOptions; id?: string; env?: EnvOverrides } = {},
+  ) {
+    super(modelName, options);
+  }
+
   protected getBillingModelName(): string {
     return this.modelName;
   }
@@ -30,6 +45,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     const body = {
       input: text,
       model: this.modelName,
+      ...(this.config.passthrough || {}),
     };
 
     let data: any;

@@ -9,6 +9,7 @@ import { mockProcessEnv } from '../util/utils';
 describe('integration-inspect-osworld example provider', () => {
   const tempDirs: string[] = [];
   let restoreEnv: (() => void) | undefined;
+  let cachedPythonExecutable: string | undefined;
 
   afterEach(() => {
     restoreEnv?.();
@@ -28,12 +29,38 @@ describe('integration-inspect-osworld example provider', () => {
   }
 
   function pythonExecutable(): string {
-    return (
-      process.env.PROMPTFOO_PYTHON ||
-      process.env.PYTHON ||
-      process.env.PYTHON3 ||
-      (process.platform === 'win32' ? 'python' : 'python3')
-    );
+    if (cachedPythonExecutable) {
+      return cachedPythonExecutable;
+    }
+
+    const pythonProbe = 'import sys; print(sys.executable)';
+    const candidates = [
+      ...(process.env.PROMPTFOO_PYTHON
+        ? [{ command: process.env.PROMPTFOO_PYTHON, args: ['-c', pythonProbe] }]
+        : []),
+      ...(process.env.PYTHON ? [{ command: process.env.PYTHON, args: ['-c', pythonProbe] }] : []),
+      ...(process.env.PYTHON3 ? [{ command: process.env.PYTHON3, args: ['-c', pythonProbe] }] : []),
+      ...(process.platform === 'win32'
+        ? [
+            { command: 'py', args: ['-3', '-c', pythonProbe] },
+            { command: 'python', args: ['-c', pythonProbe] },
+          ]
+        : [
+            { command: 'python3', args: ['-c', pythonProbe] },
+            { command: 'python', args: ['-c', pythonProbe] },
+          ]),
+    ];
+
+    for (const candidate of candidates) {
+      const result = spawnSync(candidate.command, candidate.args, { encoding: 'utf8' });
+      const executable = result.status === 0 ? result.stdout.trim() : '';
+      if (executable) {
+        cachedPythonExecutable = executable;
+        return executable;
+      }
+    }
+
+    return process.platform === 'win32' ? 'python' : 'python3';
   }
 
   it('generates the Inspect osworld_small sample suite', () => {

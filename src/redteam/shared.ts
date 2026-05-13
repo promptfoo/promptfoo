@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
+import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { pathExists } from '../util/file';
@@ -20,6 +21,8 @@ import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+  const isCliInvocation = isCliEventSource(options);
+
   if (options.verbose) {
     setLogLevel('debug');
   }
@@ -29,7 +32,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
   // Enable live verbose toggle (press 'v' to toggle debug logs)
   // Only works in interactive TTY mode, not in CI or web UI
-  const verboseToggleCleanup = options.logCallback ? null : initVerboseToggle();
+  const verboseToggleCleanup =
+    options.logCallback || !isCliInvocation
+      ? null
+      : initVerboseToggle({
+          onInterrupt: () => process.kill(process.pid, 'SIGINT'),
+        });
 
   try {
     let configPath: string = options.config ?? 'promptfooconfig.yaml';
@@ -138,6 +146,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         showProgressBar: options.progressBar,
         abortSignal: options.abortSignal,
         progressCallback: options.progressCallback,
+        eventSource: options.eventSource,
       },
     );
 

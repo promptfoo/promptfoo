@@ -55,6 +55,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
 | `--diffs-only`                    | Scan only PR diffs, don't explore full repo                                                         | false                                                |
 | `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                |
+| `-f, --format <format>`           | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                               |
 | `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                 |
 
 ### Examples
@@ -90,6 +91,14 @@ promptfoo code-scans run --json
 ```
 
 See [JSON Output Schema](#json-output-schema) for the response format.
+
+**Get SARIF output for security tooling:**
+
+```bash
+promptfoo code-scans run --format sarif > promptfoo-code-scan.sarif
+```
+
+SARIF output includes location-backed findings that GitHub Code Scanning can display.
 
 ## Configuration File
 
