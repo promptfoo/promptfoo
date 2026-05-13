@@ -33,9 +33,9 @@ jobs:
             {"node":"20.20","os":"ubuntu-latest","shard":""},
             {"node":"22.22","os":"ubuntu-latest","shard":""},
             {"node":"24.x","os":"ubuntu-latest","shard":""},
-            {"node":"22.22","os":"windows-latest","shard":1},
-            {"node":"22.22","os":"windows-latest","shard":2},
-            {"node":"22.22","os":"windows-latest","shard":3}
+            {"node":"22.22","os":"windows-2025-vs2026","shard":1},
+            {"node":"22.22","os":"windows-2025-vs2026","shard":2},
+            {"node":"22.22","os":"windows-2025-vs2026","shard":3}
           '
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
@@ -49,12 +49,12 @@ jobs:
             extra_entries='
               ,{"node":"20.20","os":"macOS-latest","shard":""},
               {"node":"22.22","os":"macOS-latest","shard":""},
-              {"node":"20.20","os":"windows-latest","shard":1},
-              {"node":"20.20","os":"windows-latest","shard":2},
-              {"node":"20.20","os":"windows-latest","shard":3},
-              {"node":"24.x","os":"windows-latest","shard":1},
-              {"node":"24.x","os":"windows-latest","shard":2},
-              {"node":"24.x","os":"windows-latest","shard":3}
+              {"node":"20.20","os":"windows-2025-vs2026","shard":1},
+              {"node":"20.20","os":"windows-2025-vs2026","shard":2},
+              {"node":"20.20","os":"windows-2025-vs2026","shard":3},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":1},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":2},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":3}
             '
             build_matrix='{"node":["20.20","22.22","24.x"]}'
           fi
@@ -99,7 +99,7 @@ jobs:
       - name: Use Ruby
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
         with:
-          ruby-version: ${{ matrix.os == 'windows-latest' && '4.0.0' || '4.0.1' }}
+          ruby-version: ${{ startsWith(matrix.os, 'windows-') && '4.0.0' || '4.0.1' }}
 
       # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
       # Key includes OS and Node version since native modules are platform/version specific
