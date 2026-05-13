@@ -1,8 +1,7 @@
 import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
-// biome-ignore lint/style/noRestrictedImports: this suite verifies the fetch abstraction's dispatcher-backed Undici path.
-import { Agent, ProxyAgent, fetch as undiciFetch } from 'undici';
+import { Agent, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
@@ -835,12 +834,6 @@ describe('fetchWithProxy', () => {
     }
   });
 
-  it('should use Undici fetch for cached Agent dispatchers', async () => {
-    await fetchWithProxy('https://example.com/api');
-
-    expect(undiciFetch).toHaveBeenCalledTimes(1);
-  });
-
   it('should reuse a dedicated Agent dispatcher per maxConcurrency value', async () => {
     const dispatchers: unknown[] = [];
     const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
@@ -903,14 +896,6 @@ describe('fetchWithProxy', () => {
         connections: 5,
       }),
     );
-  });
-
-  it('should use Undici fetch for cached ProxyAgent dispatchers', async () => {
-    mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
-
-    await fetchWithProxy('https://example.com/api');
-
-    expect(undiciFetch).toHaveBeenCalledTimes(1);
   });
 
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {

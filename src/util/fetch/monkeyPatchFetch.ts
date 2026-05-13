@@ -10,6 +10,7 @@ import logger, { logRequestResponse } from '../../logger';
 import type { FetchOptions } from './types';
 
 const gzipAsync = promisify(gzip);
+const defaultFetch = globalThis.fetch;
 
 function isConnectionError(error: Error) {
   return (
@@ -18,6 +19,11 @@ function isConnectionError(error: Error) {
     // @ts-expect-error undici error cause
     error.cause?.stack?.includes('internalConnectMultiple')
   );
+}
+
+function shouldUseUndiciFetch(options?: FetchOptions): boolean {
+  const dispatcher = (options as (FetchOptions & { dispatcher?: unknown }) | undefined)?.dispatcher;
+  return Boolean(dispatcher) && globalThis.fetch === defaultFetch;
 }
 
 /**
@@ -70,12 +76,13 @@ export async function monkeyPatchFetch(
     };
   }
   try {
-    const dispatcher = (options as (FetchOptions & { dispatcher?: unknown }) | undefined)
-      ?.dispatcher;
     // Node's global fetch does not reliably decode compressed responses when it
     // receives an npm Undici dispatcher. Undici's own fetch keeps the dispatcher
-    // path aligned with its response decoding behavior.
-    const response: Response = dispatcher
+    // path aligned with its response decoding behavior. Preserve intentional
+    // monkey patches of global fetch so tests and external instrumentation keep
+    // observing requests.
+    const useUndiciFetch = shouldUseUndiciFetch(options);
+    const response: Response = useUndiciFetch
       ? ((await undiciFetch(url as never, opts as never)) as unknown as Response)
       : // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
         await fetch(url, opts);
