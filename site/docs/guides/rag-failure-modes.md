@@ -146,7 +146,8 @@ assert:
   - type: javascript
     value: |
       const allowed = ['handbook.md', 'benefits.pdf'];
-      return allowed.some((name) => output.includes(name));
+      const cited = Array.from(output.matchAll(/[\w.-]+\.(?:md|pdf)/g)).map((m) => m[0]);
+      return cited.length > 0 && cited.every((name) => allowed.includes(name));
 ```
 
 **Debug hint**
@@ -173,7 +174,12 @@ assert:
   - type: is-json
   - type: contains-json
     value:
-      source: handbook.md
+      type: object
+      required:
+        - source
+      properties:
+        source:
+          const: handbook.md
 ```
 
 **Debug hint**
