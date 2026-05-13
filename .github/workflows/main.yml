@@ -166,10 +166,11 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        # Node 26 ships with newer npm; npm@11.11.0 repeatedly stalled in CI on the Node 26 lane.
+        # The build does not need native dependency lifecycle scripts. Skipping them
+        # keeps the Node 26 build lane out of the install stall seen on hosted runners.
         run: |
           if [ "${{ matrix.node }}" = "26.x" ]; then
-            npm ci
+            npm ci --ignore-scripts
           else
             npx -y npm@11.11.0 ci
           fi
