@@ -1,7 +1,8 @@
 import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
-import { Agent, interceptors, ProxyAgent } from 'undici';
+// biome-ignore lint/style/noRestrictedImports: this suite verifies the fetch abstraction's dispatcher-backed Undici path.
+import { Agent, ProxyAgent, fetch as undiciFetch } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
@@ -69,7 +70,6 @@ vi.mock('undici', () => {
       options,
       addRequest: vi.fn(),
       close: vi.fn(),
-      compose: vi.fn(() => dispatcher),
       destroy: vi.fn(),
     };
     return dispatcher;
@@ -80,7 +80,6 @@ vi.mock('undici', () => {
       options,
       addRequest: vi.fn(),
       close: vi.fn(),
-      compose: vi.fn(() => dispatcher),
       destroy: vi.fn(),
     };
     return dispatcher;
@@ -89,9 +88,7 @@ vi.mock('undici', () => {
   return {
     ProxyAgent,
     Agent,
-    interceptors: {
-      decompress: vi.fn(() => vi.fn()),
-    },
+    fetch: vi.fn((url: RequestInfo | URL, options?: RequestInit) => global.fetch(url, options)),
   };
 });
 
@@ -838,13 +835,10 @@ describe('fetchWithProxy', () => {
     }
   });
 
-  it('should compose decompression into cached Agent dispatchers', async () => {
+  it('should use Undici fetch for cached Agent dispatchers', async () => {
     await fetchWithProxy('https://example.com/api');
 
-    const dispatcher = vi.mocked(Agent).mock.results[0]?.value;
-
-    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
-    expect(dispatcher?.compose).toHaveBeenCalledTimes(1);
+    expect(undiciFetch).toHaveBeenCalledTimes(1);
   });
 
   it('should reuse a dedicated Agent dispatcher per maxConcurrency value', async () => {
@@ -911,15 +905,12 @@ describe('fetchWithProxy', () => {
     );
   });
 
-  it('should compose decompression into cached ProxyAgent dispatchers', async () => {
+  it('should use Undici fetch for cached ProxyAgent dispatchers', async () => {
     mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
 
     await fetchWithProxy('https://example.com/api');
 
-    const dispatcher = vi.mocked(ProxyAgent).mock.results[0]?.value;
-
-    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
-    expect(dispatcher?.compose).toHaveBeenCalledTimes(1);
+    expect(undiciFetch).toHaveBeenCalledTimes(1);
   });
 
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {

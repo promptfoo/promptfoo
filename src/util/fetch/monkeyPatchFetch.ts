@@ -1,6 +1,8 @@
 import { promisify } from 'util';
 import { gzip } from 'zlib';
 
+// biome-ignore lint/style/noRestrictedImports: this wrapper is the sanctioned fetch abstraction, and dispatcher-backed requests need Undici's decoder path.
+import { fetch as undiciFetch } from 'undici';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
@@ -68,8 +70,15 @@ export async function monkeyPatchFetch(
     };
   }
   try {
-    // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
-    const response = await fetch(url, opts);
+    const dispatcher = (options as (FetchOptions & { dispatcher?: unknown }) | undefined)
+      ?.dispatcher;
+    // Node's global fetch does not reliably decode compressed responses when it
+    // receives an npm Undici dispatcher. Undici's own fetch keeps the dispatcher
+    // path aligned with its response decoding behavior.
+    const response: Response = dispatcher
+      ? ((await undiciFetch(url as never, opts as never)) as unknown as Response)
+      : // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
+        await fetch(url, opts);
 
     if (logEnabled) {
       void logRequestResponse({

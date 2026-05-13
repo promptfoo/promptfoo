@@ -3,7 +3,7 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
+import { Agent, type Dispatcher, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -72,27 +72,19 @@ export function clearAgentCache(): void {
   cachedProxyAgents.clear();
 }
 
-function createDecompressingDispatcher(dispatcher: Dispatcher): Dispatcher {
-  // Node 26's global fetch can return compressed bytes when it is paired with
-  // an npm Undici dispatcher unless decompression is handled by the dispatcher.
-  return dispatcher.compose(interceptors.decompress());
-}
-
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
   const existing = cachedAgents.get(concurrency);
   if (existing) {
     return existing;
   }
-  const agent = createDecompressingDispatcher(
-    new Agent({
-      headersTimeout: getRequestTimeoutMs(),
-      keepAliveTimeout: 30_000,
-      keepAliveMaxTimeout: 60_000,
-      connections: concurrency,
-      connect: tlsOptions,
-    }),
-  );
+  const agent = new Agent({
+    headersTimeout: getRequestTimeoutMs(),
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: concurrency,
+    connect: tlsOptions,
+  });
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -108,17 +100,15 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
   if (existing) {
     return existing;
   }
-  const agent = createDecompressingDispatcher(
-    new ProxyAgent({
-      uri: proxyUrl,
-      proxyTls: tlsOptions,
-      requestTls: tlsOptions,
-      headersTimeout: getRequestTimeoutMs(),
-      keepAliveTimeout: 30_000,
-      keepAliveMaxTimeout: 60_000,
-      connections: concurrency,
-    }),
-  );
+  const agent = new ProxyAgent({
+    uri: proxyUrl,
+    proxyTls: tlsOptions,
+    requestTls: tlsOptions,
+    headersTimeout: getRequestTimeoutMs(),
+    keepAliveTimeout: 30_000,
+    keepAliveMaxTimeout: 60_000,
+    connections: concurrency,
+  });
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
