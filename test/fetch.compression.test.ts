@@ -82,4 +82,13 @@ describe('fetchWithProxy compressed responses', () => {
     expect(response.status).toBe(statusCode);
     expect(JSON.parse(text)).toEqual(payload);
   });
+
+  it('returns decoded JSON for native Request inputs on the pooled dispatcher path', async () => {
+    const url = await startCompressedServer('gzip', 200);
+    const response = await fetchWithProxy(new Request(url));
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(text)).toEqual(payload);
+  });
 });

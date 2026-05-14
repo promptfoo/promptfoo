@@ -844,6 +844,35 @@ describe('fetchWithProxy', () => {
     expect(undiciFetch).not.toHaveBeenCalled();
   });
 
+  it('should normalize native Request inputs before routing pooled calls through undici fetch', async () => {
+    const undiciModule = await import('undici');
+    const undiciFetch = vi.mocked(undiciModule.fetch);
+    vi.restoreAllMocks();
+    undiciFetch.mockResolvedValue(
+      new Response() as unknown as Awaited<ReturnType<typeof undiciFetch>>,
+    );
+
+    const request = new Request('https://example.com/api', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer request-token' },
+      body: 'hello',
+    });
+
+    await fetchWithProxy(request);
+
+    expect(undiciFetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        dispatcher: expect.any(Object),
+        headers: expect.objectContaining({
+          authorization: 'Bearer request-token',
+          'x-promptfoo-version': VERSION,
+        }),
+        method: 'POST',
+      }),
+    );
+  });
+
   it('should keep native multipart request bodies on global fetch', async () => {
     const undiciModule = await import('undici');
     const undiciFetch = undiciModule.fetch;

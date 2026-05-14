@@ -28,6 +28,62 @@ function shouldUseUndiciFetch(options?: FetchOptions): boolean {
   return Boolean(dispatcher) && !hasNativeMultipartBody && globalThis.fetch === defaultFetch;
 }
 
+function getUndiciFetchArgs(
+  url: string | URL | Request,
+  options: RequestInit,
+): [string | URL | Request, RequestInit] {
+  if (!(url instanceof Request)) {
+    return [url, options];
+  }
+
+  // npm Undici does not accept Node's native Request instances as fetch inputs.
+  // Preserve the Request semantics that would normally flow through global fetch
+  // while handing Undici a URL string it can parse.
+  return [
+    url.url,
+    {
+      ...options,
+      body: options.body ?? url.body ?? undefined,
+      cache: options.cache ?? url.cache,
+      credentials: options.credentials ?? url.credentials,
+      headers: options.headers ?? url.headers,
+      integrity: options.integrity ?? url.integrity,
+      keepalive: options.keepalive ?? url.keepalive,
+      method: options.method ?? url.method,
+      mode: options.mode ?? url.mode,
+      redirect: options.redirect ?? url.redirect,
+      referrer: options.referrer ?? url.referrer,
+      referrerPolicy: options.referrerPolicy ?? url.referrerPolicy,
+      signal: options.signal ?? url.signal,
+    },
+  ];
+}
+
+function getFetchInvocation(
+  url: string | URL | Request,
+  options: FetchOptions | undefined,
+  requestOptions: RequestInit,
+): {
+  fetch: typeof globalThis.fetch;
+  url: string | URL | Request;
+  options: RequestInit;
+} {
+  if (!shouldUseUndiciFetch(options)) {
+    return {
+      fetch: globalThis.fetch,
+      url,
+      options: requestOptions,
+    };
+  }
+
+  const [fetchUrl, fetchOptions] = getUndiciFetchArgs(url, requestOptions);
+  return {
+    fetch: undiciFetch as unknown as typeof globalThis.fetch,
+    url: fetchUrl,
+    options: fetchOptions,
+  };
+}
+
 /**
  * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
  */
@@ -83,10 +139,8 @@ export async function monkeyPatchFetch(
     // path aligned with its response decoding behavior. Preserve intentional
     // monkey patches of global fetch so tests and external instrumentation keep
     // observing requests.
-    const fetch: typeof globalThis.fetch = shouldUseUndiciFetch(options)
-      ? (undiciFetch as unknown as typeof globalThis.fetch)
-      : globalThis.fetch;
-    const response = await fetch(url, opts);
+    const fetchInvocation = getFetchInvocation(url, options, opts);
+    const response = await fetchInvocation.fetch(fetchInvocation.url, fetchInvocation.options);
 
     if (logEnabled) {
       void logRequestResponse({
