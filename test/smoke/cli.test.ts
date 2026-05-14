@@ -6,10 +6,12 @@
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
-import { spawnSync } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
+import { createServer, type Server as HttpServer } from 'http';
 import * as path from 'path';
 
+import { Server as SocketIOServer } from 'socket.io';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Path to the built CLI binaries
@@ -57,6 +59,59 @@ function runEntrypoint(
     stderr: result.stderr || '',
     exitCode: result.status ?? 1,
   };
+}
+
+function runEntrypointAsync(
+  args: string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [ENTRYPOINT_PATH, ...args], {
+      cwd: options.cwd || ROOT_DIR,
+      env: { ...process.env, ...options.env, NO_COLOR: '1' },
+    });
+
+    let stdout = '';
+    let stderr = '';
+    const timeoutId = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`CLI entrypoint timed out for: ${args.join(' ')}`));
+    }, 30000);
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    child.once('error', (error) => {
+      clearTimeout(timeoutId);
+      reject(error);
+    });
+    child.once('close', (code) => {
+      clearTimeout(timeoutId);
+      resolve({
+        stdout,
+        stderr,
+        exitCode: code ?? 1,
+      });
+    });
+  });
+}
+
+function runGit(args: string[], cwd: string): void {
+  const result = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf-8',
+  });
+
+  if (result.status !== 0) {
+    throw new Error(
+      `git ${args.join(' ')} failed: ${(result.stderr || result.stdout || '').trim()}`,
+    );
+  }
 }
 
 describe('CLI Smoke Tests', () => {
@@ -241,6 +296,111 @@ describe('CLI Smoke Tests', () => {
 
       expect(entrypointResult.exitCode).toBe(mainResult.exitCode);
       expect(entrypointResult.stdout.trim()).toBe(mainResult.stdout.trim());
+    });
+  });
+
+  describe('1.8 Code Scan Structured Output', () => {
+    let repoDir: string;
+    let httpServer: HttpServer;
+    let socketServer: SocketIOServer;
+    let apiHost: string;
+
+    beforeAll(async () => {
+      repoDir = path.join(ROOT_DIR, 'test/smoke/.temp-code-scan-structured-output');
+      fs.rmSync(repoDir, { recursive: true, force: true });
+      fs.mkdirSync(repoDir, { recursive: true });
+
+      runGit(['init', '-b', 'main'], repoDir);
+      runGit(['config', 'user.email', 'smoke@example.com'], repoDir);
+      runGit(['config', 'user.name', 'Promptfoo Smoke Test'], repoDir);
+      runGit(['commit', '--allow-empty', '-m', 'baseline'], repoDir);
+
+      httpServer = createServer((_request, response) => {
+        response.writeHead(200, { 'content-type': 'text/plain' });
+        response.end('ok');
+      });
+      socketServer = new SocketIOServer(httpServer, {
+        cors: { origin: '*' },
+      });
+      socketServer.on('connection', (socket) => {
+        socket.on('agent:join', () => {});
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        httpServer.once('error', reject);
+        httpServer.listen(0, '127.0.0.1', () => {
+          httpServer.off('error', reject);
+          const address = httpServer.address();
+          if (!address || typeof address === 'string') {
+            reject(new Error('Failed to resolve mock code-scan server port'));
+            return;
+          }
+          apiHost = `http://127.0.0.1:${address.port}`;
+          resolve();
+        });
+      });
+    });
+
+    afterAll(async () => {
+      await new Promise<void>((resolve) => {
+        socketServer.close(() => {
+          httpServer.close(() => resolve());
+        });
+      });
+      fs.rmSync(repoDir, { recursive: true, force: true });
+    });
+
+    it.each([
+      [
+        'JSON',
+        ['--json'],
+        (payload: Record<string, unknown>) => {
+          expect(payload).toMatchObject({
+            success: true,
+            comments: [],
+            review: 'No files to scan',
+          });
+        },
+      ],
+      [
+        'SARIF',
+        ['--format', 'sarif'],
+        (payload: Record<string, unknown>) => {
+          expect(payload).toMatchObject({
+            version: '2.1.0',
+            runs: [expect.any(Object)],
+          });
+        },
+      ],
+    ])('1.8.%# - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug', async (_label, outputArgs, assertPayload) => {
+      const { stdout, stderr, exitCode } = await runEntrypointAsync(
+        [
+          'code-scans',
+          'run',
+          repoDir,
+          '--diffs-only',
+          '--api-host',
+          apiHost,
+          '--base',
+          'main',
+          '--compare',
+          'HEAD',
+          ...outputArgs,
+          '--verbose',
+        ],
+        {
+          env: {
+            LOG_LEVEL: 'debug',
+            PROMPTFOO_DISABLE_UPDATE: 'true',
+          },
+        },
+      );
+
+      expect(exitCode).toBe(0);
+      expect(stderr).toBe('');
+
+      const payload = JSON.parse(stdout) as Record<string, unknown>;
+      assertPayload(payload);
     });
   });
 });
