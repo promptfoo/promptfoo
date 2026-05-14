@@ -59,6 +59,18 @@ jobs:
                   "url": "https://github.com/robots.txt",
               },
               {
+                  "name": "promptfoo.app",
+                  "host": "promptfoo.app",
+                  "port": 443,
+                  "url": "https://promptfoo.app/",
+              },
+              {
+                  "name": "Promptfoo API",
+                  "host": "api.promptfoo.dev",
+                  "port": 443,
+                  "url": "https://api.promptfoo.dev/",
+              },
+              {
                   "name": "npm registry",
                   "host": "registry.npmjs.org",
                   "port": 443,
@@ -69,6 +81,24 @@ jobs:
                   "host": "pypi.org",
                   "port": 443,
                   "url": "https://pypi.org/pypi/pip/json",
+              },
+              {
+                  "name": "OpenAI",
+                  "host": "openai.com",
+                  "port": 443,
+                  "url": "https://openai.com/",
+              },
+              {
+                  "name": "Cloudflare",
+                  "host": "www.cloudflare.com",
+                  "port": 443,
+                  "url": "https://www.cloudflare.com/",
+              },
+              {
+                  "name": "Example",
+                  "host": "example.com",
+                  "port": 443,
+                  "url": "https://example.com/",
               },
           ]
 
