@@ -37,6 +37,7 @@ interface DataTablePropsBase<TData, TValue = unknown> {
   showColumnToggle?: boolean;
   showFilter?: boolean;
   showExport?: boolean;
+  globalFilterLabel?: string;
   /**
    * @deprecated The shared DataTable is virtualized instead of paginated. This is accepted
    * temporarily so downstream consumers can upgrade before deleting old call-site props.
@@ -141,6 +142,7 @@ export interface DataTableToolbarProps<TData> {
   showFilter?: boolean;
   showGlobalFilter?: boolean;
   showExport?: boolean;
+  globalFilterLabel: string;
   onExportCSV?: () => void;
   onExportJSON?: () => void;
   toolbarActions?: React.ReactNode;

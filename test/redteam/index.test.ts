@@ -41,10 +41,6 @@ vi.mock('../../src/util/templates', async () => {
   };
 });
 
-vi.spyOn(process, 'exit').mockImplementation(function () {
-  return undefined as never;
-});
-
 vi.mock('../../src/redteam/strategies', async () => ({
   ...(await vi.importActual('../../src/redteam/strategies')),
 
@@ -197,11 +193,10 @@ describe('synthesize', () => {
         'Prompt 2',
         'Prompt 3',
       ]);
-      expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), [
-        'Prompt 1',
-        'Prompt 2',
-        'Prompt 3',
-      ]);
+      expect(extractEntities).toHaveBeenCalledWith(
+        expect.objectContaining({ id: expect.any(Function) }),
+        ['Prompt 1', 'Prompt 2', 'Prompt 3'],
+      );
     });
   });
 
@@ -2117,6 +2112,109 @@ describe('calculateTotalTests', () => {
     });
   });
 
+  it('should count custom intents instead of numTests for intent plugins', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 1,
+        config: { intent: ['intent1', 'intent2', 'intent3'] },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result).toEqual({
+      totalTests: 3,
+      totalPluginTests: 3,
+      effectiveStrategyCount: 0,
+      includeBasicTests: true,
+    });
+  });
+
+  it('should multiply intent count by language count for multilingual intent plugins', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 1,
+        config: {
+          intent: ['intent1', 'intent2'],
+          language: ['en', 'es', 'fr'],
+        },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result).toEqual({
+      totalTests: 6,
+      totalPluginTests: 6,
+      effectiveStrategyCount: 0,
+      includeBasicTests: true,
+    });
+  });
+
+  it('should resolve file:// intents from a JSON array for pre-generation totals', () => {
+    // fs is mocked at the module level (see vi.mock('fs') below). Stub existsSync/readFileSync
+    // so maybeLoadFromExternalFile sees an existing file with a JSON array of intents.
+    const existsSyncSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    const readFileSyncSpy = vi
+      .spyOn(fs, 'readFileSync')
+      .mockReturnValue(JSON.stringify(['do thing 1', 'do thing 2', 'do thing 3', 'do thing 4']));
+
+    try {
+      const plugins = [
+        {
+          id: 'intent',
+          numTests: 1,
+          config: { intent: 'file://intents.json' },
+        },
+      ];
+
+      const result = calculateTotalTests(plugins, []);
+
+      expect(result).toEqual({
+        totalTests: 4,
+        totalPluginTests: 4,
+        effectiveStrategyCount: 0,
+        includeBasicTests: true,
+      });
+    } finally {
+      readFileSyncSpy.mockRestore();
+      existsSyncSpy.mockRestore();
+    }
+  });
+
+  it('should fall back to count of 1 when file:// intent path is unreadable', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 1,
+        config: { intent: 'file:///definitely/does/not/exist/intents.txt' },
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    // The file can't be read, so the helper falls back to treating the literal
+    // string as a single intent. This matches the pre-fix behavior and keeps
+    // the helper from throwing during early UI calculations.
+    expect(result.totalPluginTests).toBe(1);
+  });
+
+  it('should report 0 plugin tests when an intent plugin is missing config.intent', () => {
+    const plugins = [
+      {
+        id: 'intent',
+        numTests: 5,
+        config: {},
+      },
+    ];
+
+    const result = calculateTotalTests(plugins, []);
+
+    expect(result.totalPluginTests).toBe(0);
+  });
+
   it('should handle retry strategy with default numTests', () => {
     const strategies = [{ id: 'retry' }];
     const result = calculateTotalTests(mockPlugins, strategies);
@@ -3385,7 +3483,7 @@ describe('Language configuration', () => {
         message: 'Cloud API is healthy',
       });
       vi.mocked(getRemoteHealthUrl).mockReturnValue('http://health.test');
-      vi.mocked(shouldGenerateRemote).mockResolvedValue(true);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
     });
 
     it('should show truncated policy text in plugin list for policy plugins', async () => {
@@ -3421,8 +3519,9 @@ describe('Language configuration', () => {
       expect(pluginListMessage).not.toContain('"policy":');
     });
 
-    it('should log full config at debug level for policy plugins', async () => {
-      const policyText = 'Test policy for debug logging';
+    it('should log config shape at debug level for policy plugins', async () => {
+      const policyText = 'SECRET_POLICY_DEBUG_TEXT';
+      const secretConfigKey = 'SECRET_CONFIG_KEY_NAME';
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({
         action: mockPluginAction,
@@ -3431,17 +3530,21 @@ describe('Language configuration', () => {
 
       await synthesize({
         numTests: 1,
-        plugins: [{ id: 'policy', numTests: 1, config: { policy: policyText } }],
+        plugins: [
+          { id: 'policy', numTests: 1, config: { policy: policyText, [secretConfigKey]: true } },
+        ],
         prompts: ['Test prompt'],
         strategies: [],
         targetIds: ['test-provider'],
       });
 
-      // Check that debug log uses structured logging with plugin config
       expect(logger.debug).toHaveBeenCalledWith('Plugin config', {
         pluginId: 'policy',
-        config: expect.objectContaining({ policy: policyText }),
+        configKeyCount: 2,
       });
+      const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+      expect(debugLogs).not.toContain(policyText);
+      expect(debugLogs).not.toContain(secretConfigKey);
     });
 
     it('should show "(custom config)" for non-policy plugins with config', async () => {
@@ -3468,6 +3571,38 @@ describe('Language configuration', () => {
       expect(pluginListMessage).toContain('(custom config)');
       // Should NOT contain full JSON
       expect(pluginListMessage).not.toContain('someOption');
+    });
+
+    it('should not log non-policy plugin config keys or values at debug level', async () => {
+      const secretConfigKey = 'SECRET_PLUGIN_CONFIG_KEY';
+      const secretConfigValue = 'SECRET_PLUGIN_CONFIG_VALUE';
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'harmful:hate',
+      });
+
+      await synthesize({
+        numTests: 1,
+        plugins: [
+          {
+            id: 'harmful:hate',
+            numTests: 1,
+            config: { [secretConfigKey]: secretConfigValue, severity: 'high' },
+          },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(logger.debug).toHaveBeenCalledWith('Plugin config', {
+        pluginId: 'harmful:hate',
+        configKeyCount: 2,
+      });
+      const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+      expect(debugLogs).not.toContain(secretConfigKey);
+      expect(debugLogs).not.toContain(secretConfigValue);
     });
 
     it('should show separate rows for multiple policy plugins with unique IDs', async () => {
@@ -3734,21 +3869,16 @@ describe('Language configuration', () => {
         // Mock the provider loading to return a mock provider for test generation
         // This avoids the loadApiProviders error while still testing strategy config
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
-        const providerSpy = vi
-          .spyOn(
-            await import('../../src/redteam/providers/shared'),
-            'redteamProviderManager',
-            'get',
-          )
-          .mockReturnValue({
-            getProvider: vi.fn().mockResolvedValue(mockProvider),
-            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
-            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
-            setProvider: vi.fn(),
-            setGradingProvider: vi.fn(),
-            setMultilingualProvider: vi.fn(),
-            clearProvider: vi.fn(),
-          } as any);
+        const providersShared = await import('../../src/redteam/providers/shared');
+        const getProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockProvider as any);
+        const getGradingProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(mockProvider as any);
+        const getMultilingualProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getMultilingualProvider')
+          .mockResolvedValue(undefined);
 
         try {
           await synthesize({
@@ -3764,7 +3894,9 @@ describe('Language configuration', () => {
           expect(capturedConfig).toBeDefined();
           expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
         } finally {
-          providerSpy.mockRestore();
+          getProviderSpy.mockRestore();
+          getGradingProviderSpy.mockRestore();
+          getMultilingualProviderSpy.mockRestore();
         }
       } finally {
         // Restore original cliState
@@ -3857,21 +3989,16 @@ describe('Language configuration', () => {
 
         // Mock the provider loading
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
-        const providerSpy = vi
-          .spyOn(
-            await import('../../src/redteam/providers/shared'),
-            'redteamProviderManager',
-            'get',
-          )
-          .mockReturnValue({
-            getProvider: vi.fn().mockResolvedValue(mockProvider),
-            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
-            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
-            setProvider: vi.fn(),
-            setGradingProvider: vi.fn(),
-            setMultilingualProvider: vi.fn(),
-            clearProvider: vi.fn(),
-          } as any);
+        const providersShared = await import('../../src/redteam/providers/shared');
+        const getProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockProvider as any);
+        const getGradingProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(mockProvider as any);
+        const getMultilingualProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getMultilingualProvider')
+          .mockResolvedValue(undefined);
 
         try {
           await synthesize({
@@ -3887,7 +4014,9 @@ describe('Language configuration', () => {
           // Should pass the full provider options object
           expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
         } finally {
-          providerSpy.mockRestore();
+          getProviderSpy.mockRestore();
+          getGradingProviderSpy.mockRestore();
+          getMultilingualProviderSpy.mockRestore();
         }
       } finally {
         cliState.config = originalConfig;

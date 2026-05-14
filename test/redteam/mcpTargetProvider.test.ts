@@ -3,7 +3,7 @@ import { MCPProvider } from '../../src/providers/mcp';
 import { maybeWrapMcpProviderForRedteam } from '../../src/redteam/mcpTargetProvider';
 
 import type { MCPTool } from '../../src/providers/mcp/types';
-import type { CallApiContextParams, ProviderResponse } from '../../src/types';
+import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../src/types';
 
 const providerManagerMocks = vi.hoisted(() => ({
   getProvider: vi.fn(),
@@ -15,21 +15,8 @@ vi.mock('../../src/redteam/providers/shared', () => ({
   },
 }));
 
-const searchCompaniesTool: MCPTool = {
-  name: 'search_companies',
-  description: 'Search sample company records.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string' },
-      limit: { type: 'integer', default: 10 },
-    },
-    required: ['query'],
-  },
-};
-
 class FakeMcpProvider extends MCPProvider {
-  calls: { context?: CallApiContextParams; prompt: string }[] = [];
+  calls: { context?: CallApiContextParams; options?: CallApiOptionsParams; prompt: string }[] = [];
   cleanupCalls = 0;
 
   constructor(private readonly tools: MCPTool[]) {
@@ -40,8 +27,12 @@ class FakeMcpProvider extends MCPProvider {
     return this.tools;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    this.calls.push({ prompt, context });
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    this.calls.push({ prompt, context, options });
     return { output: 'ok' };
   }
 
@@ -51,6 +42,50 @@ class FakeMcpProvider extends MCPProvider {
 }
 
 describe('maybeWrapMcpProviderForRedteam', () => {
+  const searchCompaniesPrompt = 'Find clean energy companies.';
+  const searchCompaniesCall = {
+    tool: 'search_companies',
+    args: {
+      query: searchCompaniesPrompt,
+      limit: 10,
+    },
+  };
+
+  const searchCompaniesTool: MCPTool = {
+    name: 'search_companies',
+    description: 'Search sample company records.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        limit: { type: 'integer', default: 10 },
+      },
+      required: ['query'],
+    },
+  };
+
+  const redteamMetadata = (pluginId: string, purpose = 'Search companies') => ({
+    metadata: {
+      pluginId,
+      purpose,
+    },
+  });
+
+  const redteamContext = (
+    prompt = searchCompaniesPrompt,
+    pluginId = 'harmful:hate',
+    purpose = 'Search companies',
+  ): CallApiContextParams => ({
+    prompt: {
+      raw: '{{prompt}}',
+      label: 'prompt',
+    },
+    vars: { prompt },
+    test: redteamMetadata(pluginId, purpose),
+  });
+
+  const parseToolCall = (raw: unknown) => JSON.parse(String(raw));
+
   beforeEach(() => {
     providerManagerMocks.getProvider.mockReset();
   });
@@ -59,80 +94,33 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     providerManagerMocks.getProvider.mockResolvedValueOnce({
       id: () => 'openai:test',
       callApi: async () => ({
-        output:
-          '{"tool":"search_companies","args":{"query":"Find clean energy companies.","limit":10}}',
+        output: JSON.stringify(searchCompaniesCall),
       }),
     });
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
-    const wrapped = maybeWrapMcpProviderForRedteam(target, {
-      metadata: {
-        pluginId: 'harmful:hate',
-        purpose: 'Search companies',
-      },
-    });
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
 
-    await wrapped.callApi('Find clean energy companies.', {
-      prompt: {
-        raw: '{{prompt}}',
-        label: 'prompt',
-      },
-      vars: { prompt: 'Find clean energy companies.' },
-      test: {
-        metadata: {
-          pluginId: 'harmful:hate',
-          purpose: 'Search companies',
-        },
-      },
-    } as unknown as CallApiContextParams);
+    await wrapped.callApi(searchCompaniesPrompt, redteamContext());
 
     expect(target.calls).toHaveLength(1);
-    expect(JSON.parse(target.calls[0].prompt)).toEqual({
-      tool: 'search_companies',
-      args: {
-        query: 'Find clean energy companies.',
-        limit: 10,
-      },
-    });
-    expect(JSON.parse(String(target.calls[0].context?.vars.prompt))).toEqual({
-      tool: 'search_companies',
-      args: {
-        query: 'Find clean energy companies.',
-        limit: 10,
-      },
-    });
+    expect(parseToolCall(target.calls[0].prompt)).toEqual(searchCompaniesCall);
+    expect(parseToolCall(target.calls[0].context?.vars.prompt)).toEqual(searchCompaniesCall);
   });
 
   it('does not request inference when the prompt is already valid MCP JSON', async () => {
     const target = new FakeMcpProvider([searchCompaniesTool]);
-    const wrapped = maybeWrapMcpProviderForRedteam(target, {
-      metadata: {
-        pluginId: 'harmful:hate',
-        purpose: 'Search companies',
-      },
-    });
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
     const prompt = JSON.stringify({
       tool: 'search_companies',
       args: { query: 'cloud', limit: 1 },
     });
 
-    await wrapped.callApi(prompt, {
-      prompt: {
-        raw: '{{prompt}}',
-        label: 'prompt',
-      },
-      vars: { prompt },
-      test: {
-        metadata: {
-          pluginId: 'harmful:hate',
-          purpose: 'Search companies',
-        },
-      },
-    } as unknown as CallApiContextParams);
+    await wrapped.callApi(prompt, redteamContext(prompt));
 
     expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
     expect(target.calls).toHaveLength(1);
-    expect(JSON.parse(target.calls[0].prompt)).toEqual({
+    expect(parseToolCall(target.calls[0].prompt)).toEqual({
       tool: 'search_companies',
       args: { query: 'cloud', limit: 1 },
     });
@@ -146,11 +134,13 @@ describe('maybeWrapMcpProviderForRedteam', () => {
       },
     });
 
-    const response = await wrapped.callApi('Plain prompt', undefined, { includeLogProbs: true });
+    const options = { includeLogProbs: true };
+
+    const response = await wrapped.callApi('Plain prompt', undefined, options);
 
     expect(response).toEqual({ output: 'ok' });
     expect(providerManagerMocks.getProvider).not.toHaveBeenCalled();
-    expect(target.calls).toEqual([{ prompt: 'Plain prompt', context: undefined }]);
+    expect(target.calls).toEqual([{ prompt: 'Plain prompt', context: undefined, options }]);
   });
 
   it('preserves provider identity helpers and cleanup behavior', async () => {
@@ -190,19 +180,10 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     });
 
     await expect(
-      wrapped.callApi('Search for clean energy companies.', {
-        prompt: {
-          raw: '{{prompt}}',
-          label: 'prompt',
-        },
-        vars: { prompt: 'Search for clean energy companies.' },
-        test: {
-          metadata: {
-            pluginId: 'sql-injection',
-            purpose: 'Search companies',
-          },
-        },
-      } as unknown as CallApiContextParams),
+      wrapped.callApi(
+        'Search for clean energy companies.',
+        redteamContext('Search for clean energy companies.', 'sql-injection'),
+      ),
     ).resolves.toEqual({
       error: expect.stringContaining('Failed to materialize MCP target prompt'),
     });
@@ -218,28 +199,9 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     });
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
-    const wrapped = maybeWrapMcpProviderForRedteam(target, {
-      metadata: {
-        pluginId: 'harmful:hate',
-        purpose: 'Search companies',
-      },
-    });
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
 
-    await expect(
-      wrapped.callApi('Find clean energy companies.', {
-        prompt: {
-          raw: '{{prompt}}',
-          label: 'prompt',
-        },
-        vars: { prompt: 'Find clean energy companies.' },
-        test: {
-          metadata: {
-            pluginId: 'harmful:hate',
-            purpose: 'Search companies',
-          },
-        },
-      } as unknown as CallApiContextParams),
-    ).resolves.toEqual({
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toEqual({
       error: expect.stringContaining('Failed to materialize MCP target prompt'),
     });
     expect(target.calls).toHaveLength(0);
@@ -249,35 +211,15 @@ describe('maybeWrapMcpProviderForRedteam', () => {
     providerManagerMocks.getProvider.mockResolvedValueOnce({
       id: () => 'openai:test',
       callApi: async () => ({
-        output:
-          '{"tool":"search_companies","args":{"query":"Find clean energy companies.","limit":10}}',
+        output: JSON.stringify(searchCompaniesCall),
       }),
     });
 
     const target = new FakeMcpProvider([searchCompaniesTool]);
     vi.spyOn(target, 'callApi').mockRejectedValueOnce(new Error('Target provider failed'));
-    const wrapped = maybeWrapMcpProviderForRedteam(target, {
-      metadata: {
-        pluginId: 'harmful:hate',
-        purpose: 'Search companies',
-      },
-    });
+    const wrapped = maybeWrapMcpProviderForRedteam(target, redteamMetadata('harmful:hate'));
 
-    await expect(
-      wrapped.callApi('Find clean energy companies.', {
-        prompt: {
-          raw: '{{prompt}}',
-          label: 'prompt',
-        },
-        vars: { prompt: 'Find clean energy companies.' },
-        test: {
-          metadata: {
-            pluginId: 'harmful:hate',
-            purpose: 'Search companies',
-          },
-        },
-      } as unknown as CallApiContextParams),
-    ).resolves.toEqual({
+    await expect(wrapped.callApi(searchCompaniesPrompt, redteamContext())).resolves.toEqual({
       error: expect.stringContaining('Target provider failed'),
     });
   });
