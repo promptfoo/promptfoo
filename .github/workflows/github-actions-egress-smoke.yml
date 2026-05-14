@@ -1,0 +1,186 @@
+name: GitHub Actions Egress Smoke Test
+
+on:
+  push:
+    paths:
+      - .github/workflows/github-actions-egress-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Probe on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macOS-latest
+          - windows-2025-vs2026
+
+    steps:
+      - name: Show runner context
+        shell: bash
+        run: |
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner Arch: $RUNNER_ARCH"
+          echo "Image OS: ${ImageOS:-unknown}"
+          echo "Image Version: ${ImageVersion:-unknown}"
+          python --version
+          curl --version | head -n 1
+
+      - name: Probe DNS, TCP, and HTTPS egress
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import socket
+          import ssl
+          import time
+          import urllib.error
+          import urllib.request
+
+          targets = [
+              {
+                  "name": "GitHub API",
+                  "host": "api.github.com",
+                  "port": 443,
+                  "url": "https://api.github.com/",
+              },
+              {
+                  "name": "GitHub Web",
+                  "host": "github.com",
+                  "port": 443,
+                  "url": "https://github.com/robots.txt",
+              },
+              {
+                  "name": "npm registry",
+                  "host": "registry.npmjs.org",
+                  "port": 443,
+                  "url": "https://registry.npmjs.org/npm",
+              },
+              {
+                  "name": "PyPI",
+                  "host": "pypi.org",
+                  "port": 443,
+                  "url": "https://pypi.org/pypi/pip/json",
+              },
+          ]
+
+          results = []
+
+          for target in targets:
+              record = {
+                  "name": target["name"],
+                  "host": target["host"],
+                  "port": target["port"],
+                  "url": target["url"],
+              }
+
+              try:
+                  addrinfo = socket.getaddrinfo(
+                      target["host"],
+                      target["port"],
+                      type=socket.SOCK_STREAM,
+                  )
+                  addresses = sorted({info[4][0] for info in addrinfo})
+                  record["dns_ok"] = True
+                  record["addresses"] = addresses
+              except Exception as err:
+                  record["dns_ok"] = False
+                  record["dns_error"] = repr(err)
+                  results.append(record)
+                  continue
+
+              try:
+                  start = time.perf_counter()
+                  with socket.create_connection(
+                      (target["host"], target["port"]),
+                      timeout=10,
+                  ):
+                      record["tcp_ok"] = True
+                      record["tcp_ms"] = round((time.perf_counter() - start) * 1000, 1)
+              except Exception as err:
+                  record["tcp_ok"] = False
+                  record["tcp_error"] = repr(err)
+                  results.append(record)
+                  continue
+
+              try:
+                  start = time.perf_counter()
+                  request = urllib.request.Request(
+                      target["url"],
+                      headers={"User-Agent": "promptfoo-egress-smoke-test"},
+                  )
+                  with urllib.request.urlopen(
+                      request,
+                      timeout=15,
+                      context=ssl.create_default_context(),
+                  ) as response:
+                      response.read(1)
+                      record["https_ok"] = True
+                      record["http_status"] = response.status
+                      record["https_ms"] = round((time.perf_counter() - start) * 1000, 1)
+              except urllib.error.HTTPError as err:
+                  record["https_ok"] = True
+                  record["http_status"] = err.code
+                  record["https_ms"] = round((time.perf_counter() - start) * 1000, 1)
+                  record["https_note"] = "HTTP error still proves HTTPS egress worked"
+              except Exception as err:
+                  record["https_ok"] = False
+                  record["https_error"] = repr(err)
+
+              results.append(record)
+
+          print(json.dumps(results, indent=2))
+
+          dns_successes = sum(1 for result in results if result.get("dns_ok"))
+          tcp_successes = sum(1 for result in results if result.get("tcp_ok"))
+          https_successes = sum(1 for result in results if result.get("https_ok"))
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as handle:
+                  handle.write("## Egress results\n\n")
+                  handle.write("| Target | DNS | TCP 443 | HTTPS | Details |\n")
+                  handle.write("| --- | --- | --- | --- | --- |\n")
+                  for result in results:
+                      details = []
+                      if result.get("http_status") is not None:
+                          details.append(f"HTTP {result['http_status']}")
+                      if result.get("tcp_ms") is not None:
+                          details.append(f"TCP {result['tcp_ms']} ms")
+                      if result.get("https_ms") is not None:
+                          details.append(f"HTTPS {result['https_ms']} ms")
+                      if result.get("dns_error"):
+                          details.append(result["dns_error"])
+                      if result.get("tcp_error"):
+                          details.append(result["tcp_error"])
+                      if result.get("https_error"):
+                          details.append(result["https_error"])
+                      handle.write(
+                          f"| {result['name']} | "
+                          f"{'ok' if result.get('dns_ok') else 'fail'} | "
+                          f"{'ok' if result.get('tcp_ok') else 'fail'} | "
+                          f"{'ok' if result.get('https_ok') else 'fail'} | "
+                          f"{'; '.join(details) or 'n/a'} |\n"
+                      )
+
+                  handle.write(
+                      "\n"
+                      f"DNS successes: {dns_successes}/{len(results)}  \n"
+                      f"TCP successes: {tcp_successes}/{len(results)}  \n"
+                      f"HTTPS successes: {https_successes}/{len(results)}\n"
+                  )
+
+          if tcp_successes == 0 and https_successes == 0:
+              raise SystemExit(
+                  "All outbound TCP/HTTPS probes failed. "
+                  "This strongly suggests runner egress is blocked."
+              )
+          PY
