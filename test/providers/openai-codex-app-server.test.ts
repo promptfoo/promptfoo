@@ -3748,6 +3748,103 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  it('continues from a completed command aggregate when earlier deltas already exist', async () => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = new OpenAICodexAppServerProvider({
+      config: {
+        thread_cleanup: 'none',
+      },
+    });
+
+    const resultPromise = provider.callApi('Run a command with interleaved output');
+
+    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessage(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_interleaved_output' } } });
+    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_interleaved_output', status: 'inProgress' } },
+    });
+
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_interleaved_output',
+        turnId: 'turn_interleaved_output',
+        itemId: 'cmd_interleaved_output',
+        delta: 'line one\n',
+      },
+    });
+    server.send({
+      method: 'item/completed',
+      params: {
+        threadId: 'thr_interleaved_output',
+        turnId: 'turn_interleaved_output',
+        item: {
+          type: 'commandExecution',
+          id: 'cmd_interleaved_output',
+          command: 'printf "line one\\nline two\\nline three"',
+          cwd: process.cwd(),
+          status: 'completed',
+          aggregatedOutput: 'line one\nline two\n',
+          exitCode: 0,
+          durationMs: 1,
+        },
+      },
+    });
+    server.send({
+      method: 'item/commandExecution/outputDelta',
+      params: {
+        threadId: 'thr_interleaved_output',
+        turnId: 'turn_interleaved_output',
+        itemId: 'cmd_interleaved_output',
+        delta: 'line three',
+      },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_interleaved_output',
+        turnId: 'turn_interleaved_output',
+        itemId: 'msg_interleaved_output',
+        delta: 'Done',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_interleaved_output',
+        turn: { id: 'turn_interleaved_output', status: 'completed', items: [], error: null },
+      },
+    });
+
+    const result = await resultPromise;
+    const raw = JSON.parse(result.raw as string);
+    expect(raw.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'command_execution',
+          aggregated_output: 'line one\nline two\nline three',
+        }),
+      ]),
+    );
+    expect(result.metadata?.codexAppServer.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'commandExecution',
+          aggregatedOutput: 'line one\nline two\nline three',
+        }),
+      ]),
+    );
+  });
+
   it('emits SDK-compatible raw items for coding-agent verifiers', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
