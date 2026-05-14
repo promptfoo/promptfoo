@@ -115,17 +115,17 @@ jobs:
           path: node_modules
           key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
 
-      - name: Install Dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+      - name: Install Dependencies (Node 26)
+        if: steps.cache-node-modules.outputs.cache-hit != 'true' && matrix.node == '26.x'
         # Node 26 hosted installs stall when lifecycle scripts run during npm ci.
         # Install the tree without scripts, then rebuild the native addon tests need.
         run: |
-          if [ "${{ matrix.node }}" = "26.x" ]; then
-            npm ci --ignore-scripts
-            npm rebuild better-sqlite3
-          else
-            npx -y npm@11.11.0 ci
-          fi
+          npm ci --ignore-scripts
+          npm rebuild better-sqlite3
+
+      - name: Install Dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true' && matrix.node != '26.x'
+        run: npx -y npm@11.11.0 ci
 
       - name: Test
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
