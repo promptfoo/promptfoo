@@ -492,9 +492,11 @@ describe('Telemetry', () => {
       mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-posthog-key' });
 
       const telemetryModule = await import('../src/telemetry');
-      const telemetry = new telemetryModule.Telemetry();
+      mockPostHogInstance.identify.mockClear();
+      mockPostHogInstance.flush.mockClear();
 
-      expect(telemetry).toBeDefined();
+      const telemetry = new telemetryModule.Telemetry();
+      expect(telemetry).toBeInstanceOf(telemetryModule.Telemetry);
       await Promise.resolve();
       await Promise.resolve();
 
@@ -592,7 +594,6 @@ describe('Telemetry', () => {
       mockPostHogInstance.identify.mockClear();
       mockPostHogInstance.capture.mockClear();
       mockPostHogInstance.flush.mockClear();
-
       getUserAuthInfoMock.mockReturnValue({
         email: 'new@example.com',
         isLoggedIntoCloud: true,

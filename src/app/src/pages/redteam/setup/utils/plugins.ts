@@ -1,13 +1,28 @@
 import { type Config } from '../types';
-import type { PluginConfig } from '@promptfoo/redteam/types';
 
 /**
  * Counts the number of custom policies defined in the config.
  */
 export function countSelectedCustomPolicies(config: Pick<Config, 'plugins'>): number {
+  return config.plugins.filter((p) => isRecord(p) && p.id === 'policy').length;
+}
+
+type IntentPluginLike = {
+  id: 'intent';
+  config?: {
+    intent?: unknown;
+  };
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isIntentPlugin(plugin: unknown): plugin is IntentPluginLike {
   return (
-    config.plugins.filter((p) => typeof p === 'object' && 'id' in p && p.id === 'policy').length ||
-    0
+    isRecord(plugin) &&
+    plugin.id === 'intent' &&
+    (!('config' in plugin) || plugin.config === undefined || isRecord(plugin.config))
   );
 }
 
@@ -39,16 +54,10 @@ function countIntentEntries(intent: unknown): number {
  */
 export function countSelectedCustomIntents(config: Pick<Config, 'plugins'>): number {
   return config.plugins.reduce((count, plugin) => {
-    if (
-      typeof plugin !== 'object' ||
-      plugin === null ||
-      !('id' in plugin) ||
-      plugin.id !== 'intent' ||
-      !('config' in plugin)
-    ) {
+    if (!isIntentPlugin(plugin)) {
       return count;
     }
 
-    return count + countIntentEntries((plugin as { config: PluginConfig }).config?.intent);
+    return count + countIntentEntries(plugin.config?.intent);
   }, 0);
 }
