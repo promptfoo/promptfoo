@@ -86,7 +86,7 @@ The right passage is present, but the answer uses prior knowledge, guesses, or a
 **Best signals**
 
 - `factuality`
-- `context-adherence`
+- `context-faithfulness`
 - `answer-relevance`
 
 **Starter test**
@@ -95,7 +95,7 @@ The right passage is present, but the answer uses prior knowledge, guesses, or a
 assert:
   - type: factuality
     value: employees can expense up to $500 without manager approval
-  - type: context-adherence
+  - type: context-faithfulness
     threshold: 0.9
 ```
 
@@ -111,7 +111,7 @@ The response sounds plausible but adds unsupported details.
 
 **Best signals**
 
-- `context-adherence`
+- `context-faithfulness`
 - `factuality`
 - `llm-rubric` for "answer only uses provided context"
 
@@ -119,7 +119,7 @@ The response sounds plausible but adds unsupported details.
 
 ```yaml
 assert:
-  - type: context-adherence
+  - type: context-faithfulness
     threshold: 0.95
 ```
 
