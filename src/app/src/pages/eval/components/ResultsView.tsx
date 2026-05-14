@@ -55,6 +55,9 @@ import type { ResultsFilter } from './store';
 const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
 
 const MAX_SEARCH_BADGE_LENGTH = 5;
+const MAX_FILTER_VALUE_LENGTH = 50;
+const MAX_PROMPT_LABEL_LENGTH = 60;
+
 // Default to showing charts only on sufficiently tall viewports to avoid crowding above-the-fold content.
 const MIN_VIEWPORT_HEIGHT_FOR_CHARTS = 1100;
 
@@ -100,7 +103,10 @@ function getAppliedFilterLabel(
   }
 
   const filterValue = filter.value ?? '';
-  const truncatedValue = filterValue.length > 50 ? `${filterValue.slice(0, 50)}...` : filterValue;
+  const truncatedValue =
+    filterValue.length > MAX_FILTER_VALUE_LENGTH
+      ? `${filterValue.slice(0, MAX_FILTER_VALUE_LENGTH)}...`
+      : filterValue;
 
   if (filter.type === 'metric') {
     const operatorSymbols: Record<string, string> = {
@@ -421,12 +427,12 @@ export default function ResultsView({
   const promptOptions = head.prompts.map((prompt, idx) => {
     const label = prompt.label || prompt.display || prompt.raw;
     const provider = prompt.provider || 'unknown';
-    const displayLabel = [
-      label && `"${label.slice(0, 60)}${label.length > 60 ? '...' : ''}"`,
-      provider && `[${provider}]`,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    const truncatedLabel =
+      label &&
+      `"${label.slice(0, MAX_PROMPT_LABEL_LENGTH)}${
+        label.length > MAX_PROMPT_LABEL_LENGTH ? '...' : ''
+      }"`;
+    const displayLabel = [truncatedLabel, provider && `[${provider}]`].filter(Boolean).join(' ');
 
     return {
       value: `Prompt ${idx + 1}`,

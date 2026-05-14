@@ -74,7 +74,6 @@ describe('synthesize', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.resetAllMocks();
 
     // Set up logger mocks
@@ -1962,7 +1961,6 @@ vi.mock('js-yaml');
 
 describe('resolvePluginConfig', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.resetAllMocks();
 
     // Set up logger mocks

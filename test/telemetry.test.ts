@@ -101,6 +101,25 @@ vi.mock('../src/constants/build', () => ({
   POSTHOG_KEY: 'test-posthog-key',
 }));
 
+function resetModulesAndMockFetch(
+  fetchMocks: Partial<Record<'fetchWithTimeout' | 'fetchWithProxy', Mock>> = {},
+) {
+  vi.resetModules();
+  vi.doMock('../src/util/fetch/index.ts', () => ({
+    fetchWithTimeout: fetchMocks.fetchWithTimeout ?? vi.fn().mockResolvedValue({ ok: true }),
+    fetchWithProxy: fetchMocks.fetchWithProxy ?? vi.fn().mockResolvedValue({ ok: true }),
+  }));
+}
+
+function setupTelemetryEnv(baseEnv: NodeJS.ProcessEnv) {
+  mockProcessEnv({ ...baseEnv }, { clear: true });
+  mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-key' });
+}
+
+function restoreTelemetryEnv(env: NodeJS.ProcessEnv) {
+  mockProcessEnv(env, { clear: true });
+}
+
 describe('Telemetry', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let fetchWithProxySpy: MockedFunction<typeof fetchWithProxy>;
@@ -108,8 +127,7 @@ describe('Telemetry', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    mockProcessEnv({ ...originalEnv }, { clear: true });
-    mockProcessEnv({ PROMPTFOO_POSTHOG_KEY: 'test-key' });
+    setupTelemetryEnv(originalEnv);
 
     // Get the mocked fetchWithProxy function
     fetchWithProxySpy = fetchWithProxy as MockedFunction<typeof fetchWithProxy>;
@@ -122,7 +140,7 @@ describe('Telemetry', () => {
   });
 
   afterEach(() => {
-    mockProcessEnv(originalEnv, { clear: true });
+    restoreTelemetryEnv(originalEnv);
     vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.useRealTimers();
@@ -291,13 +309,7 @@ describe('Telemetry', () => {
   it('should not send user events when telemetry is disabled', async () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TELEMETRY: '1' });
 
-    vi.resetModules();
-
-    // Re-establish fetch mocks after module reset
-    vi.doMock('../src/util/fetch/index.ts', () => ({
-      fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-      fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-    }));
+    resetModulesAndMockFetch();
 
     const telemetryModule = await import('../src/telemetry');
     const { Telemetry: TelemetryClass, default: telemetryInstance } = telemetryModule;
@@ -328,13 +340,7 @@ describe('Telemetry', () => {
         flush: vi.fn().mockResolvedValue(undefined),
       }));
 
-      vi.resetModules();
-
-      // Re-establish fetch mocks after module reset
-      vi.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-      }));
+      resetModulesAndMockFetch();
 
       vi.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
@@ -361,13 +367,7 @@ describe('Telemetry', () => {
         throw new Error('PostHog initialization failed');
       });
 
-      vi.resetModules();
-
-      // Re-establish fetch mocks after module reset
-      vi.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-      }));
+      resetModulesAndMockFetch();
 
       vi.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
@@ -397,15 +397,8 @@ describe('Telemetry', () => {
         return this;
       });
 
-      // Clear all modules and re-mock
-      vi.resetModules();
+      resetModulesAndMockFetch();
       vi.clearAllMocks();
-
-      // Re-establish all mocks after module reset
-      vi.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-      }));
 
       vi.doMock('posthog-node', () => ({
         PostHog: mockPostHog,
@@ -725,13 +718,9 @@ describe('Telemetry', () => {
     it('should handle network errors when saving consent', async () => {
       const mockError = new Error('Network error');
 
-      // Reset modules to ensure clean state
-      vi.resetModules();
-
-      // Re-mock fetchWithTimeout
-      vi.doMock('../src/util/fetch/index.ts', () => ({
+      resetModulesAndMockFetch({
         fetchWithTimeout: vi.fn().mockRejectedValue(mockError),
-      }));
+      });
 
       // Re-mock logger to capture debug calls
       vi.doMock('../src/logger', () => ({
@@ -783,21 +772,13 @@ describe('Telemetry', () => {
     it('should register beforeExit handler only once across multiple module loads', async () => {
       const beforeExitListenersBefore = process.listenerCount('beforeExit');
 
-      vi.resetModules();
-      vi.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-      }));
+      resetModulesAndMockFetch();
 
       // First import
       await import('../src/telemetry');
       const listenersAfterFirst = process.listenerCount('beforeExit');
 
-      vi.resetModules();
-      vi.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-      }));
+      resetModulesAndMockFetch();
 
       // Second import
       await import('../src/telemetry');
@@ -809,11 +790,7 @@ describe('Telemetry', () => {
     });
 
     it('should store telemetry instance on process for beforeExit handler', async () => {
-      vi.resetModules();
-      vi.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-      }));
+      resetModulesAndMockFetch();
 
       const telemetryModule = await import('../src/telemetry');
       const telemetryInstance = telemetryModule.default;
@@ -825,20 +802,12 @@ describe('Telemetry', () => {
     });
 
     it('should update stored instance when module is reloaded', async () => {
-      vi.resetModules();
-      vi.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-      }));
+      resetModulesAndMockFetch();
 
       const firstModule = await import('../src/telemetry');
       const firstInstance = firstModule.default;
 
-      vi.resetModules();
-      vi.doMock('../src/util/fetch/index.ts', () => ({
-        fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
-        fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
-      }));
+      resetModulesAndMockFetch();
 
       const secondModule = await import('../src/telemetry');
       const secondInstance = secondModule.default;
