@@ -55,7 +55,7 @@ import type { ResultsFilter } from './store';
 const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
 
 const MAX_SEARCH_BADGE_LENGTH = 5;
-// Default to charts only when there is enough vertical space to avoid crowding the results controls.
+// Default to showing charts only on sufficiently tall viewports to avoid crowding above-the-fold content.
 const MIN_VIEWPORT_HEIGHT_FOR_CHARTS = 1100;
 
 interface ResultsViewProps {

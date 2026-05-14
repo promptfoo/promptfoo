@@ -33,9 +33,10 @@ jobs:
             {"node":"20.20","os":"ubuntu-latest","shard":""},
             {"node":"22.22","os":"ubuntu-latest","shard":""},
             {"node":"24.x","os":"ubuntu-latest","shard":""},
-            {"node":"22.22","os":"windows-latest","shard":1},
-            {"node":"22.22","os":"windows-latest","shard":2},
-            {"node":"22.22","os":"windows-latest","shard":3}
+            {"node":"26.x","os":"ubuntu-latest","shard":""},
+            {"node":"22.22","os":"windows-2025-vs2026","shard":1},
+            {"node":"22.22","os":"windows-2025-vs2026","shard":2},
+            {"node":"22.22","os":"windows-2025-vs2026","shard":3}
           '
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
@@ -43,20 +44,23 @@ jobs:
             extra_entries='
               ,{"node":"22.22","os":"macOS-latest","shard":""}
             '
-            build_matrix='{"node":["20.20","24.x"]}'
+            build_matrix='{"node":["20.20","24.x","26.x"]}'
           else
             # Main/dispatch: add all macOS versions + remaining Windows shards
             extra_entries='
               ,{"node":"20.20","os":"macOS-latest","shard":""},
               {"node":"22.22","os":"macOS-latest","shard":""},
-              {"node":"20.20","os":"windows-latest","shard":1},
-              {"node":"20.20","os":"windows-latest","shard":2},
-              {"node":"20.20","os":"windows-latest","shard":3},
-              {"node":"24.x","os":"windows-latest","shard":1},
-              {"node":"24.x","os":"windows-latest","shard":2},
-              {"node":"24.x","os":"windows-latest","shard":3}
+              {"node":"20.20","os":"windows-2025-vs2026","shard":1},
+              {"node":"20.20","os":"windows-2025-vs2026","shard":2},
+              {"node":"20.20","os":"windows-2025-vs2026","shard":3},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":1},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":2},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":3},
+              {"node":"26.x","os":"windows-2025-vs2026","shard":1},
+              {"node":"26.x","os":"windows-2025-vs2026","shard":2},
+              {"node":"26.x","os":"windows-2025-vs2026","shard":3}
             '
-            build_matrix='{"node":["20.20","22.22","24.x"]}'
+            build_matrix='{"node":["20.20","22.22","24.x","26.x"]}'
           fi
 
           # Build the matrix JSON (shard:"" is falsy in GHA expressions, used to skip shard flags)
@@ -67,7 +71,8 @@ jobs:
   test:
     needs: ci-config
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
-    timeout-minutes: 15
+    # Cold-cache Node 26 installs can approach 20m before the test phase starts, so leave room for the test body.
+    timeout-minutes: 40
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -99,7 +104,7 @@ jobs:
       - name: Use Ruby
         uses: ruby/setup-ruby@4c56a21280b36d862b5fc31348f463d60bdc55d5 # v1
         with:
-          ruby-version: ${{ matrix.os == 'windows-latest' && '4.0.0' || '4.0.1' }}
+          ruby-version: ${{ startsWith(matrix.os, 'windows-') && '4.0.0' || '4.0.1' }}
 
       # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
       # Key includes OS and Node version since native modules are platform/version specific
@@ -112,7 +117,15 @@ jobs:
 
       - name: Install Dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npx -y npm@11.11.0 ci
+        # Node 26 hosted installs stall when lifecycle scripts run during npm ci.
+        # Install the tree without scripts, then rebuild the native addon tests need.
+        run: |
+          if [ "${{ matrix.node }}" = "26.x" ]; then
+            npm ci --ignore-scripts
+            npm rebuild better-sqlite3
+          else
+            npx -y npm@11.11.0 ci
+          fi
 
       - name: Test
         run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '20.20' && !matrix.shard && ' -- --coverage' || '' }}
@@ -137,8 +150,8 @@ jobs:
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
-    # Keep enough headroom for slow PR merge-ref checkout and npm install on GitHub-hosted runners.
-    timeout-minutes: 10
+    # Cold-cache Node 26 installs can approach 20m before the build phase starts on GitHub-hosted runners.
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
@@ -155,7 +168,14 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npx -y npm@11.11.0 ci
+        # The build does not need native dependency lifecycle scripts. Skipping them
+        # keeps the Node 26 build lane out of the install stall seen on hosted runners.
+        run: |
+          if [ "${{ matrix.node }}" = "26.x" ]; then
+            npm ci --ignore-scripts
+          else
+            npx -y npm@11.11.0 ci
+          fi
 
       - name: Build
         run: npm run build

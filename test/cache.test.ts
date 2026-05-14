@@ -1236,11 +1236,11 @@ describe('fetchWithCache', () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
-      // First call uses the CacheOptions object API with repeatIndex: 0.
+      // First call with repeatIndex: 0 using the new CacheOptions object API.
       const result1 = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 0 });
       expect(result1.cached).toBe(false);
 
-      // Second call uses the legacy API with no repeatIndex and should hit the same cache.
+      // Second call uses legacy API (`false`) with no repeatIndex and should hit the same cache.
       const result2 = await fetchWithCache(url, {}, 1000, 'json', false);
       expect(result2.cached).toBe(true);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);

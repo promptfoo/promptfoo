@@ -497,6 +497,8 @@ describe('Telemetry', () => {
 
       const telemetry = new telemetryModule.Telemetry();
       expect(telemetry).toBeInstanceOf(telemetryModule.Telemetry);
+      await Promise.resolve();
+      await Promise.resolve();
 
       expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
         distinctId: 'test-user-id',
@@ -576,14 +578,16 @@ describe('Telemetry', () => {
       const telemetryModule = await import('../src/telemetry');
       const telemetry = new telemetryModule.Telemetry();
 
-      expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
-        distinctId: 'test-user-id',
-        properties: {
-          email: 'old@example.com',
-          isLoggedIntoCloud: false,
-          authMethod: 'email',
-          isRunningInCi: false,
-        },
+      await vi.waitFor(() => {
+        expect(mockPostHogInstance.identify).toHaveBeenCalledWith({
+          distinctId: 'test-user-id',
+          properties: {
+            email: 'old@example.com',
+            isLoggedIntoCloud: false,
+            authMethod: 'email',
+            isRunningInCi: false,
+          },
+        });
       });
 
       getUserAuthInfoMock.mockClear();
