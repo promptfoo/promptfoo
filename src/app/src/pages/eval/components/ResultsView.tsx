@@ -55,7 +55,6 @@ import type { ResultsFilter } from './store';
 const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
 
 const MAX_SEARCH_BADGE_LENGTH = 5;
-
 // Default to showing charts only on sufficiently tall viewports to avoid crowding above-the-fold content.
 const MIN_VIEWPORT_HEIGHT_FOR_CHARTS = 1100;
 
@@ -759,6 +758,7 @@ export default function ResultsView({
         Edit name
       </DropdownMenuItem>
       <DropdownMenuItem
+        disabled={!config}
         onClick={() => {
           if (!config) {
             return;

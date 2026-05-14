@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 
 import {
   afterAll,
@@ -229,16 +230,24 @@ describe('cache configuration', () => {
     const cache = cacheModule.getCache();
     // In test environment, promptfoo falls back to an in-memory store instead of disk.
     expect(cache.stores.length).toBeGreaterThan(0);
-    expect(cache.stores[0]?.constructor?.name).not.toBe('KeyvFile');
+    expect(cache.stores[0]).toMatchObject({
+      iterator: expect.any(Function),
+      delete: expect.any(Function),
+      clear: expect.any(Function),
+    });
+    expect(cache.stores[0]?.constructor?.name).not.toBe('MockKeyv');
   });
 
   it('should use disk cache in non-test environment', async () => {
     mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
-    cacheModule.getCache();
-    // In production, disk cache initialization should check/create cache directory.
-    expect(fs.existsSync).toHaveBeenCalled();
-    expect(fs.mkdirSync).toHaveBeenCalled();
+    const cache = cacheModule.getCache();
+    // In production, stores array should have at least one store (disk cache)
+    expect(cache.stores.length).toBeGreaterThan(0);
+    expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
+    const expectedCachePath = path.join('/mock/config/path', 'cache');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
+    expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
 
   it('should respect custom cache path', async () => {

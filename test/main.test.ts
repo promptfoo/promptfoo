@@ -53,13 +53,19 @@ vi.mock('../src/codeScan', () => ({
 
 let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
 let isMainModule: typeof import('../src/mainUtils').isMainModule;
+let shouldSkipDefaultConfigLoading: typeof import('../src/mainUtils').shouldSkipDefaultConfigLoading;
 let setupEnvFilesFromArgv: typeof import('../src/mainUtils').setupEnvFilesFromArgv;
 let shutdownGracefully: typeof import('../src/mainUtils').shutdownGracefully;
 
 async function loadMainModule() {
   vi.resetModules();
-  ({ addCommonOptionsRecursively, isMainModule, setupEnvFilesFromArgv, shutdownGracefully } =
-    await import('../src/mainUtils'));
+  ({
+    addCommonOptionsRecursively,
+    isMainModule,
+    shouldSkipDefaultConfigLoading,
+    setupEnvFilesFromArgv,
+    shutdownGracefully,
+  } = await import('../src/mainUtils'));
 }
 
 describe('setupEnvFilesFromArgv', () => {
@@ -108,6 +114,28 @@ describe('setupEnvFilesFromArgv', () => {
     setupEnvFilesFromArgv(['eval', '--env-file', '--verbose']);
 
     expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+});
+
+describe('shouldSkipDefaultConfigLoading', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+  });
+
+  it('skips unrelated default config discovery for code-scans commands', () => {
+    expect(shouldSkipDefaultConfigLoading(['code-scans', 'run'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--verbose', 'code-scans', 'run', '--help'])).toBe(true);
+    expect(
+      shouldSkipDefaultConfigLoading(['--env-file', '.env.local', 'code-scans', 'run', '--help']),
+    ).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--env-path=.env.local', 'code-scans', 'run'])).toBe(
+      true,
+    );
+  });
+
+  it('keeps default config discovery for other commands and post-separator arguments', () => {
+    expect(shouldSkipDefaultConfigLoading(['eval', '--help'])).toBe(false);
+    expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(false);
   });
 });
 
