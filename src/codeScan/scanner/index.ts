@@ -347,10 +347,6 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       }
     };
   } finally {
-    if (outputFormat !== CodeScanOutputFormat.TEXT && getLogLevel() !== originalLogLevel) {
-      setLogLevel(originalLogLevel);
-    }
-
     // Cleanup: Stop MCP bridge and server, disconnect client
     if (mcpBridge) {
       await mcpBridge.disconnect().catch(() => {
@@ -369,7 +365,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       logger.debug('Agent client disconnected');
     }
 
-    if (outputFormat !== null && outputFormat !== CodeScanOutputFormat.TEXT) {
+    if (
+      outputFormat !== null &&
+      outputFormat !== CodeScanOutputFormat.TEXT &&
+      getLogLevel() !== originalLogLevel
+    ) {
       setLogLevel(originalLogLevel);
     }
   }

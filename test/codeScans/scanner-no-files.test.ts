@@ -218,10 +218,9 @@ describe('Scanner machine-readable output', () => {
     await executeScan('/test/repo', { json: true });
 
     expect(disconnect).toHaveBeenCalled();
-    expect(setLogLevelMock).toHaveBeenNthCalledWith(1, 'error');
-    expect(setLogLevelMock).toHaveBeenLastCalledWith('debug');
+    expect(setLogLevelMock.mock.calls).toEqual([['error'], ['debug']]);
     expect(disconnect.mock.invocationCallOrder[0]).toBeLessThan(
-      setLogLevelMock.mock.invocationCallOrder.at(-1) ?? Number.POSITIVE_INFINITY,
+      setLogLevelMock.mock.invocationCallOrder[1] ?? Number.POSITIVE_INFINITY,
     );
     expect(getLogLevel()).toBe('debug');
   });
