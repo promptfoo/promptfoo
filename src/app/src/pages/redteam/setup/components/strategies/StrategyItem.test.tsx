@@ -169,6 +169,45 @@ describe('StrategyItem', () => {
 
       expect(screen.getByRole('button', { name: 'Test Strategy' })).toBeDisabled();
     });
+
+    it('keeps the remote generation guidance tooltip hoverable for disabled strategies', async () => {
+      const user = userEvent.setup();
+      renderStrategyItem({
+        isDisabled: true,
+        isRemoteGenerationDisabled: true,
+        strategy: baseStrategy,
+        isSelected: false,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+      });
+
+      await user.hover(screen.getByText('Remote generation required'));
+
+      const remoteGenerationTooltips = await screen.findAllByText(
+        /This strategy requires remote generation\./,
+      );
+      expect(remoteGenerationTooltips.length).toBeGreaterThan(0);
+    });
+
+    it('keeps the enterprise guidance tooltip hoverable for disabled strategies', async () => {
+      const user = userEvent.setup();
+      renderStrategyItem({
+        isDisabled: true,
+        isRemoteGenerationDisabled: false,
+        isAuthGated: true,
+        strategy: baseStrategy,
+        isSelected: false,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+      });
+
+      await user.hover(screen.getByText('ENTERPRISE'));
+
+      const enterpriseTooltips = await screen.findAllByText(
+        'This strategy is available in Promptfoo Enterprise',
+      );
+      expect(enterpriseTooltips.length).toBeGreaterThan(0);
+    });
   });
 
   describe('Labels and Pills', () => {

@@ -134,7 +134,7 @@ export function StrategyItem({
               {isDisabled && isRemoteGenerationDisabled && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
+                    <span className="pointer-events-auto rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
                       Remote generation required
                     </span>
                   </TooltipTrigger>
@@ -148,7 +148,7 @@ export function StrategyItem({
               {isDisabled && isAuthGated && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Badge className="h-5 gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-[0.6rem] font-bold tracking-wider text-white shadow-sm">
+                    <Badge className="pointer-events-auto h-5 gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-[0.6rem] font-bold tracking-wider text-white shadow-sm">
                       <Lock className="size-2.5" />
                       ENTERPRISE
                     </Badge>
