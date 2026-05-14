@@ -471,6 +471,32 @@ describe('runEvaluation tool', () => {
       expect(result.content[0].text).toContain('No prompts found after applying filter');
     });
 
+    it('should treat an empty promptFilter array as no filter', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: [],
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(payload.data.configuration.prompts).toEqual({
+        total: 1,
+        filtered: 1,
+        labels: ['test-prompt'],
+      });
+    });
+
     it('should return a filter error when promptFilter is an invalid regex', async () => {
       const { registerRunEvaluationTool } = await import(
         '../../../../src/commands/mcp/tools/runEvaluation'

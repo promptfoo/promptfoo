@@ -41,8 +41,12 @@ function getProviderId(provider: TestSuite['providers'][number]): string {
   return typeof provider.id === 'function' ? provider.id() : provider.id;
 }
 
+function hasStringFilters(filters?: string | string[]): filters is string | string[] {
+  return Array.isArray(filters) ? filters.length > 0 : Boolean(filters);
+}
+
 function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | string[]): void {
-  if (!providerFilter) {
+  if (!hasStringFilters(providerFilter)) {
     return;
   }
 
@@ -71,7 +75,7 @@ function applyProviderFilter(testSuite: TestSuite, providerFilter?: string | str
 }
 
 function applyPromptFilter(testSuite: TestSuite, promptFilter?: string | string[]): void {
-  if (!promptFilter) {
+  if (!hasStringFilters(promptFilter)) {
     return;
   }
 
@@ -417,7 +421,9 @@ export function registerRunEvaluationTool(server: McpServer) {
         }
 
         const hasFilters =
-          testCaseIndices !== undefined || Boolean(promptFilter) || Boolean(providerFilter);
+          testCaseIndices !== undefined ||
+          hasStringFilters(promptFilter) ||
+          hasStringFilters(providerFilter);
         let suiteSummary: EvaluationFilterSummary | undefined;
 
         const cmdObj: Partial<CommandLineOptions & Command> = {
