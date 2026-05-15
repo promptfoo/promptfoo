@@ -294,13 +294,13 @@ const CACHE_KEY_IGNORED_HEADERS = new Set([
   'accept-encoding',
   'user-agent',
 ]);
-const STAINLESS_PREFIX = 'x-stainless-';
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
+// `Headers.entries()` yields lowercased names per the Fetch spec, so we don't
+// need to normalize the input here.
 function isIgnoredCacheKeyHeader(name: string): boolean {
-  const normalized = name.toLowerCase();
-  return CACHE_KEY_IGNORED_HEADERS.has(normalized) || normalized.startsWith(STAINLESS_PREFIX);
+  return CACHE_KEY_IGNORED_HEADERS.has(name) || name.startsWith('x-stainless-');
 }
 
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {

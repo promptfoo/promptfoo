@@ -128,7 +128,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
-    } as OpenAiTranscriptionOptions;
+    };
     const request = await callJsonCachedOpenAi<any>(
       {
         apiKey: this.getApiKey(),
