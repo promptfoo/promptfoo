@@ -55,5 +55,4 @@ The strategy helps identify:
 - [Leetspeak](leetspeak.md) - Text obfuscation technique
 - [Hex Encoding](hex.md) - Similar encoding strategy using hexadecimal
 - [Image Encoding](image.md) - Similar concept applied to images
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
