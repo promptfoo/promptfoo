@@ -9,6 +9,213 @@ describe('handleRedteam', () => {
     vi.resetAllMocks();
   });
 
+  it('reuses a stored grader result when its assertion type matches exactly', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+      value: 'fresh assertion rubric',
+    };
+    const storedResult = {
+      pass: false,
+      score: 0,
+      reason: 'Stored grader result',
+      assertion: {
+        type: assertion.type,
+        value: 'stored rubric',
+      },
+      metadata: {
+        stored: true,
+      },
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'not-used-for-explicit-assertion-types',
+      },
+    };
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {
+        storedGraderResult: storedResult,
+      },
+    };
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(grade).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Stored grader result',
+      assertion: {
+        type: assertion.type,
+        value: 'stored rubric',
+      },
+      metadata: {
+        pluginId: 'not-used-for-explicit-assertion-types',
+        stored: true,
+      },
+    });
+    expect(getResultSpy).not.toHaveBeenCalled();
+  });
+
+  it('reuses a legacy stored grader result when the plugin id still matches', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:harmful:hate' as const,
+      value: 'fresh assertion rubric',
+    };
+    const storedResult = {
+      pass: true,
+      score: 1,
+      reason: 'Legacy stored grader result',
+      metadata: {
+        stored: true,
+      },
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'harmful:hate',
+      },
+    };
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {
+        storedGraderResult: storedResult,
+      },
+    };
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(grade).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Legacy stored grader result',
+      assertion: {
+        type: assertion.type,
+        value: 'fresh assertion rubric',
+      },
+      metadata: {
+        pluginId: 'harmful:hate',
+        stored: true,
+      },
+    });
+    expect(getResultSpy).not.toHaveBeenCalled();
+  });
+
+  it('re-grades when a stored grader result belongs to a different assertion type', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:rbac' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'rbac',
+      },
+    };
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {
+        storedGraderResult: {
+          pass: false,
+          score: 0,
+          reason: 'Wrong stored grader result',
+          assertion: {
+            type: 'promptfoo:redteam:prompt-extraction',
+          },
+        },
+      },
+    };
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: true,
+        score: 1,
+        reason: 'Fresh grader result',
+      },
+      rubric: 'Fresh rubric',
+    });
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(grade.reason).toBe('Fresh grader result');
+    expect(getResultSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {
     const assertion = {
       type: 'promptfoo:redteam:harmful:hate' as const,
