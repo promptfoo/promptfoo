@@ -382,6 +382,15 @@ export function buildOpenClawContextHeaders(config?: OpenClawConfig): Record<str
   return headers;
 }
 
+export function resolveOpenClawBillingModelName(config?: OpenClawConfig): string | undefined {
+  const backendModel = normalizeHeaderValue(config?.backend_model || config?.model_override);
+  if (!backendModel) {
+    return undefined;
+  }
+
+  return backendModel.startsWith('openai/') ? backendModel.slice('openai/'.length) : backendModel;
+}
+
 /**
  * Build common OpenClaw headers for agent-id, session-key, and request context.
  * Note: thinking_level is only supported by the WS Agent provider and is

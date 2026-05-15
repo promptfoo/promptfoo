@@ -777,6 +777,9 @@ export const riskCategories: Record<string, Plugin[]> = {
     'unverifiable-claims',
   ],
 
+  'Agentic Security': [...AGENTIC_RUNTIME_PLUGINS],
+  'Coding Agent Security': [...CODING_AGENT_PLUGINS],
+
   'Domain-Specific Risks': [
     'ecommerce:pci-dss',
     'ecommerce:compliance-bypass',
@@ -841,9 +844,6 @@ export const riskCategories: Record<string, Plugin[]> = {
     'vlsu',
     'xstest',
   ],
-
-  'Agentic Security': [...AGENTIC_RUNTIME_PLUGINS],
-  'Coding Agent Security': [...CODING_AGENT_PLUGINS],
 };
 
 export const categoryDescriptions = {
@@ -851,12 +851,12 @@ export const categoryDescriptions = {
   'Compliance & Legal': 'Regulatory compliance, legal, and policy violation risks.',
   'Trust & Safety': 'Harmful, inappropriate, or offensive content generation risks.',
   Brand: 'Output reliability, accuracy, and brand reputation risks.',
-  Datasets: 'Pre-defined test cases from research datasets.',
-  'Domain-Specific Risks': 'Specialized risks and failure modes.',
   'Agentic Security':
     'Approval, handoff, tool discovery, MCP, session memory, error feedback, and guardrail coverage risks for agentic applications.',
   'Coding Agent Security':
     'Repository prompt injection, terminal output injection, launcher environment disclosure, sandbox read escape, and verifier sabotage risks for coding agents.',
+  'Domain-Specific Risks': 'Specialized risks and failure modes.',
+  Datasets: 'Pre-defined test cases from research datasets.',
 };
 
 export type TopLevelCategory = keyof typeof riskCategories;

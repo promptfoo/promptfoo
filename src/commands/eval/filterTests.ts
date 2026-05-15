@@ -18,6 +18,8 @@
 import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
 import { getTestCaseDeduplicationKey } from '../../util/comparison';
+import { filterByRange } from '../../util/filterRange';
+import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
 import { filterTestsByResults } from './filterTestsUtil';
 
 import type { TestSuite } from '../../types/index';
@@ -51,6 +53,8 @@ export interface FilterOptions {
   metadata?: string | string[];
   /** Regular expression pattern to filter tests by description */
   pattern?: string;
+  /** Zero-based test index range in start:end format. End is exclusive. */
+  range?: string;
   /** Number of random tests to sample */
   sample?: number | string;
 }
@@ -104,8 +108,9 @@ async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise
  * 2. Failing tests filter
  * 3. Error tests filter
  * 4. Pattern filter
- * 5. First N filter
- * 6. Random sample filter
+ * 5. Range filter
+ * 6. First N filter
+ * 7. Random sample filter
  *
  * @param testSuite - The test suite containing all tests
  * @param options - Configuration options for filtering
@@ -242,6 +247,10 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       );
     }
     tests = tests.filter((test) => test.description && pattern.test(test.description));
+  }
+
+  if (options.range !== undefined) {
+    tests = filterByRange(tests, options.range, warnEmptyFilterRange);
   }
 
   if (options.firstN !== undefined) {
