@@ -55,10 +55,11 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
   handoffs?: string | Array<Agent<any, any> | Handoff<any, any> | HandoffDefinition>;
 
   /**
-   * Maximum number of agent turns before stopping
+   * Maximum number of agent turns before stopping.
+   * Use null to disable the SDK turn limit.
    * @default 10
    */
-  maxTurns?: number;
+  maxTurns?: number | null;
 
   /**
    * Input guardrails

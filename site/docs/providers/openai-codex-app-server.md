@@ -84,6 +84,8 @@ prompts:
 
 The provider returns Codex's final assistant text as `output`. It also records thread ids, turn ids, item counts, command/file/tool metadata, approval decisions, and token usage under `metadata.codexAppServer`.
 
+For downstream coding-agent checks, `raw` also includes SDK-compatible `items` and `usage` fields alongside the protocol-shaped thread and turn payloads. That keeps trajectory-style assertions aligned between `openai:codex-app-server` and `openai:codex-sdk` without losing the richer app-server metadata.
+
 ## Safety Defaults
 
 The app-server protocol can expose shell, filesystem, config, plugin, MCP, and app connector surfaces. Promptfoo defaults to deterministic eval behavior:
@@ -114,46 +116,47 @@ Use `accept`, `acceptForSession`, permission grants, or MCP elicitation acceptan
 
 The provider validates top-level provider config strictly. Prompt-level config is parsed more leniently because promptfoo merges generic test options into `prompt.config`; unrelated keys are ignored there, while invalid values for known Codex fields still return a row-level provider error.
 
-| Parameter                 | Type          | Description                                                                                                                                                         | Default              |
-| ------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| `apiKey`                  | string        | OpenAI API key. Optional when Codex is already signed in.                                                                                                           | Environment variable |
-| `base_url`                | string        | Custom OpenAI-compatible base URL. Also passed as `OPENAI_BASE_URL` and `OPENAI_API_BASE_URL`.                                                                      | None                 |
-| `working_dir`             | string        | Directory Codex operates in. Relative values resolve from the directory containing the config file.                                                                 | Current process dir  |
-| `additional_directories`  | string[]      | Additional directories added to workspace-write sandbox roots.                                                                                                      | None                 |
-| `skip_git_repo_check`     | boolean       | Skip the default Git repository safety check.                                                                                                                       | `false`              |
-| `codex_path_override`     | string        | Path to a specific `codex` binary.                                                                                                                                  | `codex`              |
-| `model`                   | string        | Model id, such as `gpt-5.5`. Can also be set in the provider id.                                                                                                    | Codex default        |
-| `model_provider`          | string        | App-server model provider override for `thread/start` and `thread/resume`.                                                                                          | None                 |
-| `service_tier`            | string        | `fast` or `flex`.                                                                                                                                                   | App-server default   |
-| `sandbox_mode`            | string        | `read-only`, `workspace-write`, or `danger-full-access`.                                                                                                            | `read-only`          |
-| `sandbox_policy`          | object        | Raw app-server sandbox policy override for `turn/start`.                                                                                                            | Generated from mode  |
-| `network_access_enabled`  | boolean       | Adds network access to generated sandbox policies.                                                                                                                  | `false`              |
-| `approval_policy`         | string/object | `never`, `on-request`, `on-failure`, `untrusted`, or granular approval policy object.                                                                               | `never`              |
-| `approvals_reviewer`      | string        | `user` or `guardian_subagent`.                                                                                                                                      | App-server default   |
-| `model_reasoning_effort`  | string        | `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`.                                                                                                             | App-server default   |
-| `reasoning_summary`       | string        | `auto`, `concise`, `detailed`, or `none`.                                                                                                                           | App-server default   |
-| `personality`             | string        | `none`, `friendly`, or `pragmatic`.                                                                                                                                 | App-server default   |
-| `base_instructions`       | string        | Base instructions passed to `thread/start` and `thread/resume`.                                                                                                     | None                 |
-| `developer_instructions`  | string        | Developer instructions passed to `thread/start` and `thread/resume`.                                                                                                | None                 |
-| `collaboration_mode`      | object        | Experimental collaboration mode passed to `turn/start`.                                                                                                             | None                 |
-| `output_schema`           | object        | JSON Schema passed to `turn/start`.                                                                                                                                 | None                 |
-| `thread_id`               | string        | Resume an existing Codex thread.                                                                                                                                    | None                 |
-| `persist_threads`         | boolean       | Reuse threads across rows with the same prompt template and config.                                                                                                 | `false`              |
-| `thread_pool_size`        | number        | Max cached thread count when `persist_threads` is enabled.                                                                                                          | `1`                  |
-| `thread_cleanup`          | string        | `unsubscribe`, `archive`, or `none` for non-persistent threads. Resumed `thread_id` rows unsubscribe by default; `archive` is ignored for user-supplied thread IDs. | `unsubscribe`        |
-| `ephemeral`               | boolean       | Create ephemeral threads by default.                                                                                                                                | `true`               |
-| `experimental_raw_events` | boolean       | Ask app-server to emit raw Responses API items.                                                                                                                     | `false`              |
-| `experimental_api`        | boolean       | Opt into experimental app-server protocol fields during `initialize`.                                                                                               | `true`               |
-| `include_raw_events`      | boolean       | Include protocol notifications in `raw`.                                                                                                                            | `false`              |
-| `cli_config`              | object        | Extra `codex app-server -c key=value` config overrides.                                                                                                             | None                 |
-| `cli_env`                 | object        | Extra environment variables for the app-server process.                                                                                                             | Minimal shell env    |
-| `inherit_process_env`     | boolean       | Merge the full Node.js environment into the app-server process.                                                                                                     | `false`              |
-| `reuse_server`            | boolean       | Reuse the app-server process across rows. Disabled for `deep_tracing`.                                                                                              | `true`               |
-| `deep_tracing`            | boolean       | Inject OTEL env vars into a fresh app-server process per call.                                                                                                      | `false`              |
-| `request_timeout_ms`      | number        | JSON-RPC request timeout.                                                                                                                                           | `30000`              |
-| `startup_timeout_ms`      | number        | `initialize` timeout.                                                                                                                                               | `30000`              |
-| `turn_timeout_ms`         | number        | Overall turn timeout.                                                                                                                                               | None                 |
-| `server_request_policy`   | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
+| Parameter                  | Type          | Description                                                                                                                                                         | Default              |
+| -------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| `apiKey`                   | string        | OpenAI API key. Optional when Codex is already signed in.                                                                                                           | Environment variable |
+| `base_url`                 | string        | Custom OpenAI-compatible base URL. Also passed as `OPENAI_BASE_URL` and `OPENAI_API_BASE_URL`.                                                                      | None                 |
+| `working_dir`              | string        | Directory Codex operates in. Relative values resolve from the directory containing the config file.                                                                 | Current process dir  |
+| `additional_directories`   | string[]      | Additional directories added to workspace-write sandbox roots.                                                                                                      | None                 |
+| `skip_git_repo_check`      | boolean       | Skip the default Git repository safety check.                                                                                                                       | `false`              |
+| `codex_path_override`      | string        | Path to a specific `codex` binary.                                                                                                                                  | `codex`              |
+| `model`                    | string        | Model id, such as `gpt-5.5`. Can also be set in the provider id.                                                                                                    | Codex default        |
+| `model_provider`           | string        | App-server model provider override for `thread/start` and `thread/resume`.                                                                                          | None                 |
+| `service_tier`             | string        | `fast` or `flex`.                                                                                                                                                   | App-server default   |
+| `sandbox_mode`             | string        | `read-only`, `workspace-write`, or `danger-full-access`.                                                                                                            | `read-only`          |
+| `sandbox_policy`           | object        | Raw app-server sandbox policy override for `turn/start`.                                                                                                            | Generated from mode  |
+| `network_access_enabled`   | boolean       | Adds network access to generated sandbox policies.                                                                                                                  | `false`              |
+| `approval_policy`          | string/object | `never`, `on-request`, `on-failure`, `untrusted`, or granular approval policy object. `on-failure` is accepted for compatibility but deprecated by Codex.           | `never`              |
+| `approvals_reviewer`       | string        | `user` or `auto_review`. `guardian_subagent` is still accepted as a legacy alias.                                                                                   | App-server default   |
+| `model_reasoning_effort`   | string        | `none`, `minimal`, `low`, `medium`, `high`, or `xhigh`.                                                                                                             | App-server default   |
+| `reasoning_summary`        | string        | `auto`, `concise`, `detailed`, or `none`.                                                                                                                           | App-server default   |
+| `personality`              | string        | `none`, `friendly`, or `pragmatic`.                                                                                                                                 | App-server default   |
+| `base_instructions`        | string        | Base instructions passed to `thread/start` and `thread/resume`.                                                                                                     | None                 |
+| `developer_instructions`   | string        | Developer instructions passed to `thread/start` and `thread/resume`.                                                                                                | None                 |
+| `collaboration_mode`       | object        | Experimental collaboration mode passed to `turn/start`.                                                                                                             | None                 |
+| `output_schema`            | object        | JSON Schema passed to `turn/start`.                                                                                                                                 | None                 |
+| `thread_id`                | string        | Resume an existing Codex thread.                                                                                                                                    | None                 |
+| `persist_threads`          | boolean       | Reuse threads across rows with the same prompt template and config.                                                                                                 | `false`              |
+| `thread_pool_size`         | number        | Max cached thread count when `persist_threads` is enabled.                                                                                                          | `1`                  |
+| `thread_cleanup`           | string        | `unsubscribe`, `archive`, or `none` for non-persistent threads. Resumed `thread_id` rows unsubscribe by default; `archive` is ignored for user-supplied thread IDs. | `unsubscribe`        |
+| `ephemeral`                | boolean       | Create ephemeral threads by default.                                                                                                                                | `true`               |
+| `persist_extended_history` | boolean       | Preserve extended app-server thread history when starting or resuming threads.                                                                                      | `false`              |
+| `experimental_raw_events`  | boolean       | Ask app-server to emit raw Responses API items.                                                                                                                     | `false`              |
+| `experimental_api`         | boolean       | Opt into experimental app-server protocol fields during `initialize`.                                                                                               | `true`               |
+| `include_raw_events`       | boolean       | Include protocol notifications in `raw`.                                                                                                                            | `false`              |
+| `cli_config`               | object        | Extra `codex app-server -c key=value` config overrides.                                                                                                             | None                 |
+| `cli_env`                  | object        | Extra environment variables for the app-server process.                                                                                                             | Minimal shell env    |
+| `inherit_process_env`      | boolean       | Merge the full Node.js environment into the app-server process.                                                                                                     | `false`              |
+| `reuse_server`             | boolean       | Reuse the app-server process across rows. Disabled for `deep_tracing`.                                                                                              | `true`               |
+| `deep_tracing`             | boolean       | Inject OTEL env vars into a fresh app-server process per call.                                                                                                      | `false`              |
+| `request_timeout_ms`       | number        | JSON-RPC request timeout.                                                                                                                                           | `30000`              |
+| `startup_timeout_ms`       | number        | `initialize` timeout.                                                                                                                                               | `30000`              |
+| `turn_timeout_ms`          | number        | Overall turn timeout.                                                                                                                                               | None                 |
+| `server_request_policy`    | object        | Deterministic responses for approvals, user input, MCP elicitations, and dynamic tools.                                                                             | Safe declines        |
 
 ### Granular Approval Policy
 
@@ -209,6 +212,7 @@ providers:
             source: promptfoo
         permissions:
           scope: session
+          strict_auto_review: true
           permissions:
             network:
               enabled: true
@@ -234,6 +238,8 @@ server_request_policy:
 ```
 
 Legacy `execCommandApproval` and `applyPatchApproval` callbacks are also handled for older app-server versions. Advanced command decision objects are only supported on the modern `item/commandExecution/requestApproval` flow.
+
+`permissions.strict_auto_review` maps to the app-server `strictAutoReview` response field and asks Codex to review every subsequent command in the current turn before normal sandboxed execution.
 
 ## Structured Output
 

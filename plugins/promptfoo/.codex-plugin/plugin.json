@@ -14,8 +14,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Promptfoo",
-    "shortDescription": "Build evals and red teams for LLM apps",
-    "longDescription": "Skills for configuring Promptfoo providers and targets, writing eval suites, and setting up red team workflows.",
+    "shortDescription": "Create evals, connect targets, and red team LLM apps",
+    "longDescription": "Promptfoo skills for configuring providers and targets, writing eval suites, and setting up or running red team workflows against LLM apps.",
     "developerName": "Promptfoo",
     "category": "Developer Tools",
     "capabilities": ["Read", "Write"],
@@ -27,6 +27,9 @@
       "Use Promptfoo to connect my HTTP endpoint to an eval.",
       "Set up or run Promptfoo red teaming for this API."
     ],
-    "brandColor": "#111827"
+    "brandColor": "#FE2C06",
+    "composerIcon": "./assets/promptfoo-panda.svg",
+    "logo": "./assets/promptfoo-panda.svg",
+    "screenshots": []
   }
 }

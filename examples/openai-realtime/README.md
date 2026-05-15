@@ -52,6 +52,7 @@ You can also use environment variables like `OPENAI_API_BASE_URL` or `OPENAI_BAS
 
 - `promptfooconfig.yaml`: Configuration file defining the providers and tests
 - `promptfooconfig-gpt-realtime.yaml`: Comprehensive gpt-realtime-1.5 model demonstration with audio support
+- `promptfooconfig-function-calling.js`: Runnable function-calling example with a local handler
 - `test-webui-audio.yaml`: Simple audio test for WebUI playback
 - `realtime-input.json`: JSON template for the realtime input prompt
 - `promptfooconfig-conversation.yaml`: Configuration for multi-turn conversation tests
@@ -341,11 +342,11 @@ providers:
 
 If you reuse a Chat Completions-style tools file that wraps those fields under `function:`, promptfoo still accepts it as a compatibility input and normalizes only that legacy shape before sending it to the Realtime API.
 
-When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to your handler. Validate the function name and parse or validate the arguments before side effects in your application code.
+When you provide a custom `functionCallHandler`, promptfoo forwards the model-emitted tool name and arguments to your handler. Use `toolCallTimeout` to bound each handler invocation and `maxToolIterations` to cap chained tool-follow-up rounds in one turn. Validate the function name and parse or validate the arguments before side effects in your application code.
 
 #### Implementing a Custom Function Handler
 
-To use function calling in your application, you would implement a function call handler. Here's an example of how you might implement a weather function handler in JavaScript:
+To use function calling in your application, implement a function call handler. The runnable `promptfooconfig-function-calling.js` example includes one end to end; here is the same core pattern:
 
 ```javascript
 // In your application code
