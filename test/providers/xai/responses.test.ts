@@ -357,6 +357,35 @@ describe('XAIResponsesProvider', () => {
     });
   });
 
+  it('preserves completed-response annotations while rebuilding streamed output text', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.output_text.delta","delta":"final answer"}',
+          '',
+          'data: {"type":"response.completed","response":{"id":"resp_stream","model":"grok-4.3","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"final answer","annotations":[{"url":"https://example.com","title":"Example"}]}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      ),
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('final answer');
+    expect(result.metadata?.annotations).toEqual([
+      { url: 'https://example.com', title: 'Example' },
+    ]);
+    expect(result.raw?.annotations).toEqual([{ url: 'https://example.com', title: 'Example' }]);
+  });
+
   it('returns an error when a streamed response has no output content', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,

@@ -189,13 +189,31 @@ async function readStreamingResponse(response: Response): Promise<any> {
   }
 
   if (outputText) {
+    const annotations = Array.isArray(latestResponse?.output)
+      ? latestResponse.output.flatMap((item: any) =>
+          Array.isArray(item?.content)
+            ? item.content.flatMap((contentItem: any) =>
+                contentItem?.type === 'output_text' && Array.isArray(contentItem.annotations)
+                  ? contentItem.annotations
+                  : [],
+              )
+            : [],
+        )
+      : [];
+
     return {
       ...latestResponse,
       output: [
         {
           type: 'message',
           role: 'assistant',
-          content: [{ type: 'output_text', text: outputText }],
+          content: [
+            {
+              type: 'output_text',
+              text: outputText,
+              ...(annotations.length > 0 ? { annotations } : {}),
+            },
+          ],
         },
       ],
     };
