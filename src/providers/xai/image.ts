@@ -87,11 +87,24 @@ export class XAIImageProvider extends OpenAiImageProvider {
       // Dated alias for grok-imagine-image, as listed by xAI's image-generation-models API.
       'grok-imagine-image-2026-03-02': 'grok-imagine-image',
       'grok-imagine-image-quality': 'grok-imagine-image-quality',
+      // xAI exposes dated and -latest aliases for the quality model; route them to
+      // the canonical slug so fallback pricing and request routing stay consistent.
+      'grok-imagine-image-quality-latest': 'grok-imagine-image-quality',
+      'grok-imagine-image-quality-20260403': 'grok-imagine-image-quality',
       'grok-imagine-image-pro': 'grok-imagine-image-pro',
       'grok-2-image': 'grok-2-image',
       'grok-image': 'grok-2-image',
     };
-    return modelMap[this.modelName] || 'grok-2-image';
+    if (modelMap[this.modelName]) {
+      return modelMap[this.modelName];
+    }
+    // Preserve unknown Grok Imagine slugs as-is rather than silently routing
+    // them to the legacy `grok-2-image` model. This avoids surprising downgrades
+    // when xAI publishes new aliases that promptfoo has not yet indexed.
+    if (this.modelName.startsWith('grok-imagine-')) {
+      return this.modelName;
+    }
+    return 'grok-2-image';
   }
 
   private calculateImageCost(

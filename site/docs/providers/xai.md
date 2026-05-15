@@ -24,7 +24,7 @@ The xAI provider includes support for the following model formats. xAI's public 
 
 :::caution Legacy xAI model aliases
 
-xAI periodically retires older model slugs and may keep them working by redirecting them to newer replacements. Older IDs such as `grok-4-1-fast-*`, `grok-4-fast-*`, `grok-4-0709`, `grok-code-fast-1`, `grok-3`, and `grok-imagine-image-pro` can therefore remain accepted while behavior or billing follows xAI's current redirect target. For new configs, prefer current catalog models such as `grok-4.3` or `grok-imagine-image-quality` where applicable.
+xAI periodically retires older model slugs and keeps them working by redirecting them to newer replacements. As of the May 15, 2026 (12:00 PM PT) retirement, requests to `grok-4-1-fast-reasoning`, `grok-4-1-fast-non-reasoning`, `grok-4-fast-reasoning`, `grok-4-fast-non-reasoning`, `grok-4-0709`, `grok-code-fast-1`, and `grok-3` (including the `*-beta`, `*-fast`, and `*-latest` aliases on each of those families) are redirected to `grok-4.3` — reasoning variants run with `low` reasoning effort, non-reasoning variants run with `none` — and billed at standard Grok 4.3 pricing. The `grok-imagine-image-pro` slug is similarly redirected to xAI's quality image model. For new configs, prefer current catalog models such as `grok-4.3` or `grok-imagine-image-quality` directly.
 
 :::
 

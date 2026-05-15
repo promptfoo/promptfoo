@@ -297,29 +297,45 @@ export const XAI_CHAT_MODELS = [
   },
 ];
 
-// xAI redirects these legacy chat slugs to Grok 4.3 after the May 15, 2026
-// retirement cutoff. Keep the slugs accepted locally, but price fallback math
-// against the model users are actually billed for.
+// xAI's May 15, 2026 (12:00 PM PT) retirement email confirms the following
+// behaviour for the listed legacy chat slugs: requests continue to work after
+// the cutoff but redirect to grok-4.3 (low reasoning effort for the reasoning
+// variants, none for the non-reasoning variants) and are billed at standard
+// grok-4.3 pricing ($1.25 / 1M input, $2.50 / 1M output). The set mirrors
+// every id/alias pair xAI lists on `/v1/language-models` for the retired
+// models so that any spelling a user might have in their config maps to the
+// correct post-retirement billing target.
 const GROK_43_REDIRECTED_CHAT_MODELS = new Set([
+  // grok-4-1-fast-{reasoning,non-reasoning} family
   'grok-4-1-fast-reasoning',
   'grok-4-1-fast-non-reasoning',
   'grok-4-1-fast',
   'grok-4-1-fast-latest',
   'grok-4-1-fast-reasoning-latest',
   'grok-4-1-fast-non-reasoning-latest',
+  // grok-4-fast-{reasoning,non-reasoning} family
   'grok-4-fast-reasoning',
   'grok-4-fast-non-reasoning',
   'grok-4-fast',
   'grok-4-fast-latest',
   'grok-4-fast-reasoning-latest',
   'grok-4-fast-non-reasoning-latest',
+  // grok-4 (0709) family
   'grok-4-0709',
   'grok-4',
   'grok-4-latest',
+  // grok-code-fast-1 family — xAI's catalog also exposes a dated slug.
   'grok-code-fast-1',
   'grok-code-fast',
+  'grok-code-fast-1-0825',
+  // grok-3 family — xAI's catalog collapses every -beta/-fast variant into
+  // the same id, so they all share the post-retirement billing target.
   'grok-3',
   'grok-3-latest',
+  'grok-3-beta',
+  'grok-3-fast',
+  'grok-3-fast-latest',
+  'grok-3-fast-beta',
 ]);
 
 export const GROK_3_MINI_MODELS = [

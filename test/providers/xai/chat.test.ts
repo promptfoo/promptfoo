@@ -633,7 +633,16 @@ describe('xAI Chat Provider', () => {
         'grok-4-fast-non-reasoning',
         'grok-4',
         'grok-code-fast',
+        // xAI exposes a dated grok-code-fast-1 alias on /v1/language-models;
+        // it shares the post-retirement billing target with the undated slug.
+        'grok-code-fast-1-0825',
         'grok-3',
+        // The grok-3 family collapses every -beta and -fast variant into the
+        // same id on xAI's catalog, so all of them must redirect together.
+        'grok-3-beta',
+        'grok-3-fast',
+        'grok-3-fast-beta',
+        'grok-3-fast-latest',
       ]) {
         expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
       }

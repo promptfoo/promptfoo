@@ -90,6 +90,12 @@ describe('XAI Image Provider', () => {
       expect(createXAIImageProvider('xai:image:grok-imagine-image-quality').id()).toBe(
         'xai:image:grok-imagine-image-quality',
       );
+      expect(createXAIImageProvider('xai:image:grok-imagine-image-quality-latest').id()).toBe(
+        'xai:image:grok-imagine-image-quality-latest',
+      );
+      expect(createXAIImageProvider('xai:image:grok-imagine-image-quality-20260403').id()).toBe(
+        'xai:image:grok-imagine-image-quality-20260403',
+      );
       expect(createXAIImageProvider('xai:image:grok-imagine-image-pro').id()).toBe(
         'xai:image:grok-imagine-image-pro',
       );
@@ -194,6 +200,37 @@ describe('XAI Image Provider', () => {
         getRequestTimeoutMs(),
       );
       expect(result.cost).toBe(0.05);
+    });
+
+    it('routes Grok Imagine quality aliases to the canonical model slug', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-quality-latest', {
+        config: { apiKey: mockApiKey },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/generations',
+        expect.objectContaining({ model: 'grok-imagine-image-quality' }),
+        expect.any(Object),
+        getRequestTimeoutMs(),
+      );
+      expect(result.cost).toBe(0.05);
+    });
+
+    it('preserves unknown Grok Imagine slugs instead of falling back to grok-2-image', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-future-preview', {
+        config: { apiKey: mockApiKey },
+      });
+
+      await provider.callApi('Generate a cat');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/generations',
+        expect.objectContaining({ model: 'grok-imagine-image-future-preview' }),
+        expect.any(Object),
+        getRequestTimeoutMs(),
+      );
     });
 
     it('supports the quality image model with resolution-sensitive fallback pricing', async () => {
