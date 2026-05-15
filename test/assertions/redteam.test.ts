@@ -3,6 +3,11 @@ import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/i
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
+
+vi.mock('../../src/redteam/strategies/indirectWebPwn', () => ({
+  checkExfilTracking: vi.fn(),
+}));
 
 describe('handleRedteam', () => {
   afterEach(() => {
@@ -184,6 +189,165 @@ describe('handleRedteam', () => {
         valueFromScript: undefined,
       }),
     ).rejects.toThrow('Remote grading failed');
+  });
+
+  it('returns stored grader results and marks them incomplete after partial grader failures', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:harmful:hate' as const,
+      value: 'fallback rubric',
+    };
+
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'Stored grader result test',
+        pluginId: 'harmful:hate',
+      },
+    };
+
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {
+        storedGraderResult: {
+          pass: false,
+          score: 0,
+          reason: 'Stored failure',
+          assertion: {
+            type: assertion.type,
+          },
+          metadata: {
+            source: 'iterative',
+          },
+        },
+        redteamHistory: [{ graderError: 'Remote grading failed' }, { graderError: '' }],
+      },
+    };
+
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult');
+
+    const grade = await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(getResultSpy).not.toHaveBeenCalled();
+    expect(grade).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Stored failure',
+      assertion: {
+        type: assertion.type,
+        value: assertion.value,
+      },
+      metadata: {
+        purpose: 'Stored grader result test',
+        pluginId: 'harmful:hate',
+        source: 'iterative',
+        gradingIncomplete: true,
+      },
+    });
+  });
+
+  it('adds exfil tracking context when page metadata is available', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:harmful:hate' as const,
+    };
+
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        purpose: 'Indirect web exfiltration',
+        pluginId: 'harmful:hate',
+        webPageUrl: 'https://promptfoo.dev/dynamic-pages/eval-123/page-uuid',
+      },
+    };
+
+    const providerResponse = {
+      output: 'Some output',
+      metadata: {
+        webPageUuid: 'page-uuid',
+      },
+    };
+
+    vi.mocked(checkExfilTracking).mockResolvedValue({
+      wasExfiltrated: true,
+      exfilCount: 2,
+      exfilRecords: [],
+    });
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: false,
+        score: 0,
+        reason: 'Exfiltration detected',
+      },
+      rubric: 'Mock rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'test output',
+      outputString: 'test output',
+      prompt: 'test prompt',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(checkExfilTracking).toHaveBeenCalledWith('page-uuid', 'eval-123');
+    expect(getResultSpy).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      test,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      expect.objectContaining({
+        providerResponse,
+        wasExfiltrated: true,
+        exfilCount: 2,
+        exfilRecords: [],
+      }),
+    );
   });
 
   it('throws an actionable error when a redteam assertion has no registered grader', async () => {
