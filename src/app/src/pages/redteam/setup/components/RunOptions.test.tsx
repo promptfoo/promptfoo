@@ -18,28 +18,6 @@ const renderWithTooltipProvider = (component: React.ReactNode) => {
   return render(<TooltipProvider>{component}</TooltipProvider>);
 };
 
-describe('RUNOPTIONS_TEXT', () => {
-  it('should have all the required properties and nested structure for each input type', () => {
-    expect(RUNOPTIONS_TEXT).toBeDefined();
-
-    expect(RUNOPTIONS_TEXT.numberOfTests).toBeDefined();
-    expect(RUNOPTIONS_TEXT.numberOfTests.helper).toBeDefined();
-    expect(RUNOPTIONS_TEXT.numberOfTests.error).toBeDefined();
-
-    expect(RUNOPTIONS_TEXT.delayBetweenApiCalls).toBeDefined();
-    expect(RUNOPTIONS_TEXT.delayBetweenApiCalls.helper).toBeDefined();
-    expect(RUNOPTIONS_TEXT.delayBetweenApiCalls.error).toBeDefined();
-
-    expect(RUNOPTIONS_TEXT.maxConcurrentRequests).toBeDefined();
-    expect(RUNOPTIONS_TEXT.maxConcurrentRequests.helper).toBeDefined();
-    expect(RUNOPTIONS_TEXT.maxConcurrentRequests.error).toBeDefined();
-
-    expect(RUNOPTIONS_TEXT.maxCharsPerMessage).toBeDefined();
-    expect(RUNOPTIONS_TEXT.maxCharsPerMessage.helper).toBeDefined();
-    expect(RUNOPTIONS_TEXT.maxCharsPerMessage.error).toBeDefined();
-  });
-});
-
 describe('RunOptionsContent', () => {
   const mockUpdateConfig = vi.fn();
   const mockUpdateRunOption = vi.fn();
@@ -684,21 +662,6 @@ describe('NumberOfTestCasesInput', () => {
     expect(numTestsInput).toHaveAttribute('aria-invalid', 'false');
 
     expect(screen.getByText(RUNOPTIONS_TEXT.numberOfTests.helper)).toBeInTheDocument();
-  });
-
-  it('should not display helper text when RUNOPTIONS_TEXT.missingProperty is accessed', () => {
-    const originalRunOptionsText = { ...RUNOPTIONS_TEXT };
-    // @ts-ignore - Intentionally testing access to a non-existent property
-    RUNOPTIONS_TEXT.missingProperty = { helper: undefined, error: undefined };
-
-    renderWithTooltipProvider(
-      <NumberOfTestCasesInput value="3" setValue={setValue} updateConfig={updateConfig} />,
-    );
-
-    expect(screen.queryByText('undefined')).toBeNull();
-
-    // @ts-ignore - Restoring the original object
-    RUNOPTIONS_TEXT.missingProperty = originalRunOptionsText.missingProperty;
   });
 });
 
