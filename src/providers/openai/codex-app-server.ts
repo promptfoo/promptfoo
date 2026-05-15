@@ -2291,13 +2291,18 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     if (
       completedItem?.type === 'commandExecution' &&
       typeof completedItem.id === 'string' &&
-      typeof completedItem.aggregatedOutput === 'string' &&
-      !state.commandExecutionOutputDeltasByItemId.has(completedItem.id)
+      typeof completedItem.aggregatedOutput === 'string'
     ) {
-      state.commandExecutionOutputDeltasByItemId.set(
-        completedItem.id,
-        completedItem.aggregatedOutput,
-      );
+      const existingOutput = state.commandExecutionOutputDeltasByItemId.get(completedItem.id);
+      if (
+        typeof existingOutput !== 'string' ||
+        completedItem.aggregatedOutput.startsWith(existingOutput)
+      ) {
+        state.commandExecutionOutputDeltasByItemId.set(
+          completedItem.id,
+          completedItem.aggregatedOutput,
+        );
+      }
     }
     state.items.push(completedItem);
     const itemId = completedItem.id ? String(completedItem.id) : crypto.randomUUID();
@@ -2349,7 +2354,14 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     }
 
     const aggregatedOutput = state.commandExecutionOutputDeltasByItemId.get(item.id);
-    if (typeof item.aggregatedOutput === 'string' || typeof aggregatedOutput !== 'string') {
+    if (typeof aggregatedOutput !== 'string') {
+      return item;
+    }
+
+    if (
+      typeof item.aggregatedOutput === 'string' &&
+      !aggregatedOutput.startsWith(item.aggregatedOutput)
+    ) {
       return item;
     }
 

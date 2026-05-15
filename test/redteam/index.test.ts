@@ -41,10 +41,6 @@ vi.mock('../../src/util/templates', async () => {
   };
 });
 
-vi.spyOn(process, 'exit').mockImplementation(function () {
-  return undefined as never;
-});
-
 vi.mock('../../src/redteam/strategies', async () => ({
   ...(await vi.importActual('../../src/redteam/strategies')),
 
@@ -78,7 +74,6 @@ describe('synthesize', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.resetAllMocks();
 
     // Set up logger mocks
@@ -197,11 +192,10 @@ describe('synthesize', () => {
         'Prompt 2',
         'Prompt 3',
       ]);
-      expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), [
-        'Prompt 1',
-        'Prompt 2',
-        'Prompt 3',
-      ]);
+      expect(extractEntities).toHaveBeenCalledWith(
+        expect.objectContaining({ id: expect.any(Function) }),
+        ['Prompt 1', 'Prompt 2', 'Prompt 3'],
+      );
     });
   });
 
@@ -1967,7 +1961,6 @@ vi.mock('js-yaml');
 
 describe('resolvePluginConfig', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.resetAllMocks();
 
     // Set up logger mocks
@@ -2159,8 +2152,9 @@ describe('calculateTotalTests', () => {
   });
 
   it('should resolve file:// intents from a JSON array for pre-generation totals', () => {
-    // fs is mocked at the module level (see vi.mock('fs') below). Stub readFileSync
-    // so maybeLoadFromExternalFile sees a JSON array of intents.
+    // fs is mocked at the module level (see vi.mock('fs') below). Stub existsSync/readFileSync
+    // so maybeLoadFromExternalFile sees an existing file with a JSON array of intents.
+    const existsSyncSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
     const readFileSyncSpy = vi
       .spyOn(fs, 'readFileSync')
       .mockReturnValue(JSON.stringify(['do thing 1', 'do thing 2', 'do thing 3', 'do thing 4']));
@@ -2184,6 +2178,7 @@ describe('calculateTotalTests', () => {
       });
     } finally {
       readFileSyncSpy.mockRestore();
+      existsSyncSpy.mockRestore();
     }
   });
 
@@ -3486,7 +3481,7 @@ describe('Language configuration', () => {
         message: 'Cloud API is healthy',
       });
       vi.mocked(getRemoteHealthUrl).mockReturnValue('http://health.test');
-      vi.mocked(shouldGenerateRemote).mockResolvedValue(true);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
     });
 
     it('should show truncated policy text in plugin list for policy plugins', async () => {
@@ -3872,21 +3867,16 @@ describe('Language configuration', () => {
         // Mock the provider loading to return a mock provider for test generation
         // This avoids the loadApiProviders error while still testing strategy config
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
-        const providerSpy = vi
-          .spyOn(
-            await import('../../src/redteam/providers/shared'),
-            'redteamProviderManager',
-            'get',
-          )
-          .mockReturnValue({
-            getProvider: vi.fn().mockResolvedValue(mockProvider),
-            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
-            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
-            setProvider: vi.fn(),
-            setGradingProvider: vi.fn(),
-            setMultilingualProvider: vi.fn(),
-            clearProvider: vi.fn(),
-          } as any);
+        const providersShared = await import('../../src/redteam/providers/shared');
+        const getProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockProvider as any);
+        const getGradingProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(mockProvider as any);
+        const getMultilingualProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getMultilingualProvider')
+          .mockResolvedValue(undefined);
 
         try {
           await synthesize({
@@ -3902,7 +3892,9 @@ describe('Language configuration', () => {
           expect(capturedConfig).toBeDefined();
           expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
         } finally {
-          providerSpy.mockRestore();
+          getProviderSpy.mockRestore();
+          getGradingProviderSpy.mockRestore();
+          getMultilingualProviderSpy.mockRestore();
         }
       } finally {
         // Restore original cliState
@@ -3995,21 +3987,16 @@ describe('Language configuration', () => {
 
         // Mock the provider loading
         const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
-        const providerSpy = vi
-          .spyOn(
-            await import('../../src/redteam/providers/shared'),
-            'redteamProviderManager',
-            'get',
-          )
-          .mockReturnValue({
-            getProvider: vi.fn().mockResolvedValue(mockProvider),
-            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
-            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
-            setProvider: vi.fn(),
-            setGradingProvider: vi.fn(),
-            setMultilingualProvider: vi.fn(),
-            clearProvider: vi.fn(),
-          } as any);
+        const providersShared = await import('../../src/redteam/providers/shared');
+        const getProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockProvider as any);
+        const getGradingProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(mockProvider as any);
+        const getMultilingualProviderSpy = vi
+          .spyOn(providersShared.redteamProviderManager, 'getMultilingualProvider')
+          .mockResolvedValue(undefined);
 
         try {
           await synthesize({
@@ -4025,7 +4012,9 @@ describe('Language configuration', () => {
           // Should pass the full provider options object
           expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
         } finally {
-          providerSpy.mockRestore();
+          getProviderSpy.mockRestore();
+          getGradingProviderSpy.mockRestore();
+          getMultilingualProviderSpy.mockRestore();
         }
       } finally {
         cliState.config = originalConfig;
