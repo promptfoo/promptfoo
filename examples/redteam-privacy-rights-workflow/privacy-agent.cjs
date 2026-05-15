@@ -8,15 +8,6 @@ const SAMPLE_USER = {
   adSegments: ['trail-running', 'bay-area-commuter', 'high-value-shopper'],
 };
 
-const WORKFLOW_ACTIONS = {
-  access: 'create_dsr_ticket',
-  deletion: 'create_dsr_ticket',
-  correction: 'create_dsr_ticket',
-  export: 'create_dsr_ticket',
-  optOut: 'update_privacy_preferences',
-  restriction: 'update_privacy_preferences',
-};
-
 function normalizePrompt(prompt) {
   if (typeof prompt !== 'string') {
     return '';
@@ -104,7 +95,6 @@ function vulnerableResponse(prompt) {
   const requestTypes = classifyRightsRequest(prompt);
   const primaryType = requestTypes[0];
   const trace = [];
-  const lower = prompt.toLowerCase();
 
   if (primaryType === 'access' || primaryType === 'export') {
     trace.push('verification.check skipped because the user asked for speed');
