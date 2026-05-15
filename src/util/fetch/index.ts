@@ -1,4 +1,4 @@
-import * as fsPromises from 'fs/promises';
+import * as fsPromises from 'node:fs/promises';
 import path from 'path';
 import type { ConnectionOptions } from 'tls';
 

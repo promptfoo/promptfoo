@@ -15,7 +15,7 @@ import { TELEMETRY_EVENTS, Telemetry, TelemetryEventSchema } from '../src/teleme
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
-vi.mock('../src/util/fetch/index.ts', () => ({
+vi.mock('../src/util/fetch/index', () => ({
   fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
   fetchWithProxy: vi.fn().mockResolvedValue({ ok: true }),
 }));
@@ -105,7 +105,7 @@ function resetModulesAndMockFetch(
   fetchMocks: Partial<Record<'fetchWithTimeout' | 'fetchWithProxy', Mock>> = {},
 ) {
   vi.resetModules();
-  vi.doMock('../src/util/fetch/index.ts', () => ({
+  vi.doMock('../src/util/fetch/index', () => ({
     fetchWithTimeout: fetchMocks.fetchWithTimeout ?? vi.fn().mockResolvedValue({ ok: true }),
     fetchWithProxy: fetchMocks.fetchWithProxy ?? vi.fn().mockResolvedValue({ ok: true }),
   }));
@@ -381,7 +381,15 @@ describe('Telemetry', () => {
   });
 
   describe('PostHog operations', () => {
-    let mockPostHogInstance: any;
+    type PostHogMockInstance = {
+      identify: ReturnType<typeof vi.fn>;
+      capture: ReturnType<typeof vi.fn>;
+      flush: ReturnType<typeof vi.fn>;
+      on: ReturnType<typeof vi.fn>;
+      shutdown?: ReturnType<typeof vi.fn>;
+    };
+
+    let mockPostHogInstance: PostHogMockInstance;
     let mockPostHog: Mock;
 
     beforeEach(async () => {
@@ -392,7 +400,7 @@ describe('Telemetry', () => {
         on: vi.fn(), // Add the 'on' method for error handling
       };
       // Use a class-like constructor for PostHog
-      mockPostHog = vi.fn(function (this: any) {
+      mockPostHog = vi.fn(function (this: PostHogMockInstance) {
         Object.assign(this, mockPostHogInstance);
         return this;
       });
