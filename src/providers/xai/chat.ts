@@ -537,6 +537,15 @@ class XAIProvider extends OpenAiChatCompletionProvider {
   }
 
   protected supportsReasoningEffort(): boolean {
+    // Codex Review (b7875171) suggested forwarding reasoning_effort on
+    // redirected legacy slugs because xAI's retirement email says those
+    // requests now route to grok-4.3 (which accepts the parameter). In
+    // practice the chat-completions endpoint still rejects the parameter on
+    // pre-cutoff slugs with `Model <name> does not support parameter
+    // reasoningEffort.` (verified live against grok-4-fast-reasoning, 400
+    // Client specified an invalid argument). Keep stripping until the
+    // server-side redirect is actually in effect — users who want to tune
+    // effort should target `grok-4.3` (or `grok-4.3-latest`) directly.
     return GROK_REASONING_EFFORT_MODELS.includes(this.modelName);
   }
 

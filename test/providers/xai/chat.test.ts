@@ -340,6 +340,9 @@ describe('xAI Chat Provider', () => {
     });
 
     it('does not support reasoning_effort for Grok-4', () => {
+      // xAI's chat-completions endpoint rejects `reasoning_effort` on legacy
+      // Grok-4 family slugs even after the retirement-redirect to grok-4.3 is
+      // documented; the parameter is silently stripped before sending.
       const provider = createXAIProvider('xai:grok-4-0709') as any;
       expect(provider.supportsReasoningEffort()).toBe(false);
     });
@@ -380,13 +383,12 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok-4
+      // xAI's chat-completions endpoint rejects every one of these on the
+      // Grok-4 family, so they are stripped before send.
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // Temperature should still be present
       expect(result.body.temperature).toBe(0.8);
     });
 
@@ -407,13 +409,10 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok 4.1 Fast
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // These should still be present
       expect(result.body.temperature).toBe(0.7);
       expect(result.body.max_completion_tokens).toBe(2048);
     });
@@ -434,13 +433,10 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok 4 Fast
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // Temperature should still be present
       expect(result.body.temperature).toBe(0.7);
     });
 
