@@ -102,7 +102,7 @@ providers:
       apiKey: '{{env.OPENAI_API_KEY}}'
 
       # Read-only local repo access
-      working_dir: ./examples/provider-opencode-sdk/basic
+      working_dir: ./basic
       workspace: feature-branch
 
       # Structured output

@@ -70,7 +70,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 69;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -520,6 +520,42 @@ export function createServerOpenApiRegistry() {
       404: notFound('Evaluation not found'),
       500: serverError(),
       413: errorResponse('Evaluation table is too large'),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/eval/{id}/config',
+    operationId: 'getEvalConfig',
+    tags: ['Eval'],
+    summary: 'Get the full evaluation config',
+    request: {
+      params: params('EvalConfigParams', EvalSchemas.Config.Params),
+    },
+    responses: {
+      200: jsonResponse('EvalConfigResponse', EvalSchemas.Config.Response),
+      400: validationError(),
+      404: notFound('Evaluation not found'),
+      413: errorResponse('Evaluation config is too large'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/eval/{evalId}/results/{resultId}/detail',
+    operationId: 'getEvalResultDetail',
+    tags: ['Eval'],
+    summary: 'Get full detail for one evaluation result',
+    request: {
+      params: params('EvalResultDetailParams', EvalSchemas.ResultDetail.Params),
+    },
+    responses: {
+      200: jsonResponse('EvalResultDetailResponse', EvalSchemas.ResultDetail.Response),
+      400: validationError(),
+      404: notFound('Result not found'),
+      413: errorResponse('Evaluation result detail is too large'),
+      500: serverError(),
     },
   });
 

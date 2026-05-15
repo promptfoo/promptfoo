@@ -118,18 +118,20 @@ const ShallowEvaluateTableSchema = z
   })
   .passthrough();
 
-export const EvalTableResponseSchema = z.object({
-  table: ShallowEvaluateTableSchema,
-  totalCount: z.number(),
-  filteredCount: z.number(),
-  filteredMetrics: z.array(z.record(z.string(), z.unknown())).nullable(),
-  config: z.record(z.string(), z.unknown()),
-  configDetail: EvalConfigDetailInfoSchema.optional(),
-  author: z.string().nullable(),
-  version: z.number(),
-  id: z.string(),
-  stats: z.record(z.string(), z.unknown()).optional(),
-});
+export const EvalTableResponseSchema = z
+  .object({
+    table: ShallowEvaluateTableSchema,
+    totalCount: z.number(),
+    filteredCount: z.number(),
+    filteredMetrics: z.array(z.record(z.string(), z.unknown())).nullable(),
+    config: z.record(z.string(), z.unknown()),
+    configDetail: EvalConfigDetailInfoSchema.optional(),
+    author: z.string().nullable(),
+    version: z.number(),
+    id: z.string(),
+    stats: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
 
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
