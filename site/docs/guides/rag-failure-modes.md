@@ -30,7 +30,7 @@ The answer is wrong or incomplete because the retriever never returned the relev
 
 - `contains` / `contains-all` on retrieval output
 - `context-recall`
-- `context-relevance`
+- `context-relevance` when you also want to inspect how much returned context is actually needed
 
 **Starter test**
 
@@ -62,7 +62,7 @@ The retriever returns documents, but they are noisy or unrelated to the user que
 
 **Best signals**
 
-- `context-relevance`
+- `context-relevance` as a retrieval-focus signal
 - `llm-rubric` for "retrieved documents are relevant"
 
 **Starter test**
@@ -70,12 +70,12 @@ The retriever returns documents, but they are noisy or unrelated to the user que
 ```yaml
 assert:
   - type: context-relevance
-    threshold: 0.8
+    threshold: 0.5
 ```
 
 **Debug hint**
 
-Inspect retrieval ranking, metadata filters, and whether the query is over-broad.
+Inspect retrieval ranking, metadata filters, and whether the query is over-broad. `context-relevance` measures how much of the returned context is minimally needed, so interpret the score alongside the retrieved chunks rather than treating a higher score as universally better.
 
 ### 3. Context contains the answer, but the model ignores it
 
