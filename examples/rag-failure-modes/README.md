@@ -4,6 +4,8 @@ This example shows how to map common retrieval-augmented generation (RAG) failur
 
 Promptfoo already supports RAG evaluation through assertions such as `context-recall`, `context-relevance`, deterministic string checks, and model-graded rubrics. This example is not a new RAG framework or a new assertion type. It is a starter checklist for deciding which eval to write when a RAG system fails.
 
+The runnable config uses deterministic `answer` fixtures so each assertion evaluates answer behavior directly instead of passing just because the retrieved context text appears in the echoed prompt.
+
 ## Failure modes covered
 
 | Failure mode                       | What it looks like                                                                    | Suggested eval pattern                                                                                   |

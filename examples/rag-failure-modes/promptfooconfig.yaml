@@ -1,15 +1,8 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: RAG failure mode eval examples
 
 prompts:
-  - |
-    You are answering using retrieved context.
-
-    Question: {{query}}
-
-    Retrieved context:
-    {{context}}
-
-    Answer with citations when possible.
+  - '{{answer}}'
 
 providers:
   - id: echo
@@ -20,6 +13,7 @@ tests:
       query: What is the company's laptop replacement policy?
       context: |
         The travel policy covers airfare reimbursement and hotel booking rules.
+      answer: The retrieved travel policy does not answer laptop replacement timing.
     assert:
       - type: contains
         value: 'three years'
@@ -29,6 +23,7 @@ tests:
       query: What is the PTO carryover limit?
       context: |
         The equipment policy describes laptop replacement timelines and monitor reimbursement.
+      answer: I found equipment reimbursement guidance, not PTO carryover policy details.
     assert:
       - type: contains
         value: 'pto-policy.md#carryover'
@@ -39,6 +34,7 @@ tests:
       context: |
         Source: equipment-policy.md#laptops
         Employees are eligible for a laptop replacement every three years.
+      answer: According to equipment-policy.md#laptops, employees are eligible for a laptop replacement every three years.
     assert:
       - type: contains
         value: 'three years'
@@ -51,6 +47,7 @@ tests:
       context: |
         Source: equipment-policy.md#home-office
         Employees may request reimbursement for ergonomic home-office equipment with manager approval.
+      answer: Employees may request ergonomic home-office equipment reimbursement with manager approval.
     assert:
       - type: not-contains
         value: 'guaranteed standing desk reimbursement'
@@ -63,6 +60,7 @@ tests:
       context: |
         Source: equipment-policy.md#laptops
         Employees are eligible for a laptop replacement every three years.
+      answer: equipment-policy.md#laptops says employees are eligible for a laptop replacement every three years.
     assert:
       - type: contains
         value: 'equipment-policy.md#laptops'
@@ -76,6 +74,7 @@ tests:
         Source: equipment-policy.md#laptops
         Page: 4
         Employees are eligible for a laptop replacement every three years.
+      answer: 'equipment-policy.md#laptops, Page: 4, says employees are eligible for a laptop replacement every three years.'
     assert:
       - type: contains
         value: 'equipment-policy.md#laptops'
@@ -91,6 +90,7 @@ tests:
 
         Source: employee-handbook.md#pto
         PTO days cannot be carried over into the next year.
+      answer: pto-policy.md#carryover allows up to 5 carryover days, while employee-handbook.md#pto says PTO cannot be carried over, so the sources conflict.
     assert:
       - type: contains
         value: 'pto-policy.md#carryover'
@@ -103,6 +103,7 @@ tests:
       context: |
         Source: equipment-policy.md#laptops
         Employees are eligible for a laptop replacement every three years.
+      answer: Employees are eligible for a laptop replacement every three years.
     assert:
       - type: not-contains
         value: "I don't know"
