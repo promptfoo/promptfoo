@@ -131,9 +131,8 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   const replaceSearchParams = useCallback(
     (mutateSearchParams: (params: URLSearchParams) => void) => {
-      // Omit `hash` so the helper reads `window.location.hash` live — React Router's
-      // `location.hash` is stale w.r.t. `history.replaceState` mutations made by the
-      // eval-output dialog deep-link code.
+      // Filter changes can change the visible result set, so any existing details
+      // deep-link is stale and should not be carried into the replacement URL.
       navigate(
         buildEvalUrlWithSearchParams(
           { pathname: location.pathname, search: location.search, hash: '' },

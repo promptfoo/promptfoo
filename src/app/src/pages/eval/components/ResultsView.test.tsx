@@ -10,9 +10,9 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockSetSearchParams } = vi.hoisted(() => ({
+const { mockShowToast, mockNavigate } = vi.hoisted(() => ({
   mockShowToast: vi.fn(),
-  mockSetSearchParams: vi.fn(),
+  mockNavigate: vi.fn(),
 }));
 
 vi.mock('@app/hooks/useToast', () => ({
@@ -256,9 +256,8 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useSearchParams: vi
-      .fn()
-      .mockReturnValue([new URLSearchParams('filterMode=failures'), mockSetSearchParams]),
+    useNavigate: () => mockNavigate,
+    useSearchParams: vi.fn().mockReturnValue([new URLSearchParams('filterMode=failures'), vi.fn()]),
   };
 });
 
@@ -2826,12 +2825,11 @@ describe('ResultsView Browser History', () => {
     });
   });
 
-  it('should render without calling setSearchParams unnecessarily on mount', async () => {
-    // This test verifies that mounting ResultsView doesn't create unnecessary browser
-    // history entries. The component should only call setSearchParams when search text
-    // actually changes (via handleSearchTextChange), not during initialization.
+  it('should render without navigating unnecessarily on mount', async () => {
+    // Mounting ResultsView should not create a replacement navigation entry before
+    // the user changes search/view state.
 
-    mockSetSearchParams.mockClear();
+    mockNavigate.mockClear();
 
     renderWithRouter(
       <ResultsView
@@ -2844,9 +2842,6 @@ describe('ResultsView Browser History', () => {
     // Component should mount successfully
     expect(screen.getByText('Results Table')).toBeInTheDocument();
 
-    // Should not call setSearchParams during mount (search params are read, not set)
-    // The handleSearchTextChange callback (lines 217-223 in ResultsView.tsx) uses
-    // { replace: true } to prevent history pollution when search text changes
-    expect(mockSetSearchParams).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });

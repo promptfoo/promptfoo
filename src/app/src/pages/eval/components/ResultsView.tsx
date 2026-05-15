@@ -284,9 +284,8 @@ export default function ResultsView({
   const [searchInputValue, setSearchInputValue] = React.useState(initialSearchText); // local, for responsive input
   const [debouncedSearchText, setDebouncedSearchText] = React.useState(initialSearchText); // debounced, for table/URL/pill
 
-  // Debounced update for URL, table, and pill. Omit `hash` so the helper reads
-  // `window.location.hash` live — React Router's `location.hash` is stale w.r.t.
-  // `history.replaceState` mutations made by the eval-output dialog deep-link code.
+  // Debounced update for URL, table, and pill. Search changes can change the
+  // visible result set, so drop any existing details deep-link while replacing the URL.
   const debouncedUpdate = useDebouncedCallback((text: string) => {
     setDebouncedSearchText(text);
     navigate(
