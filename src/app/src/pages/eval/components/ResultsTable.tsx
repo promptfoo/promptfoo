@@ -1633,6 +1633,9 @@ function ResultsTable({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
+    if (parseEvalOutputPromptHash(window.location.hash)) {
+      setEvalDetailsHash('');
+    }
     // Use functional update to avoid stale closure over pagination state
     setPagination((prev) => ({ ...prev, pageIndex: 0 }));
   }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
@@ -1933,7 +1936,7 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={pagination.pageIndex * pagination.pageSize + info.row.index}
+                    rowIndex={output.originalRowIndex ?? info.row.index}
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,

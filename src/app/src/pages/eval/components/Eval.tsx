@@ -136,7 +136,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       // eval-output dialog deep-link code.
       navigate(
         buildEvalUrlWithSearchParams(
-          { pathname: location.pathname, search: location.search },
+          { pathname: location.pathname, search: location.search, hash: '' },
           mutateSearchParams,
         ),
         { replace: true },

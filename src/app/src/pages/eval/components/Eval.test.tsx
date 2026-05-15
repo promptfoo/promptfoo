@@ -466,7 +466,7 @@ describe('Eval', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('preserves the details hash when applying filters', async () => {
+  it('clears the details hash when applying filters', async () => {
     let subscriptionCallback: ((filters: any) => void) | null = null;
 
     // Mock subscribe to capture the callback and trigger it
@@ -519,7 +519,7 @@ describe('Eval', () => {
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.objectContaining({
         pathname: '/eval/test-eval',
-        hash: '#details-row-51-prompt-1',
+        hash: '',
       }),
       { replace: true },
     );

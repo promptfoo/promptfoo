@@ -57,9 +57,17 @@ vi.mock('react-router-dom', async () => ({
 
 vi.mock('./EvalOutputCell', () => {
   const MockEvalOutputCell = vi.fn(
-    ({ onRating, searchText }: { onRating: any; searchText?: string }) => {
+    ({
+      onRating,
+      rowIndex,
+      searchText,
+    }: {
+      onRating: any;
+      rowIndex?: number;
+      searchText?: string;
+    }) => {
       return (
-        <div data-testid="eval-output-cell" data-searchtext={searchText}>
+        <div data-testid="eval-output-cell" data-rowindex={rowIndex} data-searchtext={searchText}>
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
           </button>
@@ -1064,6 +1072,7 @@ describe('ResultsTable Row Navigation', () => {
                 id: 'test-id',
                 latencyMs: 0,
                 namedScores: {},
+                originalRowIndex: 0,
                 pass: true,
                 prompt: 'Prompt',
                 score: 1,
@@ -1110,6 +1119,24 @@ describe('ResultsTable Row Navigation', () => {
         }),
       );
     });
+  });
+
+  it('does not relabel stale loaded rows as the deep-linked row before fresh page data arrives', async () => {
+    const mockFetchEvalData = setupDeepLinkedTable('/#details-row-51-prompt-1');
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(mockFetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({
+          pageIndex: 1,
+          pageSize: 50,
+        }),
+      );
+    });
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
   });
 
   // Regression test for the pagination-trap bug introduced when locationHash was kept in

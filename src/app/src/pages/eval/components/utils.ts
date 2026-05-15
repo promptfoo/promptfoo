@@ -124,7 +124,7 @@ export function setEvalDetailsHash(hash: string): void {
   }
   const url = new URL(window.location.href);
   url.hash = next;
-  window.history.replaceState({}, '', url);
+  window.history.replaceState(window.history.state, '', url);
   notifyEvalDetailsHashListeners();
 }
 

@@ -125,6 +125,18 @@ describe('eval-details hash store', () => {
     expect(window.location.hash).toBe('#details-row-3-prompt-1');
   });
 
+  it('preserves existing history state when mutating the details hash', () => {
+    const state = { from: 'router' };
+    window.history.replaceState(state, '', '/eval/x');
+
+    act(() => {
+      setEvalDetailsHash('#details-row-4-prompt-2');
+    });
+
+    expect(window.history.state).toEqual(state);
+    expect(window.location.hash).toBe('#details-row-4-prompt-2');
+  });
+
   it('coordinates updates across multiple subscribers', () => {
     const { result: a } = renderHook(() => useEvalDetailsHash());
     const { result: b } = renderHook(() => useEvalDetailsHash());

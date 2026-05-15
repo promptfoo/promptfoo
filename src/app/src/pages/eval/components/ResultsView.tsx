@@ -291,7 +291,7 @@ export default function ResultsView({
     setDebouncedSearchText(text);
     navigate(
       buildEvalUrlWithSearchParams(
-        { pathname: location.pathname, search: location.search },
+        { pathname: location.pathname, search: location.search, hash: '' },
         (params) => {
           if (text) {
             params.set('search', text);
@@ -310,7 +310,7 @@ export default function ResultsView({
     setDebouncedSearchText('');
     navigate(
       buildEvalUrlWithSearchParams(
-        { pathname: location.pathname, search: location.search },
+        { pathname: location.pathname, search: location.search, hash: '' },
         (params) => {
           params.delete('search');
         },
@@ -334,7 +334,7 @@ export default function ResultsView({
     (view: ActiveView) => {
       navigate(
         buildEvalUrlWithSearchParams(
-          { pathname: location.pathname, search: location.search },
+          { pathname: location.pathname, search: location.search, hash: '' },
           (params) => {
             if (view === 'results') {
               params.delete('view');

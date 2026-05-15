@@ -272,6 +272,13 @@ describe('EvalOutputCell', () => {
     expect(window.location.hash).toBe('#details-row-1-prompt-1');
   });
 
+  it('ignores a details hash that targets a different stable row index', () => {
+    window.history.replaceState({}, '', '/#details-row-51-prompt-1');
+    renderWithProviders(<EvalOutputCell {...defaultProps} />);
+
+    expect(screen.queryByTestId('dialog-component')).not.toBeInTheDocument();
+  });
+
   it('handles keyboard navigation between buttons', async () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} />);
     // Start from "Mark test passed" button and tab through the remaining buttons
