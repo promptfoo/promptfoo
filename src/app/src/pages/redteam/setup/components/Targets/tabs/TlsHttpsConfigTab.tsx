@@ -42,11 +42,31 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
 }) => {
   const { showToast } = useToast();
   const tls = selectedTarget.config?.tls;
+  const certificateType =
+    tls?.certificateType === 'pkcs12'
+      ? 'pfx'
+      : (tls?.certificateType ??
+        (tls?.jksPath || tls?.jksContent || tls?.keyAlias
+          ? 'jks'
+          : tls?.pfx || tls?.pfxPath
+            ? 'pfx'
+            : tls?.cert || tls?.certPath || tls?.key || tls?.keyPath
+              ? 'pem'
+              : undefined));
+  const caInputType = tls?.caInputType ?? (tls?.caPath ? 'path' : tls?.ca ? 'inline' : undefined);
+  const certInputType =
+    tls?.certInputType ?? (tls?.certPath ? 'path' : tls?.cert ? 'inline' : undefined);
+  const keyInputType =
+    tls?.keyInputType ?? (tls?.keyPath ? 'path' : tls?.key ? 'inline' : undefined);
+  const jksInputType =
+    tls?.jksInputType ?? (tls?.jksPath ? 'path' : tls?.jksContent ? 'upload' : undefined);
+  const pfxInputType =
+    tls?.pfxInputType ?? (tls?.pfxPath ? 'path' : tls?.pfx ? 'base64' : undefined);
 
   // Determine if sections should auto-open based on existing config.
   // Only use actual data fields — not UI-only fields like caInputType.
   const hasCA = !!(tls?.ca || tls?.caPath);
-  const hasClientCert = !!tls?.certificateType;
+  const hasClientCert = !!certificateType;
   const hasAdvanced = !!(
     tls?.servername ||
     tls?.ciphers ||
@@ -137,7 +157,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
           <div className="mt-2 rounded-lg border border-border p-4 space-y-4">
             <div className="flex gap-2">
               <Button
-                variant={tls?.caInputType === 'upload' ? 'default' : 'outline'}
+                variant={caInputType === 'upload' ? 'default' : 'outline'}
                 onClick={() =>
                   updateCustomTarget('tls', {
                     ...tls,
@@ -149,7 +169,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 Upload
               </Button>
               <Button
-                variant={tls?.caInputType === 'path' ? 'default' : 'outline'}
+                variant={caInputType === 'path' ? 'default' : 'outline'}
                 onClick={() =>
                   updateCustomTarget('tls', {
                     ...tls,
@@ -161,7 +181,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                 File Path
               </Button>
               <Button
-                variant={tls?.caInputType === 'inline' ? 'default' : 'outline'}
+                variant={caInputType === 'inline' ? 'default' : 'outline'}
                 onClick={() =>
                   updateCustomTarget('tls', {
                     ...tls,
@@ -174,7 +194,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               </Button>
             </div>
 
-            {tls?.caInputType === 'upload' && (
+            {caInputType === 'upload' && (
               <div className="flex items-center gap-2">
                 <input
                   type="file"
@@ -211,7 +231,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               </div>
             )}
 
-            {tls?.caInputType === 'path' && (
+            {caInputType === 'path' && (
               <Input
                 placeholder="/path/to/ca-cert.pem"
                 value={tls?.caPath || ''}
@@ -225,7 +245,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               />
             )}
 
-            {tls?.caInputType === 'inline' && (
+            {caInputType === 'inline' && (
               <Textarea
                 rows={4}
                 placeholder="-----BEGIN CERTIFICATE-----&#10;...CA certificate content...&#10;-----END CERTIFICATE-----"
@@ -254,7 +274,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
             <div className="space-y-2">
               <Label>Certificate Type</Label>
               <Select
-                value={tls?.certificateType || 'none'}
+                value={certificateType || 'none'}
                 onValueChange={(value) => {
                   // 'none' is a UI-only sentinel — store undefined so it doesn't
                   // leak into the config or cause hasClientCert to be truthy.
@@ -295,7 +315,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
             </div>
 
             {/* PEM Certificate Configuration */}
-            {tls?.certificateType === 'pem' && (
+            {certificateType === 'pem' && (
               <div className="space-y-4">
                 <h3 className="font-medium">PEM Certificate Configuration</h3>
 
@@ -304,7 +324,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   <h4 className="font-medium">Client Certificate</h4>
                   <div className="flex gap-2">
                     <Button
-                      variant={tls?.certInputType === 'upload' ? 'default' : 'outline'}
+                      variant={certInputType === 'upload' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -316,7 +336,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       Upload
                     </Button>
                     <Button
-                      variant={tls?.certInputType === 'path' ? 'default' : 'outline'}
+                      variant={certInputType === 'path' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -328,7 +348,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       File Path
                     </Button>
                     <Button
-                      variant={tls?.certInputType === 'inline' ? 'default' : 'outline'}
+                      variant={certInputType === 'inline' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -341,7 +361,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </Button>
                   </div>
 
-                  {tls?.certInputType === 'upload' && (
+                  {certInputType === 'upload' && (
                     <div className="flex items-center gap-2">
                       <input
                         type="file"
@@ -380,7 +400,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </div>
                   )}
 
-                  {tls?.certInputType === 'path' && (
+                  {certInputType === 'path' && (
                     <Input
                       placeholder="/path/to/client-cert.pem"
                       value={tls?.certPath || ''}
@@ -394,7 +414,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     />
                   )}
 
-                  {tls?.certInputType === 'inline' && (
+                  {certInputType === 'inline' && (
                     <Textarea
                       rows={4}
                       placeholder="-----BEGIN CERTIFICATE-----&#10;...certificate content...&#10;-----END CERTIFICATE-----"
@@ -415,7 +435,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                   <h4 className="font-medium">Private Key</h4>
                   <div className="flex gap-2">
                     <Button
-                      variant={tls?.keyInputType === 'upload' ? 'default' : 'outline'}
+                      variant={keyInputType === 'upload' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -427,7 +447,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       Upload
                     </Button>
                     <Button
-                      variant={tls?.keyInputType === 'path' ? 'default' : 'outline'}
+                      variant={keyInputType === 'path' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -439,7 +459,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       File Path
                     </Button>
                     <Button
-                      variant={tls?.keyInputType === 'inline' ? 'default' : 'outline'}
+                      variant={keyInputType === 'inline' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -452,7 +472,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </Button>
                   </div>
 
-                  {tls?.keyInputType === 'upload' && (
+                  {keyInputType === 'upload' && (
                     <div className="flex items-center gap-2">
                       <input
                         type="file"
@@ -497,7 +517,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </div>
                   )}
 
-                  {tls?.keyInputType === 'path' && (
+                  {keyInputType === 'path' && (
                     <Input
                       placeholder="/path/to/client-key.pem"
                       value={tls?.keyPath || ''}
@@ -511,7 +531,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     />
                   )}
 
-                  {tls?.keyInputType === 'inline' && (
+                  {keyInputType === 'inline' && (
                     <Textarea
                       rows={4}
                       placeholder="-----BEGIN PRIVATE KEY-----&#10;...key content...&#10;-----END PRIVATE KEY-----"
@@ -547,7 +567,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
             )}
 
             {/* JKS Certificate Configuration */}
-            {tls?.certificateType === 'jks' && (
+            {certificateType === 'jks' && (
               <div className="space-y-4">
                 <h3 className="font-medium">JKS (Java KeyStore) Certificate</h3>
 
@@ -567,7 +587,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     <h4 className="font-medium">JKS File Input</h4>
                     <div className="flex gap-2">
                       <Button
-                        variant={tls?.jksInputType === 'upload' ? 'default' : 'outline'}
+                        variant={jksInputType === 'upload' ? 'default' : 'outline'}
                         onClick={() =>
                           updateCustomTarget('tls', {
                             ...tls,
@@ -579,7 +599,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                         Upload JKS
                       </Button>
                       <Button
-                        variant={tls?.jksInputType === 'path' ? 'default' : 'outline'}
+                        variant={jksInputType === 'path' ? 'default' : 'outline'}
                         onClick={() =>
                           updateCustomTarget('tls', {
                             ...tls,
@@ -592,7 +612,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       </Button>
                     </div>
 
-                    {tls?.jksInputType === 'upload' && (
+                    {jksInputType === 'upload' && (
                       <div className="space-y-2">
                         <input
                           type="file"
@@ -668,7 +688,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       </div>
                     )}
 
-                    {tls?.jksInputType === 'path' && (
+                    {jksInputType === 'path' && (
                       <div className="space-y-2">
                         <Input
                           placeholder="/path/to/keystore.jks"
@@ -759,14 +779,14 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
             )}
 
             {/* PFX Certificate Configuration */}
-            {tls?.certificateType === 'pfx' && (
+            {certificateType === 'pfx' && (
               <div className="space-y-4">
                 <h3 className="font-medium">PFX/PKCS#12 Certificate Bundle</h3>
 
                 <div className="rounded-lg border border-border p-4 space-y-4">
                   <div className="flex gap-2">
                     <Button
-                      variant={tls?.pfxInputType === 'upload' ? 'default' : 'outline'}
+                      variant={pfxInputType === 'upload' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -778,7 +798,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       Upload
                     </Button>
                     <Button
-                      variant={tls?.pfxInputType === 'path' ? 'default' : 'outline'}
+                      variant={pfxInputType === 'path' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -790,7 +810,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                       File Path
                     </Button>
                     <Button
-                      variant={tls?.pfxInputType === 'base64' ? 'default' : 'outline'}
+                      variant={pfxInputType === 'base64' ? 'default' : 'outline'}
                       onClick={() =>
                         updateCustomTarget('tls', {
                           ...tls,
@@ -803,7 +823,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </Button>
                   </div>
 
-                  {tls?.pfxInputType === 'upload' && (
+                  {pfxInputType === 'upload' && (
                     <div className="flex items-center gap-2">
                       <input
                         type="file"
@@ -843,7 +863,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     </div>
                   )}
 
-                  {tls?.pfxInputType === 'path' && (
+                  {pfxInputType === 'path' && (
                     <Input
                       placeholder="/path/to/certificate.pfx"
                       value={tls?.pfxPath || ''}
@@ -857,7 +877,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     />
                   )}
 
-                  {tls?.pfxInputType === 'base64' && (
+                  {pfxInputType === 'base64' && (
                     <div className="space-y-2">
                       <Textarea
                         rows={4}

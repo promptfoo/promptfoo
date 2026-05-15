@@ -3,7 +3,7 @@ import React from 'react';
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TlsHttpsConfigTab from './TlsHttpsConfigTab';
 
 import type { HttpProviderOptions } from '../../../types';
@@ -31,6 +31,10 @@ describe('TlsHttpsConfigTab', () => {
 
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('Server Certificate Verification', () => {
@@ -246,6 +250,26 @@ describe('TlsHttpsConfigTab', () => {
       expect(screen.getByRole('button', { name: /Upload/i })).toBeInTheDocument();
     });
 
+    it('should render imported CA paths without requiring the UI-only input mode', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            caPath: '/etc/ssl/custom-ca.pem',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByDisplayValue('/etc/ssl/custom-ca.pem')).toBeInTheDocument();
+    });
+
     it('should auto-open Client Certificate section when certificate type is set', () => {
       const selectedTarget: HttpProviderOptions = {
         id: 'http-provider',
@@ -266,6 +290,52 @@ describe('TlsHttpsConfigTab', () => {
 
       expect(screen.getByText('Certificate Type')).toBeInTheDocument();
       expect(screen.getByText('PEM Certificate Configuration')).toBeInTheDocument();
+    });
+
+    it('should infer PEM client certificates from imported backend fields', () => {
+      const selectedTarget: HttpProviderOptions = {
+        id: 'http-provider',
+        config: {
+          tls: {
+            cert: '-----BEGIN CERTIFICATE-----',
+            key: '-----BEGIN PRIVATE KEY-----',
+          },
+        },
+      };
+
+      renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByText('PEM Certificate Configuration')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('-----BEGIN CERTIFICATE-----')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('-----BEGIN PRIVATE KEY-----')).toBeInTheDocument();
+    });
+
+    it('should re-sync collapsed sections when switching targets', () => {
+      const { rerender } = renderWithProviders(
+        <TlsHttpsConfigTab
+          selectedTarget={{ id: 'http-provider-a', config: {} }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.queryByDisplayValue('/etc/ssl/custom-ca.pem')).not.toBeInTheDocument();
+
+      rerender(
+        <TlsHttpsConfigTab
+          selectedTarget={{
+            id: 'http-provider-b',
+            config: { tls: { caPath: '/etc/ssl/custom-ca.pem' } },
+          }}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(screen.getByDisplayValue('/etc/ssl/custom-ca.pem')).toBeInTheDocument();
     });
 
     it('should auto-open Advanced section when advanced config exists', () => {
