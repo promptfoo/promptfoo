@@ -24,7 +24,10 @@ const {
   mockStoreMedia: vi.fn(),
   mockMediaExists: vi.fn(),
   mockGetMediaStorage: vi.fn(),
-  mockGetConfigDirectoryPath: vi.fn(() => '/private/tmp/promptfoo-video-test-config'),
+  mockGetConfigDirectoryPath: vi.fn(
+    () =>
+      `${process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? '/tmp'}/promptfoo-video-test-config`,
+  ),
 }));
 
 const fsPromiseMocks = vi.hoisted(() => ({
@@ -109,7 +112,9 @@ describe('OpenAiVideoProvider', () => {
     mockGetConfigDirectoryPath.mockReset();
 
     // Default config directory path
-    mockGetConfigDirectoryPath.mockReturnValue('/private/tmp/promptfoo-video-test-config');
+    mockGetConfigDirectoryPath.mockReturnValue(
+      `${process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? '/tmp'}/promptfoo-video-test-config`,
+    );
 
     vi.mocked(fsPromises.readFile).mockRejectedValue(
       Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }),
