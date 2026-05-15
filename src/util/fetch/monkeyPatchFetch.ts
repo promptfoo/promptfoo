@@ -63,6 +63,32 @@ function getUndiciFetchArgs(
   return [url.url, fetchOptions];
 }
 
+function preserveNodeFetchUserAgent(options: RequestInit): RequestInit {
+  const normalizedHeaders = new Headers(options.headers);
+  if (normalizedHeaders.has('user-agent')) {
+    return options;
+  }
+
+  const headers =
+    options.headers instanceof Headers
+      ? new Headers(options.headers)
+      : Array.isArray(options.headers)
+        ? [
+            ...options.headers.map(([name, value]) => [name, value] as [string, string]),
+            ['user-agent', 'node'] as [string, string],
+          ]
+        : { ...(options.headers ?? {}), 'user-agent': 'node' };
+
+  if (headers instanceof Headers) {
+    headers.set('user-agent', 'node');
+  }
+
+  return {
+    ...options,
+    headers,
+  };
+}
+
 function getFetchInvocation(
   url: string | URL | Request,
   options: FetchOptions | undefined,
@@ -84,7 +110,7 @@ function getFetchInvocation(
   return {
     fetch: undiciFetch as unknown as typeof globalThis.fetch,
     url: fetchUrl,
-    options: fetchOptions,
+    options: preserveNodeFetchUserAgent(fetchOptions),
   };
 }
 

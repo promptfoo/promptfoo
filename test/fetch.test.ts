@@ -870,10 +870,30 @@ describe('fetchWithProxy', () => {
         duplex: 'half',
         headers: expect.objectContaining({
           authorization: 'Bearer request-token',
+          'user-agent': 'node',
           'x-promptfoo-version': VERSION,
         }),
         method: 'POST',
       }),
+    );
+  });
+
+  it('should preserve caller-provided user agents when routing through undici fetch', async () => {
+    const undiciModule = await import('undici');
+    const undiciFetch = vi.mocked(undiciModule.fetch);
+    vi.restoreAllMocks();
+    undiciFetch.mockResolvedValue(
+      new Response() as unknown as Awaited<ReturnType<typeof undiciFetch>>,
+    );
+
+    await fetchWithProxy('https://example.com/api', {
+      headers: { 'User-Agent': 'promptfoo-test-agent' },
+    });
+
+    const requestInit = undiciFetch.mock.calls[0]?.[1];
+    expect(requestInit).toBeDefined();
+    expect(new Headers(requestInit?.headers as HeadersInit | undefined).get('user-agent')).toBe(
+      'promptfoo-test-agent',
     );
   });
 
