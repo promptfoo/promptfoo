@@ -95,10 +95,23 @@ describe('fetchWithProxy compressed responses', () => {
   ] as const)('decodes %s responses with HTTP %s', async (encoding, statusCode) => {
     const url = await startCompressedServer(encoding, statusCode);
     const response = await fetchWithProxy(url);
+    const ceHeader = response.headers.get('content-encoding');
     const text = await response.text();
-
     expect(response.status).toBe(statusCode);
-    expect(JSON.parse(text)).toEqual(payload);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch (error) {
+      // Surface enough state when this fails on a future Node version for the
+      // monkeyPatchFetch fallback to be diagnosed.
+      const head = Buffer.from(text).subarray(0, 16).toString('hex');
+      throw new Error(
+        `JSON.parse failed for ${encoding}/${statusCode}: ${(error as Error).message}. ` +
+          `content-encoding-after-fetch=${ceHeader}, first-16-bytes=${head}, text-length=${text.length}`,
+      );
+    }
+    expect(parsed).toEqual(payload);
   });
 
   it.each([

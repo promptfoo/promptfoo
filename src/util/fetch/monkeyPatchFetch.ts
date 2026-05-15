@@ -45,7 +45,7 @@ export async function decompressResponseIfNeeded(response: Response): Promise<Re
     return response;
   }
   const encodingHeader = response.headers.get('content-encoding');
-  if (!encodingHeader || !response.body) {
+  if (!encodingHeader) {
     return response;
   }
   const decode = SUPPORTED_DECODERS[encodingHeader.toLowerCase()];
@@ -53,7 +53,12 @@ export async function decompressResponseIfNeeded(response: Response): Promise<Re
     return response;
   }
 
-  const raw = Buffer.from(await response.arrayBuffer());
+  let raw: Buffer;
+  try {
+    raw = Buffer.from(await response.arrayBuffer());
+  } catch {
+    return response;
+  }
   if (raw.length === 0) {
     return response;
   }
