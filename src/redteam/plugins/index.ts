@@ -333,26 +333,43 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
   };
 }
 
+function collectUnsupportedRemoteRedteamAssertionTypes(
+  assertions: unknown,
+  unsupportedAssertionTypes: Set<string>,
+): void {
+  if (!Array.isArray(assertions)) {
+    return;
+  }
+
+  for (const assertion of assertions) {
+    if (!assertion || typeof assertion !== 'object') {
+      continue;
+    }
+
+    if ('type' in assertion && assertion.type === 'assert-set') {
+      collectUnsupportedRemoteRedteamAssertionTypes(
+        'assert' in assertion ? assertion.assert : undefined,
+        unsupportedAssertionTypes,
+      );
+      continue;
+    }
+
+    const assertionType =
+      'type' in assertion && typeof assertion.type === 'string' ? assertion.type : undefined;
+    if (!assertionType?.startsWith('promptfoo:redteam:')) {
+      continue;
+    }
+    if (!getGraderById(assertionType)) {
+      unsupportedAssertionTypes.add(assertionType);
+    }
+  }
+}
+
 function validateRemoteRedteamAssertions(key: string, testCases: TestCase[]): void {
   const unsupportedAssertionTypes = new Set<string>();
 
   for (const testCase of testCases) {
-    if (!Array.isArray(testCase.assert)) {
-      continue;
-    }
-
-    for (const assertion of testCase.assert) {
-      const assertionType =
-        assertion && typeof assertion === 'object' && typeof assertion.type === 'string'
-          ? assertion.type
-          : undefined;
-      if (!assertionType?.startsWith('promptfoo:redteam:')) {
-        continue;
-      }
-      if (!getGraderById(assertionType)) {
-        unsupportedAssertionTypes.add(assertionType);
-      }
-    }
+    collectUnsupportedRemoteRedteamAssertionTypes(testCase.assert, unsupportedAssertionTypes);
   }
 
   if (unsupportedAssertionTypes.size > 0) {
