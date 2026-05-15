@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
@@ -24,6 +25,9 @@ const renderWithProviders = (ui: React.ReactElement) => {
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn(),
+}));
 vi.mock('@app/hooks/useTelemetry');
 vi.mock('@app/hooks/useToast');
 vi.mock('./StrategyConfigDialog', () => ({
@@ -53,6 +57,12 @@ describe('Strategies', () => {
         numTests: 5,
       },
       updateConfig: mockUpdateConfig,
+    });
+
+    (useApiHealth as any).mockReturnValue({
+      data: { status: 'connected', message: null },
+      isLoading: false,
+      refetch: vi.fn(),
     });
 
     (useTelemetry as any).mockReturnValue({
@@ -138,6 +148,20 @@ describe('Strategies', () => {
 
       // Check for the collapsible trigger
       expect(screen.getByText('Show Advanced Strategies')).toBeInTheDocument();
+    });
+
+    it('exposes disabled hero strategy state to assistive tech', () => {
+      (useApiHealth as any).mockReturnValue({
+        data: { status: 'disabled', message: null },
+        isLoading: false,
+        refetch: vi.fn(),
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      const metaAgentCard = screen.getByRole('button', { name: 'Meta Agent' });
+      expect(metaAgentCard).toBeDisabled();
+      expect(metaAgentCard).toHaveAttribute('aria-disabled', 'true');
     });
   });
 

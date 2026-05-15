@@ -167,7 +167,9 @@ describe('StrategyItem', () => {
         onConfigClick: mockOnConfigClick,
       });
 
-      expect(screen.getByRole('button', { name: 'Test Strategy' })).toBeDisabled();
+      const card = screen.getByRole('button', { name: 'Test Strategy' });
+      expect(card).toBeDisabled();
+      expect(card).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('keeps the remote generation guidance tooltip hoverable for disabled strategies', async () => {

@@ -107,6 +107,7 @@ export function StrategyItem({
         type="button"
         aria-label={strategy.name}
         aria-pressed={isSelected}
+        aria-disabled={isDisabled}
         disabled={isDisabled}
         onClick={handleToggle}
         className="absolute inset-0 rounded-[inherit] focus-visible:outline-none"
