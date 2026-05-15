@@ -1936,7 +1936,7 @@ function ResultsTable({
                   <EvalOutputCell
                     output={output}
                     maxTextLength={maxTextLength}
-                    rowIndex={output.originalRowIndex ?? info.row.index}
+                    rowIndex={info.row.original.testIdx}
                     promptIndex={idx}
                     onRating={handleRating.bind(
                       null,

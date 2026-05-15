@@ -1081,6 +1081,7 @@ describe('ResultsTable Row Navigation', () => {
               },
             ],
             test: {},
+            testIdx: 0,
             vars: [],
           },
         ],
@@ -1137,6 +1138,57 @@ describe('ResultsTable Row Navigation', () => {
     });
 
     expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '0');
+  });
+
+  it('uses the row test index for detail hashes after paged data is loaded', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [
+              {
+                cost: 0,
+                failureReason: 0,
+                id: 'test-id',
+                latencyMs: 0,
+                namedScores: {},
+                originalRowIndex: 0,
+                pass: true,
+                prompt: 'Prompt',
+                score: 1,
+                testCase: {},
+                text: 'Output',
+              },
+            ],
+            test: {},
+            testIdx: 50,
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [{}],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 120,
+      totalResultsCount: 120,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByTestId('eval-output-cell')).toHaveAttribute('data-rowindex', '50');
   });
 
   // Regression test for the pagination-trap bug introduced when locationHash was kept in
