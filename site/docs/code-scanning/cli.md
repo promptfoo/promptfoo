@@ -43,22 +43,22 @@ promptfoo code-scans run [repo-path] [options]
 
 ### Options
 
-| Option                            | Description                                                                                         | Default                                                                         |
-| --------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `repo-path`                       | Path to repository                                                                                  | Current directory (`.`)                                                         |
-| `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var                            |
-| `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                                              |
-| `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                                                          |
-| `--config <path>`                 | Path to config file                                                                                 | Repo-root `.promptfoo-code-scan.yaml` when present; otherwise built-in defaults |
-| `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                                            |
-| `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                                            |
-| `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                                                     |
-| `--diffs-only`                    | Scan only PR diffs; skip repository tracing                                                         | false                                                                           |
-| `--min-severity <level>`          | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                    | `medium`                                                                        |
-| `--minimum-severity <level>`      | Alias for `--min-severity`                                                                          | `medium`                                                                        |
-| `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                                           |
-| `-f, --format <format>`           | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                                                          |
-| `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                                            |
+| Option                            | Description                                                                                         | Default                                                                                         |
+| --------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `repo-path`                       | Path to repository                                                                                  | Current directory (`.`)                                                                         |
+| `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var                                            |
+| `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                                                              |
+| `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                                                                          |
+| `--config <path>`                 | Path to config file                                                                                 | Repo-root `.promptfoo-code-scan.yaml` for local scans; built-in defaults for `--github-pr` runs |
+| `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                                                            |
+| `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                                                            |
+| `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                                                                     |
+| `--diffs-only`                    | Scan only PR diffs; skip repository tracing                                                         | false                                                                                           |
+| `--min-severity <level>`          | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                    | `medium`                                                                                        |
+| `--minimum-severity <level>`      | Alias for `--min-severity`                                                                          | `medium`                                                                                        |
+| `--json`                          | Output results as JSON ([see schema](#json-output-schema))                                          | false                                                                                           |
+| `-f, --format <format>`           | Output format (`text`, `json`, or `sarif`)                                                          | `text`                                                                                          |
+| `--github-pr <owner/repo#number>` | Post comments to GitHub PR (used with [Promptfoo GitHub Action](/docs/code-scanning/github-action)) | None                                                                                            |
 
 By default, `code-scans run` starts from the selected git diff and can trace relevant paths into the repository for context. That is broader than diff-only review, but it is not a literal whole-repo sweep. Use `--diffs-only` when you want the scan constrained to the patch itself.
 
@@ -106,7 +106,9 @@ SARIF output includes location-backed findings that GitHub Code Scanning can dis
 
 ## Configuration File
 
-Create `.promptfoo-code-scan.yaml` in the repository root to have the CLI pick it up automatically, including when the command starts in a nested directory inside that repository. Use `--config <path>` when you want to load a different file.
+Create `.promptfoo-code-scan.yaml` in the repository root to have local CLI scans pick it up automatically, including when the command starts in a nested directory inside that repository. Use `--config <path>` when you want to load a different file.
+
+Runs that post to GitHub with `--github-pr` intentionally use built-in defaults unless `--config <path>` is set explicitly. That keeps PR-commenting scan policy tied to a trusted caller-selected config instead of a config file introduced by the pull request being scanned.
 
 ```yaml
 # Minimum severity level to report (low|medium|high|critical); defaults to medium

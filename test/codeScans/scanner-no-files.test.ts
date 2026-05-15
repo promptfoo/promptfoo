@@ -164,4 +164,19 @@ describe('Scanner machine-readable output', () => {
     );
     expect(setLogLevel).toHaveBeenCalledWith('error');
   });
+
+  it('does not auto-discover repository config for GitHub PR scans without --config', async () => {
+    mockNoFilesScanner();
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { loadConfigOrDefault } = await import('../../src/codeScan/config/loader');
+
+    await executeScan('/test/repo', {
+      diffsOnly: true,
+      githubPr: 'promptfoo/promptfoo#123',
+      json: true,
+    });
+
+    expect(loadConfigOrDefault).toHaveBeenCalledWith(undefined, undefined);
+  });
 });

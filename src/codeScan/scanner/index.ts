@@ -116,9 +116,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   // Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
 
-  // Load and merge configuration. When --config is omitted, prefer the repository's
-  // conventional code-scan config before falling back to built-in defaults.
-  const baseConfig: Config = loadConfigOrDefault(options.config, absoluteRepoPath);
+  // Repo-root config discovery is a local CLI convenience. PR-commenting scans must
+  // opt into custom policy through an explicit trusted --config path instead of
+  // inheriting a PR-controlled file from the checked-out branch.
+  const repoPathForConfigDiscovery = options.githubPr ? undefined : absoluteRepoPath;
+  const baseConfig: Config = loadConfigOrDefault(options.config, repoPathForConfigDiscovery);
   const config = mergeConfigWithOptions(baseConfig, options);
 
   // Resolve guidance (CLI options take precedence)

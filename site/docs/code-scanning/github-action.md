@@ -40,23 +40,25 @@ When using the GitHub App:
 
 Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can be used as action inputs:
 
-| Input               | Description                                                      | Default                                      |
-| ------------------- | ---------------------------------------------------------------- | -------------------------------------------- |
-| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app`                  |
-| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | `medium`                                     |
-| `minimum-severity`  | Alias for `min-severity`                                         | `medium`                                     |
-| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | None; omitted actions use generated defaults |
-| `diffs-only`        | Scan only PR diffs; skip repository tracing                      | `false`                                      |
-| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                                         |
-| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                                         |
-| `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                                      |
-| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning     | None                                         |
+| Input               | Description                                                      | Default                                        |
+| ------------------- | ---------------------------------------------------------------- | ---------------------------------------------- |
+| `api-host`          | Promptfoo API host URL                                           | `https://api.promptfoo.app`                    |
+| `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`) | Effective `medium` when both aliases are unset |
+| `minimum-severity`  | Alias for `min-severity`                                         | Effective `medium` when both aliases are unset |
+| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                  | None; omitted actions use generated defaults   |
+| `diffs-only`        | Scan only PR diffs; skip repository tracing                      | `false`                                        |
+| `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])           | None                                           |
+| `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])      | None                                           |
+| `enable-fork-prs`   | Enable scanning PRs from forked repositories                     | `false`                                        |
+| `sarif-output-path` | Optional path to write SARIF output for GitHub Code Scanning     | None                                           |
 
 [1]: [More on custom guidance](/docs/code-scanning/cli#custom-guidance)
 
 By default, the Action starts from the PR diff and can trace relevant paths into the repository for context. That is broader than diff-only review, but it is not a literal whole-repo sweep. Set `diffs-only: true` when you want the generated action-input config constrained to the patch itself.
 
 For scan settings beyond these inputs, supply `config-path`. Once `config-path` is set, that file supplies the scan settings instead of the generated action-input defaults, which keeps workflow-owned policy explicit.
+
+The action resolves severity to `medium` only when neither alias is provided, leaving the metadata inputs undeclared so either alias can supply the threshold without being shadowed by a baked-in YAML default.
 
 ### Triggering Additional Scans
 
