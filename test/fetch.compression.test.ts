@@ -245,4 +245,12 @@ describe('decompressResponseIfNeeded', () => {
     const out = await decompressResponseIfNeeded(response);
     expect(out.status).toBe(204);
   });
+
+  it('passes through non-Response inputs (e.g. partial test mocks)', async () => {
+    // Many tests mock fetch with plain `{ ok, json }` stubs that omit headers
+    // and arrayBuffer. The helper must not call .headers.get on those.
+    const fakeMock = { ok: true, json: () => Promise.resolve({}) } as unknown as Response;
+    const out = await decompressResponseIfNeeded(fakeMock);
+    expect(out).toBe(fakeMock);
+  });
 });

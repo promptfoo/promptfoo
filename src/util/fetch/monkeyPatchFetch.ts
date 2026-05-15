@@ -39,6 +39,11 @@ const SUPPORTED_DECODERS: Record<string, (buf: Buffer) => Promise<Buffer>> = {
  * the original payload unchanged.
  */
 export async function decompressResponseIfNeeded(response: Response): Promise<Response> {
+  // Test mocks frequently stub fetch with plain objects that omit headers/body.
+  // Duck-type guard so the helper is transparent for non-Response inputs.
+  if (typeof response?.headers?.get !== 'function' || typeof response?.arrayBuffer !== 'function') {
+    return response;
+  }
   const encodingHeader = response.headers.get('content-encoding');
   if (!encodingHeader || !response.body) {
     return response;
