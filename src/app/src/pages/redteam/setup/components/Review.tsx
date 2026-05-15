@@ -49,7 +49,7 @@ import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
-import type { Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
+import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
@@ -67,6 +67,77 @@ interface PolicyPlugin {
 interface JobStatusResponse {
   hasRunningJob: boolean;
   jobId?: string;
+}
+
+interface IntentEntry {
+  display: string;
+  isMultiStep: boolean;
+  // Position of the intent plugin in `config.plugins`. Configs may contain
+  // multiple intent plugins, so we identify which one this entry came from.
+  pluginIndex: number;
+  // Position of the entry within that plugin's `config.intent` array.
+  entryIndex: number;
+}
+
+interface IntentPluginRef {
+  id: 'intent';
+  config: { intent: string | (string | string[])[] };
+}
+
+const isIntentPlugin = (plugin: unknown): plugin is IntentPluginRef =>
+  typeof plugin === 'object' &&
+  plugin !== null &&
+  (plugin as { id?: unknown }).id === 'intent' &&
+  (plugin as { config?: { intent?: unknown } }).config?.intent !== undefined;
+
+const isNonEmptyIntentEntry = (entry: string | string[]): boolean =>
+  typeof entry === 'string' ? entry.trim() !== '' : Array.isArray(entry) && entry.length > 0;
+
+type ReviewPlugin = RedteamPlugin | { id: string; config?: PluginConfig };
+
+// Aggregates entries across every intent plugin in the config. Each top-level
+// entry in `config.intent` is one intent test case at runtime (an inner array
+// is a single multi-step sequence). Tracks (pluginIndex, entryIndex) so the
+// remove handler can target the exact entry, even when multiple intent plugins
+// exist (e.g. configs assembled from YAML that include duplicate `intent:`
+// blocks).
+function getDisplayedIntents(plugins: readonly ReviewPlugin[]): IntentEntry[] {
+  return plugins.flatMap<IntentEntry>((plugin, pluginIndex) => {
+    if (!isIntentPlugin(plugin)) {
+      return [];
+    }
+    const raw = plugin.config.intent;
+    const entries: (string | string[])[] = Array.isArray(raw) ? raw : [raw];
+    return entries.flatMap<IntentEntry>((entry, entryIndex) => {
+      if (!isNonEmptyIntentEntry(entry)) {
+        return [];
+      }
+      if (Array.isArray(entry)) {
+        return [{ display: entry.join(' → '), isMultiStep: true, pluginIndex, entryIndex }];
+      }
+      return [{ display: entry, isMultiStep: false, pluginIndex, entryIndex }];
+    });
+  });
+}
+
+function removeIntentEntry(
+  plugins: readonly ReviewPlugin[],
+  pluginIndex: number,
+  entryIndex: number,
+): ReviewPlugin[] | null {
+  const target = plugins[pluginIndex];
+  if (!target || !isIntentPlugin(target)) {
+    return null;
+  }
+  const currentIntents: (string | string[])[] = Array.isArray(target.config.intent)
+    ? target.config.intent
+    : [target.config.intent];
+  const newIntents = currentIntents.filter((_, i) => i !== entryIndex);
+  return plugins.map((p, i) =>
+    i === pluginIndex && isIntentPlugin(p)
+      ? { ...p, config: { ...p.config, intent: newIntents } }
+      : p,
+  );
 }
 
 export default function Review({
@@ -312,16 +383,17 @@ export default function Review({
     );
   }, [config.plugins]);
 
-  const intents = useMemo(() => {
-    return config.plugins
-      .filter(
-        (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-          typeof p === 'object' && p.id === 'intent' && p.config?.intent !== undefined,
-      )
-      .map((p) => p.config.intent)
-      .flat()
-      .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
-  }, [config.plugins]);
+  const intents = useMemo(() => getDisplayedIntents(config.plugins), [config.plugins]);
+
+  const handleRemoveIntent = useCallback(
+    (pluginIndex: number, entryIndex: number) => {
+      const next = removeIntentEntry(config.plugins, pluginIndex, entryIndex);
+      if (next) {
+        updateConfig('plugins', next);
+      }
+    },
+    [config.plugins, updateConfig],
+  );
 
   const [expanded, setExpanded] = React.useState(false);
 
@@ -795,43 +867,35 @@ export default function Review({
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
-                    <div key={index} className="relative rounded-lg bg-muted/50 p-3 pr-8">
-                      <p className="line-clamp-2 text-sm">{intent}</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Remove intent ${intent}`}
-                        className="absolute right-1 top-1 size-6"
-                        onClick={() => {
-                          const intentPlugin = config.plugins.find(
-                            (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-                              typeof p === 'object' &&
-                              p.id === 'intent' &&
-                              p.config?.intent !== undefined,
-                          );
-
-                          if (intentPlugin) {
-                            const currentIntents = Array.isArray(intentPlugin.config.intent)
-                              ? intentPlugin.config.intent
-                              : [intentPlugin.config.intent];
-
-                            const newIntents = currentIntents.filter((i) => i !== intent);
-
-                            const newPlugins = config.plugins.map((p) =>
-                              typeof p === 'object' && p.id === 'intent'
-                                ? { ...p, config: { ...p.config, intent: newIntents } }
-                                : p,
-                            );
-
-                            updateConfig('plugins', newPlugins);
-                          }
-                        }}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
+                  {intents
+                    .slice(0, expanded ? undefined : 5)
+                    .map(({ display, isMultiStep, pluginIndex, entryIndex }) => {
+                      // Truncate long entries for the SR/title label so screen
+                      // readers can distinguish multiple Remove buttons.
+                      const shortLabel = display.length > 80 ? `${display.slice(0, 80)}…` : display;
+                      const key = `${pluginIndex}:${entryIndex}`;
+                      return (
+                        <div key={key} className="relative rounded-lg bg-muted/50 p-3 pr-8">
+                          <p className="line-clamp-2 text-sm" title={display}>
+                            {display}
+                          </p>
+                          {isMultiStep && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Multi-step intent
+                            </p>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Remove intent: ${shortLabel}`}
+                            className="absolute right-1 top-1 size-6"
+                            onClick={() => handleRemoveIntent(pluginIndex, entryIndex)}
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   {intents.length > 5 && (
                     <Button
                       variant="link"

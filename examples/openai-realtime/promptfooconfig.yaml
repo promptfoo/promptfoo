@@ -11,21 +11,6 @@ providers:
       instructions: 'You are a helpful assistant. Keep your responses concise and informative.'
       # Increase WebSocket timeout to handle potential slow connections
       websocketTimeout: 60000 # 60 seconds
-      # Tools definition for function calling
-      # In a real implementation, you would implement a functionCallHandler in JavaScript
-      # to process these function calls and return results to the model
-      tools:
-        - type: function
-          name: get_weather
-          description: Get the current weather for a location
-          parameters:
-            type: object
-            properties:
-              location:
-                type: string
-                description: The city and state, e.g. San Francisco, CA
-            required: ['location']
-      tool_choice: 'auto'
 
 tests:
   - vars:
@@ -45,9 +30,3 @@ tests:
     assert:
       - type: llm-rubric
         value: Explains how real-time AI can enhance customer service
-
-  - vars:
-      question: "What's the weather like in San Francisco?"
-    assert:
-      - type: llm-rubric
-        value: Uses or attempts to use the weather function

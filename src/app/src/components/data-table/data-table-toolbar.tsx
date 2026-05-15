@@ -23,6 +23,7 @@ export function DataTableToolbar<TData>({
   showFilter = true,
   showGlobalFilter = true,
   showExport = true,
+  globalFilterLabel,
   onExportCSV,
   onExportJSON,
   toolbarActions,
@@ -64,6 +65,8 @@ export function DataTableToolbar<TData>({
         <div className="relative w-full sm:max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
+            type="search"
+            aria-label={globalFilterLabel}
             placeholder="Search..."
             value={globalFilter ?? ''}
             onChange={(e) => setGlobalFilter(e.target.value)}

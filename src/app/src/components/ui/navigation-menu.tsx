@@ -10,7 +10,7 @@ function NavigationMenu({
   children,
   ref,
   ...props
-}: React.ComponentProps<typeof NavigationMenuPrimitive.Root>) {
+}: React.ComponentPropsWithRef<typeof NavigationMenuPrimitive.Root>) {
   return (
     <NavigationMenuPrimitive.Root
       ref={ref}
@@ -29,7 +29,7 @@ function NavigationMenuList({
   className,
   ref,
   ...props
-}: React.ComponentProps<typeof NavigationMenuPrimitive.List>) {
+}: React.ComponentPropsWithRef<typeof NavigationMenuPrimitive.List>) {
   return (
     <NavigationMenuPrimitive.List
       ref={ref}
@@ -43,7 +43,7 @@ function NavigationMenuItem({
   className,
   ref,
   ...props
-}: React.ComponentProps<typeof NavigationMenuPrimitive.Item>) {
+}: React.ComponentPropsWithRef<typeof NavigationMenuPrimitive.Item>) {
   return (
     <NavigationMenuPrimitive.Item ref={ref} className={cn('relative', className)} {...props} />
   );
@@ -58,7 +58,7 @@ function NavigationMenuTrigger({
   children,
   ref,
   ...props
-}: React.ComponentProps<typeof NavigationMenuPrimitive.Trigger>) {
+}: React.ComponentPropsWithRef<typeof NavigationMenuPrimitive.Trigger>) {
   return (
     <NavigationMenuPrimitive.Trigger
       ref={ref}
@@ -83,7 +83,7 @@ const navigationMenuContentAlignClasses: Record<NavigationMenuContentAlign, stri
 };
 
 interface NavigationMenuContentProps
-  extends React.ComponentProps<typeof NavigationMenuPrimitive.Content> {
+  extends React.ComponentPropsWithRef<typeof NavigationMenuPrimitive.Content> {
   align?: NavigationMenuContentAlign;
 }
 

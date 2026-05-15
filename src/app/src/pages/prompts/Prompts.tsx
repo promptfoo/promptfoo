@@ -144,6 +144,7 @@ export default function Prompts({
               onRowClick={handleRowClick}
               emptyMessage="Create a prompt to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
+              globalFilterLabel="Search prompts"
             />
           </Card>
         </div>

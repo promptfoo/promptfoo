@@ -132,7 +132,8 @@ description: Codex app-server command approval eval
 
 prompts:
   - |
-    Try to list the current directory with a shell command.
+    Try to run `touch approval-check.txt` with a shell command.
+    If the sandbox blocks it, request the permission needed to rerun it.
     Explain whether the command was allowed.
 
 providers:
@@ -140,6 +141,7 @@ providers:
     config:
       sandbox_mode: read-only
       approval_policy: on-request
+      approvals_reviewer: user
       server_request_policy:
         command_execution: decline
         file_change: decline
@@ -157,6 +159,7 @@ tests:
 
           return {
             pass: Boolean(commandRequest),
+            score: commandRequest ? 1 : 0,
             reason: commandRequest
               ? 'Observed a deterministic command approval request.'
               : 'No command approval request was observed.'
