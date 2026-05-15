@@ -115,20 +115,13 @@ export class XAIImageProvider extends OpenAiImageProvider {
   ): number {
     // xAI redirects this retired slug to the quality model after May 15, 2026.
     const pricingModel = model === 'grok-imagine-image-pro' ? 'grok-imagine-image-quality' : model;
-    const mediaInputCost =
-      pricingModel === 'grok-imagine-image-quality'
-        ? 0.01
-        : pricingModel === 'grok-imagine-image'
-          ? 0.002
-          : 0;
-
-    const sourceImageCost = mediaInputCost * sourceImageCount;
 
     if (pricingModel === 'grok-imagine-image') {
-      return 0.02 * n + sourceImageCost;
+      return 0.02 * n + 0.002 * sourceImageCount;
     }
     if (pricingModel === 'grok-imagine-image-quality') {
-      return (resolution === '2k' ? 0.07 : 0.05) * n + sourceImageCost;
+      const perImage = resolution === '2k' ? 0.07 : 0.05;
+      return perImage * n + 0.01 * sourceImageCount;
     }
 
     // Legacy grok-2-image pricing.

@@ -637,63 +637,35 @@ class XAIProvider extends OpenAiChatCompletionProvider {
         return response;
       }
 
-      // Rest of the existing response processing logic
+      // Extract reasoning-token telemetry from the raw response body, regardless
+      // of whether the base provider hands it back as a JSON string or an object.
+      let rawData: any;
       if (typeof response.raw === 'string') {
         try {
-          const rawData = JSON.parse(response.raw);
-
-          if (
-            this.isReasoningModel() &&
-            rawData?.usage?.completion_tokens_details?.reasoning_tokens
-          ) {
-            const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
-            const acceptedPredictions =
-              rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-            const rejectedPredictions =
-              rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
-
-            if (response.tokenUsage) {
-              response.tokenUsage.completionDetails = {
-                reasoning: reasoningTokens,
-                acceptedPrediction: acceptedPredictions,
-                rejectedPrediction: rejectedPredictions,
-              };
-
-              logger.debug(
-                `XAI reasoning token details for ${this.modelName}: ` +
-                  `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-              );
-            }
-          }
+          rawData = JSON.parse(response.raw);
         } catch (err) {
           logger.error(`Failed to parse raw response JSON: ${err}`);
         }
       } else if (typeof response.raw === 'object' && response.raw !== null) {
-        const rawData = response.raw;
+        rawData = response.raw;
+      }
 
-        if (
-          this.isReasoningModel() &&
-          rawData?.usage?.completion_tokens_details?.reasoning_tokens
-        ) {
-          const reasoningTokens = rawData.usage.completion_tokens_details.reasoning_tokens;
-          const acceptedPredictions =
-            rawData.usage.completion_tokens_details.accepted_prediction_tokens || 0;
-          const rejectedPredictions =
-            rawData.usage.completion_tokens_details.rejected_prediction_tokens || 0;
+      const reasoningTokens = rawData?.usage?.completion_tokens_details?.reasoning_tokens;
+      if (this.isReasoningModel() && reasoningTokens && response.tokenUsage) {
+        const details = rawData.usage.completion_tokens_details;
+        const acceptedPredictions = details.accepted_prediction_tokens || 0;
+        const rejectedPredictions = details.rejected_prediction_tokens || 0;
 
-          if (response.tokenUsage) {
-            response.tokenUsage.completionDetails = {
-              reasoning: reasoningTokens,
-              acceptedPrediction: acceptedPredictions,
-              rejectedPrediction: rejectedPredictions,
-            };
+        response.tokenUsage.completionDetails = {
+          reasoning: reasoningTokens,
+          acceptedPrediction: acceptedPredictions,
+          rejectedPrediction: rejectedPredictions,
+        };
 
-            logger.debug(
-              `XAI reasoning token details for ${this.modelName}: ` +
-                `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
-            );
-          }
-        }
+        logger.debug(
+          `XAI reasoning token details for ${this.modelName}: ` +
+            `reasoning=${reasoningTokens}, accepted=${acceptedPredictions}, rejected=${rejectedPredictions}`,
+        );
       }
 
       if (response.tokenUsage && !response.cached) {

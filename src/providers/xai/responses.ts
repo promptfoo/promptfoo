@@ -137,6 +137,27 @@ function parseSseEvent(chunk: string): XAIResponsesStreamEvent | undefined {
   }
 }
 
+/**
+ * Pulls `annotations` from every `output_text` content block in a completed
+ * Responses payload. Used to preserve citation metadata when we rebuild the
+ * top-level output from streamed text deltas.
+ */
+function collectOutputTextAnnotations(output: any): any[] {
+  if (!Array.isArray(output)) {
+    return [];
+  }
+  return output.flatMap((item: any) => {
+    if (!Array.isArray(item?.content)) {
+      return [];
+    }
+    return item.content.flatMap((contentItem: any) =>
+      contentItem?.type === 'output_text' && Array.isArray(contentItem.annotations)
+        ? contentItem.annotations
+        : [],
+    );
+  });
+}
+
 async function readStreamingResponse(response: Response): Promise<any> {
   if (!response.body) {
     throw new Error('xAI streaming response has no body');
@@ -189,33 +210,33 @@ async function readStreamingResponse(response: Response): Promise<any> {
   }
 
   if (outputText) {
-    const annotations = Array.isArray(latestResponse?.output)
-      ? latestResponse.output.flatMap((item: any) =>
-          Array.isArray(item?.content)
-            ? item.content.flatMap((contentItem: any) =>
-                contentItem?.type === 'output_text' && Array.isArray(contentItem.annotations)
-                  ? contentItem.annotations
-                  : [],
-              )
-            : [],
-        )
-      : [];
+    const annotations = collectOutputTextAnnotations(latestResponse?.output);
+    const rebuiltMessage = {
+      type: 'message',
+      role: 'assistant',
+      content: [
+        {
+          type: 'output_text',
+          text: outputText,
+          ...(annotations.length > 0 ? { annotations } : {}),
+        },
+      ],
+    };
+
+    // Preserve tool-call items (function_call, web_search_call,
+    // code_interpreter_call, mcp_*, tool_result, ...) so streamed runs with
+    // tools behave like their non-streamed counterparts. Drop `reasoning`
+    // items — their summaries would otherwise leak into user-facing output —
+    // and drop the original `message` item since we just rebuilt it from
+    // streamed deltas.
+    const existingOutput = Array.isArray(latestResponse?.output) ? latestResponse.output : [];
+    const preservedItems = existingOutput.filter(
+      (item: any) => item?.type !== 'message' && item?.type !== 'reasoning',
+    );
 
     return {
       ...latestResponse,
-      output: [
-        {
-          type: 'message',
-          role: 'assistant',
-          content: [
-            {
-              type: 'output_text',
-              text: outputText,
-              ...(annotations.length > 0 ? { annotations } : {}),
-            },
-          ],
-        },
-      ],
+      output: [...preservedItems, rebuiltMessage],
     };
   }
 

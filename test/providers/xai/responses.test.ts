@@ -386,6 +386,42 @@ describe('XAIResponsesProvider', () => {
     expect(result.raw?.annotations).toEqual([{ url: 'https://example.com', title: 'Example' }]);
   });
 
+  it('preserves non-message output items (web_search_call) alongside rebuilt streamed text', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.output_text.delta","delta":"per docs, the answer is 42"}',
+          '',
+          'data: {"type":"response.completed","response":{"id":"resp_stream","model":"grok-4.3","output":[{"type":"web_search_call","id":"ws_1","status":"completed"},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"per docs, the answer is 42","annotations":[{"url":"https://example.com","title":"Example"}]}]}],"usage":{"input_tokens":10,"output_tokens":7,"total_tokens":17}}}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      ),
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: {
+        apiKey: 'test-key',
+        stream: true,
+        tools: [{ type: 'web_search' }],
+      },
+    });
+
+    const result = await provider.callApi('hello');
+
+    // The processor renders web_search_call items into the output text; the
+    // key signal is that the web_search_call survived the streamed rebuild
+    // rather than being silently dropped alongside the original message item.
+    expect(result.output).toContain('Web Search Call');
+    expect(result.output).toContain('per docs, the answer is 42');
+    expect(result.metadata?.annotations).toEqual([
+      { url: 'https://example.com', title: 'Example' },
+    ]);
+  });
+
   it('returns an error when a streamed response has no output content', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,
