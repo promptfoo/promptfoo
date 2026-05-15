@@ -165,6 +165,8 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
   const isFiltered = header.column.getIsFiltered();
   const isRightAligned = header.column.columnDef.meta?.align === 'right';
   const sortDirection = header.column.getIsSorted();
+  const ariaSort =
+    sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none';
   const headerSize = `${header.getSize()}px`;
   const isUtilityColumn = UTILITY_COLUMN_IDS.has(header.column.id);
 
@@ -190,6 +192,7 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
           ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
           : {}),
       }}
+      aria-sort={canSort ? ariaSort : undefined}
       onClick={header.column.getToggleSortingHandler()}
     >
       {header.isPlaceholder ? null : (
@@ -256,6 +259,7 @@ export function DataTable<TData, TValue = unknown>({
   showColumnToggle = true,
   showFilter = true,
   showExport = true,
+  globalFilterLabel = 'Search table',
   rowDisplayMode,
   virtualRowEstimate = 48,
   virtualOverscan = 10,
@@ -420,7 +424,8 @@ export function DataTable<TData, TValue = unknown>({
               e.stopPropagation();
               row.toggleExpanded();
             }}
-            aria-label="Expand row"
+            aria-label={row.getIsExpanded() ? 'Collapse row' : 'Expand row'}
+            aria-expanded={row.getIsExpanded()}
             className="flex items-center justify-center size-6 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <ChevronRight
@@ -709,6 +714,7 @@ export function DataTable<TData, TValue = unknown>({
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -734,6 +740,7 @@ export function DataTable<TData, TValue = unknown>({
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -763,6 +770,7 @@ export function DataTable<TData, TValue = unknown>({
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -777,87 +785,106 @@ export function DataTable<TData, TValue = unknown>({
     );
   }
 
-  const renderTableRow = (row: Row<TData>, virtualIndex?: number) => (
-    <React.Fragment key={virtualIndex === undefined ? row.id : `${row.id}-${virtualIndex}`}>
-      <tr
-        data-index={virtualIndex}
-        data-rowindex={virtualIndex ?? row.index}
-        ref={virtualIndex === undefined || isPrinting ? undefined : rowVirtualizer.measureElement}
-        onClick={() => {
-          if (onRowClick) {
-            onRowClick(row.original);
-          } else if (renderSubComponent && row.getCanExpand()) {
-            row.toggleExpanded();
-          }
-        }}
-        className={cn(
-          'group border-b border-zinc-200 dark:border-zinc-800 last:border-b-0 transition-colors print:border-gray-300',
-          (onRowClick || (renderSubComponent && row.getCanExpand())) &&
-            'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50',
-        )}
-      >
-        {row.getVisibleCells().map((cell) => {
-          const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
-          const cellSize = `${cell.column.getSize()}px`;
-          const isUtilityColumn = UTILITY_COLUMN_IDS.has(cell.column.id);
-          const stickyColumnPosition = stickyColumnPositions.get(cell.column.id);
+  const renderTableRow = (row: Row<TData>, virtualIndex?: number) => {
+    const canToggleExpansionFromRow =
+      !onRowClick && Boolean(renderSubComponent && row.getCanExpand());
+    const canActivateRow = Boolean(onRowClick);
+    const activateRow = () => {
+      if (onRowClick) {
+        onRowClick(row.original);
+      } else if (canToggleExpansionFromRow) {
+        row.toggleExpanded();
+      }
+    };
 
-          return (
-            <td
-              key={cell.id}
-              className={cn(
-                'py-3 text-sm',
-                isUtilityColumn
-                  ? cn('px-3', cell.column.id === 'select' && 'cursor-pointer')
-                  : 'px-4 overflow-hidden text-ellipsis',
-                cellAlign === 'right' && 'text-right',
-                stickyColumnPosition &&
-                  'sticky z-[1] bg-white group-hover:bg-zinc-50 dark:bg-zinc-900 dark:group-hover:bg-zinc-800/50 print:static print:z-auto print:bg-white',
-                stickyColumnPosition?.isBoundary &&
-                  (stickyColumnPosition.side === 'left'
-                    ? 'border-r border-zinc-200 dark:border-zinc-800'
-                    : 'border-l border-zinc-200 dark:border-zinc-800'),
-              )}
-              style={{
-                width: cellSize,
-                minWidth: cellSize,
-                maxWidth: cellSize,
-                ...(stickyColumnPosition
-                  ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
-                  : {}),
-              }}
-              onClick={
-                cell.column.id === 'select'
-                  ? (e) => {
-                      e.stopPropagation();
-                      row.toggleSelected();
-                    }
-                  : undefined
-              }
-            >
-              {isUtilityColumn ? (
-                flexRender(cell.column.columnDef.cell, cell.getContext())
-              ) : (
-                <div className="overflow-hidden min-w-0">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </div>
-              )}
-            </td>
-          );
-        })}
-      </tr>
-      {renderSubComponent && row.getIsExpanded() && (
-        <tr className={cn('bg-neutral-100/30 dark:bg-neutral-800/30', expandedRowClassName)}>
-          <td
-            colSpan={visibleColumnCount}
-            className="border-b border-zinc-200 p-4 dark:border-zinc-800"
-          >
-            {renderSubComponent(row)}
-          </td>
+    return (
+      <React.Fragment key={virtualIndex === undefined ? row.id : `${row.id}-${virtualIndex}`}>
+        <tr
+          data-index={virtualIndex}
+          data-rowindex={virtualIndex ?? row.index}
+          ref={virtualIndex === undefined || isPrinting ? undefined : rowVirtualizer.measureElement}
+          onClick={activateRow}
+          onKeyDown={(event) => {
+            if (
+              event.target !== event.currentTarget ||
+              (event.key !== 'Enter' && event.key !== ' ')
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+            activateRow();
+          }}
+          tabIndex={canActivateRow ? 0 : undefined}
+          className={cn(
+            'group border-b border-zinc-200 dark:border-zinc-800 last:border-b-0 transition-colors print:border-gray-300',
+            (onRowClick || (renderSubComponent && row.getCanExpand())) &&
+              'cursor-pointer hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:hover:bg-zinc-800/50',
+          )}
+        >
+          {row.getVisibleCells().map((cell) => {
+            const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
+            const cellSize = `${cell.column.getSize()}px`;
+            const isUtilityColumn = UTILITY_COLUMN_IDS.has(cell.column.id);
+            const stickyColumnPosition = stickyColumnPositions.get(cell.column.id);
+
+            return (
+              <td
+                key={cell.id}
+                className={cn(
+                  'py-3 text-sm',
+                  isUtilityColumn
+                    ? cn('px-3', cell.column.id === 'select' && 'cursor-pointer')
+                    : 'px-4 overflow-hidden text-ellipsis',
+                  cellAlign === 'right' && 'text-right',
+                  stickyColumnPosition &&
+                    'sticky z-[1] bg-white group-hover:bg-zinc-50 dark:bg-zinc-900 dark:group-hover:bg-zinc-800/50 print:static print:z-auto print:bg-white',
+                  stickyColumnPosition?.isBoundary &&
+                    (stickyColumnPosition.side === 'left'
+                      ? 'border-r border-zinc-200 dark:border-zinc-800'
+                      : 'border-l border-zinc-200 dark:border-zinc-800'),
+                )}
+                style={{
+                  width: cellSize,
+                  minWidth: cellSize,
+                  maxWidth: cellSize,
+                  ...(stickyColumnPosition
+                    ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
+                    : {}),
+                }}
+                onClick={
+                  cell.column.id === 'select'
+                    ? (e) => {
+                        e.stopPropagation();
+                        row.toggleSelected();
+                      }
+                    : undefined
+                }
+              >
+                {isUtilityColumn ? (
+                  flexRender(cell.column.columnDef.cell, cell.getContext())
+                ) : (
+                  <div className="overflow-hidden min-w-0">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </div>
+                )}
+              </td>
+            );
+          })}
         </tr>
-      )}
-    </React.Fragment>
-  );
+        {renderSubComponent && row.getIsExpanded() && (
+          <tr className={cn('bg-neutral-100/30 dark:bg-neutral-800/30', expandedRowClassName)}>
+            <td
+              colSpan={visibleColumnCount}
+              className="border-b border-zinc-200 p-4 dark:border-zinc-800"
+            >
+              {renderSubComponent(row)}
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  };
 
   const renderVirtualSpacerRow = (height: number, key: string) => {
     if (height <= 0) {
@@ -980,6 +1007,7 @@ export function DataTable<TData, TValue = unknown>({
               showFilter={showColumnFilterControls}
               showGlobalFilter={showGlobalFilterControl}
               showExport={showExport}
+              globalFilterLabel={globalFilterLabel}
               onExportCSV={onExportCSV}
               onExportJSON={onExportJSON}
               toolbarActions={toolbarActions}
