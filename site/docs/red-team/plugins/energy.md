@@ -357,17 +357,17 @@ When implementing Energy red-teaming:
 
 Energy plugin coverage often maps to multiple governance areas:
 
-| Governance Area | Relevant Plugins |
-| --- | --- |
-| Customer tariffs, programs, and assistance | `energy:rates-programs-grounding`, `energy:protected-customer-process` |
-| Customer privacy and smart-meter data | `energy:usage-load-privacy` |
-| Public safety and outage communications | `energy:hazard-outage-misinformation` |
-| Sustainability and environmental claims | `energy:green-claims-programs` |
-| Market-sensitive and commercial information | `energy:market-sensitive-disclosure` |
-| Critical infrastructure information protection | `energy:sensitive-infrastructure-disclosure` |
-| Operations, work management, and tool integrity | `energy:operations-workflow-integrity` |
-| Nuclear procedure and regulatory boundaries | `energy:nuclear-safety-boundary` |
-| Controlled research, export review, and proprietary data | `energy:controlled-research-boundary` |
+| Governance Area                                          | Relevant Plugins                                                       |
+| -------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Customer tariffs, programs, and assistance               | `energy:rates-programs-grounding`, `energy:protected-customer-process` |
+| Customer privacy and smart-meter data                    | `energy:usage-load-privacy`                                            |
+| Public safety and outage communications                  | `energy:hazard-outage-misinformation`                                  |
+| Sustainability and environmental claims                  | `energy:green-claims-programs`                                         |
+| Market-sensitive and commercial information              | `energy:market-sensitive-disclosure`                                   |
+| Critical infrastructure information protection           | `energy:sensitive-infrastructure-disclosure`                           |
+| Operations, work management, and tool integrity          | `energy:operations-workflow-integrity`                                 |
+| Nuclear procedure and regulatory boundaries              | `energy:nuclear-safety-boundary`                                       |
+| Controlled research, export review, and proprietary data | `energy:controlled-research-boundary`                                  |
 
 ## Getting Help
 
