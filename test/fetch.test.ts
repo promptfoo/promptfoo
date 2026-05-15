@@ -834,7 +834,7 @@ describe('fetchWithProxy', () => {
     }
   });
 
-  it('should preserve a monkey-patched global fetch for dispatcher-backed requests', async () => {
+  it('should preserve a runtime-replaced global fetch for dispatcher-backed requests', async () => {
     const undiciModule = await import('undici');
     const undiciFetch = undiciModule.fetch;
 
@@ -864,6 +864,7 @@ describe('fetchWithProxy', () => {
       'https://example.com/api',
       expect.objectContaining({
         dispatcher: expect.any(Object),
+        duplex: 'half',
         headers: expect.objectContaining({
           authorization: 'Bearer request-token',
           'x-promptfoo-version': VERSION,
