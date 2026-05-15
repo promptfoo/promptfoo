@@ -310,6 +310,54 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics[0].namedScores.relevance).toBeCloseTo(0.8, 1); // Only from first result
       expect(metrics[0].namedScoresCount.accuracy).toBe(2);
       expect(metrics[0].namedScoresCount.relevance).toBe(1);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(2);
+      expect(metrics[0].namedScoreWeights?.relevance).toBe(1);
+    });
+
+    it('should aggregate weighted named scores using grading result denominators', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 0,
+      });
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: {} },
+        promptId: 'weighted-test',
+        provider: { id: 'test', label: 'test' },
+        prompt: { raw: 'test', label: 'test' },
+        vars: {},
+        response: {
+          output: 'test',
+          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+        },
+        error: null,
+        failureReason: ResultFailureReason.ASSERT,
+        success: false,
+        score: 0.75,
+        latencyMs: 100,
+        gradingResult: {
+          pass: false,
+          score: 0.75,
+          reason: 'weighted metric',
+          namedScoreWeights: {
+            accuracy: 4,
+          },
+        },
+        namedScores: { accuracy: 0.75 },
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].namedScores.accuracy).toBeCloseTo(3, 10);
+      expect(metrics[0].namedScoreWeights?.accuracy).toBe(4);
+      expect(metrics[0].namedScoresCount.accuracy).toBe(1);
     });
   });
 

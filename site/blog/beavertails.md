@@ -32,7 +32,7 @@ The end result is a report that shows you how well your model handles different 
 ![BeaverTails results](/img/blog/beavertails/beavertails-eval.png)
 
 :::info
-To jump straight to the code, [click here](https://github.com/promptfoo/promptfoo/tree/main/examples/beavertails).
+To jump straight to the code, [click here](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-beavertails).
 :::
 
 <!-- truncate -->

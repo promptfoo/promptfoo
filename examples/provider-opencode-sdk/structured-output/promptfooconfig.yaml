@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK structured JSON output'
+
+prompts:
+  - 'Return JSON only with two keys: "language" and "task". Use "python" for language and describe the task as generating Fibonacci output.'
+
+providers:
+  - id: opencode:sdk
+    config:
+      apiKey: '{{env.OPENAI_API_KEY}}'
+      provider_id: openai
+      model: gpt-4o-mini
+      format:
+        type: json_schema
+        schema:
+          type: object
+          additionalProperties: false
+          properties:
+            language:
+              type: string
+            task:
+              type: string
+          required:
+            - language
+            - task
+
+tests:
+  - vars: {}
+    assert:
+      - type: is-json
+        value:
+          type: object
+          additionalProperties: false
+          properties:
+            language:
+              type: string
+            task:
+              type: string
+          required:
+            - language
+            - task

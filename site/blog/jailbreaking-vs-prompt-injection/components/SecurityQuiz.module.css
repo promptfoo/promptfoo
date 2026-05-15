@@ -451,3 +451,126 @@
     width: 100%;
   }
 }
+
+html[data-theme='dark'] .quiz {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='dark'] .progressBar {
+  background-color: #334155;
+}
+
+html[data-theme='dark'] .progressText {
+  color: #94a3b8;
+}
+
+html[data-theme='dark'] .questionCard {
+  background: #0b1220;
+  border-color: #334155;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='dark'] .questionTitle {
+  color: #e2e8f0;
+}
+
+html[data-theme='dark'] .scenarioBox {
+  background: #111827;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+html[data-theme='dark'] .option {
+  background: #111827;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+html[data-theme='dark'] .option:hover:not(:disabled) {
+  background: #172554;
+  border-color: #3b82f6;
+}
+
+html[data-theme='dark'] .option.selected {
+  background: #1e3a8a;
+  border-color: #3b82f6;
+  color: #dbeafe;
+}
+
+html[data-theme='dark'] .option.correct {
+  background: #052e16;
+  border-color: #166534;
+  color: #86efac;
+}
+
+html[data-theme='dark'] .option.incorrect {
+  background: #450a0a;
+  border-color: #991b1b;
+  color: #fca5a5;
+}
+
+html[data-theme='dark'] .choices h4,
+html[data-theme='dark'] .categories h4 {
+  color: #e2e8f0;
+}
+
+html[data-theme='dark'] .category {
+  background: #111827;
+  border-color: #334155;
+}
+
+html[data-theme='dark'] .droppedChoice {
+  background: #1f2937;
+  color: #cbd5e1;
+}
+
+html[data-theme='dark'] .dropHint {
+  color: #94a3b8;
+}
+
+html[data-theme='dark'] .explanation {
+  background: #0c1a2e;
+  border-color: #0284c7;
+}
+
+html[data-theme='dark'] .explanationContent strong {
+  color: #7dd3fc;
+}
+
+html[data-theme='dark'] .explanationContent p {
+  color: #cbd5e1;
+}
+
+html[data-theme='dark'] .hint {
+  color: #94a3b8;
+  background: #111827;
+}
+
+html[data-theme='dark'] .scoreDisplay,
+html[data-theme='dark'] .resultsSummary {
+  background: #0b1220;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='dark'] .scoreText h2,
+html[data-theme='dark'] .resultsSummary h3 {
+  color: #e2e8f0;
+}
+
+html[data-theme='dark'] .timeDisplay,
+html[data-theme='dark'] .points {
+  color: #94a3b8;
+}
+
+html[data-theme='dark'] .resultItem {
+  border-bottom-color: #1f2937;
+}
+
+html[data-theme='dark'] .retryButton {
+  background: #475569;
+}
+
+html[data-theme='dark'] .retryButton:hover {
+  background: #334155;
+}

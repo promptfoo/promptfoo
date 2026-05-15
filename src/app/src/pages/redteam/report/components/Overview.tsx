@@ -43,7 +43,7 @@ const Overview = ({ categoryStats, plugins, vulnerabilitiesDataGridRef }: Overvi
 
   // Iterate over categoryStats entries (keyed by resolved plugin IDs) rather than
   // the raw plugins array, so custom policies with specific IDs are counted correctly.
-  const severityCounts = Object.values(Severity).reduce(
+  const severityCounts = Object.values(Severity).reduce<Partial<Record<Severity, number>>>(
     (acc, severity) => {
       acc[severity] = Object.entries(categoryStats).reduce((count, [pluginId, stats]) => {
         if (stats.total <= 0) {
@@ -62,7 +62,7 @@ const Overview = ({ categoryStats, plugins, vulnerabilitiesDataGridRef }: Overvi
       }, 0);
       return acc;
     },
-    {} as Record<Severity, number>,
+    {},
   );
 
   const handleNavigateToVulnerabilities = (severity: Severity) => {
@@ -77,7 +77,7 @@ const Overview = ({ categoryStats, plugins, vulnerabilitiesDataGridRef }: Overvi
   };
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
       {Object.values(Severity).map((severity) => (
         <div key={severity} className="flex-1">
           <SeverityCard

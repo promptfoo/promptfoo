@@ -7,13 +7,13 @@ description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, an
 
 # Bedrock
 
-The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, Alibaba's Qwen, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Bedrock model IDs directly, including regional IDs and inference profile IDs. Because AWS changes the Bedrock catalog over time, use the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html), [model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns), or `aws bedrock list-foundation-models` as the source of truth for current model IDs and regional availability.
 
 ## Setup
 
-1. **Model Access**: Amazon Bedrock provides automatic access to serverless foundation models with no manual approval required.
-   - **Most models**: Amazon, DeepSeek, Mistral, Meta, Qwen, and OpenAI models (including GPT-OSS and Qwen3) are available immediately - just start using them
-   - **Anthropic models**: Require one-time use case submission through the model catalog (access granted immediately after submission)
+1. **Model Access**: Access rules vary by provider and can change over time.
+   - Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) for the current access path and regional availability of the model you want to use
+   - **Anthropic models**: May require one-time use case submission through the model catalog
    - **AWS Marketplace models**: Some third-party models require IAM permissions with `aws-marketplace:Subscribe`
    - **Access control**: Organizations maintain control through IAM policies and Service Control Policies (SCPs)
 
@@ -34,7 +34,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-opus-4-6-v1:0
+     - id: bedrock:us.anthropic.claude-opus-4-7-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -77,7 +77,7 @@ The `inferenceModelType` config option supports the following values:
 - `claude` - For Anthropic Claude models
 - `nova` - For Amazon Nova models (v1)
 - `nova2` - For Amazon Nova 2 models (with reasoning support)
-- `llama` - Defaults to Llama 4 (latest version)
+- `llama` - For Meta Llama models (defaults to Llama 4)
 - `llama2` - For Meta Llama 2 models
 - `llama3` - For Meta Llama 3 models
 - `llama3.1` or `llama3_1` - For Meta Llama 3.1 models
@@ -97,8 +97,8 @@ The `inferenceModelType` config option supports the following values:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  # Claude Opus 4.6 via global inference profile (required for this model)
-  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-6-v1
+  # Claude Opus 4.7 via global inference profile
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-7
     config:
       inferenceModelType: 'claude'
       region: 'us-east-2'
@@ -143,7 +143,9 @@ When using inference profiles, ensure the `inferenceModelType` matches the model
 
 ## Converse API
 
-The Converse API provides a unified interface across all Bedrock models with native support for extended thinking (reasoning), tool calling, and guardrails. Use the `bedrock:converse:` prefix to access this API.
+The Converse API provides a unified interface across supported Bedrock models with
+native support for extended thinking (reasoning), tool calling, and guardrails. Use
+the `bedrock:converse:` prefix to access this API.
 
 ### Basic Usage
 
@@ -215,21 +217,66 @@ providers:
 
 ### Supported Models
 
-The Converse API works with all Bedrock models that support the Converse operation:
+The Converse API works with Bedrock models that support the `Converse` operation.
+Because AWS changes that compatibility matrix over time, use the
+[AWS Converse supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html)
+as the source of truth for current support.
 
-- **Claude**: All Claude 3.x and 4.x models
-- **Amazon Nova**: Lite, Micro, Pro, Premier (not Sonic)
-- **Amazon Nova 2**: Lite (with reasoning support)
-- **Meta Llama**: 3.x, 4.x models
-- **Mistral**: All Mistral models
-- **Cohere**: Command R and R+ models
-- **AI21**: Jamba models
-- **DeepSeek**: R1 and other models
-- **Qwen**: Qwen3 models
+### Model Context Protocol (MCP) Servers
+
+The Converse provider can attach [Model Context Protocol](https://modelcontextprotocol.io)
+servers and surface their tools to the model alongside any `tools` you configure
+manually. MCP tool definitions are discovered at provider startup, converted to
+Bedrock `toolSpec` entries, and sent on every request.
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      mcp:
+        enabled: true
+        servers:
+          # Remote MCP server (Streamable HTTP)
+          - name: deepwiki
+            url: https://mcp.deepwiki.com/mcp
+          # Or a local stdio MCP server
+          # - name: filesystem
+          #   command: npx
+          #   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp']
+        # Optional: only expose specific tools
+        tools:
+          - ask_question
+      toolChoice: auto
+```
+
+**Single-turn execution.** When the model returns a `tool_use` block, the provider
+executes the requested MCP tool and returns the **raw tool result** as the final
+output. The result is not fed back to the model for a follow-up turn — there is no
+agent loop. Write your assertions against the tool output text directly, or wrap
+the provider in an agent harness if you need a synthesized natural-language answer.
+
+**Tool name collisions.** If an entry under `config.tools` has the same `name` as
+an MCP-discovered tool, the MCP version wins and the duplicate is dropped with a
+warning. Bedrock rejects duplicate tool names with `ValidationException`, so
+deduping is required.
+
+**Lifecycle.** Stdio MCP servers spawn a child process; the provider registers
+itself with the evaluator's shutdown hook so transports are released when the
+eval finishes. If MCP initialization fails (bad URL, missing binary, handshake
+failure), the failure is surfaced as a `ProviderResponse.error` on the first
+`callApi` rather than crashing the eval. MCP errors during a tool call are
+likewise propagated to `error` so failed runs do not pass silently.
+
+**Disabling tools.** Setting `toolChoice: none` (or `tool_choice: none`) skips
+the entire tool path: no MCP definitions are sent in the request and no MCP
+tools are invoked even if the model returns a stale `tool_use` block.
 
 ## Authentication
 
-Amazon Bedrock supports multiple authentication methods, including the new API key authentication for simplified access. Credentials are resolved in this priority order:
+Amazon Bedrock supports multiple authentication methods, including API key
+authentication for simplified access. Credentials are resolved in this priority order:
 
 ### Credential Resolution Order
 
@@ -648,7 +695,8 @@ Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials mu
 
 :::
 
-Nova Reel is available in **us-east-1** region.
+Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+for current Nova Reel regional availability.
 
 #### Basic Configuration
 
@@ -754,9 +802,9 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
+**Note**: Claude Opus 4.7 (`anthropic.claude-opus-4-7`) is available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and — at launch — through the base foundation model ID in select regions (US East/N. Virginia, Europe/Ireland, Europe/Stockholm, Asia Pacific/Tokyo). Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) still require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
 
 ```yaml
 config:
@@ -884,7 +932,7 @@ config:
 
 ### Mistral Models
 
-For Mistral models (e.g., `mistral.mistral-7b-instruct-v0:2`), you can use the following configuration options:
+Legacy Mistral text-completion models such as `mistral.mistral-7b-instruct-v0:2` support:
 
 ```yaml
 config:
@@ -893,6 +941,11 @@ config:
   top_p: 0.9
   top_k: 50
 ```
+
+Mistral chat-completion models such as `mistral.mistral-large-2407-v1:0`,
+`mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
+`mistral.pixtral-large-2502-v1:0` use `messages` requests and support the same
+options except `top_k`.
 
 ### DeepSeek Models
 
@@ -909,19 +962,23 @@ config:
   showThinking: true # Optional: Control whether thinking content is included in output
 ```
 
-DeepSeek models support an extended thinking capability. The `showThinking` parameter controls whether thinking content is included in the response output:
+`deepseek.r1-v1:0` supports extended thinking output. The `showThinking` parameter controls whether R1 thinking content is included in the response output:
 
 - When set to `true` (default), thinking content will be included in the output
 - When set to `false`, thinking content will be excluded from the output
 
-This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
+`deepseek.v3-v1:0` and `deepseek.v3.2` use chat-completion style `messages`
+requests and return the final assistant message directly.
 
 ### OpenAI Models
 
-OpenAI's open-weight models are available through AWS Bedrock with full support for their reasoning capabilities and parameters. The available models include:
+OpenAI models on Bedrock use OpenAI-style request parameters. Available model IDs
+include:
 
-- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter model with strong reasoning capabilities
-- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter model, more cost-effective
+- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter general-purpose model
+- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter general-purpose model
+- **`openai.gpt-oss-safeguard-120b`**: 120 billion parameter safety model
+- **`openai.gpt-oss-safeguard-20b`**: 20 billion parameter safety model
 
 ```yaml
 config:
@@ -936,7 +993,7 @@ config:
 
 #### Reasoning Effort
 
-OpenAI models support adjustable reasoning effort through the `reasoning_effort` parameter:
+General-purpose GPT OSS models support adjustable reasoning effort through the `reasoning_effort` parameter:
 
 - **`low`**: Faster responses with basic reasoning
 - **`medium`**: Balanced performance and reasoning depth
@@ -972,7 +1029,11 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 ### Qwen Models
 
-Alibaba's Qwen models (e.g., `qwen.qwen3-coder-480b-a35b-v1:0`, `qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, `qwen.qwen3-32b-v1:0`) support advanced features including hybrid thinking modes, tool calling, and extended context understanding.
+Qwen model IDs include `qwen.qwen3-coder-next`, `qwen.qwen3-next-80b-a3b`,
+`qwen.qwen3-vl-235b-a22b`, `qwen.qwen3-coder-480b-a35b-v1:0`,
+`qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, and
+`qwen.qwen3-32b-v1:0`. Qwen models support advanced features including hybrid
+thinking modes, tool calling, and extended context understanding.
 
 **Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home) or use `aws bedrock list-foundation-models` to verify which Qwen models are available in your target region, as availability varies by model and region.
 
@@ -1025,6 +1086,9 @@ config:
 
 - **Qwen3-Coder-480B-A35B**: Mixture-of-experts model optimized for coding and agentic tasks with 480B total parameters and 35B active parameters
 - **Qwen3-Coder-30B-A3B**: Smaller MoE model with 30B total parameters and 3B active parameters, optimized for coding tasks
+- **Qwen3-Coder-Next**: Coding model exposed through Bedrock
+- **Qwen3-Next-80B-A3B**: General-purpose MoE model
+- **Qwen3-VL-235B-A22B**: Vision-language model that also accepts text prompts
 - **Qwen3-235B-A22B**: General-purpose MoE model with 235B total parameters and 22B active parameters for reasoning and coding
 - **Qwen3-32B**: Dense model with 32B parameters for consistent performance in resource-constrained environments
 
@@ -1180,7 +1244,7 @@ The prompt file (`nova_multimodal_prompt.json`) should be structured to include 
 ]
 ```
 
-See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
 
 When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
 
@@ -1349,17 +1413,17 @@ Make sure to:
 
 If you see this error, the cause depends on which model provider you're using:
 
-**For most serverless models** (Amazon, DeepSeek, Mistral, Meta, Qwen, OpenAI):
+**For models without provider-specific access steps**:
 
-- These models have instant access with no approval required
+- Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+  for the current access flow
 - Verify your IAM permissions include `bedrock:InvokeModel`
 - Check your region configuration matches the model's region
 
 **For Anthropic models (Claude)**:
 
-- First-time use requires submitting use case details in the Bedrock console
-- Access is granted immediately after submission
-- This is a one-time step per AWS account or organization
+- First-time use may require submitting use case details in the Bedrock console
+- Check the AWS documentation for the current access flow
 
 **For AWS Marketplace models**:
 
@@ -1521,11 +1585,8 @@ Generate videos using Luma Ray 2, which produces high-quality videos from text p
 
 **Provider ID:** `bedrock:video:luma.ray-v2:0`
 
-:::note
-
-Luma Ray 2 is currently available in **us-west-2** region only.
-
-:::
+Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+for current Luma Ray regional availability.
 
 #### Basic Configuration
 
