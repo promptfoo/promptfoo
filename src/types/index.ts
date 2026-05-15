@@ -18,15 +18,9 @@ export {
   isCliEventSource,
 } from './eventSource';
 
-import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from '../contracts/env';
 import type { Prompt, PromptConfig, PromptFunction } from '../contracts/prompts';
-import type {
-  BaseTokenUsage,
-  NunjucksFilterMap,
-  TokenUsage,
-  VarValue,
-} from '../contracts/shared';
+import type { BaseTokenUsage, NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type { TransformFunction } from '../contracts/transform';
 import type {
   PluginConfig,
