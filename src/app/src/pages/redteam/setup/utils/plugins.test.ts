@@ -61,6 +61,31 @@ describe('countSelectedCustomIntents', () => {
       ),
     ).toBe(3);
   });
+
+  it('ignores empty entries and whitespace-only multi-step intents', () => {
+    expect(
+      countSelectedCustomIntents(
+        makeConfig([
+          {
+            id: 'intent',
+            config: { intent: ['', '   ', [' ', '\t'], ['valid step', '']] } as any,
+          },
+        ]),
+      ),
+    ).toBe(1);
+  });
+
+  it('aggregates custom intents across multiple intent plugins', () => {
+    expect(
+      countSelectedCustomIntents(
+        makeConfig([
+          { id: 'intent', config: { intent: 'first plugin intent' } as any },
+          { id: 'sql-injection' },
+          { id: 'intent', config: { intent: ['second a', ['second b1', 'second b2']] } as any },
+        ]),
+      ),
+    ).toBe(3);
+  });
 });
 
 describe('countSelectedCustomPolicies', () => {

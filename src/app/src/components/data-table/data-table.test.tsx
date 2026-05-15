@@ -273,6 +273,33 @@ describe('DataTable', () => {
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
   });
 
+  it('should expose an accessible search label', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Apple' }];
+
+    render(<DataTable columns={columns} data={data} globalFilterLabel="Search apples" />);
+
+    expect(screen.getByRole('searchbox', { name: 'Search apples' })).toBeInTheDocument();
+  });
+
+  it('should expose sort direction on sortable headers', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [
+      { id: '1', name: 'Apple' },
+      { id: '2', name: 'Banana' },
+    ];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    const idHeader = screen.getByRole('columnheader', { name: /ID/i });
+    expect(idHeader).toHaveAttribute('aria-sort', 'none');
+
+    await user.click(idHeader);
+    expect(idHeader).toHaveAttribute('aria-sort', 'ascending');
+
+    await user.click(idHeader);
+    expect(idHeader).toHaveAttribute('aria-sort', 'descending');
+  });
+
   it('should show no-results state instead of empty state when manual column filters are active with no data', () => {
     const activeColumnFilters = [{ id: 'name', value: 'Apple' }];
 
@@ -1484,6 +1511,26 @@ describe('DataTable', () => {
       expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
     });
 
+    it('should keep row expansion on the explicit disclosure control', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const firstRow = screen.getByText('Item 1').closest('tr');
+      const firstExpandButton = screen.getAllByRole('button', { name: /expand row/i })[0];
+
+      expect(firstRow).not.toHaveAttribute('tabindex');
+      expect(firstRow).not.toHaveAttribute('aria-expanded');
+      expect(firstExpandButton).toHaveAttribute('aria-expanded', 'false');
+
+      firstExpandButton.focus();
+      await user.keyboard('{Enter}');
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+      expect(firstExpandButton).toHaveAttribute('aria-expanded', 'true');
+      expect(firstExpandButton).toHaveAccessibleName('Collapse row');
+    });
+
     it('should NOT toggle expansion on row click when onRowClick IS provided', async () => {
       const user = userEvent.setup();
       const onRowClick = vi.fn();
@@ -1503,6 +1550,33 @@ describe('DataTable', () => {
 
       expect(onRowClick).toHaveBeenCalledOnce();
       expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
+    });
+
+    it('should call onRowClick from the keyboard without hijacking nested controls', async () => {
+      const user = userEvent.setup();
+      const onRowClick = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          onRowClick={onRowClick}
+        />,
+      );
+
+      const firstRow = screen.getByText('Item 1').closest('tr');
+      const firstExpandButton = screen.getAllByRole('button', { name: /expand row/i })[0];
+
+      expect(firstRow).toHaveAttribute('tabindex', '0');
+      firstRow?.focus();
+      await user.keyboard('{Enter}');
+      expect(onRowClick).toHaveBeenCalledOnce();
+
+      firstExpandButton.focus();
+      await user.keyboard('{Enter}');
+      expect(onRowClick).toHaveBeenCalledOnce();
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
     });
 
     it('should render expanded content spanning all columns', async () => {

@@ -173,6 +173,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
               onRowClick={handleRowClick}
               emptyMessage="Create a dataset to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
+              globalFilterLabel="Search datasets"
             />
           </Card>
         </div>
