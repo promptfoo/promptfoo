@@ -133,6 +133,7 @@ export function registerRedteamRunTool(server: McpServer) {
           progressBar,
           cache: true,
           verbose: false,
+          eventSource: 'mcp',
         };
 
         logger.debug(`Running redteam scan with config: ${configPath || 'promptfooconfig.yaml'}`);
