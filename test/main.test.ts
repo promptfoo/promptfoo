@@ -223,8 +223,8 @@ describe('addCommonOptionsRecursively', () => {
     // Create a deeper command structure
     const subSubCommand = subCommand.command('subsubcommand');
     subSubCommand.action(() => {});
-    const subSubSubCommand = subSubCommand.command('subsubsubcommand');
-    subSubSubCommand.action(() => {});
+    const level3Command = subSubCommand.command('subsubsubcommand');
+    level3Command.action(() => {});
 
     addCommonOptionsRecursively(program);
 
@@ -250,10 +250,10 @@ describe('addCommonOptionsRecursively', () => {
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
 
-    const hasSubSubSubCommandVerboseOption = subSubSubCommand.options.some(
+    const hasSubSubSubCommandVerboseOption = level3Command.options.some(
       (option) => option.short === '-v' || option.long === '--verbose',
     );
-    const hasSubSubSubCommandEnvFileOption = subSubSubCommand.options.some(
+    const hasSubSubSubCommandEnvFileOption = level3Command.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
 
@@ -589,16 +589,16 @@ describe('shutdownGracefully', () => {
   });
 
   it('should clear force exit timeout when cleanup completes normally', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
     const shutdownPromise = shutdownGracefully();
 
-    // Advance a little to let the cleanup complete
     await vi.runAllTimersAsync();
 
     await shutdownPromise;
 
-    // The force exit (3s) should not have been called since cleanup completed
-    // We verify this by checking process.exit was called with the natural exit timeout (100ms)
-    // not the force exit message
+    const forceExitTimeout = setTimeoutSpy.mock.results[0]?.value;
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(forceExitTimeout);
     expect(process.exit).toHaveBeenCalled();
   });
 

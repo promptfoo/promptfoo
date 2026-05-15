@@ -246,9 +246,12 @@ type SmokeCase = {
 class MockSocket extends Duplex {
   remoteAddress = '127.0.0.1';
 
-  _read() {}
+  _read() {
+    // This test double never emits readable data; IncomingMessage only needs the stream shape.
+  }
 
   _write(_chunk: unknown, _encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+    // Accept and discard smoke-test transport writes.
     callback();
   }
 }
