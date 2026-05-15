@@ -125,11 +125,17 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     requestBody: ReturnType<OpenAiTranscriptionProvider['createRequestBody']>,
     context?: CallApiContextParams,
   ): Promise<TranscriptionRequestResult> {
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    } as OpenAiTranscriptionOptions;
     const request = await callJsonCachedOpenAi<any>(
       {
         apiKey: this.getApiKey(),
+        allowMissingApiKey: !this.requiresApiKey(),
         organization: this.getOrganization(),
         baseURL: this.getApiUrl(),
+        headers: config.headers,
         bustCache: context?.bustCache ?? context?.debug,
         maxRetries: this.config.maxRetries,
       },

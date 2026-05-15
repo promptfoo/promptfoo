@@ -527,6 +527,46 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(getTranscriptionRequest().headers.get('openai-organization')).toBe('test-org');
     });
 
+    it('should forward custom headers from config to the SDK request', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          headers: {
+            'x-tenant-id': 'tenant-42',
+            'x-tracing-id': 'trace-abc',
+          },
+        },
+      });
+
+      await provider.callApi('/path/to/audio.mp3');
+
+      const headers = getTranscriptionRequest().headers;
+      expect(headers.get('x-tenant-id')).toBe('tenant-42');
+      expect(headers.get('x-tracing-id')).toBe('trace-abc');
+    });
+
+    it('should let prompt-level config.headers override provider headers', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+        config: {
+          apiKey: 'test-key',
+          headers: { 'x-tenant-id': 'provider-default' },
+        },
+      });
+
+      const context = {
+        prompt: {
+          raw: '/path/to/audio.mp3',
+          config: { headers: { 'x-tenant-id': 'prompt-override' } },
+          label: 'test',
+        },
+        vars: {},
+      };
+
+      await provider.callApi('/path/to/audio.mp3', context);
+
+      expect(getTranscriptionRequest().headers.get('x-tenant-id')).toBe('prompt-override');
+    });
+
     it('should merge prompt config with provider config', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: { apiKey: 'test-key', temperature: 0.5 },

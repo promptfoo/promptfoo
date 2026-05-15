@@ -216,8 +216,12 @@ function stripSyntheticAuthorization(init: RequestInit, apiKey: string | undefin
   };
 }
 
-function isSdkUploadCapabilityProbe(url: string) {
-  return url === 'data:,';
+// Exported for tests. The OpenAI SDK probes upload capability with a `data:`
+// URL. The exact form ("data:," today) is an implementation detail; match the
+// scheme rather than the literal so future SDK versions keep bypassing the
+// cache wrapper.
+export function isSdkUploadCapabilityProbe(url: string) {
+  return url.startsWith('data:');
 }
 
 function getRequestUrlString(url: RequestInfo | URL) {

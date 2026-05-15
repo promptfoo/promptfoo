@@ -285,8 +285,23 @@ type PreparedFetchResponse = {
 
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
+// Headers that describe the client/runtime rather than the request semantics.
+// Excluded from cache keys so caches stay portable across SDK upgrades, Node
+// versions, and OS/arch. `x-promptfoo-version` is intentionally kept in the
+// key so promptfoo upgrades remain a deliberate invalidation boundary.
+const CACHE_KEY_IGNORED_HEADERS = new Set([
+  'accept',
+  'accept-encoding',
+  'user-agent',
+]);
+const STAINLESS_PREFIX = 'x-stainless-';
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
+
+function isIgnoredCacheKeyHeader(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return CACHE_KEY_IGNORED_HEADERS.has(normalized) || normalized.startsWith(STAINLESS_PREFIX);
+}
 
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
@@ -298,10 +313,12 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
     }
   }
 
-  return Array.from(headers.entries()).sort(([nameA, valueA], [nameB, valueB]) => {
-    const nameComparison = nameA.localeCompare(nameB);
-    return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
-  });
+  return Array.from(headers.entries())
+    .filter(([name]) => !isIgnoredCacheKeyHeader(name))
+    .sort(([nameA, valueA], [nameB, valueB]) => {
+      const nameComparison = nameA.localeCompare(nameB);
+      return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
+    });
 }
 
 function hashFetchCacheKey(identity: unknown) {

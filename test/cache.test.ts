@@ -996,6 +996,91 @@ describe('fetchWithCache', () => {
       }
     });
 
+    it('should ignore SDK telemetry and content-negotiation headers in cache keys', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'telemetry-ignored' }),
+      );
+
+      const baselineResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'Content-Type': 'application/json',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const telemetryResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'Content-Type': 'application/json',
+            accept: 'application/json',
+            'accept-encoding': 'gzip, deflate',
+            'user-agent': 'OpenAI/JS 6.37.0',
+            'x-stainless-arch': 'arm64',
+            'x-stainless-lang': 'js',
+            'x-stainless-os': 'MacOS',
+            'x-stainless-package-version': '6.37.0',
+            'x-stainless-retry-count': '0',
+            'x-stainless-runtime': 'node',
+            'x-stainless-runtime-version': 'v24.7.0',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(baselineResult.cached).toBe(false);
+      expect(telemetryResult).toMatchObject({
+        cached: true,
+        data: { data: 'telemetry-ignored' },
+      });
+    });
+
+    it('should still isolate cached responses when semantic headers differ', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'org-a' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'org-b' }));
+
+      const orgAResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'OpenAI-Organization': 'org-a',
+            'user-agent': 'OpenAI/JS 6.37.0',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const orgBResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'OpenAI-Organization': 'org-b',
+            'user-agent': 'OpenAI/JS 6.37.0',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(orgAResult.data).toEqual({ data: 'org-a' });
+      expect(orgBResult.data).toEqual({ data: 'org-b' });
+    });
+
     it('should normalize request method casing in cache keys', async () => {
       mockFetchWithRetries.mockResolvedValueOnce(
         mockFetchWithRetriesResponse(true, { data: 'method-normalized' }),
