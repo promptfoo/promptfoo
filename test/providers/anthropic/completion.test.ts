@@ -149,18 +149,22 @@ describe('AnthropicCompletionProvider', () => {
     it('should keep auth cache namespace stable across module reloads', async () => {
       async function getNamespaceFromFreshModule() {
         vi.resetModules();
-        const { getAnthropicAuthCacheNamespace } = await import(
-          '../../../src/providers/anthropic/generic'
-        );
-        return getAnthropicAuthCacheNamespace('sk-ant-reload-secret');
+        const anthropicGeneric = await import('../../../src/providers/anthropic/generic');
+        return {
+          getAnthropicAuthCacheNamespace: anthropicGeneric.getAnthropicAuthCacheNamespace,
+          namespace: anthropicGeneric.getAnthropicAuthCacheNamespace('sk-ant-reload-secret'),
+        };
       }
 
-      const firstNamespace = await getNamespaceFromFreshModule();
-      const secondNamespace = await getNamespaceFromFreshModule();
+      const firstLoad = await getNamespaceFromFreshModule();
+      const secondLoad = await getNamespaceFromFreshModule();
 
-      expect(firstNamespace).toBe(secondNamespace);
-      expect(firstNamespace).toMatch(/^[a-f0-9]{64}$/);
-      expect(firstNamespace).not.toContain('sk-ant-reload-secret');
+      expect(firstLoad.getAnthropicAuthCacheNamespace).not.toBe(
+        secondLoad.getAnthropicAuthCacheNamespace,
+      );
+      expect(firstLoad.namespace).toBe(secondLoad.namespace);
+      expect(firstLoad.namespace).toMatch(/^[a-f0-9]{64}$/);
+      expect(firstLoad.namespace).not.toContain('sk-ant-reload-secret');
     });
 
     it('should keep cache key hashes stable across fresh processes', () => {
@@ -176,7 +180,7 @@ describe('AnthropicCompletionProvider', () => {
       const spawnOptions = {
         cwd: process.cwd(),
         encoding: 'utf8' as const,
-        timeout: 30_000,
+        timeout: 10_000,
       };
       const firstRun = spawnSync(
         process.execPath,
@@ -315,29 +319,33 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('should preserve an explicit max_tokens_to_sample value of 0', async () => {
-      mockProcessEnv({ ANTHROPIC_MAX_TOKENS: '1024' });
+      const restoreEnv = mockProcessEnv({ ANTHROPIC_MAX_TOKENS: '1024' });
 
-      const provider = new AnthropicCompletionProvider('claude-2.1', {
-        config: { max_tokens_to_sample: 0 },
-      });
-      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
-        id: 'test-id',
-        model: 'claude-2.1',
-        stop_reason: 'stop_sequence',
-        type: 'completion',
-        completion: 'Test output',
-      });
+      try {
+        const provider = new AnthropicCompletionProvider('claude-2.1', {
+          config: { max_tokens_to_sample: 0 },
+        });
+        vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+          id: 'test-id',
+          model: 'claude-2.1',
+          stop_reason: 'stop_sequence',
+          type: 'completion',
+          completion: 'Test output',
+        });
 
-      await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
 
-      expect(provider.anthropic.completions.create).toHaveBeenCalledWith(
-        expect.objectContaining({ max_tokens_to_sample: 0 }),
-      );
+        expect(provider.anthropic.completions.create).toHaveBeenCalledWith(
+          expect.objectContaining({ max_tokens_to_sample: 0 }),
+        );
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
   describe('requiresApiKey', () => {
-    it('always requires an API key even when apiKeyRequired: false is set', () => {
+    it('requires an API key for the Completion API even when apiKeyRequired: false is set', () => {
       // Claude Code OAuth tokens only work on the Messages API; forwarding
       // them to the legacy completions endpoint would fail at request time,
       // so the completion subclass must not honor `apiKeyRequired: false`.

@@ -776,12 +776,15 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                         </Badge>
                       </span>
                     </TooltipTrigger>
-                    {selectedPrompt?.metrics?.tokenUsage?.total && (
+                    {(selectedPrompt?.metrics?.tokenUsage?.total ||
+                      selectedPrompt?.metrics?.tokenUsage?.assertions?.total) && (
                       <TooltipContent>
-                        <div>
-                          {selectedPrompt.metrics.tokenUsage.total.toLocaleString()} non-grading
-                          tokens
-                        </div>
+                        {!!selectedPrompt.metrics.tokenUsage.total && (
+                          <div>
+                            {selectedPrompt.metrics.tokenUsage.total.toLocaleString()} non-grading
+                            tokens
+                          </div>
+                        )}
                         {!!selectedPrompt.metrics.tokenUsage.assertions?.total && (
                           <div>
                             {selectedPrompt.metrics.tokenUsage.assertions.total.toLocaleString()}{' '}

@@ -322,6 +322,58 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('Non-grading Tokens/Sec:')).toBeInTheDocument();
   });
 
+  it('shows grading tokens even when red-team rows have no non-grading token totals', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                tokenUsage: {
+                  total: 0,
+                  prompt: 0,
+                  completion: 0,
+                  cached: 0,
+                  numRequests: 0,
+                  assertions: {
+                    total: 50,
+                    prompt: 25,
+                    completion: 25,
+                    cached: 0,
+                    numRequests: 1,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Grading Tokens:')).toBeInTheDocument();
+    expect(screen.queryByText('Non-grading Tokens:')).not.toBeInTheDocument();
+  });
+
   it('renders object provider IDs and request/assert metrics in the prompt header', () => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},

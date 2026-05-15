@@ -241,11 +241,26 @@ interface ColumnFilterDisplay {
   filterOptions: FilterOption[];
 }
 
+const formatMultiSelectSummary = (selectedValues: string[], options: FilterOption[]): string => {
+  if (selectedValues.length === 0) {
+    return 'No values selected';
+  }
+  if (selectedValues.length > 2) {
+    return `${selectedValues.length} selected`;
+  }
+  const labels = selectedValues.map(
+    (entry) => options.find((option) => option.value === entry)?.label || entry,
+  );
+  return `${selectedValues.length} selected: ${labels.join(', ')}`;
+};
+
 // Select filter component for discrete values
 interface SelectFilterProps {
   operator: SelectOperator;
   value: string | string[];
   options: FilterOption[];
+  operatorLabel: string;
+  valueLabel: string;
   onOperatorChange: (operator: SelectOperator) => void;
   onChange: (value: string | string[]) => void;
   disabled?: boolean;
@@ -255,29 +270,33 @@ function SelectFilterInput({
   operator,
   value,
   options,
+  operatorLabel,
+  valueLabel,
   onOperatorChange,
   onChange,
   disabled = false,
 }: SelectFilterProps) {
   const isMultiSelect = operator === 'isAny';
   const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
+  const selectedSummary = formatMultiSelectSummary(selectedValues, options);
 
   const handleSingleSelect = (newValue: string) => {
     onChange(newValue);
   };
 
   const handleMultiSelectToggle = (optionValue: string) => {
-    const currentValues = Array.isArray(value) ? value : [];
-    const newValues = currentValues.includes(optionValue)
-      ? currentValues.filter((v) => v !== optionValue)
-      : [...currentValues, optionValue];
+    // Use the normalized selectedValues so a string-shaped value isn't silently
+    // dropped on the first toggle when the UI was already showing it as selected.
+    const newValues = selectedValues.includes(optionValue)
+      ? selectedValues.filter((v) => v !== optionValue)
+      : [...selectedValues, optionValue];
     onChange(newValues);
   };
 
   return (
     <>
       <Select value={operator} onValueChange={onOperatorChange} disabled={disabled}>
-        <SelectTrigger className="h-8 w-[110px] shrink-0">
+        <SelectTrigger aria-label={operatorLabel} className="h-8 w-[110px] shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -295,14 +314,11 @@ function SelectFilterInput({
             <Button
               variant="outline"
               disabled={disabled}
+              aria-label={`${valueLabel}: ${selectedSummary}`}
               className="h-8 min-w-[150px] flex-1 justify-start font-normal"
             >
               {selectedValues.length > 0 ? (
-                <span className="truncate">
-                  {selectedValues.length} selected
-                  {selectedValues.length <= 2 &&
-                    `: ${selectedValues.map((v) => options.find((o) => o.value === v)?.label || v).join(', ')}`}
-                </span>
+                <span className="truncate">{selectedSummary}</span>
               ) : (
                 <span className="text-gray-500 dark:text-gray-400">Select values...</span>
               )}
@@ -313,21 +329,27 @@ function SelectFilterInput({
               {options.map((option) => {
                 const isSelected = selectedValues.includes(option.value);
                 return (
-                  <div
+                  <label
                     key={option.value}
-                    className="flex items-center space-x-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer"
-                    onClick={() => handleMultiSelectToggle(option.value)}
+                    className="flex w-full cursor-pointer items-center space-x-2 rounded-sm px-2 py-1.5 hover:bg-accent focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2"
                   >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleMultiSelectToggle(option.value)}
+                      className="sr-only"
+                    />
                     <div
                       className={cn(
                         'size-4 border border-input rounded flex items-center justify-center',
                         isSelected && 'bg-primary border-primary text-primary-foreground',
                       )}
+                      aria-hidden="true"
                     >
                       {isSelected && <span className="text-xs">✓</span>}
                     </div>
                     <span className="text-sm">{option.label}</span>
-                  </div>
+                  </label>
                 );
               })}
             </div>
@@ -339,7 +361,7 @@ function SelectFilterInput({
           onValueChange={handleSingleSelect}
           disabled={disabled}
         >
-          <SelectTrigger className="h-8 min-w-[150px] flex-1">
+          <SelectTrigger aria-label={valueLabel} className="h-8 min-w-[150px] flex-1">
             <SelectValue placeholder="Select value..." />
           </SelectTrigger>
           <SelectContent>
@@ -359,6 +381,8 @@ function SelectFilterInput({
 interface ComparisonFilterProps {
   operator: FilterOperator;
   value: string;
+  operatorLabel: string;
+  valueLabel: string;
   onOperatorChange: (operator: FilterOperator) => void;
   onValueChange: (value: string) => void;
   disabled?: boolean;
@@ -367,6 +391,8 @@ interface ComparisonFilterProps {
 function ComparisonFilterInput({
   operator,
   value,
+  operatorLabel,
+  valueLabel,
   onOperatorChange,
   onValueChange,
   disabled = false,
@@ -374,7 +400,7 @@ function ComparisonFilterInput({
   return (
     <>
       <Select value={operator} onValueChange={onOperatorChange} disabled={disabled}>
-        <SelectTrigger className="h-8 w-[110px] shrink-0">
+        <SelectTrigger aria-label={operatorLabel} className="h-8 w-[110px] shrink-0">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -386,6 +412,7 @@ function ComparisonFilterInput({
         </SelectContent>
       </Select>
       <Input
+        aria-label={valueLabel}
         placeholder="Value..."
         value={value}
         onChange={(e) => onValueChange(e.target.value)}
@@ -409,7 +436,10 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
   const [multiSelectValues, setMultiSelectValues] = React.useState<string[]>(
     Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : [],
   );
+  const multiSelectSummary = formatMultiSelectSummary(multiSelectValues, filterOptions);
   const [isMultiSelectOpen, setIsMultiSelectOpen] = React.useState<boolean>(false);
+  const multiSelectDropdownId = React.useId();
+  const multiSelectTriggerRef = React.useRef<HTMLButtonElement>(null);
   const columnHeader =
     typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id;
 
@@ -523,6 +553,15 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
       <PopoverContent
         className="w-fit min-w-[320px] max-w-[min(90vw,560px)] overflow-visible p-3"
         align="start"
+        onEscapeKeyDown={(event) => {
+          // When the multi-select dropdown is open, Escape should close it
+          // and leave the parent popover open.
+          if (isMultiSelectOpen) {
+            event.preventDefault();
+            setIsMultiSelectOpen(false);
+            multiSelectTriggerRef.current?.focus();
+          }
+        }}
         onInteractOutside={(e) => {
           // Prevent popover from closing when interacting with portaled Select content.
           // Radix Select renders its dropdown in a separate portal, which can be interpreted
@@ -548,7 +587,10 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                     handleOperatorChange(selectedOperator as FilterOperator)
                   }
                 >
-                  <SelectTrigger className="h-8 w-full">
+                  <SelectTrigger
+                    aria-label={`Operator for ${columnHeader} filter`}
+                    className="h-8 w-full"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -563,58 +605,63 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                 {operator === 'isAny' ? (
                   <div className="relative min-w-0 w-full">
                     <Button
+                      ref={multiSelectTriggerRef}
                       variant="outline"
+                      aria-label={`Value for ${columnHeader} filter: ${multiSelectSummary}`}
+                      aria-haspopup="dialog"
+                      aria-controls={multiSelectDropdownId}
+                      aria-expanded={isMultiSelectOpen}
                       className="h-8 w-full min-w-0 overflow-hidden justify-start font-normal"
                       onMouseDown={(event) => event.stopPropagation()}
                       onClick={(event) => {
                         event.stopPropagation();
-                        setIsMultiSelectOpen(true);
+                        setIsMultiSelectOpen((prev) => !prev);
                       }}
                     >
                       {multiSelectValues.length > 0 ? (
-                        <span className="truncate">
-                          {multiSelectValues.length} selected
-                          {multiSelectValues.length <= 2 &&
-                            `: ${multiSelectValues
-                              .map(
-                                (entry) =>
-                                  filterOptions.find((option) => option.value === entry)?.label ||
-                                  entry,
-                              )
-                              .join(', ')}`}
-                        </span>
+                        <span className="truncate">{multiSelectSummary}</span>
                       ) : (
                         <span className="text-zinc-500 dark:text-zinc-400">Select values...</span>
                       )}
                     </Button>
                     {isMultiSelectOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1 w-full rounded-md border border-border bg-white dark:bg-zinc-900 shadow-md p-2 z-(--z-dropdown)">
+                      <div
+                        id={multiSelectDropdownId}
+                        role="dialog"
+                        aria-label={`Select values for ${columnHeader} filter`}
+                        className="absolute left-0 right-0 top-full mt-1 w-full rounded-md border border-border bg-white dark:bg-zinc-900 shadow-md p-2 z-(--z-dropdown)"
+                      >
                         <div className="space-y-1">
                           {filterOptions.map((option) => {
                             const isSelected = multiSelectValues.includes(option.value);
 
                             return (
-                              <div
+                              <label
                                 key={option.value}
-                                role="menuitem"
-                                className="flex items-center space-x-2 px-2 py-1.5 rounded-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                                className="flex w-full cursor-pointer items-center space-x-2 rounded-sm px-2 py-1.5 hover:bg-zinc-100 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 dark:hover:bg-zinc-800"
                                 onMouseDown={(event) => event.stopPropagation()}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  handleMultiSelectChange(option.value);
                                 }}
                               >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleMultiSelectChange(option.value)}
+                                  className="sr-only"
+                                />
                                 <div
                                   className={`size-4 border rounded flex items-center justify-center ${
                                     isSelected
                                       ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-100 dark:border-zinc-100 dark:text-zinc-900'
                                       : 'border-zinc-300 dark:border-zinc-600'
                                   }`}
+                                  aria-hidden="true"
                                 >
                                   {isSelected && <span className="text-xs">✓</span>}
                                 </div>
                                 <span className="text-sm">{option.label}</span>
-                              </div>
+                              </label>
                             );
                           })}
                         </div>
@@ -629,7 +676,10 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                       setFilterValue(operator, nextValue);
                     }}
                   >
-                    <SelectTrigger className="h-8 w-full min-w-0">
+                    <SelectTrigger
+                      aria-label={`Value for ${columnHeader} filter`}
+                      className="h-8 w-full min-w-0"
+                    >
                       <SelectValue placeholder="Select value..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -650,7 +700,10 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                     handleOperatorChange(selectedOperator as FilterOperator)
                   }
                 >
-                  <SelectTrigger className="h-8 w-full">
+                  <SelectTrigger
+                    aria-label={`Operator for ${columnHeader} filter`}
+                    className="h-8 w-full"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -662,6 +715,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
                   </SelectContent>
                 </Select>
                 <Input
+                  aria-label={`Value for ${columnHeader} filter`}
                   placeholder="Value..."
                   value={textValue}
                   onChange={(event) => {
@@ -968,8 +1022,12 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
           </div>
 
           <div className="space-y-2">
-            {activeFilters.map((filter) => {
-              const { isSelectFilter, filterOptions } = getColumnMetadata(filter.columnId);
+            {activeFilters.map((filter, filterIndex) => {
+              const { column, isSelectFilter, filterOptions } = getColumnMetadata(filter.columnId);
+              const columnHeader =
+                typeof column?.columnDef.header === 'string'
+                  ? column.columnDef.header
+                  : filter.columnId;
 
               return (
                 <div
@@ -993,7 +1051,10 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
                       updateFilter(filter.id, { columnId: value, value: '' });
                     }}
                   >
-                    <SelectTrigger className="h-8 w-[110px] shrink-0">
+                    <SelectTrigger
+                      aria-label={`Column for filter ${filterIndex + 1}`}
+                      className="h-8 w-[110px] shrink-0"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1013,6 +1074,8 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
                       operator={filter.operator as SelectOperator}
                       value={filter.value}
                       options={filterOptions}
+                      operatorLabel={`Operator for ${columnHeader} filter`}
+                      valueLabel={`Value for ${columnHeader} filter`}
                       onOperatorChange={(operator) => {
                         // When switching to/from isAny, reset value appropriately
                         const newValue =
@@ -1033,6 +1096,8 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
                     <ComparisonFilterInput
                       operator={filter.operator as ComparisonOperator}
                       value={typeof filter.value === 'string' ? filter.value : ''}
+                      operatorLabel={`Operator for ${columnHeader} filter`}
+                      valueLabel={`Value for ${columnHeader} filter`}
                       onOperatorChange={(operator) => {
                         updateFilter(filter.id, { operator });
                       }}
@@ -1046,6 +1111,7 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
                   <Button
                     variant="ghost"
                     size="sm"
+                    aria-label={`Remove filter for ${columnHeader}`}
                     onClick={() => removeFilter(filter.id)}
                     className="size-8 p-0 shrink-0"
                   >
@@ -1065,11 +1131,15 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
                   ),
               )
               .map((filter) => (
-                <div key={`column-${filter.id}`} className="flex items-center gap-1.5">
+                <div
+                  key={`column-${filter.id}`}
+                  data-testid="data-table-static-filter-row"
+                  className="flex flex-wrap items-center gap-1.5"
+                >
                   <div className="h-8 w-[110px] px-3 py-1.5 text-xs rounded-md border border-input bg-background shrink-0">
                     <span className="truncate">{filter.columnHeader}</span>
                   </div>
-                  <div className="flex min-h-8 h-8 flex-1 items-center border rounded-md bg-gray-100/50 dark:bg-gray-800/50 px-3 text-sm">
+                  <div className="flex min-h-8 h-8 min-w-[150px] flex-1 items-center border rounded-md bg-gray-100/50 dark:bg-gray-800/50 px-3 text-sm">
                     {filter.isSelectFilter ? (
                       <span className="truncate">
                         {`${filter.operator} ${
@@ -1093,6 +1163,7 @@ export function DataTableFilter<TData>({ table, columnFilters }: DataTableFilter
                   <Button
                     variant="ghost"
                     size="sm"
+                    aria-label={`Remove filter for ${filter.columnHeader}`}
                     onClick={() => table.getColumn(filter.columnId)?.setFilterValue(undefined)}
                     className="size-8 p-0 shrink-0"
                   >

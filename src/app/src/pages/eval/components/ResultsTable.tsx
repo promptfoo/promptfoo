@@ -601,36 +601,38 @@ function renderTokenMetrics({
   testCount?: PromptSummaryMetric;
   isRedteam: boolean;
 }): React.ReactNode[] {
-  if (!metrics?.tokenUsage?.total) {
-    return [];
-  }
-
-  const totalTokens = metrics.tokenUsage.total;
+  const totalTokens = metrics?.tokenUsage?.total ?? 0;
+  const gradingTokens = metrics?.tokenUsage?.assertions?.total ?? 0;
+  const rows: React.ReactNode[] = [];
   const filteredTokens = filteredMetrics?.tokenUsage?.total;
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
     filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
 
-  return [
-    <div key="total-tokens">
-      <strong>{isRedteam ? 'Non-grading Tokens:' : 'Total Tokens:'}</strong>{' '}
-      {formatMetricValue(totalTokens)}
-      {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
-    </div>,
-    <div key="avg-tokens">
-      <strong>{isRedteam ? 'Avg Non-grading Tokens:' : 'Avg Tokens:'}</strong>{' '}
-      {formatMetricValue(totalAverage)}
-      {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
-    </div>,
-    ...(isRedteam && metrics.tokenUsage.assertions?.total
-      ? [
-          <div key="grading-tokens">
-            <strong>Grading Tokens:</strong>{' '}
-            {formatMetricValue(metrics.tokenUsage.assertions.total)}
-          </div>,
-        ]
-      : []),
-  ];
+  if (totalTokens) {
+    rows.push(
+      <div key="total-tokens">
+        <strong>{isRedteam ? 'Non-grading Tokens:' : 'Total Tokens:'}</strong>{' '}
+        {formatMetricValue(totalTokens)}
+        {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
+      </div>,
+      <div key="avg-tokens">
+        <strong>{isRedteam ? 'Avg Non-grading Tokens:' : 'Avg Tokens:'}</strong>{' '}
+        {formatMetricValue(totalAverage)}
+        {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
+      </div>,
+    );
+  }
+
+  if (isRedteam && gradingTokens) {
+    rows.push(
+      <div key="grading-tokens">
+        <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
+      </div>,
+    );
+  }
+
+  return rows;
 }
 
 function renderLatencyMetric({

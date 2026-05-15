@@ -1058,7 +1058,10 @@ export class CustomProvider implements ApiProvider {
         throw error;
       }
       logger.warn('[Custom] Failed to parse refusal score response', { error });
-      return [false, 'Failed to parse refusal score response', refusalResponse.tokenUsage];
+      throw new RedteamProviderError(
+        'Failed to parse refusal score response',
+        refusalResponse.tokenUsage,
+      );
     }
   }
 
@@ -1134,15 +1137,10 @@ export class CustomProvider implements ApiProvider {
         throw error;
       }
       logger.warn('[Custom] Failed to parse eval score response', { error });
-      return [
-        {
-          value: false,
-          description: 'Failed to parse evaluation response',
-          rationale: 'Failed to parse evaluation response',
-          metadata: 0,
-        },
+      throw new RedteamProviderError(
+        'Failed to parse evaluation response',
         evalResponse.tokenUsage,
-      ];
+      );
     }
   }
 

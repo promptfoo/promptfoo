@@ -1301,6 +1301,97 @@ describe('CustomProvider', () => {
     });
   });
 
+  it('should preserve refusal helper usage when refusal scoring payloads are malformed', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1 },
+    });
+    mockScoringProvider.callApi.mockResolvedValueOnce({
+      output: 'not-json',
+      tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
+    });
+
+    const result = await testProvider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 180,
+      prompt: 80,
+      completion: 100,
+      numRequests: 1,
+    });
+  });
+
+  it('should preserve eval helper usage when eval scoring payloads are malformed', async () => {
+    const testProvider = new CustomProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+      strategyText: 'Test strategy',
+    });
+
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        generatedQuestion: 'test question',
+        rationaleBehindJailbreak: 'test rationale',
+        lastResponseSummary: 'test summary',
+      }),
+      tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1 },
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+      tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1 },
+    });
+    mockScoringProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          value: false,
+          metadata: 0,
+          rationale: 'Not a refusal',
+        }),
+        tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'not-json',
+        tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1 },
+      });
+
+    const result = await testProvider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 200,
+      prompt: 90,
+      completion: 110,
+      numRequests: 1,
+    });
+  });
+
   it('should include modifiers in system prompt from test metadata', async () => {
     const prompt = 'test prompt';
     const context = {

@@ -4,6 +4,7 @@ import { VERSION } from '../../version';
 
 const SARIF_SCHEMA_URL = 'https://json.schemastore.org/sarif-2.1.0.json';
 const SARIF_VERSION = '2.1.0';
+const TOOL_INFORMATION_URI = 'https://www.promptfoo.dev/docs/code-scanning/cli/';
 const GENERIC_RULE_ID = 'promptfoo/code-scan-finding';
 const RULE_HELP_TEXT =
   'Review the finding and suggested fix, then validate the affected code path before merging.';
@@ -41,7 +42,8 @@ interface SarifRegion {
 
 interface SarifPhysicalLocation {
   artifactLocation: SarifArtifactLocation;
-  region: SarifRegion;
+  // SARIF allows results without a region — they pin the finding to the file as a whole.
+  region?: SarifRegion;
 }
 
 interface SarifLocation {
@@ -72,6 +74,7 @@ interface SarifLog {
     tool: {
       driver: {
         name: string;
+        informationUri: string;
         semanticVersion?: string;
         rules: Array<{
           id: string;
@@ -97,16 +100,22 @@ interface SarifLog {
       };
     };
     results: SarifResult[];
+    properties?: {
+      promptfoo?: {
+        review?: string;
+      };
+    };
   }>;
 }
 
 function isReportableFinding(comment: Comment): boolean {
-  // GitHub Code Scanning only displays results that include a source location, so we
-  // require file + line. CommentSchema marks `severity` optional and toSarifLevel falls
-  // back to 'note' for undefined, so we let those flow through rather than silently
-  // dropping a finding the scanner couldn't grade. Explicit NONE means "no issue" and
-  // is filtered out per the scanner's own convention.
-  return Boolean(comment.file && comment.line && comment.severity !== CodeScanSeverity.NONE);
+  // GitHub Code Scanning needs an artifact location to display a result, so we require
+  // `file`. `line` is optional — SARIF allows results without a region (file-level
+  // findings). CommentSchema marks `severity` optional and toSarifLevel falls back to
+  // 'note' for undefined, so we let undefined flow through rather than silently dropping
+  // a finding the scanner couldn't grade. Explicit NONE means "no issue" and is filtered.
+  const hasFile = comment.file != null && comment.file !== '';
+  return hasFile && comment.severity !== CodeScanSeverity.NONE;
 }
 
 function toSarifLevel(severity: CodeScanSeverity | undefined): SarifResult['level'] {
@@ -155,27 +164,27 @@ function toArtifactUri(filePath: string): string {
 }
 
 function toSarifLocation(comment: Comment): SarifLocation[] | undefined {
-  if (!comment.file || !comment.line) {
+  if (!comment.file) {
     return undefined;
   }
 
-  const startLine = comment.startLine ?? comment.line;
-  const endLine = comment.line;
-  const region: SarifRegion = { startLine };
-  if (endLine > startLine) {
-    region.endLine = endLine;
+  const physicalLocation: SarifPhysicalLocation = {
+    artifactLocation: { uri: toArtifactUri(comment.file) },
+  };
+
+  // File-only findings (no line info) emit just an artifactLocation. SARIF allows it
+  // and GitHub Code Scanning pins the alert to the file as a whole.
+  if (comment.line) {
+    const startLine = comment.startLine ?? comment.line;
+    const endLine = comment.line;
+    const region: SarifRegion = { startLine };
+    if (endLine > startLine) {
+      region.endLine = endLine;
+    }
+    physicalLocation.region = region;
   }
 
-  return [
-    {
-      physicalLocation: {
-        artifactLocation: {
-          uri: toArtifactUri(comment.file),
-        },
-        region,
-      },
-    },
-  ];
+  return [{ physicalLocation }];
 }
 
 function toSarifResult(comment: Comment): SarifResult {
@@ -198,9 +207,14 @@ function toSarifResult(comment: Comment): SarifResult {
 }
 
 export function scanResponseToSarif(response: ScanResponse): SarifLog {
+  const results = response.comments.filter(isReportableFinding).map(toSarifResult);
+
   const driver: SarifLog['runs'][number]['tool']['driver'] = {
     name: 'Promptfoo Code Scan',
-    rules: [SARIF_RULE],
+    informationUri: TOOL_INFORMATION_URI,
+    // Omit the rule descriptor when we have no findings. A rule with no associated results
+    // adds noise to GitHub Code Scanning's tool inventory, so only emit it when used.
+    rules: results.length > 0 ? [SARIF_RULE] : [],
   };
   // Only emit semanticVersion when we have a real one. The action bundle ships through
   // esbuild without VERSION injection, so VERSION resolves to the dev fallback there;
@@ -208,14 +222,21 @@ export function scanResponseToSarif(response: ScanResponse): SarifLog {
   if (VERSION && VERSION !== '0.0.0-development') {
     driver.semanticVersion = VERSION;
   }
+
+  const run: SarifLog['runs'][number] = {
+    tool: { driver },
+    results,
+  };
+  // Preserve the scan's review summary under a tool-namespaced custom property. GitHub
+  // Code Scanning ignores unknown properties; SARIF tooling that knows about promptfoo
+  // can surface it.
+  if (response.review) {
+    run.properties = { promptfoo: { review: response.review } };
+  }
+
   return {
     $schema: SARIF_SCHEMA_URL,
     version: SARIF_VERSION,
-    runs: [
-      {
-        tool: { driver },
-        results: response.comments.filter(isReportableFinding).map(toSarifResult),
-      },
-    ],
+    runs: [run],
   };
 }

@@ -439,7 +439,8 @@ function resolveSarifOutputPath(rawPath: string): string {
 }
 
 function serializeSarif(scanResponse: ScanResponse): string {
-  return JSON.stringify(scanResponseToSarif(scanResponse), null, 2);
+  // Trailing newline for POSIX-text-file friendliness; some downstream tools require it.
+  return `${JSON.stringify(scanResponseToSarif(scanResponse), null, 2)}\n`;
 }
 
 // Walk up from `p` until realpathSync resolves successfully, returning the canonical

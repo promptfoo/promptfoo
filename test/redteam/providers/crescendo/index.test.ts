@@ -1746,6 +1746,97 @@ describe('CrescendoProvider', () => {
       });
     });
 
+    it('should preserve refusal helper usage when refusal scoring payloads are malformed', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+        tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1, cached: 0 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1, cached: 0 },
+      });
+      mockScoringProvider.callApi.mockResolvedValueOnce({
+        output: 'not-json',
+        tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1, cached: 0 },
+      });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 180,
+        prompt: 80,
+        completion: 100,
+        numRequests: 1,
+        cached: 0,
+      });
+    });
+
+    it('should preserve eval helper usage when eval scoring payloads are malformed', async () => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 1,
+        redteamProvider: mockRedTeamProvider,
+      });
+
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+      };
+
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'test question',
+          rationaleBehindJailbreak: 'test rationale',
+          lastResponseSummary: 'test summary',
+        }),
+        tokenUsage: { total: 50, prompt: 25, completion: 25, numRequests: 1, cached: 0 },
+      });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { total: 100, prompt: 40, completion: 60, numRequests: 1, cached: 0 },
+      });
+      mockScoringProvider.callApi
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            value: false,
+            metadata: 0,
+            rationale: 'Not a refusal',
+          }),
+          tokenUsage: { total: 20, prompt: 10, completion: 10, numRequests: 1, cached: 0 },
+        })
+        .mockResolvedValueOnce({
+          output: 'not-json',
+          tokenUsage: { total: 30, prompt: 15, completion: 15, numRequests: 1, cached: 0 },
+        });
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toMatchObject({
+        total: 200,
+        prompt: 90,
+        completion: 110,
+        numRequests: 1,
+        cached: 0,
+      });
+    });
+
     it('should handle zero token counts correctly', async () => {
       const provider = new CrescendoProvider({
         injectVar: 'objective',
