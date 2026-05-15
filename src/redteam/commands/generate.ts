@@ -112,6 +112,33 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
   );
 }
 
+function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): string {
+  const basicStrategy = strategies.find((strategy) => strategy.id === 'basic');
+  const basicDisabled = basicStrategy?.config?.enabled === false;
+
+  if (!basicDisabled) {
+    return 'No test cases generated. Please check for errors and try again.';
+  }
+
+  const activeStrategies = strategies.filter(
+    (strategy) => !(strategy.id === 'basic' && strategy.config?.enabled === false),
+  );
+
+  if (activeStrategies.length === 0) {
+    return dedent`
+      No final test cases were generated because the Basic strategy is disabled and no other strategies are selected.
+
+      The Basic strategy runs plugin-generated test cases as-is. Enable Basic to run your configured plugin tests directly, or select another strategy to transform them.
+    `;
+  }
+
+  return dedent`
+    No final test cases were generated. The Basic strategy is disabled, so plugin-generated test cases are excluded unless another selected strategy creates replacement tests.
+
+    Enable Basic to include plugin tests as-is, or review the selected strategies for generation errors.
+  `;
+}
+
 async function getConfigHash(configPath: string): Promise<string> {
   const content = await fs.readFile(configPath, 'utf8');
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
@@ -678,7 +705,7 @@ async function doGenerateRedteamInternal(
     handleFailedPlugins(failedPlugins, options.strict ?? false);
 
     if (redteamTests.length === 0) {
-      logger.warn('No test cases generated. Please check for errors and try again.');
+      logger.warn(getNoTestCasesGeneratedMessage(strategyObjs));
       return null;
     }
 

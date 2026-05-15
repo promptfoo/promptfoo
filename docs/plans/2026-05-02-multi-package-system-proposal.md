@@ -43,8 +43,9 @@ That makes the root package convenient, but also broad:
 - Before this prototype, the public library entrypoint in `src/index.ts`
   imported migrations, models, sharing, provider loading, and redteam APIs.
   The prototype starts separating that shape by moving the public Node API
-  behind `src/node/evaluate.ts`, while the internal orchestration stays in the
-  Node layer at `src/evaluate.ts` and `promptfoo` remains the facade.
+  behind `src/node/evaluate.ts`, keeping the internal orchestration in the Node
+  layer at `src/evaluate.ts`, and carving a first leaf-safe contract subset into
+  `src/contracts/**` while `promptfoo` remains the facade.
 - `src/main.ts` and `src/commands/view.ts` are already outer-shell concerns,
   not core evaluation concerns.
 - Provider loading is centralized enough that optional/provider dependencies are
