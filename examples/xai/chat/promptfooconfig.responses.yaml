@@ -5,8 +5,8 @@ prompts:
   - '{{question}}'
 
 providers:
-  # Grok 4.1 Fast with Agent Tools (web + X search)
-  - id: xai:responses:grok-4-1-fast-reasoning
+  # Grok 4.3 with Agent Tools (web + X search)
+  - id: xai:responses:grok-4.3
     config:
       temperature: 0.7
       max_output_tokens: 2048

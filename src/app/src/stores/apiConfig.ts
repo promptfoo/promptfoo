@@ -21,7 +21,7 @@ function isLegacyLocalApiBaseUrl(apiBaseUrl: unknown) {
     const url = new URL(apiBaseUrl);
     return (
       url.protocol === 'http:' &&
-      ['localhost', '127.0.0.1', '::1'].includes(url.hostname) &&
+      ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) &&
       url.port === LEGACY_LOCAL_API_PORT &&
       ['', '/'].includes(url.pathname)
     );

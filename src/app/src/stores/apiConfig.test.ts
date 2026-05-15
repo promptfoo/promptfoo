@@ -23,6 +23,13 @@ describe('mergeApiConfigPersistedState', () => {
     expect(merged.apiBaseUrl).toBe('http://localhost:18601');
   });
 
+  it('upgrades stale IPv6 loopback defaults to the configured API base URL', () => {
+    const currentState = createApiConfig('http://localhost:18601');
+    const merged = mergeApiConfigPersistedState({ apiBaseUrl: 'http://[::1]:15500' }, currentState);
+
+    expect(merged.apiBaseUrl).toBe('http://localhost:18601');
+  });
+
   it('keeps a custom persisted API base URL', () => {
     const currentState = createApiConfig('http://localhost:18601');
     const merged = mergeApiConfigPersistedState(
