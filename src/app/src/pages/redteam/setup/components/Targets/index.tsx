@@ -82,9 +82,9 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
     if (selectedTarget.id === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
       const hasConfig =
-        selectedTarget.config.request !== undefined
-          ? selectedTarget.config.request?.trim() !== ''
-          : !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+        selectedTarget.config.request === undefined
+          ? !!selectedTarget.config.url && selectedTarget.config.url.trim() !== ''
+          : selectedTarget.config.request?.trim() !== '';
 
       // For HTTP providers, require both tests to be completed
       return hasConfig && isTargetTested && isSessionTested;
@@ -105,13 +105,13 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
 
     // Additional validation messages for HTTP and WebSocket providers
     if (selectedTarget.id === 'http') {
-      if (selectedTarget.config.request !== undefined) {
-        if (!selectedTarget.config.request?.trim()) {
-          return 'HTTP request content is required';
-        }
-      } else {
+      if (selectedTarget.config.request === undefined) {
         if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
           return 'Valid URL is required';
+        }
+      } else {
+        if (!selectedTarget.config.request?.trim()) {
+          return 'HTTP request content is required';
         }
       }
 
@@ -141,11 +141,10 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
         <>
           <p className="mb-4">
             A target is the specific LLM or endpoint you want to evaluate in your red teaming
-            process. In Promptfoo targets are also known as providers. You can configure additional
-            targets later.
+            process. You can configure additional targets later.
           </p>
           <p>
-            For more information on available providers and how to configure them, please visit our{' '}
+            For connection details and supported integrations, see the{' '}
             <a
               href="https://www.promptfoo.dev/docs/providers/"
               target="_blank"

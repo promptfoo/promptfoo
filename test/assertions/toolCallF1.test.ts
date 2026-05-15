@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { handleToolCallF1 } from '../../src/assertions/toolCallF1';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const createParams = (
   output: unknown,

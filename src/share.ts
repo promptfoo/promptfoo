@@ -537,6 +537,14 @@ export function stripAuthFromUrl(urlString: string): string {
 }
 
 async function handleEmailCollection(evalRecord: Eval): Promise<void> {
+  // Skip email collection if author is already set
+  if (evalRecord.author) {
+    logger.debug(`[Share] Skipping email collection because author is already set`, {
+      evalId: evalRecord.id,
+    });
+    return;
+  }
+
   if (!process.stdout.isTTY || isCI() || getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
     return;
   }
@@ -693,8 +701,12 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
  */
 export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolean> {
   try {
-    // GET /api/v1/model-audits/:id
-    const res = await makeCloudRequest(`model-audits/${audit.id}`, 'GET');
+    const currentOrgId = cloudConfig.getCurrentOrganizationId();
+    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    const url = currentTeamId
+      ? `model-audits/${audit.id}?teamId=${currentTeamId}`
+      : `model-audits/${audit.id}`;
+    const res = await makeCloudRequest(url, 'GET');
     switch (res.status) {
       // 200: Model audit already exists i.e. it has been shared before.
       case 200:
@@ -723,6 +735,11 @@ export async function createShareableModelAuditUrl(
   auditRecord: ModelAudit,
   showAuth: boolean = false,
 ): Promise<string | null> {
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    logger.debug('Skipping model audit share because PROMPTFOO_DISABLE_SHARING is enabled');
+    return null;
+  }
+
   // 1. Handle email collection (skip for model audits as they don't have eval config)
   // Model audits use cloud config directly
 
@@ -740,6 +757,8 @@ export async function createShareableModelAuditUrl(
   logger.debug(`Sharing model audit ${auditRecord.id} to ${url}`);
 
   try {
+    const currentOrgId = cloudConfig.getCurrentOrganizationId();
+    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
     const payload = {
       scanId: auditRecord.id,
       createdAt: auditRecord.createdAt,
@@ -763,6 +782,7 @@ export async function createShareableModelAuditUrl(
       modelSource: auditRecord.modelSource,
       sourceLastModified: auditRecord.sourceLastModified,
       scannerVersion: auditRecord.scannerVersion,
+      ...(currentTeamId && { teamId: currentTeamId }),
     };
 
     // Log payload size for debugging large model audits

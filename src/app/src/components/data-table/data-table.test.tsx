@@ -1,9 +1,8 @@
-import * as React from 'react';
-
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DataTable } from './data-table';
+import { useServerVirtualizedRows } from './use-server-virtualized-rows';
 import type { ColumnDef } from '@tanstack/react-table';
 
 interface TestRow {
@@ -42,6 +41,14 @@ const headerFilterRows: HeaderFilterRow[] = [
   { id: '3', name: 'Row Three', status: 'gamma' },
   { id: '4', name: 'Row Four', status: 'alpha' },
 ];
+
+const openHeaderFilterPopover = async (columnHeader: string, user = userEvent.setup()) => {
+  await user.click(screen.getByRole('button', { name: `Filter ${columnHeader}` }));
+  const heading = await screen.findByText(`Filter ${columnHeader}`);
+  const popover = heading.closest('[data-radix-popper-content-wrapper]');
+  expect(popover).toBeInTheDocument();
+  return popover as HTMLElement;
+};
 
 describe('DataTable', () => {
   const columns: ColumnDef<TestRow>[] = [
@@ -106,6 +113,70 @@ describe('DataTable', () => {
     expect(screen.getByText('Test Item 2')).toBeInTheDocument();
   });
 
+  it('keeps filter value controls usable on narrow filter popovers', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [{ id: '1', name: 'Test Item 1' }];
+
+    render(<DataTable columns={columns} data={data} showToolbar />);
+
+    await user.click(screen.getByText('Filters'));
+
+    const filterRow = screen.getByTestId('data-table-filter-row');
+    const valueInput = screen.getByPlaceholderText('Value...');
+
+    expect(filterRow).toHaveClass('flex-wrap');
+    expect(valueInput).toHaveClass('min-w-[150px]');
+    expect(within(filterRow).getByRole('combobox', { name: 'Column for filter 1' })).toBeVisible();
+    expect(
+      within(filterRow).getByRole('combobox', { name: 'Operator for ID filter' }),
+    ).toBeVisible();
+    expect(within(filterRow).getByRole('textbox', { name: 'Value for ID filter' })).toBeVisible();
+    expect(within(filterRow).getByRole('button', { name: 'Remove filter for ID' })).toBeVisible();
+  });
+
+  it('keeps toolbar controls easier to tap on narrow screens', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Test Item 1' }];
+
+    render(<DataTable columns={columns} data={data} showToolbar />);
+
+    expect(screen.getByText('Columns').closest('button')).toHaveClass('h-11', 'sm:h-8');
+    expect(screen.getByText('Filters').closest('button')).toHaveClass('h-11', 'sm:h-8');
+  });
+
+  it('exposes toolbar multi-select filters as labeled checkbox controls', async () => {
+    const user = userEvent.setup();
+
+    render(<DataTable columns={headerFilterColumns} data={headerFilterRows} showToolbar />);
+
+    await user.click(screen.getByText('Filters'));
+    const filterRow = screen.getByTestId('data-table-filter-row');
+
+    await user.click(within(filterRow).getByRole('combobox', { name: 'Column for filter 1' }));
+    await user.click(await screen.findByRole('option', { name: 'Status' }));
+
+    await user.click(
+      within(filterRow).getByRole('combobox', { name: 'Operator for Status filter' }),
+    );
+    await user.click(await screen.findByRole('option', { name: 'is any of' }));
+
+    await user.click(
+      within(filterRow).getByRole('button', {
+        name: 'Value for Status filter: No values selected',
+      }),
+    );
+    const alphaOption = screen.getByRole('checkbox', { name: 'Alpha' });
+    expect(alphaOption).not.toBeChecked();
+
+    alphaOption.focus();
+    await user.keyboard('[Space]');
+    expect(alphaOption).toBeChecked();
+    expect(
+      within(filterRow).getByRole('button', {
+        name: 'Value for Status filter: 1 selected: Alpha',
+      }),
+    ).toBeVisible();
+  });
+
   it('should render table with data when data is provided', () => {
     const data: TestRow[] = [
       { id: '1', name: 'Test Item 1' },
@@ -123,6 +194,29 @@ describe('DataTable', () => {
     // Should show column headers
     expect(screen.getByText('ID')).toBeInTheDocument();
     expect(screen.getByText('Name')).toBeInTheDocument();
+  });
+
+  it('should sort rows when a sortable column header is clicked', async () => {
+    const user = userEvent.setup();
+    const sortableRows: TestRow[] = [
+      { id: '1', name: 'Charlie' },
+      { id: '2', name: 'Alpha' },
+      { id: '3', name: 'Bravo' },
+    ];
+
+    render(<DataTable columns={columns} data={sortableRows} />);
+
+    const nameHeader = screen.getByText('Name').closest('th') as HTMLElement;
+    expect(nameHeader).toBeInTheDocument();
+
+    await user.click(nameHeader);
+
+    await waitFor(() => {
+      const renderedRows = Array.from(document.querySelectorAll('tbody tr[data-rowindex]'));
+      expect(renderedRows[0]).toHaveTextContent('Alpha');
+      expect(renderedRows[1]).toHaveTextContent('Bravo');
+      expect(renderedRows[2]).toHaveTextContent('Charlie');
+    });
   });
 
   it('should display loading state when isLoading is true', () => {
@@ -165,7 +259,9 @@ describe('DataTable', () => {
 
     // Type a search term that matches nothing
     const searchInput = screen.getByPlaceholderText('Search...');
-    await user.type(searchInput, 'xyz-no-match');
+    await user.click(searchInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('xyz-no-match');
 
     // Data should be filtered out
     expect(screen.queryByText('Apple')).not.toBeInTheDocument();
@@ -175,6 +271,73 @@ describe('DataTable', () => {
     expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
     expect(screen.getByTestId('custom-action')).toBeInTheDocument();
     expect(screen.getByText('No results match your search')).toBeInTheDocument();
+  });
+
+  it('should expose an accessible search label', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Apple' }];
+
+    render(<DataTable columns={columns} data={data} globalFilterLabel="Search apples" />);
+
+    expect(screen.getByRole('searchbox', { name: 'Search apples' })).toBeInTheDocument();
+  });
+
+  it('should expose sort direction on sortable headers', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [
+      { id: '1', name: 'Apple' },
+      { id: '2', name: 'Banana' },
+    ];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    const idHeader = screen.getByRole('columnheader', { name: /ID/i });
+    expect(idHeader).toHaveAttribute('aria-sort', 'none');
+
+    await user.click(idHeader);
+    expect(idHeader).toHaveAttribute('aria-sort', 'ascending');
+
+    await user.click(idHeader);
+    expect(idHeader).toHaveAttribute('aria-sort', 'descending');
+  });
+
+  it('should show no-results state instead of empty state when manual column filters are active with no data', () => {
+    const activeColumnFilters = [{ id: 'name', value: 'Apple' }];
+
+    render(
+      <DataTable
+        columns={columns}
+        data={[]}
+        manualFiltering
+        columnFilters={activeColumnFilters}
+        onColumnFiltersChange={vi.fn()}
+        showToolbar
+      />,
+    );
+
+    expect(screen.queryByText('No data found')).not.toBeInTheDocument();
+    expect(screen.getByText('No results match your search')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+  });
+
+  it('should preserve column visibility state when reopening the column menu', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [
+      { id: '1', name: 'Item 1' },
+      { id: '2', name: 'Item 2' },
+    ];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    await user.click(screen.getByRole('button', { name: /Columns/i }));
+    const idMenuItem = await screen.findByRole('menuitemcheckbox', { name: 'ID' });
+    expect(idMenuItem).toHaveAttribute('aria-checked', 'true');
+
+    await user.click(idMenuItem);
+    await waitFor(() => expect(screen.queryByRole('columnheader', { name: 'ID' })).toBeNull());
+
+    await user.click(screen.getByRole('button', { name: /Columns/i }));
+    const reopenedIdMenuItem = await screen.findByRole('menuitemcheckbox', { name: 'ID' });
+    expect(reopenedIdMenuItem).toHaveAttribute('aria-checked', 'false');
   });
 
   it('should rehydrate toolbar filter rows from active column filters when reopened', async () => {
@@ -193,314 +356,370 @@ describe('DataTable', () => {
 
     await user.click(screen.getByRole('button', { name: 'Filter Name' }));
     const headerFilterInput = await screen.findByPlaceholderText('Value...');
-    await user.type(headerFilterInput, 'Item 2');
+    await user.click(headerFilterInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('Item 2');
     await user.click(screen.getByRole('button', { name: 'Filter Name' }));
 
     await user.click(screen.getByRole('button', { name: /^Filters/ }));
     expect(await screen.findByDisplayValue('Item 2')).toBeInTheDocument();
   });
 
-  describe('pagination', () => {
-    // Generate test data with enough rows to require pagination
+  describe('virtualized rows', () => {
     const generateData = (count: number): TestRow[] =>
       Array.from({ length: count }, (_, i) => ({
         id: `id-${i + 1}`,
         name: `Item ${i + 1}`,
       }));
 
-    it('should show pagination controls when data exceeds page size', () => {
-      const data = generateData(30);
+    it('should virtualize client-side rows by default without mounting the full dataset', () => {
+      const data = generateData(1000);
+      const { container } = render(
+        <DataTable
+          columns={columns}
+          data={data}
+          maxHeight="400px"
+          virtualRowEstimate={40}
+          virtualOverscan={2}
+        />,
+      );
 
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // Should show pagination controls
-      expect(screen.getByRole('button', { name: 'Next' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Previous' })).toBeInTheDocument();
-      expect(screen.getByText(/Showing 1 to 10 of 30 rows/)).toBeInTheDocument();
+      const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
+      expect(renderedRows.length).toBeGreaterThan(0);
+      expect(renderedRows.length).toBeLessThan(100);
+      expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
     });
 
-    it('should navigate to next page when Next is clicked', async () => {
-      const user = userEvent.setup();
-      const data = generateData(15);
+    it('should keep client-side row DOM bounded after a long scroll', async () => {
+      const data = generateData(1000);
+      const { container } = render(
+        <DataTable
+          columns={columns}
+          data={data}
+          maxHeight="400px"
+          virtualRowEstimate={40}
+          virtualOverscan={2}
+        />,
+      );
 
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
+      const scrollContainer = container.querySelector('.overflow-auto');
+      expect(scrollContainer).not.toBeNull();
+      if (scrollContainer) {
+        await act(async () => {
+          scrollContainer.scrollTop = 20_000;
+          scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
+        });
+        // TanStack Virtual debounces scroll-end notification after scroll events.
+        // Let it settle before jsdom teardown so React does not receive a late update.
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
+      }
 
-      // First page: items 1-10 visible
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Item 10')).toBeInTheDocument();
-      expect(screen.queryByText('Item 11')).not.toBeInTheDocument();
-
-      // Click Next
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-
-      // Second page: items 11-15 visible, items 1-10 not visible
-      expect(screen.queryByText('Item 1')).not.toBeInTheDocument();
-      expect(screen.queryByText('Item 10')).not.toBeInTheDocument();
-      expect(screen.getByText('Item 11')).toBeInTheDocument();
-      expect(screen.getByText('Item 15')).toBeInTheDocument();
-      expect(screen.getByText(/Showing 11 to 15 of 15 rows/)).toBeInTheDocument();
+      const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
+      expect(renderedRows.length).toBeGreaterThan(0);
+      expect(renderedRows.length).toBeLessThan(100);
     });
 
-    it('should navigate back when Previous is clicked', async () => {
-      const user = userEvent.setup();
-      const data = generateData(15);
+    it('should virtualize server-side rows and request the visible range', async () => {
+      const loadedRows = new Map<number, TestRow>([[0, { id: 'id-1', name: 'Loaded row' }]]);
+      const loadRows = vi.fn();
+      const { container } = render(
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          virtualRowEstimate={40}
+          virtualOverscan={2}
+          serverVirtualization={{
+            rowCount: 1000,
+            pageSize: 25,
+            getRow: (index) => loadedRows.get(index),
+            loadRows,
+            isRowLoading: (index) => !loadedRows.has(index),
+          }}
+        />,
+      );
 
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // Go to page 2
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      expect(screen.getByText('Item 11')).toBeInTheDocument();
-
-      // Go back to page 1
-      await user.click(screen.getByRole('button', { name: 'Previous' }));
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.queryByText('Item 11')).not.toBeInTheDocument();
+      await waitFor(() => expect(loadRows).toHaveBeenCalled());
+      expect(loadRows.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ startIndex: 0, endIndex: expect.any(Number) }),
+      );
+      expect(screen.getByText('Loaded row')).toBeInTheDocument();
+      expect(container.querySelectorAll('tbody tr[data-rowindex]').length).toBeLessThan(100);
+      expect(container.querySelector('tbody tr[aria-busy="true"]')).toBeInTheDocument();
     });
 
-    it('should change page size when rows per page is changed', async () => {
+    it('should use virtual row indexes for server-side selection when no getRowId is provided', async () => {
       const user = userEvent.setup();
-      const data = generateData(30);
-
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // Initially showing 10 rows
-      expect(screen.getByText(/Showing 1 to 10 of 30 rows/)).toBeInTheDocument();
-
-      // Change to 25 rows per page
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
-
-      // Now showing 25 rows
-      expect(screen.getByText(/Showing 1 to 25 of 30 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Item 25')).toBeInTheDocument();
-    });
-
-    it('should reset to first page when page size is changed', async () => {
-      const user = userEvent.setup();
-      const data = generateData(30);
-
-      render(<DataTable columns={columns} data={data} initialPageSize={10} />);
-
-      // Go to page 2
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      expect(screen.getByText(/Showing 11 to 20 of 30 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Item 11')).toBeInTheDocument();
-
-      // Change page size
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
-
-      // Should be back to first page showing items 1-25
-      expect(screen.getByText(/Showing 1 to 25 of 30 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Item 25')).toBeInTheDocument();
-    });
-
-    it('should call external onPaginationChange when Next is clicked in manual pagination mode', async () => {
-      const user = userEvent.setup();
-      const data = generateData(10);
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
+      let capturedSelection: Record<string, boolean> = {};
+      const loadedRows = new Map<number, TestRow>([[25, { id: 'row-25', name: 'Loaded row 25' }]]);
 
       render(
         <DataTable
           columns={columns}
-          data={data}
-          manualPagination
-          pageIndex={0}
-          pageSize={10}
-          pageCount={5}
-          onPaginationChange={onPaginationChange}
-          onPageSizeChange={onPageSizeChange}
-          rowCount={50}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          virtualRowEstimate={20}
+          virtualOverscan={10}
+          enableRowSelection
+          rowSelection={{}}
+          onRowSelectionChange={(selection) => {
+            capturedSelection = selection;
+          }}
+          serverVirtualization={{
+            rowCount: 100,
+            pageSize: 25,
+            getRow: (index) => loadedRows.get(index),
+            loadRows: vi.fn(),
+            isRowLoading: (index) => !loadedRows.has(index),
+          }}
         />,
       );
 
-      await user.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText('Loaded row 25');
 
-      expect(onPaginationChange).toHaveBeenCalledTimes(1);
-      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 10 });
+      const checkboxes = screen.getAllByRole('checkbox');
+      expect(checkboxes).toHaveLength(2);
+
+      await user.click(checkboxes[1]);
+
+      expect(capturedSelection).toHaveProperty('25', true);
+      expect(capturedSelection).not.toHaveProperty('0');
     });
 
-    it('should call external onPageSizeChange (not onPaginationChange) when page size changes in manual pagination mode', async () => {
+    it('should hide no-op filter controls for server-side rows by default', async () => {
+      const loadRows = vi.fn();
+      render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          serverVirtualization={{
+            rowCount: 10,
+            pageSize: 25,
+            getRow: (index) => headerFilterRows[index],
+            loadRows,
+          }}
+        />,
+      );
+
+      await waitFor(() => expect(loadRows).toHaveBeenCalled());
+
+      expect(screen.queryByRole('button', { name: /^Filters/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Filter Name' })).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('Search...')).not.toBeInTheDocument();
+    });
+
+    it('should allow explicit manual column filters for server-side rows', async () => {
       const user = userEvent.setup();
-      const data = generateData(10);
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
+      const onColumnFiltersChange = vi.fn();
+
+      render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={onColumnFiltersChange}
+          serverVirtualization={{
+            rowCount: 1,
+            pageSize: 25,
+            getRow: (index) => headerFilterRows[index],
+            loadRows: vi.fn(),
+          }}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /^Filters/ })).toBeInTheDocument();
+      expect(screen.queryByPlaceholderText('Search...')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
+      const filterInput = await screen.findByPlaceholderText('Value...');
+      await user.type(filterInput, 'Row');
+
+      await waitFor(() => expect(onColumnFiltersChange).toHaveBeenCalled());
+    });
+
+    it('should not refetch the initial server range when seeded rows cover it', async () => {
+      const fetchRows = vi.fn().mockResolvedValue({ rows: [], offset: 0 });
+
+      function SeededServerTable() {
+        const { serverVirtualization } = useServerVirtualizedRows<TestRow>({
+          initialRows: generateData(25),
+          rowCount: 25,
+          pageSize: 25,
+          fetchRows,
+        });
+
+        return (
+          <DataTable
+            columns={columns}
+            data={[]}
+            rowDisplayMode="server-virtualized"
+            maxHeight="400px"
+            virtualRowEstimate={40}
+            virtualOverscan={2}
+            serverVirtualization={serverVirtualization}
+          />
+        );
+      }
+
+      render(<SeededServerTable />);
+
+      expect(screen.getByText('Item 1')).toBeInTheDocument();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(fetchRows).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to client virtualization when server configuration is missing', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
+      try {
+        render(
+          <DataTable
+            columns={columns}
+            data={[{ id: 'id-1', name: 'Client fallback row' }]}
+            rowDisplayMode={'server-virtualized' as any}
+          />,
+        );
+
+        expect(screen.getByText('Client fallback row')).toBeInTheDocument();
+        await waitFor(() =>
+          expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('serverVirtualization')),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should reload the visible server range when sorting changes', async () => {
+      const user = userEvent.setup();
+      const loadRows = vi.fn();
       render(
         <DataTable
           columns={columns}
-          data={data}
-          manualPagination
-          pageIndex={3}
-          pageSize={10}
-          pageCount={10}
-          onPaginationChange={onPaginationChange}
-          onPageSizeChange={onPageSizeChange}
-          rowCount={100}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          serverVirtualization={{
+            rowCount: 100,
+            pageSize: 25,
+            getRow: () => undefined,
+            loadRows,
+          }}
         />,
       );
 
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
+      await waitFor(() => expect(loadRows).toHaveBeenCalled());
+      const loadCountBeforeSort = loadRows.mock.calls.length;
 
-      expect(onPageSizeChange).toHaveBeenCalledTimes(1);
-      expect(onPageSizeChange).toHaveBeenCalledWith(25);
-      expect(onPaginationChange).not.toHaveBeenCalled();
-      expect(warnSpy).not.toHaveBeenCalled();
-      warnSpy.mockRestore();
+      await user.click(screen.getByRole('columnheader', { name: 'Name' }));
+
+      await waitFor(() => expect(loadRows.mock.calls.length).toBeGreaterThan(loadCountBeforeSort));
     });
+    it('should abort server-side virtual row loads on cleanup', async () => {
+      let capturedSignal: AbortSignal | undefined;
+      const { unmount } = render(
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          serverVirtualization={{
+            rowCount: 100,
+            pageSize: 25,
+            getRow: () => undefined,
+            loadRows: ({ signal }) => {
+              capturedSignal = signal;
+            },
+          }}
+        />,
+      );
 
-    it('should support page-size changes through onPageSizeChange in a controlled manual-pagination wrapper', async () => {
+      await waitFor(() => expect(capturedSignal).toBeDefined());
+      unmount();
+      expect(capturedSignal?.aborted).toBe(true);
+    });
+  });
+
+  describe('manual filtering', () => {
+    it('should call onColumnFiltersChange instead of filtering internally when manualFiltering is enabled', async () => {
       const user = userEvent.setup();
-      const data = generateData(50);
-      const totalRows = 50;
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
-
-      const ControlledPaginationWrapper = () => {
-        const [pagination, setPagination] = React.useState({
-          pageIndex: 2,
-          pageSize: 5,
-        });
-
-        return (
-          <DataTable
-            columns={columns}
-            data={data.slice(
-              pagination.pageIndex * pagination.pageSize,
-              (pagination.pageIndex + 1) * pagination.pageSize,
-            )}
-            manualPagination
-            rowCount={totalRows}
-            pageCount={Math.ceil(totalRows / pagination.pageSize)}
-            pageIndex={pagination.pageIndex}
-            pageSize={pagination.pageSize}
-            onPaginationChange={(nextPagination) => {
-              onPaginationChange(nextPagination);
-              setPagination(nextPagination);
-            }}
-            onPageSizeChange={(pageSize) => {
-              onPageSizeChange(pageSize);
-              setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
-            }}
-          />
-        );
-      };
-
-      render(<ControlledPaginationWrapper />);
-
-      const pageSizeSelect = screen.getByRole('combobox');
-      await user.click(pageSizeSelect);
-      await user.click(screen.getByRole('option', { name: '25' }));
-
-      expect(onPageSizeChange).toHaveBeenCalledTimes(1);
-      expect(onPageSizeChange).toHaveBeenCalledWith(25);
-      expect(onPaginationChange).not.toHaveBeenCalled();
-      expect(screen.getByText('Item 1')).toBeInTheDocument();
-      expect(screen.getByText('Item 25')).toBeInTheDocument();
-    });
-
-    it('should use rowCount and avoid client-side row slicing in manual pagination mode', () => {
-      const data = generateData(15);
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
+      const onColumnFiltersChange = vi.fn();
 
       render(
         <DataTable
-          columns={columns}
-          data={data}
-          manualPagination
-          pageIndex={0}
-          pageSize={10}
-          pageCount={8}
-          onPaginationChange={onPaginationChange}
-          onPageSizeChange={onPageSizeChange}
-          rowCount={73}
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={onColumnFiltersChange}
         />,
       );
 
-      // Manual pagination should render all provided rows for the current page payload.
-      expect(screen.getByText('Item 15')).toBeInTheDocument();
-      expect(screen.getByText(/Showing 1 to 10 of 73 rows/)).toBeInTheDocument();
+      const popover = await openHeaderFilterPopover('Name', user);
+      await user.type(within(popover).getByPlaceholderText('Value...'), 'test');
+
+      await waitFor(() => expect(onColumnFiltersChange).toHaveBeenCalled());
+      const lastCall =
+        onColumnFiltersChange.mock.calls[onColumnFiltersChange.mock.calls.length - 1][0];
+      expect(lastCall).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'name' })]));
     });
 
-    it('should paginate and filter client-side when manual pagination is disabled', async () => {
-      const user = userEvent.setup();
-      const data: TestRow[] = Array.from({ length: 12 }, (_, i) => ({
-        id: `${i + 1}`,
-        name: i < 10 ? `Target-${i + 1}` : `Other-${i + 1}`,
-      }));
+    it('should not filter rows client-side when manualFiltering is enabled', () => {
+      render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[{ id: 'status', value: { operator: 'equals', value: 'alpha' } }]}
+          onColumnFiltersChange={vi.fn()}
+        />,
+      );
 
-      render(<DataTable columns={columns} data={data} initialPageSize={5} />);
-
-      expect(screen.getByText(/Showing 1 to 5 of 12 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Target-5')).toBeInTheDocument();
-      expect(screen.queryByText('Target-6')).not.toBeInTheDocument();
-
-      const searchInput = screen.getByPlaceholderText('Search...');
-      await user.type(searchInput, 'Target');
-
-      expect(screen.getByText(/Showing 1 to 5 of 10 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Target-5')).toBeInTheDocument();
-      expect(screen.queryByText('Other-11')).not.toBeInTheDocument();
-
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-      expect(screen.getByText(/Showing 6 to 10 of 10 rows/)).toBeInTheDocument();
-      expect(screen.getByText('Target-10')).toBeInTheDocument();
+      // All rows should still be visible since filtering is manual (server-side)
+      expect(screen.getByText('Row One')).toBeInTheDocument();
+      expect(screen.getByText('Row Two')).toBeInTheDocument();
+      expect(screen.getByText('Row Three')).toBeInTheDocument();
+      expect(screen.getByText('Row Four')).toBeInTheDocument();
     });
 
-    it('should delegate manual pagination to external state callbacks', async () => {
-      const user = userEvent.setup();
-      const data = generateData(20);
-      const onPaginationChange = vi.fn();
-      const onPageSizeChange = vi.fn();
+    it('should reflect externally controlled column filter state', () => {
+      const { rerender } = render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={vi.fn()}
+        />,
+      );
 
-      const ControlledPaginationWrapper = () => {
-        const [pagination, setPagination] = React.useState({
-          pageIndex: 0,
-          pageSize: 5,
-        });
+      // No active filter indicator initially
+      const filterButton = screen.getByRole('button', { name: 'Filter Status' });
+      expect(filterButton).toBeInTheDocument();
 
-        return (
-          <DataTable
-            columns={columns}
-            data={data.slice(
-              pagination.pageIndex * pagination.pageSize,
-              (pagination.pageIndex + 1) * pagination.pageSize,
-            )}
-            manualPagination
-            rowCount={20}
-            pageCount={4}
-            pageIndex={pagination.pageIndex}
-            pageSize={pagination.pageSize}
-            onPaginationChange={(nextPagination) => {
-              onPaginationChange(nextPagination);
-              setPagination(nextPagination);
-            }}
-            onPageSizeChange={(pageSize) => {
-              onPageSizeChange(pageSize);
-              setPagination((prev) => ({ ...prev, pageSize, pageIndex: 0 }));
-            }}
-          />
-        );
-      };
+      // Apply external filter
+      rerender(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[{ id: 'status', value: { operator: 'equals', value: 'beta' } }]}
+          onColumnFiltersChange={vi.fn()}
+        />,
+      );
 
-      render(<ControlledPaginationWrapper />);
-
-      await user.click(screen.getByRole('button', { name: 'Next' }));
-
-      expect(onPaginationChange).toHaveBeenCalledTimes(1);
-      expect(onPaginationChange).toHaveBeenCalledWith({ pageIndex: 1, pageSize: 5 });
-      expect(onPageSizeChange).not.toHaveBeenCalled();
-      expect(screen.getByText('Item 6')).toBeInTheDocument();
-      expect(screen.getByText(/Showing 6 to 10 of 20 rows/)).toBeInTheDocument();
+      // Filter button should now show active state (blue color)
+      const activeFilterButton = screen.getByRole('button', { name: 'Filter Status' });
+      expect(activeFilterButton).toBeInTheDocument();
     });
   });
 
@@ -512,34 +731,37 @@ describe('DataTable', () => {
         { id: '5', name: 'Alpha Row', status: 'gamma' },
       ];
 
-      render(<DataTable columns={headerFilterColumns} data={data} showPagination={false} />);
+      render(<DataTable columns={headerFilterColumns} data={data} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      await user.type(screen.getByPlaceholderText('Value...'), 'Alpha');
+      const popover = await openHeaderFilterPopover('Name', user);
+      expect(
+        within(popover).getByRole('combobox', { name: 'Operator for Name filter' }),
+      ).toBeVisible();
+      await user.type(
+        within(popover).getByRole('textbox', { name: 'Value for Name filter' }),
+        'Alpha',
+      );
 
+      await waitFor(() => expect(screen.queryByText('Row Two')).not.toBeInTheDocument());
       expect(screen.getByText('Alpha Row')).toBeInTheDocument();
-      expect(screen.queryByText('Row Two')).not.toBeInTheDocument();
       expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
     });
 
     it('should filter rows using the select input in a header popover', async () => {
       const user = userEvent.setup();
 
-      render(
-        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
-      );
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
-      const popover = screen.getByRole('dialog');
-      const comboboxes = within(popover).getAllByRole('combobox');
-      const valueSelect = comboboxes[1];
+      const popover = await openHeaderFilterPopover('Status');
+      const valueSelect = within(popover).getByRole('combobox', {
+        name: 'Value for Status filter',
+      });
 
       await user.click(valueSelect);
-      const option = screen.getByRole('option', { name: 'Beta', hidden: true });
-      fireEvent.click(option);
+      await user.click(await screen.findByRole('option', { name: 'Beta' }));
 
+      await waitFor(() => expect(screen.queryByText('Row One')).not.toBeInTheDocument());
       expect(screen.getByText('Row Two')).toBeInTheDocument();
-      expect(screen.queryByText('Row One')).not.toBeInTheDocument();
       expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
       expect(screen.queryByText('Row Four')).not.toBeInTheDocument();
     });
@@ -547,46 +769,102 @@ describe('DataTable', () => {
     it('should support multi-select filtering from header popovers', async () => {
       const user = userEvent.setup();
 
-      render(
-        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
-      );
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
-      const popover = screen.getByRole('dialog');
+      const popover = await openHeaderFilterPopover('Status');
 
-      const operatorSelect = within(popover).getAllByRole('combobox')[0];
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Status filter',
+      });
       await user.click(operatorSelect);
-      const isAnyOption = await screen.findByRole('option', { name: /^is any of$/, hidden: true });
-      await user.click(isAnyOption);
+      await user.click(await screen.findByRole('option', { name: 'is any of' }));
 
-      const multiSelectButton = await within(popover).findByText('Select values...');
-      await user.click(multiSelectButton);
-      await user.click(within(popover).getByText('Alpha'));
-      await user.click(within(popover).getByText('Beta'));
+      // Switching to 'is any of' auto-opens the dropdown.
+      expect(
+        within(popover).getByRole('button', {
+          name: 'Value for Status filter: No values selected',
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
+      const alphaOption = within(popover).getByRole('checkbox', { name: 'Alpha' });
+      expect(alphaOption).not.toBeChecked();
+      alphaOption.focus();
+      await user.keyboard('[Space]');
+      expect(alphaOption).toBeChecked();
+      expect(within(popover).getByRole('checkbox', { name: 'Alpha' })).toBeInTheDocument();
+      expect(
+        within(popover).getByRole('button', {
+          name: 'Value for Status filter: 1 selected: Alpha',
+        }),
+      ).toBeVisible();
+      await user.click(within(popover).getByRole('checkbox', { name: 'Beta' }));
 
+      await waitFor(() => expect(screen.queryByText('Row Three')).not.toBeInTheDocument());
       expect(screen.getByText('Row One')).toBeInTheDocument();
       expect(screen.getByText('Row Two')).toBeInTheDocument();
       expect(screen.getByText('Row Four')).toBeInTheDocument();
-      expect(screen.queryByText('Row Three')).not.toBeInTheDocument();
+    });
+
+    it('toggles and dismisses the multi-select dropdown via the trigger and Escape key', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
+
+      const popover = await openHeaderFilterPopover('Status');
+
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Status filter',
+      });
+      await user.click(operatorSelect);
+      await user.click(await screen.findByRole('option', { name: 'is any of' }));
+
+      const trigger = within(popover).getByRole('button', {
+        name: 'Value for Status filter: No values selected',
+      });
+      const dropdownLabel = 'Select values for Status filter';
+      expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      expect(within(popover).getByRole('dialog', { name: dropdownLabel })).toBeVisible();
+
+      // Click on the open trigger toggles the dropdown closed.
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        within(popover).queryByRole('dialog', { name: dropdownLabel }),
+      ).not.toBeInTheDocument();
+
+      // Click reopens.
+      await user.click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+      // Escape closes the dropdown and leaves the parent header filter popover open.
+      const dropdown = within(popover).getByRole('dialog', { name: dropdownLabel });
+      const alpha = within(dropdown).getByRole('checkbox', { name: 'Alpha' });
+      alpha.focus();
+      await user.keyboard('[Escape]');
+      expect(
+        within(popover).queryByRole('dialog', { name: dropdownLabel }),
+      ).not.toBeInTheDocument();
+      expect(popover).toBeInTheDocument();
     });
 
     it('should open header filter popovers with an active interactive row by default', async () => {
       const user = userEvent.setup();
+      render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
-      render(
-        <DataTable columns={headerFilterColumns} data={headerFilterRows} showPagination={false} />,
-      );
-
-      await user.click(screen.getByRole('button', { name: 'Filter Name' }));
-      const operatorSelect = screen.getByRole('combobox');
-      const valueInput = screen.getByPlaceholderText('Value...');
+      const popover = await openHeaderFilterPopover('Name', user);
+      const operatorSelect = within(popover).getByRole('combobox', {
+        name: 'Operator for Name filter',
+      });
+      const valueInput = within(popover).getByRole('textbox', {
+        name: 'Value for Name filter',
+      });
 
       expect(operatorSelect).toBeInTheDocument();
       expect(valueInput).toBeInTheDocument();
       expect(valueInput).toBeEnabled();
 
       await user.type(valueInput, 'Row');
-      expect(screen.getByText('Row One')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByText('Row One')).toBeInTheDocument());
     });
 
     it('should include header popover filters in the filter toolbar panel', async () => {
@@ -594,21 +872,75 @@ describe('DataTable', () => {
 
       render(<DataTable columns={headerFilterColumns} data={headerFilterRows} />);
 
-      await user.click(screen.getByRole('button', { name: 'Filter Status' }));
-      const popover = screen.getByRole('dialog');
+      const popover = await openHeaderFilterPopover('Status');
       const comboboxes = within(popover).getAllByRole('combobox');
       const valueSelect = comboboxes[1];
       await user.click(valueSelect);
-      const betaOption = screen.getByRole('option', { name: 'Beta', hidden: true });
-      fireEvent.click(betaOption);
+      await user.click(await screen.findByRole('option', { name: 'Beta' }));
+      await waitFor(() => expect(screen.queryByText('Row One')).not.toBeInTheDocument());
 
       await user.click(screen.getByRole('button', { name: /Filters/ }));
-      const toolbarDialog = screen
-        .getAllByRole('dialog')
-        .find((node) => within(node).queryByRole('heading', { name: 'Filters' }));
+      const toolbarDialog = await waitFor(() => {
+        const dialog = screen
+          .getAllByRole('dialog')
+          .find((node) => within(node).queryByRole('heading', { name: 'Filters' }));
+        expect(dialog).toBeDefined();
+        return dialog as HTMLElement;
+      });
       expect(toolbarDialog).toBeDefined();
-      expect(await within(toolbarDialog as HTMLElement).findByText('Status')).toBeInTheDocument();
-      expect(await within(toolbarDialog as HTMLElement).findByText(/beta/i)).toBeInTheDocument();
+      expect(toolbarDialog).toHaveClass('w-[min(520px,calc(100vw-1rem))]');
+      expect(await within(toolbarDialog).findByText('Status')).toBeInTheDocument();
+      expect(await within(toolbarDialog).findByText(/beta/i)).toBeInTheDocument();
+      expect(
+        within(toolbarDialog).getByRole('button', { name: 'Remove filter for Status' }),
+      ).toBeVisible();
+    });
+
+    it('keeps externally-added static filter rows usable on narrow popovers', async () => {
+      const user = userEvent.setup();
+      const onColumnFiltersChange = vi.fn();
+      const { rerender } = render(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[]}
+          onColumnFiltersChange={onColumnFiltersChange}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: /Filters/ }));
+
+      rerender(
+        <DataTable
+          columns={headerFilterColumns}
+          data={headerFilterRows}
+          manualFiltering
+          columnFilters={[
+            { id: 'status', value: { operator: 'equals', value: 'beta' } },
+            { id: 'status', value: { operator: 'is any of', value: ['alpha', 'beta', 'gamma'] } },
+            { id: 'name', value: { operator: 'contains', value: 'Row' } },
+          ]}
+          onColumnFiltersChange={onColumnFiltersChange}
+        />,
+      );
+
+      const staticFilterRows = await screen.findAllByTestId('data-table-static-filter-row');
+      expect(staticFilterRows).toHaveLength(3);
+
+      for (const staticFilterRow of staticFilterRows) {
+        expect(staticFilterRow).toHaveClass('flex-wrap');
+      }
+
+      expect(within(staticFilterRows[0]).getByText(/beta/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
+      expect(within(staticFilterRows[1]).getByText(/3 selected/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
+      expect(within(staticFilterRows[2]).getByText(/contains Row/i).parentElement).toHaveClass(
+        'min-w-[150px]',
+      );
     });
   });
 
@@ -807,6 +1139,100 @@ describe('DataTable', () => {
       const dataCell = cells?.[1];
       expect(dataCell?.className).toContain('overflow-hidden');
     });
+  });
+
+  it('should keep compact header padding for utility columns', () => {
+    const data: TestRow[] = [{ id: '1', name: 'Test Item' }];
+    const renderSubComponent = () => <div data-testid="expanded-content">Details</div>;
+
+    const { container } = render(
+      <DataTable
+        columns={columns}
+        data={data}
+        enableRowSelection
+        renderSubComponent={renderSubComponent}
+      />,
+    );
+
+    const headerCells = container.querySelectorAll('thead th');
+    expect(headerCells).toHaveLength(4);
+    expect(headerCells[0].className).toContain('px-3');
+    expect(headerCells[1].className).toContain('px-3');
+    expect(headerCells[0].className).not.toContain('overflow-hidden');
+    expect(headerCells[1].className).not.toContain('overflow-hidden');
+    expect(headerCells[2].className).toContain('px-4');
+    expect(headerCells[2].className).toContain('overflow-hidden');
+    expect(headerCells[3].className).toContain('px-4');
+    expect(headerCells[3].className).toContain('overflow-hidden');
+  });
+
+  it('should overlay sortable header actions without consuming label width', () => {
+    const layoutColumns: ColumnDef<TestRow>[] = [
+      {
+        accessorKey: 'id',
+        header: 'Identifier',
+        size: 96,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Right Aligned Header',
+        size: 128,
+        meta: {
+          align: 'right',
+        },
+      },
+    ];
+    const data: TestRow[] = [{ id: '1', name: 'Long header row' }];
+
+    render(<DataTable columns={layoutColumns} data={data} />);
+
+    const assertHeaderLayout = (headerText: string, shouldBeRightAligned = false) => {
+      const headerLabel = screen.getByText(headerText);
+      const headerContent = headerLabel.closest('div');
+      expect(headerContent).not.toBeNull();
+      expect(headerContent).toHaveClass('flex', 'min-w-0', 'items-center');
+      expect(headerContent).not.toHaveClass('gap-1');
+      expect(headerContent).toHaveClass('overflow-hidden');
+
+      if (shouldBeRightAligned) {
+        expect(headerContent).toHaveClass('flex-row-reverse');
+      } else {
+        expect(headerContent).not.toHaveClass('flex-row-reverse');
+      }
+
+      expect(headerLabel).toHaveClass('block', 'min-w-0', 'flex-1', 'truncate');
+
+      const actionGroup = headerContent?.querySelector('button')?.closest('span');
+      expect(actionGroup).toBeInTheDocument();
+      expect(actionGroup).toHaveClass('flex', 'shrink-0', 'items-center');
+      expect(actionGroup).toHaveClass(
+        'opacity-100',
+        'pointer-events-auto',
+        'sm:opacity-0',
+        'sm:pointer-events-none',
+        'sm:group-hover:opacity-100',
+        'sm:group-hover:pointer-events-auto',
+      );
+      expect(actionGroup).not.toHaveClass('absolute', 'left-0', 'right-0');
+
+      const sortButton = headerContent?.querySelector('button');
+      expect(sortButton).toHaveAttribute('aria-label', `Sort ${headerText} ascending`);
+    };
+
+    assertHeaderLayout('Identifier');
+    assertHeaderLayout('Right Aligned Header', true);
+  });
+
+  it('uses a clear label when the next sort action removes sorting', async () => {
+    const user = userEvent.setup();
+    const data: TestRow[] = [{ id: '1', name: 'Long header row' }];
+
+    render(<DataTable columns={columns} data={data} />);
+
+    await user.click(screen.getByRole('button', { name: 'Sort ID ascending' }));
+    await user.click(screen.getByRole('button', { name: 'Sort ID descending' }));
+
+    expect(screen.getByRole('button', { name: 'Clear sorting for ID' })).toBeInTheDocument();
   });
 
   describe('cell content wrapper', () => {
@@ -1085,6 +1511,26 @@ describe('DataTable', () => {
       expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
     });
 
+    it('should keep row expansion on the explicit disclosure control', async () => {
+      const user = userEvent.setup();
+
+      render(<DataTable columns={columns} data={data} renderSubComponent={renderSubComponent} />);
+
+      const firstRow = screen.getByText('Item 1').closest('tr');
+      const firstExpandButton = screen.getAllByRole('button', { name: /expand row/i })[0];
+
+      expect(firstRow).not.toHaveAttribute('tabindex');
+      expect(firstRow).not.toHaveAttribute('aria-expanded');
+      expect(firstExpandButton).toHaveAttribute('aria-expanded', 'false');
+
+      firstExpandButton.focus();
+      await user.keyboard('{Enter}');
+
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+      expect(firstExpandButton).toHaveAttribute('aria-expanded', 'true');
+      expect(firstExpandButton).toHaveAccessibleName('Collapse row');
+    });
+
     it('should NOT toggle expansion on row click when onRowClick IS provided', async () => {
       const user = userEvent.setup();
       const onRowClick = vi.fn();
@@ -1106,6 +1552,33 @@ describe('DataTable', () => {
       expect(screen.queryByTestId('expanded-1')).not.toBeInTheDocument();
     });
 
+    it('should call onRowClick from the keyboard without hijacking nested controls', async () => {
+      const user = userEvent.setup();
+      const onRowClick = vi.fn();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          onRowClick={onRowClick}
+        />,
+      );
+
+      const firstRow = screen.getByText('Item 1').closest('tr');
+      const firstExpandButton = screen.getAllByRole('button', { name: /expand row/i })[0];
+
+      expect(firstRow).toHaveAttribute('tabindex', '0');
+      firstRow?.focus();
+      await user.keyboard('{Enter}');
+      expect(onRowClick).toHaveBeenCalledOnce();
+
+      firstExpandButton.focus();
+      await user.keyboard('{Enter}');
+      expect(onRowClick).toHaveBeenCalledOnce();
+      expect(screen.getByTestId('expanded-1')).toBeInTheDocument();
+    });
+
     it('should render expanded content spanning all columns', async () => {
       const user = userEvent.setup();
 
@@ -1117,6 +1590,90 @@ describe('DataTable', () => {
       const expandedContent = screen.getByTestId('expanded-1');
       const expandedTd = expandedContent.closest('td');
       expect(expandedTd).toHaveAttribute('colspan', '3');
+    });
+
+    it('should render expanded content spanning only visible columns', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          initialColumnVisibility={{ expand: false }}
+        />,
+      );
+
+      const table = screen.getByRole('table');
+      const rows = table.querySelectorAll('tbody tr');
+      await user.click(rows[0]);
+
+      const expandedContent = screen.getByTestId('expanded-1');
+      const expandedTd = expandedContent.closest('td');
+      expect(expandedTd).toHaveAttribute('colspan', '2');
+    });
+
+    it('should allow overriding the expanded row background', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DataTable
+          columns={columns}
+          data={data}
+          renderSubComponent={renderSubComponent}
+          expandedRowClassName="bg-transparent"
+        />,
+      );
+
+      const expandButtons = screen.getAllByRole('button', { name: /expand row/i });
+      await user.click(expandButtons[0]);
+
+      const expandedRow = screen.getByTestId('expanded-1').closest('tr');
+      expect(expandedRow).toHaveClass('bg-transparent');
+    });
+  });
+
+  describe('sticky columns', () => {
+    it('should pin configured edge columns during horizontal scrolling', () => {
+      const stickyColumns: ColumnDef<TestRow>[] = [
+        {
+          accessorKey: 'id',
+          header: 'Identifier',
+          size: 96,
+          meta: { sticky: 'left' },
+        },
+        {
+          accessorKey: 'name',
+          header: 'Name',
+          size: 160,
+        },
+        {
+          id: 'actions',
+          header: 'Actions',
+          size: 80,
+          meta: { sticky: 'right' },
+          cell: () => 'Open',
+        },
+      ];
+      const data: TestRow[] = [{ id: '1', name: 'Pinned row' }];
+
+      render(<DataTable columns={stickyColumns} data={data} />);
+
+      const leftHeader = screen.getByText('Identifier').closest('th');
+      const rightHeader = screen.getByText('Actions').closest('th');
+      const leftCell = screen.getByText('1').closest('td');
+      const rightCell = screen.getByText('Open').closest('td');
+
+      expect(leftHeader).toHaveClass('sticky');
+      expect(leftHeader).toHaveStyle({ left: '0px' });
+      expect(leftHeader).toHaveClass('border-r');
+      expect(rightHeader).toHaveClass('sticky');
+      expect(rightHeader).toHaveStyle({ right: '0px' });
+      expect(rightHeader).toHaveClass('border-l');
+      expect(leftCell).toHaveClass('sticky');
+      expect(leftCell).toHaveStyle({ left: '0px' });
+      expect(rightCell).toHaveClass('sticky');
+      expect(rightCell).toHaveStyle({ right: '0px' });
     });
   });
 });

@@ -4,6 +4,7 @@ The Claude Agent SDK provider (aka Claude Code provider) enables you to run agen
 
 ```bash
 npx promptfoo@latest init --example claude-agent-sdk
+cd claude-agent-sdk
 ```
 
 ## Setup
@@ -147,8 +148,8 @@ This example demonstrates handling the `AskUserQuestion` tool in automated evalu
 This example demonstrates testing [Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) with the Claude Agent SDK. Skills are reusable capabilities defined as `SKILL.md` files that Claude automatically invokes when relevant.
 
 - **Skill discovery**: Uses `setting_sources: ['project']` to load skills from `.claude/skills/`
-- **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
-- **Tool call assertions**: Verifies skill invocation through `metadata.toolCalls`
+- **Skill filtering**: Uses `skills: ['code-review']` (SDK 0.2.120+) to scope the test to a single skill and auto-allow the `Skill` tool
+- **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
 - **Sample skill**: A code review skill that identifies bugs and security issues
 
 **Location**: `./skills/`
@@ -157,6 +158,40 @@ This example demonstrates testing [Agent Skills](https://platform.claude.com/doc
 
 ```bash
 (cd skills && promptfoo eval)
+```
+
+### Skill Comparison
+
+This example compares two versions of the same Claude Agent SDK skill against identical review tasks. It is the Claude companion to [`examples/openai-codex-sdk/skill-comparison`](../openai-codex-sdk/skill-comparison) and the runnable form of the [agent-skill testing guide](https://www.promptfoo.dev/docs/guides/test-agent-skills).
+
+- **Versioned fixtures**: Each provider points at a different `working_dir` with its own `.claude/skills/review-standards/SKILL.md`
+- **Skill filter**: Uses `skills: ['review-standards']` (SDK 0.2.120+) to auto-allow the `Skill` tool
+- **Structured output**: Shares an `output_format` schema across both providers via a YAML anchor so JSON results are reliable without prompt gymnastics
+- **Outcome scoring**: A JavaScript assertion scores issue recall against `expectedIssues`
+
+**Location**: `./skill-comparison/`
+
+**Usage**:
+
+```bash
+(cd skill-comparison && promptfoo eval --no-cache)
+```
+
+### Plugins
+
+This example demonstrates loading skills from a [plugin](https://code.claude.com/docs/en/plugins) instead of from `setting_sources`. Plugins are self-contained directories that bundle skills, agents, hooks, and MCP servers together.
+
+- **Plugin loading**: Uses `plugins: [{type: local, path: ./sample-plugin}]` to load a local plugin
+- **Skill filtering**: Uses `skills: all` to load plugin skills and auto-allow the `Skill` tool
+- **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
+- **Sample skill**: A standards-check skill verifies the project has a README.md
+
+**Location**: `./plugins/`
+
+**Usage**:
+
+```bash
+(cd plugins && promptfoo eval)
 ```
 
 ### Cyber Espionage Red Team

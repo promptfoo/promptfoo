@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
+import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
 
@@ -17,6 +19,11 @@ const mockApplyRuntimeTransforms = vi.hoisted(() =>
     image: undefined,
   })),
 );
+
+vi.mock('../../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
 
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
@@ -44,12 +51,18 @@ vi.mock('../../../../src/redteam/providers/shared', async () => ({
   tryUnblocking: vi.fn(),
 }));
 
-vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    getGraderById: mockGetGraderById,
-  };
-});
+vi.mock('../../../../src/redteam/graders', () => ({
+  getGraderById: mockGetGraderById,
+}));
+
+vi.mock('../../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
@@ -69,6 +82,10 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
   ...(await vi.importActual('../../../../src/evaluatorHelpers')),
   renderPrompt: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+});
 
 describe('MemorySystem', () => {
   let memorySystem: MemorySystem;
@@ -115,28 +132,20 @@ describe('MemorySystem', () => {
 
 describe('CrescendoProvider', () => {
   let crescendoProvider: CrescendoProvider;
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Create fresh mocks for each test
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     crescendoProvider = new CrescendoProvider({
       injectVar: 'objective',
@@ -235,6 +244,30 @@ describe('CrescendoProvider', () => {
 
     // Should prefer maxTurns when both are provided
     expect(provider['maxTurns']).toBe(12);
+  });
+
+  it('should preserve explicit zero values for maxTurns and maxBacktracks', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 0,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    expect(provider['maxTurns']).toBe(0);
+    expect(provider['maxBacktracks']).toBe(0);
+  });
+
+  it('should preserve maxRounds when it is explicitly set to zero', () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxRounds: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    expect(provider['maxTurns']).toBe(0);
   });
 
   it('should return correct provider id', () => {
@@ -752,6 +785,85 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.storedGraderResult).toMatchObject({ pass: true });
     expect(result.metadata?.storedGraderResult?.assertion).toBeDefined();
+  });
+
+  it('should grade the latest assistant output while passing prior turns in grading context', async () => {
+    const getResult = vi.fn(async () => ({
+      grade: {
+        pass: true,
+      },
+      rubric: 'rendered rubric',
+    }));
+    mockGetGraderById.mockImplementation(() => ({ getResult }) as any);
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 2,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    const context = {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: '{{objective}}', label: 'test' },
+      test: {
+        assert: [{ type: 'mock-grader' }],
+        metadata: { pluginId: 'mock', purpose: 'test purpose' },
+      } as any,
+    };
+
+    mockRedTeamProvider.callApi
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          generatedQuestion: 'first question',
+          rationaleBehindJailbreak: 'first rationale',
+          lastResponseSummary: '',
+        }),
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          generatedQuestion: 'second question',
+          rationaleBehindJailbreak: 'second rationale',
+          lastResponseSummary: 'first response summary',
+        }),
+      });
+
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'first response' })
+      .mockResolvedValueOnce({ output: 'second response' });
+
+    mockScoringProvider.callApi.mockResolvedValue({
+      output: JSON.stringify({
+        value: false,
+        metadata: 0,
+        rationale: 'not refused and not achieved',
+      }),
+    });
+
+    const result = await provider.callApi('ignored', context);
+
+    expect(result.metadata?.stopReason).toBe('Max rounds reached');
+    expect(getResult).toHaveBeenCalledTimes(2);
+
+    const firstCall = getResult.mock.calls[0] as unknown as unknown[];
+    expect(firstCall?.[0]).toBe('first question');
+    expect(firstCall?.[1]).toBe('first response');
+    expect(firstCall?.[7]).toMatchObject({
+      redteamHistory: [],
+      conversationHistory: [],
+      conversationTranscript: '',
+    });
+
+    const secondCall = getResult.mock.calls[1] as unknown as unknown[];
+    expect(secondCall?.[0]).toBe('second question');
+    expect(secondCall?.[1]).toBe('second response');
+    expect(secondCall?.[7]).toMatchObject({
+      redteamHistory: [{ prompt: 'first question', output: 'first response' }],
+      conversationHistory: [{ prompt: 'first question', output: 'first response' }],
+      conversationTranscript: 'Turn 1:\nUser: first question\nAssistant: first response',
+    });
   });
 
   it('should stop when max backtracks reached', async () => {
@@ -1805,27 +1917,19 @@ describe('CrescendoProvider', () => {
 });
 
 describe('CrescendoProvider - Abort Signal Handling', () => {
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
       options: any,
@@ -1840,6 +1944,11 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
     });
 
     vi.mocked(checkServerFeatureSupport).mockResolvedValue(true);
+    vi.mocked(evaluatorHelpers.renderPrompt).mockReset();
+    vi.mocked(evaluatorHelpers.renderPrompt).mockImplementation(async (prompt) => {
+      const rawPrompt = typeof prompt === 'object' && 'raw' in prompt ? prompt.raw : String(prompt);
+      return rawPrompt;
+    });
     mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
@@ -2074,27 +2183,19 @@ describe('CrescendoProvider - Abort Signal Handling', () => {
 
 describe('CrescendoProvider - Chat Template Support', () => {
   let crescendoProvider: CrescendoProvider;
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     crescendoProvider = new CrescendoProvider({
       injectVar: 'user_input',
@@ -2420,27 +2521,19 @@ describe('CrescendoProvider - Chat Template Support', () => {
 });
 
 describe('CrescendoProvider - perTurnLayers configuration', () => {
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (
       options: any,
@@ -2579,5 +2672,145 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
       expect(result.metadata.redteamHistory[0].promptAudio).toBeUndefined();
       expect(result.metadata.redteamHistory[0].promptImage).toBeUndefined();
     }
+  });
+
+  it('should use remote materialized vars when the crescendo prompt is plain text', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    const docxDataUri =
+      'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+      inputs: {
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        question: {
+          description: 'Benign analyst question',
+          type: 'text',
+        },
+      },
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    await (provider as any).sendPrompt(
+      'Summarize the uploaded planning document for the analyst.',
+      { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      {
+        objective: 'test objective',
+        document: 'stale document',
+        question: 'stale question',
+      },
+      undefined,
+      mockTargetProvider,
+      1,
+      {
+        vars: {
+          objective: 'test objective',
+          document: 'stale document',
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        materializationHandled: true,
+        materializedVars: {
+          document: docxDataUri,
+          question: 'What changed?',
+        },
+      },
+    );
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalled();
+    const targetCallContext = mockTargetProvider.callApi.mock.calls[0][1] as {
+      vars?: Record<string, string>;
+    };
+    expect(targetCallContext.vars).toMatchObject({
+      document: docxDataUri,
+      question: 'What changed?',
+    });
+  });
+
+  it('should preserve the existing DOCX var when remote materialization omits it', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    const docxDataUri =
+      'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+      inputs: {
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        question: {
+          description: 'Benign analyst question',
+          type: 'text',
+        },
+      },
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    await (provider as any).sendPrompt(
+      JSON.stringify({
+        document: 'Quarterly Sales Report',
+        question: 'Can you summarize the main points from this document?',
+      }),
+      { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      {
+        objective: 'test objective',
+        document: docxDataUri,
+        question: 'stale question',
+      },
+      undefined,
+      mockTargetProvider,
+      1,
+      {
+        vars: {
+          objective: 'test objective',
+          document: docxDataUri,
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        materializationHandled: true,
+        materializedVars: {
+          question: 'What changed?',
+        },
+      },
+    );
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalled();
+    const targetCallContext = mockTargetProvider.callApi.mock.calls[0][1] as {
+      vars?: Record<string, string>;
+    };
+    expect(targetCallContext.vars).toMatchObject({
+      document: docxDataUri,
+      question: 'What changed?',
+    });
   });
 });

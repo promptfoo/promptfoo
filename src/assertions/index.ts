@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
@@ -8,21 +8,20 @@ import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
+import { matchesClassification } from '../matchers/classification';
+import { matchesSelectBest } from '../matchers/comparison';
+import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matchers/llmGrading';
+import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
-  matchesClassification,
-  matchesClosedQa,
   matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-  matchesFactuality,
-  matchesLlmRubric,
-  matchesModeration,
-  matchesSelectBest,
-  matchesSimilarity,
-} from '../matchers';
+} from '../matchers/rag';
+import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -33,11 +32,13 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  type TraceData,
   type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -81,18 +82,27 @@ import { handleRougeScore } from './rouge';
 import { handleRuby } from './ruby';
 import { handleSearchRubric } from './searchRubric';
 import { handleSimilar } from './similar';
+import { handleSkillUsed } from './skill';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
 import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
+import {
+  handleTrajectoryGoalSuccess,
+  handleTrajectoryStepCount,
+  handleTrajectoryToolArgsMatch,
+  handleTrajectoryToolSequence,
+  handleTrajectoryToolUsed,
+} from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
+  AssertionOrSet,
   AssertionParams,
   AssertionValueFunctionContext,
   BaseAssertionTypes,
@@ -101,6 +111,12 @@ import type {
 } from '../types/index';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
+const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
+const DEFAULT_TRACE_FETCH_RETRY_DELAY_MS = 250;
+const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
+const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
+const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
+const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -112,7 +128,98 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-closedqa',
   'model-graded-factuality',
   'search-rubric',
+  'trajectory:goal-success',
 ]);
+
+const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
+  'javascript',
+  'python',
+  'ruby',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
+  'trajectory:goal-success',
+  'trajectory:step-count',
+  'trajectory:tool-args-match',
+  'trajectory:tool-sequence',
+  'trajectory:tool-used',
+]);
+
+export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionUsesTrace);
+  }
+
+  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+}
+
+function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+  if (assertionUsesTrace(assertion)) {
+    return true;
+  }
+
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionMayNeedTraceContext);
+  }
+
+  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+    return true;
+  }
+
+  return typeof assertion.value === 'string'
+    ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
+    : false;
+}
+
+export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
+  return Boolean(assertions?.some(assertionMayNeedTraceContext));
+}
+
+async function loadTraceData(traceId: string): Promise<TraceData | null> {
+  const traceStore = getTraceStore();
+  const maxAttempts = Math.min(
+    MAX_TRACE_FETCH_MAX_ATTEMPTS,
+    Math.max(1, getEnvInt('PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS', DEFAULT_TRACE_FETCH_MAX_ATTEMPTS)),
+  );
+  const retryDelayMs = Math.min(
+    MAX_TRACE_FETCH_RETRY_DELAY_MS,
+    Math.max(
+      0,
+      getEnvInt('PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS', DEFAULT_TRACE_FETCH_RETRY_DELAY_MS),
+    ),
+  );
+  const stablePolls = Math.min(
+    MAX_TRACE_FETCH_STABLE_POLLS,
+    Math.max(1, getEnvInt('PROMPTFOO_TRACE_FETCH_STABLE_POLLS', DEFAULT_TRACE_FETCH_STABLE_POLLS)),
+  );
+
+  let lastSpanCount = -1;
+  let stableObservations = 0;
+  let latestTrace: TraceData | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
+
+    const spanCount = latestTrace?.spans?.length ?? 0;
+    if (spanCount > 0) {
+      stableObservations = spanCount === lastSpanCount ? stableObservations + 1 : 1;
+      lastSpanCount = spanCount;
+
+      if (stableObservations >= stablePolls || attempt === maxAttempts - 1) {
+        return latestTrace;
+      }
+    } else {
+      stableObservations = 0;
+      lastSpanCount = spanCount;
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await sleep(retryDelayMs);
+    }
+  }
+
+  return latestTrace;
+}
 
 const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,
@@ -186,12 +293,18 @@ const ASSERTION_HANDLERS: Record<
   ruby: handleRuby,
   'rouge-n': handleRougeScore,
   'search-rubric': handleSearchRubric,
+  'skill-used': handleSkillUsed,
   similar: handleSimilar,
   'similar:cosine': handleSimilar,
   'similar:dot': handleSimilar,
   'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
   'tool-call-f1': handleToolCallF1,
+  'trajectory:goal-success': handleTrajectoryGoalSuccess,
+  'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
+  'trajectory:step-count': handleTrajectoryStepCount,
+  'trajectory:tool-sequence': handleTrajectoryToolSequence,
+  'trajectory:tool-used': handleTrajectoryToolUsed,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
@@ -249,6 +362,44 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
+/**
+ * Execute a single assertion against provider output.
+ *
+ * This is a core API for programmatic assertion execution. Use this when:
+ * - Running assertions independently outside of the main evaluate() flow
+ * - Implementing custom evaluation pipelines
+ * - Testing specific provider outputs
+ * - Building custom grading systems
+ *
+ * @param params Configuration for assertion execution
+ * @param params.prompt The prompt that was sent to the provider (optional, for context)
+ * @param params.provider The API provider instance (optional, for context in assertions)
+ * @param params.assertion The assertion to run (e.g., `{ type: 'contains', value: 'expected' }`)
+ * @param params.test The test case context containing variables and configuration
+ * @param params.vars Template variables from the test (overrides test.vars if provided)
+ * @param params.providerResponse The provider's response to evaluate
+ * @param params.latencyMs Provider response latency in milliseconds (optional)
+ * @param params.traceId Distributed trace ID for debugging (optional)
+ * @param params.traceData Trace spans with timing information (optional)
+ *
+ * @returns GradingResult with pass/fail status, score, and reason
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertion({
+ *   assertion: { type: 'contains', value: '4' },
+ *   test: { vars: { question: 'What is 2+2?' } },
+ *   providerResponse: { output: 'The answer is 4' }
+ * });
+ *
+ * console.log(`Pass: ${result.pass}, Score: ${result.score}`);
+ * ```
+ *
+ * @see runAssertions for batch assertion execution
+ * @see evaluate for full evaluation pipeline
+ */
 export async function runAssertion({
   prompt,
   provider,
@@ -258,6 +409,7 @@ export async function runAssertion({
   latencyMs,
   providerResponse,
   traceId,
+  traceData,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -268,6 +420,7 @@ export async function runAssertion({
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
+  traceData?: TraceData | null;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -296,17 +449,16 @@ export async function runAssertion({
   };
 
   // Add trace data if traceId is available
-  if (traceId) {
+  if (traceId && assertionMayNeedTraceContext(assertion)) {
     try {
-      const traceStore = getTraceStore();
-      const traceData = await traceStore.getTrace(traceId);
-      if (traceData) {
+      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      if (resolvedTraceData) {
         context.trace = {
-          traceId: traceData.traceId,
-          evaluationId: traceData.evaluationId,
-          testCaseId: traceData.testCaseId,
-          metadata: traceData.metadata,
-          spans: traceData.spans || [],
+          traceId: resolvedTraceData.traceId,
+          evaluationId: resolvedTraceData.evaluationId,
+          testCaseId: resolvedTraceData.testCaseId,
+          metadata: resolvedTraceData.metadata,
+          spans: resolvedTraceData.spans || [],
         };
       }
     } catch (error) {
@@ -458,6 +610,11 @@ export async function runAssertion({
       }
     : undefined;
 
+  const finalTest = getFinalTest(
+    vars === undefined ? test : { ...test, vars: resolvedVars },
+    assertion,
+  );
+
   const assertionParams: AssertionParams = {
     assertion,
     baseType: getAssertionBaseType(assertion),
@@ -473,7 +630,7 @@ export async function runAssertion({
     provider,
     providerResponse,
     renderedValue,
-    test: getFinalTest(test, assertion),
+    test: finalTest,
     valueFromScript,
   };
 
@@ -511,6 +668,53 @@ export async function runAssertion({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
+/**
+ * Execute multiple assertions in batch against provider output.
+ *
+ * This function runs all assertions defined in a test case and returns aggregated results.
+ * It handles:
+ * - Multiple assertion types (contains, regex, LLM-graded, etc.)
+ * - Nested assertion-sets with logical operators
+ * - Custom scoring functions
+ * - Combined pass/fail and scoring logic
+ *
+ * @param params Configuration for batch assertion execution
+ * @param params.assertScoringFunction Custom scoring function (optional)
+ * @param params.latencyMs Provider response latency in milliseconds
+ * @param params.prompt The prompt that was sent to the provider (optional)
+ * @param params.provider The API provider instance (optional)
+ * @param params.providerResponse The provider's response to evaluate
+ * @param params.test The test case with assertions to run
+ * @param params.vars Template variables (overrides test.vars if provided)
+ * @param params.traceId Distributed trace ID (optional)
+ *
+ * @returns GradingResult aggregating all assertion results. The returned result
+ *          includes `componentResults` and `namedScores` rather than a nested
+ *          `results` array.
+ *
+ * @example Basic usage
+ * ```typescript
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertions({
+ *   assertions: [
+ *     { type: 'contains', value: '4' },
+ *     { type: 'regex', value: '^The answer is' }
+ *   ],
+ *   test: { vars: { question: 'What is 2+2?' } },
+ *   providerResponse: { output: 'The answer is 4' }
+ * });
+ *
+ * console.log(`All passed: ${result.pass}`);
+ * console.log(`Average score: ${result.score}`);
+ * result.componentResults.forEach((r) => {
+ *   console.log(`  ${r.assertion?.type}: ${r.pass ? '✓' : '✗'} (${r.score})`);
+ * });
+ * ```
+ *
+ * @see runAssertion for single assertion execution
+ * @see evaluate for full evaluation pipeline
+ */
 export async function runAssertions({
   assertScoringFunction,
   latencyMs,
@@ -568,35 +772,50 @@ export async function runAssertions({
     })
     .flat();
 
-  await async.forEachOfLimit(
-    asserts,
-    ASSERTIONS_MAX_CONCURRENCY,
-    async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
-        return;
-      }
+  const shouldPreloadTrace =
+    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+  let preloadedTraceData: TraceData | null | undefined;
+  if (shouldPreloadTrace && traceId) {
+    try {
+      preloadedTraceData = await loadTraceData(traceId);
+    } catch (error) {
+      logger.debug(`Failed to preload trace data for assertions: ${error}`);
+      preloadedTraceData = null;
+    }
+  }
 
-      const result = await runAssertion({
-        prompt,
-        provider,
-        providerResponse,
-        assertion,
-        test,
-        vars,
-        latencyMs,
-        assertIndex: index,
-        traceId,
-      });
+  // Serialize when the grouping queue is active: concurrent dispatch can
+  // reorder provider enqueues and split same-judge groups.
+  const concurrency = getProviderCallExecutionContext()?.providerCallQueue
+    ? 1
+    : ASSERTIONS_MAX_CONCURRENCY;
 
-      assertResult.addResult({
-        index,
-        result,
-        metric: renderMetricName(assertion.metric, vars || test.vars || {}),
-        weight: assertion.weight,
-      });
-    },
-  );
+  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
+    if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+      return;
+    }
+
+    const result = await runAssertion({
+      prompt,
+      provider,
+      providerResponse,
+      assertion,
+      test,
+      vars,
+      latencyMs,
+      assertIndex: index,
+      traceId,
+      traceData: preloadedTraceData,
+    });
+
+    assertResult.addResult({
+      index,
+      result,
+      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+      weight: assertion.weight,
+    });
+  });
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
@@ -639,7 +858,7 @@ export async function runCompareAssertion(
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
-    const assertions = yaml.load(fs.readFileSync(filePath, 'utf-8')) as Assertion[];
+    const assertions = yaml.load(await fs.readFile(filePath, 'utf-8')) as Assertion[];
     if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
       throw new Error('Assertions file must be an array of assertion objects');
     }

@@ -1,4 +1,4 @@
-# Simple MCP (Model Context Protocol) Provider Example
+# simple-mcp (Simple MCP Provider)
 
 This example demonstrates how to use the MCP provider for evaluating MCP servers. The MCP provider is designed for direct tool calling evaluation rather than text generation, making it ideal for testing tool behavior, security vulnerabilities, and edge cases.
 
@@ -8,6 +8,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example simple-mcp
+cd simple-mcp
 ```
 
 ## Getting Started
@@ -80,12 +81,12 @@ tests:
       - type: contains
         value: 'dangerous SQL query blocked'
 
-  # XSS sanitization
+  # Data previewing
   - vars:
-      prompt: '{"tool": "process_data", "args": {"data": "<script>alert(\"xss\")</script>Hello", "operation": "sanitize"}}'
+      prompt: '{"tool": "process_data", "args": {"data": "Hello from the MCP example", "operation": "preview"}}'
     assert:
       - type: contains
-        value: '[SCRIPT_REMOVED]'
+        value: 'Preview: Hello from the MCP example'
 ```
 
 ### Debug Mode
@@ -103,6 +104,36 @@ providers:
         - name: my-server
           url: http://localhost:3000/mcp
 ```
+
+### Custom Response Parsing
+
+The example also includes `response-parser.js`, which reads `structuredContent` from the raw MCP
+tool result and falls back to Promptfoo's normalized `content` string:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      servers:
+        - name: security-test-server
+          path: ./example-server.js
+      transformResponse: 'file://response-parser.js'
+```
+
+```javascript
+export default function parseMcpResponse(result, content) {
+  return result.structuredContent?.summary ?? content;
+}
+```
+
+The `get_user_profile` test proves the parser is reading structured MCP output by asserting on
+`Ada Lovelace is active`, which is not present in the tool's text content.
+Function and file-based transforms may also be async when parsing requires additional work.
+
+Relative file reads in `example-server.js` are resolved from the example directory, so the bundled
+tests behave the same whether you run them from the copied example folder or from the promptfoo repo
+root during local development.
 
 ## Example MCP Servers
 

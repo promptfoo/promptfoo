@@ -1,8 +1,10 @@
 import fs from 'fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
+import { mockGlobal, mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -18,19 +20,47 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('fs');
+const fsMocks = vi.hoisted(() => ({
+  existsSync: vi.fn(),
+  readFileSync: vi.fn(),
+}));
 
-// Mock native File API
-global.File = class MockFile {
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+vi.mock('fs/promises', () => {
+  // Async wrapper around the sync mock so the returned value is a real Promise,
+  // matching the actual fs/promises.readFile API.
+  const readFile = vi.fn(async (filePath: any, encoding?: any) =>
+    encoding === undefined
+      ? fsMocks.readFileSync(filePath)
+      : fsMocks.readFileSync(filePath, encoding),
+  );
+  return {
+    default: {
+      readFile,
+    },
+    readFile,
+  };
+});
+
+class MockFile {
   constructor(
     public parts: any[],
     public name: string,
     public options?: FilePropertyBag,
   ) {}
-} as any;
+}
 
-// Mock native FormData
-global.FormData = class MockFormData {
+class MockFormData {
   private data: Map<string, any> = new Map();
 
   append(key: string, value: any) {
@@ -44,7 +74,15 @@ global.FormData = class MockFormData {
   has(key: string) {
     return this.data.has(key);
   }
-} as any;
+}
+
+const restoreFile = mockGlobal('File', MockFile as unknown as typeof File);
+const restoreFormData = mockGlobal('FormData', MockFormData as unknown as typeof FormData);
+
+afterAll(() => {
+  restoreFormData();
+  restoreFile();
+});
 
 describe('OpenAiTranscriptionProvider', () => {
   const mockTranscriptionResponse = {
@@ -130,7 +168,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       const result = await provider.callApi('/path/to/audio.mp3');
 
-      expect(fs.existsSync).toHaveBeenCalledWith('/path/to/audio.mp3');
+      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/audio.mp3');
       expect(fetchWithCache).toHaveBeenCalledWith(
         expect.stringContaining('/audio/transcriptions'),
         expect.objectContaining({
@@ -198,6 +236,16 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(result.cost).toBe(0.006); // 2 minutes * $0.003/min
     });
 
+    it('should calculate cost correctly for gpt-4o-mini-transcribe-2025-12-15', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe-2025-12-15', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      expect(result.cost).toBe(0.006); // 2 minutes * $0.003/min
+    });
+
     it('should calculate cost correctly for whisper-1', async () => {
       const provider = new OpenAiTranscriptionProvider('whisper-1', {
         config: { apiKey: 'test-key' },
@@ -225,18 +273,50 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(provider.id()).toBe('openai:transcription:gpt-4o-transcribe');
     });
 
+    it('should generate correct default ID for dated diarization snapshots', () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe-diarize-2025-10-15', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(provider.id()).toBe('openai:transcription:gpt-4o-transcribe-diarize-2025-10-15');
+    });
+
     it('should throw an error if API key is not set', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe');
 
         await expect(provider.callApi('/path/to/audio.mp3')).rejects.toThrow(
-          'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        process.env.OPENAI_API_KEY = originalEnv;
+        restoreEnv();
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+      });
+
+      try {
+        const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_TRANSCRIPTION_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('/path/to/audio.mp3')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_TRANSCRIPTION_API_KEY'),
+        );
+      } finally {
+        restoreEnv();
       }
     });
   });
@@ -307,8 +387,8 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      vi.mocked(fs.existsSync).mockImplementation(function () {
-        return false;
+      vi.mocked(fs.readFileSync).mockImplementation(function () {
+        throw Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' });
       });
 
       const result = await provider.callApi('/path/to/missing.mp3');
@@ -569,7 +649,9 @@ describe('OpenAiTranscriptionProvider', () => {
       const models = [
         'gpt-4o-transcribe',
         'gpt-4o-mini-transcribe',
+        'gpt-4o-mini-transcribe-2025-12-15',
         'gpt-4o-transcribe-diarize',
+        'gpt-4o-transcribe-diarize-2025-10-15',
         'whisper-1',
       ];
 
@@ -612,7 +694,7 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(result.cost).toBe(0);
     });
 
-    it('should handle missing duration in response', async () => {
+    it('should leave cost undefined when the API omits duration', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: { apiKey: 'test-key' },
       });
@@ -629,8 +711,8 @@ describe('OpenAiTranscriptionProvider', () => {
 
       const result = await provider.callApi('/path/to/audio.mp3');
 
-      expect(result.cost).toBe(0);
-      expect(result.metadata?.duration).toBe(0);
+      expect(result.cost).toBeUndefined();
+      expect(result.metadata?.duration).toBeUndefined();
     });
 
     it('should handle diarized segments with missing fields', async () => {
@@ -666,7 +748,7 @@ describe('OpenAiTranscriptionProvider', () => {
 
       await provider.callApi('  /path/to/audio.mp3  ');
 
-      expect(fs.existsSync).toHaveBeenCalledWith('/path/to/audio.mp3');
+      expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/audio.mp3');
     });
   });
 });

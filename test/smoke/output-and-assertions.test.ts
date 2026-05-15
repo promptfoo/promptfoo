@@ -98,6 +98,27 @@ describe('Output and Assertion Variants Smoke Tests', () => {
     });
   });
 
+  describe('5.1.9b Quoted Comma Parsing in Contains Assertions', () => {
+    it('5.1.9b - quoted commas are preserved in contains-any, contains-all, icontains-any, icontains-all', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/contains-quoted-commas.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'contains-quoted-commas-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const results = parsed.results.results;
+
+      // All 4 tests should pass (quoted comma values match the echo output)
+      expect(results).toHaveLength(4);
+      for (const result of results) {
+        expect(result.success).toBe(true);
+      }
+    });
+  });
+
   describe('5.1.10 levenshtein Assertion', () => {
     it('5.1.10 - levenshtein checks edit distance', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/levenshtein-assertion.yaml');

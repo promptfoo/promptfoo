@@ -2,21 +2,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GeminiImageProvider } from '../../../src/providers/google/gemini-image';
 import * as googleUtil from '../../../src/providers/google/util';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
 
-vi.mock('../../../src/providers/google/util', () => ({
-  getGoogleClient: vi.fn(),
-  loadCredentials: vi.fn(),
-  resolveProjectId: vi.fn(),
-  geminiFormatAndSystemInstructions: vi.fn().mockImplementation((prompt) => ({
-    contents: [{ parts: [{ text: prompt }], role: 'user' }],
-    systemInstruction: undefined,
-  })),
-  createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
-}));
+vi.mock('../../../src/providers/google/util', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/providers/google/util')>();
+  return {
+    ...actual,
+    getGoogleClient: vi.fn(),
+    loadCredentials: vi.fn(),
+    resolveProjectId: vi.fn(),
+    geminiFormatAndSystemInstructions: vi.fn().mockImplementation((prompt) => ({
+      contents: [{ parts: [{ text: prompt }], role: 'user' }],
+      systemInstruction: undefined,
+    })),
+    createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
+    normalizeTools: actual.normalizeTools,
+  };
+});
 
 describe('GeminiImageProvider', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
@@ -26,11 +32,11 @@ describe('GeminiImageProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.GOOGLE_API_KEY = 'test-api-key';
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_PROJECT_ID;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
+    mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
+    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
 
     mockLoadCredentials.mockImplementation((creds) => {
       if (typeof creds === 'object') {
@@ -42,11 +48,11 @@ describe('GeminiImageProvider', () => {
   });
 
   afterEach(() => {
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GOOGLE_PROJECT_ID;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
   });
 
   it('should construct with model name', () => {
@@ -93,7 +99,7 @@ describe('GeminiImageProvider', () => {
 
     expect(mockFetchWithCache).toHaveBeenCalledWith(
       expect.stringContaining(
-        'generativelanguage.googleapis.com/v1alpha/models/gemini-3-pro-image-preview:generateContent',
+        'generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
       ),
       expect.objectContaining({
         method: 'POST',
@@ -115,10 +121,10 @@ describe('GeminiImageProvider', () => {
   });
 
   it('should return error when both project ID and API key are missing', async () => {
-    delete process.env.GOOGLE_PROJECT_ID;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
     const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
     const result = await provider.callApi('Test prompt');
@@ -137,7 +143,7 @@ describe('GeminiImageProvider', () => {
 
   describe('Vertex AI', () => {
     beforeEach(() => {
-      process.env.GOOGLE_PROJECT_ID = 'test-project';
+      mockProcessEnv({ GOOGLE_PROJECT_ID: 'test-project' });
     });
 
     it('should use OAuth authentication for Vertex AI', async () => {
@@ -209,6 +215,91 @@ describe('GeminiImageProvider', () => {
       expect(result.error).toContain('Failed to call Vertex AI');
       expect(result.error).toContain('Google auth library not found');
     });
+
+    it('should use global endpoint with v1 for gemini-3-pro-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
+        config: {
+          projectId: 'test-project',
+        },
+      });
+
+      const mockClient = {
+        request: vi.fn().mockResolvedValue({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'test-project',
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('https://aiplatform.googleapis.com/v1/'),
+        }),
+      );
+      // Global endpoint uses location=global
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('/locations/global/'),
+        }),
+      );
+    });
+
+    it('should use global endpoint with v1 for gemini-3.1-flash-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
+        config: {
+          projectId: 'test-project',
+          region: 'us-central1',
+        },
+      });
+
+      const mockClient = {
+        request: vi.fn().mockResolvedValue({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
+              },
+            ],
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'test-project',
+      });
+
+      await provider.callApi('Test prompt');
+
+      // Gemini 3.1 should use global endpoint, same as Gemini 3.0
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('https://aiplatform.googleapis.com/v1/'),
+        }),
+      );
+      expect(mockClient.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: expect.stringContaining('/locations/global/'),
+        }),
+      );
+    });
   });
 
   describe('Image configuration', () => {
@@ -260,6 +351,47 @@ describe('GeminiImageProvider', () => {
       expect(body.generationConfig.imageConfig).toEqual({
         aspectRatio: '16:9',
         imageSize: '2K',
+      });
+    });
+
+    it('should pass imageSize config for gemini-3.1-flash-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
+        config: {
+          imageAspectRatio: '1:1',
+          imageSize: '512px',
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'image/png',
+                      data: 'base64data',
+                    },
+                  },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Test prompt');
+
+      const callArgs = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+      expect(body.generationConfig.imageConfig).toEqual({
+        aspectRatio: '1:1',
+        imageSize: '512px',
       });
     });
 
@@ -566,12 +698,43 @@ describe('GeminiImageProvider', () => {
 
       expect(result.cost).toBe(0.039);
     });
+
+    it('should return correct cost for gemini-3.1-flash-image-preview', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: 'image/png',
+                      data: 'base64data',
+                    },
+                  },
+                ],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.cost).toBe(0.067);
+    });
   });
 
   describe('API key handling', () => {
     it('should support GEMINI_API_KEY environment variable', async () => {
-      delete process.env.GOOGLE_API_KEY;
-      process.env.GEMINI_API_KEY = 'gemini-key';
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ GEMINI_API_KEY: 'gemini-key' });
 
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
@@ -615,7 +778,7 @@ describe('GeminiImageProvider', () => {
     });
 
     it('should use apiKey from config', async () => {
-      delete process.env.GOOGLE_API_KEY;
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
 
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
         config: {
@@ -663,7 +826,7 @@ describe('GeminiImageProvider', () => {
   });
 
   describe('API version selection', () => {
-    it('should use v1alpha for gemini-3 models', async () => {
+    it('should use v1beta for gemini-3 models', async () => {
       const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
 
       mockFetchWithCache.mockResolvedValueOnce({
@@ -685,7 +848,7 @@ describe('GeminiImageProvider', () => {
       await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        expect.stringContaining('/v1alpha/'),
+        expect.stringContaining('/v1beta/'),
         expect.any(Object),
         expect.any(Number),
         'json',
@@ -721,6 +884,160 @@ describe('GeminiImageProvider', () => {
         'json',
         false,
       );
+    });
+
+    it('should use v1beta for gemini-3.1 image models', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/v1beta/'),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        false,
+      );
+    });
+  });
+
+  describe('Grounding tools', () => {
+    it('should include googleSearch tool in request body', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
+        config: {
+          tools: [
+            {
+              googleSearch: {},
+            },
+          ],
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Generate a grounded image');
+
+      const callArgs = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should preserve googleSearch when function calling is disabled', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
+        config: {
+          tools: [
+            {
+              googleSearch: {},
+            },
+          ],
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'NONE',
+            },
+          },
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Generate a grounded image');
+
+      const callArgs = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
+    it('should normalize google_search tool format to googleSearch', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
+        config: {
+          tools: [
+            {
+              google_search: {
+                searchTypes: {
+                  webSearch: {},
+                  imageSearch: {},
+                },
+              },
+            } as any,
+          ],
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Generate a grounded image');
+
+      const callArgs = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+      expect(body.tools).toMatchObject([
+        {
+          googleSearch: {
+            searchTypes: {
+              webSearch: {},
+              imageSearch: {},
+            },
+          },
+        },
+      ]);
     });
   });
 });
