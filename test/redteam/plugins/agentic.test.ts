@@ -5,7 +5,11 @@ import { AGENTIC_RUNTIME_PLUGINS } from '../../../src/redteam/constants/agentic'
 import { getGraderById } from '../../../src/redteam/graders';
 import { Plugins } from '../../../src/redteam/plugins';
 import { AgenticRuntimePlugin } from '../../../src/redteam/plugins/agentic';
-import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import {
+  getRemoteGenerationUrl,
+  getRemoteHealthUrl,
+  neverGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
 import { checkRemoteHealth } from '../../../src/util/apiHealth';
 
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
@@ -15,16 +19,13 @@ import type { TraceData } from '../../../src/types/tracing';
 vi.mock('../../../src/cache');
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
   ...(await importOriginal()),
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://remote.example.test/api/v1/task'),
-  getRemoteHealthUrl: vi.fn().mockReturnValue('https://remote.example.test/health'),
-  neverGenerateRemote: vi.fn().mockReturnValue(false),
+  getRemoteGenerationUrl: vi.fn(),
+  getRemoteHealthUrl: vi.fn(),
+  neverGenerateRemote: vi.fn(),
 }));
 vi.mock('../../../src/util/apiHealth', async (importOriginal) => ({
   ...(await importOriginal()),
-  checkRemoteHealth: vi.fn().mockResolvedValue({
-    message: 'API is healthy',
-    status: 'OK',
-  }),
+  checkRemoteHealth: vi.fn(),
 }));
 
 const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContext => ({
@@ -41,7 +42,9 @@ describe('Agentic redteam plugins', () => {
   } as unknown as ApiProvider;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://remote.example.test/api/v1/task');
+    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://remote.example.test/health');
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(checkRemoteHealth).mockResolvedValue({
       message: 'API is healthy',
