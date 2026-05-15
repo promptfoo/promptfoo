@@ -441,6 +441,22 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Items: content from data1, content from data2');
     });
 
+    it('should resolve repeated nested file references within the same var graph', async () => {
+      const prompt = toPrompt('{{ payload.first.source }} | {{ payload.second.source }}');
+      const shared = { source: 'file://shared.txt' };
+      const vars = {
+        payload: {
+          first: shared,
+          second: shared,
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('shared content');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+      expect(renderedPrompt).toBe('shared content | shared content');
+    });
+
     it('should resolve nested JS var files with dot-path varName', async () => {
       const prompt = toPrompt('{{ nested.value }}');
       const vars = {
@@ -1576,6 +1592,31 @@ describe('evaluatorHelpers', () => {
 
       expect(metadata).toEqual({
         'media.photo': {
+          path: 'file://path/to/img.jpg',
+          type: 'image',
+          format: 'jpg',
+        },
+      });
+    });
+
+    it('should collect repeated nested media references at each path', () => {
+      const shared = { photo: 'file://path/to/img.jpg' };
+      const vars = {
+        media: {
+          first: shared,
+          second: shared,
+        },
+      };
+
+      const metadata = collectFileMetadata(vars);
+
+      expect(metadata).toEqual({
+        'media.first.photo': {
+          path: 'file://path/to/img.jpg',
+          type: 'image',
+          format: 'jpg',
+        },
+        'media.second.photo': {
           path: 'file://path/to/img.jpg',
           type: 'image',
           format: 'jpg',

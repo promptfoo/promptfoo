@@ -182,46 +182,57 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
  */
 export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadata {
   const fileMetadata: FileMetadata = {};
-  const visited = new WeakSet<object>();
 
-  function collectFromValue(value: VarValue, metadataKey: string): void {
-    if (typeof value === 'object' && value !== null) {
-      if (visited.has(value as object)) {
+  function collectFromValue(
+    value: VarValue,
+    metadataKey: string,
+    visiting = new WeakSet<object>(),
+  ): void {
+    const objectValue =
+      typeof value === 'object' && value !== null ? (value as object) : undefined;
+    if (objectValue) {
+      if (visiting.has(objectValue)) {
         return;
       }
-      visited.add(value as object);
+      visiting.add(objectValue);
     }
 
-    if (typeof value === 'string' && value.startsWith('file://')) {
-      const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop() || '';
+    try {
+      if (typeof value === 'string' && value.startsWith('file://')) {
+        const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
+        const fileExtension = filePath.split('.').pop() || '';
 
-      if (isImageFile(filePath)) {
-        fileMetadata[metadataKey] = {
-          path: value, // Keep the original file:// notation
-          type: 'image',
-          format: fileExtension,
-        };
-      } else if (isVideoFile(filePath)) {
-        fileMetadata[metadataKey] = {
-          path: value,
-          type: 'video',
-          format: fileExtension,
-        };
-      } else if (isAudioFile(filePath)) {
-        fileMetadata[metadataKey] = {
-          path: value,
-          type: 'audio',
-          format: fileExtension,
-        };
+        if (isImageFile(filePath)) {
+          fileMetadata[metadataKey] = {
+            path: value, // Keep the original file:// notation
+            type: 'image',
+            format: fileExtension,
+          };
+        } else if (isVideoFile(filePath)) {
+          fileMetadata[metadataKey] = {
+            path: value,
+            type: 'video',
+            format: fileExtension,
+          };
+        } else if (isAudioFile(filePath)) {
+          fileMetadata[metadataKey] = {
+            path: value,
+            type: 'audio',
+            format: fileExtension,
+          };
+        }
+      } else if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+          collectFromValue(value[i] as VarValue, `${metadataKey}[${i}]`, visiting);
+        }
+      } else if (isPlainObject(value)) {
+        for (const [key, val] of Object.entries(value)) {
+          collectFromValue(val as VarValue, `${metadataKey}.${key}`, visiting);
+        }
       }
-    } else if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++) {
-        collectFromValue(value[i] as VarValue, `${metadataKey}[${i}]`);
-      }
-    } else if (isPlainObject(value)) {
-      for (const [key, val] of Object.entries(value)) {
-        collectFromValue(val as VarValue, `${metadataKey}.${key}`);
+    } finally {
+      if (objectValue) {
+        visiting.delete(objectValue);
       }
     }
   }
@@ -478,7 +489,7 @@ async function resolveFileRefsInValue(
   basePrompt: string,
   vars: Record<string, VarValue>,
   provider?: ApiProvider,
-  visited?: WeakSet<object>,
+  visited?: WeakMap<object, VarValue>,
 ): Promise<VarValue> {
   if (typeof value === 'string') {
     if (value.startsWith('file://')) {
@@ -491,14 +502,15 @@ async function resolveFileRefsInValue(
   }
 
   if (typeof value === 'object' && value !== null) {
-    const seen = visited ?? new WeakSet<object>();
-    if (seen.has(value as object)) {
-      return value;
+    const seen = visited ?? new WeakMap<object, VarValue>();
+    const existing = seen.get(value as object);
+    if (existing !== undefined) {
+      return existing;
     }
-    seen.add(value as object);
 
     if (Array.isArray(value)) {
       const resolved: VarValue[] = [];
+      seen.set(value as object, resolved as unknown as VarValue);
       for (let i = 0; i < value.length; i++) {
         resolved.push(
           await resolveFileRefsInValue(
@@ -516,6 +528,7 @@ async function resolveFileRefsInValue(
 
     if (isPlainObject(value)) {
       const resolved: Record<string, VarValue> = {};
+      seen.set(value as object, resolved);
       for (const [key, val] of Object.entries(value)) {
         resolved[key] = await resolveFileRefsInValue(
           val as VarValue,
