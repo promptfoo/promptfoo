@@ -256,7 +256,11 @@ export default function EvalsTable({
         cell: ({ getValue }) => {
           const evalId = getValue<string>();
           if (evalId === focusedEvalId) {
-            return <span className="font-mono text-sm">{evalId}</span>;
+            return (
+              <span title={evalId} className="block truncate font-mono text-sm">
+                {evalId}
+              </span>
+            );
           }
           return (
             <Link
@@ -265,7 +269,8 @@ export default function EvalsTable({
                 e.preventDefault();
                 onEvalSelected(evalId);
               }}
-              className="text-primary hover:underline font-mono text-sm"
+              title={evalId}
+              className="block truncate font-mono text-sm text-primary hover:underline"
             >
               {evalId}
             </Link>
@@ -463,6 +468,7 @@ export default function EvalsTable({
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
         initialSorting={[{ id: 'createdAt', desc: true }]}
+        globalFilterLabel="Search evaluations"
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}
         toolbarActions={deleteButton}

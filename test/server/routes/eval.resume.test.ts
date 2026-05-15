@@ -2,7 +2,7 @@
  * Tests for POST /api/eval/:id/resume endpoint.
  *
  * Covers:
- * - C2: 409 when eval is already running
+ * - C2: 409 when a resume job is already active
  * - W1: Sets 'canceled' status when resume fails
  * - Happy path: returns 200 with jobId for incomplete eval
  */
@@ -71,10 +71,27 @@ describe('POST /api/eval/:id/resume', () => {
     expect(response.body).toMatchObject({ success: false, error: 'Eval not found' });
   });
 
-  it('should return 409 when eval is already running (C2)', async () => {
+  it('should allow resuming a stale running eval when no active job exists', async () => {
     const eval_ = await EvalFactory.create();
     eval_.setEvalStatus('running');
     await eval_.save();
+
+    const response = await request(app).post(`/api/eval/${eval_.id}/resume`).send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ success: true });
+  });
+
+  it('should return 409 when a resume job is already active (C2)', async () => {
+    const eval_ = await EvalFactory.create();
+    evalJobs.set('active-resume-job', {
+      evalId: eval_.id,
+      status: 'in-progress',
+      progress: 0,
+      total: 0,
+      result: null,
+      logs: [],
+    });
 
     const response = await request(app).post(`/api/eval/${eval_.id}/resume`).send({});
 
@@ -105,6 +122,33 @@ describe('POST /api/eval/:id/resume', () => {
       expect.any(Eval),
       expect.objectContaining({ eventSource: 'web', resume: true }),
     );
+  });
+
+  it('should mark the eval running before dispatching resume work', async () => {
+    const eval_ = await EvalFactory.create();
+    type ResumeResult = {
+      id: string;
+      toEvaluateSummary: () => Promise<{ version: number; results: unknown[] }>;
+    };
+    let resolveResume!: (value: ResumeResult) => void;
+
+    mockDoEvaluate.mockImplementationOnce(
+      () =>
+        new Promise<ResumeResult>((resolve) => {
+          resolveResume = resolve;
+        }),
+    );
+
+    const response = await request(app).post(`/api/eval/${eval_.id}/resume`).send({});
+
+    expect(response.status).toBe(200);
+    const reloadedEval = await Eval.findById(eval_.id);
+    expect(reloadedEval?.evalStatus).toBe('running');
+
+    resolveResume({
+      id: eval_.id,
+      toEvaluateSummary: vi.fn().mockResolvedValue({ version: 3, results: [] }),
+    });
   });
 
   it('should allow resume for canceled evals', async () => {

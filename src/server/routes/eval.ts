@@ -3,10 +3,10 @@ import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { evaluate as doEvaluate } from '../../evaluator';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
-import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
+import { evaluateWithSource } from '../../node';
 import { EvalIdParamSchema, EvalSchemas } from '../../types/api/eval';
 import { resolveConfigs } from '../../util/config/load';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
@@ -35,12 +35,18 @@ import type {
   PromptMetrics,
   ResultsFile,
   Vars,
-} from '../../index';
+} from '../../types/index';
 
 export const evalRouter = Router();
 
 // Running jobs
 export const evalJobs = new Map<string, Job>();
+
+function hasActiveResumeJob(evalId: string): boolean {
+  return Array.from(evalJobs.values()).some(
+    (job) => job.evalId === evalId && job.status === 'in-progress',
+  );
+}
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
   let parsedPayload: EvalTableDTO;
@@ -157,23 +163,24 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     logs: [],
   });
 
-  promptfoo
-    .evaluate(
-      Object.assign({}, testSuite as EvaluateTestSuite, {
-        writeLatestResults: true,
-        sharing: testSuite.sharing ?? shouldShareResults({}),
-      }),
-      Object.assign({}, evaluateOptions, {
-        eventSource: 'web',
-        progressCallback: (progress: number, total: number) => {
-          const job = evalJobs.get(id);
-          invariant(job, 'Job not found');
-          job.progress = progress;
-          job.total = total;
-          console.log(`[${id}] ${progress}/${total}`);
-        },
-      }),
-    )
+  evaluateWithSource(
+    {
+      ...(testSuite as EvaluateTestSuite),
+      writeLatestResults: true,
+      sharing: testSuite.sharing ?? shouldShareResults({}),
+    },
+    {
+      ...evaluateOptions,
+      eventSource: 'web',
+      progressCallback: (progress: number, total: number) => {
+        const job = evalJobs.get(id);
+        invariant(job, 'Job not found');
+        job.progress = progress;
+        job.total = total;
+        console.log(`[${id}] ${progress}/${total}`);
+      },
+    },
+  )
     .then(async (evalResult) => {
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
@@ -251,21 +258,9 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
       return;
     }
 
-    if (eval_.evalStatus === 'running') {
+    if (hasActiveResumeJob(evalId)) {
       res.status(409).json({ success: false, error: 'Evaluation is already running' });
       return;
-    }
-
-    // Reconstruct test suite from the eval's stored config
-    const { testSuite } = await resolveConfigs({}, eval_.config);
-
-    // Restore prompts from the eval to preserve IDs and ordering
-    if (Array.isArray(eval_.prompts) && eval_.prompts.length > 0) {
-      testSuite.prompts = eval_.prompts.map((p) => ({
-        raw: p.raw,
-        label: p.label,
-        id: p.id,
-      }));
     }
 
     const jobId = crypto.randomUUID();
@@ -277,6 +272,23 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
       result: null,
       logs: [],
     });
+
+    // Reconstruct test suite from the eval's stored config after claiming the resume slot.
+    const { testSuite } = await resolveConfigs({}, eval_.config);
+
+    // Restore prompts from the eval to preserve IDs and ordering
+    if (Array.isArray(eval_.prompts) && eval_.prompts.length > 0) {
+      testSuite.prompts = eval_.prompts.map((p) => ({
+        raw: p.raw,
+        label: p.label,
+        id: p.id,
+      }));
+    }
+
+    // Persist the claim before the evaluator is dispatched so concurrent resume
+    // attempts cannot both observe a non-running eval and launch duplicate work.
+    eval_.setEvalStatus('running');
+    await eval_.save();
 
     // Pass resume as a per-evaluation option to avoid mutating global cliState
     doEvaluate(testSuite, eval_, {
@@ -319,6 +331,12 @@ evalRouter.post('/:id/resume', async (req: Request, res: Response): Promise<void
 
     res.json({ success: true, data: { id: jobId, evalId } });
   } catch (error) {
+    const activeResumeJob = Array.from(evalJobs.entries()).find(
+      ([, job]) => job.evalId === evalId && job.status === 'in-progress',
+    );
+    if (activeResumeJob) {
+      evalJobs.delete(activeResumeJob[0]);
+    }
     logger.error('[Eval] Failed to set up resume', { error, evalId });
     res.status(500).json({ success: false, error: 'Failed to resume evaluation' });
   }
@@ -717,7 +735,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Run the prompt through the provider
-    const result = await promptfoo.evaluate(
+    const result = await evaluateWithSource(
       {
         prompts: [
           {

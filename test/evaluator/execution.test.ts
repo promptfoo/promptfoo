@@ -72,6 +72,53 @@ describeEvaluator('evaluator execution control', () => {
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps raw SVG text available to llm-rubric judges while indexing media metadata', async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('svg-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: svg,
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async (prompt) => {
+        const messages = JSON.parse(String(prompt)) as Array<{ content: string }>;
+        const judgeInput = messages.at(-1)?.content;
+        expect(judgeInput).toContain(svg);
+        expect(judgeInput).not.toContain('promptfoo://blob/');
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'saw raw SVG' }),
+          tokenUsage: createEmptyTokenUsage(),
+        };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Generate SVG')],
+      tests: [
+        {
+          assert: [{ type: 'llm-rubric', value: 'Output should be SVG', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const completedEval = await evaluate(testSuite, evalRecord, {});
+    const results = await completedEval.getResults();
+
+    expect(judge.callApi).toHaveBeenCalledTimes(1);
+    expect(results[0].response).toEqual(
+      expect.objectContaining({
+        output: svg,
+        metadata: expect.objectContaining({
+          blobUris: [expect.stringMatching(/^promptfoo:\/\/blob\/[a-f0-9]{64}$/)],
+        }),
+      }),
+    );
+  });
+
   type ConcurrencyProbe = {
     maxActiveCalls: number;
     callApi: ReturnType<typeof vi.fn>;

@@ -555,7 +555,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
           {selectedTarget.config?.signatureAuth?.certificateType === 'pem' && (
             <div>
               <p className="mb-3 font-medium">PEM Key Input Method</p>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {[
                   { value: 'upload', icon: Upload, label: 'Upload Key', desc: 'Upload PEM file' },
                   { value: 'path', icon: File, label: 'File Path', desc: 'Specify key location' },

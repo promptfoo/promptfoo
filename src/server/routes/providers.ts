@@ -141,6 +141,11 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
   }
   const { requestExample, responseExample } = bodyResult.data;
 
+  if (neverGenerateRemote()) {
+    res.status(400).json({ error: 'Requires remote generation be enabled.' });
+    return;
+  }
+
   const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
 
   try {

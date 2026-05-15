@@ -238,7 +238,7 @@
       "schedule": ["before 6am on Monday"]
     },
     {
-      "description": "LLM provider packages: frequent updates with a short stabilization window",
+      "description": "LLM provider packages: frequent updates with a one-week stabilization window",
       "matchPackagePatterns": [
         "^@anthropic-ai/",
         "^@aws-sdk/client-bedrock",
@@ -256,56 +256,56 @@
       ],
       "schedule": ["every weekday"],
       "rangeStrategy": "bump",
-      "minimumReleaseAge": "2 days"
+      "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Runtime npm deps: wait 5 days before updates",
+      "description": "Runtime npm deps: wait 7 days before updates",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["dependencies"],
-      "minimumReleaseAge": "5 days"
+      "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Dev npm deps: wait 2 days before updates",
+      "description": "Dev npm deps: wait 7 days before updates",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["devDependencies"],
-      "minimumReleaseAge": "2 days"
+      "minimumReleaseAge": "7 days"
     },
     {
-      "description": "Optional npm deps: wait 2 days before updates (same as devDependencies)",
+      "description": "Optional npm deps: wait 7 days before updates (same as devDependencies)",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["optionalDependencies"],
-      "minimumReleaseAge": "2 days"
+      "minimumReleaseAge": "7 days"
     },
     {
-      "description": "npm overrides/resolutions: wait 2 days to match .npmrc min-release-age floor",
+      "description": "npm overrides/resolutions: wait 7 days to match .npmrc min-release-age floor",
       "matchDatasources": ["npm"],
       "matchDepTypes": ["overrides", "pnpm.overrides", "resolutions"],
-      "minimumReleaseAge": "2 days"
+      "minimumReleaseAge": "7 days"
     },
 
     {
       "description": "@opencode-ai/sdk: weekly updates to reduce noise from daily releases",
       "matchPackageNames": ["@opencode-ai/sdk"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "3 days"
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "AWS SDK packages: weekly updates to reduce noise",
       "matchPackagePatterns": ["^@aws-sdk/", "^@smithy/"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "3 days"
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "Biome: weekly updates",
       "matchPackageNames": ["@biomejs/biome"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "3 days"
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "Dev tooling: weekly updates (low urgency)",
       "matchPackageNames": ["hono", "knip"],
       "schedule": ["before 6am on Monday"],
-      "minimumReleaseAge": "3 days"
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "framer-motion: monthly updates (animation library, low urgency)",
