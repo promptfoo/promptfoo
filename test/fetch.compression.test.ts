@@ -3,6 +3,7 @@ import { brotliCompressSync, deflateSync, gzipSync } from 'node:zlib';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { clearAgentCache, fetchWithProxy } from '../src/util/fetch/index';
+import { decompressResponseIfNeeded } from '../src/util/fetch/monkeyPatchFetch';
 import { mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
 type SupportedEncoding = 'br' | 'deflate' | 'gzip';
@@ -174,5 +175,74 @@ describe('fetchWithProxy compressed responses', () => {
 
     expect(response.status).toBe(200);
     expect(JSON.parse(await response.text())).toEqual(payload);
+  });
+});
+
+describe('decompressResponseIfNeeded', () => {
+  // Direct unit coverage for the fallback decoder. The fallback exists because
+  // some Node versions return raw compressed bytes even with the dispatcher's
+  // decompress interceptor composed (observed on Node 26 + Brotli + non-2xx).
+  // These tests fake that situation by constructing Responses that pair a
+  // Content-Encoding header with a compressed (or pre-decoded) body.
+
+  function makeResponse(body: Buffer | string, encoding: string | null, status = 200): Response {
+    const headers = new Headers({ 'content-type': 'application/json' });
+    if (encoding) {
+      headers.set('content-encoding', encoding);
+      headers.set(
+        'content-length',
+        String(typeof body === 'string' ? body.length : body.byteLength),
+      );
+    }
+    return new Response(body as BodyInit, { status, headers });
+  }
+
+  it.each([
+    ['gzip', (raw: Buffer) => gzipSync(raw)],
+    ['x-gzip', (raw: Buffer) => gzipSync(raw)],
+    ['deflate', (raw: Buffer) => deflateSync(raw)],
+    ['br', (raw: Buffer) => brotliCompressSync(raw)],
+  ] as const)('decodes raw %s bodies and strips encoding headers', async (encoding, compress) => {
+    const raw = Buffer.from(JSON.stringify(payload));
+    const response = makeResponse(compress(raw), encoding, 500);
+
+    const decoded = await decompressResponseIfNeeded(response);
+
+    expect(JSON.parse(await decoded.text())).toEqual(payload);
+    expect(decoded.headers.get('content-encoding')).toBeNull();
+    expect(decoded.headers.get('content-length')).toBeNull();
+    expect(decoded.headers.get('content-type')).toBe('application/json');
+    expect(decoded.status).toBe(500);
+  });
+
+  it('returns the original bytes when the body is already decoded', async () => {
+    // Simulates Node's bundled fetch decoding the body but preserving the
+    // Content-Encoding header — the decoder errors on missing magic bytes and
+    // the fallback hands the caller the already-decoded payload.
+    const response = makeResponse(JSON.stringify(payload), 'gzip', 500);
+    const out = await decompressResponseIfNeeded(response);
+    expect(JSON.parse(await out.text())).toEqual(payload);
+  });
+
+  it('is a no-op when no Content-Encoding header is set', async () => {
+    const response = makeResponse(JSON.stringify(payload), null);
+    const out = await decompressResponseIfNeeded(response);
+    expect(out).toBe(response);
+  });
+
+  it('is a no-op for unknown Content-Encoding values', async () => {
+    const response = makeResponse(JSON.stringify(payload), 'identity');
+    const out = await decompressResponseIfNeeded(response);
+    expect(out).toBe(response);
+    expect(out.headers.get('content-encoding')).toBe('identity');
+  });
+
+  it('handles empty bodies without throwing', async () => {
+    const response = new Response(null, {
+      status: 204,
+      headers: { 'content-encoding': 'gzip' },
+    });
+    const out = await decompressResponseIfNeeded(response);
+    expect(out.status).toBe(204);
   });
 });

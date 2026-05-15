@@ -1,5 +1,5 @@
 import { promisify } from 'util';
-import { gzip } from 'zlib';
+import { brotliDecompress, gunzip, gzip, inflate } from 'zlib';
 
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
@@ -8,6 +8,9 @@ import logger, { logRequestResponse } from '../../logger';
 import type { FetchOptions } from './types';
 
 const gzipAsync = promisify(gzip);
+const gunzipAsync = promisify(gunzip);
+const inflateAsync = promisify(inflate);
+const brotliDecompressAsync = promisify(brotliDecompress);
 
 function isConnectionError(error: Error) {
   return (
@@ -16,6 +19,63 @@ function isConnectionError(error: Error) {
     // @ts-expect-error undici error cause
     error.cause?.stack?.includes('internalConnectMultiple')
   );
+}
+
+const SUPPORTED_DECODERS: Record<string, (buf: Buffer) => Promise<Buffer>> = {
+  gzip: gunzipAsync,
+  'x-gzip': gunzipAsync,
+  deflate: inflateAsync,
+  br: brotliDecompressAsync,
+};
+
+/**
+ * Belt-and-suspenders for compressed responses. The pooled dispatchers compose
+ * `interceptors.decompress()`, but on some Node versions (observed on Node 26)
+ * that interceptor skips non-2xx responses and Node's bundled fetch does not
+ * fall back to decoding Brotli over an external dispatcher — callers then see
+ * raw compressed bytes. If the Content-Encoding header survives the fetch and
+ * we recognize the algorithm, attempt to decode; if the body was already
+ * decoded the decoder errors on missing/invalid magic bytes and we hand back
+ * the original payload unchanged.
+ */
+export async function decompressResponseIfNeeded(response: Response): Promise<Response> {
+  const encodingHeader = response.headers.get('content-encoding');
+  if (!encodingHeader || !response.body) {
+    return response;
+  }
+  const decode = SUPPORTED_DECODERS[encodingHeader.toLowerCase()];
+  if (!decode) {
+    return response;
+  }
+
+  const raw = Buffer.from(await response.arrayBuffer());
+  if (raw.length === 0) {
+    return response;
+  }
+
+  let decoded: Buffer;
+  try {
+    decoded = await decode(raw);
+  } catch {
+    return new Response(toArrayBuffer(raw), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  }
+
+  const headers = new Headers(response.headers);
+  headers.delete('content-encoding');
+  headers.delete('content-length');
+  return new Response(toArrayBuffer(decoded), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function toArrayBuffer(buf: Buffer): ArrayBuffer {
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
 /**
@@ -69,7 +129,8 @@ export async function monkeyPatchFetch(
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
-    const response = await fetch(url, opts);
+    const rawResponse = await fetch(url, opts);
+    const response = await decompressResponseIfNeeded(rawResponse);
 
     if (logEnabled) {
       void logRequestResponse({
