@@ -285,15 +285,13 @@ type PreparedFetchResponse = {
 
 const inflightFetchResponses = new Map<string, Promise<SerializedFetchResponse>>();
 const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
-// Headers that describe the client/runtime rather than the request semantics.
-// Excluded from cache keys so caches stay portable across SDK upgrades, Node
-// versions, and OS/arch. `x-promptfoo-version` is intentionally kept in the
-// key so promptfoo upgrades remain a deliberate invalidation boundary.
-const CACHE_KEY_IGNORED_HEADERS = new Set([
-  'accept',
-  'accept-encoding',
-  'user-agent',
-]);
+// Headers that describe the transport/runtime rather than the selected
+// representation. Excluded from cache keys so caches stay portable across SDK
+// upgrades, Node versions, and OS/arch. `accept` intentionally stays in the
+// key because shared fetch callers can legitimately negotiate different
+// response formats for the same URL/body. `x-promptfoo-version` is also kept in
+// the key so promptfoo upgrades remain a deliberate invalidation boundary.
+const CACHE_KEY_IGNORED_HEADERS = new Set(['accept-encoding', 'user-agent']);
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 

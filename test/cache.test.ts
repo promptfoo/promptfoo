@@ -996,7 +996,7 @@ describe('fetchWithCache', () => {
       }
     });
 
-    it('should ignore SDK telemetry and content-negotiation headers in cache keys', async () => {
+    it('should ignore SDK telemetry and transport headers in cache keys', async () => {
       mockFetchWithRetries.mockResolvedValueOnce(
         mockFetchWithRetriesResponse(true, { data: 'telemetry-ignored' }),
       );
@@ -1019,7 +1019,6 @@ describe('fetchWithCache', () => {
           headers: {
             Authorization: 'Bearer same-token',
             'Content-Type': 'application/json',
-            accept: 'application/json',
             'accept-encoding': 'gzip, deflate',
             'user-agent': 'OpenAI/JS 6.37.0',
             'x-stainless-arch': 'arm64',
@@ -1042,6 +1041,41 @@ describe('fetchWithCache', () => {
         cached: true,
         data: { data: 'telemetry-ignored' },
       });
+    });
+
+    it('should isolate cached responses when Accept differs', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'json' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'csv' }));
+
+      const jsonResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            Accept: 'application/json',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const csvResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            Accept: 'text/csv',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(jsonResult.data).toEqual({ data: 'json' });
+      expect(csvResult.data).toEqual({ data: 'csv' });
     });
 
     it('should still isolate cached responses when semantic headers differ', async () => {
