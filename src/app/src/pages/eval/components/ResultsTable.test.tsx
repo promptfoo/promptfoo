@@ -4197,7 +4197,7 @@ describe('ResultsTable - Auto-hide empty prompt columns', () => {
   };
 
   const localRender = (ui: React.ReactElement) => {
-    return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
+    return renderWithProviders(ui);
   };
 
   it('hides prompt columns with zero results when filteredMetrics is present', () => {

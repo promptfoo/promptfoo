@@ -1511,15 +1511,17 @@ function ResultsTable({
         visibility[colId] = false;
       }
     });
-    // Safety net: don't hide ALL prompt columns (e.g. backend error returning all-zero metrics)
+    // Safety net: don't hide ALL prompt columns while filtered rows still exist
+    // (e.g. backend error returning all-zero metrics). When a filter yields no rows,
+    // hiding the empty prompt columns is the intended behavior.
     const allPromptsHidden = head.prompts.every(
       (_, idx) => visibility[`Prompt ${idx + 1}`] === false,
     );
-    if (allPromptsHidden && head.prompts.length > 0) {
+    if (allPromptsHidden && head.prompts.length > 0 && filteredResultsCount > 0) {
       return columnVisibility;
     }
     return visibility;
-  }, [columnVisibility, head.prompts, filteredMetrics]);
+  }, [columnVisibility, filteredMetrics, filteredResultsCount, head.prompts]);
 
   const visiblePromptCount = React.useMemo(
     () =>
