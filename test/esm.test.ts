@@ -237,10 +237,7 @@ describe('ESM utilities', () => {
     });
 
     it('sets error.cause with both ESM and CJS errors when combined error is thrown', async () => {
-      const modulePath = path.resolve(
-        testDir,
-        '__fixtures__/testModuleCjsFallbackFailure.js',
-      );
+      const modulePath = path.resolve(testDir, '__fixtures__/testModuleCjsFallbackFailure.js');
 
       let combinedError: Error | undefined;
       try {
@@ -254,9 +251,7 @@ describe('ESM utilities', () => {
       expect(combinedError?.message).toContain('ESM import error');
       expect(combinedError?.message).toContain('CJS fallback error');
 
-      const cause = combinedError?.cause as
-        | { esmError?: unknown; cjsError?: unknown }
-        | undefined;
+      const cause = combinedError?.cause as { esmError?: unknown; cjsError?: unknown } | undefined;
       expect(cause?.esmError).toBeInstanceOf(Error);
       expect(cause?.cjsError).toBeInstanceOf(Error);
       expect((cause?.esmError as Error).message).toContain('require is not defined');
