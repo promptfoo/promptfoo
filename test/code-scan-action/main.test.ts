@@ -404,7 +404,7 @@ describe('code-scan-action main', () => {
       });
     });
 
-    it('should use the repository code-scan config before generating a temporary config', async () => {
+    it('should keep using generated action-input config even when the workspace contains a repo config', async () => {
       const repositoryConfigPath = path.resolve('/test/workspace', '.promptfoo-code-scan.yaml');
       mocks.fs.existsSync.mockImplementation((candidatePath: string) => {
         return candidatePath === repositoryConfigPath;
@@ -412,9 +412,11 @@ describe('code-scan-action main', () => {
 
       const { args } = await importActionAndGetPromptfooCall();
 
-      expectCliArg(args, '--config', repositoryConfigPath);
-      expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
-      expect(mocks.fs.unlinkSync).not.toHaveBeenCalled();
+      expectCliArg(args, '--config', '/tmp/test-config.yaml');
+      expect(mocks.config.generateConfigFile).toHaveBeenCalledWith('medium', undefined, false);
+      await vi.waitFor(() => {
+        expect(mocks.fs.unlinkSync).toHaveBeenCalledWith('/tmp/test-config.yaml');
+      });
     });
 
     it('should pass an explicit config-path through without generating or deleting a temp config', async () => {

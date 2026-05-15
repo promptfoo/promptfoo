@@ -182,13 +182,6 @@ function resolveConfigPath(
     return { path: configPath, shouldCleanup: false };
   }
 
-  const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
-  const repositoryConfigPath = path.join(workspace, '.promptfoo-code-scan.yaml');
-  if (fs.existsSync(repositoryConfigPath)) {
-    core.info(`📝 Using repository config at ${repositoryConfigPath}`);
-    return { path: repositoryConfigPath, shouldCleanup: false };
-  }
-
   const generatedConfigPath = generateConfigFile(minimumSeverity, guidance, diffsOnly);
   core.info(`📝 Generated temporary config at ${generatedConfigPath}`);
   return { path: generatedConfigPath, shouldCleanup: true };

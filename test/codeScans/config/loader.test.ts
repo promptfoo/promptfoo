@@ -234,6 +234,23 @@ describe('Configuration Loader', () => {
       });
     });
 
+    it('should discover the repository-root code-scan config from a nested working directory', () => {
+      fs.mkdirSync(path.join(tempDir, '.git'));
+
+      const nestedRepoPath = path.join(tempDir, 'packages', 'api');
+      fs.mkdirSync(nestedRepoPath, { recursive: true });
+
+      const configPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
+      fs.writeFileSync(configPath, 'minimumSeverity: critical\ndiffsOnly: true');
+
+      const config = loadConfigOrDefault(undefined, nestedRepoPath);
+
+      expect(config).toEqual({
+        minimumSeverity: CodeScanSeverity.CRITICAL,
+        diffsOnly: true,
+      });
+    });
+
     it('should prefer an explicit config path over the repository default config', () => {
       const repositoryConfigPath = path.join(tempDir, '.promptfoo-code-scan.yaml');
       fs.writeFileSync(repositoryConfigPath, 'minimumSeverity: low\ndiffsOnly: false');

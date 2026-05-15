@@ -106,7 +106,7 @@ SARIF output includes location-backed findings that GitHub Code Scanning can dis
 
 ## Configuration File
 
-Create `.promptfoo-code-scan.yaml` in the repository root to have the CLI pick it up automatically. Use `--config <path>` when you want to load a different file.
+Create `.promptfoo-code-scan.yaml` in the repository root to have the CLI pick it up automatically, including when the command starts in a nested directory inside that repository. Use `--config <path>` when you want to load a different file.
 
 ```yaml
 # Minimum severity level to report (low|medium|high|critical); defaults to medium

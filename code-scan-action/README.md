@@ -12,7 +12,7 @@ After scanning, the action posts findings with severity levels and suggested fix
 
 To also surface findings in GitHub Code Scanning, configure `sarif-output-path` and upload the generated file with `github/codeql-action/upload-sarif`.
 
-By default, the action scans the pull request diff with repository tracing enabled so the scanner can inspect surrounding code paths. Set `diffs-only: true` when you want to restrict analysis to the changed hunks only. If `.promptfoo-code-scan.yaml` exists in the repository root, the action uses it automatically; `config-path` can point at a different config file.
+By default, the action scans the pull request diff with repository tracing enabled so the scanner can inspect surrounding code paths. Set `diffs-only: true` when you want to restrict analysis to the changed hunks only. To use a checked-in `.promptfoo-code-scan.yaml`, pass it explicitly with `config-path`; once `config-path` is set, that file supplies the scan settings instead of the generated action-input defaults.
 
 ## Quick Start
 

@@ -12,13 +12,13 @@ inputs:
     required: false
     default: https://api.promptfoo.app
   min-severity:
-    description: 'Minimum severity level to report (low|medium|high|critical)'
+    description: 'Minimum severity level to report (low|medium|high|critical); defaults to medium when neither severity alias is set'
     required: false
   minimum-severity:
-    description: 'Alias for min-severity (low|medium|high|critical)'
+    description: 'Alias for min-severity (low|medium|high|critical); defaults to medium when neither severity alias is set'
     required: false
   config-path:
-    description: 'Path to YAML configuration file'
+    description: 'Path to YAML configuration file; when set, the file supplies scan settings instead of generated action-input defaults'
     required: false
   diffs-only:
     description: 'Scan only PR diffs instead of tracing into surrounding repository context'
