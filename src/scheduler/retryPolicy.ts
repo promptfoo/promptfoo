@@ -1,3 +1,5 @@
+import { isHttpRateLimitError, isTransientConnectionError } from '../util/fetch/errors';
+
 export interface RetryPolicy {
   maxRetries: number;
   baseDelayMs: number;
@@ -50,19 +52,31 @@ export function shouldRetry(
     return false;
   }
 
+  // Hard quotas (insufficient_quota, billing_hard_limit_reached, …) won't
+  // resolve on retry — retrying just amplifies load against an exhausted
+  // account. The transport already fails fast, but isRateLimited may
+  // still be true via substring match, so check the structured signal
+  // before the rate-limit retry path.
+  if (isHttpRateLimitError(error) && error.kind === 'quota') {
+    return false;
+  }
+
   // Always retry rate limits (up to max)
   if (isRateLimited) {
     return true;
   }
 
-  // Retry transient errors
+  // Retry transient errors.
+  // isTransientConnectionError covers TLS/socket-level failures (bad record
+  // mac, EPROTO, ECONNRESET, socket hang up).  The inline patterns below
+  // cover higher-level transient failures (DNS, HTTP status codes, timeouts)
+  // that are distinct from those low-level connection errors.
   if (error) {
     const message = (error.message ?? '').toLowerCase();
     return (
+      isTransientConnectionError(error) ||
       message.includes('timeout') ||
-      message.includes('econnreset') ||
       message.includes('econnrefused') ||
-      message.includes('socket hang up') ||
       message.includes('network') ||
       message.includes('503') ||
       message.includes('502') ||

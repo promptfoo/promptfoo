@@ -1,16 +1,17 @@
 import { createHash } from 'crypto';
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { z } from 'zod';
-import { disableCache } from '../../cache';
+import { withCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import {
   checkEmailStatusAndMaybeExit,
+  EmailValidationError,
   getAuthor,
   getUserEmail,
   promptForEmailUnverified,
@@ -29,12 +30,18 @@ import {
   isCloudProvider,
   resolveTeamId,
 } from '../../util/cloud';
-import { resolveConfigs } from '../../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
+import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
 import { printBorder, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
 import { promptfooCommand } from '../../util/promptfooCommand';
+import { checkRedteamProbeLimit, MONTHLY_PROBE_LIMIT } from '../../util/redteamProbeLimit';
 import { isUuid } from '../../util/uuid';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
 import {
@@ -47,10 +54,10 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { synthesize } from '../index';
+import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
-import { PartialGenerationError } from '../types';
+import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -105,8 +112,35 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
   );
 }
 
-function getConfigHash(configPath: string): string {
-  const content = fs.readFileSync(configPath, 'utf8');
+function getNoTestCasesGeneratedMessage(strategies: RedteamStrategyObject[]): string {
+  const basicStrategy = strategies.find((strategy) => strategy.id === 'basic');
+  const basicDisabled = basicStrategy?.config?.enabled === false;
+
+  if (!basicDisabled) {
+    return 'No test cases generated. Please check for errors and try again.';
+  }
+
+  const activeStrategies = strategies.filter(
+    (strategy) => !(strategy.id === 'basic' && strategy.config?.enabled === false),
+  );
+
+  if (activeStrategies.length === 0) {
+    return dedent`
+      No final test cases were generated because the Basic strategy is disabled and no other strategies are selected.
+
+      The Basic strategy runs plugin-generated test cases as-is. Enable Basic to run your configured plugin tests directly, or select another strategy to transform them.
+    `;
+  }
+
+  return dedent`
+    No final test cases were generated. The Basic strategy is disabled, so plugin-generated test cases are excluded unless another selected strategy creates replacement tests.
+
+    Enable Basic to include plugin tests as-is, or review the selected strategies for generation errors.
+  `;
+}
+
+async function getConfigHash(configPath: string): Promise<string> {
+  const content = await fs.readFile(configPath, 'utf8');
   return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
 }
 
@@ -150,13 +184,46 @@ function createHeaderComments({
   ].filter(Boolean) as string[];
 }
 
+async function withGenerationConcurrency<T>(
+  maxConcurrency: number,
+  delay: number | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const cappedMaxConcurrency = Math.min(maxConcurrency, MAX_MAX_CONCURRENCY);
+  const effectiveMaxConcurrency = delay !== undefined && delay > 0 ? 1 : cappedMaxConcurrency;
+  return cliState.withMaxConcurrency(effectiveMaxConcurrency, fn);
+}
+
 export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
   setupEnv(options.envFile);
-  if (!options.cache) {
+  const cacheOverride = options.cache === false ? false : undefined;
+  if (cacheOverride === false) {
     logger.info('Cache is disabled');
-    disableCache();
+  }
+
+  return withCacheEnabled(cacheOverride, () => doGenerateRedteamInternal(options));
+}
+
+async function doGenerateRedteamInternal(
+  options: Partial<RedteamCliGenerateOptions>,
+): Promise<Partial<UnifiedConfig> | null> {
+  // Check monthly probe limit for non-cloud users
+  const probeLimitResult = checkRedteamProbeLimit();
+  if (!probeLimitResult.withinLimit) {
+    logger.error(dedent`
+      ${chalk.red.bold('Monthly probe limit reached')}
+
+      You've used ${chalk.bold(probeLimitResult.used.toLocaleString())} of your ${chalk.bold(MONTHLY_PROBE_LIMIT.toLocaleString())} free monthly probes.
+
+      To continue, please log in to Promptfoo Cloud:
+
+        ${chalk.cyan('promptfoo auth login')}
+
+      For enterprise plans, contact ${chalk.cyan('inquiries@promptfoo.dev')}
+    `);
+    throw new ProbeLimitExceededError(probeLimitResult.used, MONTHLY_PROBE_LIMIT);
   }
 
   let testSuite: TestSuite;
@@ -171,39 +238,33 @@ export async function doGenerateRedteam(
     // Write configFromCloud to a temporary file
     const filename = `redteam-generate-${Date.now()}.yaml`;
     const tmpFile = path.join('', filename);
-    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
-    fs.writeFileSync(tmpFile, yaml.dump(options.configFromCloud));
+    await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+    await fs.writeFile(tmpFile, yaml.dump(options.configFromCloud));
     configPath = tmpFile;
     logger.debug(`Using Promptfoo Cloud-originated config at ${tmpFile}`);
   }
 
-  // Check for updates to the config file and decide whether to generate
-  let shouldGenerate = options.force || options.configFromCloud; // Always generate for live configs
+  // Skip generation when a YAML output already matches the current config hash.
   if (
     !options.force &&
     !options.configFromCloud &&
-    fs.existsSync(outputPath) &&
+    !outputPath.endsWith('.burp') &&
+    (await pathExists(outputPath)) &&
     configPath &&
-    fs.existsSync(configPath)
+    (await pathExists(configPath))
   ) {
-    // Skip hash check for .burp files since they're not YAML
-    if (!outputPath.endsWith('.burp')) {
-      const redteamContent = yaml.load(
-        fs.readFileSync(outputPath, 'utf8'),
-      ) as Partial<UnifiedConfig>;
-      const storedHash = redteamContent.metadata?.configHash;
-      const currentHash = getConfigHash(configPath);
+    const redteamContent = yaml.load(
+      await fs.readFile(outputPath, 'utf8'),
+    ) as Partial<UnifiedConfig>;
+    const storedHash = redteamContent.metadata?.configHash;
+    const currentHash = await getConfigHash(configPath);
 
-      shouldGenerate = storedHash !== currentHash;
-      if (!shouldGenerate) {
-        logger.warn(
-          'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
-        );
-        return redteamContent;
-      }
+    if (storedHash === currentHash) {
+      logger.warn(
+        'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
+      );
+      return redteamContent;
     }
-  } else {
-    shouldGenerate = true;
   }
 
   let pluginSeverityOverrides: Map<Plugin, Severity> = new Map();
@@ -438,20 +499,29 @@ export async function doGenerateRedteam(
   // Read inputs from the first target/provider
   const targetInputs = testSuite.providers[0]?.inputs;
 
+  const explicitMaxConcurrency =
+    options.maxConcurrency ??
+    redteamConfig?.maxConcurrency ??
+    commandLineOptions?.maxConcurrency ??
+    resolvedConfig?.evaluateOptions?.maxConcurrency;
+
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
     // Multi-variable inputs for test case generation (read from target)
     inputs: targetInputs,
     language: redteamConfig?.language || options.language,
-    maxConcurrency:
-      options.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
+    maxConcurrency: explicitMaxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
     numTests: redteamConfig?.numTests ?? options.numTests,
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose ?? options.purpose,
     strategies: strategyObjs,
-    delay: redteamConfig?.delay || options.delay || commandLineOptions?.delay,
+    delay:
+      options.delay ??
+      redteamConfig?.delay ??
+      commandLineOptions?.delay ??
+      resolvedConfig?.evaluateOptions?.delay,
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
@@ -506,7 +576,7 @@ export async function doGenerateRedteam(
   // Check for contexts - if present, generate tests for each context
   const contexts = redteamConfig?.contexts;
   let redteamTests: any[] = [];
-  let purpose: string = enhancedPurpose;
+  let purpose: string;
   let entities: string[] = [];
   let finalInjectVar: string = '';
   let failedPlugins: { pluginId: string; requested: number }[] = [];
@@ -523,19 +593,24 @@ export async function doGenerateRedteam(
 
       const contextPurpose = context.purpose + (enhancedPurpose ? `\n\n${enhancedPurpose}` : '');
 
-      const contextResult = await synthesize({
-        ...parsedConfig.data,
-        inputs: targetInputs,
-        purpose: contextPurpose,
-        numTests: config.numTests,
-        prompts: testSuite.prompts.map((prompt) => prompt.raw),
-        maxConcurrency: config.maxConcurrency,
-        delay: config.delay,
-        abortSignal: options.abortSignal,
-        targetIds,
-        showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: augmentedTestGenerationInstructions,
-      } as SynthesizeOptions);
+      const contextResult = await withGenerationConcurrency(
+        config.maxConcurrency,
+        config.delay,
+        () =>
+          synthesize({
+            ...parsedConfig.data,
+            inputs: targetInputs,
+            purpose: contextPurpose,
+            numTests: config.numTests,
+            prompts: testSuite.prompts.map((prompt) => prompt.raw),
+            maxConcurrency: config.maxConcurrency,
+            delay: config.delay,
+            abortSignal: options.abortSignal,
+            targetIds,
+            showProgressBar: options.progressBar !== false,
+            testGenerationInstructions: augmentedTestGenerationInstructions,
+          } as SynthesizeOptions),
+      );
 
       // Collect failed plugins from this context
       if (contextResult.failedPlugins.length > 0) {
@@ -579,19 +654,21 @@ export async function doGenerateRedteam(
     );
   } else {
     // Single purpose mode (existing behavior)
-    const result = await synthesize({
-      ...parsedConfig.data,
-      inputs: targetInputs,
-      purpose: enhancedPurpose,
-      numTests: config.numTests,
-      prompts: testSuite.prompts.map((prompt) => prompt.raw),
-      maxConcurrency: config.maxConcurrency,
-      delay: config.delay,
-      abortSignal: options.abortSignal,
-      targetIds,
-      showProgressBar: options.progressBar !== false,
-      testGenerationInstructions: augmentedTestGenerationInstructions,
-    } as SynthesizeOptions);
+    const result = await withGenerationConcurrency(config.maxConcurrency, config.delay, () =>
+      synthesize({
+        ...parsedConfig.data,
+        inputs: targetInputs,
+        purpose: enhancedPurpose,
+        numTests: config.numTests,
+        prompts: testSuite.prompts.map((prompt) => prompt.raw),
+        maxConcurrency: config.maxConcurrency,
+        delay: config.delay,
+        abortSignal: options.abortSignal,
+        targetIds,
+        showProgressBar: options.progressBar !== false,
+        testGenerationInstructions: augmentedTestGenerationInstructions,
+      } as SynthesizeOptions),
+    );
 
     redteamTests = result.testCases;
     purpose = result.purpose;
@@ -628,7 +705,7 @@ export async function doGenerateRedteam(
     handleFailedPlugins(failedPlugins, options.strict ?? false);
 
     if (redteamTests.length === 0) {
-      logger.warn('No test cases generated. Please check for errors and try again.');
+      logger.warn(getNoTestCasesGeneratedMessage(strategyObjs));
       return null;
     }
 
@@ -654,7 +731,7 @@ export async function doGenerateRedteam(
         })
         .filter((line) => line.length > 0)
         .join('\n');
-      fs.writeFileSync(options.output, outputLines);
+      await fs.writeFile(options.output, outputLines);
       logger.info(
         chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
       );
@@ -662,7 +739,7 @@ export async function doGenerateRedteam(
       return {};
     } else if (options.output) {
       const existingYaml = configPath
-        ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
+        ? (yaml.load(await fs.readFile(configPath, 'utf8')) as Partial<UnifiedConfig>)
         : {};
       const existingDefaultTest =
         typeof existingYaml.defaultTest === 'object' ? existingYaml.defaultTest : {};
@@ -682,7 +759,7 @@ export async function doGenerateRedteam(
         metadata: {
           ...(existingYaml.metadata || {}),
           ...(configPath && redteamTests.length > 0
-            ? { configHash: getConfigHash(configPath) }
+            ? { configHash: await getConfigHash(configPath) }
             : { configHash: 'force-regenerate' }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
@@ -720,7 +797,7 @@ export async function doGenerateRedteam(
       printBorder();
     } else if (options.write && configPath) {
       const existingConfig = yaml.load(
-        fs.readFileSync(configPath, 'utf8'),
+        await fs.readFile(configPath, 'utf8'),
       ) as Partial<UnifiedConfig>;
       const existingTests = existingConfig.tests;
       let testsArray: any[] = [];
@@ -747,7 +824,7 @@ export async function doGenerateRedteam(
       // Add the config hash to metadata
       existingConfig.metadata = {
         ...(existingConfig.metadata || {}),
-        configHash: getConfigHash(configPath),
+        configHash: await getConfigHash(configPath),
       };
       const author = getAuthor();
       const userEmail = getUserEmail();
@@ -976,7 +1053,13 @@ export function redteamGenerateCommand(
           error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
-        } else {
+        } else if (error instanceof ConfigResolutionError) {
+          logConfigResolutionError(error);
+        } else if (
+          !(error instanceof EmailValidationError) &&
+          !(error instanceof ProbeLimitExceededError)
+        ) {
+          // These expected failures are already logged by their helpers.
           // Log the stack trace, which already includes the error message
           logger.error(
             error instanceof Error && error.stack

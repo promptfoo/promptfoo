@@ -1,3 +1,6 @@
+import * as React from 'react';
+
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -29,9 +32,16 @@ vi.mock('./FilterModeProvider', () => ({
   }),
 }));
 vi.mock('./ResultsView', () => ({
-  default: ({ defaultEvalId }: { defaultEvalId: string }) => (
-    <div data-testid="results-view" data-default-eval-id={defaultEvalId} />
-  ),
+  default: ({ defaultEvalId }: { defaultEvalId: string }) => {
+    const [mountId] = React.useState(() => Math.random().toString(36).slice(2));
+    return (
+      <div
+        data-testid="results-view"
+        data-default-eval-id={defaultEvalId}
+        data-mount-id={mountId}
+      />
+    );
+  },
 }));
 vi.mock('@app/components/EnterpriseBanner', () => ({
   default: () => null,
@@ -119,7 +129,7 @@ describe('Eval', () => {
     baseMockResultsViewSettings.setComparisonEvalIds.mockClear();
     mockShowToast.mockClear();
 
-    vi.useFakeTimers();
+    useTestTimers();
 
     // Use stable mock to prevent infinite loops
     vi.mocked(useResultsViewSettingsStore).mockReturnValue(baseMockResultsViewSettings);
@@ -130,8 +140,7 @@ describe('Eval', () => {
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    restoreTestTimers({ runPending: true });
   });
 
   it('should call resetFilters when mounted with a new fetchId', async () => {
@@ -302,6 +311,42 @@ describe('Eval', () => {
 
     // Should show results view when table exists
     expect(queryByTestId('results-view')).toBeInTheDocument();
+  });
+
+  it('should preserve the ResultsView instance when navigating between evals', async () => {
+    let tableStoreValue = {
+      ...baseMockTableStore,
+      table: mockTable,
+      evalId: 'eval-1',
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+
+    const { getByTestId, rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="eval-1" />
+      </MemoryRouter>,
+    );
+
+    const firstMountId = getByTestId('results-view').getAttribute('data-mount-id');
+    expect(firstMountId).toBeTruthy();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      evalId: 'eval-2',
+    };
+
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+      );
+    });
+
+    const secondMountId = getByTestId('results-view').getAttribute('data-mount-id');
+    expect(secondMountId).toBeTruthy();
+    expect(secondMountId).toBe(firstMountId);
   });
 
   it('should show error state when loadEvalById fails', async () => {

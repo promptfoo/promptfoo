@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, shouldRetry } from '../../src/scheduler/retryPolicy';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 
 describe('getRetryDelay', () => {
   const policy = { ...DEFAULT_RETRY_POLICY, jitterFactor: 0 }; // No jitter for predictable tests
@@ -90,5 +91,41 @@ describe('shouldRetry', () => {
     const error = new Error('ECONNRESET');
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);
+  });
+
+  it('should retry on bad record mac error', () => {
+    const error = new Error('bad record mac');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
+
+  it('should retry on EPROTO error', () => {
+    const error = new Error('write EPROTO 00000000:error:0A000126');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
+
+  it('should not retry on permanent certificate errors', () => {
+    const error = new Error('self signed certificate');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(false);
+  });
+
+  it('should not retry HttpRateLimitError with kind="quota" even when isRateLimited=true', () => {
+    // The transport-level fail-fast must not be undermined by the
+    // scheduler's retry-on-429 logic. Without this, a hard quota would
+    // get amplified by `policy.maxRetries` calls against an exhausted
+    // account.
+    const error = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
+    expect(shouldRetry(0, error, true, DEFAULT_RETRY_POLICY)).toBe(false);
+  });
+
+  it('should retry HttpRateLimitError with kind="rate_limit"', () => {
+    const error = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      retryAfterMs: 5000,
+    });
+    expect(shouldRetry(0, error, true, DEFAULT_RETRY_POLICY)).toBe(true);
   });
 });

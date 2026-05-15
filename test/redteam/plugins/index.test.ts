@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
+import logger from '../../../src/logger';
 import {
   ADDITIONAL_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
+  CANARY_BREAKING_STRATEGY_IDS,
   HARM_PLUGINS,
   PII_PLUGINS,
   REDTEAM_PROVIDER_HARM_PLUGINS,
@@ -13,9 +15,14 @@ import {
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 import type { FetchWithCacheResult } from '../../../src/cache';
-import type { ApiProvider, TestCase } from '../../../src/types/index';
+import type { TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/cliState', () => ({
@@ -53,16 +60,15 @@ function mockFetchResponse(result: any[]): FetchWithCacheResult<unknown> {
 }
 
 describe('Plugins', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: vi.fn().mockResolvedValue({
+    mockProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Sample output',
-        error: null,
+        error: null as any,
       }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    });
 
     // Reset all mocks
     vi.clearAllMocks();
@@ -125,6 +131,7 @@ describe('Plugins', () => {
         'religion',
         'ssrf',
         'indirect-prompt-injection',
+        'rag-poisoning',
       ];
 
       remotePluginKeys.forEach((key) => {
@@ -154,6 +161,109 @@ describe('Plugins', () => {
       expect(() => indirectPlugin?.validate?.({})).toThrow(
         'Indirect prompt injection plugin requires `config.indirectInjectionVar` to be set',
       );
+    });
+
+    it('should validate rag-poisoning plugin config', async () => {
+      const ragPlugin = Plugins.find((p) => p.key === 'rag-poisoning');
+      expect(() => ragPlugin?.validate?.({})).toThrow('config.intendedResults');
+      expect(() => ragPlugin?.validate?.({ intendedResults: [] })).toThrow(
+        'config.intendedResults',
+      );
+    });
+  });
+
+  describe('max chars retries', () => {
+    it('should retry oversized local PII generations', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.spyOn(mockProvider, 'callApi')
+        .mockResolvedValueOnce({
+          output: 'Prompt: this prompt is too long\nPrompt: tiny',
+          error: undefined,
+        })
+        .mockResolvedValueOnce({
+          output: 'Prompt: short',
+          error: undefined,
+        });
+
+      const plugin = Plugins.find((p) => p.key === 'pii:direct');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 2,
+        config: { maxCharsPerMessage: 10 },
+        delayMs: 0,
+      });
+
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('Generate replacement prompts only'),
+      );
+      expect(result?.map((testCase) => testCase.vars?.testVar).sort()).toEqual(['short', 'tiny']);
+    });
+
+    it('should retry oversized remote generations and strip retry modifiers from metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce(
+          mockFetchResponse([
+            {
+              vars: { testVar: 'this prompt is too long' },
+            },
+          ]),
+        )
+        .mockResolvedValueOnce(
+          mockFetchResponse([
+            {
+              vars: { testVar: 'short' },
+            },
+          ]),
+        );
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {
+          modifiers: {
+            maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+
+      const retryRequestBody = JSON.parse((vi.mocked(fetchWithCache).mock.calls[1][1] as any).body);
+      expect(retryRequestBody.config.modifiers.__maxCharsPerMessageRetry).toContain(
+        'Generate replacement prompts only',
+      );
+
+      expect(result).toEqual([
+        {
+          vars: { testVar: 'short' },
+          metadata: {
+            pluginId: 'ssrf',
+            pluginConfig: {
+              modifiers: {
+                maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
+              },
+            },
+          },
+        },
+      ]);
     });
   });
 
@@ -213,6 +323,256 @@ describe('Plugins', () => {
       );
       expect(result).toEqual([
         { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
+      ]);
+    });
+
+    it('should strip graderExamples from remote generation request but preserve in metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      const mockResponse = {
+        data: { result: [{ vars: { testVar: 'test content' } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const graderExamples = [
+        { output: 'safe response', pass: true, score: 1, reason: 'Correctly refused' },
+        { output: 'unsafe response', pass: false, score: 0, reason: 'Should have refused' },
+      ];
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {
+          graderExamples,
+          language: 'en',
+        },
+        delayMs: 0,
+      });
+
+      // Verify graderExamples are NOT in the request body sent to server
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const requestBody = JSON.parse((callArgs[1] as any).body);
+      expect(requestBody.config).not.toHaveProperty('graderExamples');
+      expect(requestBody.config).toHaveProperty('language', 'en');
+
+      // Verify graderExamples ARE preserved in the returned test case metadata
+      expect(result).toHaveLength(1);
+      expect(result![0].metadata?.pluginConfig).toHaveProperty('graderExamples', graderExamples);
+      expect(result![0].metadata?.pluginConfig).toHaveProperty('language', 'en');
+    });
+
+    it('should accept server-materialized multi-input remote generation results', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          materializationHandled: true,
+          result: [
+            {
+              metadata: {
+                inputMaterialization: {
+                  document: {
+                    injectionPlacement: 'comment',
+                    wrapperSummary: 'Internal planning memo with reviewer note.',
+                  },
+                },
+              },
+              vars: {
+                document:
+                  'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+                testVar: '{"document":"Summarize the reviewer notes."}',
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {
+          inputs: {
+            document: {
+              description: 'Uploaded planning document',
+              type: 'docx',
+            },
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([
+        {
+          metadata: {
+            inputMaterialization: {
+              document: {
+                injectionPlacement: 'comment',
+                wrapperSummary: 'Internal planning memo with reviewer note.',
+              },
+            },
+            pluginConfig: {
+              inputs: {
+                document: {
+                  description: 'Uploaded planning document',
+                  type: 'docx',
+                },
+              },
+              modifiers: expect.objectContaining({
+                __outputFormat: expect.stringContaining('<Prompt>'),
+              }),
+            },
+            pluginId: 'ssrf',
+          },
+          vars: {
+            document:
+              'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+            testVar: '{"document":"Summarize the reviewer notes."}',
+          },
+        },
+      ]);
+    });
+
+    it('should fail fast when remote multi-input generation hits an older server', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [
+            {
+              vars: {
+                testVar: '{"document":"Summarize the reviewer notes."}',
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {
+            inputs: {
+              document: {
+                description: 'Uploaded planning document',
+                type: 'docx',
+              },
+            },
+          },
+          delayMs: 0,
+        }),
+      ).resolves.toEqual([]);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Remote plugin generation for ssrf requires remote multi-input materialization support from a newer Promptfoo server.',
+        ),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('http://test-url'));
+    });
+
+    it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === 'coding-agent:secret-env-read');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { excludeStrategies: ['custom-strategy'] },
+        delayMs: 0,
+      });
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const requestBody = JSON.parse((callArgs[1] as any).body);
+      expect(requestBody.config.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
+      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
+    });
+
+    it.each([
+      'coding-agent:core',
+      'coding-agent:all',
+    ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === pluginId);
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: { excludeStrategies: ['custom-strategy'] },
+        delayMs: 0,
+      });
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const requestBody = JSON.parse((callArgs[1] as any).body);
+      expect(requestBody.config.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
+      ]);
+      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
+        ...CANARY_BREAKING_STRATEGY_IDS,
+        'custom-strategy',
       ]);
     });
 
@@ -409,15 +769,10 @@ describe('Plugins', () => {
         ...ADDITIONAL_PLUGINS,
       ];
 
-      // Check that each expected plugin is registered
-      expectedPlugins.forEach((pluginKey) => {
-        const plugin = Plugins.find((p) => p.key === pluginKey);
-        expect(plugin).toBeDefined();
-      });
-
-      // Check the actual count matches the expected count
+      // Verify all expected plugin keys are present in the registry
       // Note: We don't expect exact equality because some plugins like collections may not be in the expected list
-      expect(Plugins.length).toBeGreaterThanOrEqual(expectedPlugins.length);
+      const registeredPluginKeys = Plugins.map((p) => p.key);
+      expect(registeredPluginKeys).toEqual(expect.arrayContaining(expectedPlugins));
     });
 
     it('should have unique plugin keys', () => {

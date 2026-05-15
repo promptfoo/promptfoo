@@ -1,10 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Test config for #7353 - class-based provider with prototype id() method in redteam flow
-# This verifies that class-based providers work correctly when wrapped with rate limiting.
+# This verifies that class-based providers work correctly in the redteam generate flow.
 #
 # The bug was: wrapProviderWithRateLimiting used spread operator which doesn't copy
 # prototype methods like id(), causing "TypeError: redteamProvider.id is not a function"
 # in strategies that call TokenUsageTracker.trackUsage(provider.id(), ...).
+#
+# Uses contracts plugin (local generation) and base64 strategy (local transform)
+# so the test completes without any remote API calls.
 description: 'Test class-based redteam provider with prototype id()'
 
 targets:
@@ -17,6 +20,6 @@ redteam:
   purpose: Test application for security vulnerabilities
   numTests: 1
   plugins:
-    - harmful:hate
+    - contracts
   strategies:
-    - id: jailbreak
+    - id: base64

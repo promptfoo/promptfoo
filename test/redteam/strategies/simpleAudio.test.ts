@@ -4,6 +4,7 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
+import { mockConsole } from '../../util/utils';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -11,6 +12,10 @@ import type { TestCase } from '../../../src/types/index';
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    getRemoteGenerationExplicitlyDisabledError: vi.fn(
+      (strategyName) =>
+        `${strategyName} requires remote generation, which has been explicitly disabled.`,
+    ),
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.url'),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
   };
@@ -43,13 +48,13 @@ vi.mock('cli-progress', async (importOriginal) => {
   };
 });
 
-const originalConsoleLog = console.log;
 const mockFetchWithCache = vi.mocked(fetchWithCache);
 const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
+let consoleLogSpy: ReturnType<typeof mockConsole>;
 
 describe('audio strategy', () => {
   beforeAll(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = mockConsole('log');
   });
 
   beforeEach(() => {
@@ -64,7 +69,7 @@ describe('audio strategy', () => {
   });
 
   afterAll(() => {
-    console.log = originalConsoleLog;
+    consoleLogSpy.mockRestore();
   });
 
   describe('textToAudio', () => {
@@ -92,7 +97,9 @@ describe('audio strategy', () => {
       mockNeverGenerateRemote.mockReturnValue(true);
 
       const text = 'This should fail';
-      await expect(textToAudio(text, 'en')).rejects.toThrow('Remote generation is disabled');
+      await expect(textToAudio(text, 'en')).rejects.toThrow(
+        'Audio strategy requires remote generation, which has been explicitly disabled.',
+      );
     });
 
     it('should throw an error if remote API fails', async () => {
@@ -223,6 +230,140 @@ describe('audio strategy', () => {
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          body: expect.stringContaining('"language":"es"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should use language from test case metadata.language over config', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in Japanese',
+        },
+        metadata: {
+          language: 'ja',
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"ja"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should use language from test case metadata.modifiers.language over config', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in French',
+        },
+        metadata: {
+          modifiers: {
+            language: 'fr',
+          },
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"fr"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should prefer metadata.language over metadata.modifiers.language', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should be in German',
+        },
+        metadata: {
+          language: 'de',
+          modifiers: {
+            language: 'fr',
+          },
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt', { language: 'es' });
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"de"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should default to English when no language is specified', async () => {
+      const testCase: TestCase = {
+        vars: {
+          prompt: 'This should default to English',
+        },
+      };
+
+      await addAudioToBase64([testCase], 'prompt');
+
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"en"'),
+        }),
+        expect.any(Number),
+      );
+    });
+
+    it('should handle different languages for different test cases', async () => {
+      const testCases: TestCase[] = [
+        {
+          vars: { prompt: 'Japanese text' },
+          metadata: { language: 'ja' },
+        },
+        {
+          vars: { prompt: 'French text' },
+          metadata: { language: 'fr' },
+        },
+        {
+          vars: { prompt: 'Default text' },
+        },
+      ];
+
+      await addAudioToBase64(testCases, 'prompt', { language: 'es' });
+
+      // First call should use 'ja' from metadata
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        1,
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"ja"'),
+        }),
+        expect.any(Number),
+      );
+
+      // Second call should use 'fr' from metadata
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"language":"fr"'),
+        }),
+        expect.any(Number),
+      );
+
+      // Third call should fall back to config 'es'
+      expect(mockFetchWithCache).toHaveBeenNthCalledWith(
+        3,
+        expect.any(String),
+        expect.objectContaining({
           body: expect.stringContaining('"language":"es"'),
         }),
         expect.any(Number),

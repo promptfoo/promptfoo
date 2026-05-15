@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
@@ -49,7 +49,12 @@ export const SORA_COSTS: Record<OpenAiVideoModel, number> = {
 /**
  * Valid video sizes (aspect ratios) for OpenAI Sora
  */
-const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = ['1280x720', '720x1280'] as const;
+const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = [
+  '1280x720',
+  '720x1280',
+  '1792x1024',
+  '1024x1792',
+] as const;
 
 /**
  * Valid video durations in seconds for OpenAI Sora
@@ -177,10 +182,13 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       let imageData = config.input_reference;
       if (config.input_reference.startsWith('file://')) {
         const filePath = config.input_reference.slice(7);
-        if (fs.existsSync(filePath)) {
-          const buffer = fs.readFileSync(filePath);
+        try {
+          const buffer = await fs.readFile(filePath);
           imageData = buffer.toString('base64');
-        } else {
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw error;
+          }
           return {
             job: {} as OpenAiVideoJob,
             error: `Input reference file not found: ${filePath}`,
@@ -293,7 +301,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     cacheKey: string,
     evalId?: string,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
-    const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant !== 'video' ? `?variant=${variant}` : ''}`;
+    const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant === 'video' ? '' : `?variant=${variant}`}`;
     const headers = this.getAuthHeaders();
 
     try {
@@ -334,9 +342,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     // Validate API key
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const config: OpenAiVideoOptions = {
@@ -382,7 +388,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       const storage = getMediaStorage();
 
       // Read the cache mapping from filesystem to get thumbnail/spritesheet keys
-      const mapping = readCacheMapping(cacheKey);
+      const mapping = await readCacheMapping(cacheKey);
       const thumbnailKey = mapping?.thumbnailKey;
       const spritesheetKey = mapping?.spritesheetKey;
 
@@ -502,7 +508,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const cost = calculateVideoCost(model, seconds, false);
 
     // Store cache mapping for future lookups
-    storeCacheMapping(
+    await storeCacheMapping(
       cacheKey,
       videoRef.key,
       thumbnailRef?.key,

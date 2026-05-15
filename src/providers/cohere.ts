@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -50,10 +50,21 @@ interface CohereChatOptions {
 
 export class CohereChatCompletionProvider implements ApiProvider {
   static COHERE_CHAT_MODELS = [
+    'command-a-03-2025',
+    'command-r7b-12-2024',
+    'command-a-translate-08-2025',
+    'command-a-reasoning-08-2025',
+    'command-a-vision-07-2025',
+    'command-r-08-2024',
+    'command-r-plus-08-2024',
+    'tiny-aya-global',
+    'tiny-aya-earth',
+    'tiny-aya-fire',
+    'tiny-aya-water',
+    'c4ai-aya-expanse-32b',
+    'c4ai-aya-vision-32b',
+    // Legacy aliases retained to avoid warning on existing configs.
     'command',
-    'command-light',
-    'command-light-nightly',
-    'command-nightly',
     'command-r',
     'command-r-plus',
     'command-r-v1',
@@ -80,6 +91,14 @@ export class CohereChatCompletionProvider implements ApiProvider {
 
   id() {
     return `cohere:${this.modelName}`;
+  }
+
+  getApiKey(): string | undefined {
+    return this.apiKey || undefined;
+  }
+
+  requiresApiKey(): boolean {
+    return true;
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -177,7 +196,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as { data: any; cached: boolean });
 
       if (data.message) {
@@ -279,7 +298,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${err}`);
