@@ -176,11 +176,9 @@ describe('evaluatorTracing', () => {
         },
       } as unknown as TestSuite;
       const traceStoreModule = await import('../../src/tracing/store');
-      const getTraceStoreSpy = vi
-        .spyOn(traceStoreModule, 'getTraceStore')
-        .mockReturnValue({
-          createTrace: mockCreateTrace,
-        } as unknown as ReturnType<typeof traceStoreModule.getTraceStore>);
+      const getTraceStoreSpy = vi.spyOn(traceStoreModule, 'getTraceStore').mockReturnValue({
+        createTrace: mockCreateTrace,
+      } as unknown as ReturnType<typeof traceStoreModule.getTraceStore>);
 
       try {
         await generateTraceContextIfNeeded(test, {}, 2, 4, testSuite);
