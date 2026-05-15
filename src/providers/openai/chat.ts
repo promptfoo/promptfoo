@@ -964,13 +964,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
-        metadata: {
-          http: {
-            status,
-            statusText,
-            headers: responseHeaders ?? {},
-          },
-        },
+        metadata: getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
       };
     }
   }
