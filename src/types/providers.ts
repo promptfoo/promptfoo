@@ -1,6 +1,7 @@
 import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
+import type { MinimalApiProvider } from '../contracts/prompts';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
@@ -287,9 +288,7 @@ export interface CallApiOptionsParams {
  *
  * @public
  */
-export interface ApiProvider {
-  /** Stable id used in result tables, cache keys, and provider lookups. */
-  id: () => string;
+export interface ApiProvider extends MinimalApiProvider {
   /** Execute one provider request. */
   callApi: CallApiFunction;
   /**

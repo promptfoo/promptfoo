@@ -9,9 +9,9 @@ description: "Fetch a URL through promptfoo's retrying cache wrapper."
 import { cache } from 'promptfoo';
 ```
 
-> **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bust?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
+> **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bustOrOptions?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
 
-Defined in: [cache.ts:630](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L630)
+Defined in: [cache.ts:648](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L648)
 
 Fetch a URL through promptfoo's retrying cache wrapper.
 
@@ -55,11 +55,11 @@ Request timeout in milliseconds. Defaults to the value of the
 `'json'` (default) parses the response body as JSON;
 `'text'` returns the raw response body unchanged.
 
-### bust?
+### bustOrOptions?
 
-`boolean` = `false`
+`boolean` \| `CacheOptions` \| `undefined`
 
-Skip the cache and force a fresh request.
+Skip the cache, or provide per-request cache options.
 
 ### maxRetries?
 
@@ -71,6 +71,8 @@ the value of `PROMPTFOO_REQUEST_BACKOFF_MS` / built-in retry policy.
 ## Returns
 
 `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
+
+Parsed response data plus cache and HTTP metadata.
 
 ## Throws
 

@@ -9,7 +9,7 @@ description: 'Runtime context passed to function-valued assertions.'
 import type { AssertionValueFunctionContext } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:1127](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1127)
+Defined in: [types/index.ts:1128](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1128)
 
 Runtime context passed to function-valued assertions.
 
@@ -29,7 +29,7 @@ const assertion: AssertionValueFunction = (output, context) => ({
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/index.ts:1137](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1137)
+Defined in: [types/index.ts:1138](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1138)
 
 Assertion-specific config copied from `assert[].config`.
 
@@ -39,7 +39,7 @@ Assertion-specific config copied from `assert[].config`.
 
 > **logProbs**: `number`[] \| `undefined`
 
-Defined in: [types/index.ts:1135](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1135)
+Defined in: [types/index.ts:1136](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1136)
 
 Provider log probabilities, when available.
 
@@ -49,7 +49,7 @@ Provider log probabilities, when available.
 
 > **prompt**: `string` \| `undefined`
 
-Defined in: [types/index.ts:1129](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1129)
+Defined in: [types/index.ts:1130](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1130)
 
 Rendered prompt for the current result, when available.
 
@@ -59,7 +59,7 @@ Rendered prompt for the current result, when available.
 
 > **provider**: [`ApiProvider`](ApiProvider.md) \| `undefined`
 
-Defined in: [types/index.ts:1139](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1139)
+Defined in: [types/index.ts:1140](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1140)
 
 Provider used for the current result, when available.
 
@@ -69,7 +69,7 @@ Provider used for the current result, when available.
 
 > **providerResponse**: [`ProviderResponse`](ProviderResponse.md) \| `undefined`
 
-Defined in: [types/index.ts:1141](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1141)
+Defined in: [types/index.ts:1142](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1142)
 
 Full provider response for the current result.
 
@@ -79,7 +79,7 @@ Full provider response for the current result.
 
 > **test**: [`AtomicTestCase`](AtomicTestCase.md)
 
-Defined in: [types/index.ts:1133](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1133)
+Defined in: [types/index.ts:1134](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1134)
 
 Test case currently being graded.
 
@@ -89,7 +89,7 @@ Test case currently being graded.
 
 > `optional` **trace?**: `TraceData`
 
-Defined in: [types/index.ts:1143](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1143)
+Defined in: [types/index.ts:1144](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1144)
 
 Trace data for trace-aware assertions when tracing is enabled.
 
@@ -99,6 +99,6 @@ Trace data for trace-aware assertions when tracing is enabled.
 
 > **vars**: `Record`\<`string`, `VarValue`\>
 
-Defined in: [types/index.ts:1131](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1131)
+Defined in: [types/index.ts:1132](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1132)
 
 Rendered variables for the current test case.

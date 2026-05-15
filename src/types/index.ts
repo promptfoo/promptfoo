@@ -1,17 +1,15 @@
-// Note: This file is in the process of being deconstructed into `types/` and `validators/`
-// Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { ProviderEnvOverridesSchema } from '../types/env';
-import { BaseTokenUsageSchema } from '../types/shared';
+import { ProviderEnvOverridesSchema } from '../contracts/env';
+import { BaseTokenUsageSchema } from '../contracts/shared';
+import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
+import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { parseFilterRange } from '../util/filterRange';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 
 export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
 
 export {
   EVENT_SOURCES,
@@ -20,14 +18,22 @@ export {
   isCliEventSource,
 } from './eventSource';
 
+import type { BlobRef } from '../blobs/types';
+import type { EnvOverrides } from '../contracts/env';
+import type { Prompt, PromptConfig, PromptFunction } from '../contracts/prompts';
+import type {
+  BaseTokenUsage,
+  NunjucksFilterMap,
+  TokenUsage,
+  VarValue,
+} from '../contracts/shared';
+import type { TransformFunction } from '../contracts/transform';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import type { EnvOverrides } from '../types/env';
-import type { Prompt, PromptConfig, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   AudioOutput,
@@ -38,12 +44,7 @@ import type {
   ProvidersConfig,
   VideoOutput,
 } from './providers';
-import type { BaseTokenUsage, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
-
-export type { VarValue } from './shared';
-
 import type { TraceData } from './tracing';
-import type { TransformFunction } from './transform';
 
 type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
 function assert<_T extends true>() {}

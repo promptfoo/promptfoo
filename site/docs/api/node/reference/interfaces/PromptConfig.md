@@ -9,7 +9,7 @@ description: 'Prompt-local text decoration applied before provider execution.'
 import type { PromptConfig } from 'promptfoo';
 ```
 
-Defined in: [types/prompts.ts:43](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L43)
+Defined in: [contracts/prompts.ts:43](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L43)
 
 Prompt-local text decoration applied before provider execution.
 
@@ -35,7 +35,7 @@ const config: PromptConfig = {
 
 > `optional` **prefix?**: `string`
 
-Defined in: [types/prompts.ts:45](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L45)
+Defined in: [contracts/prompts.ts:45](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L45)
 
 Text prepended to the rendered prompt before it is sent to the provider.
 
@@ -45,6 +45,6 @@ Text prepended to the rendered prompt before it is sent to the provider.
 
 > `optional` **suffix?**: `string`
 
-Defined in: [types/prompts.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L47)
+Defined in: [contracts/prompts.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L47)
 
 Text appended to the rendered prompt before it is sent to the provider.

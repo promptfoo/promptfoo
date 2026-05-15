@@ -9,7 +9,7 @@ description: 'Chat message reported by providers for multi-turn prompts and tran
 import type { ChatMessage } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:89](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L89)
+Defined in: [types/providers.ts:90](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L90)
 
 Chat message reported by providers for multi-turn prompts and transcripts.
 
@@ -31,7 +31,7 @@ const message: ChatMessage = {
 
 > **content**: `string`
 
-Defined in: [types/providers.ts:93](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L93)
+Defined in: [types/providers.ts:94](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L94)
 
 Text content sent or received for the turn.
 
@@ -41,6 +41,6 @@ Text content sent or received for the turn.
 
 > **role**: `"function"` \| `"system"` \| `"user"` \| `"assistant"` \| `"tool"`
 
-Defined in: [types/providers.ts:91](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L91)
+Defined in: [types/providers.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L92)
 
 Speaker role for the message.

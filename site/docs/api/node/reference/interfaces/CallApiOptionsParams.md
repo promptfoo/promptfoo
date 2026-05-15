@@ -9,7 +9,7 @@ description: 'Per-request options passed to custom providers.'
 import type { CallApiOptionsParams } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:265](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L265)
+Defined in: [types/providers.ts:266](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L266)
 
 Per-request options passed to custom providers.
 
@@ -36,7 +36,7 @@ const provider: ProviderFunction = async (prompt, _context, options) => {
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: [types/providers.ts:269](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L269)
+Defined in: [types/providers.ts:270](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L270)
 
 Signal that can be used to abort the request.
 
@@ -46,6 +46,6 @@ Signal that can be used to abort the request.
 
 > `optional` **includeLogProbs?**: `boolean`
 
-Defined in: [types/providers.ts:267](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L267)
+Defined in: [types/providers.ts:268](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L268)
 
 Whether the caller requested token log probabilities when supported.

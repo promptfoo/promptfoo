@@ -9,7 +9,7 @@ description: 'Result type for prompt functions.'
 import type { PromptFunctionResult } from 'promptfoo';
 ```
 
-Defined in: [types/prompts.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L98)
+Defined in: [contracts/prompts.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L98)
 
 Result type for prompt functions.
 
@@ -38,7 +38,7 @@ const result: PromptFunctionResult = {
 
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: [types/prompts.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L102)
+Defined in: [contracts/prompts.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L102)
 
 Provider config overrides to merge for this rendered prompt.
 
@@ -48,6 +48,6 @@ Provider config overrides to merge for this rendered prompt.
 
 > **prompt**: [`PromptContent`](../type-aliases/PromptContent.md)
 
-Defined in: [types/prompts.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L100)
+Defined in: [contracts/prompts.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L100)
 
 Prompt content to send to the provider.

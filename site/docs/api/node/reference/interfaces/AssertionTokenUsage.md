@@ -9,7 +9,7 @@ description: 'Token accounting attributed to model-graded assertions.'
 import type { AssertionTokenUsage } from 'promptfoo';
 ```
 
-Defined in: [types/shared.ts:118](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L118)
+Defined in: [contracts/shared.ts:96](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L96)
 
 Token accounting attributed to model-graded assertions.
 
@@ -29,7 +29,7 @@ const usage: AssertionTokenUsage = {
 
 > `optional` **cached?**: `number`
 
-Defined in: [types/shared.ts:126](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L126)
+Defined in: [contracts/shared.ts:104](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L104)
 
 Assertion tokens served from cache.
 
@@ -39,7 +39,7 @@ Assertion tokens served from cache.
 
 > `optional` **completion?**: `number`
 
-Defined in: [types/shared.ts:124](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L124)
+Defined in: [contracts/shared.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L102)
 
 Assertion completion/output tokens.
 
@@ -49,7 +49,7 @@ Assertion completion/output tokens.
 
 > `optional` **completionDetails?**: [`CompletionTokenDetails`](CompletionTokenDetails.md)
 
-Defined in: [types/shared.ts:130](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L130)
+Defined in: [contracts/shared.ts:108](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L108)
 
 Detailed completion-token breakdown for assertion grading.
 
@@ -59,7 +59,7 @@ Detailed completion-token breakdown for assertion grading.
 
 > `optional` **numRequests?**: `number`
 
-Defined in: [types/shared.ts:128](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L128)
+Defined in: [contracts/shared.ts:106](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L106)
 
 Number of assertion model requests represented here.
 
@@ -69,7 +69,7 @@ Number of assertion model requests represented here.
 
 > `optional` **prompt?**: `number`
 
-Defined in: [types/shared.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L122)
+Defined in: [contracts/shared.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L100)
 
 Assertion prompt/input tokens.
 
@@ -79,6 +79,6 @@ Assertion prompt/input tokens.
 
 > `optional` **total?**: `number`
 
-Defined in: [types/shared.ts:120](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L120)
+Defined in: [contracts/shared.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L98)
 
 Total assertion tokens.

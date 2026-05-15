@@ -11,7 +11,7 @@ import { cache } from 'promptfoo';
 
 > **getCache**(): `Cache`
 
-Defined in: [cache.ts:76](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L76)
+Defined in: [cache.ts:78](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L78)
 
 Return the active promptfoo cache instance.
 

@@ -9,7 +9,7 @@ description: 'One row in an eval table.'
 import type { EvaluateTableRow } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:647](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L647)
+Defined in: [types/index.ts:648](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L648)
 
 One row in an eval table.
 
@@ -45,7 +45,7 @@ const row: EvaluateTableRow = {
 
 > `optional` **description?**: `string`
 
-Defined in: [types/index.ts:649](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L649)
+Defined in: [types/index.ts:650](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L650)
 
 Optional human-readable description for the row's test case.
 
@@ -55,7 +55,7 @@ Optional human-readable description for the row's test case.
 
 > **outputs**: [`EvaluateTableOutput`](EvaluateTableOutput.md)[]
 
-Defined in: [types/index.ts:651](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L651)
+Defined in: [types/index.ts:652](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L652)
 
 Provider outputs rendered across this row.
 
@@ -65,7 +65,7 @@ Provider outputs rendered across this row.
 
 > **test**: [`AtomicTestCase`](AtomicTestCase.md)
 
-Defined in: [types/index.ts:655](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L655)
+Defined in: [types/index.ts:656](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L656)
 
 Test case represented by this row.
 
@@ -75,7 +75,7 @@ Test case represented by this row.
 
 > **testIdx**: `number`
 
-Defined in: [types/index.ts:657](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L657)
+Defined in: [types/index.ts:658](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L658)
 
 Zero-based index of the test case in the eval.
 
@@ -85,6 +85,6 @@ Zero-based index of the test case in the eval.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:653](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L653)
+Defined in: [types/index.ts:654](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L654)
 
 Rendered variable values shown in the table row.

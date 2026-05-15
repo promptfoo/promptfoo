@@ -34,6 +34,8 @@ import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
+import type { CacheOptions } from './types/cache';
+
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
 
@@ -173,6 +175,19 @@ function getNamespacedCache(namespace: string) {
 
 function getCurrentCacheNamespace() {
   return cacheNamespaceStorage.getStore()?.namespace;
+}
+
+function currentNamespaceIncludesRepeatIndex(repeatIndex: number) {
+  const namespaceParts = getCurrentCacheNamespace()?.split(':') ?? [];
+  return namespaceParts.some(
+    (part, index) => part === 'repeat' && namespaceParts[index + 1] === String(repeatIndex),
+  );
+}
+
+function shouldApplyRepeatCacheSuffix(repeatIndex?: number) {
+  return (
+    repeatIndex != null && repeatIndex > 0 && !currentNamespaceIncludesRepeatIndex(repeatIndex)
+  );
 }
 
 /**
@@ -420,6 +435,7 @@ function getFetchCacheKey(
   options: RequestInit,
   method: string,
   format: 'json' | 'text',
+  repeatIndex?: number,
 ) {
   const bodyForCacheKey = getBodyForFetchCacheKey(
     options.body ?? (url instanceof Request ? url.body : undefined),
@@ -433,6 +449,7 @@ function getFetchCacheKey(
     return null;
   }
 
+  const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   return getScopedCacheKey(
     `fetch:v3:${hashFetchCacheKey({
       format,
@@ -440,7 +457,7 @@ function getFetchCacheKey(
       method,
       options: optionsForCacheKey.identity,
       url: url instanceof Request ? url.url : String(url),
-    })}`,
+    })}${repeatSuffix}`,
   );
 }
 
@@ -608,9 +625,10 @@ async function prepareFetchResponse(
  * `REQUEST_TIMEOUT_MS` environment variable.
  * @param format - `'json'` (default) parses the response body as JSON;
  * `'text'` returns the raw response body unchanged.
- * @param bust - Skip the cache and force a fresh request.
+ * @param bustOrOptions - Skip the cache, or provide per-request cache options.
  * @param maxRetries - Maximum retry attempts on transient errors. Defaults to
  * the value of `PROMPTFOO_REQUEST_BACKOFF_MS` / built-in retry policy.
+ * @returns Parsed response data plus cache and HTTP metadata.
  * @throws When `format` is `'json'` and the response body is not valid JSON.
  *
  * @example
@@ -632,9 +650,13 @@ export async function fetchWithCache<T = unknown>(
   options: RequestInit = {},
   timeout: number = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
-  bust: boolean = false,
+  bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const cacheOptions: CacheOptions =
+    typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
+  const { bust = false, repeatIndex } = cacheOptions;
+
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
@@ -642,7 +664,8 @@ export async function fetchWithCache<T = unknown>(
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
   const cacheEnabled = getEffectiveCacheEnabled();
-  const cacheKey = cacheEnabled && !bust ? getFetchCacheKey(url, options, method, format) : null;
+  const cacheKey =
+    cacheEnabled && !bust ? getFetchCacheKey(url, options, method, format, repeatIndex) : null;
 
   if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(

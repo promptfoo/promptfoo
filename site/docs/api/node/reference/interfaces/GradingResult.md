@@ -9,7 +9,7 @@ description: 'Result returned by assertions and matcher helpers.'
 import type { GradingResult } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:796](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L796)
+Defined in: [types/index.ts:797](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L797)
 
 Result returned by assertions and matcher helpers.
 
@@ -29,7 +29,7 @@ const result: GradingResult = {
 
 > `optional` **assertion?**: [`Assertion`](Assertion.md)
 
-Defined in: [types/index.ts:819](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L819)
+Defined in: [types/index.ts:820](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L820)
 
 Assertion that produced this result, when retained by the caller.
 
@@ -39,7 +39,7 @@ Assertion that produced this result, when retained by the caller.
 
 > `optional` **comment?**: `string`
 
-Defined in: [types/index.ts:822](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L822)
+Defined in: [types/index.ts:823](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L823)
 
 Optional user-authored comment attached to the result.
 
@@ -49,7 +49,7 @@ Optional user-authored comment attached to the result.
 
 > `optional` **componentResults?**: `GradingResult`[]
 
-Defined in: [types/index.ts:816](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L816)
+Defined in: [types/index.ts:817](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L817)
 
 Component results for compound assertions such as assertion sets.
 
@@ -59,7 +59,7 @@ Component results for compound assertions such as assertion sets.
 
 > `optional` **metadata?**: `object`
 
-Defined in: [types/index.ts:828](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L828)
+Defined in: [types/index.ts:829](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L829)
 
 Additional assertion-specific metadata.
 
@@ -123,7 +123,7 @@ Red-team strategy id associated with the result, when applicable.
 
 > `optional` **namedScores?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:807](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L807)
+Defined in: [types/index.ts:808](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L808)
 
 Map of named metric values emitted by the assertion.
 
@@ -133,7 +133,7 @@ Map of named metric values emitted by the assertion.
 
 > `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
-Defined in: [types/index.ts:810](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L810)
+Defined in: [types/index.ts:811](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L811)
 
 Total weight contributing to each named score.
 
@@ -143,7 +143,7 @@ Total weight contributing to each named score.
 
 > **pass**: `boolean`
 
-Defined in: [types/index.ts:798](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L798)
+Defined in: [types/index.ts:799](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L799)
 
 Whether the test passed or failed.
 
@@ -153,7 +153,7 @@ Whether the test passed or failed.
 
 > **reason**: `string`
 
-Defined in: [types/index.ts:804](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L804)
+Defined in: [types/index.ts:805](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L805)
 
 Plain-text explanation suitable for logs and reports.
 
@@ -163,7 +163,7 @@ Plain-text explanation suitable for logs and reports.
 
 > **score**: `number`
 
-Defined in: [types/index.ts:801](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L801)
+Defined in: [types/index.ts:802](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L802)
 
 Test score, typically between 0 and 1.
 
@@ -173,7 +173,7 @@ Test score, typically between 0 and 1.
 
 > `optional` **suggestions?**: `ResultSuggestion`[]
 
-Defined in: [types/index.ts:825](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L825)
+Defined in: [types/index.ts:826](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L826)
 
 Follow-up suggestions produced by some graders.
 
@@ -183,6 +183,6 @@ Follow-up suggestions produced by some graders.
 
 > `optional` **tokensUsed?**: [`TokenUsage`](TokenUsage.md)
 
-Defined in: [types/index.ts:813](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L813)
+Defined in: [types/index.ts:814](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L814)
 
 Token usage attributed to the assertion or grader.

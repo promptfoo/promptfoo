@@ -9,7 +9,7 @@ description: 'Detailed completion-token breakdown reported by reasoning-capable 
 import type { CompletionTokenDetails } from 'promptfoo';
 ```
 
-Defined in: [types/shared.ts:42](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L42)
+Defined in: [contracts/shared.ts:42](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L42)
 
 Detailed completion-token breakdown reported by reasoning-capable models.
 
@@ -28,7 +28,7 @@ const details: CompletionTokenDetails = {
 
 > `optional` **acceptedPrediction?**: `number`
 
-Defined in: [types/shared.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L46)
+Defined in: [contracts/shared.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L46)
 
 Prediction tokens accepted by speculative decoding, when reported.
 
@@ -38,7 +38,7 @@ Prediction tokens accepted by speculative decoding, when reported.
 
 > `optional` **cacheCreationInputTokens?**: `number`
 
-Defined in: [types/shared.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L52)
+Defined in: [contracts/shared.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L52)
 
 Input tokens written into a provider cache.
 
@@ -48,7 +48,7 @@ Input tokens written into a provider cache.
 
 > `optional` **cacheReadInputTokens?**: `number`
 
-Defined in: [types/shared.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L50)
+Defined in: [contracts/shared.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L50)
 
 Input tokens read from a provider cache.
 
@@ -58,7 +58,7 @@ Input tokens read from a provider cache.
 
 > `optional` **reasoning?**: `number`
 
-Defined in: [types/shared.ts:44](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L44)
+Defined in: [contracts/shared.ts:44](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L44)
 
 Tokens spent on hidden model reasoning when the provider reports them.
 
@@ -68,6 +68,6 @@ Tokens spent on hidden model reasoning when the provider reports them.
 
 > `optional` **rejectedPrediction?**: `number`
 
-Defined in: [types/shared.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L48)
+Defined in: [contracts/shared.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L48)
 
 Prediction tokens rejected by speculative decoding, when reported.

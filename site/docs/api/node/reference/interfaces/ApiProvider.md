@@ -9,7 +9,7 @@ description: 'Provider object shape accepted by the Node.js API.'
 import type { ApiProvider } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:290](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L290)
+Defined in: [types/providers.ts:291](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L291)
 
 Provider object shape accepted by the Node.js API.
 
@@ -27,15 +27,23 @@ const provider: ApiProvider = {
 };
 ```
 
+## Extends
+
+- `MinimalApiProvider`
+
 ## Properties
 
 ### callApi
 
 > **callApi**: [`CallApiFunction`](CallApiFunction.md)
 
-Defined in: [types/providers.ts:294](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L294)
+Defined in: [types/providers.ts:293](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L293)
 
 Execute one provider request.
+
+#### Overrides
+
+`MinimalApiProvider.callApi`
 
 ---
 
@@ -43,7 +51,7 @@ Execute one provider request.
 
 > `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
-Defined in: [types/providers.ts:344](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L344)
+Defined in: [types/providers.ts:343](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L343)
 
 Provider-wide cleanup hook for releasing long-lived resources such as worker
 processes, browser sessions, or pooled connections at eval shutdown.
@@ -59,7 +67,7 @@ Request-scoped cancellation should be implemented with `abortSignal`.
 
 > `optional` **config?**: `any`
 
-Defined in: [types/providers.ts:315](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L315)
+Defined in: [types/providers.ts:314](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L314)
 
 Provider-specific configuration retained for later calls and serialization.
 The shape mirrors [ProviderOptions.config](ProviderOptions.md#config); consult the documentation
@@ -71,7 +79,7 @@ for the specific provider for the supported keys.
 
 > `optional` **delay?**: `number`
 
-Defined in: [types/providers.ts:317](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L317)
+Defined in: [types/providers.ts:316](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L316)
 
 Delay in milliseconds before provider calls.
 
@@ -81,7 +89,7 @@ Delay in milliseconds before provider calls.
 
 > `optional` **getSessionId?**: () => `string`
 
-Defined in: [types/providers.ts:319](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L319)
+Defined in: [types/providers.ts:318](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L318)
 
 Optional stable session id for conversational providers.
 
@@ -95,13 +103,15 @@ Optional stable session id for conversational providers.
 
 > **id**: () => `string`
 
-Defined in: [types/providers.ts:292](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L292)
-
-Stable id used in result tables, cache keys, and provider lookups.
+Defined in: [contracts/prompts.ts:5](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L5)
 
 #### Returns
 
 `string`
+
+#### Inherited from
+
+`MinimalApiProvider.id`
 
 ---
 
@@ -109,7 +119,7 @@ Stable id used in result tables, cache keys, and provider lookups.
 
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: [types/providers.ts:327](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L327)
+Defined in: [types/providers.ts:326](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L326)
 
 Named provider inputs used by multi-input targets.
 
@@ -123,9 +133,13 @@ generation guidance.
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:329](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L329)
+Defined in: [types/providers.ts:328](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L328)
 
 Human-readable label shown in reports.
+
+#### Overrides
+
+`MinimalApiProvider.label`
 
 ---
 
@@ -133,7 +147,7 @@ Human-readable label shown in reports.
 
 > `optional` **toJSON?**: () => `any`
 
-Defined in: [types/providers.ts:338](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L338)
+Defined in: [types/providers.ts:337](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L337)
 
 Custom JSON serialization hook used when persisting the provider on an eval
 record. Implementations should return a value that is structurally
@@ -149,7 +163,7 @@ serializable (no functions or circular references).
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/providers.ts:331](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L331)
+Defined in: [types/providers.ts:330](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L330)
 
 Transform provider output before assertions run.
 
@@ -159,7 +173,7 @@ Transform provider output before assertions run.
 
 > `optional` **callClassificationApi**(`prompt`): `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
 
-Defined in: [types/providers.ts:301](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L301)
+Defined in: [types/providers.ts:300](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L300)
 
 Optional classification-specific entrypoint for compatible providers.
 
@@ -183,7 +197,7 @@ Class labels mapped to provider-reported scores.
 
 > `optional` **callEmbeddingApi**(`input`): `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
 
-Defined in: [types/providers.ts:308](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L308)
+Defined in: [types/providers.ts:307](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L307)
 
 Optional embedding-specific entrypoint for compatible providers.
 

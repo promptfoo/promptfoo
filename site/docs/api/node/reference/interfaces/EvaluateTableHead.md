@@ -9,7 +9,7 @@ description: 'Header metadata for an eval table.'
 import type { EvaluateTableHead } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:682](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L682)
+Defined in: [types/index.ts:683](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L683)
 
 Header metadata for an eval table.
 
@@ -37,7 +37,7 @@ const head: EvaluateTableHead = {
 
 > **prompts**: [`CompletedPrompt`](CompletedPrompt.md)[]
 
-Defined in: [types/index.ts:684](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L684)
+Defined in: [types/index.ts:685](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L685)
 
 Completed prompts rendered as provider columns.
 
@@ -47,6 +47,6 @@ Completed prompts rendered as provider columns.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:686](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L686)
+Defined in: [types/index.ts:687](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L687)
 
 Variable names rendered before provider columns.

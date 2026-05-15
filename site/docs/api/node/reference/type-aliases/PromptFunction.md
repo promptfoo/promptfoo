@@ -11,7 +11,7 @@ import type { PromptFunction } from 'promptfoo';
 
 > **PromptFunction** = (`context`) => `Promise`\<[`PromptContent`](PromptContent.md) \| [`PromptFunctionResult`](../interfaces/PromptFunctionResult.md)\>
 
-Defined in: [types/prompts.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/types/prompts.ts#L122)
+Defined in: [contracts/prompts.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L122)
 
 Function form accepted anywhere the Node.js API accepts a prompt.
 
@@ -26,7 +26,7 @@ Rendered vars and the selected provider when one is available.
 
 #### provider?
 
-`ApiProvider`
+`MinimalApiProvider`
 
 Provider selected for this invocation when one is available.
 

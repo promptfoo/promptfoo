@@ -9,7 +9,7 @@ description: 'Image attachment returned by providers that produce images.'
 import type { ImageOutput } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:491](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L491)
+Defined in: [types/providers.ts:490](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L490)
 
 Image attachment returned by providers that produce images.
 
@@ -31,7 +31,7 @@ const image: ImageOutput = {
 
 > `optional` **blobRef?**: [`BlobRef`](BlobRef.md)
 
-Defined in: [types/providers.ts:495](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L495)
+Defined in: [types/providers.ts:494](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L494)
 
 External blob reference when image data is stored outside the result row.
 
@@ -41,7 +41,7 @@ External blob reference when image data is stored outside the result row.
 
 > `optional` **data?**: `string`
 
-Defined in: [types/providers.ts:493](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L493)
+Defined in: [types/providers.ts:492](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L492)
 
 Inline data URI or base64 payload.
 
@@ -51,6 +51,6 @@ Inline data URI or base64 payload.
 
 > `optional` **mimeType?**: `string`
 
-Defined in: [types/providers.ts:497](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L497)
+Defined in: [types/providers.ts:496](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L496)
 
 MIME type such as `image/png`.

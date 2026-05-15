@@ -9,7 +9,7 @@ description: 'Token accounting reported by providers and graders.'
 import type { TokenUsage } from 'promptfoo';
 ```
 
-Defined in: [types/shared.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L147)
+Defined in: [contracts/shared.ts:125](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L125)
 
 Token accounting reported by providers and graders.
 
@@ -29,7 +29,7 @@ const usage: TokenUsage = {
 
 > `optional` **assertions?**: [`AssertionTokenUsage`](AssertionTokenUsage.md)
 
-Defined in: [types/shared.ts:161](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L161)
+Defined in: [contracts/shared.ts:139](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L139)
 
 Token usage accumulated by model-graded assertions.
 
@@ -39,7 +39,7 @@ Token usage accumulated by model-graded assertions.
 
 > `optional` **cached?**: `number`
 
-Defined in: [types/shared.ts:153](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L153)
+Defined in: [contracts/shared.ts:131](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L131)
 
 Tokens served from a provider cache, when reported.
 
@@ -49,7 +49,7 @@ Tokens served from a provider cache, when reported.
 
 > `optional` **completion?**: `number`
 
-Defined in: [types/shared.ts:151](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L151)
+Defined in: [contracts/shared.ts:129](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L129)
 
 Completion/output tokens produced by the provider call.
 
@@ -59,7 +59,7 @@ Completion/output tokens produced by the provider call.
 
 > `optional` **completionDetails?**: [`CompletionTokenDetails`](CompletionTokenDetails.md)
 
-Defined in: [types/shared.ts:159](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L159)
+Defined in: [contracts/shared.ts:137](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L137)
 
 Provider-specific completion-token breakdown.
 
@@ -69,7 +69,7 @@ Provider-specific completion-token breakdown.
 
 > `optional` **numRequests?**: `number`
 
-Defined in: [types/shared.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L157)
+Defined in: [contracts/shared.ts:135](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L135)
 
 Number of underlying requests represented by this usage object.
 
@@ -79,7 +79,7 @@ Number of underlying requests represented by this usage object.
 
 > `optional` **prompt?**: `number`
 
-Defined in: [types/shared.ts:149](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L149)
+Defined in: [contracts/shared.ts:127](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L127)
 
 Prompt/input tokens consumed by the provider call.
 
@@ -89,6 +89,6 @@ Prompt/input tokens consumed by the provider call.
 
 > `optional` **total?**: `number`
 
-Defined in: [types/shared.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/types/shared.ts#L155)
+Defined in: [contracts/shared.ts:133](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L133)
 
 Total tokens reported for the provider call.
