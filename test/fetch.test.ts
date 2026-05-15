@@ -1,7 +1,7 @@
 import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
-import { Agent, ProxyAgent } from 'undici';
+import { Agent, interceptors, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
@@ -63,26 +63,33 @@ vi.mock('../src/globalConfig/cloud', () => ({
 }));
 
 vi.mock('undici', () => {
-  // Use regular functions instead of arrow functions for constructors
-  const ProxyAgent = vi.fn(function (this: any, options: any) {
-    return {
+  const createMockDispatcher = (options: any) => {
+    const dispatcher = {
       options,
       addRequest: vi.fn(),
+      close: vi.fn(),
       destroy: vi.fn(),
+      compose: vi.fn(),
     };
+    dispatcher.compose.mockReturnValue(dispatcher);
+    return dispatcher;
+  };
+
+  // Use regular functions instead of arrow functions for constructors
+  const ProxyAgent = vi.fn(function (this: any, options: any) {
+    return createMockDispatcher(options);
   });
 
   const Agent = vi.fn(function (this: any, options: any) {
-    return {
-      options,
-      addRequest: vi.fn(),
-      destroy: vi.fn(),
-    };
+    return createMockDispatcher(options);
   });
 
   return {
     ProxyAgent,
     Agent,
+    interceptors: {
+      decompress: vi.fn(() => ({ name: 'decompress' })),
+    },
   };
 });
 
@@ -863,6 +870,14 @@ describe('fetchWithProxy', () => {
     expect(dispatchers[1]).not.toBe(dispatchers[0]);
   });
 
+  it('should compose default Agent dispatchers with response decompression', async () => {
+    await fetchWithProxy('https://example.com/api');
+
+    const agent = vi.mocked(Agent).mock.results[0]?.value as { compose: ReturnType<typeof vi.fn> };
+    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
+    expect(agent.compose).toHaveBeenCalledWith({ name: 'decompress' });
+  });
+
   it('should create a dedicated ProxyAgent dispatcher per proxy URL and maxConcurrency value', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
     mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
@@ -891,6 +906,18 @@ describe('fetchWithProxy', () => {
         connections: 5,
       }),
     );
+  });
+
+  it('should compose ProxyAgent dispatchers with response decompression', async () => {
+    mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
+
+    await fetchWithProxy('https://example.com/api');
+
+    const proxyAgent = vi.mocked(ProxyAgent).mock.results[0]?.value as {
+      compose: ReturnType<typeof vi.fn>;
+    };
+    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
+    expect(proxyAgent.compose).toHaveBeenCalledWith({ name: 'decompress' });
   });
 
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {
