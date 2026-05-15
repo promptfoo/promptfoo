@@ -9,14 +9,15 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 vi.mock('../../../src/globalConfig/accounts', () => ({
-  getUserEmail: vi.fn().mockReturnValue('test@example.com'),
-  getUserId: vi.fn().mockReturnValue('test-user-id'),
+  getUserEmail: vi.fn(),
+  getUserId: vi.fn(),
 }));
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.example.com/task'),
+  getRemoteGenerationUrl: vi.fn(),
 }));
 
+import { getUserEmail, getUserId } from '../../../src/globalConfig/accounts';
 import { loadApiProvider } from '../../../src/providers/index';
 import {
   clearProbeState,
@@ -27,9 +28,17 @@ import {
   McpShadowGrader,
   McpShadowPlugin,
 } from '../../../src/redteam/plugins/mcpShadow';
+import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 
 const mockFetch = vi.mocked(fetchWithRetries);
+
+function resetMcpShadowMocks() {
+  vi.resetAllMocks();
+  vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+  vi.mocked(getUserId).mockReturnValue('test-user-id');
+  vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.example.com/task');
+}
 
 function mockStartProbeResponse(probeId = 'probe-1') {
   mockFetch.mockResolvedValueOnce({
@@ -57,7 +66,7 @@ function getGeneratedProviderConfig(
 
 describe('McpShadowPlugin.generateTests', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetMcpShadowMocks();
     clearProbeState();
   });
 
@@ -193,7 +202,7 @@ describe('McpShadowPlugin.generateTests', () => {
 
 describe('provider wrapper', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetMcpShadowMocks();
     clearProbeState();
   });
 
@@ -294,7 +303,7 @@ describe('provider wrapper', () => {
 
 describe('endProbe', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetMcpShadowMocks();
   });
 
   it('should call mcp-end-probe task and return grading signals', async () => {
@@ -325,7 +334,7 @@ describe('endProbe', () => {
 
 describe('getMcpShadowGradingSignals', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetMcpShadowMocks();
   });
 
   it('should return null on failure', async () => {
@@ -348,8 +357,8 @@ describe('McpShadowGrader', () => {
   let grader: McpShadowGrader;
 
   beforeEach(() => {
+    resetMcpShadowMocks();
     grader = new McpShadowGrader();
-    vi.clearAllMocks();
   });
 
   it('should have correct id', () => {
