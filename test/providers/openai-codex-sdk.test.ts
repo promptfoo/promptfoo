@@ -2185,6 +2185,45 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it('should default gpt-5.2-codex to medium CLI verbosity', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'gpt-5.2-codex',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: { model_verbosity: 'medium' },
+          }),
+        );
+      });
+
+      it('should preserve explicit gpt-5.2-codex CLI verbosity', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            model: 'gpt-5.2-codex',
+            cli_config: { model_verbosity: 'low' },
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: { model_verbosity: 'low' },
+          }),
+        );
+      });
+
       it('should map top-level collaboration_mode into the Codex CLI config object', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 

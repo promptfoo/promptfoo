@@ -47,6 +47,7 @@ describe('createOpenAiRealtimeSocket', () => {
     expect(MockOpenAIRealtimeWS).toHaveBeenCalledTimes(1);
     expect(MockWebSocket).not.toHaveBeenCalled();
     expect(on).toHaveBeenCalledWith('error', expect.any(Function));
+    expect(() => on.mock.calls[0]?.[1]?.()).not.toThrow();
   });
 
   it('preserves ws:// overrides with the legacy socket constructor', () => {

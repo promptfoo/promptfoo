@@ -9,7 +9,7 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
-import { mockProcessEnv } from '../../util/utils';
+import { createTempDir, mockProcessEnv, removeTempDir } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 // Hoist mock functions so they're available in vi.mock factories
@@ -24,7 +24,9 @@ const {
   mockStoreMedia: vi.fn(),
   mockMediaExists: vi.fn(),
   mockGetMediaStorage: vi.fn(),
-  mockGetConfigDirectoryPath: vi.fn(() => '/private/tmp/promptfoo-video-test-config'),
+  mockGetConfigDirectoryPath: vi.fn(
+    () => process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? '/tmp',
+  ),
 }));
 
 const fsPromiseMocks = vi.hoisted(() => ({
@@ -100,6 +102,8 @@ function getRequestJsonBody(path: string) {
 }
 
 describe('OpenAiVideoProvider', () => {
+  let tempConfigDir: string | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchWithProxy.mockReset();
@@ -108,8 +112,8 @@ describe('OpenAiVideoProvider', () => {
     mockGetMediaStorage.mockReset();
     mockGetConfigDirectoryPath.mockReset();
 
-    // Default config directory path
-    mockGetConfigDirectoryPath.mockReturnValue('/private/tmp/promptfoo-video-test-config');
+    tempConfigDir = createTempDir('promptfoo-video-test-config-');
+    mockGetConfigDirectoryPath.mockReturnValue(tempConfigDir);
 
     vi.mocked(fsPromises.readFile).mockRejectedValue(
       Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }),
@@ -139,6 +143,8 @@ describe('OpenAiVideoProvider', () => {
   });
 
   afterEach(() => {
+    removeTempDir(tempConfigDir);
+    tempConfigDir = undefined;
     vi.resetAllMocks();
   });
 

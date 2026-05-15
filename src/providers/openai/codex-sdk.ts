@@ -672,12 +672,20 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   }
 
   private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
-    if (!config.cli_config && !config.collaboration_mode) {
+    const cliConfig = {
+      ...(config.cli_config ?? {}),
+    };
+
+    if (config.model === 'gpt-5.2-codex' && cliConfig.model_verbosity === undefined) {
+      cliConfig.model_verbosity = 'medium';
+    }
+
+    if (!Object.keys(cliConfig).length && !config.collaboration_mode) {
       return undefined;
     }
 
     return {
-      ...(config.cli_config ?? {}),
+      ...cliConfig,
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
   }
