@@ -143,7 +143,7 @@ function applyDefaultRemotePluginConfig(
 ): PluginConfig | undefined {
   const configWithDefaultExamples = applyDefaultGraderExamples(key, config);
 
-  if (!key.startsWith('coding-agent:')) {
+  if (!key.startsWith('coding-agent:') && !key.startsWith('harness:')) {
     return configWithDefaultExamples;
   }
 

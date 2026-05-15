@@ -146,7 +146,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'commands/export.test.ts',
   'commands/mcp/server.test.ts',
   'commands/mcp/tools/runEvaluation.test.ts',
-  'commands/modelScan.test.ts',
   'commands/view.test.ts',
   'evaluator.integration.realTransforms.test.ts',
   'evaluatorHelpers.test.ts',

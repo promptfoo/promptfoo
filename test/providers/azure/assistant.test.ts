@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureAssistantProvider } from '../../../src/providers/azure/assistant';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { sleep } from '../../../src/util/time';
 
 vi.mock('../../../src/cache');
@@ -12,6 +13,7 @@ vi.mock('../../../src/logger', () => ({
     debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -1347,56 +1349,144 @@ describe('Azure Assistant Provider', () => {
     });
   });
 
-  describe('error detection methods', () => {
-    it('should identify content filter errors', () => {
-      expect((provider as any).isContentFilterError('content_filter triggered')).toBe(true);
-      expect((provider as any).isContentFilterError('content filter violation')).toBe(true);
-      expect((provider as any).isContentFilterError('Content filter blocked this')).toBe(true);
-      expect((provider as any).isContentFilterError('filtered due to policy')).toBe(true);
-      expect((provider as any).isContentFilterError('content filtering system')).toBe(true);
-      expect((provider as any).isContentFilterError('inappropriate content detected')).toBe(true);
-      expect((provider as any).isContentFilterError('safety guidelines violation')).toBe(true);
-      expect((provider as any).isContentFilterError('guardrail triggered')).toBe(true);
-      expect((provider as any).isContentFilterError('some other error')).toBe(false);
+  describe('structured HttpRateLimitError handling', () => {
+    it('formats a per-window rate limit error with retry-after detail', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        statusText: 'Too Many Requests',
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 12_000,
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.error).toContain('429');
+      expect(result.error).toContain('rate_limit_exceeded');
+      expect(result.error).toContain('retry after 12s');
+      expect(result.error).not.toContain('Retries will not help');
+      // Structured signal so the scheduler can fail-fast on the result path.
+      expect(result.metadata?.rateLimitKind).toBe('rate_limit');
     });
 
-    it('should identify rate limit errors', () => {
-      expect((provider as any).isRateLimitError('rate limit exceeded')).toBe(true);
-      expect((provider as any).isRateLimitError('Rate limit reached')).toBe(true);
-      expect((provider as any).isRateLimitError('HTTP 429 Too Many Requests')).toBe(true);
-      expect((provider as any).isRateLimitError('some other error')).toBe(false);
+    it('propagates kind=quota into result.metadata so the scheduler does not retry', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
+      const result = (provider as any).formatError(err);
+      expect(result.metadata?.rateLimitKind).toBe('quota');
     });
 
-    it('should identify service errors', () => {
-      expect((provider as any).isServiceError('Service unavailable')).toBe(true);
-      expect((provider as any).isServiceError('Bad gateway')).toBe(true);
-      expect((provider as any).isServiceError('Gateway timeout')).toBe(true);
-      expect((provider as any).isServiceError('Server is busy')).toBe(true);
-      expect((provider as any).isServiceError('Sorry, something went wrong')).toBe(true);
-      expect((provider as any).isServiceError('some other error')).toBe(false);
+    it('formats a hard quota error with a clear non-retryable hint', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        statusText: 'Too Many Requests',
+        code: 'insufficient_quota',
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+      expect(result.error).toContain('Retries will not help');
     });
 
-    it('should identify server errors', () => {
-      expect((provider as any).isServerError('500 Internal Server Error')).toBe(true);
-      expect((provider as any).isServerError('502 Bad Gateway')).toBe(true);
-      expect((provider as any).isServerError('503 Service Unavailable')).toBe(true);
-      expect((provider as any).isServerError('504 Gateway Timeout')).toBe(true);
-      expect((provider as any).isServerError('some other error')).toBe(false);
+    it('omits retry-after detail when no metadata is available', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).not.toContain('retry after');
+      expect(result.error).not.toContain('resets in');
     });
 
-    it('should determine if an error is retryable', () => {
-      // Direct code check
-      expect((provider as any).isRetryableError('rate_limit_exceeded')).toBe(true);
+    it('uses resetAt fallback when retryAfterMs is missing', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        resetAt: Date.now() + 30_000,
+      });
+      const result = (provider as any).formatError(err);
 
-      // Message checks
-      expect((provider as any).isRetryableError(undefined, 'rate limit exceeded')).toBe(true);
-      expect((provider as any).isRetryableError(undefined, 'Service unavailable')).toBe(true);
-      expect((provider as any).isRetryableError(undefined, '500 Internal Server Error')).toBe(true);
+      expect(result.error).toMatch(/resets in \d+s/);
+    });
 
-      // Not retryable
-      expect((provider as any).isRetryableError(undefined, 'Invalid request')).toBe(false);
-      expect((provider as any).isRetryableError('invalid_request')).toBe(false);
-      expect((provider as any).isRetryableError()).toBe(false);
+    it('surfaces structured rate-limit errors raised during run polling', async () => {
+      const provider2 = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            testFunction: vi.fn() as any,
+          },
+        },
+      });
+      (provider2 as any).authHeaders = { 'api-key': 'test-key' };
+
+      vi.spyOn(provider2 as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      vi.spyOn(provider2 as any, 'ensureInitialized').mockResolvedValue(undefined);
+      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+
+      const quota = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
+      vi.spyOn(provider2 as any, 'makeRequest').mockRejectedValue(quota);
+
+      const result = await (provider2 as any).pollRunWithToolCallHandling(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-1',
+        'run-1',
+      );
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+    });
+
+    it('surfaces rate-limit errors during run polling without "Retries will not help"', async () => {
+      // Symmetric to the quota test above: a per-window rate limit during
+      // polling must format as a regular rate-limit error, not the quota
+      // (non-retryable) message.
+      const provider2 = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            testFunction: vi.fn() as any,
+          },
+        },
+      });
+      (provider2 as any).authHeaders = { 'api-key': 'test-key' };
+      vi.spyOn(provider2 as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      vi.spyOn(provider2 as any, 'ensureInitialized').mockResolvedValue(undefined);
+      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 7000,
+      });
+      vi.spyOn(provider2 as any, 'makeRequest').mockRejectedValue(rateLimit);
+
+      const result = await (provider2 as any).pollRunWithToolCallHandling(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-1',
+        'run-1',
+      );
+
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.error).toContain('rate_limit_exceeded');
+      expect(result.error).toContain('retry after 7s');
+      expect(result.error).not.toContain('Retries will not help');
     });
   });
 

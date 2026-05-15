@@ -59,8 +59,31 @@ describe('Eval API schemas', () => {
     expect(result.success).toBe(false);
   });
 
-  it('SubmitRating response schema returns a message envelope', () => {
-    const parsed = EvalSchemas.SubmitRating.Response.parse({ message: 'ok' });
-    expect(parsed).toEqual({ message: 'ok' });
+  it('SubmitRating response schema preserves the persisted EvalResult row', () => {
+    const parsed = EvalSchemas.SubmitRating.Response.parse({
+      id: 'result-123',
+      success: true,
+      score: 0.75,
+      gradingResult: { pass: true, score: 0.75, reason: 'manual override' },
+      promptIdx: 0,
+    });
+    expect(parsed.id).toBe('result-123');
+    expect(parsed.success).toBe(true);
+    expect(parsed.score).toBe(0.75);
+    // Passthrough preserves additional EvalResult fields like gradingResult.
+    // The inferred Zod type carries an index signature for the passthrough
+    // bucket but doesn't statically include `gradingResult`, so cast through
+    // `unknown` to read it.
+    expect((parsed as unknown as { gradingResult: { pass: boolean } }).gradingResult.pass).toBe(
+      true,
+    );
+  });
+
+  it('SubmitRating response schema rejects payloads missing the row identifier', () => {
+    const result = EvalSchemas.SubmitRating.Response.safeParse({
+      success: true,
+      score: 1,
+    });
+    expect(result.success).toBe(false);
   });
 });

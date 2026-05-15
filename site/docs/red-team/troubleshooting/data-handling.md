@@ -18,7 +18,7 @@ Red team testing involves three distinct operations, each with different data re
 | **Test generation**   | Local or remote | Depends on configuration (see below) |
 | **Result grading**    | Local or remote | Depends on configuration (see below) |
 
-Your target model is always evaluated locally. Promptfoo never receives your target's responses unless you're using remote grading.
+Your target model is always evaluated locally. Promptfoo receives target responses only when you use a hosted flow that requires them, such as remote grading or red team target discovery.
 
 ## Default Behavior (No API Key)
 
@@ -28,6 +28,7 @@ Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses host
 
 - Application purpose (from your config's `purpose` field)
 - Plugin configuration and settings
+- Red team target/provider setup details, including request examples, target URLs, and auth headers entered into setup or test forms
 - Your email (for usage tracking)
 
 **For grading:**
@@ -36,16 +37,17 @@ Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses host
 - Your target's response
 - Grading criteria
 
-**Never sent:**
+**Not sent by default during generation/grading:**
 
-- API keys or credentials
-- Your promptfooconfig.yaml file
+- API keys or credentials stored in local environment variables
 - Model weights or training data
 - Files from your filesystem (unless explicitly configured in prompts)
 
+Credentials, authorization headers, provider config fields, and request examples **are** sent if you paste them into red team target/provider setup or test forms, sharing, Cloud sync, or other Cloud-backed features. Don't enter real secrets into those flows. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full hosted-feature list.
+
 ## With Your Own API Key
 
-Setting `OPENAI_API_KEY` routes generation and grading through your OpenAI account instead of promptfoo servers:
+Setting `OPENAI_API_KEY` routes generation and grading through your OpenAI account instead of Promptfoo servers:
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -58,7 +60,7 @@ redteam:
   provider: anthropic:messages:claude-sonnet-4-20250514
 ```
 
-With this configuration, promptfoo servers receive only [telemetry](#telemetry).
+With this configuration, Promptfoo servers usually receive only [telemetry](#telemetry) unless you use red team target/provider setup helpers, red team target/provider test requests, sharing, Cloud sync, hosted reports, or other Cloud-backed features.
 
 ## With Your ChatGPT Subscription
 
@@ -66,7 +68,7 @@ If Codex is installed and signed in with ChatGPT, Promptfoo can use `openai:code
 
 ## Remote-Only Plugins
 
-Some plugins require promptfoo's hosted inference and cannot run locally. These are marked with 🌐 in the [plugin documentation](/docs/red-team/plugins/).
+Some plugins require Promptfoo's hosted inference and cannot run locally. These are marked with 🌐 in the [plugin documentation](/docs/red-team/plugins/).
 
 Remote-only plugins include:
 
@@ -80,13 +82,13 @@ Remote-only strategies include: `audio`, `citation`, `gcg`, `goat`, `jailbreak:c
 
 ## Disabling Remote Generation
 
-To run entirely locally:
+To prefer local generation:
 
 ```bash
 export PROMPTFOO_DISABLE_REMOTE_GENERATION=true
 ```
 
-This disables all remote-only plugins and strategies. You must provide your own `OPENAI_API_KEY` or configure a local model for generation and grading.
+This disables supported remote-generation fallbacks for red team generation paths, including red team target/provider setup helpers that rely on remote generation. It is not a network isolation guarantee and does not disable telemetry, account/license checks, sharing, Cloud sync, red team target/provider test requests, red team target/provider setup helpers that do not rely on remote generation, or explicitly configured providers. You must provide your own `OPENAI_API_KEY` or configure a local model for generation and grading.
 
 For red-team-specific control (keeps SimulatedUser remote generation enabled):
 
@@ -116,7 +118,7 @@ See [Telemetry Configuration](/docs/configuration/telemetry/) for details.
 
 ## Network Requirements
 
-When using remote generation, promptfoo requires access to:
+When using remote generation, Promptfoo requires access to:
 
 | Domain              | Purpose                              |
 | ------------------- | ------------------------------------ |
@@ -141,11 +143,11 @@ See the [Enterprise Overview](/docs/enterprise/) for deployment options.
 
 ## Configuration Summary
 
-| Requirement                  | Configuration                                                                                                                                             |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No data to Promptfoo servers | Use API-key/local providers for every generation, grading, embedding, and moderation path; avoid remote-only plugins; set `PROMPTFOO_DISABLE_TELEMETRY=1` |
-| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local provider                                                                                 |
-| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                                                                                                               |
+| Requirement                  | Configuration                                                                                                                                                                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No data to Promptfoo servers | Use API-key/local providers for every generation, grading, embedding, and moderation path; avoid remote-only plugins, red team target/provider setup helpers, and red team target/provider test requests; disable telemetry; avoid Cloud sync and sharing |
+| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local providers for supported generation paths                                                                                                                                                 |
+| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                                                                                                                                                                                                               |
 
 ## Related Documentation
 

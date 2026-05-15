@@ -1,4 +1,5 @@
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 import zlib from 'zlib';
 
@@ -6,7 +7,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { createOutputMetadata, writeOutput } from '../util/index';
-import { getLogDirectory, getLogFilesSync } from '../util/logs';
+import { getLogDirectory, getLogFiles } from '../util/logs';
 import type { Command } from 'commander';
 
 /**
@@ -18,9 +19,13 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
     const gzip = zlib.createGzip({ level: 9 });
 
     output.on('close', () => {
-      const stats = fs.statSync(outputPath);
-      logger.info(`Created log archive: ${outputPath} (${stats.size} bytes)`);
-      resolve();
+      fsPromises
+        .stat(outputPath)
+        .then((stats) => {
+          logger.info(`Created log archive: ${outputPath} (${stats.size} bytes)`);
+          resolve();
+        })
+        .catch(reject);
     });
 
     output.on('error', reject);
@@ -28,67 +33,86 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
 
     gzip.pipe(output);
 
-    for (const logFile of logFiles) {
-      if (fs.existsSync(logFile)) {
-        const fileName = path.basename(logFile);
-        const fileContent = fs.readFileSync(logFile);
-        const fileStats = fs.statSync(logFile);
+    void (async () => {
+      try {
+        for (const logFile of logFiles) {
+          let fileContent: Buffer;
+          let fileStats: Awaited<ReturnType<typeof fsPromises.stat>>;
 
-        // Create tar header (simplified version)
-        const header = Buffer.alloc(512);
+          try {
+            [fileContent, fileStats] = await Promise.all([
+              fsPromises.readFile(logFile),
+              fsPromises.stat(logFile),
+            ]);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+              continue;
+            }
+            throw error;
+          }
 
-        // File name (100 bytes)
-        Buffer.from(fileName).copy(header, 0, 0, Math.min(fileName.length, 100));
+          const fileName = path.basename(logFile);
 
-        // File mode (8 bytes) - default 644
-        Buffer.from('0000644 ').copy(header, 100);
+          // Create tar header (simplified version)
+          const header = Buffer.alloc(512);
 
-        // User ID (8 bytes)
-        Buffer.from('0000000 ').copy(header, 108);
+          // File name (100 bytes)
+          Buffer.from(fileName).copy(header, 0, 0, Math.min(fileName.length, 100));
 
-        // Group ID (8 bytes)
-        Buffer.from('0000000 ').copy(header, 116);
+          // File mode (8 bytes) - default 644
+          Buffer.from('0000644 ').copy(header, 100);
 
-        // File size (12 bytes) - octal
-        const sizeOctal = fileStats.size.toString(8).padStart(11, '0') + ' ';
-        Buffer.from(sizeOctal).copy(header, 124);
+          // User ID (8 bytes)
+          Buffer.from('0000000 ').copy(header, 108);
 
-        // Modification time (12 bytes) - octal
-        const mtime = Math.floor(fileStats.mtime.getTime() / 1000);
-        const mtimeOctal = mtime.toString(8).padStart(11, '0') + ' ';
-        Buffer.from(mtimeOctal).copy(header, 136);
+          // Group ID (8 bytes)
+          Buffer.from('0000000 ').copy(header, 116);
 
-        // Checksum placeholder (8 bytes)
-        Buffer.from('        ').copy(header, 148);
+          // File size (12 bytes) - octal
+          const sizeOctal = fileStats.size.toString(8).padStart(11, '0') + ' ';
+          Buffer.from(sizeOctal).copy(header, 124);
 
-        // Type flag (1 byte) - regular file
-        header[156] = 0x30; // '0'
+          // Modification time (12 bytes) - octal
+          const mtime = Math.floor(fileStats.mtime.getTime() / 1000);
+          const mtimeOctal = mtime.toString(8).padStart(11, '0') + ' ';
+          Buffer.from(mtimeOctal).copy(header, 136);
 
-        // Calculate checksum
-        let checksum = 0;
-        for (let i = 0; i < 512; i++) {
-          checksum += header[i];
+          // Checksum placeholder (8 bytes)
+          Buffer.from('        ').copy(header, 148);
+
+          // Type flag (1 byte) - regular file
+          header[156] = 0x30; // '0'
+
+          // Calculate checksum
+          let checksum = 0;
+          for (let i = 0; i < 512; i++) {
+            checksum += header[i];
+          }
+          const checksumOctal = checksum.toString(8).padStart(6, '0') + '\0 ';
+          Buffer.from(checksumOctal).copy(header, 148);
+
+          // Write header
+          gzip.write(header);
+
+          // Write file content
+          gzip.write(fileContent);
+
+          // Pad to 512-byte boundary
+          const padding = 512 - (fileContent.length % 512);
+          if (padding < 512) {
+            gzip.write(Buffer.alloc(padding));
+          }
         }
-        const checksumOctal = checksum.toString(8).padStart(6, '0') + '\0 ';
-        Buffer.from(checksumOctal).copy(header, 148);
 
-        // Write header
-        gzip.write(header);
-
-        // Write file content
-        gzip.write(fileContent);
-
-        // Pad to 512-byte boundary
-        const padding = 512 - (fileContent.length % 512);
-        if (padding < 512) {
-          gzip.write(Buffer.alloc(padding));
-        }
+        // Write two empty 512-byte blocks to end the tar
+        gzip.write(Buffer.alloc(1024));
+        gzip.end();
+      } catch (error) {
+        gzip.destroy(error as Error);
+        output.destroy(error as Error);
+        reject(error);
       }
-    }
-
-    // Write two empty 512-byte blocks to end the tar
-    gzip.write(Buffer.alloc(1024));
-    gzip.end();
+    })();
   });
 }
 
@@ -154,7 +178,9 @@ export function exportCommand(program: Command) {
       try {
         const logDir = getLogDirectory();
 
-        if (!fs.existsSync(logDir)) {
+        try {
+          await fsPromises.access(logDir);
+        } catch {
           logger.error(
             `No log directory found. Logs are created when running commands like "promptfoo eval".\nLog directory: ${logDir}`,
           );
@@ -162,7 +188,7 @@ export function exportCommand(program: Command) {
           return;
         }
 
-        const allLogFiles = getLogFilesSync();
+        const allLogFiles = await getLogFiles();
 
         if (allLogFiles.length === 0) {
           logger.error(
