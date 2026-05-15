@@ -2,8 +2,6 @@ import { OpenAIRealtimeWS } from 'openai/realtime/ws';
 import WebSocket from 'ws';
 import { createOpenAiClient } from './client';
 
-import type { OpenAiRealtimeOptions } from './realtime';
-
 type CreateOpenAiRealtimeSocketOptions = {
   apiKey?: string;
   organization?: string;
@@ -11,7 +9,9 @@ type CreateOpenAiRealtimeSocketOptions = {
   model: string;
   socketUrl: string;
   websocketOptions: WebSocket.ClientOptions;
-  config: Pick<OpenAiRealtimeOptions, 'maxRetries'>;
+  config: {
+    maxRetries?: number;
+  };
 };
 
 /**
