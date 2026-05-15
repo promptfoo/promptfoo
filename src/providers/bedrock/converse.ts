@@ -28,6 +28,7 @@ import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isClaudeOpus47Model } from '../anthropic/util';
 import { MCPClient } from '../mcp/client';
+import { formatMcpToolError, formatMcpToolResult } from '../mcp/util';
 import { providerRegistry } from '../providerRegistry';
 import {
   isOpenAIToolArray,
@@ -37,6 +38,7 @@ import {
   openaiToolsToBedrock,
 } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions, createBedrockCacheKeyHash } from './base';
+import { parseJsonConverseMessages, parseLineBasedConverseMessages } from './converseMessages';
 import type {
   ContentBlock,
   ConverseCommandInput,
@@ -328,41 +330,6 @@ function transformMCPToolsToBedrockConverse(tools: MCPTool[]): BedrockConverseTo
   return result;
 }
 
-function normalizeMCPToolContent(content: unknown): string {
-  if (content == null) {
-    return '';
-  }
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === 'string') {
-          return part;
-        }
-        if (part && typeof part === 'object') {
-          if ('text' in part && (part as { text?: unknown }).text != null) {
-            return String((part as { text?: unknown }).text);
-          }
-          if ('json' in part) {
-            return JSON.stringify((part as { json?: unknown }).json);
-          }
-          if ('data' in part) {
-            return JSON.stringify((part as { data?: unknown }).data);
-          }
-          logger.debug('[Bedrock Converse] Unknown MCP content shape, serializing as JSON', {
-            keys: Object.keys(part as object),
-          });
-          return JSON.stringify(part);
-        }
-        return String(part);
-      })
-      .join('\n');
-  }
-  return JSON.stringify(content);
-}
-
 /**
  * Extract a printable message from an unknown thrown value without losing
  * non-`Error` payloads to `[object Object]`.
@@ -421,18 +388,30 @@ function joinMcpErrors(errors: string[]): string | undefined {
   return errors.length > 0 ? errors.join('; ') : undefined;
 }
 
-function formatMcpToolResult(name: string, content: unknown): string {
-  return `MCP Tool Result (${name}): ${normalizeMCPToolContent(content)}`;
-}
-
-function formatMcpToolError(name: string, message: string): string {
-  return `MCP Tool Error (${name}): ${message}`;
-}
-
 interface StreamingToolUseBlock {
   toolUseId?: string;
   name?: string;
   input: string;
+}
+
+type ConverseToolUseBlock = ContentBlock & {
+  toolUse: NonNullable<ContentBlock['toolUse']>;
+};
+
+interface ParsedConverseResponseContext {
+  content: ContentBlock[];
+  showThinking: boolean;
+  tokenUsage: Partial<TokenUsage>;
+  cost: number | undefined;
+  metadata: Record<string, unknown>;
+  guardrails: { flagged: true; reason: 'guardrail_intervened' } | undefined;
+  malformedError: string | undefined;
+}
+
+interface ToolDispatchResult {
+  results: string[];
+  errors: string[];
+  handledIndexes: Set<number>;
 }
 
 /**
@@ -503,250 +482,7 @@ export function parseConverseMessages(prompt: string): {
   messages: Message[];
   system?: SystemContentBlock[];
 } {
-  // Try to parse as JSON first
-  try {
-    const parsed = JSON.parse(prompt);
-    if (Array.isArray(parsed)) {
-      const systemMessages: SystemContentBlock[] = [];
-      const messages: Message[] = [];
-
-      for (const msg of parsed) {
-        if (msg.role === 'system') {
-          // System messages go to the system field
-          const content =
-            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          systemMessages.push({ text: content });
-        } else if (msg.role === 'user' || msg.role === 'assistant') {
-          // Convert content to ContentBlock format
-          const contentBlocks: ContentBlock[] = [];
-
-          if (typeof msg.content === 'string') {
-            contentBlocks.push({ text: msg.content });
-          } else if (Array.isArray(msg.content)) {
-            for (const block of msg.content) {
-              if (typeof block === 'string') {
-                contentBlocks.push({ text: block });
-              } else if (block.type === 'text') {
-                contentBlocks.push({ text: block.text });
-              } else if (block.type === 'image' || block.image) {
-                // Handle image content - multiple formats supported
-                const imageData = block.image || block;
-                let bytes: Buffer | undefined;
-                let format: string = 'png';
-
-                // Determine format from various sources
-                if (imageData.format) {
-                  format = imageData.format;
-                } else if (imageData.source?.media_type) {
-                  format = imageData.source.media_type.split('/')[1] || 'png';
-                }
-
-                // Get bytes from various sources
-                if (imageData.source?.bytes) {
-                  const rawBytes = imageData.source.bytes;
-                  if (typeof rawBytes === 'string') {
-                    // Check for data URL format: data:image/jpeg;base64,...
-                    if (rawBytes.startsWith('data:')) {
-                      const matches = rawBytes.match(/^data:image\/([^;]+);base64,(.+)$/);
-                      if (matches) {
-                        format = matches[1] === 'jpg' ? 'jpeg' : matches[1];
-                        bytes = Buffer.from(matches[2], 'base64');
-                      }
-                    } else {
-                      // Assume raw base64 string
-                      bytes = Buffer.from(rawBytes, 'base64');
-                    }
-                  } else if (Buffer.isBuffer(rawBytes)) {
-                    bytes = rawBytes;
-                  }
-                } else if (imageData.source?.data) {
-                  // Anthropic format: {source: {type: 'base64', media_type: '...', data: '...'}}
-                  bytes = Buffer.from(imageData.source.data, 'base64');
-                }
-
-                if (bytes) {
-                  // Normalize format names for Converse API
-                  if (format === 'jpg') {
-                    format = 'jpeg';
-                  }
-                  contentBlocks.push({
-                    image: {
-                      format: format as 'png' | 'jpeg' | 'gif' | 'webp',
-                      source: { bytes },
-                    },
-                  });
-                } else {
-                  logger.warn('Could not parse image content block', { block });
-                }
-              } else if (block.type === 'image_url' || block.image_url) {
-                // OpenAI-compatible image_url format
-                const imageUrl = block.image_url?.url || block.url;
-                if (typeof imageUrl === 'string' && imageUrl.startsWith('data:')) {
-                  const matches = imageUrl.match(/^data:image\/([^;]+);base64,(.+)$/);
-                  if (matches) {
-                    const format = matches[1] === 'jpg' ? 'jpeg' : matches[1];
-                    const bytes = Buffer.from(matches[2], 'base64');
-                    contentBlocks.push({
-                      image: {
-                        format: format as 'png' | 'jpeg' | 'gif' | 'webp',
-                        source: { bytes },
-                      },
-                    });
-                  }
-                } else {
-                  logger.warn('Unsupported image_url format (only data URLs supported)', {
-                    imageUrl,
-                  });
-                }
-              } else if (block.type === 'document' || block.document) {
-                // Handle document content
-                const docData = block.document || block;
-                let bytes: Buffer | undefined;
-                const format: string = docData.format || 'txt';
-                const name: string = docData.name || 'document';
-
-                if (docData.source?.bytes) {
-                  const rawBytes = docData.source.bytes;
-                  if (typeof rawBytes === 'string') {
-                    // Check for data URL format
-                    if (rawBytes.startsWith('data:')) {
-                      const matches = rawBytes.match(/^data:[^;]+;base64,(.+)$/);
-                      if (matches) {
-                        bytes = Buffer.from(matches[1], 'base64');
-                      }
-                    } else {
-                      bytes = Buffer.from(rawBytes, 'base64');
-                    }
-                  } else if (Buffer.isBuffer(rawBytes)) {
-                    bytes = rawBytes;
-                  }
-                }
-
-                if (bytes) {
-                  contentBlocks.push({
-                    document: {
-                      format: format as
-                        | 'pdf'
-                        | 'csv'
-                        | 'doc'
-                        | 'docx'
-                        | 'xls'
-                        | 'xlsx'
-                        | 'html'
-                        | 'txt'
-                        | 'md',
-                      name,
-                      source: { bytes },
-                    },
-                  });
-                } else {
-                  logger.warn('Could not parse document content block', { block });
-                }
-              } else if (block.type === 'tool_use' || block.toolUse) {
-                const toolUseData = block.toolUse || block;
-                contentBlocks.push({
-                  toolUse: {
-                    toolUseId: toolUseData.toolUseId || toolUseData.id,
-                    name: toolUseData.name,
-                    input: toolUseData.input,
-                  },
-                });
-              } else if (block.type === 'tool_result' || block.toolResult) {
-                const toolResultData = block.toolResult || block;
-                contentBlocks.push({
-                  toolResult: {
-                    toolUseId: toolResultData.toolUseId || toolResultData.tool_use_id,
-                    content: Array.isArray(toolResultData.content)
-                      ? toolResultData.content.map((c: any) =>
-                          typeof c === 'string' ? { text: c } : c,
-                        )
-                      : [{ text: String(toolResultData.content) }],
-                    status: toolResultData.status,
-                  },
-                });
-              } else {
-                // Unknown block type, try to convert to text
-                contentBlocks.push({ text: JSON.stringify(block) });
-              }
-            }
-          } else {
-            contentBlocks.push({ text: JSON.stringify(msg.content) });
-          }
-
-          messages.push({
-            role: msg.role,
-            content: contentBlocks,
-          });
-        }
-      }
-
-      return {
-        messages,
-        system: systemMessages.length > 0 ? systemMessages : undefined,
-      };
-    }
-  } catch {
-    // Not JSON, try line-based parsing
-  }
-
-  // Parse as line-based format or plain text
-  const lines = prompt.split('\n');
-  const messages: Message[] = [];
-  let system: SystemContentBlock[] | undefined;
-  let currentRole: 'user' | 'assistant' | null = null;
-  let currentContent: string[] = [];
-
-  const pushMessage = () => {
-    if (currentRole && currentContent.length > 0) {
-      messages.push({
-        role: currentRole,
-        content: [{ text: currentContent.join('\n') }],
-      });
-      currentContent = [];
-    }
-  };
-
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-
-    if (trimmedLine.toLowerCase().startsWith('system:')) {
-      pushMessage();
-      system = [{ text: trimmedLine.slice(7).trim() }];
-      currentRole = null;
-    } else if (trimmedLine.toLowerCase().startsWith('user:')) {
-      pushMessage();
-      currentRole = 'user';
-      const content = trimmedLine.slice(5).trim();
-      if (content) {
-        currentContent.push(content);
-      }
-    } else if (trimmedLine.toLowerCase().startsWith('assistant:')) {
-      pushMessage();
-      currentRole = 'assistant';
-      const content = trimmedLine.slice(10).trim();
-      if (content) {
-        currentContent.push(content);
-      }
-    } else if (currentRole) {
-      currentContent.push(line);
-    } else {
-      // No role prefix, treat as user message
-      currentRole = 'user';
-      currentContent.push(line);
-    }
-  }
-
-  pushMessage();
-
-  // If no messages were parsed, treat entire prompt as user message
-  if (messages.length === 0) {
-    messages.push({
-      role: 'user',
-      content: [{ text: prompt }],
-    });
-  }
-
-  return { messages, system };
+  return parseJsonConverseMessages(prompt) ?? parseLineBasedConverseMessages(prompt);
 }
 
 /**
@@ -1522,84 +1258,39 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     return { results, errors };
   }
 
-  /**
-   * Parse the Converse API response into ProviderResponse format
-   */
-  private async parseResponse(
+  private buildParsedResponseContext(
     response: ConverseCommandOutput,
-    toolsDisabled = false,
-  ): Promise<ProviderResponse> {
-    // Extract output text
-    const outputMessage = response.output?.message;
-    const content = outputMessage?.content || [];
-    const showThinking = this.config.showThinking !== false;
-
-    // Extract token usage
+  ): ParsedConverseResponseContext {
+    const content = response.output?.message?.content || [];
     const usage = response.usage;
     const promptTokens = usage?.inputTokens;
     const completionTokens = usage?.outputTokens;
-    const totalTokens = usage?.totalTokens;
     const cacheReadTokens = usage?.cacheReadInputTokens;
     const cacheWriteTokens = usage?.cacheWriteInputTokens;
-
-    const tokenUsage: Partial<TokenUsage> = {
-      prompt: promptTokens,
-      completion: completionTokens,
-      total: totalTokens || (promptTokens || 0) + (completionTokens || 0),
-      numRequests: 1,
-    };
-
-    // Calculate cost
-    const cost = calculateBedrockConverseCost(this.modelName, promptTokens, completionTokens);
-
-    // Build metadata
     const metadata: Record<string, unknown> = {};
 
-    // Add latency
     if (response.metrics?.latencyMs) {
       metadata.latencyMs = response.metrics.latencyMs;
     }
-
-    // Add stop reason
     if (response.stopReason) {
       metadata.stopReason = response.stopReason;
     }
-
-    // Add cache token info
     if (cacheReadTokens !== undefined || cacheWriteTokens !== undefined) {
-      metadata.cacheTokens = {
-        read: cacheReadTokens,
-        write: cacheWriteTokens,
-      };
+      metadata.cacheTokens = { read: cacheReadTokens, write: cacheWriteTokens };
     }
-
-    // Add performance config info
     if (response.performanceConfig) {
       metadata.performanceConfig = response.performanceConfig;
     }
-
-    // Add service tier info
     if (response.serviceTier) {
       metadata.serviceTier = response.serviceTier;
     }
-
-    // Add additional model response fields
     if (response.additionalModelResponseFields) {
       metadata.additionalModelResponseFields = response.additionalModelResponseFields;
     }
-
-    // Add trace info if present
     if (response.trace) {
       metadata.trace = response.trace;
     }
 
-    // Check for guardrail intervention
-    const guardrails =
-      response.stopReason === 'guardrail_intervened'
-        ? { flagged: true, reason: 'guardrail_intervened' }
-        : undefined;
-
-    // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
     let malformedError: string | undefined;
     if (response.stopReason === 'malformed_model_output') {
       malformedError = 'Model produced invalid output. The response could not be parsed correctly.';
@@ -1610,118 +1301,148 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       metadata.isModelError = true;
     }
 
-    const toolUseBlocks = content.filter(
-      (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
-        'toolUse' in block && block.toolUse !== undefined,
-    );
+    return {
+      content,
+      showThinking: this.config.showThinking !== false,
+      tokenUsage: {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: usage?.totalTokens || (promptTokens || 0) + (completionTokens || 0),
+        numRequests: 1,
+      },
+      cost: calculateBedrockConverseCost(this.modelName, promptTokens, completionTokens),
+      metadata,
+      guardrails:
+        response.stopReason === 'guardrail_intervened'
+          ? { flagged: true, reason: 'guardrail_intervened' }
+          : undefined,
+      malformedError,
+    };
+  }
 
-    // Mixed dispatch: each tool_use block goes to MCP if a matching MCP tool
-    // exists, otherwise to a configured `functionToolCallbacks` entry, otherwise
-    // falls through to the default `tool_use` JSON serialization. We aggregate
-    // results across the whole response so a mix of MCP + local callbacks both
-    // run instead of one short-circuiting the other.
+  private getToolUseBlocks(content: ContentBlock[]): ConverseToolUseBlock[] {
+    return content.filter(
+      (block): block is ConverseToolUseBlock => 'toolUse' in block && block.toolUse !== undefined,
+    );
+  }
+
+  private async dispatchToolUseBlocks(
+    toolUseBlocks: ConverseToolUseBlock[],
+    toolsDisabled: boolean,
+    showThinking: boolean,
+  ): Promise<ToolDispatchResult> {
+    const result: ToolDispatchResult = {
+      results: [],
+      errors: [],
+      handledIndexes: new Set<number>(),
+    };
+    if (toolsDisabled || toolUseBlocks.length === 0) {
+      return result;
+    }
+
     const mcpToolNames = new Set(
       this.mcpClient ? this.mcpClient.getAllTools().map((tool) => tool.name) : [],
     );
-    const dispatchResults: string[] = [];
-    const mcpErrors: string[] = [];
-    const handledIndexes = new Set<number>();
+    const mcpEligible = toolUseBlocks.flatMap((block, idx) => {
+      const name = block.toolUse.name;
+      return this.mcpClient && name && mcpToolNames.has(name)
+        ? [{ idx, name, input: block.toolUse.input }]
+        : [];
+    });
 
-    if (!toolsDisabled && toolUseBlocks.length > 0) {
-      // 1) MCP for matching tool names.
-      const mcpEligible: { idx: number; name: string; input: unknown }[] = [];
-      toolUseBlocks.forEach((block, idx) => {
-        const name = block.toolUse.name;
-        if (this.mcpClient && name && mcpToolNames.has(name)) {
-          mcpEligible.push({ idx, name, input: block.toolUse.input });
-        }
-      });
-
-      if (mcpEligible.length > 0) {
-        const mcpResult = await this.executeMcpToolCalls(mcpEligible);
-        for (const { idx } of mcpEligible) {
-          handledIndexes.add(idx);
-        }
-        dispatchResults.push(...mcpResult.results);
-        mcpErrors.push(...mcpResult.errors);
+    if (mcpEligible.length > 0) {
+      const mcpResult = await this.executeMcpToolCalls(mcpEligible);
+      for (const { idx } of mcpEligible) {
+        result.handledIndexes.add(idx);
       }
+      result.results.push(...mcpResult.results);
+      result.errors.push(...mcpResult.errors);
+    }
 
-      // 2) functionToolCallbacks for any remaining (non-MCP) tool_use blocks.
-      if (this.config.functionToolCallbacks) {
-        for (let idx = 0; idx < toolUseBlocks.length; idx++) {
-          if (handledIndexes.has(idx)) {
-            continue;
-          }
-          const block = toolUseBlocks[idx];
-          const functionName = block.toolUse.name;
-          if (!functionName || !this.config.functionToolCallbacks[functionName]) {
-            continue;
-          }
-          try {
-            const args =
-              typeof block.toolUse.input === 'string'
-                ? block.toolUse.input
-                : JSON.stringify(block.toolUse.input || {});
-            const result = await this.executeFunctionCallback(functionName, args);
-            dispatchResults.push(result);
-            handledIndexes.add(idx);
-          } catch (err) {
-            logger.warn(
-              `[Bedrock Converse] Function callback failed for ${functionName}: ${errorMessage(err)}; falling back to tool_use output`,
-            );
-            // Leave the block unhandled so the default serialization below
-            // surfaces it.
-          }
+    if (this.config.functionToolCallbacks) {
+      for (let idx = 0; idx < toolUseBlocks.length; idx++) {
+        if (result.handledIndexes.has(idx)) {
+          continue;
+        }
+        const block = toolUseBlocks[idx];
+        const functionName = block.toolUse.name;
+        if (!functionName || !this.config.functionToolCallbacks[functionName]) {
+          continue;
+        }
+        try {
+          const args =
+            typeof block.toolUse.input === 'string'
+              ? block.toolUse.input
+              : JSON.stringify(block.toolUse.input || {});
+          result.results.push(await this.executeFunctionCallback(functionName, args));
+          result.handledIndexes.add(idx);
+        } catch (err) {
+          logger.warn(
+            `[Bedrock Converse] Function callback failed for ${functionName}: ${errorMessage(err)}; falling back to tool_use output`,
+          );
         }
       }
     }
 
-    // 3) Default tool_use JSON for any remaining unhandled blocks. Rendered
-    // alongside any MCP / callback results so a mixed response shows everything.
-    // Skip when tools are disabled — in that case we want the regular text
-    // extraction path below to render text + tool_use as one combined output
-    // (matching the pre-MCP contract).
-    if (!toolsDisabled && toolUseBlocks.length > 0 && handledIndexes.size < toolUseBlocks.length) {
+    if (result.handledIndexes.size < toolUseBlocks.length) {
       const fallbackText = extractTextFromContentBlocks(
         toolUseBlocks
-          .filter((_, idx) => !handledIndexes.has(idx))
+          .filter((_, idx) => !result.handledIndexes.has(idx))
           .map((block) => ({ toolUse: block.toolUse })) as ContentBlock[],
         showThinking,
       );
       if (fallbackText) {
-        dispatchResults.push(fallbackText);
+        result.results.push(fallbackText);
       }
     }
 
-    if (dispatchResults.length > 0) {
+    return result;
+  }
+
+  private buildParsedProviderResponse(
+    context: ParsedConverseResponseContext,
+    output: string,
+    error?: string,
+  ): ProviderResponse {
+    return {
+      output,
+      tokenUsage: context.tokenUsage,
+      ...(context.cost === undefined ? {} : { cost: context.cost }),
+      ...(Object.keys(context.metadata).length > 0 ? { metadata: context.metadata } : {}),
+      ...(context.guardrails ? { guardrails: context.guardrails } : {}),
+      ...(error ? { error } : {}),
+    };
+  }
+
+  /**
+   * Parse the Converse API response into ProviderResponse format
+   */
+  private async parseResponse(
+    response: ConverseCommandOutput,
+    toolsDisabled = false,
+  ): Promise<ProviderResponse> {
+    const context = this.buildParsedResponseContext(response);
+    const toolUseBlocks = this.getToolUseBlocks(context.content);
+    const dispatch = await this.dispatchToolUseBlocks(
+      toolUseBlocks,
+      toolsDisabled,
+      context.showThinking,
+    );
+
+    if (dispatch.results.length > 0) {
       // Surface MCP failures via the response `error` field so downstream
       // consumers (assertions, exit codes, redteam grader) treat broken MCP
       // calls as failures rather than greenlighting them on the strength of an
       // embedded "MCP Tool Error: ..." string. Malformed-output stop reasons
       // take precedence since they're a model-level (not tool-level) failure.
-      const error = malformedError ?? joinMcpErrors(mcpErrors);
-      return {
-        output: dispatchResults.join('\n'),
-        tokenUsage,
-        ...(cost === undefined ? {} : { cost }),
-        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-        ...(guardrails ? { guardrails } : {}),
-        ...(error ? { error } : {}),
-      };
+      const error = context.malformedError ?? joinMcpErrors(dispatch.errors);
+      return this.buildParsedProviderResponse(context, dispatch.results.join('\n'), error);
     }
 
     // No tool_use blocks (or tools disabled) — fall through to the regular text
     // output extraction.
-    const output = extractTextFromContentBlocks(content, showThinking);
-
-    return {
-      output,
-      tokenUsage,
-      ...(cost === undefined ? {} : { cost }),
-      ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-      ...(guardrails ? { guardrails } : {}),
-      ...(malformedError ? { error: malformedError } : {}),
-    };
+    const output = extractTextFromContentBlocks(context.content, context.showThinking);
+    return this.buildParsedProviderResponse(context, output, context.malformedError);
   }
 
   /**

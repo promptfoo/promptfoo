@@ -931,6 +931,51 @@ export const HttpProviderConfigSchema = z.object({
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
+function serializeToolTemplateValue(value: unknown): unknown {
+  return typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
+}
+
+function resolveHttpToolTemplateValues(
+  providerConfig: HttpProviderConfig,
+  promptConfig: Record<string, any> | undefined,
+): { tools: unknown; toolChoice: unknown } {
+  const rawTools = promptConfig?.tools ?? providerConfig.tools;
+  const rawToolChoice = promptConfig?.tool_choice ?? providerConfig.tool_choice;
+  const format = providerConfig.transformToolsFormat as ToolFormat | undefined;
+
+  return {
+    tools: format ? transformTools(rawTools, format) : rawTools,
+    toolChoice: format ? transformToolChoice(rawToolChoice, format) : rawToolChoice,
+  };
+}
+
+function warnIfToolChoiceHasNoTools(tools: unknown, toolChoice: unknown): void {
+  if (!toolChoice) {
+    return;
+  }
+  if (tools && (!Array.isArray(tools) || tools.length > 0)) {
+    return;
+  }
+  logger.warn(
+    '[HTTP Provider]: tool_choice is set but tools is empty or undefined. This may cause API errors.',
+  );
+}
+
+function buildHttpTemplateVars(
+  prompt: string,
+  context: CallApiContextParams | undefined,
+  tools: unknown,
+  toolChoice: unknown,
+): Record<string, any> {
+  return {
+    ...(context?.vars || {}),
+    prompt,
+    ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
+    ...(tools === undefined ? {} : { tools: serializeToolTemplateValue(tools) }),
+    ...(toolChoice === undefined ? {} : { tool_choice: serializeToolTemplateValue(toolChoice) }),
+  };
+}
+
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
     return false;
@@ -2198,44 +2243,17 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Transform tools and tool_choice if transformToolsFormat is specified
-    // Merge prompt.config with this.config (prompt.config takes precedence)
-    const rawTools = context?.prompt?.config?.tools ?? this.config.tools;
-    const rawToolChoice = context?.prompt?.config?.tool_choice ?? this.config.tool_choice;
-    const format = this.config.transformToolsFormat as ToolFormat | undefined;
-
-    const transformedTools = format ? transformTools(rawTools, format) : rawTools;
-    const transformedToolChoice = format
-      ? transformToolChoice(rawToolChoice, format)
-      : rawToolChoice;
-
-    // Warn if tool_choice is set but tools is empty or undefined
-    if (
-      transformedToolChoice &&
-      (!transformedTools || (Array.isArray(transformedTools) && transformedTools.length === 0))
-    ) {
-      logger.warn(
-        '[HTTP Provider]: tool_choice is set but tools is empty or undefined. This may cause API errors.',
-      );
-    }
+    const { tools, toolChoice } = resolveHttpToolTemplateValues(
+      this.config,
+      context?.prompt?.config as Record<string, any> | undefined,
+    );
+    warnIfToolChoiceHasNoTools(tools, toolChoice);
 
     // Pre-serialize tools and tool_choice as JSON strings so templates can use
     // {{ tools }} and {{ tool_choice }} without the dump filter. processJsonBody
     // will parse JSON strings starting with { or [ back into objects/arrays.
     // String values (e.g. tool_choice: 'required') are passed through as-is.
-    const serializeForTemplate = (value: unknown): unknown =>
-      typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
-
-    const vars = {
-      ...(context?.vars || {}),
-      prompt,
-      ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
-      // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
-      ...(transformedTools === undefined ? {} : { tools: serializeForTemplate(transformedTools) }),
-      ...(transformedToolChoice === undefined
-        ? {}
-        : { tool_choice: serializeForTemplate(transformedToolChoice) }),
-    } as Record<string, any>;
+    const vars = buildHttpTemplateVars(prompt, context, tools, toolChoice);
 
     if (this.config.auth?.type === 'oauth') {
       await this.refreshOAuthTokenIfNeeded(vars);

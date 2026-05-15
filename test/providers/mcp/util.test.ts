@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyQueryParams,
   discoverTokenEndpoint,
+  formatMcpToolError,
+  formatMcpToolResult,
   getAuthHeaders,
   getAuthQueryParams,
   isMcpToolNameFilter,
+  normalizeMcpToolContent,
 } from '../../../src/providers/mcp/util';
 
 import type { MCPServerConfig } from '../../../src/providers/mcp/types';
@@ -25,6 +28,28 @@ describe('isMcpToolNameFilter', () => {
     expect(isMcpToolNameFilter('file://tools.json')).toBe(false);
     expect(isMcpToolNameFilter(['file://tools.json'])).toBe(false);
     expect(isMcpToolNameFilter([{ type: 'function', function: { name: 'lookup' } }])).toBe(false);
+  });
+});
+
+describe('normalizeMcpToolContent', () => {
+  it('normalizes rich MCP content arrays into readable lines', () => {
+    expect(
+      normalizeMcpToolContent([
+        'raw',
+        { text: 'hello' },
+        { json: { ok: true } },
+        { data: ['a', 'b'] },
+        { unknown: true },
+        42,
+      ]),
+    ).toBe('raw\nhello\n{"ok":true}\n["a","b"]\n{"unknown":true}\n42');
+  });
+
+  it('formats tool results and errors with the shared provider prefix', () => {
+    expect(formatMcpToolResult('lookup', [{ text: 'done' }])).toBe(
+      'MCP Tool Result (lookup): done',
+    );
+    expect(formatMcpToolError('lookup', 'boom')).toBe('MCP Tool Error (lookup): boom');
   });
 });
 
