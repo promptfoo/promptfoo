@@ -236,24 +236,31 @@ describe('ESM utilities', () => {
       expect(result()).toBe('esm default test result');
     });
 
-    it('sets error.cause with both ESM and CJS errors when combined error is thrown', () => {
-      const esmError = new Error('require is not defined');
-      const cjsError = new Error('Cannot find module');
-      const combinedError = new Error(
-        'Failed to load module test.js:\n' +
-          '  ESM import error: require is not defined\n' +
-          '  CJS fallback error: Cannot find module',
-        { cause: { esmError, cjsError } },
+    it('sets error.cause with both ESM and CJS errors when combined error is thrown', async () => {
+      const modulePath = path.resolve(
+        testDir,
+        '__fixtures__/testModuleCjsFallbackFailure.js',
       );
 
+      let combinedError: Error | undefined;
+      try {
+        await importModule(modulePath);
+      } catch (error) {
+        combinedError = error as Error;
+      }
+
       expect(combinedError).toBeInstanceOf(Error);
-      expect(combinedError.message).toContain('Failed to load module');
-      expect(combinedError.message).toContain('ESM import error');
-      expect(combinedError.message).toContain('CJS fallback error');
-      expect(combinedError.cause).toBeDefined();
-      const cause = combinedError.cause as { esmError: Error; cjsError: Error };
-      expect(cause.esmError).toBe(esmError);
-      expect(cause.cjsError).toBe(cjsError);
+      expect(combinedError?.message).toContain('Failed to load module');
+      expect(combinedError?.message).toContain('ESM import error');
+      expect(combinedError?.message).toContain('CJS fallback error');
+
+      const cause = combinedError?.cause as
+        | { esmError?: unknown; cjsError?: unknown }
+        | undefined;
+      expect(cause?.esmError).toBeInstanceOf(Error);
+      expect(cause?.cjsError).toBeInstanceOf(Error);
+      expect((cause?.esmError as Error).message).toContain('require is not defined');
+      expect((cause?.cjsError as Error).message).toContain('require is not defined');
     });
 
     describe('CJS fallback for .js files', () => {
