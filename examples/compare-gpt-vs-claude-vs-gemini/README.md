@@ -1,6 +1,6 @@
 # compare-gpt-vs-claude-vs-gemini (GPT vs Claude vs Gemini Comparison)
 
-This example compares OpenAI's GPT-5.2, Anthropic's Claude Sonnet 4.6, and Google's Gemini on riddle-solving tasks with cost, latency, and quality assertions.
+This example compares OpenAI's GPT-5.4, Anthropic's Claude Sonnet 4.6, and Google's Gemini 3.1 Pro Preview on riddle-solving tasks with cost, latency, and quality assertions.
 
 You can run this example with:
 

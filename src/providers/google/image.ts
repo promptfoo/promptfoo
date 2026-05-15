@@ -3,7 +3,7 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
   getGoogleClient,
@@ -176,7 +176,7 @@ export class GoogleImageProvider implements ApiProvider {
               ...(this.config.headers || {}),
             },
             data: body,
-            timeout: REQUEST_TIMEOUT_MS,
+            timeout: getRequestTimeoutMs(),
           }),
         'Vertex AI API call',
       )) as { data: ImageGenerationResponse };
@@ -246,7 +246,7 @@ export class GoogleImageProvider implements ApiProvider {
               body: JSON.stringify(body),
               ...(authDiscriminator && { _authHash: authDiscriminator }),
             } as RequestInit,
-            REQUEST_TIMEOUT_MS,
+            getRequestTimeoutMs(),
             'json',
           ),
         'Google AI Studio API call',

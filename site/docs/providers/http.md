@@ -73,6 +73,74 @@ providers:
       body: 'model={{model}}&translate={{language}}'
 ```
 
+## Sending multipart/form-data
+
+Use `multipart.parts` when the target API expects form fields or file uploads.
+Promptfoo builds a fresh `FormData` body for every request and automatically sets the
+multipart boundary. Do not set `Content-Type: multipart/form-data` yourself unless
+you are using [raw HTTP request mode](#sending-a-raw-http-request).
+
+### Text fields and generated documents
+
+This example sends the prompt as a `documentQuery` text field and sends a simple
+generated PDF as the `files` upload field:
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: 'http://localhost:8080/api/genai/analyze-file'
+      method: POST
+      headers:
+        X-API-Key: '{{api_key}}'
+      multipart:
+        parts:
+          - kind: file
+            name: files
+            filename: promptfoo-document.pdf
+            source:
+              type: generated
+              format: pdf
+              text: 'Promptfoo generated document for multipart testing.'
+          - kind: field
+            name: documentQuery
+            value: '{{prompt}}'
+      transformResponse: json.summary
+```
+
+The `generated` source creates a deterministic document suitable for transport
+tests. Supported formats are `pdf`, `png`, `jpeg`, and `jpg` (alias for `jpeg`).
+
+### Uploading local files
+
+Use a `path` source to upload a file from the machine running promptfoo. Relative
+paths resolve from the promptfoo config directory.
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: 'http://localhost:8080/api/genai/analyze-file'
+      method: POST
+      multipart:
+        parts:
+          - kind: file
+            name: files
+            filename: sample-report45.pdf
+            contentType: application/pdf
+            source:
+              type: path
+              path: file://fixtures/sample-report45.pdf
+          - kind: field
+            name: documentQuery
+            value: '{{prompt}}'
+      transformResponse: json.summary
+```
+
+Structured multipart requests bypass the HTTP response cache by default.
+`multipart` is mutually exclusive with `request` and `body`, and it cannot be
+used with `GET` or `HEAD`.
+
 ## Sending a raw HTTP request
 
 You can also send a raw HTTP request by specifying the `request` property in the provider configuration. This allows you to have full control over the request, including headers and body.
@@ -1702,6 +1770,7 @@ Supported config options:
 | method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
 | headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
 | body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
+| multipart         | object                  | Multipart form configuration with ordered `parts`. Supports text fields, local file uploads, and generated PDF/PNG/JPEG documents.                                                  |
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |

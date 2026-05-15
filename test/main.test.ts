@@ -9,6 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 // Hoisted mocks for shutdown tests
 const mockSetupEnv = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
+const mockTelemetryRecord = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
@@ -33,7 +34,7 @@ vi.mock('../src/logger', () => ({
 
 vi.mock('../src/telemetry', () => ({
   __esModule: true,
-  default: { record: vi.fn(), shutdown: mockTelemetryShutdown },
+  default: { record: mockTelemetryRecord, shutdown: mockTelemetryShutdown },
 }));
 
 vi.mock('../src/database/index', () => ({
@@ -50,14 +51,93 @@ vi.mock('../src/codeScan', () => ({
   codeScansCommand: vi.fn(),
 }));
 
-let addCommonOptionsRecursively: typeof import('../src/main').addCommonOptionsRecursively;
-let isMainModule: typeof import('../src/main').isMainModule;
-let shutdownGracefully: typeof import('../src/main').shutdownGracefully;
+let addCommonOptionsRecursively: typeof import('../src/mainUtils').addCommonOptionsRecursively;
+let isMainModule: typeof import('../src/mainUtils').isMainModule;
+let shouldSkipDefaultConfigLoading: typeof import('../src/mainUtils').shouldSkipDefaultConfigLoading;
+let setupEnvFilesFromArgv: typeof import('../src/mainUtils').setupEnvFilesFromArgv;
+let shutdownGracefully: typeof import('../src/mainUtils').shutdownGracefully;
 
 async function loadMainModule() {
   vi.resetModules();
-  ({ addCommonOptionsRecursively, isMainModule, shutdownGracefully } = await import('../src/main'));
+  ({
+    addCommonOptionsRecursively,
+    isMainModule,
+    shouldSkipDefaultConfigLoading,
+    setupEnvFilesFromArgv,
+    shutdownGracefully,
+  } = await import('../src/mainUtils'));
 }
+
+describe('setupEnvFilesFromArgv', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+    mockSetupEnv.mockReset();
+  });
+
+  it('should load env files before command actions run', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '.env.local']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local');
+  });
+
+  it('should support repeated and comma-separated env file args', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '.env.one', '--env-path=.env.two,.env.three']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+  });
+
+  it('should ignore flags after --', () => {
+    setupEnvFilesFromArgv(['eval', '--', '--env-file', '.env.local']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should recognize the --env-path alias', () => {
+    setupEnvFilesFromArgv(['eval', '--env-path', '.env.staging']);
+
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.staging');
+  });
+
+  it('should be a no-op when no env flags are present', () => {
+    setupEnvFilesFromArgv(['eval', '--verbose', '--no-cache']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should ignore --env-file= with empty value', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file=']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+
+  it('should skip --env-file when next arg starts with -', () => {
+    setupEnvFilesFromArgv(['eval', '--env-file', '--verbose']);
+
+    expect(mockSetupEnv).not.toHaveBeenCalled();
+  });
+});
+
+describe('shouldSkipDefaultConfigLoading', () => {
+  beforeEach(async () => {
+    await loadMainModule();
+  });
+
+  it('skips unrelated default config discovery for code-scans commands', () => {
+    expect(shouldSkipDefaultConfigLoading(['code-scans', 'run'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--verbose', 'code-scans', 'run', '--help'])).toBe(true);
+    expect(
+      shouldSkipDefaultConfigLoading(['--env-file', '.env.local', 'code-scans', 'run', '--help']),
+    ).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--env-path=.env.local', 'code-scans', 'run'])).toBe(
+      true,
+    );
+  });
+
+  it('keeps default config discovery for other commands and post-separator arguments', () => {
+    expect(shouldSkipDefaultConfigLoading(['eval', '--help'])).toBe(false);
+    expect(shouldSkipDefaultConfigLoading(['--', 'code-scans', 'run'])).toBe(false);
+  });
+});
 
 describe('addCommonOptionsRecursively', () => {
   const originalExit = process.exit;
@@ -70,10 +150,11 @@ describe('addCommonOptionsRecursively', () => {
 
   beforeEach(async () => {
     await loadMainModule();
-    program = new Command();
+    program = new Command('promptfoo');
     program.action(() => {});
     subCommand = program.command('subcommand');
     subCommand.action(() => {});
+    mockTelemetryRecord.mockReset();
     vi.clearAllMocks();
   });
 
@@ -142,8 +223,8 @@ describe('addCommonOptionsRecursively', () => {
     // Create a deeper command structure
     const subSubCommand = subCommand.command('subsubcommand');
     subSubCommand.action(() => {});
-    const subSubSubCommand = subSubCommand.command('subsubsubcommand');
-    subSubSubCommand.action(() => {});
+    const level3Command = subSubCommand.command('subsubsubcommand');
+    level3Command.action(() => {});
 
     addCommonOptionsRecursively(program);
 
@@ -169,10 +250,10 @@ describe('addCommonOptionsRecursively', () => {
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
 
-    const hasSubSubSubCommandVerboseOption = subSubSubCommand.options.some(
+    const hasSubSubSubCommandVerboseOption = level3Command.options.some(
       (option) => option.short === '-v' || option.long === '--verbose',
     );
-    const hasSubSubSubCommandEnvFileOption = subSubSubCommand.options.some(
+    const hasSubSubSubCommandEnvFileOption = level3Command.options.some(
       (option) => option.long === '--env-file' || option.long === '--env-path',
     );
 
@@ -220,6 +301,49 @@ describe('addCommonOptionsRecursively', () => {
     preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }));
     expect(mockSetLogLevel).toHaveBeenCalledWith('debug');
     expect(mockSetupEnv).toHaveBeenCalledWith('.env.combined');
+  });
+
+  it('should parse --env-file without consuming positional subcommand arguments', async () => {
+    const action = vi.fn();
+    const documentCommand = program.command('scan-model').argument('<model>').action(action);
+
+    addCommonOptionsRecursively(program);
+
+    await program.parseAsync(['scan-model', '--env-file', '.env.local', 'llama-3'], {
+      from: 'user',
+    });
+
+    expect(action).toHaveBeenCalledWith(
+      'llama-3',
+      expect.objectContaining({ verbose: false }),
+      documentCommand,
+    );
+    expect(mockSetupEnv).toHaveBeenCalledWith('.env.local');
+  });
+
+  it('should support repeated and comma-separated --env-file values', async () => {
+    addCommonOptionsRecursively(program);
+
+    await program.parseAsync(
+      ['subcommand', '--env-file', '.env.one', '--env-file', '.env.two,.env.three'],
+      { from: 'user' },
+    );
+
+    expect(mockSetupEnv).toHaveBeenCalledWith(['.env.one', '.env.two', '.env.three']);
+  });
+
+  it('should record telemetry once for nested subcommands', async () => {
+    const nestedParent = program.command('redteam');
+    const nestedAction = vi.fn();
+    nestedParent.command('run').action(nestedAction);
+
+    addCommonOptionsRecursively(program);
+
+    await program.parseAsync(['redteam', 'run'], { from: 'user' });
+
+    expect(nestedAction).toHaveBeenCalledTimes(1);
+    expect(mockTelemetryRecord).toHaveBeenCalledTimes(1);
+    expect(mockTelemetryRecord).toHaveBeenCalledWith('command_used', { name: 'redteam run' });
   });
 });
 
@@ -465,16 +589,16 @@ describe('shutdownGracefully', () => {
   });
 
   it('should clear force exit timeout when cleanup completes normally', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
     const shutdownPromise = shutdownGracefully();
 
-    // Advance a little to let the cleanup complete
     await vi.runAllTimersAsync();
 
     await shutdownPromise;
 
-    // The force exit (3s) should not have been called since cleanup completed
-    // We verify this by checking process.exit was called with the natural exit timeout (100ms)
-    // not the force exit message
+    const forceExitTimeout = setTimeoutSpy.mock.results[0]?.value;
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(forceExitTimeout);
     expect(process.exit).toHaveBeenCalled();
   });
 

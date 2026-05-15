@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import * as fs from 'fs';
 
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -17,6 +16,7 @@ import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { pathExists } from '../../util/file';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
@@ -127,6 +127,55 @@ export function normalizeTargetPurposeDiscoveryResult(
   };
 }
 
+function extractStringField(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+async function getRemoteResponseErrorDetail(response: Response): Promise<string> {
+  const rawText = (await response.text()).trim();
+  const fallback = rawText || response.statusText || 'Unknown error';
+  if (!rawText) {
+    return fallback;
+  }
+  try {
+    const parsed = JSON.parse(rawText) as { message?: unknown; error?: unknown } | null;
+    const detail = extractStringField(parsed?.message) ?? extractStringField(parsed?.error);
+    return detail ?? fallback;
+  } catch {
+    // Not JSON — fall through to raw text.
+    return fallback;
+  }
+}
+
+const REMOTE_ERROR_HINTS: Record<number, string> = {
+  400: 'This usually means your promptfoo client is out of date. Try `npm install -g promptfoo@latest` and rerun.',
+  401: 'Check that you are logged in (`promptfoo auth login`) and that your account has access to target discovery.',
+  403: 'Check that you are logged in (`promptfoo auth login`) and that your account has access to target discovery.',
+  404: 'This usually means your promptfoo client is out of date. Try `npm install -g promptfoo@latest` and rerun.',
+  429: 'You are being rate limited. Wait a moment and try again.',
+};
+
+function getRemoteErrorHint(status: number): string | undefined {
+  if (REMOTE_ERROR_HINTS[status]) {
+    return REMOTE_ERROR_HINTS[status];
+  }
+  if (status >= 500) {
+    return 'The remote generation service may be temporarily unavailable. Retry in a few minutes or contact support if the issue persists.';
+  }
+  return undefined;
+}
+
+async function buildRemoteErrorFromResponse(response: Response): Promise<Error> {
+  const detail = await getRemoteResponseErrorDetail(response);
+  const hint = getRemoteErrorHint(response.status);
+  const base = `Remote server returned HTTP ${response.status}: ${detail}`;
+  return new Error(hint ? `${base}\n${hint}` : base);
+}
+
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
@@ -192,9 +241,7 @@ export async function doTargetPurposeDiscovery(
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        logger.error(`${LOG_PREFIX} Error getting the next question from remote server: ${error}`);
-        continue;
+        throw await buildRemoteErrorFromResponse(response);
       }
 
       const responseData = await response.json();
@@ -332,7 +379,14 @@ export function discoverCommand(
       // If user provides a config, read the target from it:
       if (args.config) {
         // Validate that the config is a valid path:
-        if (!fs.existsSync(args.config)) {
+        let configExists: boolean;
+        try {
+          configExists = await pathExists(args.config);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(`Unable to access config at ${args.config}: ${message}`);
+        }
+        if (!configExists) {
           throw new Error(`Config not found at ${args.config}`);
         }
 

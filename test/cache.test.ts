@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 
 import {
   afterAll,
@@ -15,16 +16,28 @@ import {
   disableCache,
   enableCache,
   fetchWithCache,
+  getCache,
   isCacheEnabled,
+  withCacheEnabled,
+  withCacheNamespace,
 } from '../src/cache';
 import { fetchWithRetries } from '../src/util/fetch/index';
+import { mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
 }));
 
+vi.mock('../src/globalConfig/cloud', () => ({
+  CLOUD_API_HOST: 'https://api.promptfoo.app',
+  cloudConfig: {
+    getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
+  },
+}));
+
 // Mock fetchWithRetries to return proper Response objects
-vi.mock('../src/util/fetch/index', () => ({
+vi.mock('../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/util/fetch/index')>()),
   fetchWithRetries: vi.fn(),
 }));
 
@@ -33,37 +46,66 @@ vi.mock('../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Mock cacheMigration
-vi.mock('../src/cacheMigration', () => ({
-  shouldRunMigration: vi.fn().mockReturnValue(false), // Don't run migration by default in tests
-  runMigration: vi.fn().mockReturnValue({
-    success: true,
-    stats: { successCount: 0, skippedExpired: 0, failureCount: 0, errors: [] },
-  }),
-}));
-
 const mockFetchWithRetries = vi.mocked(fetchWithRetries);
 
-// Mock cache-manager v7
+// Mock cache-manager v7. This is a behavioral test double, not a complete
+// cache-manager implementation; it models only the storage, TTL, namespace
+// iteration, and in-flight deduplication semantics exercised by this suite.
 vi.mock('cache-manager', () => ({
   createCache: vi.fn().mockImplementation(({ stores }) => {
-    const cache = new Map();
-    const inflight = new Map();
+    const cache = new Map<string, unknown>();
+    const expiresAt = new Map<string, number>();
+    const inflight = new Map<string, Promise<unknown>>();
+    const memoryStore = {
+      iterator: vi.fn().mockImplementation(async function* (namespace?: string) {
+        const prefix = namespace ? `${namespace}:` : undefined;
+        for (const [key, value] of cache.entries()) {
+          if (!prefix || key.startsWith(prefix)) {
+            yield [key, value];
+          }
+        }
+      }),
+      delete: vi.fn().mockImplementation((key: string) => {
+        cache.delete(key);
+        expiresAt.delete(key);
+        return Promise.resolve(true);
+      }),
+      deleteMany: vi.fn().mockImplementation((keys: string[]) => {
+        for (const key of keys) {
+          cache.delete(key);
+          expiresAt.delete(key);
+        }
+        return Promise.resolve(true);
+      }),
+      clear: vi.fn().mockImplementation(() => {
+        cache.clear();
+        expiresAt.clear();
+        return Promise.resolve();
+      }),
+    };
+
     return {
-      stores: stores || [],
+      stores: stores?.length ? stores : [memoryStore],
       get: vi.fn().mockImplementation((key) => cache.get(key)),
-      set: vi.fn().mockImplementation((key, value) => {
+      set: vi.fn().mockImplementation((key, value, ttl) => {
         cache.set(key, value);
+        if (ttl === undefined) {
+          expiresAt.delete(key);
+        } else {
+          expiresAt.set(key, Date.now() + ttl);
+        }
         return Promise.resolve();
       }),
       del: vi.fn().mockImplementation((key) => {
         cache.delete(key);
+        expiresAt.delete(key);
         return Promise.resolve();
       }),
       clear: vi.fn().mockImplementation(() => {
         cache.clear();
+        expiresAt.clear();
         inflight.clear();
-        return Promise.resolve();
+        return Promise.resolve(true);
       }),
       wrap: vi.fn().mockImplementation(async (key, fn) => {
         if (cache.has(key)) {
@@ -87,11 +129,37 @@ vi.mock('cache-manager', () => ({
         return pending;
       }),
       // Add required Cache interface methods
-      mget: vi.fn(),
-      mset: vi.fn(),
-      mdel: vi.fn(),
+      mget: vi.fn().mockImplementation((keys: string[]) => {
+        return Promise.resolve(keys.map((key) => cache.get(key)));
+      }),
+      mset: vi
+        .fn()
+        .mockImplementation((list: Array<{ key: string; value: unknown; ttl?: number }>) => {
+          for (const { key, value, ttl } of list) {
+            cache.set(key, value);
+            if (ttl === undefined) {
+              expiresAt.delete(key);
+            } else {
+              expiresAt.set(key, Date.now() + ttl);
+            }
+          }
+          return Promise.resolve(list);
+        }),
+      mdel: vi.fn().mockImplementation((keys: string[]) => {
+        for (const key of keys) {
+          cache.delete(key);
+          expiresAt.delete(key);
+        }
+        return Promise.resolve(true);
+      }),
       reset: vi.fn(),
-      ttl: vi.fn(),
+      ttl: vi.fn().mockImplementation((key: string) => {
+        const expiry = expiresAt.get(key);
+        if (expiry === undefined) {
+          return Promise.resolve(undefined);
+        }
+        return Promise.resolve(Math.max(0, expiry - Date.now()));
+      }),
       on: vi.fn(),
       removeAllListeners: vi.fn(),
     } as any;
@@ -124,7 +192,13 @@ const mockFetchWithRetriesResponse = (
     status: ok ? 200 : 400,
     statusText: ok ? 'OK' : 'Bad Request',
     text: () => Promise.resolve(responseText),
-    json: () => (ok ? Promise.resolve(response) : Promise.reject(new Error('Invalid JSON'))),
+    json: () => {
+      try {
+        return Promise.resolve(JSON.parse(responseText));
+      } catch (err) {
+        return Promise.reject(err);
+      }
+    },
     headers: new Headers({
       'content-type': contentType,
       'x-session-id': '45',
@@ -133,54 +207,64 @@ const mockFetchWithRetriesResponse = (
 };
 
 describe('cache configuration', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
   let mkdirSyncMock: MockInstance;
   let existsSyncMock: MockInstance;
 
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...originalEnv };
+    mockProcessEnv({ ...originalEnv }, { clear: true });
     // Clear cache type override from test setup
-    delete process.env.PROMPTFOO_CACHE_TYPE;
+    mockProcessEnv({ PROMPTFOO_CACHE_TYPE: undefined });
     mkdirSyncMock = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
     existsSyncMock = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     mkdirSyncMock.mockRestore();
     existsSyncMock.mockRestore();
   });
 
   it('should use memory cache in test environment', async () => {
-    process.env.NODE_ENV = 'test';
+    mockProcessEnv({ NODE_ENV: 'test' });
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
-    // In test environment, stores array should be empty (memory cache)
-    expect(cache.stores).toEqual([]);
+    // In test environment, promptfoo falls back to an in-memory store instead of disk.
+    expect(cache.stores.length).toBeGreaterThan(0);
+    expect(cache.stores[0]).toMatchObject({
+      iterator: expect.any(Function),
+      delete: expect.any(Function),
+      clear: expect.any(Function),
+    });
+    expect(cache.stores[0]?.constructor?.name).not.toBe('MockKeyv');
   });
 
   it('should use disk cache in non-test environment', async () => {
-    process.env.NODE_ENV = 'production';
+    mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
     // In production, stores array should have at least one store (disk cache)
     expect(cache.stores.length).toBeGreaterThan(0);
+    expect(cache.stores[0]?.constructor?.name).toBe('MockKeyv');
+    const expectedCachePath = path.join('/mock/config/path', 'cache');
+    expect(fs.existsSync).toHaveBeenCalledWith(expectedCachePath);
+    expect(fs.mkdirSync).toHaveBeenCalledWith(expectedCachePath, { recursive: true });
   });
 
   it('should respect custom cache path', async () => {
-    process.env.PROMPTFOO_CACHE_PATH = '/custom/cache/path';
-    process.env.NODE_ENV = 'production';
+    mockProcessEnv({ PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
+    mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     cacheModule.getCache();
     expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
   });
 
   it('should respect cache configuration from environment', async () => {
-    process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT = '100';
-    process.env.PROMPTFOO_CACHE_TTL = '3600';
-    process.env.PROMPTFOO_CACHE_MAX_SIZE = '1000000';
-    process.env.NODE_ENV = 'production';
+    mockProcessEnv({ PROMPTFOO_CACHE_MAX_FILE_COUNT: '100' });
+    mockProcessEnv({ PROMPTFOO_CACHE_TTL: '3600' });
+    mockProcessEnv({ PROMPTFOO_CACHE_MAX_SIZE: '1000000' });
+    mockProcessEnv({ NODE_ENV: 'production' });
 
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
@@ -190,7 +274,7 @@ describe('cache configuration', () => {
 
   it('should handle cache directory creation when it exists', async () => {
     existsSyncMock.mockReturnValue(true);
-    process.env.NODE_ENV = 'production';
+    mockProcessEnv({ NODE_ENV: 'production' });
 
     const cacheModule = await import('../src/cache');
     cacheModule.getCache();
@@ -218,6 +302,120 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('should scope cache disabling to the current async context', async () => {
+      expect(isCacheEnabled()).toBe(true);
+
+      await withCacheEnabled(false, async () => {
+        expect(isCacheEnabled()).toBe(false);
+      });
+
+      expect(isCacheEnabled()).toBe(true);
+    });
+
+    it('should treat undefined as no override', async () => {
+      expect(isCacheEnabled()).toBe(true);
+
+      await withCacheEnabled(undefined, async () => {
+        expect(isCacheEnabled()).toBe(true);
+      });
+
+      // Inside a force-disabled scope, an undefined inner override must NOT
+      // shadow the outer false — pin this contract so a future refactor doesn't
+      // accidentally create a fresh storage frame.
+      await withCacheEnabled(false, async () => {
+        await withCacheEnabled(undefined, async () => {
+          expect(isCacheEnabled()).toBe(false);
+        });
+      });
+    });
+
+    it('should re-enable cache inside a globally disabled context', async () => {
+      disableCache();
+      try {
+        expect(isCacheEnabled()).toBe(false);
+        await withCacheEnabled(true, async () => {
+          expect(isCacheEnabled()).toBe(true);
+        });
+        expect(isCacheEnabled()).toBe(false);
+      } finally {
+        enableCache();
+      }
+    });
+
+    it('should isolate concurrent overrides between async contexts', async () => {
+      const observed: Array<boolean> = [];
+
+      await Promise.all([
+        withCacheEnabled(false, async () => {
+          await new Promise((resolve) => setImmediate(resolve));
+          observed.push(isCacheEnabled());
+        }),
+        withCacheEnabled(true, async () => {
+          await new Promise((resolve) => setImmediate(resolve));
+          observed.push(isCacheEnabled());
+        }),
+      ]);
+
+      expect(observed).toContain(false);
+      expect(observed).toContain(true);
+      expect(isCacheEnabled()).toBe(true);
+    });
+
+    it('should isolate direct cache access by namespace', async () => {
+      const cache = getCache();
+
+      await cache.set('shared-key', 'global-value');
+
+      await withCacheNamespace('repeat:0', async () => {
+        const scopedCache = getCache();
+        await scopedCache.set('shared-key', 'repeat-0-value');
+
+        expect(await scopedCache.get('shared-key')).toBe('repeat-0-value');
+      });
+
+      await withCacheNamespace('repeat:1', async () => {
+        const scopedCache = getCache();
+
+        expect(await scopedCache.get('shared-key')).toBeUndefined();
+      });
+
+      expect(await cache.get('shared-key')).toBe('global-value');
+    });
+
+    it('should isolate bulk cache access and namespace-local clear operations', async () => {
+      const cache = getCache();
+      await cache.mset([{ key: 'bulk-key', value: 'global-value' }]);
+
+      await withCacheNamespace('repeat:0', async () => {
+        const scopedCache = getCache();
+        const savedEntries = await scopedCache.mset([
+          { key: 'bulk-key', value: 'repeat-0-value', ttl: 5000 },
+        ]);
+
+        expect(savedEntries).toEqual([{ key: 'bulk-key', value: 'repeat-0-value', ttl: 5000 }]);
+        expect(await scopedCache.mget(['bulk-key'])).toEqual(['repeat-0-value']);
+        expect(await scopedCache.ttl('bulk-key')).toEqual(expect.any(Number));
+      });
+
+      await withCacheNamespace('repeat:1', async () => {
+        const scopedCache = getCache();
+
+        expect(await scopedCache.mget(['bulk-key'])).toEqual([undefined]);
+        expect(await scopedCache.ttl('bulk-key')).toBeUndefined();
+        expect(await scopedCache.clear()).toBe(true);
+      });
+
+      expect(await cache.mget(['bulk-key'])).toEqual(['global-value']);
+
+      await withCacheNamespace('repeat:0', async () => {
+        const scopedCache = getCache();
+
+        expect(await scopedCache.mget(['bulk-key'])).toEqual(['repeat-0-value']);
+        expect(await scopedCache.mdel(['bulk-key'])).toBe(true);
+        expect(await scopedCache.mget(['bulk-key'])).toEqual([undefined]);
+      });
+    });
+
     it('should fetch and cache successful requests', async () => {
       const mockResponse = mockFetchWithRetriesResponse(true, response);
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
@@ -272,6 +470,38 @@ describe('fetchWithCache', () => {
       expect(cachedResult.cached).toBe(true);
       expect(cachedResult.data).toEqual(response);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should isolate in-flight fetch deduping by namespace', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 0' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 1' }));
+
+      const [repeat0Result, repeat1Result] = await Promise.all([
+        withCacheNamespace('repeat:0', () => fetchWithCache(url, {}, 1000)),
+        withCacheNamespace('repeat:1', () => fetchWithCache(url, {}, 1000)),
+      ]);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(repeat0Result.data).toEqual({ data: 'repeat 0' });
+      expect(repeat1Result.data).toEqual({ data: 'repeat 1' });
+
+      const repeat0CachedResult = await withCacheNamespace('repeat:0', () =>
+        fetchWithCache(url, {}, 1000),
+      );
+      const repeat1CachedResult = await withCacheNamespace('repeat:1', () =>
+        fetchWithCache(url, {}, 1000),
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(repeat0CachedResult).toMatchObject({
+        cached: true,
+        data: { data: 'repeat 0' },
+      });
+      expect(repeat1CachedResult).toMatchObject({
+        cached: true,
+        data: { data: 'repeat 1' },
+      });
     });
 
     it('should not cache failed requests', async () => {
@@ -452,6 +682,93 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
+    it('should isolate signaled in-flight failures from unsignaled callers', async () => {
+      const controller = new AbortController();
+      let resolveSignaledStarted: () => void = () => {};
+      const signaledStarted = new Promise<void>((resolve) => {
+        resolveSignaledStarted = resolve;
+      });
+
+      mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
+        const signal = requestOptions?.signal;
+        if (signal === controller.signal) {
+          resolveSignaledStarted();
+          return new Promise<Response>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+          });
+        }
+        return Promise.resolve(mockFetchWithRetriesResponse(true, { data: 'unsignaled' }));
+      });
+
+      const signaledPromise = fetchWithCache(url, { signal: controller.signal }, 1000);
+      await signaledStarted;
+      const unsignaledPromise = fetchWithCache(url, {}, 1000);
+
+      controller.abort();
+      const [signaledResult, unsignaledResult] = await Promise.allSettled([
+        signaledPromise,
+        unsignaledPromise,
+      ]);
+
+      expect(signaledResult).toMatchObject({ status: 'rejected' });
+      if (signaledResult.status === 'rejected') {
+        expect(signaledResult.reason.message).toBe('Aborted');
+      }
+      expect(unsignaledResult).toMatchObject({ status: 'fulfilled' });
+      if (unsignaledResult.status === 'fulfilled') {
+        expect(unsignaledResult.value).toMatchObject({
+          cached: false,
+          data: { data: 'unsignaled' },
+        });
+      }
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not let aborted signaled callers join unsignaled in-flight responses', async () => {
+      const controller = new AbortController();
+      let resolveUnsignaledFetch: (value: Response) => void = () => {};
+      const unsignaledFetch = new Promise<Response>((resolve) => {
+        resolveUnsignaledFetch = resolve;
+      });
+
+      mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
+        const signal = requestOptions?.signal;
+        if (signal === controller.signal) {
+          if (signal.aborted) {
+            return Promise.reject(new Error('Aborted'));
+          }
+          return new Promise<Response>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(new Error('Aborted')), { once: true });
+          });
+        }
+        return unsignaledFetch;
+      });
+
+      const unsignaledPromise = fetchWithCache(url, {}, 1000);
+      const signaledPromise = fetchWithCache(url, { signal: controller.signal }, 1000);
+
+      await Promise.resolve();
+      controller.abort();
+      resolveUnsignaledFetch(mockFetchWithRetriesResponse(true, { data: 'unsignaled' }));
+      const [unsignaledResult, signaledResult] = await Promise.allSettled([
+        unsignaledPromise,
+        signaledPromise,
+      ]);
+
+      expect(unsignaledResult).toMatchObject({ status: 'fulfilled' });
+      if (unsignaledResult.status === 'fulfilled') {
+        expect(unsignaledResult.value).toMatchObject({
+          cached: false,
+          data: { data: 'unsignaled' },
+        });
+      }
+      expect(signaledResult).toMatchObject({ status: 'rejected' });
+      if (signaledResult.status === 'rejected') {
+        expect(signaledResult.reason.message).toBe('Aborted');
+      }
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
     it('should handle request options in cache key', async () => {
       const options = { method: 'POST', body: JSON.stringify({ test: true }) };
       const mockResponse = mockFetchWithRetriesResponse(true, response);
@@ -465,6 +782,275 @@ describe('fetchWithCache', () => {
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       await fetchWithCache(url, differentOptions, 1000);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not cache opaque FormData request bodies', async () => {
+      const cache = getCache();
+      const firstFormData = new FormData();
+      firstFormData.append('file', new Blob(['audio-one']), 'sample.wav');
+      const secondFormData = new FormData();
+      secondFormData.append('file', new Blob(['audio-two']), 'sample.wav');
+
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'first audio' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'second audio' }));
+
+      const firstResult = await fetchWithCache(
+        url,
+        { headers: { Authorization: 'Bearer same-token' }, method: 'POST', body: firstFormData },
+        1000,
+      );
+      const secondResult = await fetchWithCache(
+        url,
+        { headers: { Authorization: 'Bearer same-token' }, method: 'POST', body: secondFormData },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(firstResult.data).toEqual({ data: 'first audio' });
+      expect(secondResult.data).toEqual({ data: 'second audio' });
+      expect(vi.mocked(cache.set)).not.toHaveBeenCalled();
+    });
+
+    it('should not treat null init body as overriding a Request body when caching', async () => {
+      const cache = getCache();
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'first request body' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'second request body' }));
+
+      const firstResult = await fetchWithCache(
+        new Request(url, { method: 'POST', body: 'request-body-one' }),
+        { method: 'POST', body: null },
+        1000,
+      );
+      const secondResult = await fetchWithCache(
+        new Request(url, { method: 'POST', body: 'request-body-two' }),
+        { method: 'POST', body: null },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(firstResult.data).toEqual({ data: 'first request body' });
+      expect(secondResult.data).toEqual({ data: 'second request body' });
+      expect(vi.mocked(cache.set)).not.toHaveBeenCalled();
+    });
+
+    it('should not cache requests with opaque transport options', async () => {
+      const cache = getCache();
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'first identity' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'second identity' }));
+
+      const firstResult = await fetchWithCache(
+        url,
+        { dispatcher: { clientCert: 'first-cert' }, method: 'GET' } as unknown as RequestInit,
+        1000,
+      );
+      const secondResult = await fetchWithCache(
+        url,
+        { dispatcher: { clientCert: 'second-cert' }, method: 'GET' } as unknown as RequestInit,
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(firstResult.data).toEqual({ data: 'first identity' });
+      expect(secondResult.data).toEqual({ data: 'second identity' });
+      expect(vi.mocked(cache.set)).not.toHaveBeenCalled();
+    });
+
+    it('should isolate cached responses by request headers without storing secrets in the key', async () => {
+      const cache = getCache();
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'token one data' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'token two data' }));
+
+      const tokenOneResult = await fetchWithCache(
+        'https://api.example.com/data?api_key=secret-url-token',
+        {
+          headers: { Authorization: 'Bearer secret-header-token-one' },
+          method: 'POST',
+          body: JSON.stringify({ apiKey: 'secret-body-token' }),
+        },
+        1000,
+      );
+      const tokenTwoResult = await fetchWithCache(
+        'https://api.example.com/data?api_key=secret-url-token',
+        {
+          headers: { Authorization: 'Bearer secret-header-token-two' },
+          method: 'POST',
+          body: JSON.stringify({ apiKey: 'secret-body-token' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(tokenOneResult.data).toEqual({ data: 'token one data' });
+      expect(tokenTwoResult.data).toEqual({ data: 'token two data' });
+
+      const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+      expect(cacheKeys).toHaveLength(2);
+      for (const cacheKey of cacheKeys) {
+        expect(cacheKey).not.toContain('secret-url-token');
+        expect(cacheKey).not.toContain('secret-header-token');
+        expect(cacheKey).not.toContain('secret-body-token');
+      }
+    });
+
+    it('should isolate cloud requests by injected API key without storing the key', async () => {
+      const cache = getCache();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'secret-cloud-token-one' });
+      mockFetchWithRetries.mockImplementation(() =>
+        Promise.resolve(
+          mockFetchWithRetriesResponse(true, {
+            data:
+              process.env.PROMPTFOO_API_KEY === 'secret-cloud-token-one'
+                ? 'cloud token one data'
+                : 'cloud token two data',
+          }),
+        ),
+      );
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        const tokenOneResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
+
+        mockProcessEnv({ PROMPTFOO_API_KEY: 'secret-cloud-token-two' });
+
+        const tokenTwoResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
+
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        expect(tokenOneResult.data).toEqual({ data: 'cloud token one data' });
+        expect(tokenTwoResult.data).toEqual({ data: 'cloud token two data' });
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        expect(cacheKeys).toHaveLength(2);
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('secret-cloud-token-one');
+          expect(cacheKey).not.toContain('secret-cloud-token-two');
+        }
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should preserve Request headers when isolating cached responses', async () => {
+      const cache = getCache();
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'request token one' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'request token two' }));
+
+      const firstRequest = new Request(url, {
+        headers: { Authorization: 'Bearer request-token-one' },
+      });
+      const secondRequest = new Request(url, {
+        headers: { Authorization: 'Bearer request-token-two' },
+      });
+
+      const firstResult = await fetchWithCache(firstRequest, {}, 1000);
+      const secondResult = await fetchWithCache(secondRequest, {}, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(firstResult.data).toEqual({ data: 'request token one' });
+      expect(secondResult.data).toEqual({ data: 'request token two' });
+
+      const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+      expect(cacheKeys).toHaveLength(2);
+      for (const cacheKey of cacheKeys) {
+        expect(cacheKey).not.toContain('request-token-one');
+        expect(cacheKey).not.toContain('request-token-two');
+      }
+    });
+
+    it('should treat init headers as replacing Request headers in cache keys', async () => {
+      const cache = getCache();
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'request auth' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'init headers' }));
+
+      const request = new Request(url, {
+        headers: { Authorization: 'Bearer request-token' },
+      });
+
+      const requestHeaderResult = await fetchWithCache(request, {}, 1000);
+      const initHeaderResult = await fetchWithCache(request, { headers: {} }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(requestHeaderResult.data).toEqual({ data: 'request auth' });
+      expect(initHeaderResult.data).toEqual({ data: 'init headers' });
+
+      const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+      expect(cacheKeys).toHaveLength(2);
+      for (const cacheKey of cacheKeys) {
+        expect(cacheKey).not.toContain('request-token');
+      }
+    });
+
+    it('should normalize request method casing in cache keys', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'method-normalized' }),
+      );
+
+      const lowercaseMethodResult = await fetchWithCache(url, { method: 'get' }, 1000);
+      const uppercaseMethodResult = await fetchWithCache(url, { method: 'GET' }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(lowercaseMethodResult.cached).toBe(false);
+      expect(uppercaseMethodResult).toMatchObject({
+        cached: true,
+        data: { data: 'method-normalized' },
+      });
+    });
+
+    it('should canonicalize primitive fetch option order in cache keys', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'ordered-options' }),
+      );
+
+      const firstResult = await fetchWithCache(
+        url,
+        { cache: 'no-store', credentials: 'same-origin' },
+        1000,
+      );
+      const secondResult = await fetchWithCache(
+        url,
+        { credentials: 'same-origin', cache: 'no-store' },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(firstResult.cached).toBe(false);
+      expect(secondResult).toMatchObject({
+        cached: true,
+        data: { data: 'ordered-options' },
+      });
+    });
+
+    it('should isolate cached responses by requested response format', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'json data' }))
+        .mockResolvedValueOnce(
+          mockFetchWithRetriesResponse(true, 'plain text response', 'text/plain'),
+        );
+
+      const jsonResult = await fetchWithCache(url, {}, 1000, 'json');
+      const textResult = await fetchWithCache<string>(url, {}, 1000, 'text');
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(jsonResult.data).toEqual({ data: 'json data' });
+      expect(textResult.data).toBe('plain text response');
     });
 
     it('should respect cache busting', async () => {
@@ -484,6 +1070,10 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache disabled', () => {
+    // Mirrors fetchAndReadBody's idempotent body-read policy: one initial read
+    // plus two transient-error retries.
+    const BODY_READ_TOTAL_ATTEMPTS = 3;
+
     beforeEach(() => {
       disableCache();
     });
@@ -518,17 +1108,17 @@ describe('fetchWithCache', () => {
     });
 
     it('should retry on transient body-read error then succeed', async () => {
-      let textCallCount = 0;
       const responseText = JSON.stringify(response);
-      // First fetch: text() fails with transient error
+      const textMockFail = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValue(new Error('ECONNRESET during body read'));
+      const textMockSuccess = vi.fn<() => Promise<string>>().mockResolvedValue(responseText);
+
       mockFetchWithRetries.mockResolvedValueOnce({
         ok: true,
         status: 200,
         statusText: 'OK',
-        text: () => {
-          textCallCount++;
-          return Promise.reject(new Error('ECONNRESET during body read'));
-        },
+        text: textMockFail,
         headers: new Headers({ 'content-type': 'application/json' }),
       } as unknown as Response);
       // Second fetch (after body retry): succeeds
@@ -536,24 +1126,22 @@ describe('fetchWithCache', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        text: () => {
-          textCallCount++;
-          return Promise.resolve(responseText);
-        },
+        text: textMockSuccess,
         headers: new Headers({ 'content-type': 'application/json' }),
       } as unknown as Response);
 
       const result = await fetchWithCache(url, {}, 1000);
 
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
-      expect(textCallCount).toBe(2);
+      expect(textMockFail).toHaveBeenCalledTimes(1);
+      expect(textMockSuccess).toHaveBeenCalledTimes(1);
       expect(result.data).toEqual(response);
       expect(result.cached).toBe(false);
     });
 
     it('should throw after exhausting body-read retries', async () => {
       // All fetches return responses whose text() fails with transient error
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < BODY_READ_TOTAL_ATTEMPTS; i++) {
         mockFetchWithRetries.mockResolvedValueOnce({
           ok: true,
           status: 200,
@@ -564,7 +1152,7 @@ describe('fetchWithCache', () => {
       }
 
       await expect(fetchWithCache(url, {}, 1000)).rejects.toThrow('ECONNRESET');
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(BODY_READ_TOTAL_ATTEMPTS);
     });
 
     it('should not retry body-read for non-transient errors', async () => {
@@ -605,6 +1193,23 @@ describe('fetchWithCache', () => {
       // Only 1 call — body retry loop does not re-invoke fetchWithRetries
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
+
+    it('propagates HttpRateLimitError without re-invoking fetchWithRetries', async () => {
+      // Hard quota / retry-exhausted rate limits surface as HttpRateLimitError
+      // from fetchWithRetries; the cache body-retry loop must NOT swallow them
+      // or retry — that would amplify load against an exhausted account.
+      const { HttpRateLimitError } = await import('../src/util/fetch/errors');
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+        retryAfterMs: 60_000,
+      });
+      mockFetchWithRetries.mockRejectedValueOnce(rateLimit);
+
+      await expect(fetchWithCache(url, {}, 1000)).rejects.toBeInstanceOf(HttpRateLimitError);
+      // Single call — body retry loop must not re-invoke fetchWithRetries.
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('cache utility functions', () => {
@@ -627,6 +1232,109 @@ describe('fetchWithCache', () => {
       mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
       await fetchWithCache(url, {}, 1000);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('per-repeat caching', () => {
+    it('should use same cache key for repeatIndex 0 and no repeatIndex', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      // First call with repeatIndex: 0 using the new CacheOptions object API.
+      const result1 = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 0 });
+      expect(result1.cached).toBe(false);
+
+      // Second call uses legacy API (`false`) with no repeatIndex and should hit the same cache.
+      const result2 = await fetchWithCache(url, {}, 1000, 'json', false);
+      expect(result2.cached).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should create separate cache entries for different repeatIndex values', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      // First repeat
+      const result0 = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 0 });
+      expect(result0.cached).toBe(false);
+
+      // Second repeat should create a new cache entry
+      const result1 = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 1 });
+      expect(result1.cached).toBe(false);
+
+      // Third repeat should create a new cache entry
+      const result2 = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 2 });
+      expect(result2.cached).toBe(false);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
+    });
+
+    it('should append repeat suffixes to repeated fetch cache keys', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 1 });
+      await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 2 });
+
+      const cacheKeys = vi.mocked(getCache().set).mock.calls.map(([cacheKey]) => String(cacheKey));
+      expect(cacheKeys).toEqual([
+        expect.stringMatching(/:repeat1$/),
+        expect.stringMatching(/:repeat2$/),
+      ]);
+    });
+
+    it('should not add a repeat suffix when the active namespace already isolates the repeat', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await withCacheNamespace('repeat:1', async () => {
+        const firstResult = await fetchWithCache(url, {}, 1000, 'json', { repeatIndex: 1 });
+        const secondResult = await fetchWithCache(url, {}, 1000, 'json', false);
+
+        expect(firstResult.cached).toBe(false);
+        expect(secondResult.cached).toBe(true);
+      });
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      const cacheKeys = vi.mocked(getCache().set).mock.calls.map(([cacheKey]) => String(cacheKey));
+      expect(cacheKeys).toEqual([expect.stringMatching(/^repeat:1:fetch:v3:/)]);
+      expect(cacheKeys[0]).not.toMatch(/:repeat1$/);
+    });
+
+    it('should preserve boolean bust behavior and support object cache options', async () => {
+      const mockResponse = mockFetchWithRetriesResponse(true, response);
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      // Old API with boolean false (populate cache)
+      const result1 = await fetchWithCache(url, {}, 1000, 'json', false);
+      expect(result1.cached).toBe(false);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+
+      // Same call should hit cache
+      const result2 = await fetchWithCache(url, {}, 1000, 'json', false);
+      expect(result2.cached).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1); // No new fetch
+
+      // Old API with boolean true (bust) should bypass cache
+      mockFetchWithRetries.mockResolvedValueOnce(mockResponse);
+      const result3 = await fetchWithCache(url, {}, 1000, 'json', true);
+      expect(result3.cached).toBe(false);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2); // New fetch
+
+      // New API with CacheOptions object
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'new data' }),
+      );
+      const result4 = await fetchWithCache(url, {}, 1000, 'json', {
+        bust: true,
+        repeatIndex: 1,
+      });
+      expect(result4.cached).toBe(false);
+      expect(result4.data).toEqual({ data: 'new data' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(3);
     });
   });
 });

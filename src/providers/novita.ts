@@ -1,8 +1,10 @@
+import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
-import { fetchWithProxy } from '../util/fetch/index';
+import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -30,8 +32,11 @@ export async function fetchNovitaModels(env?: EnvOverrides): Promise<NovitaModel
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const response = await fetchWithProxy('https://api.novita.ai/v3/openai/models', { headers });
-    const data = await response.json();
+    const { data } = await fetchWithCache<any>(
+      'https://api.novita.ai/v3/openai/models',
+      { headers },
+      getRequestTimeoutMs(),
+    );
 
     const models = data?.data || data?.models || data;
     if (Array.isArray(models)) {
@@ -39,11 +44,12 @@ export async function fetchNovitaModels(env?: EnvOverrides): Promise<NovitaModel
     } else {
       modelCache = [];
     }
-  } catch {
+  } catch (err) {
+    logger.warn(`Failed to fetch novita models: ${String(err)}`);
     modelCache = [];
   }
 
-  return modelCache ?? [];
+  return modelCache;
 }
 
 export function createNovitaProvider(
