@@ -138,6 +138,7 @@ describe('Scanner machine-readable output', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -175,6 +176,25 @@ describe('Scanner machine-readable output', () => {
       diffsOnly: true,
       githubPr: 'promptfoo/promptfoo#123',
       json: true,
+    });
+
+    expect(loadConfigOrDefault).toHaveBeenCalledWith(undefined, undefined);
+  });
+
+  it.each([
+    'pull_request',
+    'pull_request_target',
+  ])('does not auto-discover repository config for GitHub Actions %s scans without --config', async (eventName) => {
+    mockNoFilesScanner();
+    vi.stubEnv('GITHUB_ACTIONS', 'true');
+    vi.stubEnv('GITHUB_EVENT_NAME', eventName);
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { loadConfigOrDefault } = await import('../../src/codeScan/config/loader');
+
+    await executeScan('/test/repo', {
+      diffsOnly: true,
+      format: CodeScanOutputFormat.SARIF,
     });
 
     expect(loadConfigOrDefault).toHaveBeenCalledWith(undefined, undefined);
