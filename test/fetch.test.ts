@@ -897,6 +897,39 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should preserve native multipart Request streams on the undici path', async () => {
+    const undiciModule = await import('undici');
+    const undiciFetch = vi.mocked(undiciModule.fetch);
+    vi.restoreAllMocks();
+    undiciFetch.mockResolvedValue(
+      new Response() as unknown as Awaited<ReturnType<typeof undiciFetch>>,
+    );
+
+    const body = new FormData();
+    body.append('file', new Blob(['hello']), 'hello.txt');
+    const request = new Request('https://example.com/api', {
+      method: 'POST',
+      body,
+    });
+
+    await fetchWithProxy(request);
+
+    const requestInit = undiciFetch.mock.calls[0]?.[1];
+    expect(requestInit).toBeDefined();
+    expect(undiciFetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        body: request.body,
+        dispatcher: expect.any(Object),
+        duplex: 'half',
+        method: 'POST',
+      }),
+    );
+    expect(
+      new Headers(requestInit?.headers as HeadersInit | undefined).get('content-type'),
+    ).toMatch(/^multipart\/form-data; boundary=/);
+  });
+
   it('should keep native multipart request bodies on global fetch', async () => {
     const undiciModule = await import('undici');
     const undiciFetch = undiciModule.fetch;
