@@ -627,6 +627,18 @@ describe('xAI Chat Provider', () => {
       expect(miniAliasCost).toBeDefined();
     });
 
+    it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
+      for (const modelName of [
+        'grok-4-1-fast-reasoning',
+        'grok-4-fast-non-reasoning',
+        'grok-4',
+        'grok-code-fast',
+        'grok-3',
+      ]) {
+        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
+      }
+    });
+
     it('returns undefined for invalid inputs', () => {
       // Unknown model
       expect(calculateXAICost('invalid-model', {}, 600, 400)).toBe(undefined);

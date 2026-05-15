@@ -172,7 +172,7 @@ describe('XAI Image Provider', () => {
       expect(result.cost).toBe(0.02);
     });
 
-    it('uses the pro image model without falling back to the legacy model name', async () => {
+    it('keeps the pro request slug while fallback pricing follows the quality redirect', async () => {
       const provider = new XAIImageProvider('grok-imagine-image-pro', {
         config: { apiKey: mockApiKey },
       });
@@ -193,7 +193,7 @@ describe('XAI Image Provider', () => {
         },
         getRequestTimeoutMs(),
       );
-      expect(result.cost).toBe(0.07);
+      expect(result.cost).toBe(0.05);
     });
 
     it('supports the quality image model with resolution-sensitive fallback pricing', async () => {
@@ -284,6 +284,19 @@ describe('XAI Image Provider', () => {
         getRequestTimeoutMs(),
       );
       expect(result.cost).toBe(0.07);
+    });
+
+    it('uses quality redirect pricing for deprecated pro edit fallback costs', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-pro', {
+        config: {
+          apiKey: mockApiKey,
+          image: { url: 'https://example.com/source.png' },
+        },
+      });
+
+      const result = await provider.callApi('Restyle this source image');
+
+      expect(result.cost).toBeCloseTo(0.06, 10);
     });
 
     it('should generate an image successfully', async () => {

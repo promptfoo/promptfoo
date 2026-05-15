@@ -75,7 +75,7 @@ The recommended starting point for general text workflows:
 
 ### Legacy Model Note
 
-xAI periodically retires older model slugs and may keep them working through redirects to newer replacements. This example sticks to current Grok 4.3 and Grok 4.20 families so it remains a useful starting point for new evaluations.
+xAI periodically retires older model slugs and may keep them working through redirects to newer replacements. This example uses Grok 4.3 plus alias-style Grok 4.20 family IDs, matching xAI's guidance for configs that should track the current release within a family.
 
 ### Agent Tools (Responses API)
 

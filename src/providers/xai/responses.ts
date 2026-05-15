@@ -188,12 +188,9 @@ async function readStreamingResponse(response: Response): Promise<any> {
     processChunk(buffer);
   }
 
-  if (latestResponse) {
-    return latestResponse;
-  }
-
   if (outputText) {
     return {
+      ...latestResponse,
       output: [
         {
           type: 'message',
@@ -202,6 +199,10 @@ async function readStreamingResponse(response: Response): Promise<any> {
         },
       ],
     };
+  }
+
+  if (latestResponse) {
+    return latestResponse;
   }
 
   throw new Error('xAI streaming response did not include output content');

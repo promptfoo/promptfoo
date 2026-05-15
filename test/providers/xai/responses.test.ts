@@ -323,6 +323,40 @@ describe('XAIResponsesProvider', () => {
     expect(result.output).toBe('final answer');
   });
 
+  it('prefers streamed final-answer deltas over completed reasoning summaries', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.reasoning_summary_text.delta","delta":"internal reasoning"}',
+          '',
+          'data: {"type":"response.output_text.delta","delta":"final answer"}',
+          '',
+          'data: {"type":"response.completed","response":{"id":"resp_stream","model":"grok-4.3","output":[{"type":"reasoning","summary":[{"text":"internal reasoning"}]},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"final answer"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      ),
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('final answer');
+    expect(result.output).not.toContain('Reasoning:');
+    expect(result.tokenUsage).toEqual({
+      total: 15,
+      prompt: 10,
+      completion: 5,
+      numRequests: 1,
+    });
+  });
+
   it('returns an error when a streamed response has no output content', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,

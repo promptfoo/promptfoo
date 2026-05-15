@@ -14,19 +14,19 @@ providers:
       max_completion_tokens: 4096
 
   # Grok 4.20 reasoning family
-  - id: xai:grok-4.20-0309-reasoning
+  - id: xai:grok-4.20-reasoning
     config:
       temperature: 0.7
       max_completion_tokens: 4096
 
   # Grok 4.20 non-reasoning family
-  - id: xai:grok-4.20-0309-non-reasoning
+  - id: xai:grok-4.20-non-reasoning
     config:
       temperature: 0.7
       max_completion_tokens: 4096
 
   # Grok 4.20 multi-agent family
-  - id: xai:grok-4.20-multi-agent-0309
+  - id: xai:grok-4.20-multi-agent
     config:
       temperature: 0.7
       max_completion_tokens: 4096

@@ -297,6 +297,31 @@ export const XAI_CHAT_MODELS = [
   },
 ];
 
+// xAI redirects these legacy chat slugs to Grok 4.3 after the May 15, 2026
+// retirement cutoff. Keep the slugs accepted locally, but price fallback math
+// against the model users are actually billed for.
+const GROK_43_REDIRECTED_CHAT_MODELS = new Set([
+  'grok-4-1-fast-reasoning',
+  'grok-4-1-fast-non-reasoning',
+  'grok-4-1-fast',
+  'grok-4-1-fast-latest',
+  'grok-4-1-fast-reasoning-latest',
+  'grok-4-1-fast-non-reasoning-latest',
+  'grok-4-fast-reasoning',
+  'grok-4-fast-non-reasoning',
+  'grok-4-fast',
+  'grok-4-fast-latest',
+  'grok-4-fast-reasoning-latest',
+  'grok-4-fast-non-reasoning-latest',
+  'grok-4-0709',
+  'grok-4',
+  'grok-4-latest',
+  'grok-code-fast-1',
+  'grok-code-fast',
+  'grok-3',
+  'grok-3-latest',
+]);
+
 export const GROK_3_MINI_MODELS = [
   'grok-3-mini-beta',
   'grok-3-mini',
@@ -446,9 +471,11 @@ export function calculateXAICost(
     return undefined;
   }
 
-  const model = XAI_CHAT_MODELS.find(
-    (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
-  );
+  const model = GROK_43_REDIRECTED_CHAT_MODELS.has(modelName)
+    ? XAI_CHAT_MODELS.find((m) => m.id === 'grok-4.3')
+    : XAI_CHAT_MODELS.find(
+        (m) => m.id === modelName || (m.aliases && m.aliases.includes(modelName)),
+      );
   if (!model || !model.cost) {
     return undefined;
   }

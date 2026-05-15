@@ -589,6 +589,10 @@ prompts:
   - 'Render this as a pencil sketch with detailed shading'
 ```
 
+#### Pricing
+
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to its local Imagine image estimate, including documented output rates and source-image media-input charges on edit requests.
+
 ### Video Generation
 
 xAI supports video generation through the Grok Imagine API using the `xai:video:grok-imagine-video` provider:
@@ -674,7 +678,7 @@ Reference-to-video requires a non-empty prompt, cannot be combined with `image` 
 
 #### Pricing
 
-Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to its local estimate for documented Imagine image output rates and source-image media-input charges on edit requests.
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to the video provider's local duration-based estimate.
 
 ### Voice Agent API
 
