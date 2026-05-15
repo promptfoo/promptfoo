@@ -726,7 +726,16 @@ describe('handleRedteam', () => {
     const tracking = {
       wasExfiltrated: true,
       exfilCount: 2,
-      exfilRecords: [{ id: 'record-1' }],
+      exfilRecords: [
+        {
+          timestamp: '2026-05-15T00:00:00.000Z',
+          ip: '127.0.0.1',
+          userAgent: 'promptfoo-test',
+          queryParams: {
+            token: 'leaked',
+          },
+        },
+      ],
     };
     vi.mocked(checkExfilTracking).mockResolvedValue(tracking);
     const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
