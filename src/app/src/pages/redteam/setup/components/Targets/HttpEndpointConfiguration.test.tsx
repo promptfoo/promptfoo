@@ -1,10 +1,15 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { act, render, screen } from '@testing-library/react';
+import { callApi } from '@app/utils/api';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+
+vi.mock('@app/utils/api', () => ({
+  callApi: vi.fn(),
+}));
 
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange }: any) => (
@@ -14,6 +19,36 @@ vi.mock('react-simple-code-editor', () => ({
       onChange={(e) => onValueChange(e.target.value)}
     />
   ),
+}));
+
+vi.mock('./PostmanImportDialog', () => ({
+  default: ({
+    open,
+    onImport,
+  }: {
+    open: boolean;
+    onImport: (config: {
+      url: string;
+      method: string;
+      headers: Record<string, string>;
+      body: string;
+    }) => void;
+  }) =>
+    open ? (
+      <button
+        type="button"
+        onClick={() =>
+          onImport({
+            url: 'https://postman.example.com/chat',
+            method: 'PATCH',
+            headers: { Authorization: 'Bearer postman' },
+            body: '{"message":"{{prompt}}"}',
+          })
+        }
+      >
+        Mock Postman Import
+      </button>
+    ) : null,
 }));
 
 // Wrapper component for providing tooltip context
@@ -565,10 +600,28 @@ describe('HttpEndpointConfiguration - handleApply batched updates', () => {
     mockUpdateCustomTarget = vi.fn();
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
+    vi.mocked(callApi).mockReset();
     vi.clearAllMocks();
   });
 
-  it('should have import button that opens dropdown menu', () => {
+  it('applies generated structured config with one batched provider update', async () => {
+    const user = userEvent.setup();
+    vi.mocked(callApi).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'http',
+        config: {
+          url: 'https://generated.example.com/chat',
+          method: 'PUT',
+          headers: { Authorization: 'Bearer generated' },
+          body: '{"message":"{{prompt}}"}',
+          transformRequest: 'requestTransform',
+          transformResponse: 'responseTransform',
+          sessionParser: 'session.id',
+        },
+      }),
+    } as Response);
+
     renderWithProviders(
       <HttpEndpointConfiguration
         {...defaultProps}
@@ -579,29 +632,28 @@ describe('HttpEndpointConfiguration - handleApply batched updates', () => {
       />,
     );
 
-    // Verify the import button exists
-    const importButton = screen.getByText('Import');
-    expect(importButton).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Auto-fill from Example' }));
+    await user.click(screen.getByRole('button', { name: 'Generate' }));
+    await screen.findByRole('button', { name: 'Apply Configuration' });
 
-    // The import button should be a dropdown trigger
-    expect(importButton).toHaveAttribute('aria-haspopup', 'menu');
-    expect(importButton).toHaveAttribute('aria-expanded', 'false');
-  });
+    mockUpdateCustomTarget.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Apply Configuration' }));
 
-  it('should render import dialog trigger for config generation', () => {
-    renderWithProviders(
-      <HttpEndpointConfiguration
-        {...defaultProps}
-        updateCustomTarget={mockUpdateCustomTarget}
-        setBodyError={mockSetBodyError}
-        urlError={defaultProps.urlError}
-        setUrlError={mockSetUrlError}
-      />,
+    expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'config',
+      expect.objectContaining({
+        request: undefined,
+        url: 'https://generated.example.com/chat',
+        method: 'PUT',
+        headers: { Authorization: 'Bearer generated' },
+        body: '{"message":"{{prompt}}"}',
+        transformRequest: 'requestTransform',
+        transformResponse: 'responseTransform',
+        sessionParser: 'session.id',
+      }),
     );
-
-    // Verify the import button is present, which will eventually trigger handleApply
-    const importButton = screen.getByText('Import');
-    expect(importButton).toBeInTheDocument();
   });
 });
 
@@ -632,7 +684,8 @@ describe('HttpEndpointConfiguration - handlePostmanImport batched updates', () =
     vi.clearAllMocks();
   });
 
-  it('should render import dropdown trigger for Postman import', () => {
+  it('applies imported Postman config with one batched provider update', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <HttpEndpointConfiguration
         {...defaultProps}
@@ -643,26 +696,23 @@ describe('HttpEndpointConfiguration - handlePostmanImport batched updates', () =
       />,
     );
 
-    // Verify the import button exists which provides Postman import option
-    const importButton = screen.getByText('Import');
-    expect(importButton).toBeInTheDocument();
-    expect(importButton).toHaveAttribute('aria-haspopup', 'menu');
-  });
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Postman' }));
 
-  it('should have PostmanImportDialog in component tree', () => {
-    const { container } = renderWithProviders(
-      <HttpEndpointConfiguration
-        {...defaultProps}
-        updateCustomTarget={mockUpdateCustomTarget}
-        setBodyError={mockSetBodyError}
-        urlError={defaultProps.urlError}
-        setUrlError={mockSetUrlError}
-      />,
+    mockUpdateCustomTarget.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Mock Postman Import' }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'config',
+      expect.objectContaining({
+        request: undefined,
+        url: 'https://postman.example.com/chat',
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer postman' },
+        body: '{"message":"{{prompt}}"}',
+      }),
     );
-
-    // The PostmanImportDialog component is rendered (even if not visible)
-    // This verifies that the handlePostmanImport callback is wired up
-    expect(container).toBeInTheDocument();
   });
 });
 

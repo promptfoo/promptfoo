@@ -8,10 +8,47 @@ import ProviderConfigEditor from './ProviderConfigEditor';
 import type { ProviderOptions } from '../../types';
 
 vi.mock('./HttpEndpointConfiguration', () => ({
-  default: () => <div data-testid="http-config" />,
+  default: ({
+    updateCustomTarget,
+  }: {
+    updateCustomTarget: (field: string, value: unknown) => void;
+  }) => (
+    <div data-testid="http-config">
+      <button
+        data-testid="update-http-url"
+        onClick={() => updateCustomTarget('url', 'https://updated.example.com/chat')}
+      >
+        Update HTTP URL
+      </button>
+      <button
+        data-testid="replace-http-config"
+        onClick={() =>
+          updateCustomTarget('config', {
+            url: 'https://replacement.example.com/chat',
+            method: 'PUT',
+          })
+        }
+      >
+        Replace HTTP Config
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./WebSocketEndpointConfiguration', () => ({
-  default: () => <div data-testid="ws-config" />,
+  default: ({
+    updateWebSocketTarget,
+  }: {
+    updateWebSocketTarget: (field: string, value: unknown) => void;
+  }) => (
+    <div data-testid="ws-config">
+      <button
+        data-testid="update-ws-url"
+        onClick={() => updateWebSocketTarget('url', 'wss://updated.example.com/ws')}
+      >
+        Update WebSocket URL
+      </button>
+    </div>
+  ),
 }));
 vi.mock('./CustomTargetConfiguration', () => ({
   default: () => <div data-testid="custom-config" />,
@@ -661,37 +698,8 @@ describe('ProviderConfigEditor', () => {
     });
   });
 
-  describe('updateCustomTarget - deep copy behavior', () => {
-    it('should not mutate original provider config when updating config field', () => {
-      const mockSetProvider = vi.fn();
-      const originalConfig = {
-        url: 'https://api.example.com',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      };
-      const httpProvider: ProviderOptions = {
-        id: 'http',
-        config: originalConfig,
-      };
-
-      renderWithProviders(
-        <ProviderConfigEditor
-          provider={httpProvider}
-          setProvider={mockSetProvider}
-          providerType="http"
-        />,
-      );
-
-      // Simulate updating the config through child component
-      // The updateCustomTarget function should create a deep copy
-      expect(mockSetProvider).not.toHaveBeenCalled();
-
-      // The original config should remain unchanged
-      expect(httpProvider.config).toBe(originalConfig);
-      expect(httpProvider.config.url).toBe('https://api.example.com');
-    });
-
-    it('should create deep copy of config when updateCustomTarget is called with url field', () => {
+  describe('config cloning during provider updates', () => {
+    it('clones the HTTP config before changing a field', () => {
       const mockSetProvider = vi.fn();
       const originalConfig = {
         url: 'https://api.example.com',
@@ -702,43 +710,6 @@ describe('ProviderConfigEditor', () => {
         config: originalConfig,
       };
 
-      const { rerender } = renderWithProviders(
-        <ProviderConfigEditor
-          provider={httpProvider}
-          setProvider={mockSetProvider}
-          providerType="http"
-        />,
-      );
-
-      // Render HttpEndpointConfiguration which calls updateCustomTarget
-      rerender(
-        <ProviderConfigEditor
-          provider={httpProvider}
-          setProvider={mockSetProvider}
-          providerType="http"
-        />,
-      );
-
-      // When updateCustomTarget is called, setProvider should be invoked
-      // and the new provider should have a different config reference
-      if (mockSetProvider.mock.calls.length > 0) {
-        const updatedProvider = mockSetProvider.mock.calls[0][0];
-        // Config should be a new object
-        expect(updatedProvider.config).not.toBe(originalConfig);
-      }
-    });
-
-    it('should preserve config immutability when updating nested config fields', () => {
-      const mockSetProvider = vi.fn();
-      const originalHeaders = { 'Content-Type': 'application/json' };
-      const httpProvider: ProviderOptions = {
-        id: 'http',
-        config: {
-          url: 'https://api.example.com',
-          headers: originalHeaders,
-        },
-      };
-
       renderWithProviders(
         <ProviderConfigEditor
           provider={httpProvider}
@@ -747,115 +718,84 @@ describe('ProviderConfigEditor', () => {
         />,
       );
 
-      // The original headers object should remain unchanged
-      expect(httpProvider.config.headers).toBe(originalHeaders);
+      act(() => {
+        screen.getByTestId('update-http-url').click();
+      });
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            url: 'https://updated.example.com/chat',
+            method: 'POST',
+          }),
+        }),
+      );
+      const updatedProvider = mockSetProvider.mock.calls[0][0] as ProviderOptions;
+      expect(updatedProvider.config).not.toBe(originalConfig);
+      expect(originalConfig.url).toBe('https://api.example.com');
     });
 
-    it('should handle config field replacement without mutating original state', () => {
+    it('replaces the HTTP config without mutating the prior object', () => {
       const mockSetProvider = vi.fn();
       const originalConfig = {
         url: 'https://api.example.com',
         method: 'POST',
-        body: '{"test": "value"}',
-      };
-      const httpProvider: ProviderOptions = {
-        id: 'http',
-        config: originalConfig,
       };
 
       renderWithProviders(
         <ProviderConfigEditor
-          provider={httpProvider}
+          provider={{ id: 'http', config: originalConfig }}
           setProvider={mockSetProvider}
           providerType="http"
         />,
       );
 
-      // The bug fix ensures that when config is updated, a new config object is created
-      // This test verifies that the original config is not mutated
-      expect(httpProvider.config).toBe(originalConfig);
-      expect(httpProvider.config.url).toBe('https://api.example.com');
-    });
-  });
+      act(() => {
+        screen.getByTestId('replace-http-config').click();
+      });
 
-  describe('updateWebSocketTarget - deep copy behavior', () => {
-    it('should not mutate original provider config when updating websocket url', () => {
-      const mockSetProvider = vi.fn();
-      const originalConfig = {
-        url: 'wss://example.com/ws',
-      };
-      const wsProvider: ProviderOptions = {
-        id: 'websocket',
-        config: originalConfig,
-      };
-
-      renderWithProviders(
-        <ProviderConfigEditor
-          provider={wsProvider}
-          setProvider={mockSetProvider}
-          providerType="websocket"
-        />,
-      );
-
-      // The original config should remain unchanged
-      expect(wsProvider.config).toBe(originalConfig);
-      expect(wsProvider.config.url).toBe('wss://example.com/ws');
+      const updatedProvider = mockSetProvider.mock.calls[0][0] as ProviderOptions;
+      expect(updatedProvider.config).toEqual({
+        url: 'https://replacement.example.com/chat',
+        method: 'PUT',
+      });
+      expect(updatedProvider.config).not.toBe(originalConfig);
+      expect(originalConfig).toEqual({
+        url: 'https://api.example.com',
+        method: 'POST',
+      });
     });
 
-    it('should create deep copy of config when updateWebSocketTarget is called', () => {
-      const mockSetProvider = vi.fn();
-      const originalConfig = {
-        url: 'wss://example.com/ws',
-        streamResponse: 'true',
-      };
-      const wsProvider: ProviderOptions = {
-        id: 'websocket',
-        config: originalConfig,
-      };
-
-      const { rerender } = renderWithProviders(
-        <ProviderConfigEditor
-          provider={wsProvider}
-          setProvider={mockSetProvider}
-          providerType="websocket"
-        />,
-      );
-
-      rerender(
-        <ProviderConfigEditor
-          provider={wsProvider}
-          setProvider={mockSetProvider}
-          providerType="websocket"
-        />,
-      );
-
-      // The original config should remain unchanged
-      expect(wsProvider.config).toBe(originalConfig);
-    });
-
-    it('should preserve config immutability when updating websocket fields', () => {
+    it('clones the WebSocket config before changing a field', () => {
       const mockSetProvider = vi.fn();
       const originalConfig = {
         url: 'wss://example.com/ws',
         transformResponse: 'json.data',
       };
-      const wsProvider: ProviderOptions = {
-        id: 'websocket',
-        config: originalConfig,
-      };
 
       renderWithProviders(
         <ProviderConfigEditor
-          provider={wsProvider}
+          provider={{ id: 'websocket', config: originalConfig }}
           setProvider={mockSetProvider}
           providerType="websocket"
         />,
       );
 
-      // Verify original config is not mutated
-      expect(wsProvider.config).toBe(originalConfig);
-      expect(wsProvider.config.url).toBe('wss://example.com/ws');
-      expect(wsProvider.config.transformResponse).toBe('json.data');
+      act(() => {
+        screen.getByTestId('update-ws-url').click();
+      });
+
+      expect(mockSetProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            url: 'wss://updated.example.com/ws',
+            transformResponse: 'json.data',
+          }),
+        }),
+      );
+      const updatedProvider = mockSetProvider.mock.calls[0][0] as ProviderOptions;
+      expect(updatedProvider.config).not.toBe(originalConfig);
+      expect(originalConfig.url).toBe('wss://example.com/ws');
     });
   });
 });
