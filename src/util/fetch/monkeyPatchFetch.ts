@@ -1,8 +1,6 @@
 import { promisify } from 'util';
 import { gzip } from 'zlib';
 
-// biome-ignore lint/style/noRestrictedImports: this wrapper is the sanctioned fetch abstraction, and dispatcher-backed requests need Undici's decoder path.
-import { fetch as undiciFetch } from 'undici';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../../constants';
 import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger, { logRequestResponse } from '../../logger';
@@ -10,7 +8,6 @@ import logger, { logRequestResponse } from '../../logger';
 import type { FetchOptions } from './types';
 
 const gzipAsync = promisify(gzip);
-const defaultFetch = globalThis.fetch;
 
 function isConnectionError(error: Error) {
   return (
@@ -19,99 +16,6 @@ function isConnectionError(error: Error) {
     // @ts-expect-error undici error cause
     error.cause?.stack?.includes('internalConnectMultiple')
   );
-}
-
-function shouldUseUndiciFetch(options?: FetchOptions): boolean {
-  const dispatcher = (options as (FetchOptions & { dispatcher?: unknown }) | undefined)?.dispatcher;
-  const hasNativeMultipartBody =
-    typeof FormData !== 'undefined' && options?.body instanceof FormData;
-  return Boolean(dispatcher) && !hasNativeMultipartBody && globalThis.fetch === defaultFetch;
-}
-
-function getUndiciFetchArgs(
-  url: string | URL | Request,
-  options: RequestInit,
-): [string | URL | Request, RequestInit] {
-  if (!(url instanceof Request)) {
-    return [url, options];
-  }
-
-  // npm Undici does not accept Node's native Request instances as fetch inputs.
-  // Preserve the Request semantics that would normally flow through global fetch
-  // while handing Undici a URL string it can parse.
-  const fetchOptions = {
-    ...options,
-    body: options.body ?? url.body ?? undefined,
-    cache: options.cache ?? url.cache,
-    credentials: options.credentials ?? url.credentials,
-    headers: options.headers ?? url.headers,
-    integrity: options.integrity ?? url.integrity,
-    keepalive: options.keepalive ?? url.keepalive,
-    method: options.method ?? url.method,
-    mode: options.mode ?? url.mode,
-    redirect: options.redirect ?? url.redirect,
-    referrer: options.referrer ?? url.referrer,
-    referrerPolicy: options.referrerPolicy ?? url.referrerPolicy,
-    signal: options.signal === undefined ? url.signal : options.signal,
-  } as RequestInit & { duplex?: 'half' };
-
-  const duplex = (url as Request & { duplex?: 'half' }).duplex;
-  if (duplex) {
-    fetchOptions.duplex = duplex;
-  }
-
-  return [url.url, fetchOptions];
-}
-
-function preserveNodeFetchUserAgent(options: RequestInit): RequestInit {
-  const normalizedHeaders = new Headers(options.headers);
-  if (normalizedHeaders.has('user-agent')) {
-    return options;
-  }
-
-  const headers =
-    options.headers instanceof Headers
-      ? new Headers(options.headers)
-      : Array.isArray(options.headers)
-        ? [
-            ...options.headers.map(([name, value]) => [name, value] as [string, string]),
-            ['user-agent', 'node'] as [string, string],
-          ]
-        : { ...(options.headers ?? {}), 'user-agent': 'node' };
-
-  if (headers instanceof Headers) {
-    headers.set('user-agent', 'node');
-  }
-
-  return {
-    ...options,
-    headers,
-  };
-}
-
-function getFetchInvocation(
-  url: string | URL | Request,
-  options: FetchOptions | undefined,
-  requestOptions: RequestInit,
-): {
-  fetch: typeof globalThis.fetch;
-  url: string | URL | Request;
-  options: RequestInit;
-} {
-  if (!shouldUseUndiciFetch(options)) {
-    return {
-      fetch: globalThis.fetch,
-      url,
-      options: requestOptions,
-    };
-  }
-
-  const [fetchUrl, fetchOptions] = getUndiciFetchArgs(url, requestOptions);
-  return {
-    fetch: undiciFetch as unknown as typeof globalThis.fetch,
-    url: fetchUrl,
-    options: preserveNodeFetchUserAgent(fetchOptions),
-  };
 }
 
 /**
@@ -164,12 +68,8 @@ export async function monkeyPatchFetch(
     };
   }
   try {
-    // Node's global fetch does not reliably decode compressed responses when it
-    // receives an npm Undici dispatcher. Undici's own fetch keeps the dispatcher
-    // path aligned with its response decoding behavior. Runtime replacements of
-    // global fetch that differ from the module-load default still observe calls.
-    const fetchInvocation = getFetchInvocation(url, options, opts);
-    const response = await fetchInvocation.fetch(fetchInvocation.url, fetchInvocation.options);
+    // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here
+    const response = await fetch(url, opts);
 
     if (logEnabled) {
       void logRequestResponse({

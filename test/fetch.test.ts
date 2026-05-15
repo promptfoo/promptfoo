@@ -87,7 +87,6 @@ vi.mock('undici', () => {
   return {
     ProxyAgent,
     Agent,
-    fetch: vi.fn((url: RequestInfo | URL, options?: RequestInit) => global.fetch(url, options)),
     interceptors: {
       decompress: vi.fn(() => ({ name: 'decompress' })),
     },
@@ -835,115 +834,6 @@ describe('fetchWithProxy', () => {
     for (const d of dispatchers) {
       expect(d).toBe(first);
     }
-  });
-
-  it('should preserve a runtime-replaced global fetch for dispatcher-backed requests', async () => {
-    const undiciModule = await import('undici');
-    const undiciFetch = undiciModule.fetch;
-
-    await fetchWithProxy('https://example.com/api');
-
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(undiciFetch).not.toHaveBeenCalled();
-  });
-
-  it('should normalize native Request inputs before routing pooled calls through undici fetch', async () => {
-    const undiciModule = await import('undici');
-    const undiciFetch = vi.mocked(undiciModule.fetch);
-    vi.restoreAllMocks();
-    undiciFetch.mockResolvedValue(
-      new Response() as unknown as Awaited<ReturnType<typeof undiciFetch>>,
-    );
-
-    const request = new Request('https://example.com/api', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer request-token' },
-      body: 'hello',
-    });
-
-    await fetchWithProxy(request);
-
-    expect(undiciFetch).toHaveBeenCalledWith(
-      'https://example.com/api',
-      expect.objectContaining({
-        dispatcher: expect.any(Object),
-        duplex: 'half',
-        headers: expect.objectContaining({
-          authorization: 'Bearer request-token',
-          'user-agent': 'node',
-          'x-promptfoo-version': VERSION,
-        }),
-        method: 'POST',
-      }),
-    );
-  });
-
-  it('should preserve caller-provided user agents when routing through undici fetch', async () => {
-    const undiciModule = await import('undici');
-    const undiciFetch = vi.mocked(undiciModule.fetch);
-    vi.restoreAllMocks();
-    undiciFetch.mockResolvedValue(
-      new Response() as unknown as Awaited<ReturnType<typeof undiciFetch>>,
-    );
-
-    await fetchWithProxy('https://example.com/api', {
-      headers: { 'User-Agent': 'promptfoo-test-agent' },
-    });
-
-    const requestInit = undiciFetch.mock.calls[0]?.[1];
-    expect(requestInit).toBeDefined();
-    expect(new Headers(requestInit?.headers as HeadersInit | undefined).get('user-agent')).toBe(
-      'promptfoo-test-agent',
-    );
-  });
-
-  it('should preserve native multipart Request streams on the undici path', async () => {
-    const undiciModule = await import('undici');
-    const undiciFetch = vi.mocked(undiciModule.fetch);
-    vi.restoreAllMocks();
-    undiciFetch.mockResolvedValue(
-      new Response() as unknown as Awaited<ReturnType<typeof undiciFetch>>,
-    );
-
-    const body = new FormData();
-    body.append('file', new Blob(['hello']), 'hello.txt');
-    const request = new Request('https://example.com/api', {
-      method: 'POST',
-      body,
-    });
-
-    await fetchWithProxy(request);
-
-    const requestInit = undiciFetch.mock.calls[0]?.[1];
-    expect(requestInit).toBeDefined();
-    expect(undiciFetch).toHaveBeenCalledWith(
-      'https://example.com/api',
-      expect.objectContaining({
-        body: request.body,
-        dispatcher: expect.any(Object),
-        duplex: 'half',
-        method: 'POST',
-      }),
-    );
-    expect(
-      new Headers(requestInit?.headers as HeadersInit | undefined).get('content-type'),
-    ).toMatch(/^multipart\/form-data; boundary=/);
-  });
-
-  it('should keep native multipart request bodies on global fetch', async () => {
-    const undiciModule = await import('undici');
-    const undiciFetch = undiciModule.fetch;
-    const nativeFetch = globalThis.fetch;
-    vi.restoreAllMocks();
-
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(nativeFetch);
-    const body = new FormData();
-    body.append('file', new Blob(['hello']), 'hello.txt');
-
-    await fetchWithProxy('data:text/plain,ok', { method: 'POST', body });
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(undiciFetch).not.toHaveBeenCalled();
   });
 
   it('should reuse a dedicated Agent dispatcher per maxConcurrency value', async () => {
