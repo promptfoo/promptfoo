@@ -140,6 +140,14 @@ describe('createTransformResponse', () => {
     const result = parser({ result: 'success' }, '');
     expect(result.output).toBe('success');
   });
+
+  it('should keep expressions containing the word return as expressions', async () => {
+    const parser = await createTransformResponse(
+      'json.message.includes("return") ? json.message : text',
+    );
+    const result = parser({ message: 'please return this' }, 'fallback');
+    expect(result.output).toBe('please return this');
+  });
 });
 
 describe('createTransformRequest', () => {

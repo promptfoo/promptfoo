@@ -16,6 +16,15 @@ function stripTrailingSemicolon(code: string): string {
   return code.replace(/;\s*$/, '');
 }
 
+function looksLikeResponseTransformBody(code: string): boolean {
+  const trimmed = code.trimStart();
+  const startsWithStatement = /^(return|const|let|var|if|switch|for|while|do|try|throw)\b/.test(
+    trimmed,
+  );
+
+  return startsWithStatement && /\breturn\b/.test(trimmed);
+}
+
 export interface TransformResponseContext {
   response: FetchWithCacheResult<any>;
 }
@@ -65,8 +74,9 @@ export async function createTransformResponse(
           // For function expressions, call them with the arguments
           functionBody = `try { return (${trimmedParser})(json, text, context); } catch(e) { throw new Error('Transform failed: ${errorSuffix}); }`;
         } else {
-          // Check if it contains a return statement (indicates a function body)
-          const hasReturn = /\breturn\b/.test(trimmedParser);
+          // Treat explicit statement bodies differently from ordinary expressions.
+          // This avoids misclassifying quoted text such as `"return"` as a body.
+          const hasReturn = looksLikeResponseTransformBody(trimmedParser);
           if (hasReturn) {
             // Use as function body if it has return statements
             functionBody = `try { ${trimmedParser} } catch(e) { throw new Error('Transform failed: ${errorSuffix}); }`;
