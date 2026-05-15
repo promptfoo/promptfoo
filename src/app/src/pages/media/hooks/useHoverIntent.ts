@@ -67,6 +67,18 @@ export function useHoverIntent({
   const isEffectivelyEnabled =
     enabled && hasHoverCapability() && !(respectReducedMotion && prefersReducedMotion());
 
+  const markIntentional = useCallback(() => {
+    timeoutRef.current = undefined;
+
+    // Test environments can tear down jsdom between scheduling and execution.
+    // Avoid dispatching a React update once the browser global is already gone.
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    setIsIntentional(true);
+  }, []);
+
   // Clear timeout on unmount
   useEffect(() => {
     return () => {
@@ -82,10 +94,8 @@ export function useHoverIntent({
     }
 
     setIsHovering(true);
-    timeoutRef.current = window.setTimeout(() => {
-      setIsIntentional(true);
-    }, delay);
-  }, [isEffectivelyEnabled, delay]);
+    timeoutRef.current = window.setTimeout(markIntentional, delay);
+  }, [isEffectivelyEnabled, delay, markIntentional]);
 
   const onMouseLeave = useCallback(() => {
     setIsHovering(false);
@@ -105,10 +115,8 @@ export function useHoverIntent({
 
     setIsHovering(true);
     // For keyboard users, we can be more immediate
-    timeoutRef.current = window.setTimeout(() => {
-      setIsIntentional(true);
-    }, delay / 2);
-  }, [isEffectivelyEnabled, delay]);
+    timeoutRef.current = window.setTimeout(markIntentional, delay / 2);
+  }, [isEffectivelyEnabled, delay, markIntentional]);
 
   const onBlur = useCallback(() => {
     setIsHovering(false);
