@@ -411,6 +411,7 @@ async function fetchRemoteTestCases(
     result?: TestCase[];
   }
 
+  let ret: TestCase[];
   try {
     const { data, status, statusText } = await fetchWithCache<PluginGenerationResponse>(
       getRemoteGenerationUrl(),
@@ -430,14 +431,15 @@ async function fetchRemoteTestCases(
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
-    const ret = data.result;
-    validateRemoteRedteamAssertions(key, ret);
-    logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
-    return ret;
+    ret = data.result;
   } catch (err) {
     logger.error(`Error generating test cases for ${key}: ${err}`);
     return [];
   }
+
+  validateRemoteRedteamAssertions(key, ret);
+  logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
+  return ret;
 }
 
 function createPluginFactory<T extends PluginConfig>(
