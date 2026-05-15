@@ -339,6 +339,26 @@ describe('Strategies', () => {
       );
     });
 
+    it('labels hero strategy settings buttons with the strategy names', () => {
+      (useRedTeamConfig as any).mockReturnValue({
+        config: {
+          target: {
+            config: {
+              stateful: false,
+            },
+          },
+          strategies: [{ id: 'jailbreak:meta' }],
+          plugins: [],
+          numTests: 5,
+        },
+        updateConfig: mockUpdateConfig,
+      });
+
+      renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('button', { name: 'Configure Meta Agent' })).toBeInTheDocument();
+    });
+
     it('toggles hero strategy cards from the keyboard', async () => {
       const user = userEvent.setup();
       renderWithProviders(<Strategies onNext={mockOnNext} onBack={mockOnBack} />);
