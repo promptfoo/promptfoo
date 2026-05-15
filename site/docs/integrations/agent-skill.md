@@ -5,11 +5,14 @@ sidebar_label: Agent Skills
 sidebar_position: 99
 ---
 
-# Agent Skill for Writing Evals
+# Agent Skills for Evals and Red Teaming
 
 AI coding agents can write promptfoo configs, but they often get the details wrong: shell-style env vars that do not work, hallucination rubrics that cannot see the source material, tests dumped inline instead of in files, and red-team configs that collapse real app inputs into one generic prompt field. The portable `promptfoo-evals` skill covers eval conventions, while the Codex `promptfoo-redteam-setup` and `promptfoo-redteam-run` skills cover red-team setup and scan triage.
 
-If you use Codex in this repo, Promptfoo also includes a plugin bundle for provider setup, red-team setup, and scan triage. Use the portable skill for eval help in any compatible tool. Use the Codex bundle when you also want red-team workflows.
+If you use Codex, prefer the Codex plugin bundle when you want the full workflow:
+eval authoring, provider setup, red-team setup, and scan triage. Use the
+portable single `promptfoo-evals` skill when you intentionally want an eval-only
+skill that also works in other compatible tools.
 
 The portable skill works with [Claude Code](https://code.claude.com) and [OpenAI Codex](https://openai.com/index/codex). It follows the open [Agent Skills](https://agentskills.io) standard, so it should also work with other compatible tools.
 
@@ -40,7 +43,7 @@ compare.
 
 ### Via Codex plugin bundle
 
-For repo-local Codex usage, this repo includes a plugin bundle at
+For Codex, Promptfoo includes a plugin bundle at
 `plugins/promptfoo`, exposed by `.agents/plugins/marketplace.json`. It contains
 four skills: `promptfoo-evals`, `promptfoo-provider-setup`,
 `promptfoo-redteam-setup`, and `promptfoo-redteam-run`.
@@ -63,10 +66,10 @@ local graders, and local redteam generators, including `workers`, `timeout`, and
 `PROMPTFOO_PYTHON` configuration.
 
 Use the Claude marketplace command above when you want the portable single
-`promptfoo-evals` skill. Use the Codex bundle when working in this repo and you
-want separate eval, provider setup, redteam setup, and redteam run workflows.
-To reuse the bundle elsewhere, copy `plugins/promptfoo` and its
-`.agents/plugins/marketplace.json` entry together.
+`promptfoo-evals` skill. Use the Codex bundle for the preferred Codex
+experience, especially when provider setup or redteam work is part of the job.
+To reuse the bundle in another Codex workspace, copy `plugins/promptfoo` and
+its `.agents/plugins/marketplace.json` entry together.
 
 For red teaming, use the Codex bundle:
 `promptfoo-provider-setup` connects the system under test,
@@ -74,9 +77,9 @@ For red teaming, use the Codex bundle:
 into a scan plan, and `promptfoo-redteam-run` executes and triages the
 generated probes.
 
-### Manual install
+### Manual install for the portable eval skill
 
-Manual install below covers the portable eval skill. Download the
+Manual install below covers only the portable eval-only skill. Download the
 [skill directory](https://github.com/promptfoo/promptfoo/tree/main/.claude/skills/promptfoo-evals)
 and copy it to the correct location for your tool:
 
@@ -99,7 +102,10 @@ cp -r promptfoo-evals your-project/.agents/skills/
 ```
 
 :::note
-For team adoption, commit the skill to your repo's skill directory (`.claude/skills/` for Claude Code, `.agents/skills/` for Codex). Every developer's agent picks it up automatically, with no per-person install needed.
+For Codex, prefer the plugin bundle above when you want the full Promptfoo
+workflow. Commit the portable single skill to `.agents/skills/` only when your
+team intentionally wants eval-only guidance. Every developer's agent then picks
+it up automatically, with no per-person install needed.
 :::
 
 The core skill consists of two files:

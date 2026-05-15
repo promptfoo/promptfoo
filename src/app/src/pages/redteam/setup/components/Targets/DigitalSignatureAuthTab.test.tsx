@@ -340,6 +340,17 @@ describe('DigitalSignatureAuthTab', () => {
   });
 
   describe('PEM Key Input Type Selection', () => {
+    it('stacks PEM key input method cards on narrow screens', () => {
+      const { container } = renderWithTooltipProvider(
+        <DigitalSignatureAuthTab
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
+
+      expect(container.querySelector('.grid')).toHaveClass('grid-cols-1', 'sm:grid-cols-3');
+    });
+
     it('should update keyInputType to path when File Path option is clicked', async () => {
       const user = userEvent.setup();
       renderWithTooltipProvider(

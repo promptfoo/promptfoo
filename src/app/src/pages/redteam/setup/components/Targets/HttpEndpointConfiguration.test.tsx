@@ -82,6 +82,69 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     expect(firstValueField).toBeVisible();
   });
 
+  it('stacks the raw-request toggle above import controls on narrow screens', () => {
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    expect(screen.getByText('Use Raw HTTP Request').parentElement?.parentElement).toHaveClass(
+      'flex-col',
+      'sm:flex-row',
+    );
+  });
+
+  it('stacks the method and URL controls on narrow screens', () => {
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const urlInput = screen.getByPlaceholderText('https://example.com/api/chat');
+    const controlsRow = urlInput.parentElement;
+    const methodTrigger = screen.getByRole('combobox');
+
+    expect(controlsRow).toHaveClass('flex-col', 'sm:flex-row');
+    expect(methodTrigger).toHaveClass('w-full', 'sm:w-24', 'sm:shrink-0');
+    expect(urlInput).toHaveClass('min-w-0', 'flex-1');
+  });
+
+  it('keeps generated configuration actions visible while the dialog body scrolls independently', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Import' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Auto-fill from Example' }));
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen.getByText(
+      /Paste an example HTTP request and optionally a response/i,
+    ).parentElement;
+    const footer = screen.getByRole('button', { name: 'Generate' }).parentElement;
+
+    expect(dialog).toHaveClass('flex', 'max-h-[90vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
+  });
+
   it('should maintain header Name and Value field layout constraints when bodyError state changes', () => {
     const { rerender } = renderWithProviders(
       <HttpEndpointConfiguration
@@ -309,5 +372,12 @@ describe('HttpEndpointConfiguration - Header Management', () => {
 
     expect(nameFields[nameFields.length - 1]).toBeVisible();
     expect(valueFields[valueFields.length - 1]).toBeVisible();
+    expect(nameFields[nameFields.length - 1].parentElement).toHaveClass(
+      'flex-col',
+      'items-stretch',
+      'sm:flex-row',
+      'sm:items-center',
+    );
+    expect(screen.getByRole('button', { name: 'Remove header 1' })).toBeInTheDocument();
   });
 });
