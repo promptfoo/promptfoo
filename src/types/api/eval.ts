@@ -124,6 +124,7 @@ export const EvalTableResponseSchema = z
   })
   .passthrough();
 
+export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
 // POST /api/eval/job
@@ -258,7 +259,19 @@ export const SubmitRatingRequestSchema = z
   })
   .passthrough();
 
-export const SubmitRatingResponseSchema = MessageResponseSchema;
+/**
+ * Response is the persisted EvalResult row. The route returns the updated
+ * record so external SDKs/CLIs can read refreshed metrics without a follow-up
+ * fetch. The shape is permissive because EvalResult does not have a Zod
+ * schema — only the most commonly-read fields are validated.
+ */
+export const SubmitRatingResponseSchema = z
+  .object({
+    id: z.string(),
+    success: z.boolean(),
+    score: z.number(),
+  })
+  .passthrough();
 
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
@@ -348,6 +361,7 @@ export const EvalSchemas = {
     Params: EvalIdParamSchema,
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
+    JsonExportResponse: EvalTableJsonExportResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,

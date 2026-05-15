@@ -109,6 +109,7 @@ prompts:
 ```
 
 This allows you to prepare a directory with files or sub-directories before running your tests.
+Relative `working_dir` values are resolved from the directory containing the config file.
 
 By default, when you specify a working directory, Claude Agent SDK is given read-only access to the directory.
 
@@ -148,7 +149,7 @@ prompts:
 | `permission_mode`                    | string           | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `auto`                    | `default`                |
 | `allow_dangerously_skip_permissions` | boolean          | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
 | `thinking`                           | object           | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
-| `effort`                             | string           | Response effort level: `low`, `medium`, `high`, `max`                                                        | `high`                   |
+| `effort`                             | string           | Response effort level: `low`, `medium`, `high`, `xhigh` (Opus 4.7+), `max`                                   | `high`                   |
 | `agent`                              | string           | Named agent for the main thread (must be defined in `agents` or settings)                                    | None                     |
 | `session_id`                         | string           | Custom session UUID (cannot be used with `continue`/`resume` unless `fork_session` is set)                   | Auto-generated           |
 | `title`                              | string           | Custom title for a new session (skips auto-generation from the first message)                                | Auto-generated           |
@@ -183,6 +184,7 @@ prompts:
 | `agent_progress_summaries`           | boolean          | Enable periodic AI progress summaries for subagents                                                          | false                    |
 | `settings`                           | string/object    | Additional [settings](#settings) (file path or inline object)                                                | None                     |
 | `managed_settings`                   | object           | Policy-tier [settings](#settings) the SDK loads above user/project layers (for embedders enforcing policy)   | None                     |
+| `can_use_tool`                       | function         | Callback forwarded to Claude Agent SDK's `canUseTool` option (programmatic only)                             | None                     |
 | `on_elicitation`                     | function         | Callback for MCP elicitation requests (programmatic only)                                                    | Auto-decline             |
 | `resume`                             | string           | Resume from a specific session ID                                                                            | None                     |
 | `fork_session`                       | boolean          | Fork from an existing session instead of continuing                                                          | false                    |
@@ -256,6 +258,7 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `acceptEdits`       | Allow file modifications                                              |
 | `bypassPermissions` | No restrictions (requires `allow_dangerously_skip_permissions: true`) |
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
+| `auto`              | Use a model classifier to approve or deny permission prompts          |
 
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
@@ -336,7 +339,7 @@ providers:
       allow_all_tools: true
 ```
 
-The `tools` option specifies the base set of available built-in tools, while `allowedTools` and `disallowedTools` filter from that base.
+The `tools` option specifies the base set of available built-in tools, while `custom_allowed_tools`/`append_allowed_tools` and `disallowed_tools` filter from that base.
 
 ⚠️ **Security Note**: Some tools allow Claude Agent SDK to modify files, run system commands, search the web, and more. Think carefully about security implications before using these tools.
 
@@ -397,7 +400,7 @@ providers:
       plugins:
         - type: local
           path: ./my-plugin
-      append_allowed_tools: ['Skill', 'Read']
+      skills: all
 ```
 
 :::note
@@ -466,7 +469,7 @@ providers:
       skills: all # Or: ['code-review', 'test-generator']
 ```
 
-If you don't set `skills`, you must add `'Skill'` to allowed tools manually for the model to invoke them:
+For SDK versions before 0.2.120, omit `skills` and add `'Skill'` manually instead:
 
 ```yaml
 providers:
@@ -546,7 +549,8 @@ providers:
     config:
       working_dir: ./my-project
       setting_sources: ['project'] # Only team-shared skills, exclude personal
-      append_allowed_tools: ['Skill', 'Read', 'Bash']
+      skills: all
+      append_allowed_tools: ['Read', 'Bash']
       permission_mode: 'acceptEdits'
 ```
 
@@ -560,7 +564,8 @@ providers:
     config:
       working_dir: ./my-project
       setting_sources: ['project']
-      append_allowed_tools: ['Skill', 'Read', 'Write', 'Bash']
+      skills: all
+      append_allowed_tools: ['Read', 'Write', 'Bash']
       permission_mode: 'acceptEdits'
 
 prompts:
@@ -643,6 +648,12 @@ When `output_format` is configured, the response will include structured output 
 
 - `output` - The parsed structured output (when available)
 - `metadata.structuredOutput` - The raw structured output value
+
+:::tip
+For evals that depend on parsing JSON from the model's reply, prefer `output_format` over asking for JSON in the prompt and then running `is-json` / `JSON.parse()`. Without it, Claude commonly wraps short JSON answers in Markdown fences or a leading sentence, which makes downstream parsers brittle. With it, the response arrives as a parsed object, so a JavaScript assertion can read fields directly.
+
+This is the Claude Agent SDK's analogue of the OpenAI Codex SDK's [`output_schema`](/docs/providers/openai-codex-sdk#structured-output) — same idea, slightly different wrapper shape (`{type: 'json_schema', schema: {...}}` here vs a bare schema object on Codex). The [Test Agent Skills guide](/docs/guides/test-agent-skills) shows both side by side.
+:::
 
 ## Session Management
 
@@ -786,7 +797,7 @@ providers:
             allowManagedDomainsOnly: true
 ```
 
-## Tool Configuration
+## Per-Tool Configuration
 
 Customize built-in tool behavior with `tool_config`:
 
@@ -855,14 +866,16 @@ providers:
 For running Claude Code in VMs, containers, or remote environments, you can provide a custom spawn function when using the provider programmatically:
 
 ```typescript
-import { ClaudeCodeSDKProvider } from 'promptfoo';
+import { loadApiProvider } from 'promptfoo';
 
-const provider = new ClaudeCodeSDKProvider({
-  config: {
-    spawn_claude_code_process: (options) => {
-      // Custom spawn logic for VM/container execution
-      // options contains: command, args, cwd, env, signal
-      return myVMProcess; // Must satisfy SpawnedProcess interface
+const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+  options: {
+    config: {
+      spawn_claude_code_process: (options) => {
+        // Custom spawn logic for VM/container execution
+        // options contains: command, args, cwd, env, signal
+        return myVMProcess; // Must satisfy SpawnedProcess interface
+      },
     },
   },
 });
@@ -919,13 +932,27 @@ Available behaviors:
 For custom answer selection logic when using the provider programmatically, you can provide your own `canUseTool` callback:
 
 ```typescript
-import { ClaudeCodeSDKProvider } from 'promptfoo';
+import { loadApiProvider } from 'promptfoo';
 
-const provider = new ClaudeCodeSDKProvider({
-  config: {
-    append_allowed_tools: ['AskUserQuestion'],
+const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+  options: {
+    config: {
+      append_allowed_tools: ['AskUserQuestion'],
+      can_use_tool: async (toolName, input) => {
+        if (toolName !== 'AskUserQuestion') {
+          return { behavior: 'allow', updatedInput: input };
+        }
+
+        return {
+          behavior: 'allow',
+          updatedInput: {
+            ...input,
+            answers: { 'Which environment?': 'Staging' },
+          },
+        };
+      },
+    },
   },
-  // Custom canUseTool passed via SDK options
 });
 ```
 
@@ -959,6 +986,35 @@ See the [Claude Agent SDK permissions documentation](https://platform.claude.com
 :::tip
 If you're testing scenarios where the agent asks questions, consider what answer would lead to the most interesting test case. Using `random` behavior can help discover edge cases.
 :::
+
+## Hooks
+
+Promptfoo forwards the `hooks` option to the Claude Agent SDK unchanged, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
+
+The `PostToolUse` event lets you rewrite tool output before the model sees it. Return `updatedToolOutput` to replace the result for any tool (built-in or MCP):
+
+```ts title="provider.mjs"
+export default {
+  id: 'anthropic:claude-agent-sdk',
+  config: {
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: 'Bash',
+          hooks: [
+            async (input) => ({
+              hookEventName: 'PostToolUse',
+              updatedToolOutput: redact(input.tool_response),
+            }),
+          ],
+        },
+      ],
+    },
+  },
+};
+```
+
+`updatedMCPToolOutput` (MCP-only) is deprecated in favor of `updatedToolOutput`, which works for every tool. See the [SDK hook reference](https://docs.claude.com/en/docs/claude-code/hooks) for the full list of events and return shapes.
 
 ## Tool Call Tracking
 

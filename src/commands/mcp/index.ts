@@ -34,7 +34,7 @@ export function mcpCommand(program: Command): void {
           process.exitCode = 1;
           return;
         }
-        await startHttpMcpServer(port, cmdObj.host);
+        await startHttpMcpServer(port, cmdObj.host || undefined);
       }
     });
 }

@@ -10,6 +10,7 @@ import {
   type GenAISpanResult,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
@@ -27,7 +28,8 @@ import {
   transformTools,
 } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
+import { calculateOpenAIUsageCost } from './billing';
+import { getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
@@ -208,6 +210,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
+  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
+    return this.modelName;
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -299,6 +305,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
       ...(config.passthrough || {}),
       ...(this.modelName.includes('audio')
         ? {
@@ -538,6 +550,24 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
       await deleteFromCache?.();
+      // Preserve the structured rate-limit signal so the scheduler honors
+      // the transport-layer fail-fast contract (no retry on hard quotas)
+      // and so the user-facing message stays the canonical
+      // "Rate limit exceeded:" / "Quota exceeded:" form rather than being
+      // wrapped in "API call error: HttpRateLimitError: ...".
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatRateLimitErrorMessage(err),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: err.headers ?? responseHeaders ?? {},
+            },
+          },
+        };
+      }
       return {
         error: `API call error: ${String(err)}`,
         metadata: {
@@ -733,14 +763,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             latencyMs,
             logProbs,
             ...(finishReason && { finishReason }),
-            cost: calculateOpenAICost(
-              this.modelName,
-              config,
-              data.usage?.prompt_tokens,
-              data.usage?.completion_tokens,
-              data.usage?.audio_prompt_tokens,
-              data.usage?.audio_completion_tokens,
-            ),
+            cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+              cachedResponse: cached,
+              serviceTier: data.service_tier ?? config.service_tier,
+            }),
             guardrails: { flagged: contentFiltered },
             metadata: {
               http: {
@@ -777,14 +803,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           latencyMs,
           logProbs,
           ...(finishReason && { finishReason }),
-          cost: calculateOpenAICost(
-            this.modelName,
-            config,
-            data.usage?.prompt_tokens,
-            data.usage?.completion_tokens,
-            data.usage?.audio_prompt_tokens,
-            data.usage?.audio_completion_tokens,
-          ),
+          cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+            cachedResponse: cached,
+            serviceTier: data.service_tier ?? config.service_tier,
+          }),
           guardrails: { flagged: contentFiltered },
           metadata: {
             http: {
@@ -803,14 +825,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         logProbs,
         ...(finishReason && { finishReason }),
-        cost: calculateOpenAICost(
-          this.modelName,
-          config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-          data.usage?.audio_prompt_tokens,
-          data.usage?.audio_completion_tokens,
-        ),
+        cost: calculateOpenAIUsageCost(this.getBillingModelName(config), config, data.usage, {
+          cachedResponse: cached,
+          serviceTier: data.service_tier ?? config.service_tier,
+        }),
         guardrails: { flagged: contentFiltered },
         metadata: {
           http: {

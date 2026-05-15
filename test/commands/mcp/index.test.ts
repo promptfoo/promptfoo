@@ -79,5 +79,14 @@ describe('mcp command', () => {
 
       expect(startHttpMcpServer).toHaveBeenCalledWith(8080, '0.0.0.0');
     });
+
+    it('should fall back to the server default when host is blank', async () => {
+      const mcpCmd = program.commands.find((cmd) => cmd.name() === 'mcp');
+      expect(mcpCmd).toBeDefined();
+
+      await mcpCmd!.parseAsync(['node', 'test', '--transport', 'http', '--host', '']);
+
+      expect(startHttpMcpServer).toHaveBeenCalledWith(3100, undefined);
+    });
   });
 });

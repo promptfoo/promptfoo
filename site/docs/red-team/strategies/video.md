@@ -141,6 +141,5 @@ This strategy is worth implementing because:
 - [Audio Jailbreaking](/docs/red-team/strategies/audio) - Similar approach using speech audio
 - [Image Jailbreaking](/docs/red-team/strategies/image) - Similar approach using images
 - [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Comprehensive guide for testing multi-modal models
-- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog

@@ -188,6 +188,9 @@
         "ANTHROPIC_BASE_URL": {
           "type": "string"
         },
+        "ATLASCLOUD_API_KEY": {
+          "type": "string"
+        },
         "AWS_BEDROCK_REGION": {
           "type": "string"
         },
@@ -1614,6 +1617,9 @@
                       "type": "string"
                     },
                     "ANTHROPIC_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ATLASCLOUD_API_KEY": {
                       "type": "string"
                     },
                     "AWS_BEDROCK_REGION": {
@@ -3096,11 +3102,13 @@
         "delay": {
           "type": "number"
         },
-        "eventSource": {
-          "type": "string"
-        },
         "generateSuggestions": {
           "type": "boolean"
+        },
+        "suggestionsCount": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
         },
         "interactiveProviders": {
           "type": "boolean"
@@ -3287,6 +3295,11 @@
         },
         "generateSuggestions": {
           "type": "boolean"
+        },
+        "suggestionsCount": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 50
         },
         "promptPrefix": {
           "type": "string"
