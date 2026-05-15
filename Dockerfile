@@ -27,18 +27,19 @@ ENV VITE_IS_HOSTED=1 \
     VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
     PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
 
-# Install dependencies (deterministic + cached)
+# Install dependencies (deterministic + cached). Copy workspace package manifests
+# before npm ci so the root lockfile can install all workspaces reproducibly.
 COPY package.json package-lock.json ./
+COPY src/app/package.json ./src/app/package.json
+COPY site/package.json ./site/package.json
+# The site workspace postinstall writes a generated stats placeholder.
+RUN mkdir -p site/src
 # Leverage BuildKit cache
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --install-links --include=peer
 
 # Copy the rest of the application code
 COPY . .
-
-# Run npm install for the react app
-WORKDIR /app/src/app
-RUN npm install
 
 WORKDIR /app
 RUN npm run build
@@ -60,7 +61,7 @@ USER promptfoo
 
 EXPOSE 3000
 
-# Set up healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD curl -f http://localhost:3000/health || exit 1
+# Set up healthcheck using Node, which is present in every stage.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s CMD node -e "const http = require('node:http'); const req = http.get('http://127.0.0.1:3000/health', (res) => process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1)); req.on('error', () => process.exit(1)); req.setTimeout(5000, () => { req.destroy(); process.exit(1); });"
 
 CMD ["node", "dist/src/server/index.js"]

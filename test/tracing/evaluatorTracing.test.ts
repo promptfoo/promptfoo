@@ -14,6 +14,8 @@ import { mockProcessEnv } from '../util/utils';
 import type { TestCase, TestSuite } from '../../src/types/index';
 
 const mockStartOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockUpdateOTLPReceiverOptions = vi.hoisted(() => vi.fn());
+const mockCreateTrace = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({
@@ -28,13 +30,14 @@ vi.mock('../../src/logger', () => ({
 // Mock the trace store
 vi.mock('../../src/tracing/store', () => ({
   getTraceStore: vi.fn(() => ({
-    createTrace: vi.fn(),
+    createTrace: mockCreateTrace,
   })),
 }));
 
 vi.mock('../../src/tracing/otlpReceiver', () => ({
   startOTLPReceiver: mockStartOTLPReceiver,
   stopOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+  updateOTLPReceiverOptions: mockUpdateOTLPReceiverOptions,
 }));
 
 describe('evaluatorTracing', () => {
@@ -42,6 +45,9 @@ describe('evaluatorTracing', () => {
     vi.clearAllMocks();
     mockStartOTLPReceiver.mockReset();
     mockStartOTLPReceiver.mockResolvedValue(undefined);
+    mockUpdateOTLPReceiverOptions.mockReset();
+    mockCreateTrace.mockReset();
+    mockCreateTrace.mockResolvedValue(undefined);
     resetTracingState();
     // Reset environment variables
     mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: undefined });
@@ -155,6 +161,30 @@ describe('evaluatorTracing', () => {
       expect(result!.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
       expect(result!.evaluationId).toMatch(/^eval-/);
       expect(result!.testCaseId).toBe('3-7');
+    });
+
+    it('should persist command tool-name overrides in trace metadata', async () => {
+      const test: TestCase = {
+        vars: { foo: 'bar' },
+      };
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          commandToolNames: ['bash'],
+        },
+      } as unknown as TestSuite;
+
+      await generateTraceContextIfNeeded(test, {}, 2, 4, testSuite);
+
+      expect(mockCreateTrace).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            commandToolNames: ['bash'],
+          }),
+        }),
+      );
     });
   });
 
@@ -368,22 +398,37 @@ describe('evaluatorTracing', () => {
       });
     });
 
-    it('resets command tool-name overrides when a later eval omits them', async () => {
-      const { getCommandToolNames } = await import('../../src/assertions/trajectoryUtils');
+    it('should refresh receiver options when tracing is already running', async () => {
+      await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite);
 
       await startOtlpReceiverIfNeeded({
         providers: [],
         prompts: [],
-        tracing: { enabled: false, commandToolNames: ['bash'] },
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '127.0.0.1',
+              redactAttributes: ['authorization'],
+            },
+          },
+        },
       } as unknown as TestSuite);
-      expect(getCommandToolNames()).toContain('bash');
 
-      await startOtlpReceiverIfNeeded({
-        providers: [],
-        prompts: [],
-        tracing: { enabled: false },
-      } as unknown as TestSuite);
-      expect(getCommandToolNames()).not.toContain('bash');
+      expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
+      expect(mockUpdateOTLPReceiverOptions).toHaveBeenCalledWith({
+        acceptFormats: ['json', 'protobuf'],
+        redactAttributes: ['authorization'],
+      });
     });
   });
 });

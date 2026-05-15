@@ -238,6 +238,8 @@ def call_api(prompt, options, context):
     return result
 ```
 
+For workflows that make multiple model calls, set `tokenUsage.numRequests` yourself. Fresh Python-provider results that omit it are recorded as one request.
+
 ### Types
 
 The types passed into the Python script function and the `ProviderResponse` return type are defined as follows:
@@ -256,6 +258,7 @@ class TokenUsage:
     total: int
     prompt: int
     completion: int
+    numRequests: int
 
 class ProviderResponse:
     output: Optional[Union[str, Dict[str, Any]]]
@@ -565,8 +568,8 @@ npx promptfoo@latest eval
 
 Promptfoo automatically detects your Python installation in this priority order:
 
-1. **Environment variable**: `PROMPTFOO_PYTHON` (if set)
-2. **Provider config**: `pythonExecutable` in your config
+1. **Provider config**: `pythonExecutable` in your config
+2. **Environment variable**: `PROMPTFOO_PYTHON` (if set)
 3. **Windows smart detection**: Uses `where python` and filters out Microsoft Store stubs (Windows only)
 4. **Smart detection**: Uses `python -c "import sys; print(sys.executable)"` to find the actual Python path
 5. **Fallback commands**:
@@ -574,6 +577,7 @@ Promptfoo automatically detects your Python installation in this priority order:
    - macOS/Linux: `python3`, `python`
 
 This enhanced detection is especially helpful on Windows where the Python launcher (`py.exe`) might not be available.
+Use `pythonExecutable` when one provider needs a different interpreter than the global default.
 
 #### Environment Variables
 

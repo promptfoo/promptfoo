@@ -218,9 +218,17 @@ jobs:
           # shellcheck disable=SC2046
           npx madge $(git ls-files '*.ts') --circular
 
+      - name: Check architecture boundaries
+        run: |
+          npm run architecture:check
+
       - name: Check for missing dependencies
         run: |
           npm run depcheck
+
+      - name: Check for orphaned files
+        run: |
+          npm run knip -- --include files
 
       - name: Validate lockfile integrity
         run: |

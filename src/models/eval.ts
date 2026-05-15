@@ -48,7 +48,7 @@ import {
   getTotalResultRowCount,
   queryTestIndicesOptimized,
 } from './evalPerformance';
-import EvalResult from './evalResult';
+import EvalResult, { persistTraceMetadata } from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -180,6 +180,11 @@ export function combineFilterConditions(
   }, filterConditions[0].condition);
 }
 
+// Reserved internal namespace under `metadata.*`. Mirrors the constant in
+// `evalResult.ts` (which writes/reads it). Kept in sync to hide the namespace
+// from the metadata-discovery API.
+const RESERVED_METADATA_NAMESPACE = '__promptfoo';
+
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
     const db = getDb();
@@ -261,7 +266,9 @@ export class EvalQueries {
         LIMIT 1000
       `;
       const results = await db.all<MetadataKeyResult>(query);
-      return results.map((r) => r.key);
+      // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+      // it through the metadata-keys API — pair this with the value-side filter below.
+      return results.map((r) => r.key).filter((key) => key !== RESERVED_METADATA_NAMESPACE);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
@@ -281,6 +288,14 @@ export class EvalQueries {
     const db = getDb();
     const trimmedKey = key.trim();
     if (!trimmedKey) {
+      return [];
+    }
+    // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
+    // it through the metadata-values API even though it lives in the same JSON column.
+    if (
+      trimmedKey === RESERVED_METADATA_NAMESPACE ||
+      trimmedKey.startsWith(`${RESERVED_METADATA_NAMESPACE}.`)
+    ) {
       return [];
     }
 
@@ -516,7 +531,14 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
+          .values(
+            opts.results?.map((r) => ({
+              ...r,
+              metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              evalId,
+              id: crypto.randomUUID(),
+            })),
+          )
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
@@ -1217,7 +1239,13 @@ export default class Eval {
     this.results = results;
     if (this.persisted) {
       const db = getDb();
-      await db.insert(evalResultsTable).values(results.map((r) => ({ ...r, evalId: this.id })));
+      await db.insert(evalResultsTable).values(
+        results.map((r) => ({
+          ...r,
+          metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+          evalId: this.id,
+        })),
+      );
     }
     this._resultsLoaded = true;
   }

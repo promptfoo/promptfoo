@@ -29,6 +29,48 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   }) as ProviderConfig;
 }
 
+function projectProviderResponse(
+  response: ProviderResponse | undefined,
+  options: { stripMetadata: boolean; stripOutput: boolean },
+): ProviderResponse | undefined {
+  if (!response) {
+    return response;
+  }
+
+  if (!options.stripMetadata && !options.stripOutput) {
+    return response;
+  }
+
+  const projectedResponse = options.stripMetadata
+    ? (({ metadata: _metadata, ...rest }) => rest)(response)
+    : { ...response };
+
+  if (options.stripOutput) {
+    projectedResponse.output = '[output stripped]';
+  }
+
+  return projectedResponse;
+}
+
+function projectTestCase(
+  testCase: AtomicTestCase,
+  options: { stripMetadata: boolean; stripVars: boolean },
+): AtomicTestCase {
+  if (!options.stripMetadata && !options.stripVars) {
+    return testCase;
+  }
+
+  const projectedTestCase = options.stripMetadata
+    ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
+    : { ...testCase };
+
+  if (options.stripVars) {
+    projectedTestCase.vars = undefined;
+  }
+
+  return projectedTestCase;
+}
+
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
@@ -274,7 +316,20 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
-function persistTraceMetadata(
+// `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
+// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
+// log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
+// `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
+const PROMPTFOO_METADATA_KEY = '__promptfoo';
+const TRACE_LINKAGE_KEY = 'traceLinkage';
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+export function persistTraceMetadata(
   metadata: EvaluateResult['metadata'],
   traceId: EvaluateResult['traceId'],
   evaluationId: EvaluateResult['evaluationId'],
@@ -284,21 +339,20 @@ function persistTraceMetadata(
   }
 
   const metadataRecord = metadata ?? {};
-  const promptfooMetadata =
-    metadataRecord.__promptfoo &&
-    typeof metadataRecord.__promptfoo === 'object' &&
-    !Array.isArray(metadataRecord.__promptfoo)
-      ? (metadataRecord.__promptfoo as Record<string, unknown>)
-      : {};
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
+    logger.warn(
+      `[EvalResult] Overwriting non-object metadata.${PROMPTFOO_METADATA_KEY} with internal trace linkage; the key is reserved for promptfoo internals.`,
+    );
+  }
 
+  // `traceId`/`evaluationId` are only persisted when truthy — JSON.stringify strips
+  // undefined values, and `surfaceTraceMetadata` requires `typeof === 'string'` on read.
   return {
     ...metadataRecord,
-    __promptfoo: {
-      ...promptfooMetadata,
-      traceLinkage: {
-        ...(traceId ? { traceId } : {}),
-        ...(evaluationId ? { evaluationId } : {}),
-      },
+    [PROMPTFOO_METADATA_KEY]: {
+      ...(promptfooMetadata ?? {}),
+      [TRACE_LINKAGE_KEY]: { traceId, evaluationId },
     },
   };
 }
@@ -309,33 +363,24 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   metadata: Record<string, unknown>;
 } {
   const metadataRecord = metadata ?? {};
-  const promptfooMetadata =
-    metadataRecord.__promptfoo &&
-    typeof metadataRecord.__promptfoo === 'object' &&
-    !Array.isArray(metadataRecord.__promptfoo)
-      ? (metadataRecord.__promptfoo as Record<string, unknown>)
-      : undefined;
-  const traceLinkage =
-    promptfooMetadata?.traceLinkage &&
-    typeof promptfooMetadata.traceLinkage === 'object' &&
-    !Array.isArray(promptfooMetadata.traceLinkage)
-      ? (promptfooMetadata.traceLinkage as Record<string, unknown>)
-      : undefined;
+  const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
+  const traceLinkage = asRecord(promptfooMetadata?.[TRACE_LINKAGE_KEY]);
 
   const traceId = typeof traceLinkage?.traceId === 'string' ? traceLinkage.traceId : undefined;
   const evaluationId =
     typeof traceLinkage?.evaluationId === 'string' ? traceLinkage.evaluationId : undefined;
 
-  if (!traceLinkage || (!traceId && !evaluationId)) {
+  // No trace linkage to surface — return metadata untouched.
+  if (!traceId && !evaluationId) {
     return { traceId, evaluationId, metadata: metadataRecord };
   }
 
-  const { traceLinkage: _traceLinkage, ...remainingPromptfooMetadata } = promptfooMetadata ?? {};
+  const { [TRACE_LINKAGE_KEY]: _traceLinkage, ...remainingPromptfooMetadata } =
+    promptfooMetadata ?? {};
   const surfacedMetadata = { ...metadataRecord };
+  delete surfacedMetadata[PROMPTFOO_METADATA_KEY];
   if (Object.keys(remainingPromptfooMetadata).length > 0) {
-    surfacedMetadata.__promptfoo = remainingPromptfooMetadata;
-  } else {
-    delete surfacedMetadata.__promptfoo;
+    surfacedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
   }
 
   return { traceId, evaluationId, metadata: surfacedMetadata };
@@ -441,9 +486,12 @@ export default class EvalResult {
       for (const result of processedResults) {
         // See `createFromEvaluateResult` for why `testCase` and `prompt` go
         // through the credential-redacting sanitizer while the other fields
-        // stay on the lighter `sanitizeForDb`.
+        // stay on the lighter `sanitizeForDb`. Trace IDs travel inside metadata
+        // via `persistTraceMetadata`; strip the top-level fields so the DB write
+        // only carries known-schema columns.
+        const { traceId: _traceId, evaluationId: _evaluationId, ...rest } = result;
         const sanitizedResult = {
-          ...result,
+          ...rest,
           testCase: sanitizeForDbWithSecrets(result.testCase),
           prompt: sanitizeForDbWithSecrets(result.prompt),
           response: sanitizeResponseForDb(sanitizeForDb(result.response)),
@@ -638,10 +686,11 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    const surfacedTraceMetadata = surfaceTraceMetadata(opts.metadata);
-    this.metadata = surfacedTraceMetadata.metadata;
-    this.traceId = surfacedTraceMetadata.traceId;
-    this.evaluationId = surfacedTraceMetadata.evaluationId;
+    ({
+      metadata: this.metadata,
+      traceId: this.traceId,
+      evaluationId: this.evaluationId,
+    } = surfaceTraceMetadata(opts.metadata));
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -651,8 +700,13 @@ export default class EvalResult {
 
   async save() {
     const db = getDb();
+    // Trace linkage and `pluginId` aren't schema columns — `pluginId` is re-derived from
+    // testCase metadata in the constructor, and trace linkage travels inside the metadata
+    // JSON via persistTraceMetadata. Drizzle would drop them silently, but excluding them
+    // explicitly keeps the write payload aligned with the schema.
+    const { traceId: _traceId, evaluationId: _evaluationId, pluginId: _pluginId, ...rest } = this;
     const persistedValues = {
-      ...this,
+      ...rest,
       metadata: persistTraceMetadata(this.metadata, this.traceId, this.evaluationId),
     };
     //check if this exists in the db
@@ -675,13 +729,10 @@ export default class EvalResult {
     const shouldStripGradingResult = getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false);
     const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
 
-    const response =
-      shouldStripResponseOutput && this.response
-        ? {
-            ...this.response,
-            output: '[output stripped]',
-          }
-        : this.response;
+    const response = projectProviderResponse(this.response, {
+      stripMetadata: shouldStripMetadata,
+      stripOutput: shouldStripResponseOutput,
+    });
 
     const prompt = shouldStripPromptText
       ? {
@@ -690,12 +741,10 @@ export default class EvalResult {
         }
       : this.prompt;
 
-    const testCase = shouldStripTestVars
-      ? {
-          ...this.testCase,
-          vars: undefined,
-        }
-      : this.testCase;
+    const testCase = projectTestCase(this.testCase, {
+      stripMetadata: shouldStripMetadata,
+      stripVars: shouldStripTestVars,
+    });
 
     return {
       cost: this.cost,

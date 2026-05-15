@@ -96,17 +96,24 @@ const TextGenResponseSchema = z.object({
 });
 
 const TIER_PRICING = {
-  class_1: 0.6,
-  class_2: 1.8,
-  class_3: 5.0,
-  class_c1: 0.1,
-  class_5: 0.25,
-  class_7: 16.0,
-  class_8: 0.15,
-  class_9: 0.35,
-  class_10: 2.0,
-  class_11: 0.005,
-  class_12: 0.2,
+  class_1: 0.636,
+  class_2: 1.908,
+  class_3: 5.3,
+  class_c1: 0.106,
+  class_5: 0.265,
+  class_7: 16.96,
+  class_8: 0.159,
+  class_9: 0.371,
+  class_10: 2.12,
+  class_11: 0.0053,
+  class_12: 0.212,
+  class_13: 0.7526,
+  class_16: 1.484,
+  class_17: 0.318,
+  class_18: 0.0636,
+  class_19: 1.272,
+  mistral_large_input: 3.37,
+  mistral_large: 10.07,
 };
 
 function convertResponse(response: z.infer<typeof TextGenResponseSchema>): ProviderResponse {
@@ -236,7 +243,7 @@ async function fetchModelSpecs(): Promise<ModelSpec[]> {
       cached: _cached,
       latencyMs: _latencyMs,
     } = await fetchWithCache(
-      'https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2023-09-30',
+      'https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2024-05-01',
       {
         headers: {
           'Content-Type': 'application/json',
@@ -256,6 +263,10 @@ async function fetchModelSpecs(): Promise<ModelSpec[]> {
 
 let modelSpecsCache: WatsonXModel[] | null = null;
 
+function normalizePricingTier(tier: string): string {
+  return tier.trim().toLowerCase().replace(/\s+/g, '_');
+}
+
 export function clearModelSpecsCache() {
   modelSpecsCache = null;
 }
@@ -266,9 +277,12 @@ async function getModelSpecs(): Promise<WatsonXModel[]> {
     modelSpecsCache = specs.map((spec) => ({
       id: spec.model_id,
       cost: {
-        input: TIER_PRICING[spec.input_tier.toLowerCase() as keyof typeof TIER_PRICING] / 1e6 || 0,
+        input:
+          TIER_PRICING[normalizePricingTier(spec.input_tier) as keyof typeof TIER_PRICING] / 1e6 ||
+          0,
         output:
-          TIER_PRICING[spec.output_tier.toLowerCase() as keyof typeof TIER_PRICING] / 1e6 || 0,
+          TIER_PRICING[normalizePricingTier(spec.output_tier) as keyof typeof TIER_PRICING] / 1e6 ||
+          0,
       },
     }));
   }
