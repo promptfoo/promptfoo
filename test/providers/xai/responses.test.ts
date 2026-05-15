@@ -357,7 +357,72 @@ describe('XAIResponsesProvider', () => {
     });
   });
 
-  it('preserves completed-response annotations while rebuilding streamed output text', async () => {
+  it('preserves encrypted reasoning output in raw streamed responses without exposing the summary', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.output_text.delta","delta":"final answer"}',
+          '',
+          'data: {"type":"response.completed","response":{"id":"resp_stream","model":"grok-4.3","output":[{"type":"reasoning","summary":[{"text":"internal reasoning"}],"encrypted_content":"opaque-payload"},{"type":"message","role":"assistant","content":[{"type":"output_text","text":"final answer"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      ),
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: {
+        apiKey: 'test-key',
+        stream: true,
+        include: ['reasoning.encrypted_content'],
+      },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('final answer');
+    expect(result.output).not.toContain('Reasoning:');
+    expect(result.raw?.output).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'reasoning',
+          encrypted_content: 'opaque-payload',
+        }),
+      ]),
+    );
+  });
+
+  it('uses the completed streamed response when malformed deltas would truncate fallback text', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.output_text.delta","delta":"hel"}',
+          '',
+          'data: not-json',
+          '',
+          'data: {"type":"response.completed","response":{"id":"resp_stream","model":"grok-4.3","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}],"usage":{"input_tokens":10,"output_tokens":5,"total_tokens":15}}}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      ),
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('hello');
+  });
+
+  it('preserves completed-response annotations for streamed output text', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,
       statusText: 'OK',
@@ -386,7 +451,7 @@ describe('XAIResponsesProvider', () => {
     expect(result.raw?.annotations).toEqual([{ url: 'https://example.com', title: 'Example' }]);
   });
 
-  it('preserves non-message output items (web_search_call) alongside rebuilt streamed text', async () => {
+  it('preserves non-message output items (web_search_call) in streamed completed responses', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,
       statusText: 'OK',
@@ -413,8 +478,8 @@ describe('XAIResponsesProvider', () => {
     const result = await provider.callApi('hello');
 
     // The processor renders web_search_call items into the output text; the
-    // key signal is that the web_search_call survived the streamed rebuild
-    // rather than being silently dropped alongside the original message item.
+    // key signal is that the web_search_call survives streamed processing
+    // rather than being silently dropped alongside the assistant message.
     expect(result.output).toContain('Web Search Call');
     expect(result.output).toContain('per docs, the answer is 42');
     expect(result.metadata?.annotations).toEqual([
