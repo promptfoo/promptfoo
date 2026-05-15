@@ -285,7 +285,6 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -296,6 +295,11 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
@@ -424,7 +428,6 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -435,6 +438,11 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');
@@ -447,7 +455,6 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -458,6 +465,11 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
+        undefined,
+        1,
+        undefined,
+        {},
+        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');

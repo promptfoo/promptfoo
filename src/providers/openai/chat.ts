@@ -262,9 +262,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
 
-    return this.supportsTemperature()
-      ? (config.temperature ?? temperatureDefault)
-      : undefined;
+    return this.supportsTemperature() ? (config.temperature ?? temperatureDefault) : undefined;
   }
 
   private async getRequestTools(
@@ -326,8 +324,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.top_p = config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1);
     }
     if (config.presence_penalty !== undefined || getEnvString('OPENAI_PRESENCE_PENALTY')) {
-      body.presence_penalty =
-        config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0);
+      body.presence_penalty = config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0);
     }
     if (config.frequency_penalty !== undefined || getEnvString('OPENAI_FREQUENCY_PENALTY')) {
       body.frequency_penalty =
@@ -606,9 +603,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (message.reasoning) {
       output = message.content;
     } else if (message.content && (message.function_call || message.tool_calls)) {
-      output = Array.isArray(message.tool_calls) && message.tool_calls.length === 0
-        ? message.content
-        : message;
+      output =
+        Array.isArray(message.tool_calls) && message.tool_calls.length === 0
+          ? message.content
+          : message;
     } else if (
       message.content === null ||
       message.content === undefined ||
@@ -695,7 +693,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         config.functionToolCallbacks,
       );
       if (callbackResult.isError) {
-        logger.debug(`Function callback failed for ${functionName}, falling back to original output`);
+        logger.debug(
+          `Function callback failed for ${functionName}, falling back to original output`,
+        );
         return {};
       }
       results.push(callbackResult.output);
