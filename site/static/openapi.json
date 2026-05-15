@@ -799,7 +799,7 @@
                   },
                   "packageVersion": {
                     "type": "string",
-                    "default": "0.121.9"
+                    "default": "0.121.11"
                   },
                   "properties": {
                     "type": "object",
@@ -4227,7 +4227,25 @@
                           "failedChecks": {
                             "type": ["number", "null"]
                           },
-                          "metadata": {}
+                          "metadata": {},
+                          "modelId": {
+                            "type": ["string", "null"]
+                          },
+                          "revisionSha": {
+                            "type": ["string", "null"]
+                          },
+                          "contentHash": {
+                            "type": ["string", "null"]
+                          },
+                          "modelSource": {
+                            "type": ["string", "null"]
+                          },
+                          "sourceLastModified": {
+                            "type": ["number", "null"]
+                          },
+                          "scannerVersion": {
+                            "type": ["string", "null"]
+                          }
                         },
                         "required": ["id", "createdAt", "updatedAt", "modelPath", "hasErrors"],
                         "additionalProperties": {}
@@ -4364,7 +4382,25 @@
                     "failedChecks": {
                       "type": ["number", "null"]
                     },
-                    "metadata": {}
+                    "metadata": {},
+                    "modelId": {
+                      "type": ["string", "null"]
+                    },
+                    "revisionSha": {
+                      "type": ["string", "null"]
+                    },
+                    "contentHash": {
+                      "type": ["string", "null"]
+                    },
+                    "modelSource": {
+                      "type": ["string", "null"]
+                    },
+                    "sourceLastModified": {
+                      "type": ["number", "null"]
+                    },
+                    "scannerVersion": {
+                      "type": ["string", "null"]
+                    }
                   },
                   "required": ["id", "createdAt", "updatedAt", "modelPath", "hasErrors"],
                   "additionalProperties": {}
@@ -4499,7 +4535,25 @@
                     "failedChecks": {
                       "type": ["number", "null"]
                     },
-                    "metadata": {}
+                    "metadata": {},
+                    "modelId": {
+                      "type": ["string", "null"]
+                    },
+                    "revisionSha": {
+                      "type": ["string", "null"]
+                    },
+                    "contentHash": {
+                      "type": ["string", "null"]
+                    },
+                    "modelSource": {
+                      "type": ["string", "null"]
+                    },
+                    "sourceLastModified": {
+                      "type": ["number", "null"]
+                    },
+                    "scannerVersion": {
+                      "type": ["string", "null"]
+                    }
                   },
                   "required": ["id", "createdAt", "updatedAt", "modelPath", "hasErrors"],
                   "additionalProperties": {}

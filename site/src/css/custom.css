@@ -93,6 +93,7 @@ code p {
 
 .navbar__brand {
   font-family: var(--ifm-font-family-monospace);
+  flex-shrink: 0;
 }
 
 /* Hide search bar on non-docs pages */
@@ -117,14 +118,42 @@ html:not(.docs-wrapper) .DocSearch {
 /* Mobile navbar adjustments */
 @media (max-width: 1100px) {
   /* Hide search box on mobile to prevent overlap */
-  .navbar__search,
-  .DocSearch {
+  .navbar__search {
     display: none !important;
   }
 
   /* Keep hamburger top-level items consistent */
+  .navbar-sidebar__items .menu__list > .menu__list-item > .menu__link,
+  .navbar-sidebar__items .header-book-demo-link,
+  .navbar-sidebar__items .header-discord-link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
   .navbar-sidebar__items .menu__list > .menu__list-item > .menu__link {
     font-weight: 600;
+  }
+
+  .navbar-sidebar__items .header-discord-link {
+    gap: 12px;
+  }
+
+  .navbar-sidebar__items .header-discord-link::after {
+    content: 'Discord';
+  }
+
+  .docs-wrapper .DocSearch-Button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .docs-wrapper .DocSearch-Button-Placeholder,
+  .docs-wrapper .DocSearch-Button-Keys {
+    display: none;
   }
 }
 
@@ -171,6 +200,12 @@ html:not(.docs-wrapper) .DocSearch {
 .navbar__items--right > :nth-last-child(2) {
   /* Equalize the spacing to the left of the color mode toggle */
   margin-left: 4px;
+}
+
+@media (max-width: 1280px) {
+  .docs-wrapper .navbar__items--right .header-discord-link {
+    display: none;
+  }
 }
 
 .dropdown > .navbar__link:after {

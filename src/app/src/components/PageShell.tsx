@@ -14,7 +14,9 @@ export default function PageShell() {
       <Layout>
         <Navigation />
         <UpdateBanner />
-        <Outlet />
+        <main>
+          <Outlet />
+        </main>
         <PostHogPageViewTracker />
       </Layout>
     </PostHogProvider>
