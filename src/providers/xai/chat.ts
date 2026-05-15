@@ -74,7 +74,7 @@ export type XAIAgentTool =
 
 type XAIConfig = {
   region?: string;
-  reasoning_effort?: 'low' | 'high';
+  reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
   search_parameters?: Record<string, any>;
   /** xAI Agent Tools - server-side tools for agentic workflows */
   agent_tools?: XAIAgentTool[];
@@ -306,8 +306,10 @@ export const GROK_3_MINI_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// Models that support reasoning_effort parameter (only Grok-3 mini models)
+// Models that support reasoning_effort on the chat-completions-compatible API.
 export const GROK_REASONING_EFFORT_MODELS = [
+  'grok-4.3',
+  'grok-4.3-latest',
   'grok-3-mini-beta',
   'grok-3-mini',
   'grok-3-mini-latest',
@@ -316,7 +318,7 @@ export const GROK_REASONING_EFFORT_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// All reasoning models (including Grok-4 which doesn't support reasoning_effort)
+// All reasoning models, including older families that reason without a tunable effort knob.
 export const GROK_REASONING_MODELS = [
   // Grok 4.20
   'grok-4.20-0309-reasoning',
@@ -372,7 +374,7 @@ export const GROK_REASONING_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// Grok-4+ models that have specific parameter restrictions (no presence_penalty, frequency_penalty, stop, reasoning_effort)
+// Grok-4+ models that have specific sampling-parameter restrictions.
 export const GROK_4_MODELS = [
   // Grok 4.20
   'grok-4.20-0309-reasoning',
@@ -507,13 +509,11 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       return result;
     }
 
-    // Filter out unsupported parameters for Grok-4
+    // Filter out unsupported sampling controls for Grok-4-family models.
     if (this.modelName && GROK_4_MODELS.includes(this.modelName)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
-      // Grok-4 doesn't support reasoning_effort parameter
-      delete result.body.reasoning_effort;
     }
 
     // Filter reasoning_effort for models that don't support it

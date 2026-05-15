@@ -160,10 +160,12 @@ async function readStreamingResponse(response: Response): Promise<any> {
       latestResponse = event;
     }
 
-    if (typeof event.delta === 'string') {
-      outputText += event.delta;
-    } else if (typeof event.output_text?.delta === 'string') {
-      outputText += event.output_text.delta;
+    if (event.type === 'response.output_text.delta') {
+      if (typeof event.delta === 'string') {
+        outputText += event.delta;
+      } else if (typeof event.output_text?.delta === 'string') {
+        outputText += event.output_text.delta;
+      }
     }
   };
 
@@ -261,9 +263,9 @@ export interface XAIResponsesConfig {
   store?: boolean;
   /** Additional response data to include, such as encrypted reasoning content */
   include?: string[];
-  /** Multi-agent configuration for supported models */
+  /** Reasoning configuration for Grok 4.3 or multi-agent models */
   reasoning?: {
-    effort?: 'low' | 'medium' | 'high' | 'xhigh';
+    effort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   };
   /** Previous response ID for multi-turn conversations */
   previous_response_id?: string;

@@ -22,6 +22,12 @@ When xAI is the selected fallback provider family, Promptfoo can use xAI default
 
 The xAI provider includes support for the following model formats. xAI's public model catalog currently recommends `grok-4.3` for general chat and coding workloads; consult the catalog when choosing a new default for a long-lived integration.
 
+:::caution Legacy xAI model aliases
+
+xAI periodically retires older model slugs and may keep them working by redirecting them to newer replacements. Older IDs such as `grok-4-1-fast-*`, `grok-4-fast-*`, `grok-4-0709`, `grok-code-fast-1`, `grok-3`, and `grok-imagine-image-pro` can therefore remain accepted while behavior or billing follows xAI's current redirect target. For new configs, prefer current catalog models such as `grok-4.3` or `grok-imagine-image-quality` where applicable.
+
+:::
+
 ### Grok 4.3 Models
 
 - `xai:grok-4.3` - General-purpose reasoning model
@@ -104,10 +110,10 @@ The provider supports all [OpenAI provider](/docs/providers/openai) configuratio
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: xai:grok-3-mini-beta
+  - id: xai:grok-4.3
     config:
       temperature: 0.7
-      reasoning_effort: 'high' # Only for grok-3-mini models
+      reasoning_effort: 'high' # none, low, medium, or high
       apiKey: your_api_key_here # Alternative to XAI_API_KEY
 ```
 
@@ -115,7 +121,7 @@ providers:
 
 Multiple Grok models support reasoning capabilities:
 
-**Grok 4.3**: General-purpose reasoning model recommended by xAI's public model catalog. It reasons automatically and does not support `reasoning_effort`.
+**Grok 4.3**: General-purpose reasoning model recommended by xAI's public model catalog. Chat requests can set `reasoning_effort` to `none`, `low`, `medium`, or `high`; Responses API requests use `reasoning.effort`.
 
 **Grok Code Fast Models**: The `grok-code-fast-1` family are reasoning models optimized for agentic coding workflows. They support:
 
@@ -128,8 +134,8 @@ Multiple Grok models support reasoning capabilities:
 Grok 4.3 is the best starting point for general text workflows:
 
 - **Responses API recommended**: Use `xai:responses:grok-4.3` for server-side tools, multi-turn state, and newer xAI capabilities
-- **Automatic reasoning**: No `reasoning_effort` parameter is required or supported
-- **Unsupported parameters**: Same restrictions as other Grok 4-family reasoning models (`presence_penalty`, `frequency_penalty`, `stop`, `reasoning_effort`)
+- **Configurable reasoning**: `reasoning_effort` defaults to xAI's `low` mode; set `none`, `medium`, or `high` when the workload calls for it
+- **Unsupported parameters**: Same restrictions as other Grok 4-family reasoning models (`presence_penalty`, `frequency_penalty`, and `stop`)
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -367,22 +373,22 @@ tests:
 
 #### Responses API Configuration
 
-| Parameter              | Type    | Description                               |
-| ---------------------- | ------- | ----------------------------------------- |
-| `temperature`          | number  | Sampling temperature (0-2)                |
-| `max_output_tokens`    | number  | Maximum tokens to generate                |
-| `max_tool_calls`       | number  | Maximum tool calls for one request        |
-| `top_p`                | number  | Nucleus sampling parameter                |
-| `tools`                | array   | Agent tools to enable                     |
-| `tool_choice`          | string  | Tool selection mode: auto, required, none |
-| `parallel_tool_calls`  | boolean | Allow parallel tool execution             |
-| `stream`               | boolean | Request streamed response deltas          |
-| `instructions`         | string  | System-level instructions                 |
-| `previous_response_id` | string  | For multi-turn conversations              |
-| `store`                | boolean | Store response for later retrieval        |
-| `include`              | array   | Additional response data to return        |
-| `reasoning`            | object  | Multi-agent configuration where supported |
-| `response_format`      | object  | JSON schema for structured output         |
+| Parameter              | Type    | Description                                                |
+| ---------------------- | ------- | ---------------------------------------------------------- |
+| `temperature`          | number  | Sampling temperature (0-2)                                 |
+| `max_output_tokens`    | number  | Maximum tokens to generate                                 |
+| `max_tool_calls`       | number  | Maximum tool calls for one request                         |
+| `top_p`                | number  | Nucleus sampling parameter                                 |
+| `tools`                | array   | Agent tools to enable                                      |
+| `tool_choice`          | string  | Tool selection mode: auto, required, none                  |
+| `parallel_tool_calls`  | boolean | Allow parallel tool execution                              |
+| `stream`               | boolean | Request streamed response deltas                           |
+| `instructions`         | string  | System-level instructions                                  |
+| `previous_response_id` | string  | For multi-turn conversations                               |
+| `store`                | boolean | Store response for later retrieval                         |
+| `include`              | array   | Additional response data to return                         |
+| `reasoning`            | object  | Reasoning configuration for Grok 4.3 or multi-agent models |
+| `response_format`      | object  | JSON schema for structured output                          |
 
 #### Supported Models
 
@@ -539,7 +545,10 @@ providers:
 Current Grok Imagine image model IDs include:
 
 - `xai:image:grok-imagine-image`
+- `xai:image:grok-imagine-image-quality`
 - `xai:image:grok-imagine-image-pro`
+
+`grok-imagine-image-quality` is xAI's newer quality-oriented image model and the better default for new higher-quality image workflows. Older image-model aliases may continue to resolve through xAI-managed redirects.
 
 Example configuration for image generation:
 

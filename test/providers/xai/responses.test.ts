@@ -298,6 +298,31 @@ describe('XAIResponsesProvider', () => {
     expect(result.output).toBe('hello');
   });
 
+  it('ignores streamed reasoning summary deltas when rebuilding output text', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce({
+      status: 200,
+      statusText: 'OK',
+      body: createSSEStream(
+        [
+          'data: {"type":"response.reasoning_summary_text.delta","delta":"internal reasoning"}',
+          '',
+          'data: {"type":"response.output_text.delta","delta":"final answer"}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'),
+      ),
+    });
+
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('final answer');
+  });
+
   it('returns an error when a streamed response has no output content', async () => {
     mockFetchWithProxy.mockResolvedValueOnce({
       status: 200,

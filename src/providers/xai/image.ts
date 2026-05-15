@@ -86,6 +86,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
       'grok-imagine-image': 'grok-imagine-image',
       // Dated alias for grok-imagine-image, as listed by xAI's image-generation-models API.
       'grok-imagine-image-2026-03-02': 'grok-imagine-image',
+      'grok-imagine-image-quality': 'grok-imagine-image-quality',
       'grok-imagine-image-pro': 'grok-imagine-image-pro',
       'grok-2-image': 'grok-2-image',
       'grok-image': 'grok-2-image',
@@ -93,9 +94,16 @@ export class XAIImageProvider extends OpenAiImageProvider {
     return modelMap[this.modelName] || 'grok-2-image';
   }
 
-  private calculateImageCost(model: string, n: number = 1): number {
+  private calculateImageCost(
+    model: string,
+    n: number = 1,
+    resolution: XaiImageOptions['resolution'] = '1k',
+  ): number {
     if (model === 'grok-imagine-image') {
       return 0.02 * n;
+    }
+    if (model === 'grok-imagine-image-quality') {
+      return (resolution === '2k' ? 0.07 : 0.05) * n;
     }
     if (model === 'grok-imagine-image-pro') {
       return 0.07 * n;
@@ -197,7 +205,9 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
 
       const reportedCost = getXAICostInUsd(data.usage);
-      const cost = cached ? 0 : (reportedCost ?? this.calculateImageCost(model, config.n || 1));
+      const cost = cached
+        ? 0
+        : (reportedCost ?? this.calculateImageCost(model, config.n || 1, config.resolution));
       const images = buildStructuredImageOutputs(data);
 
       return {

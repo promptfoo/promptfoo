@@ -344,6 +344,26 @@ describe('xAI Chat Provider', () => {
       expect(provider.supportsReasoningEffort()).toBe(false);
     });
 
+    it('preserves reasoning_effort for Grok 4.3 chat requests', async () => {
+      const provider = createXAIProvider('xai:grok-4.3') as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            reasoning_effort: 'high',
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+          },
+        },
+      });
+
+      expect(provider.supportsReasoningEffort()).toBe(true);
+      expect(result.body.reasoning_effort).toBe('high');
+      expect(result.body.presence_penalty).toBeUndefined();
+      expect(result.body.frequency_penalty).toBeUndefined();
+      expect(result.body.stop).toBeUndefined();
+    });
+
     it('filters unsupported parameters for Grok-4 aliases', async () => {
       const provider = createXAIProvider('xai:grok-4') as any;
       const mockContext = {
@@ -503,6 +523,11 @@ describe('xAI Chat Provider', () => {
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4-0709');
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4');
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4-latest');
+    });
+
+    it('includes Grok 4.3 in reasoning effort models list', () => {
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.3');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.3-latest');
     });
 
     it('includes Grok-3 mini models in reasoning effort models list', () => {
