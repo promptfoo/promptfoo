@@ -425,12 +425,17 @@ export class OTLPReceiver {
 
   private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
     for (const [traceId, info] of traceInfoById) {
+      if (!info.evaluationId || !info.testCaseId) {
+        logger.debug(`[OtlpReceiver] Skipping trace record creation for unlinked trace ${traceId}`);
+        continue;
+      }
+
       try {
         logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
         await this.traceStore.createTrace({
           traceId,
-          evaluationId: info.evaluationId || '',
-          testCaseId: info.testCaseId || '',
+          evaluationId: info.evaluationId,
+          testCaseId: info.testCaseId,
         });
       } catch (error) {
         // Trace might already exist, which is fine
@@ -442,7 +447,10 @@ export class OTLPReceiver {
   private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-      await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+      await this.traceStore.addSpans(traceId, spans, {
+        skipTraceCheck: false,
+        warnIfMissingTrace: false,
+      });
     }
   }
 

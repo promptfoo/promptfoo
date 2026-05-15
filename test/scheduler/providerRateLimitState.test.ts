@@ -208,6 +208,139 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.failedRequests).toBe(1);
       expect(metrics.rateLimitHits).toBe(0);
     });
+
+    it('back-compat: substring matcher detects HttpRateLimitError (rate_limit kind)', async () => {
+      // The transport-layer HttpRateLimitError is unknown to the scheduler,
+      // so the scheduler relies on its substring matcher to detect rate-limit
+      // hits. The HttpRateLimitError contract requires the rendered message
+      // to contain `429` and a rate-limit token; verify the scheduler still
+      // counts these as ratelimit:hit events.
+      const { HttpRateLimitError } = await import('../../src/util/fetch/errors');
+      const events: any[] = [];
+      noRetryState.on('ratelimit:hit', (data) => events.push(data));
+
+      try {
+        await noRetryState.executeWithRetry(
+          'req-1',
+          async () => {
+            throw new HttpRateLimitError({
+              status: 429,
+              code: 'rate_limit_exceeded',
+              retryAfterMs: 5000,
+            });
+          },
+          {},
+        );
+      } catch {}
+
+      expect(events.length).toBeGreaterThan(0);
+      const metrics = noRetryState.getMetrics();
+      expect(metrics.rateLimitHits).toBeGreaterThan(0);
+    });
+
+    it('back-compat: substring matcher detects HttpRateLimitError (quota kind)', async () => {
+      const { HttpRateLimitError } = await import('../../src/util/fetch/errors');
+      const events: any[] = [];
+      noRetryState.on('ratelimit:hit', (data) => events.push(data));
+
+      try {
+        await noRetryState.executeWithRetry(
+          'req-1',
+          async () => {
+            throw new HttpRateLimitError({
+              status: 429,
+              code: 'insufficient_quota',
+            });
+          },
+          {},
+        );
+      } catch {}
+
+      expect(events.length).toBeGreaterThan(0);
+      const metrics = noRetryState.getMetrics();
+      expect(metrics.rateLimitHits).toBeGreaterThan(0);
+    });
+
+    it('result-path: kind=quota in result.metadata short-circuits retry', async () => {
+      // The PR's transport-layer fail-fast is undermined when a provider
+      // catches HttpRateLimitError and folds it into ProviderResponse.error
+      // (the standard pattern across most providers). The default
+      // isRateLimited callback for ProviderResponse must honor the
+      // structured `metadata.rateLimitKind: 'quota'` signal so the scheduler
+      // doesn't retry hard quotas through the result path.
+      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
+      let callCount = 0;
+      const result = await state.executeWithRetry(
+        'req-quota',
+        async () => {
+          callCount++;
+          return {
+            error: 'Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota).',
+            metadata: { rateLimitKind: 'quota' as const },
+          };
+        },
+        {
+          isRateLimited: isProviderResponseRateLimited,
+        },
+      );
+
+      // With kind=quota, the classifier returns false, so the scheduler
+      // sees a "successful" result and returns it without retrying.
+      expect(callCount).toBe(1);
+      expect((result as { error?: string }).error).toContain('Quota exceeded');
+    });
+
+    it('result-path: "Quota exceeded:" prefix short-circuits retry even without metadata', async () => {
+      // String-fallback path for providers that don't populate metadata but
+      // still emit the canonical formatRateLimitErrorMessage prefix.
+      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
+      let callCount = 0;
+      const result = await state.executeWithRetry(
+        'req-quota-nometa',
+        async () => {
+          callCount++;
+          return {
+            error: 'Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota).',
+          };
+        },
+        {
+          isRateLimited: isProviderResponseRateLimited,
+        },
+      );
+
+      expect(callCount).toBe(1);
+      expect((result as { error?: string }).error).toContain('Quota exceeded');
+    });
+
+    it('result-path: kind=rate_limit still triggers retry', async () => {
+      // Symmetric verification: per-window rate limits must still retry.
+      const { isProviderResponseRateLimited } = await import('../../src/scheduler/types');
+      let callCount = 0;
+      const promise = state.executeWithRetry(
+        'req-ratelimit',
+        async () => {
+          callCount++;
+          if (callCount < 2) {
+            return {
+              error:
+                'Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after 0s]',
+              metadata: { rateLimitKind: 'rate_limit' as const },
+            };
+          }
+          return { output: 'recovered' };
+        },
+        {
+          isRateLimited: isProviderResponseRateLimited,
+          getRetryAfter: () => 0,
+        },
+      );
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(callCount).toBe(2);
+      expect((result as { output?: string }).output).toBe('recovered');
+    });
   });
 
   describe('executeWithRetry - retry behavior', () => {

@@ -1,5 +1,4 @@
 import { PostHog } from 'posthog-node';
-import { z } from 'zod';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { POSTHOG_KEY } from './constants/build';
 import { getEnvBool, getEnvString, isCI } from './envars';
@@ -7,34 +6,11 @@ import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
 
-export const TelemetryEventSchema = z.object({
-  event: z.enum([
-    'assertion_used',
-    'command_used',
-    'eval setup',
-    'eval_ran',
-    'feature_used',
-    'funnel',
-    'redteam discover',
-    'redteam generate',
-    'redteam init',
-    'redteam poison',
-    'redteam report',
-    'redteam run',
-    'redteam setup',
-    'webui_action',
-    'webui_api',
-    'webui_page_view',
-  ]),
-  packageVersion: z.string().optional().prefault(VERSION),
-  properties: z.record(
-    z.string(),
-    z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
-  ),
-});
-type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
-export type TelemetryEventTypes = TelemetryEvent['event'];
-export type EventProperties = TelemetryEvent['properties'];
+import type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
+
+export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
+
+export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
 let posthogClient: PostHog | null = null;
 let isShuttingDown = false;
@@ -64,6 +40,15 @@ function getPostHogClient(): PostHog | null {
 }
 
 const TELEMETRY_TIMEOUT_MS = 1000;
+
+function getRuntimeMetadata() {
+  return {
+    nodeVersion: process.version,
+    nodeMajor: Number.parseInt(process.versions.node, 10),
+    platform: process.platform,
+    arch: process.arch,
+  };
+}
 
 export class Telemetry {
   private telemetryDisabledRecorded = false;
@@ -130,6 +115,7 @@ export class Telemetry {
       ...properties,
       packageVersion: VERSION,
       isRunningInCi: ciFlag,
+      ...getRuntimeMetadata(),
     };
 
     const client = getPostHogClient();

@@ -1111,13 +1111,13 @@ Azure AI Foundry Agents let promptfoo run an existing Foundry agent through the 
 
 ### Key Differences from Standard Azure Assistants
 
-| Feature             | Azure Assistant                              | Azure Foundry Agent                                                             |
-| ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
-| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime      |
-| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)   |
-| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                 |
-| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                        |
-| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent: { name, type: "agent_reference" } } })` |
+| Feature             | Azure Assistant                              | Azure Foundry Agent                                                                       |
+| ------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **API Type**        | Direct HTTP calls to Azure OpenAI API        | Azure AI Projects SDK (`@azure/ai-projects`) + Responses API agent runtime                |
+| **Authentication**  | API key or Azure credentials                 | `DefaultAzureCredential` (Azure CLI, environment variables, managed identity)             |
+| **Endpoint**        | Azure OpenAI endpoint (`*.openai.azure.com`) | Azure AI Project URL (`*.services.ai.azure.com/api/projects/*`)                           |
+| **Provider Format** | `azure:assistant:<assistant_id>`             | `azure:foundry-agent:<agent-name-or-id>`                                                  |
+| **Execution Model** | Threads/messages/runs                        | `responses.create(..., { body: { agent_reference: { name, type: "agent_reference" } } })` |
 
 ### Setup
 
@@ -1300,7 +1300,8 @@ tests:
 The Azure Foundry Agent provider includes comprehensive error handling:
 
 - **Content Filter Detection**: Automatically detects and reports content filtering events with guardrails metadata
-- **Rate Limit Handling**: Identifies rate limit errors for proper retry handling
+- **Rate Limit Handling**: Per-window 429s (`rate_limit_exceeded`) are retried with `Retry-After`-based backoff plus randomized jitter. The error message is `Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after Xs]`.
+- **Hard-Quota Fail-Fast**: Billing and contract-level codes (`insufficient_quota`, `billing_hard_limit_reached`, `billing_not_active`, `access_terminated`, `quota_exceeded`) skip retries entirely — retrying these only amplifies load against an exhausted account. The error message is `Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota.` If the server also sets a small `Retry-After` (≤ 1h), the error is treated as a recoverable rate limit instead, since billing servers do not hint at recovery time.
 - **Service Error Detection**: Detects transient service errors (500, 502, 503, 504)
 - **Timeout Management**: Configurable polling timeout via `maxPollTimeMs`
 
