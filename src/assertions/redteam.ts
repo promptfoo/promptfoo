@@ -107,7 +107,10 @@ export const handleRedteam = async ({
   }
 
   const grader = getGraderById(assertion.type);
-  invariant(grader, `Unknown grader: ${baseType}`);
+  invariant(
+    grader,
+    `Unknown grader: ${baseType}. This Promptfoo client cannot evaluate that redteam assertion. Check the assertion type; if this test came from generated redteam YAML, upgrade Promptfoo, regenerate the scan, and retry.`,
+  );
   const effectivePrompt = getRedteamPrompt(prompt, test);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 

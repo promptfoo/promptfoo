@@ -677,6 +677,48 @@ describe('Plugins', () => {
         metadata: { ...originalTestCase.metadata, pluginConfig: { modifiers: {} } },
       });
     });
+
+    it('should reject remote redteam assertions that the client cannot grade', async () => {
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        mockFetchResponse([
+          {
+            assert: [
+              {
+                type: 'promptfoo:redteam:future-remote-plugin',
+                metric: 'FutureRemotePlugin',
+              },
+            ],
+            vars: {
+              testVar: 'test content',
+            },
+          },
+        ]),
+      );
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([]);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Remote test generation for ssrf returned unsupported redteam grader type(s): promptfoo:redteam:future-remote-plugin.',
+        ),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Upgrade Promptfoo and regenerate the scan.'),
+      );
+    });
   });
 
   describe('unaligned harm plugins', () => {

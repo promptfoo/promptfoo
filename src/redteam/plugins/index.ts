@@ -16,6 +16,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { getGraderById } from '../graders';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -332,6 +333,36 @@ function withMaxCharsRetries(pluginFactory: PluginFactory): PluginFactory {
   };
 }
 
+function validateRemoteRedteamAssertions(key: string, testCases: TestCase[]): void {
+  const unsupportedAssertionTypes = new Set<string>();
+
+  for (const testCase of testCases) {
+    if (!Array.isArray(testCase.assert)) {
+      continue;
+    }
+
+    for (const assertion of testCase.assert) {
+      const assertionType =
+        assertion && typeof assertion === 'object' && typeof assertion.type === 'string'
+          ? assertion.type
+          : undefined;
+      if (!assertionType?.startsWith('promptfoo:redteam:')) {
+        continue;
+      }
+      if (!getGraderById(assertionType)) {
+        unsupportedAssertionTypes.add(assertionType);
+      }
+    }
+  }
+
+  if (unsupportedAssertionTypes.size > 0) {
+    const unsupportedTypes = Array.from(unsupportedAssertionTypes).sort().join(', ');
+    throw new Error(
+      `Remote test generation for ${key} returned unsupported redteam grader type(s): ${unsupportedTypes}. Promptfoo ${VERSION} cannot evaluate these generated tests. Upgrade Promptfoo and regenerate the scan. If this still happens on the latest release, report it as a Promptfoo bug.`,
+    );
+  }
+}
+
 async function fetchRemoteTestCases(
   key: string,
   purpose: string,
@@ -400,6 +431,7 @@ async function fetchRemoteTestCases(
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
+    validateRemoteRedteamAssertions(key, ret);
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {
