@@ -733,6 +733,46 @@ describe('evaluateOptions behavior', () => {
       expect(options.filterRange).toBeUndefined();
     });
 
+    it('should let library callers suppress config filterRange after prefiltering tests', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-custom-prefilter-range.yaml', {
+        evaluateOptions: {
+          filterRange: '1:2',
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+        },
+        {},
+        undefined,
+        {},
+        {
+          beforeFilterTestSuite: (testSuite) => {
+            testSuite.tests = [testSuite.tests![0]];
+          },
+          allowConfigFilterRange: false,
+        },
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['one']);
+      expect(evalRecord.runtimeOptions?.filterRange).toBeUndefined();
+      expect(options.filterRange).toBeUndefined();
+    });
+
     it('should apply filterRange to the implicit default test', async () => {
       const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-default.yaml', {
         providers: ['echo'],

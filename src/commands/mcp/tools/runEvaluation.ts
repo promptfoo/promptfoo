@@ -152,6 +152,20 @@ function applyTestCaseFilter(
   testSuite.tests = tests.slice(start, end);
 }
 
+function countRunnableTestCases(testSuite: TestSuite): number {
+  const explicitTestCount = testSuite.tests?.length || 0;
+  if (!testSuite.scenarios) {
+    return explicitTestCount > 0 ? explicitTestCount : 1;
+  }
+
+  const scenarioTestCount = testSuite.scenarios.reduce((count, scenario) => {
+    const testsPerScenarioConfig = scenario.tests?.length || 1;
+    return count + scenario.config.length * testsPerScenarioConfig;
+  }, 0);
+
+  return explicitTestCount + scenarioTestCount;
+}
+
 function summarizeFilteredSuite(
   testSuite: TestSuite,
   totals: {
@@ -163,7 +177,7 @@ function summarizeFilteredSuite(
   return {
     testCases: {
       total: totals.testCases,
-      filtered: testSuite.tests?.length || 0,
+      filtered: countRunnableTestCases(testSuite),
     },
     prompts: {
       total: totals.prompts,
@@ -190,7 +204,7 @@ function applyMcpEvaluationFilters(
 ): EvaluationFilterSummary {
   const { testCaseIndices, promptFilter, providerFilter } = options;
   const totals = {
-    testCases: testSuite.tests?.length || 0,
+    testCases: countRunnableTestCases(testSuite),
     prompts: testSuite.prompts.length,
     providers: testSuite.providers.length,
   };
@@ -469,9 +483,13 @@ export function registerRunEvaluationTool(server: McpServer) {
               providers: suiteSummary.providers.total,
             });
           },
-          evaluateOptionOverrides: {
-            timeoutMs,
-          },
+          evaluateOptionOverrides:
+            args.timeoutMs === undefined
+              ? undefined
+              : {
+                  timeoutMs,
+                },
+          allowConfigFilterRange: testCaseIndices === undefined,
         });
         const endTime = Date.now();
         if (!suiteSummary) {
@@ -479,6 +497,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         }
 
         const summary = await evalResult.toEvaluateSummary();
+        const effectiveTimeoutMs = evalResult.runtimeOptions?.timeoutMs ?? timeoutMs;
         const { results: formattedResults, pagination } = formatEvaluationResults(summary, {
           resultLimit,
           resultOffset,
@@ -498,7 +517,7 @@ export function registerRunEvaluationTool(server: McpServer) {
               promptFilter,
               providerFilter,
               maxConcurrency,
-              timeoutMs,
+              timeoutMs: effectiveTimeoutMs,
               repeat,
               delay,
               cache,

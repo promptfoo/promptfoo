@@ -79,6 +79,7 @@ export interface EvalRunCustomization {
   beforeFilterTestSuite?: TestSuiteTransform;
   afterFilterTestSuite?: TestSuiteTransform;
   evaluateOptionOverrides?: Partial<InternalEvaluateOptions>;
+  allowConfigFilterRange?: boolean;
 }
 
 export class EvalRunError extends Error {
@@ -512,9 +513,13 @@ export async function doEval(
         `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with stored range ${resumeFilterRange ?? '(none)'} to preserve test indices.`,
       );
     }
+    const configuredFilterRange =
+      customization.allowConfigFilterRange === false
+        ? undefined
+        : (commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterRange = resumeEval
       ? resumeFilterRange
-      : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+      : (cmdObj.filterRange ?? configuredFilterRange);
     const shouldApplyRangeToImplicitDefaultTest =
       filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
 

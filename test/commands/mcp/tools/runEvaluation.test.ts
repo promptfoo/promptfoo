@@ -136,6 +136,7 @@ describe('runEvaluation tool', () => {
           evaluateOptionOverrides: {
             timeoutMs: 1234,
           },
+          allowConfigFilterRange: false,
         }),
       );
     });
@@ -174,6 +175,53 @@ describe('runEvaluation tool', () => {
           },
         }),
       );
+    });
+
+    it('should preserve config timeout overrides when the MCP caller omits timeoutMs', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = createMockTestSuite();
+          await customization?.beforeFilterTestSuite?.(testSuite as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any);
+          return {
+            ...createMockEvalResult(),
+            runtimeOptions: {
+              timeoutMs: 9999,
+            },
+          } as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(result.isError).toBe(false);
+      expect(doEval).toHaveBeenCalledWith(
+        expect.any(Object),
+        {},
+        'promptfooconfig.yaml',
+        expect.objectContaining({
+          timeoutMs: 30000,
+        }),
+        expect.objectContaining({
+          evaluateOptionOverrides: undefined,
+        }),
+      );
+      expect(payload.data.configuration.options.timeoutMs).toBe(9999);
     });
 
     it('should return the same suite metadata shape for unfiltered evals', async () => {
@@ -248,6 +296,88 @@ describe('runEvaluation tool', () => {
 
       expect(payload.data.configuration.testCases).toEqual({
         total: 3,
+        filtered: 1,
+        filters: {},
+      });
+    });
+
+    it('should count scenario-generated test cases in the suite summary', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+            scenarios: [
+              {
+                config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+                tests: [{ vars: { role: 'admin' } }, { vars: { role: 'analyst' } }],
+              },
+            ],
+          };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any);
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 4,
+        filtered: 4,
+        filters: {},
+      });
+    });
+
+    it('should count the implicit default test in the suite summary', async () => {
+      const { doEval } = await import('../../../../src/commands/eval');
+      vi.mocked(doEval).mockImplementationOnce(
+        async (_cmdObj, _defaultConfig, _defaultConfigPath, _evaluateOptions, customization) => {
+          const testSuite = {
+            ...createMockTestSuite(),
+            tests: undefined,
+          };
+
+          await customization?.beforeFilterTestSuite?.(testSuite as any);
+          await customization?.afterFilterTestSuite?.(testSuite as any);
+          return createMockEvalResult() as any;
+        },
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+      });
+      const payload = JSON.parse(result.content[0].text);
+
+      expect(payload.data.configuration.testCases).toEqual({
+        total: 1,
         filtered: 1,
         filters: {},
       });
