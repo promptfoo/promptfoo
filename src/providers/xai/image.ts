@@ -98,19 +98,33 @@ export class XAIImageProvider extends OpenAiImageProvider {
     model: string,
     n: number = 1,
     resolution: XaiImageOptions['resolution'] = '1k',
+    sourceImageCount: number = 0,
   ): number {
+    const mediaInputCost =
+      model === 'grok-imagine-image-quality'
+        ? 0.01
+        : model === 'grok-imagine-image' || model === 'grok-imagine-image-pro'
+          ? 0.002
+          : 0;
+
+    const sourceImageCost = mediaInputCost * sourceImageCount;
+
     if (model === 'grok-imagine-image') {
-      return 0.02 * n;
+      return 0.02 * n + sourceImageCost;
     }
     if (model === 'grok-imagine-image-quality') {
-      return (resolution === '2k' ? 0.07 : 0.05) * n;
+      return (resolution === '2k' ? 0.07 : 0.05) * n + sourceImageCost;
     }
     if (model === 'grok-imagine-image-pro') {
-      return 0.07 * n;
+      return 0.07 * n + sourceImageCost;
     }
 
     // Legacy grok-2-image pricing.
     return 0.07 * n;
+  }
+
+  private countSourceImages(config: XaiImageOptions): number {
+    return Number(Boolean(config.image)) + (config.images?.length || 0);
   }
 
   async callApi(
@@ -207,7 +221,13 @@ export class XAIImageProvider extends OpenAiImageProvider {
       const reportedCost = getXAICostInUsd(data.usage);
       const cost = cached
         ? 0
-        : (reportedCost ?? this.calculateImageCost(model, config.n || 1, config.resolution));
+        : (reportedCost ??
+          this.calculateImageCost(
+            model,
+            config.n || 1,
+            config.resolution,
+            this.countSourceImages(config),
+          ));
       const images = buildStructuredImageOutputs(data);
 
       return {

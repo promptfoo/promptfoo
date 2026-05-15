@@ -252,6 +252,40 @@ describe('XAI Image Provider', () => {
       );
     });
 
+    it('includes documented source-image input pricing in fallback edit cost estimates', async () => {
+      const provider = new XAIImageProvider('grok-imagine-image-quality', {
+        config: {
+          apiKey: mockApiKey,
+          images: [
+            { url: 'https://example.com/source-1.png' },
+            { url: 'https://example.com/source-2.png' },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('Combine these source images');
+
+      expect(callOpenAiImageApi).toHaveBeenCalledWith(
+        'https://api.x.ai/v1/images/edits',
+        {
+          model: 'grok-imagine-image-quality',
+          prompt: 'Combine these source images',
+          n: 1,
+          response_format: 'url',
+          images: [
+            { url: 'https://example.com/source-1.png' },
+            { url: 'https://example.com/source-2.png' },
+          ],
+        },
+        {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${mockApiKey}`,
+        },
+        getRequestTimeoutMs(),
+      );
+      expect(result.cost).toBe(0.07);
+    });
+
     it('should generate an image successfully', async () => {
       const provider = new XAIImageProvider('grok-2-image', {
         config: { apiKey: mockApiKey },

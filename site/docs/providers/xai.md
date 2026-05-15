@@ -674,7 +674,7 @@ Reference-to-video requires a non-empty prompt, cannot be combined with `image` 
 
 #### Pricing
 
-Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available, and falls back to the legacy estimate only when the API omits usage.
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to its local estimate for documented Imagine image output rates and source-image media-input charges on edit requests.
 
 ### Voice Agent API
 
