@@ -143,13 +143,6 @@ vi.mock('../src/envars', () => {
   };
 });
 
-vi.mock('node:fs', () => ({
-  default: {
-    readFileSync: vi.fn(),
-  },
-  readFileSync: vi.fn(),
-}));
-
 vi.mock('node:fs/promises', () => ({
   readFile: vi.fn(),
 }));
