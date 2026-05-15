@@ -1,4 +1,4 @@
-# guide-evals (Video Guide Evaluation Pack)
+# video-rubric/guide-evals (Video Guide Evaluation Pack)
 
 Evaluation configs for the [Video Generation Guide](/docs/guides/evaluate-video). Uses the Promptfoo red panda mascot to test genuinely hard video generation capabilities.
 

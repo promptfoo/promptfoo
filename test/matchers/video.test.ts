@@ -5,7 +5,7 @@ import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 const mocks = vi.hoisted(() => {
   const gradingProvider: ApiProvider = {
     id: () => 'test:video-grader',
-    callApi: vi.fn(),
+    callApi: vi.fn<ApiProvider['callApi']>(),
   };
 
   return {

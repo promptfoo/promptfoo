@@ -35,3 +35,7 @@ The grading model receives the video and rubric, then returns:
 - `pass`: Whether the video meets the rubric criteria
 - `score`: A numeric score (0.0 - 1.0)
 - `reason`: Explanation of the evaluation
+
+## Guide evals
+
+The [`guide-evals`](guide-evals/) subdirectory contains the extended example suite referenced by the video evaluation guide, including camera-motion, negative-case, multi-provider, quickstart, text-rendering, variance, and PR-review hero configs.

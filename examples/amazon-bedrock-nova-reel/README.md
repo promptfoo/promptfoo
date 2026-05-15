@@ -1,6 +1,12 @@
-# Amazon Nova Reel Video Generation
+# amazon-bedrock-nova-reel (Amazon Nova Reel Video Generation)
 
 This example demonstrates video generation using Amazon Nova Reel through AWS Bedrock.
+
+## Usage
+
+```bash
+npx promptfoo@latest init --example amazon-bedrock-nova-reel
+```
 
 ## Prerequisites
 

@@ -2,6 +2,12 @@
 
 Examples for using promptfoo with [Amazon Bedrock](https://aws.amazon.com/bedrock/).
 
+## Usage
+
+```bash
+npx promptfoo@latest init --example amazon-bedrock
+```
+
 ## Examples
 
 - [models](./models/) - Model evaluations: Claude, Llama, Mistral, Nova, Titan, DeepSeek, Qwen, and more

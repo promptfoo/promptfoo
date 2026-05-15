@@ -13,7 +13,7 @@ tests:
   - vars:
       question: What are the major factors contributing to the change in Apple's gross margin in the most recent 10-Q compared to the previous quarters?
   - vars:
-      question: Has there been any significant change in Apple's operating expenses over the reported quarters? If so, what are the key drivers for this change?
+      question: Has there been any significant change in Microsoft's operating expenses over the reported quarters? If so, what are the key drivers for this change?
   - vars:
       question: How has Apple's revenue from iPhone sales fluctuated across quarters?
   - vars:
