@@ -19,21 +19,18 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
-import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
+import type { AzureProviderOptions, AzureResponsesOptions } from './types';
 
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider {
-  declare config: AzureChatResponsesOptions;
+  declare config: AzureResponsesOptions;
 
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
 
-  constructor(
-    deploymentName: string,
-    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
-  ) {
+  constructor(deploymentName: string, options: AzureProviderOptions<AzureResponsesOptions> = {}) {
     super(deploymentName, options);
 
     // Initialize the shared response processor
@@ -194,7 +191,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ...(!isReasoningModel && (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.tools

@@ -88,7 +88,6 @@ export interface AzureCompletionOptions {
   stop?: string[];
   seed?: number;
   reasoning_effort?: 'low' | 'medium' | 'high';
-  reasoning?: Reasoning | GPT5Reasoning;
   /**
    * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
    */
@@ -113,6 +112,13 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
    * Only values explicitly set via config or environment variables will be sent.
    */
   omitDefaults?: boolean;
+}
+
+/**
+ * Options supported only by the Azure Responses API surface.
+ */
+export interface AzureResponsesOptions extends AzureChatResponsesOptions {
+  reasoning?: Reasoning | GPT5Reasoning;
 }
 
 export interface AzureModelCost {

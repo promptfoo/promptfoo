@@ -728,7 +728,7 @@ Azure OpenAI now supports reasoning models like `o1`, `o3`, `o3-mini`, and `o4-m
 3. They accept a `reasoning_effort` parameter ('low', 'medium', 'high') on chat and completion endpoints
 4. The Responses API uses a `reasoning` object for `effort` and optional reasoning `summary`
 
-Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, you must explicitly set the `isReasoningModel` flag to `true` in your configuration when using reasoning models. This works with both chat and completion endpoints:
+Since Azure allows custom deployment names that don't necessarily reflect the underlying model type, custom chat and completion deployments must explicitly set the `isReasoningModel` flag to `true` in your configuration when using reasoning models. Azure Responses deployments also enter the reasoning request path when `reasoning` or `reasoning_effort` is configured.
 
 ```yaml
 # For chat endpoints
@@ -765,11 +765,11 @@ providers:
     config:
       reasoning:
         effort: 'medium'
-        summary: 'auto' # auto, concise, or detailed
+        summary: 'auto' # auto, concise, or detailed where supported
       max_output_tokens: 25000
 ```
 
-Promptfoo includes returned reasoning summary items in the output as `Reasoning: ...`. The summary is not the model's raw chain-of-thought.
+Promptfoo includes returned reasoning summary items in the output as `Reasoning: ...`. The summary is not the model's raw chain-of-thought. Microsoft notes that summary option support varies by model; for example, GPT-5 series models do not support `concise`.
 
 ### Using Variables with Reasoning Effort
 

@@ -348,6 +348,22 @@ describe('AzureResponsesProvider', () => {
       expect(body.temperature).toBeUndefined();
     });
 
+    it('should omit top_p when reasoning config promotes a custom Responses deployment', async () => {
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: {
+          top_p: 0.9,
+          reasoning: {
+            summary: 'auto',
+          },
+        },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.top_p).toBeUndefined();
+      expect('top_p' in body).toBe(false);
+    });
+
     it('should merge reasoning_effort with reasoning summary config', async () => {
       const provider = new AzureResponsesProvider('o3-mini', {
         config: {
@@ -572,6 +588,44 @@ describe('AzureResponsesProvider', () => {
         'json',
         undefined,
       );
+    });
+
+    it('should surface reasoning summary items in provider output', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          output: [
+            {
+              type: 'reasoning',
+              summary: [{ type: 'summary_text', text: 'Check the constraints first.' }],
+            },
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Final answer' }],
+            },
+          ],
+          usage: {
+            input_tokens: 10,
+            output_tokens: 8,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('custom-reasoning-deployment', {
+        config: {
+          reasoning: {
+            summary: 'auto',
+          },
+        },
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.output).toBe('Reasoning: Check the constraints first.\nFinal answer');
+      expect(result.error).toBeUndefined();
     });
 
     it('should handle API errors', async () => {
