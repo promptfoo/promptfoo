@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google ADK SequentialAgent workflow with native tracing
+
+prompts:
+  - '{{task}}'
+
+providers:
+  - id: file://provider.py:call_workflow_api
+    label: google-adk-workflow
+    config:
+      otlp_endpoint: http://localhost:4318
+
+tests:
+  - description: Sequential workflow looks up weather before drafting a brief
+    vars:
+      task: Write a one-sentence Tokyo trip brief with a packing suggestion.
+    metadata:
+      tracingEnabled: true
+      testCaseId: google-adk-sequential-workflow
+    assert:
+      - type: contains
+        value: Tokyo
+      - type: contains
+        value: '"weather_snapshot"'
+      - type: trajectory:tool-used
+        value: get_weather
+      - type: trajectory:tool-args-match
+        value:
+          name: get_weather
+          args:
+            city: Tokyo
+          mode: partial
+      - type: trace-span-count
+        value:
+          pattern: 'invoke_agent trip_planning_workflow'
+          min: 1
+      - type: trace-span-count
+        value:
+          pattern: 'invoke_agent weather_lookup_agent'
+          min: 1
+      - type: trace-span-count
+        value:
+          pattern: 'invoke_agent briefing_agent'
+          min: 1
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats: ['json', 'protobuf']

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import * as path from 'path';
 
 import { migrate } from 'drizzle-orm/libsql/migrator';
-import { getDb } from './database/index';
+import { closeDbIfOpen, getDb } from './database/index';
 import { getDirectory } from './esm';
 import logger from './logger';
 import {
@@ -96,6 +96,21 @@ export async function runDbMigrations(options: RunDbMigrationsOptions = {}): Pro
   }
 }
 
+export async function runDbMigrationsFromCli(): Promise<void> {
+  try {
+    await runDbMigrations({ suppressBindingErrorLogging: true });
+    process.exitCode = 0;
+  } catch (error) {
+    const libsqlBindingErrorMessage = formatLibsqlBindingErrorMessage(error);
+    if (libsqlBindingErrorMessage) {
+      console.error(libsqlBindingErrorMessage);
+    }
+    process.exitCode = 1;
+  } finally {
+    await closeDbIfOpen();
+  }
+}
+
 /**
  * ESM replacement for the CommonJS `require.main === module` pattern.
  *
@@ -125,15 +140,7 @@ if (shouldCheckDirectExecution) {
       (currentModulePath.endsWith('migrate.js') || currentModulePath.endsWith('migrate.ts'));
 
     if (isMigrateModuleMainExecution) {
-      runDbMigrations({ suppressBindingErrorLogging: true })
-        .then(() => process.exit(0))
-        .catch((error) => {
-          const libsqlBindingErrorMessage = formatLibsqlBindingErrorMessage(error);
-          if (libsqlBindingErrorMessage) {
-            console.error(libsqlBindingErrorMessage);
-          }
-          process.exit(1);
-        });
+      void runDbMigrationsFromCli();
     }
   } catch {
     // Expected in CJS environments (Jest) where import.meta syntax is invalid.

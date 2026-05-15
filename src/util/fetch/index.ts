@@ -3,7 +3,7 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, ProxyAgent } from 'undici';
+import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -33,8 +33,8 @@ import type { FetchOptions } from './types';
 // Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
 // creation time. This is acceptable because these env vars don't change
 // mid-process. If that assumption changes, add cache-invalidation logic.
-const cachedAgents: Map<number, Agent> = new Map();
-const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
+const cachedAgents: Map<number, Dispatcher> = new Map();
+const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -72,7 +72,7 @@ export function clearAgentCache(): void {
   cachedProxyAgents.clear();
 }
 
-function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
+function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
   const existing = cachedAgents.get(concurrency);
   if (existing) {
@@ -84,7 +84,7 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  });
+  }).compose(interceptors.decompress());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -93,7 +93,7 @@ function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
   return `${proxyUrl}::${concurrency}`;
 }
 
-function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ProxyAgent {
+function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
   const cacheKey = getProxyAgentCacheKey(proxyUrl, concurrency);
   const existing = cachedProxyAgents.get(cacheKey);
@@ -108,7 +108,7 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  });
+  }).compose(interceptors.decompress());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }

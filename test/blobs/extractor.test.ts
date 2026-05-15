@@ -4,6 +4,7 @@ import {
   isBlobStorageEnabled,
   normalizeAudioMimeType,
 } from '../../src/blobs/extractor';
+import { sha256 } from '../../src/util/createHash';
 
 import type { ProviderResponse } from '../../src/types/providers';
 
@@ -604,5 +605,56 @@ describe('Cloud blob upload', () => {
 
     expect(result?.output).toBe(result?.images?.[0].blobRef?.uri);
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+  });
+
+  it('should store small raw SVG outputs for the media library without replacing text output', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
+    const response: ProviderResponse = { output: svg };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.output).toBe(svg);
+    expect(result?.metadata?.blobUris).toEqual(['promptfoo://blob/abc123def456']);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      Buffer.from(svg),
+      'image/svg+xml',
+      expect.objectContaining({
+        location: 'response.output',
+        kind: 'image',
+      }),
+    );
+  });
+
+  it('should not store the same raw SVG preview twice when metadata already references it', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4"/></svg>';
+    const response: ProviderResponse = {
+      output: svg,
+      metadata: {
+        blobUris: [`promptfoo://blob/${sha256(Buffer.from(svg))}`],
+      },
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result).toBe(response);
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+  });
+
+  it('should not store multiple root SVG documents as one media blob', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const response: ProviderResponse = {
+      output: '<svg><circle/></svg>\n\n<svg><rect/></svg>',
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result).toBe(response);
+    expect(mockStoreBlob).not.toHaveBeenCalled();
   });
 });

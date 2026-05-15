@@ -3018,6 +3018,36 @@ describe('runAssertion', () => {
       });
     });
 
+    it('should use resolved vars for context-based grading', async () => {
+      const assertion: Assertion = {
+        type: 'context-relevance',
+        threshold: 0.7,
+      };
+      const test: AtomicTestCase = {
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'file://docs/france.md',
+        },
+      };
+
+      const result = await runAssertion({
+        assertion,
+        test,
+        vars: {
+          query: 'What is the capital of France?',
+          context: 'Paris is the capital of France.',
+        },
+        providerResponse: { output: 'Some output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        metadata: {
+          context: 'Paris is the capital of France.',
+        },
+      });
+    });
+
     it('should throw an error when vars object is missing', async () => {
       const assertion: Assertion = {
         type: 'context-relevance',

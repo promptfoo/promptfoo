@@ -10,7 +10,7 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 
 | Directory           | Purpose                         | Local Docs                   |
 | ------------------- | ------------------------------- | ---------------------------- |
-| `.agents/`          | Codex marketplace metadata      | `.agents/AGENTS.md`          |
+| `.agents/`          | Codex metadata and repo skills  | `.agents/AGENTS.md`          |
 | `.github/`          | GitHub Actions and workflows    | `.github/AGENTS.md`          |
 | `code-scan-action/` | Code scan GitHub Action wrapper | `code-scan-action/AGENTS.md` |
 | `docs/agents/`      | Reusable coding-agent docs      | `docs/agents/AGENTS.md`      |
@@ -285,6 +285,7 @@ EOF
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking
+- Keep tracked root-owned TypeScript files under the root compiler project unless they belong to an explicitly separate project such as `src/app/` or `test/code-scan-action/`.
 - Follow consistent import order (Biome handles sorting)
 - Use consistent curly braces for all control statements
 - Prefer `const` over `let`; avoid `var`
