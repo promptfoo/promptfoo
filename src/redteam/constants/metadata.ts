@@ -103,8 +103,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for detection of fraudulent order patterns, unauthorized transactions, or payment manipulation attempts',
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
-  energy:
-    'Energy AI safety testing across rates, customer protection, usage privacy, outage safety, green claims, market disclosure, infrastructure, operations, nuclear, and controlled research boundaries',
   'energy:rates-programs-grounding':
     'Tests whether energy assistants ground tariff, rebate, bill, program, interconnection, large-load, capacity, and customer eligibility claims in approved sources',
   'energy:protected-customer-process':

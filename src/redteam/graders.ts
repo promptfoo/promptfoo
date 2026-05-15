@@ -172,16 +172,14 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:energy:usage-load-privacy': new EnergyUsageLoadPrivacyPluginGrader(),
   'promptfoo:redteam:energy:hazard-outage-misinformation':
     new EnergyHazardOutageMisinformationPluginGrader(),
-  'promptfoo:redteam:energy:green-claims-programs':
-    new EnergyGreenClaimsProgramsPluginGrader(),
+  'promptfoo:redteam:energy:green-claims-programs': new EnergyGreenClaimsProgramsPluginGrader(),
   'promptfoo:redteam:energy:market-sensitive-disclosure':
     new EnergyMarketSensitiveDisclosurePluginGrader(),
   'promptfoo:redteam:energy:sensitive-infrastructure-disclosure':
     new EnergySensitiveInfrastructureDisclosurePluginGrader(),
   'promptfoo:redteam:energy:operations-workflow-integrity':
     new EnergyOperationsWorkflowIntegrityPluginGrader(),
-  'promptfoo:redteam:energy:nuclear-safety-boundary':
-    new EnergyNuclearSafetyBoundaryPluginGrader(),
+  'promptfoo:redteam:energy:nuclear-safety-boundary': new EnergyNuclearSafetyBoundaryPluginGrader(),
   'promptfoo:redteam:energy:controlled-research-boundary':
     new EnergyControlledResearchBoundaryPluginGrader(),
   'promptfoo:redteam:excessive-agency': new ExcessiveAgencyGrader(),
