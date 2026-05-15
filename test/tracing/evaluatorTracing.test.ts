@@ -175,16 +175,26 @@ describe('evaluatorTracing', () => {
           commandToolNames: ['bash'],
         },
       } as unknown as TestSuite;
+      const traceStoreModule = await import('../../src/tracing/store');
+      const getTraceStoreSpy = vi
+        .spyOn(traceStoreModule, 'getTraceStore')
+        .mockReturnValue({
+          createTrace: mockCreateTrace,
+        } as unknown as ReturnType<typeof traceStoreModule.getTraceStore>);
 
-      await generateTraceContextIfNeeded(test, {}, 2, 4, testSuite);
+      try {
+        await generateTraceContextIfNeeded(test, {}, 2, 4, testSuite);
 
-      expect(mockCreateTrace).toHaveBeenCalledWith(
-        expect.objectContaining({
-          metadata: expect.objectContaining({
-            commandToolNames: ['bash'],
+        expect(mockCreateTrace).toHaveBeenCalledWith(
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              commandToolNames: ['bash'],
+            }),
           }),
-        }),
-      );
+        );
+      } finally {
+        getTraceStoreSpy.mockRestore();
+      }
     });
   });
 
