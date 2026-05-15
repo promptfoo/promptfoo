@@ -170,10 +170,16 @@ export class ChatKitBrowserPool {
    */
   setTemplate(templateKey: string, html: string, createClientSecret?: () => Promise<string>): void {
     const existing = this.templates.get(templateKey);
-    if (existing?.html !== html || existing?.createClientSecret !== createClientSecret) {
+    const htmlChanged = existing?.html !== html;
+    const createClientSecretChanged = existing?.createClientSecret !== createClientSecret;
+
+    if (htmlChanged || createClientSecretChanged) {
       this.templates.set(templateKey, { html, createClientSecret });
       logger.debug('[ChatKitPool] Registered template', { templateKey });
-      // Mark pages with this template as needing refresh if template changed
+    }
+
+    if (htmlChanged) {
+      // Mark pages with this template as needing refresh only when the served page changes.
       for (const page of this.pages) {
         if (page.templateKey === templateKey) {
           page.ready = false;
@@ -224,8 +230,9 @@ export class ChatKitBrowserPool {
                 res.end(JSON.stringify({ client_secret: clientSecret }));
               })
               .catch((error) => {
+                logger.error('[ChatKitPool] Failed to create ChatKit client secret', { error });
                 res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: String(error) }));
+                res.end(JSON.stringify({ error: 'Failed to create ChatKit session' }));
               });
             return;
           }

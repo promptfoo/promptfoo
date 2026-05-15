@@ -313,8 +313,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     this.applySamplingOptions(body, config);
     this.applyToolOptions(body, config, context?.vars, allTools);
-    this.applyResponseOptions(body, config, context?.vars, callApiOptions, isGPT5Model);
+    this.applyResponseOptions(body, config, context?.vars, callApiOptions);
     Object.assign(body, config.passthrough || {});
+    this.applyModelSpecificResponseOptions(body, config, isGPT5Model);
     this.applyAdvancedOptions(body, config, isReasoningModel, isGPT5Model);
     return body;
   }
@@ -363,7 +364,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     config: OpenAiCompletionOptions,
     vars: CallApiContextParams['vars'] | undefined,
     callApiOptions: CallApiOptionsParams | undefined,
-    isGPT5Model: boolean,
   ) {
     if (config.response_format) {
       body.response_format = maybeLoadResponseFormatFromExternalFile(config.response_format, vars);
@@ -377,6 +377,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (config.prompt_cache_retention !== undefined) {
       body.prompt_cache_retention = config.prompt_cache_retention;
     }
+  }
+
+  private applyModelSpecificResponseOptions(
+    body: Record<string, any>,
+    config: OpenAiCompletionOptions,
+    isGPT5Model: boolean,
+  ) {
     if (this.modelName.includes('audio')) {
       body.modalities = config.modalities || ['text', 'audio'];
       body.audio = config.audio || { voice: 'alloy', format: 'wav' };

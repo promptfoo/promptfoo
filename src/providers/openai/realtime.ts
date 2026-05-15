@@ -720,13 +720,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       };
 
       const ws = createOpenAiRealtimeSocket({
-        apiKey: this.getApiKey(),
-        organization: this.getOrganization(),
-        baseURL: this.getApiUrl(),
-        model: this.modelName,
         socketUrl: wsUrl,
         websocketOptions: wsOptions,
-        config: this.config,
       });
 
       // Inactivity-based request timeout. Held in a closure variable so the
@@ -1991,13 +1986,8 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     };
 
     const ws = createOpenAiRealtimeSocket({
-      apiKey: this.getApiKey(),
-      organization: this.getOrganization(),
-      baseURL: this.getApiUrl(),
-      model: this.modelName,
       socketUrl: wsUrl,
       websocketOptions: wsOptions,
-      config: this.config,
     });
     this.persistentConnection = ws;
 

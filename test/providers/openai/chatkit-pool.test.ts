@@ -22,6 +22,7 @@ const mockBrowser = vi.hoisted(() => ({
 const mockChromium = vi.hoisted(() => ({
   launch: vi.fn().mockResolvedValue(mockBrowser),
 }));
+const mockServerRequestHandler = vi.hoisted(() => vi.fn());
 
 // Mock playwright
 vi.mock('playwright', () => ({
@@ -30,11 +31,14 @@ vi.mock('playwright', () => ({
 
 // Mock http server
 vi.mock('http', () => ({
-  createServer: vi.fn().mockReturnValue({
-    listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
-    address: vi.fn().mockReturnValue({ port: 3000 }),
-    close: vi.fn(),
-    once: vi.fn(), // Error handler registration
+  createServer: vi.fn((handler: (...args: any[]) => void) => {
+    mockServerRequestHandler.mockImplementation(handler);
+    return {
+      listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
+      address: vi.fn().mockReturnValue({ port: 3000 }),
+      close: vi.fn(),
+      once: vi.fn(), // Error handler registration
+    };
   }),
 }));
 
@@ -168,6 +172,26 @@ describe('ChatKitBrowserPool', () => {
         createClientSecret: undefined,
       });
     });
+
+    it('should not invalidate pooled pages when only the session factory changes', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      const firstSessionFactory = vi.fn().mockResolvedValue('secret-1');
+      const secondSessionFactory = vi.fn().mockResolvedValue('secret-2');
+
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML, firstSessionFactory);
+      const pooledPage = await instance.acquirePage(TEST_TEMPLATE_KEY);
+      await instance.releasePage(pooledPage);
+
+      expect(pooledPage.ready).toBe(true);
+
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML, secondSessionFactory);
+
+      expect(pooledPage.ready).toBe(true);
+      expect((instance as any).templates.get(TEST_TEMPLATE_KEY)).toEqual({
+        html: TEST_HTML,
+        createClientSecret: secondSessionFactory,
+      });
+    });
   });
 
   describe('initialize', () => {
@@ -199,6 +223,39 @@ describe('ChatKitBrowserPool', () => {
 
       // Should still only launch browser once
       expect(mockChromium.launch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should redact pooled session minting failures in browser responses', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      instance.setTemplate(
+        TEST_TEMPLATE_KEY,
+        TEST_HTML,
+        vi.fn().mockRejectedValue(new Error('upstream detail should stay server-side')),
+      );
+      await instance.initialize();
+
+      const writeHead = vi.fn();
+      const end = vi.fn();
+
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
+        },
+        {
+          writeHead,
+          end,
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(writeHead).toHaveBeenCalledWith(500, { 'Content-Type': 'application/json' });
+      expect(end).toHaveBeenCalledWith(
+        JSON.stringify({ error: 'Failed to create ChatKit session' }),
+      );
+      expect(end.mock.calls[0]?.[0]).not.toContain('upstream detail should stay server-side');
     });
   });
 

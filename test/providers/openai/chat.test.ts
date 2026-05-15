@@ -1929,6 +1929,35 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(body.response_format).toEqual({ type: 'text' });
     });
 
+    it('should preserve explicit model-specific response options over passthrough', async () => {
+      const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
+        config: {
+          verbosity: 'high',
+          passthrough: {
+            verbosity: 'low',
+          },
+        },
+      });
+      const { body: gpt5Body } = await gpt5Provider.getOpenAiBody('Test prompt');
+
+      expect(gpt5Body.verbosity).toBe('high');
+
+      const audioProvider = new OpenAiChatCompletionProvider('gpt-4o-audio-preview', {
+        config: {
+          modalities: ['audio'],
+          audio: { voice: 'alloy', format: 'wav' },
+          passthrough: {
+            modalities: ['text'],
+            audio: { voice: 'verse', format: 'mp3' },
+          },
+        },
+      });
+      const { body: audioBody } = await audioProvider.getOpenAiBody('Test prompt');
+
+      expect(audioBody.modalities).toEqual(['audio']);
+      expect(audioBody.audio).toEqual({ voice: 'alloy', format: 'wav' });
+    });
+
     it('should not share config between provider instances', () => {
       const sharedConfig = {
         max_tokens: 16000,
