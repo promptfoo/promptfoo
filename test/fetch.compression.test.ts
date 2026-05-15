@@ -105,4 +105,18 @@ describe('fetchWithProxy compressed responses', () => {
     expect(response.status).toBe(200);
     expect(JSON.parse(text)).toEqual(payload);
   });
+
+  it('allows native Request callers to clear inherited aborted signals on the pooled path', async () => {
+    const url = await startCompressedServer('gzip', 200);
+    const controller = new AbortController();
+    controller.abort();
+
+    const response = await fetchWithProxy(new Request(url, { signal: controller.signal }), {
+      signal: null,
+    });
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(text)).toEqual(payload);
+  });
 });

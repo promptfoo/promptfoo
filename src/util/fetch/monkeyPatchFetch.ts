@@ -52,7 +52,7 @@ function getUndiciFetchArgs(
     redirect: options.redirect ?? url.redirect,
     referrer: options.referrer ?? url.referrer,
     referrerPolicy: options.referrerPolicy ?? url.referrerPolicy,
-    signal: options.signal ?? url.signal,
+    signal: options.signal === undefined ? url.signal : options.signal,
   } as RequestInit & { duplex?: 'half' };
 
   const duplex = (url as Request & { duplex?: 'half' }).duplex;
