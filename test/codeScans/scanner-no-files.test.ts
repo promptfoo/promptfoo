@@ -193,13 +193,17 @@ describe('Scanner machine-readable output', () => {
 
   it('restores the original log level when structured config loading fails early', async () => {
     mockScanner({ loadConfigError: new Error('missing config') });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
     const { getLogLevel, setLogLevel } = await import('../../src/logger');
     const setLogLevelMock = vi.mocked(setLogLevel);
 
     await executeScan('/test/repo', { json: true, config: '/missing.yaml' });
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Scan failed: missing config');
+    expect(logger.error).not.toHaveBeenCalled();
     expect(setLogLevelMock).toHaveBeenNthCalledWith(1, 'error');
     expect(setLogLevelMock).toHaveBeenLastCalledWith('info');
     expect(getLogLevel()).toBe('info');

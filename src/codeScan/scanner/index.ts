@@ -333,6 +333,8 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const msg = `Scan failed: ${errorMessage}`;
     if (showSpinner && spinner) {
       spinner.fail(msg);
+    } else if (outputFormat !== null && outputFormat !== CodeScanOutputFormat.TEXT) {
+      console.error(msg);
     } else {
       logger.error(msg);
     }

@@ -391,6 +391,7 @@ describe('CLI Smoke Tests', () => {
         {
           env: {
             LOG_LEVEL: 'debug',
+            NODE_NO_WARNINGS: '1',
             PROMPTFOO_DISABLE_UPDATE: 'true',
           },
         },
@@ -401,6 +402,22 @@ describe('CLI Smoke Tests', () => {
 
       const payload = JSON.parse(stdout) as Record<string, unknown>;
       assertPayload(payload);
+    });
+
+    it('1.8.2 - keeps structured config failures off stdout', async () => {
+      const missingConfigPath = path.join(repoDir, 'definitely-missing-code-scan-config.yaml');
+      const { stdout, stderr, exitCode } = await runEntrypointAsync(
+        ['code-scans', 'run', repoDir, '--json', '--config', missingConfigPath],
+        {
+          env: {
+            NODE_NO_WARNINGS: '1',
+          },
+        },
+      );
+
+      expect(exitCode).toBe(1);
+      expect(stdout).toBe('');
+      expect(stderr).toContain(`Scan failed: Configuration file not found: ${missingConfigPath}`);
     });
   });
 });
