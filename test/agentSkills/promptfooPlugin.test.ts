@@ -1732,11 +1732,16 @@ describe('promptfoo Codex plugin package', () => {
         expect.stringContaining('red teaming'),
       ]),
     );
+    expect(manifest.interface.composerIcon).toBe('./assets/promptfoo-panda.svg');
+    expect(manifest.interface.logo).toBe('./assets/promptfoo-panda.svg');
+    expect(manifest.interface.screenshots).toEqual([]);
     expect(fs.existsSync(path.join(pluginRoot, 'skills'))).toBe(true);
     expect(fs.existsSync(evalsSkillRoot)).toBe(true);
     expect(fs.existsSync(providerSkillRoot)).toBe(true);
     expect(fs.existsSync(redteamSetupSkillRoot)).toBe(true);
     expect(fs.existsSync(redteamRunSkillRoot)).toBe(true);
+    expect(fs.existsSync(path.join(pluginRoot, manifest.interface.composerIcon))).toBe(true);
+    expect(fs.existsSync(path.join(pluginRoot, manifest.interface.logo))).toBe(true);
   });
 
   it('keeps the Codex plugin manifest within documented packaging constraints', () => {
@@ -1762,11 +1767,14 @@ describe('promptfoo Codex plugin package', () => {
         'brandColor',
         'capabilities',
         'category',
+        'composerIcon',
         'defaultPrompt',
         'developerName',
         'displayName',
+        'logo',
         'longDescription',
         'privacyPolicyURL',
+        'screenshots',
         'shortDescription',
         'termsOfServiceURL',
         'websiteURL',
@@ -1799,6 +1807,9 @@ describe('promptfoo Codex plugin package', () => {
     expect(manifest.interface.longDescription.length).toBeLessThanOrEqual(160);
     expect(manifest.interface.capabilities).toEqual(expect.arrayContaining(['Read', 'Write']));
     expect(manifest.interface.brandColor).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    expect(manifest.interface.composerIcon).toMatch(/^\.\//);
+    expect(manifest.interface.logo).toMatch(/^\.\//);
+    expect(manifest.interface.screenshots).toEqual([]);
     expect(new Set(manifest.interface.defaultPrompt).size).toBe(
       manifest.interface.defaultPrompt.length,
     );
@@ -1857,6 +1868,7 @@ describe('promptfoo Codex plugin package', () => {
 
     expect(packagedFiles).toEqual([
       '.codex-plugin/plugin.json',
+      'assets/promptfoo-panda.svg',
       'skills/promptfoo-evals/SKILL.md',
       'skills/promptfoo-evals/agents/openai.yaml',
       'skills/promptfoo-evals/references/eval-patterns.md',

@@ -175,15 +175,17 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
+      const maxTurns = this.agentConfig.maxTurns === undefined ? 10 : this.agentConfig.maxTurns;
+
       logger.debug('[AgentsProvider] Running agent', {
         agentName: this.agent?.name,
-        maxTurns: this.agentConfig.maxTurns ?? 10,
+        maxTurns,
       });
 
       const runOptions: any = {
         ...(await this.resolveRunOptions(context)),
         context: context?.vars,
-        maxTurns: this.agentConfig.maxTurns ?? 10,
+        maxTurns,
         signal: callApiOptions?.abortSignal,
       };
 
