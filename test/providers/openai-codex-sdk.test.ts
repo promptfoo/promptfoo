@@ -55,7 +55,12 @@ vi.mock('@openai/codex-sdk', () => mockCodexSDK);
 // Helper to create mock response matching real SDK format
 const createMockResponse = (
   finalResponse: string,
-  usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number },
+  usage?: {
+    input_tokens?: number;
+    cached_input_tokens?: number;
+    output_tokens?: number;
+    reasoning_output_tokens?: number;
+  },
   items: any[] = [],
 ) => ({
   finalResponse,
@@ -64,6 +69,9 @@ const createMockResponse = (
         input_tokens: usage.input_tokens ?? 0,
         cached_input_tokens: usage.cached_input_tokens ?? 0,
         output_tokens: usage.output_tokens ?? 0,
+        ...(usage.reasoning_output_tokens === undefined
+          ? {}
+          : { reasoning_output_tokens: usage.reasoning_output_tokens }),
       }
     : undefined,
   items,
@@ -180,6 +188,8 @@ describe('OpenAICodexSDKProvider', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -245,7 +255,7 @@ describe('OpenAICodexSDKProvider', () => {
             total: 30, // 10 + 20
             cached: 5,
           },
-          cost: 0,
+          cost: undefined,
           raw: expect.any(String),
           sessionId: 'test-thread-123',
         });
@@ -256,6 +266,32 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
+      it('should preserve Codex reasoning token usage details', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Reasoning response', {
+            input_tokens: 10,
+            cached_input_tokens: 2,
+            output_tokens: 20,
+            reasoning_output_tokens: 7,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage).toEqual({
+          prompt: 10,
+          completion: 20,
+          total: 30,
+          cached: 2,
+          completionDetails: {
+            reasoning: 7,
+          },
+        });
       });
 
       it('should pass structured text and local image prompt inputs to the SDK', async () => {
@@ -835,6 +871,24 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should resolve relative working_dir from cliState.basePath', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        cliState.basePath = '/test/basePath';
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { working_dir: './workspace' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        const resolvedWorkingDir = path.resolve('/test/basePath', 'workspace');
+        expect(statSyncSpy).toHaveBeenCalledWith(resolvedWorkingDir);
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: resolvedWorkingDir,
+          skipGitRepoCheck: false,
+        });
+      });
+
       it('should error when working_dir does not exist', async () => {
         statSyncSpy.mockImplementation(function () {
           throw new Error('ENOENT: no such file or directory');
@@ -961,6 +1015,30 @@ describe('OpenAICodexSDKProvider', () => {
           workingDirectory: '/main/dir',
           skipGitRepoCheck: false,
           additionalDirectories: ['/extra/dir1', '/extra/dir2'],
+        });
+      });
+
+      it('should resolve relative additional_directories from cliState.basePath', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        cliState.basePath = '/test/basePath';
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            working_dir: './workspace',
+            additional_directories: ['./extra', '../shared'],
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: path.resolve('/test/basePath', 'workspace'),
+          skipGitRepoCheck: false,
+          additionalDirectories: [
+            path.resolve('/test/basePath', 'extra'),
+            path.resolve('/test/basePath', '../shared'),
+          ],
         });
       });
 
@@ -1460,9 +1538,9 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.1-codex: $2/1M input, $8/1M output
-        // Cost = (1000 * 2/1000000) + (500 * 8/1000000) = 0.002 + 0.004 = 0.006
-        expect(result.cost).toBeCloseTo(0.006, 6);
+        // gpt-5.1-codex: $1.25/1M input, $10/1M output
+        // Cost = (1000 * 1.25/1000000) + (500 * 10/1000000) = 0.00125 + 0.005 = 0.00625
+        expect(result.cost).toBeCloseTo(0.00625, 6);
       });
 
       it('should calculate cost for gpt-5.1-codex-mini model', async () => {
@@ -1481,14 +1559,34 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // gpt-5.1-codex-mini: $0.5/1M input, $0.05/1M cache_read, $2/1M output
+        // gpt-5.1-codex-mini: $0.25/1M input, $0.025/1M cache_read, $2/1M output
         // uncached input = 2000 - 500 = 1500, cached = 500
-        // Cost = (1500 * 0.5/1000000) + (500 * 0.05/1000000) + (1000 * 2/1000000)
-        //      = 0.00075 + 0.000025 + 0.002 = 0.002775
+        // Cost = (1500 * 0.25/1000000) + (500 * 0.025/1000000) + (1000 * 2/1000000)
+        //      = 0.000375 + 0.0000125 + 0.002 = 0.0023875
+        expect(result.cost).toBeCloseTo(0.0023875, 6);
+      });
+
+      it('should calculate cost for gpt-5-codex-mini model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5-codex-mini' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // Preserve the previously supported Codex SDK rate card for this legacy model.
         expect(result.cost).toBeCloseTo(0.002775, 6);
       });
 
-      it('should return 0 cost when model pricing not found', async () => {
+      it('should return undefined cost when model pricing not found', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 100,
@@ -1503,10 +1601,10 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBe(0);
+        expect(result.cost).toBeUndefined();
       });
 
-      it('should return 0 cost when no model specified', async () => {
+      it('should return undefined cost when no model specified', async () => {
         mockRun.mockResolvedValue(
           createMockResponse('Response', {
             input_tokens: 100,
@@ -1520,10 +1618,10 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBe(0);
+        expect(result.cost).toBeUndefined();
       });
 
-      it('should return 0 cost when no usage data', async () => {
+      it('should return undefined cost when no usage data', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
@@ -1533,7 +1631,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.cost).toBe(0);
+        expect(result.cost).toBeUndefined();
       });
     });
 
@@ -1550,7 +1648,12 @@ describe('OpenAICodexSDKProvider', () => {
           };
           yield {
             type: 'turn.completed',
-            usage: { input_tokens: 10, cached_input_tokens: 5, output_tokens: 20 },
+            usage: {
+              input_tokens: 10,
+              cached_input_tokens: 5,
+              output_tokens: 20,
+              reasoning_output_tokens: 3,
+            },
           };
         };
 
@@ -1563,12 +1666,15 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.output).toBe('Part 1\nPart 2');
+        expect(result.output).toBe('Part 2');
         expect(result.tokenUsage).toEqual({
           prompt: 10, // cached_input_tokens is already included in input_tokens
           completion: 20,
           total: 30, // 10 + 20
           cached: 5,
+          completionDetails: {
+            reasoning: 3,
+          },
         });
       });
 
@@ -2038,6 +2144,35 @@ describe('OpenAICodexSDKProvider', () => {
         );
       });
 
+      it('should ignore attached live provider objects before rendering prompt config vars', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const attachedProvider: Record<string, unknown> = {
+          id: () => 'attached-provider',
+        };
+        attachedProvider.self = attachedProvider;
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await expect(
+          provider.callApi('Test prompt', {
+            prompt: {
+              config: {
+                model: '{{ model }}',
+                provider: attachedProvider,
+              } as any,
+            },
+            vars: { model: 'gpt-5.2' },
+          } as any),
+        ).resolves.toMatchObject({
+          output: 'Response',
+        });
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
       it('should use CODEX_API_KEY from env if available', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
@@ -2229,7 +2364,111 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2, GPT-5.3, and GPT-5.4 models', () => {
+    describe('GPT-5.2, GPT-5.3, GPT-5.4, and GPT-5.5 models', () => {
+      it('should recognize gpt-5.5 as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.5');
+      });
+
+      it('should recognize gpt-5.5-pro as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.5-pro');
+      });
+
+      it('should calculate cost for gpt-5.5 model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.5: $5/1M input, $30/1M output
+        // Cost = (1000 * 5/1000000) + (500 * 30/1000000) = 0.005 + 0.015 = 0.02
+        expect(result.cost).toBeCloseTo(0.02, 6);
+      });
+
+      it('should calculate cost for gpt-5.5 model with cached input tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.5: $5/1M input, $0.50/1M cache_read, $30/1M output
+        // uncached input = 2000 - 500 = 1500, cached = 500
+        // Cost = (1500 * 5/1000000) + (500 * 0.5/1000000) + (1000 * 30/1000000)
+        //      = 0.0075 + 0.00025 + 0.03 = 0.03775
+        expect(result.cost).toBeCloseTo(0.03775, 6);
+      });
+
+      it('should calculate cost for gpt-5.5-pro model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.5-pro: $30/1M input, $180/1M output
+        // Cost = (1000 * 30/1000000) + (500 * 180/1000000) = 0.03 + 0.09 = 0.12
+        expect(result.cost).toBeCloseTo(0.12, 6);
+      });
+
+      it('should calculate cost for gpt-5.5-pro model without cache discount', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.5-pro has no discounted cached-input pricing.
+        // uncached input = 2000 - 500 = 1500, cached = 500, both billed at $30/1M.
+        // Cost = (1500 * 30/1000000) + (500 * 30/1000000) + (1000 * 180/1000000)
+        //      = 0.045 + 0.015 + 0.18 = 0.24
+        expect(result.cost).toBeCloseTo(0.24, 6);
+      });
+
       it('should recognize gpt-5.4 as a known model', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.4' },

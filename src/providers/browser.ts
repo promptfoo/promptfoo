@@ -8,6 +8,7 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
+import { normalizeResponseTransformResult } from './transformResult';
 
 import type {
   ApiProvider,
@@ -258,15 +259,7 @@ export class BrowserProvider implements ApiProvider {
     const ret = this.transformResponse(extracted, finalHtml);
     logger.debug(`Browser response transform output: ${safeJsonStringify(ret)}`);
 
-    // Build response
-    let response: ProviderResponse;
-    if (typeof ret === 'object' && ret !== null && ('output' in ret || 'error' in ret)) {
-      response = ret;
-    } else {
-      response = { output: ret };
-    }
-
-    return response;
+    return normalizeResponseTransformResult(ret);
   }
 
   private async setCookies(browserContext: BrowserContext): Promise<void> {

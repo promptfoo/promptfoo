@@ -4,7 +4,8 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
-import type { EvaluateOptions, TestCase, TestSuite } from '../types/index';
+import type { TestCase, TestSuite } from '../types/index';
+import type { InternalEvaluateOptions } from '../types/internal';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;
@@ -154,7 +155,7 @@ export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean
  */
 export async function generateTraceContextIfNeeded(
   test: TestCase,
-  evaluateOptions: EvaluateOptions | undefined,
+  evaluateOptions: InternalEvaluateOptions | undefined,
   testIdx: number,
   promptIdx: number,
   testSuite?: TestSuite,

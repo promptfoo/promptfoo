@@ -285,4 +285,157 @@ describe('OpenAiResponsesProvider tool handling', () => {
     const parsed = JSON.parse(result.output);
     expect(parsed.type).toBe('tool_result');
   });
+
+  it('should include observable web and file search fees in responses cost', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_cost123',
+        status: 'completed',
+        model: 'gpt-5-mini',
+        output: [
+          {
+            type: 'web_search_call',
+            action: { type: 'search', query: 'pricing' },
+            status: 'completed',
+          },
+          {
+            type: 'file_search_call',
+            status: 'completed',
+          },
+        ],
+        usage: {
+          input_tokens: 1_000,
+          output_tokens: 100,
+          total_tokens: 1_100,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-5-mini', {
+      config: {
+        apiKey: 'test-key',
+        tools: [{ type: 'web_search_preview' }],
+      },
+    });
+
+    const result = await provider.callApi('Search my files');
+
+    expect(result.cost).toBeCloseTo((1_000 * 0.25 + 100 * 2) / 1e6 + 0.0125, 10);
+  });
+
+  it('should price observable web search fees from effective passthrough tools', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_cost456',
+        status: 'completed',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'web_search_call',
+            action: { type: 'search', query: 'pricing' },
+            status: 'completed',
+          },
+        ],
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          total_tokens: 0,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: {
+        apiKey: 'test-key',
+        tools: [{ type: 'web_search_preview' }],
+        passthrough: { tools: [{ type: 'web_search' }] },
+      },
+    });
+
+    const result = await provider.callApi('Search the web');
+
+    expect(result.cost).toBeCloseTo(0.01, 10);
+  });
+
+  it('should price from the tier returned by OpenAI rather than the requested tier', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'resp_priority123',
+        status: 'completed',
+        model: 'gpt-5-mini',
+        service_tier: 'priority',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Done' }],
+          },
+        ],
+        usage: {
+          input_tokens: 1_000,
+          output_tokens: 100,
+          total_tokens: 1_100,
+        },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-5-mini', {
+      config: {
+        apiKey: 'test-key',
+        service_tier: 'flex',
+      },
+    });
+
+    const result = await provider.callApi('Do the thing');
+
+    expect(result.cost).toBeCloseTo((1_000 * 0.45 + 100 * 3.6) / 1e6, 10);
+  });
+
+  it('should not invent code-interpreter session fees from response output alone', async () => {
+    const mockApiResponse = {
+      id: 'resp_ci123',
+      status: 'completed',
+      model: 'gpt-5-mini',
+      output: [
+        {
+          type: 'code_interpreter_call',
+          container_id: 'cntr_a',
+          status: 'completed',
+        },
+      ],
+      usage: {
+        input_tokens: 1_000,
+        output_tokens: 100,
+        total_tokens: 1_100,
+      },
+    };
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: mockApiResponse,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-5-mini', {
+      config: {
+        apiKey: 'test-key',
+        tools: [
+          { type: 'code_interpreter', container: { type: 'auto', memory_limit: '4g' } } as any,
+        ],
+      },
+    });
+
+    const result = await provider.callApi('Use python');
+
+    expect(result.cost).toBeCloseTo((1_000 * 0.25 + 100 * 2) / 1e6, 10);
+  });
 });

@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { extractJsonObjects } from '../../util/json';
+import { REDACTED, isSecretField, sanitizeObject } from '../../util/sanitizer';
 import {
   type AgentObservation,
   type AgentRunFinding,
@@ -562,6 +563,63 @@ function safeJson(value: unknown): string {
   }
 }
 
+function isSensitiveRubricEvidenceKey(key: string): boolean {
+  const normalizedKey = key.toLowerCase().replace(/[-_]/g, '');
+  return (
+    isSecretField(key) ||
+    [
+      'apikey',
+      'authorization',
+      'cookie',
+      'credential',
+      'password',
+      'privatekey',
+      'secret',
+      'sessionid',
+      'token',
+    ].some((fragment) => normalizedKey.includes(fragment))
+  );
+}
+
+function redactSensitiveRubricEvidenceKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveRubricEvidenceKeys(item));
+  }
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') {
+        return JSON.stringify(redactSensitiveRubricEvidenceKeys(parsed));
+      }
+    } catch {
+      return value;
+    }
+    return value;
+  }
+
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      isSensitiveRubricEvidenceKey(key) ? REDACTED : redactSensitiveRubricEvidenceKeys(nestedValue),
+    ]),
+  );
+}
+
+function safeAgenticEvidenceJson(evidence: AgenticRuntimeEvidence | undefined): string {
+  return safeJson(
+    redactSensitiveRubricEvidenceKeys(
+      sanitizeObject(compactAgenticEvidenceForRubric(evidence), {
+        context: 'agentic runtime rubric evidence',
+      }),
+    ),
+  );
+}
+
 function createAgenticEvidenceMetadata(
   evidence: AgenticRuntimeEvidence | undefined,
   matchingFindings: AgenticRuntimeFinding[],
@@ -614,18 +672,60 @@ function extractProviderRawEvidence(
   };
 }
 
+function hasActionableTraceObservations(
+  evidence: AgenticRuntimeEvidence | undefined,
+): evidence is AgenticRuntimeEvidence {
+  return (
+    evidence?.observations?.some(
+      (observation) =>
+        (observation.source === 'trace' || observation.source === 'trace-event') &&
+        observation.kind !== 'finding' &&
+        observation.kind !== 'message',
+    ) ?? false
+  );
+}
+
 function extractAgenticRuntimeEvidence(
   gradingContext?: RedteamGradingContext,
   pluginId?: AgenticRuntimePluginId,
 ): AgenticRuntimeEvidence | undefined {
   if (pluginId) {
     const traceEvidence = extractTraceEvidence(gradingContext, pluginId);
-    if (traceEvidence) {
+    const spans = getTraceSpans(gradingContext);
+    const hasPluginSpecificTraceEvidence =
+      (traceEvidence?.findings?.length ?? 0) > 0 ||
+      hasRelevantAgenticRuntimeTraceEvidence(spans, pluginId);
+
+    if (
+      traceEvidence &&
+      (hasPluginSpecificTraceEvidence || hasActionableTraceObservations(traceEvidence))
+    ) {
       return traceEvidence;
     }
+
     const providerRawEvidence = extractProviderRawEvidence(gradingContext, pluginId);
     if (providerRawEvidence) {
       return providerRawEvidence;
+    }
+
+    for (const candidate of [
+      gradingContext?.providerResponse?.metadata?.agenticEvidence,
+      gradingContext?.providerResponse?.metadata?.agentSdkEvidence,
+      gradingContext?.providerResponse?.metadata,
+    ]) {
+      for (const evidence of parseEvidenceCandidates(candidate)) {
+        const scopedEvidence = normalizeEvidenceForPlugin(evidence, pluginId);
+        if (hasVerifierEvidence(scopedEvidence)) {
+          return {
+            ...scopedEvidence,
+            evidenceSource: scopedEvidence.evidenceSource || 'provider',
+          };
+        }
+      }
+    }
+
+    if (traceEvidence) {
+      return traceEvidence;
     }
   }
 
@@ -793,7 +893,7 @@ export class AgenticRuntimeGrader extends RedteamGraderBase {
             agenticExpectedFinding: expectedFinding,
             agenticPluginId: this.pluginId,
             agenticRuntimeDisplayName: displayName,
-            agenticRuntimeEvidenceJson: safeJson(compactAgenticEvidenceForRubric(evidence)),
+            agenticRuntimeEvidenceJson: safeAgenticEvidenceJson(evidence),
             agenticRuntimeEvidenceSource: evidence?.evidenceSource || 'none',
             agenticRuntimeEvidenceStatus: evidenceStatus,
             agenticRuntimeFindingKinds: findingKinds.length > 0 ? findingKinds.join(', ') : 'none',
@@ -804,7 +904,7 @@ export class AgenticRuntimeGrader extends RedteamGraderBase {
             agenticExpectedFinding: expectedFinding,
             agenticPluginId: this.pluginId,
             agenticRuntimeDisplayName: displayName,
-            agenticRuntimeEvidenceJson: safeJson(compactAgenticEvidenceForRubric(evidence)),
+            agenticRuntimeEvidenceJson: safeAgenticEvidenceJson(evidence),
             agenticRuntimeEvidenceSource: evidence?.evidenceSource || 'none',
             agenticRuntimeEvidenceStatus: evidenceStatus,
             agenticRuntimeFindingKinds: findingKinds.length > 0 ? findingKinds.join(', ') : 'none',

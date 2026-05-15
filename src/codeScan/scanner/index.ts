@@ -8,7 +8,13 @@ import path from 'path';
 import type { ChildProcess } from 'child_process';
 
 import cliState from '../../cliState';
-import logger, { getLogLevel } from '../../logger';
+import logger, { getLogLevel, setLogLevel } from '../../logger';
+import {
+  CodeScanOutputFormat,
+  CodeScanOutputFormatSchema,
+  type PullRequestContext,
+  type ScanResponse,
+} from '../../types/codeScan';
 import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import {
   loadConfigOrDefault,
@@ -27,7 +33,6 @@ import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
 
-import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
 import type { Config } from '../config/schema';
 import type { SocketIoMcpBridge } from '../mcp/transport';
 
@@ -43,11 +48,25 @@ export interface ScanOptions {
   base?: string;
   compare?: string;
   json?: boolean;
+  format?: string;
   githubPr?: string;
   minimumSeverity?: string;
   minSeverity?: string;
   guidance?: string;
   guidanceFile?: string;
+}
+
+export function resolveOutputFormat(options: ScanOptions): CodeScanOutputFormat {
+  const parsed = CodeScanOutputFormatSchema.safeParse(options.format ?? CodeScanOutputFormat.TEXT);
+  if (!parsed.success) {
+    throw new Error(
+      `Invalid output format "${options.format}". Expected one of: text, json, sarif`,
+    );
+  }
+  if (options.json && parsed.data === CodeScanOutputFormat.SARIF) {
+    throw new Error('Cannot combine --json with --format sarif');
+  }
+  return options.json ? CodeScanOutputFormat.JSON : parsed.data;
 }
 
 /**
@@ -73,6 +92,27 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
   const startTime = Date.now();
 
+  let outputFormat: CodeScanOutputFormat;
+  try {
+    outputFormat = resolveOutputFormat(options);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error(`Scan failed: ${errorMessage}`);
+    cliState.postActionCallback = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      process.exitCode = 1;
+    };
+    return;
+  }
+
+  // Structured modes reserve stdout for the payload. src/entrypoint.ts already pre-sets
+  // LOG_LEVEL=error before the logger module is imported (so any module-init logs are
+  // already suppressed); we re-apply here for callers that bypass the CLI entrypoint
+  // (e.g., library consumers calling executeScan directly).
+  if (outputFormat !== CodeScanOutputFormat.TEXT) {
+    setLogLevel('error');
+  }
+
   // Load and merge configuration
   const baseConfig: Config = loadConfigOrDefault(options.config);
   const config = mergeConfigWithOptions(baseConfig, options);
@@ -83,8 +123,8 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   // Resolve repository path
   const absoluteRepoPath = path.resolve(repoPath);
 
-  // Display startup messages (skip in JSON mode to keep stdout clean for parsing)
-  if (!options.json) {
+  // Display startup messages (skipped for non-text formats to keep stdout clean for parsing)
+  if (outputFormat === CodeScanOutputFormat.TEXT) {
     logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
     logger.info(`  Minimum severity: ${config.minimumSeverity}`);
     if (config.diffsOnly) {
@@ -111,10 +151,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
   registerCleanupHandlers(cleanupRefs);
 
-  // Initialize spinner (hide in JSON mode, but still show logger.info status)
+  // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
   const isWebUI = Boolean(cliState.webUI);
   const spinner = createSpinner({
-    json: options.json || false,
+    format: outputFormat,
     isWebUI,
     logLevel: getLogLevel(),
   });
@@ -212,10 +252,13 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     if (includedFiles.length === 0) {
       const msg = 'No files to scan';
 
-      // In JSON mode, output a proper JSON response for programmatic consumption
-      if (options.json) {
+      // For non-text formats (JSON, SARIF), emit a structured empty response for programmatic consumption
+      if (outputFormat !== CodeScanOutputFormat.TEXT) {
         const response: ScanResponse = { success: true, comments: [], review: msg };
-        logger.info(JSON.stringify(response, null, 2));
+        displayScanResults(response, Date.now() - startTime, {
+          format: outputFormat,
+          githubPr: options.githubPr,
+        });
       } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
@@ -278,7 +321,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     // Display results
     displayScanResults(scanResponse, duration, {
-      json: options.json || false,
+      format: outputFormat,
       githubPr: options.githubPr,
     });
   } catch (error) {

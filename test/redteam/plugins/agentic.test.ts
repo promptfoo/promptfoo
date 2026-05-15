@@ -6,7 +6,11 @@ import { AGENTIC_RUNTIME_PLUGINS } from '../../../src/redteam/constants/agentic'
 import { getGraderById } from '../../../src/redteam/graders';
 import { Plugins } from '../../../src/redteam/plugins';
 import { AgenticRuntimePlugin } from '../../../src/redteam/plugins/agentic';
-import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import {
+  getRemoteGenerationUrl,
+  getRemoteHealthUrl,
+  neverGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
 import { checkRemoteHealth } from '../../../src/util/apiHealth';
 
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
@@ -20,16 +24,13 @@ vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => ({
 }));
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
   ...(await importOriginal()),
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://remote.example.test/api/v1/task'),
-  getRemoteHealthUrl: vi.fn().mockReturnValue('https://remote.example.test/health'),
-  neverGenerateRemote: vi.fn().mockReturnValue(false),
+  getRemoteGenerationUrl: vi.fn(),
+  getRemoteHealthUrl: vi.fn(),
+  neverGenerateRemote: vi.fn(),
 }));
 vi.mock('../../../src/util/apiHealth', async (importOriginal) => ({
   ...(await importOriginal()),
-  checkRemoteHealth: vi.fn().mockResolvedValue({
-    message: 'API is healthy',
-    status: 'OK',
-  }),
+  checkRemoteHealth: vi.fn(),
 }));
 
 const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContext => ({
@@ -125,7 +126,7 @@ describe('Agentic redteam plugins', () => {
   } as unknown as ApiProvider;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.mocked(matchesLlmRubric).mockImplementation(async (rubric) => {
       const rubricText = typeof rubric === 'string' ? rubric : JSON.stringify(rubric);
       const pluginId = rubricField(rubricText, 'Plugin under test');
@@ -153,6 +154,8 @@ describe('Agentic redteam plugins', () => {
         metadata: findingKind ? { agenticGraderFindingKind: findingKind } : {},
       };
     });
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('https://remote.example.test/api/v1/task');
+    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://remote.example.test/health');
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(checkRemoteHealth).mockResolvedValue({
       message: 'API is healthy',
@@ -685,6 +688,58 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.evidenceSource).toBe('provider');
   });
 
+  it('does not let generic Codex trace spans mask provider Agentic findings', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const providerEvidence = {
+      findings: [
+        {
+          pluginId,
+          kind: 'approval-continuity',
+        },
+      ],
+      mode: 'vulnerable',
+      pluginId,
+    };
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without trusted evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext(providerEvidence),
+        traceData: {
+          evaluationId: 'eval-generic-codex-otel',
+          testCaseId: 'case-generic-codex-otel',
+          traceId: '56565656565656565656565656565656',
+          spans: [
+            {
+              attributes: {
+                'codex.item.type': 'command_execution',
+                'promptfoo.provider.id': 'openai:codex-sdk',
+              },
+              name: 'codex command without agentic finding',
+              spanId: 'span-codex-generic',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('provider');
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+  });
+
   it('does not let unrelated Agentic trace findings mask provider Agentic findings', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
@@ -945,6 +1000,9 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.pass).toBe(false);
     expect(result.grade.metadata?.evidenceSource).toBe('otel');
     expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    const rubric = String(vi.mocked(matchesLlmRubric).mock.calls.at(-1)?.[0] ?? '');
+    expect(rubric).not.toContain('"refund_admin_token":"secret"');
+    expect(rubric).toContain('[REDACTED]');
   });
 
   it('grades agent-as-tool-boundary failures from Codex raw nested-agent tool output', async () => {
