@@ -1,7 +1,9 @@
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
-import { getUserEmail } from '../../src/globalConfig/accounts';
+import { updateSignalFile } from '../../src/database/signal';
+import { spansTable, tracesTable } from '../../src/database/tables';
+import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
   buildSafeJsonPath,
@@ -10,6 +12,7 @@ import Eval, {
   escapeJsonPathKey,
   getEvalSummaries,
 } from '../../src/models/eval';
+import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
 
 import type { Prompt } from '../../src/types/index';
@@ -19,6 +22,15 @@ vi.mock('../../src/globalConfig/accounts', async () => {
   return {
     ...actual,
     getUserEmail: vi.fn(),
+    getAuthor: vi.fn(),
+  };
+});
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
   };
 });
 
@@ -28,15 +40,64 @@ describe('evaluator', () => {
   });
 
   beforeEach(async () => {
+    vi.mocked(getAuthor).mockReset();
+    vi.mocked(updateSignalFile).mockClear();
+
     // Clear all tables before each test
     const db = getDb();
     // Delete related tables first
+    await db.run('DELETE FROM spans');
+    await db.run('DELETE FROM traces');
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
     await db.run('DELETE FROM evals_to_tags');
     // Then delete from main table
     await db.run('DELETE FROM evals');
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  describe('addPrompts', () => {
+    it('should notify watchers when persisted prompt metadata changes', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      vi.mocked(updateSignalFile).mockClear();
+
+      await eval_.addPrompts([
+        {
+          raw: 'Summarize the latest changelog entry',
+          label: 'Summarize the latest changelog entry',
+          provider: 'test-provider',
+        },
+      ]);
+
+      expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
+
+      const reloaded = await Eval.findById(eval_.id);
+      expect(reloaded?.prompts).toEqual([
+        expect.objectContaining({
+          raw: 'Summarize the latest changelog entry',
+          label: 'Summarize the latest changelog entry',
+          provider: 'test-provider',
+        }),
+      ]);
+    });
+
+    it('should not notify watchers for in-memory evals', async () => {
+      const eval_ = new Eval({});
+
+      await eval_.addPrompts([
+        {
+          raw: 'In-memory prompt',
+          label: 'In-memory prompt',
+          provider: 'test-provider',
+        },
+      ]);
+
+      expect(updateSignalFile).not.toHaveBeenCalled();
+    });
   });
 
   describe('summaryResults', () => {
@@ -171,31 +232,88 @@ describe('evaluator', () => {
       const eval_2 = await Eval.findById(eval1.id);
       expect(eval_2).toBeUndefined();
     });
+
+    it('should delete traces and spans for an evaluation', async () => {
+      const eval1 = await EvalFactory.create();
+      const traceStore = new TraceStore();
+      await traceStore.createTrace({
+        traceId: 'trace-to-delete',
+        evaluationId: eval1.id,
+        testCaseId: 'test-case-id',
+      });
+      await traceStore.addSpans('trace-to-delete', [
+        {
+          spanId: 'span-to-delete',
+          name: 'test-span',
+          startTime: 1,
+        },
+      ]);
+
+      await eval1.delete();
+
+      const db = getDb();
+      expect(await Eval.findById(eval1.id)).toBeUndefined();
+      expect(db.select().from(tracesTable).all()).toHaveLength(0);
+      expect(db.select().from(spansTable).all()).toHaveLength(0);
+    });
   });
 
   describe('create', () => {
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
+      // Spy must not be called — opts.author is explicit, so getAuthor() is bypassed.
+      vi.mocked(getAuthor).mockReturnValue('should-not-be-used@example.com');
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts, { author: providedAuthor });
       expect(evaluation.author).toBe(providedAuthor);
+      expect(vi.mocked(getAuthor)).not.toHaveBeenCalled();
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(providedAuthor);
     });
 
-    it('should use default author from getUserEmail when not provided', async () => {
-      const mockEmail = 'default@example.com';
-      vi.mocked(getUserEmail).mockReturnValue(mockEmail);
+    it('should honor an explicit author even when the current user is cloud-authed (import regression)', async () => {
+      // Simulate cloud-authed user with a different identity than the imported eval.
+      vi.mocked(getAuthor).mockReturnValue('current-cloud-user@example.com');
+      const config = { description: 'Imported eval' };
+      const renderedPrompts: Prompt[] = [
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
+      ];
+      const evaluation = await Eval.create(config, renderedPrompts, {
+        author: 'original-author@example.com',
+      });
+      expect(evaluation.author).toBe('original-author@example.com');
+      expect(vi.mocked(getAuthor)).not.toHaveBeenCalled();
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.author).toBe('original-author@example.com');
+    });
+
+    it('should persist null when author is explicitly null', async () => {
+      vi.mocked(getAuthor).mockReturnValue('should-not-be-used@example.com');
+      const config = { description: 'Test eval' };
+      const renderedPrompts: Prompt[] = [
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
+      ];
+      const evaluation = await Eval.create(config, renderedPrompts, { author: null });
+      expect(evaluation.author).toBeNull();
+      expect(vi.mocked(getAuthor)).not.toHaveBeenCalled();
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.author).toBeNull();
+    });
+
+    it('should fall back to getAuthor when author is not provided', async () => {
+      const mockAuthor = 'default@example.com';
+      vi.mocked(getAuthor).mockReturnValue(mockAuthor);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts);
+      expect(evaluation.author).toBe(mockAuthor);
       const persistedEval = await Eval.findById(evaluation.id);
-      expect(persistedEval?.author).toBe(mockEmail);
+      expect(persistedEval?.author).toBe(mockAuthor);
     });
   });
 
@@ -301,6 +419,141 @@ describe('evaluator', () => {
       const stats = persistedEval?.getStats();
       expect(stats?.durationMs).toBe(12345);
     });
+
+    it('should extract generationDurationMs and evaluationDurationMs from database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ durationMs: 15000, generationDurationMs: 10000, evaluationDurationMs: 5000 })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.generationDurationMs).toBe(10000);
+      expect(persistedEval?.evaluationDurationMs).toBe(5000);
+      expect(persistedEval?.durationMs).toBe(15000);
+    });
+
+    it('should handle missing generationDurationMs and evaluationDurationMs in database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ durationMs: 5000 })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.generationDurationMs).toBeUndefined();
+      expect(persistedEval?.evaluationDurationMs).toBeUndefined();
+      expect(persistedEval?.durationMs).toBe(5000);
+    });
+
+    it('should handle invalid generationDurationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ durationMs: 5000, generationDurationMs: -100, evaluationDurationMs: 'bad' })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.generationDurationMs).toBeUndefined();
+      expect(persistedEval?.evaluationDurationMs).toBeUndefined();
+      expect(persistedEval?.durationMs).toBe(5000);
+    });
+
+    it('should recompute durationMs from split fields when durationMs is missing', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ generationDurationMs: 10000, evaluationDurationMs: 5000 })}' WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.generationDurationMs).toBe(10000);
+      expect(persistedEval?.evaluationDurationMs).toBe(5000);
+      expect(persistedEval?.durationMs).toBe(15000);
+    });
+  });
+
+  describe('save with duration fields', () => {
+    it('should persist all three duration fields in results JSON', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      eval1.setDurationMs(5000);
+      eval1.setGenerationDurationMs(10000);
+      await eval1.save();
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.durationMs).toBe(15000);
+      expect(persistedEval?.generationDurationMs).toBe(10000);
+      expect(persistedEval?.evaluationDurationMs).toBe(5000);
+    });
+
+    it('should preserve existing keys in results JSON when saving duration fields', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Seed the results column with an extra key (simulating future fields or other data)
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = '${JSON.stringify({ someOtherKey: 'preserve-me' })}' WHERE id = '${eval1.id}'`,
+      );
+
+      eval1.setDurationMs(5000);
+      await eval1.save();
+
+      // Verify duration fields were written AND the extra key survived
+      const row = await db.get<{ results: string }>(
+        `SELECT results FROM evals WHERE id = '${eval1.id}'`,
+      );
+      const results = JSON.parse(row!.results);
+      expect(results.someOtherKey).toBe('preserve-me');
+      expect(results.durationMs).toBe(5000);
+      expect(results.evaluationDurationMs).toBe(5000);
+    });
+
+    it('should recover from malformed JSON in results column', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Corrupt the results column with invalid JSON
+      const db = getDb();
+      await db.run(`UPDATE evals SET results = 'not-valid-json' WHERE id = '${eval1.id}'`);
+
+      eval1.setDurationMs(5000);
+      await eval1.save();
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.durationMs).toBe(5000);
+      expect(persistedEval?.evaluationDurationMs).toBe(5000);
+    });
+
+    it('should recover from non-object JSON in results column', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Set results to a valid JSON array (non-object)
+      const db = getDb();
+      await db.run(`UPDATE evals SET results = '[]' WHERE id = '${eval1.id}'`);
+
+      eval1.setDurationMs(3000);
+      await eval1.save();
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.durationMs).toBe(3000);
+      expect(persistedEval?.evaluationDurationMs).toBe(3000);
+    });
+
+    it('should persist only evaluationDurationMs and durationMs for non-redteam evals', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      eval1.setDurationMs(5000);
+      await eval1.save();
+
+      const persistedEval = await Eval.findById(eval1.id);
+      expect(persistedEval?.durationMs).toBe(5000);
+      expect(persistedEval?.evaluationDurationMs).toBe(5000);
+      expect(persistedEval?.generationDurationMs).toBeUndefined();
+    });
   });
 
   describe('getStats', () => {
@@ -356,6 +609,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       });
     });
@@ -388,6 +643,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       });
     });
@@ -438,23 +695,28 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       });
     });
 
-    it('should include durationMs when set', () => {
+    it('should include durationMs and evaluationDurationMs when setDurationMs is called', () => {
       const eval1 = new Eval({});
       eval1.setDurationMs(12345);
 
       const stats = eval1.getStats();
       expect(stats.durationMs).toBe(12345);
+      expect(stats.evaluationDurationMs).toBe(12345);
     });
 
-    it('should return undefined durationMs when not set', () => {
+    it('should return undefined for all duration fields when not set', () => {
       const eval1 = new Eval({});
 
       const stats = eval1.getStats();
       expect(stats.durationMs).toBeUndefined();
+      expect(stats.generationDurationMs).toBeUndefined();
+      expect(stats.evaluationDurationMs).toBeUndefined();
     });
 
     it('should preserve durationMs when passed via constructor', () => {
@@ -462,6 +724,62 @@ describe('evaluator', () => {
 
       const stats = eval1.getStats();
       expect(stats.durationMs).toBe(54321);
+    });
+
+    it('should compute total from generation + evaluation durations', () => {
+      const eval1 = new Eval({});
+      eval1.setDurationMs(5000); // evaluation phase
+      eval1.setGenerationDurationMs(10000); // generation phase
+
+      const stats = eval1.getStats();
+      expect(stats.generationDurationMs).toBe(10000);
+      expect(stats.evaluationDurationMs).toBe(5000);
+      expect(stats.durationMs).toBe(15000);
+    });
+
+    it('should handle setGenerationDurationMs called before setDurationMs', () => {
+      const eval1 = new Eval({});
+      eval1.setGenerationDurationMs(10000);
+
+      // durationMs should reflect generation even before evaluation is set
+      expect(eval1.generationDurationMs).toBe(10000);
+      expect(eval1.evaluationDurationMs).toBeUndefined();
+      expect(eval1.durationMs).toBe(10000);
+
+      eval1.setDurationMs(5000);
+      expect(eval1.durationMs).toBe(15000);
+    });
+
+    it('should ignore invalid duration values', () => {
+      const eval1 = new Eval({});
+      eval1.setDurationMs(5000);
+
+      eval1.setDurationMs(NaN);
+      expect(eval1.evaluationDurationMs).toBe(5000);
+
+      eval1.setDurationMs(-1);
+      expect(eval1.evaluationDurationMs).toBe(5000);
+
+      eval1.setDurationMs(Infinity);
+      expect(eval1.evaluationDurationMs).toBe(5000);
+
+      eval1.setGenerationDurationMs(NaN);
+      expect(eval1.generationDurationMs).toBeUndefined();
+
+      eval1.setGenerationDurationMs(-100);
+      expect(eval1.generationDurationMs).toBeUndefined();
+    });
+
+    it('should include generationDurationMs and evaluationDurationMs in stats', () => {
+      const eval1 = new Eval(
+        {},
+        { durationMs: 15000, generationDurationMs: 10000, evaluationDurationMs: 5000 },
+      );
+
+      const stats = eval1.getStats();
+      expect(stats.generationDurationMs).toBe(10000);
+      expect(stats.evaluationDurationMs).toBe(5000);
+      expect(stats.durationMs).toBe(15000);
     });
   });
 

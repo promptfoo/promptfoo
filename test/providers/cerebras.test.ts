@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
 import { loadApiProvider } from '../../src/providers/index';
+import { mockProcessEnv } from '../util/utils';
 import type { z } from 'zod';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -11,13 +12,14 @@ type ProviderEnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
 
 describe('Cerebras provider', () => {
   let provider: ApiProvider;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
-    process.env.CEREBRAS_API_KEY = 'test-key';
+    restoreEnv = mockProcessEnv({ CEREBRAS_API_KEY: 'test-key' });
   });
 
   afterEach(() => {
-    delete process.env.CEREBRAS_API_KEY;
+    restoreEnv();
   });
 
   describe('createCerebrasProvider', () => {

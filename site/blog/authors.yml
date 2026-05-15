@@ -24,13 +24,19 @@ dane:
 
 ian:
   name: Ian Webster
-  title: Engineer & OWASP Gen AI Red Teaming Contributor
+  title: Co-founder & CEO
   url: https://github.com/typpo
   image_url: /img/team/ian.jpeg
 
+konstantine:
+  name: Konstantine Kahadze
+  title: Developer Relations Engineer
+  url: https://github.com/kkahadze
+  image_url: /img/team/konstantine.jpg
+
 michael:
   name: Michael D'Angelo
-  title: CTO & Co-founder
+  title: Co-founder & CTO
   url: https://github.com/mldangelo
   image_url: /img/team/michael.jpeg
 

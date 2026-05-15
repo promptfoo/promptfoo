@@ -1,5 +1,5 @@
 ---
-sidebar_label: OpenAI vs Azure benchmark
+sidebar_label: OpenAI vs Azure Benchmark
 description: Compare OpenAI vs Azure OpenAI performance across speed, cost, and model updates with automated benchmarks to optimize your LLM infrastructure decisions
 ---
 
@@ -36,13 +36,14 @@ AZURE_API_KEY='...'
 
 ## Step 1: Set up the models
 
-Create a new directory for your comparison project and initialize it:
+Initialize the example project:
 
 ```sh
-npx promptfoo@latest init openai-azure-comparison
+npx promptfoo@latest init --example openai-azure-comparison
+cd openai-azure-comparison
 ```
 
-Edit your `promptfooconfig.yaml` to include both OpenAI and Azure OpenAI as providers. In this example, we'll compare the same model on both services.
+Open the `promptfooconfig.yaml` and configure both OpenAI and Azure OpenAI as providers. In this example, we'll compare the same model on both services.
 
 ```yaml
 providers:
@@ -53,23 +54,6 @@ providers:
 ```
 
 Make sure to replace the above with the actual host and deployment name for your Azure OpenAI instances.
-
-### Optional: configure model usage
-
-For each provider, you may configure additional parameters such as `temperature` and `max_tokens`:
-
-```yaml
-providers:
-  - id: openai:chat:gpt-5-mini
-    config:
-      temperature: 0
-      max_tokens: 128
-  - id: azure:chat:my-gpt-5-mini-deployment
-    config:
-      apiHost: your_azure_openai_host
-      temperature: 0
-      max_tokens: 128
-```
 
 ## Step 2: Create prompts and test cases
 
@@ -98,7 +82,7 @@ npx promptfoo@latest eval --no-cache
 
 This will run the test cases against both models and output the results.
 
-We've added the `--no-cache` directive because we care about timings (in order to see which provider is faster), so we don't want any
+We've added the `--no-cache` directive because we care about timings (in order to see which provider is faster), so we don't want any cached results.
 
 ## Step 4: Review results and analyze
 
@@ -116,7 +100,7 @@ Once you set up your own test cases, you can compare the results to ensure that 
 
 **Output accuracy & consistency**
 
-Interestingly, the outputs differ despite the speed and temperature being set to 0.
+Interestingly, the outputs may differ between providers even with identical configurations.
 
 The comparison view makes it easy to ensure that the accuracy and relevance of the responses are consistent.
 

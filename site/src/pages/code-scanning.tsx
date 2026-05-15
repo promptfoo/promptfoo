@@ -207,7 +207,7 @@ function VulnerabilityTypesSection() {
     },
     {
       severity: 'high',
-      name: 'Insecure Output Handling',
+      name: 'Improper Output Handling',
       description: 'LLM outputs used in dangerous contexts like SQL queries or shell commands.',
     },
     {

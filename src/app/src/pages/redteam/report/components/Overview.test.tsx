@@ -2,7 +2,8 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Overview from './Overview';
 import { useReportStore } from './store';
@@ -28,8 +29,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -73,12 +73,21 @@ describe('Overview', () => {
     });
   });
 
+  it('uses a breakpoint-aware severity card grid', () => {
+    const { container } = renderOverview({}, []);
+
+    expect(container.firstElementChild).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-2',
+      'lg:grid-cols-5',
+    );
+  });
+
   it('should display the correct issue counts for each severity when pass rates are below the threshold', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.8,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -113,8 +122,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.5,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -187,8 +195,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.5,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -210,7 +217,8 @@ describe('Overview', () => {
     expectSeverityCardToHaveCount(Severity.Low, '0');
   });
 
-  it('should scroll to vulnerabilities section when different severity cards are clicked in succession', () => {
+  it('should scroll to vulnerabilities section when different severity cards are clicked in succession', async () => {
+    const user = userEvent.setup();
     const categoryStats = {
       plugin1: { pass: 0, total: 1 },
       plugin2: { pass: 0, total: 1 },
@@ -233,25 +241,24 @@ describe('Overview', () => {
     const highCard = getSeverityCard(Severity.High);
     const mediumCard = getSeverityCard(Severity.Medium);
 
-    fireEvent.click(criticalCard!);
+    await user.click(criticalCard!);
     expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
 
-    fireEvent.click(highCard!);
+    await user.click(highCard!);
     expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
 
-    fireEvent.click(mediumCard!);
+    await user.click(mediumCard!);
     expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
 
     // Should be called 3 times (once per click)
     expect(mockElement.scrollIntoView).toHaveBeenCalledTimes(3);
   });
 
-  it('should scroll to vulnerabilities section when severity card is clicked and showPercentagesOnRiskCards is true', () => {
+  it('should scroll to vulnerabilities section when severity card is clicked', async () => {
+    const user = userEvent.setup();
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.8,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: true,
-      setShowPercentagesOnRiskCards: vi.fn(),
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -271,13 +278,14 @@ describe('Overview', () => {
 
     // Find and click the Critical severity card
     const criticalCard = getSeverityCard(Severity.Critical);
-    fireEvent.click(criticalCard!);
+    await user.click(criticalCard!);
 
     // Check that scrollIntoView was called
     expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
   });
 
-  it('should handle click on severity cards with null ref gracefully', () => {
+  it('should handle click on severity cards with null ref gracefully', async () => {
+    const user = userEvent.setup();
     const categoryStats = {
       plugin1: { pass: 0, total: 1 },
     };
@@ -291,12 +299,14 @@ describe('Overview', () => {
 
     // Find and click the High severity card
     const highCard = getSeverityCard(Severity.High);
+    expect(highCard).toBeInTheDocument();
 
     // This should not throw an error even with null ref
-    expect(() => fireEvent.click(highCard!)).not.toThrow();
+    await user.click(highCard!);
   });
 
-  it('should pass navigateToIssues callback to SeverityCard and trigger scroll on click', () => {
+  it('should pass navigateToIssues callback to SeverityCard and trigger scroll on click', async () => {
+    const user = userEvent.setup();
     const categoryStats = {
       plugin1: { pass: 0, total: 1 },
     };
@@ -311,7 +321,7 @@ describe('Overview', () => {
 
     const criticalCard = getSeverityCard(Severity.Critical);
 
-    fireEvent.click(criticalCard!);
+    await user.click(criticalCard!);
 
     expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
   });
@@ -320,8 +330,7 @@ describe('Overview', () => {
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: vi.fn(),
     });
@@ -345,13 +354,13 @@ describe('Overview', () => {
     });
   });
 
-  it('should set severity filter when a severity card is clicked', () => {
+  it('should set severity filter when a severity card is clicked', async () => {
+    const user = userEvent.setup();
     const mockSetSeverityFilter = vi.fn();
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: null,
       setSeverityFilter: mockSetSeverityFilter,
     });
@@ -370,20 +379,20 @@ describe('Overview', () => {
 
     const criticalCard = getSeverityCard(Severity.Critical);
 
-    fireEvent.click(criticalCard!);
+    await user.click(criticalCard!);
 
     // Should set the filter to Critical
     expect(mockSetSeverityFilter).toHaveBeenCalledWith(Severity.Critical);
     expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
   });
 
-  it('should clear severity filter when clicking the same severity card twice', () => {
+  it('should clear severity filter when clicking the same severity card twice', async () => {
+    const user = userEvent.setup();
     const mockSetSeverityFilter = vi.fn();
     mockedUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: vi.fn(),
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: vi.fn(),
+
       severityFilter: Severity.Critical,
       setSeverityFilter: mockSetSeverityFilter,
     });
@@ -402,7 +411,7 @@ describe('Overview', () => {
 
     const criticalCard = getSeverityCard(Severity.Critical);
 
-    fireEvent.click(criticalCard!);
+    await user.click(criticalCard!);
 
     // Should clear the filter (set to null) since it was already Critical
     expect(mockSetSeverityFilter).toHaveBeenCalledWith(null);

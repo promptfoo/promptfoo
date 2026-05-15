@@ -123,7 +123,7 @@ const DrawerContent = ({
         }
       }
     } catch {
-      console.debug('Failed to parse prompt as JSON, using raw string');
+      // Raw prompt strings are valid display input.
     }
     return prompt;
   };
@@ -216,7 +216,7 @@ const DrawerContent = ({
               )}
               %
             </p>
-            <p className="text-sm text-muted-foreground">Success Rate</p>
+            <p className="text-sm text-muted-foreground">Attack Success Rate</p>
           </div>
         </div>
       </div>
@@ -231,10 +231,12 @@ const DrawerContent = ({
               <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                 Attack Success Rate
               </th>
-              <th className="px-4 py-3 text-right font-medium text-muted-foreground">
+              <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground sm:table-cell">
                 # Flagged Attempts
               </th>
-              <th className="px-4 py-3 text-right font-medium text-muted-foreground"># Attempts</th>
+              <th className="hidden px-4 py-3 text-right font-medium text-muted-foreground sm:table-cell">
+                # Attempts
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -243,13 +245,20 @@ const DrawerContent = ({
               return (
                 <tr key={stat.plugin} className="hover:bg-muted/30">
                   <td className="px-4 py-3 font-medium">
-                    {customPolicy?.name ??
-                      (displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
-                        stat.plugin)}
+                    <div>
+                      {customPolicy?.name ??
+                        (displayNameOverrides[stat.plugin as keyof typeof displayNameOverrides] ||
+                          stat.plugin)}
+                    </div>
+                    <div className="mt-1 text-xs font-normal text-muted-foreground sm:hidden">
+                      {stat.total - stat.successfulAttacks} flagged / {stat.total} attempts
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right">{formatASRForDisplay(stat.asr)}%</td>
-                  <td className="px-4 py-3 text-right">{stat.total - stat.successfulAttacks}</td>
-                  <td className="px-4 py-3 text-right">{stat.total}</td>
+                  <td className="hidden px-4 py-3 text-right sm:table-cell">
+                    {stat.total - stat.successfulAttacks}
+                  </td>
+                  <td className="hidden px-4 py-3 text-right sm:table-cell">{stat.total}</td>
                 </tr>
               );
             })}
@@ -259,11 +268,17 @@ const DrawerContent = ({
 
       {/* Tabs */}
       <Tabs value={tabValue} onValueChange={onTabChange} className="mt-4">
-        <TabsList className="w-full">
-          <TabsTrigger value="flagged" className="flex-1">
+        <TabsList className="h-auto w-full">
+          <TabsTrigger
+            value="flagged"
+            className="min-h-10 flex-1 whitespace-normal px-2 text-center text-xs leading-tight sm:text-sm"
+          >
             Flagged Attempts ({selectedStrategyStats.pass})
           </TabsTrigger>
-          <TabsTrigger value="successful" className="flex-1">
+          <TabsTrigger
+            value="successful"
+            className="min-h-10 flex-1 whitespace-normal px-2 text-center text-xs leading-tight sm:text-sm"
+          >
             Successful Attacks ({selectedStrategyStats.failCount})
           </TabsTrigger>
         </TabsList>
@@ -338,7 +353,7 @@ const StrategySheet = ({
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         side="right"
-        className="flex w-[750px] flex-col p-0 sm:max-w-[750px]"
+        className="flex w-full flex-col p-0 sm:w-[750px] sm:max-w-[750px]"
         aria-describedby={undefined}
       >
         <SheetTitle className="sr-only">
@@ -429,11 +444,11 @@ const StrategyStats = ({
       <Card
         role="region"
         aria-label="Attack Methods Statistics"
-        className="break-inside-avoid print:break-inside-avoid print:break-after-page"
+        className="break-inside-avoid print:break-inside-avoid"
       >
         <CardContent className="p-6">
           <h2 className="mb-4 text-xl font-semibold">Attack Methods</h2>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
             {strategies.map(([strategy, { total, failCount }]) => {
               const asr = calculateAttackSuccessRate(total, failCount);
               return (
@@ -463,7 +478,7 @@ const StrategyStats = ({
                   </p>
                   {/* Progress bar */}
                   <div className="mb-2 flex items-center">
-                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
+                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600 print:bg-zinc-300">
                       <div
                         className={cn(
                           'h-full rounded-full transition-all',

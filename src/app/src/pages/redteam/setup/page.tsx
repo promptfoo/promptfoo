@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
-import PylonChat from '@app/components/PylonChat';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -11,6 +10,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
@@ -37,7 +42,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { customTargetOption, predefinedTargets } from './components/constants';
+import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
@@ -53,7 +58,7 @@ import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
+import type { Config } from './types';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };
@@ -166,21 +171,17 @@ export default function RedTeamSetupPage() {
   };
 
   const handleNext = () => {
-    setValue((prevValue) => {
-      const newValue = prevValue + 1;
-      updateHash(newValue);
-      window.scrollTo({ top: 0 });
-      return newValue;
-    });
+    const newValue = value + 1;
+    setValue(newValue);
+    updateHash(newValue);
+    window.scrollTo({ top: 0 });
   };
 
   const handleBack = () => {
-    setValue((prevValue) => {
-      const newValue = prevValue - 1;
-      updateHash(newValue);
-      window.scrollTo({ top: 0 });
-      return newValue;
-    });
+    const newValue = value - 1;
+    setValue(newValue);
+    updateHash(newValue);
+    window.scrollTo({ top: 0 });
   };
 
   const handleTabChange = (newValue: string) => {
@@ -330,7 +331,7 @@ export default function RedTeamSetupPage() {
 
       // Convert string targets to objects
       if (typeof target === 'string') {
-        const targetType = predefinedTargets.find((t: RedteamUITarget) => t.value === target);
+        const targetType = findPredefinedTarget(target);
 
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
@@ -341,7 +342,6 @@ export default function RedTeamSetupPage() {
       const hasAnyStatefulStrategies = strategies.some(
         (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
       );
-      console.log({ hasAnyStatefulStrategies, strategies });
       if (hasAnyStatefulStrategies) {
         if (typeof target === 'string') {
           target = { id: target, config: { stateful: true } };
@@ -428,12 +428,15 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  // Calculate active strategy count (excluding 'basic' with enabled: false)
+  // Calculate active strategy count shown in the sidebar.
+  // Exclude hidden basic strategy and explicitly disabled entries.
   const activeStrategyCount = useMemo(() => {
     return config.strategies.filter((strategy) => {
       const id = typeof strategy === 'string' ? strategy : strategy.id;
-      // Skip 'basic' strategy if it has enabled: false
-      if (id === 'basic' && typeof strategy === 'object' && strategy.config?.enabled === false) {
+      if (id === 'basic') {
+        return false;
+      }
+      if (typeof strategy === 'object' && strategy.config?.enabled === false) {
         return false;
       }
       return true;
@@ -458,10 +461,11 @@ export default function RedTeamSetupPage() {
       {/* Root container */}
       <div className="fixed flex w-full bg-white dark:bg-zinc-900">
         {/* Content wrapper */}
-        <div className="flex grow transition-[margin] duration-200">
+        <div className="flex min-w-0 grow flex-col transition-[margin] duration-200 md:flex-row">
           {/* Outer sidebar container */}
           <div
-            className="flex h-full flex-col border-r border-border"
+            data-testid="redteam-setup-sidebar"
+            className="hidden h-full flex-col border-r border-border md:flex"
             style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
           >
             {/* Inner sidebar (sticky) */}
@@ -568,7 +572,70 @@ export default function RedTeamSetupPage() {
           </div>
 
           {/* Tab content */}
-          <div className="relative flex grow flex-col transition-[margin] duration-200">
+          <div className="relative flex min-w-0 grow flex-col transition-[margin] duration-200">
+            <div
+              data-testid="redteam-setup-mobile-actions"
+              className="border-b border-border bg-card p-4 md:hidden"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="mb-1 truncate text-base font-medium text-foreground">
+                    {configName ? `Config: ${configName}` : 'New Configuration'}
+                  </p>
+                  {hasUnsavedChanges ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="flex items-center gap-1 text-sm text-amber-600 dark:text-amber-500">
+                        <span>●</span> Unsaved changes
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="min-w-0 border-amber-500 px-2 py-1 text-amber-600 hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-950/30"
+                        onClick={handleSaveConfig}
+                        disabled={!configName}
+                      >
+                        Save now
+                      </Button>
+                    </div>
+                  ) : (
+                    configDate && (
+                      <p className="text-sm text-muted-foreground">
+                        {formatDataGridDate(configDate)}
+                      </p>
+                    )
+                  )}
+                </div>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="shrink-0">
+                      <Settings className="mr-2 size-4" />
+                      Config
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setSaveDialogOpen(true)}>
+                      <Save className="mr-2 size-4" />
+                      Save Config
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        loadConfigs();
+                        setLoadDialogOpen(true);
+                      }}
+                    >
+                      <FolderOpen className="mr-2 size-4" />
+                      Load Config
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setResetDialogOpen(true)}>
+                      <RotateCcw className="mr-2 size-4" />
+                      Reset Config
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
             {value === 0 && (
               <ErrorBoundary name="Target Type Selection Page">
                 <TargetTypeSelection onNext={handleNext} />
@@ -609,7 +676,6 @@ export default function RedTeamSetupPage() {
         </div>
 
         {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
-        <PylonChat />
 
         {/* Save Dialog */}
         <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>
