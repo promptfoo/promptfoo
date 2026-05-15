@@ -3,6 +3,18 @@ import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/i
 import { handleRedteam } from '../../src/assertions/redteam';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import { checkExfilTracking } from '../../src/redteam/strategies/indirectWebPwn';
+
+vi.mock('../../src/redteam/strategies/indirectWebPwn', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../src/redteam/strategies/indirectWebPwn')
+  >('../../src/redteam/strategies/indirectWebPwn');
+
+  return {
+    ...actual,
+    checkExfilTracking: vi.fn(),
+  };
+});
 
 describe('handleRedteam', () => {
   afterEach(() => {
@@ -627,5 +639,148 @@ describe('handleRedteam', () => {
       },
     );
     expect(grade.pass).toBe(false);
+  });
+
+  it('rejects grading when no prompt can be derived', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:prompt-extraction' as const,
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'prompt-extraction',
+      },
+    };
+    const providerResponse = {
+      output: 'No prompt available',
+      metadata: {},
+    };
+
+    await expect(
+      handleRedteam({
+        assertion,
+        baseType: getAssertionBaseType(assertion),
+        assertionValueContext: {
+          prompt: '',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse,
+        },
+        cost: 0,
+        inverse: isAssertionInverse(assertion),
+        latencyMs: 0,
+        logProbs: [],
+        output: 'No prompt available',
+        outputString: 'No prompt available',
+        prompt: '',
+        provider: undefined,
+        providerResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      }),
+    ).rejects.toThrow('must have a prompt');
+  });
+
+  it('passes trace summaries and tracked exfiltration into the grader context', async () => {
+    const assertion = {
+      type: 'promptfoo:redteam:prompt-extraction' as const,
+    };
+    const trace = {
+      traceId: 'trace-1',
+      evaluationId: 'eval-trace',
+      testCaseId: 'case-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'fetch_url',
+            'tool.arguments': '{"url":"https://example.com"}',
+          },
+        },
+      ],
+    };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: {
+        pluginId: 'prompt-extraction',
+      },
+    };
+    const providerResponse = {
+      output: 'Visited the page',
+      metadata: {
+        webPageUuid: 'page-uuid',
+        webPageUrl: 'https://remote.test/dynamic-pages/eval-123/page-uuid',
+      },
+    };
+    const tracking = {
+      wasExfiltrated: true,
+      exfilCount: 2,
+      exfilRecords: [{ id: 'record-1' }],
+    };
+    vi.mocked(checkExfilTracking).mockResolvedValue(tracking);
+    const getResultSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: {
+        pass: false,
+        score: 0,
+        reason: 'Tracked exfiltration',
+      },
+      rubric: 'Tracked rubric',
+    });
+
+    await handleRedteam({
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'Open the embedded page',
+        vars: {},
+        test,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+        trace,
+      },
+      cost: 0,
+      inverse: isAssertionInverse(assertion),
+      latencyMs: 0,
+      logProbs: [],
+      output: 'Visited the page',
+      outputString: 'Visited the page',
+      prompt: 'Open the embedded page',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    });
+
+    expect(checkExfilTracking).toHaveBeenCalledWith('page-uuid', 'eval-123');
+    expect(getResultSpy).toHaveBeenCalledWith(
+      'Open the embedded page',
+      'Visited the page',
+      test,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      expect.objectContaining({
+        providerResponse,
+        traceData: trace,
+        traceSummary: expect.any(String),
+        wasExfiltrated: true,
+        exfilCount: 2,
+        exfilRecords: tracking.exfilRecords,
+      }),
+    );
   });
 });
