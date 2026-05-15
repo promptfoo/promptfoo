@@ -4,12 +4,10 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies BEFORE imports
-vi.mock('../../../src/index', () => ({
-  default: {
-    evaluate: vi.fn().mockResolvedValue({
-      toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
-    }),
-  },
+vi.mock('../../../src/node', () => ({
+  evaluateWithSource: vi.fn().mockResolvedValue({
+    toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
+  }),
 }));
 
 vi.mock('../../../src/util/sharing', () => ({
@@ -23,15 +21,15 @@ vi.mock('../../../src/models/eval', () => ({
 }));
 vi.mock('../../../src/globalConfig/accounts');
 
-import promptfoo from '../../../src/index';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
+import { evaluateWithSource } from '../../../src/node';
 import { createApp } from '../../../src/server/server';
 import { shouldShareResults } from '../../../src/util/sharing';
 
 const errorSpy = vi.spyOn(logger, 'error');
 const mockedEvalCreate = vi.mocked(Eval.create);
-const mockedEvaluate = vi.mocked(promptfoo.evaluate);
+const mockedEvaluateWithSource = vi.mocked(evaluateWithSource);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
 describe('Eval Routes - Sharing behavior', () => {
@@ -60,7 +58,7 @@ describe('Eval Routes - Sharing behavior', () => {
     vi.resetAllMocks();
     errorSpy.mockClear();
 
-    mockedEvaluate.mockResolvedValue({
+    mockedEvaluateWithSource.mockResolvedValue({
       toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
     } as any);
 
@@ -85,10 +83,10 @@ describe('Eval Routes - Sharing behavior', () => {
 
     // Wait for async evaluate call
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(true);
   });
 
@@ -98,10 +96,10 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob({ ...minimalTestSuite, sharing: false });
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(false);
   });
 
@@ -111,16 +109,16 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob(minimalTestSuite);
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(true);
     expect(mockedShouldShareResults).toHaveBeenCalledWith({});
   });
 
   it('should not log the raw job body on evaluation failure', async () => {
-    mockedEvaluate.mockRejectedValueOnce(new Error('boom'));
+    mockedEvaluateWithSource.mockRejectedValueOnce(new Error('boom'));
 
     const sensitiveBody = {
       prompts: ['test prompt'],
@@ -187,10 +185,10 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob(minimalTestSuite);
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(false);
   });
 
@@ -202,7 +200,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects local prompt file sources from web job creation', async () => {
@@ -213,7 +211,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects local prompt file sources that contain spaces', async () => {
@@ -224,7 +222,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects local prompt file sources with spaces before the first separator', async () => {
@@ -235,7 +233,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects local prompt file sources with single-character path prefixes', async () => {
@@ -246,7 +244,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects local prompt file sources with non-word path segments', async () => {
@@ -257,7 +255,24 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects local prompt file sources with punctuation-only path prefixes', async () => {
+    const underscoredResponse = await postJob({
+      ...minimalTestSuite,
+      prompts: ['_/runner'],
+    });
+    const dashedResponse = await postJob({
+      ...minimalTestSuite,
+      prompts: ['--/tool'],
+    });
+
+    expect(underscoredResponse.status).toBe(400);
+    expect(underscoredResponse.body.error).toContain('Server-side prompt sources are disabled');
+    expect(dashedResponse.status).toBe(400);
+    expect(dashedResponse.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects extensionless local paths with non-word path segments', async () => {
@@ -268,7 +283,18 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects extensionless local prompt file sources with spaces', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['my prompts/my runner'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects glob prompt sources that contain spaces', async () => {
@@ -279,7 +305,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects local prompt file names that contain spaces', async () => {
@@ -290,7 +316,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects local executable prompt files that contain spaces', async () => {
@@ -301,7 +327,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects local executable prompt files with non-word file names', async () => {
@@ -312,7 +338,18 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects URI-like prompt strings that resolve through the local prompt loader', async () => {
+    const response = await postJob({
+      ...minimalTestSuite,
+      prompts: ['foo://../../../../bin/sh'],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects colon-separated prompt file references', async () => {
@@ -323,7 +360,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects executable prompt files from web job creation', async () => {
@@ -334,7 +371,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
   it('rejects executable prompt files with generic file extensions', async () => {
@@ -345,29 +382,50 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
   });
 
-  it('rejects object prompt sources from web job creation', async () => {
+  it('rejects executable prompt files with non-letter extensions', async () => {
+    const numericExtensionResponse = await postJob({
+      ...minimalTestSuite,
+      prompts: ['payload.42'],
+    });
+    const mixedExtensionResponse = await postJob({
+      ...minimalTestSuite,
+      prompts: ['tool.1a'],
+    });
+
+    expect(numericExtensionResponse.status).toBe(400);
+    expect(numericExtensionResponse.body.error).toContain(
+      'Server-side prompt sources are disabled',
+    );
+    expect(mixedExtensionResponse.status).toBe(400);
+    expect(mixedExtensionResponse.body.error).toContain('Server-side prompt sources are disabled');
+    expect(mockedEvaluateWithSource).not.toHaveBeenCalled();
+  });
+
+  it('allows object prompt sources from web job creation', async () => {
     const response = await postJob({
       ...minimalTestSuite,
       prompts: [{ raw: 'exec:/bin/echo PROMPTFOO_EXEC_SENTINEL', label: 'unsafe' }],
     });
 
-    expect(response.status).toBe(400);
-    expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
   });
 
-  it('rejects object prompt id sources when raw is omitted', async () => {
+  it('allows object prompt id sources when raw is omitted', async () => {
     const response = await postJob({
       ...minimalTestSuite,
       prompts: [{ id: 'prompts/runner', label: 'unsafe' }],
     });
 
-    expect(response.status).toBe(400);
-    expect(response.body.error).toContain('Server-side prompt sources are disabled');
-    expect(mockedEvaluate).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
   });
 
   it('allows inline templated and JSON-like prompt strings', async () => {
@@ -386,7 +444,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(200);
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
   });
 
@@ -400,7 +458,7 @@ describe('Eval Routes - Sharing behavior', () => {
 
     expect(response.status).toBe(200);
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
   });
 });

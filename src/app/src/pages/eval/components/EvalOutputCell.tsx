@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { formatDuration } from '@app/utils/date';
 import {
   normalizeMediaText,
   resolveAudioSource,
@@ -723,6 +724,13 @@ function getCommentTextToDisplay(comment?: string): string | undefined {
   return comment?.startsWith('!highlight') ? comment.slice('!highlight'.length).trim() : comment;
 }
 
+// Module-scoped to avoid Intl.NumberFormat construction on every per-cell render.
+const WHOLE_NUMBER_FORMATTER = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+// Sub-millisecond precision for raw latency values (some providers report fractional ms).
+const LATENCY_PRECISION_FORMATTER = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 3,
+});
+
 function formatTokenUsageDisplay(
   tokenUsage:
     | EvaluateTableOutput['tokenUsage']
@@ -732,8 +740,8 @@ function formatTokenUsageDisplay(
   if (tokenUsage?.cached) {
     return (
       <span>
-        {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokenUsage.cached ?? 0)}{' '}
-        (cached)
+        {WHOLE_NUMBER_FORMATTER.format(tokenUsage.cached ?? 0)}
+        <span className="italic"> (cached)</span>
       </span>
     );
   }
@@ -742,18 +750,12 @@ function formatTokenUsageDisplay(
     return undefined;
   }
 
-  const promptTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-    tokenUsage.prompt ?? 0,
-  );
-  const completionTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-    tokenUsage.completion ?? 0,
-  );
-  const totalTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
-    tokenUsage.total ?? 0,
-  );
+  const promptTokens = WHOLE_NUMBER_FORMATTER.format(tokenUsage.prompt ?? 0);
+  const completionTokens = WHOLE_NUMBER_FORMATTER.format(tokenUsage.completion ?? 0);
+  const totalTokens = WHOLE_NUMBER_FORMATTER.format(tokenUsage.total ?? 0);
 
   if (tokenUsage.completionDetails?.reasoning) {
-    const reasoningTokens = Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(
+    const reasoningTokens = WHOLE_NUMBER_FORMATTER.format(
       tokenUsage.completionDetails.reasoning ?? 0,
     );
     const tooltipText = `${promptTokens} prompt tokens + ${completionTokens} completion tokens & ${reasoningTokens} reasoning tokens = ${totalTokens} total`;
@@ -773,30 +775,43 @@ function formatTokenUsageDisplay(
     );
   }
 
+  const plainTooltipText = `${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span>
+        <span aria-label={plainTooltipText}>
           {totalTokens}
           {(promptTokens !== '0' || completionTokens !== '0') &&
             ` (${promptTokens}+${completionTokens})`}
         </span>
       </TooltipTrigger>
-      <TooltipContent>{`${promptTokens} prompt tokens + ${completionTokens} completion tokens = ${totalTokens} total`}</TooltipContent>
+      <TooltipContent>{plainTooltipText}</TooltipContent>
     </Tooltip>
   );
 }
 
 function getLatencyDisplay(output: EvaluateTableOutput): React.ReactNode | undefined {
-  if (!output.latencyMs) {
+  if (output.latencyMs == null) {
     return undefined;
   }
 
+  const cached = !!output.response?.cached;
+  const exactMs = `${LATENCY_PRECISION_FORMATTER.format(output.latencyMs)} ms`;
+  // Fall back to the raw ms string when latency is non-finite/negative, so corrupt
+  // upstream data is still visible in the cell (matches the column-aggregate footer).
+  const formatted = formatDuration(output.latencyMs) ?? exactMs;
+  const tooltipContent = cached ? `${exactMs} (cached response)` : exactMs;
+
   return (
-    <span>
-      {Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(output.latencyMs)} ms
-      {output.response?.cached ? ' (cached)' : ''}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span aria-label={tooltipContent}>
+          {formatted}
+          {cached && <span className="italic"> (cached)</span>}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tooltipContent}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -815,9 +830,7 @@ function getTokensPerSecondDisplay({
   }
 
   const tokPerSec = tokenUsage.completion / (latencyMs / 1000);
-  return (
-    <span>{Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(tokPerSec)}</span>
-  );
+  return <span>{WHOLE_NUMBER_FORMATTER.format(tokPerSec)}</span>;
 }
 
 function getCostDisplay(cost?: number): React.ReactNode | undefined {

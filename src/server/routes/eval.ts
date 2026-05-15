@@ -3,11 +3,11 @@ import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
-import promptfoo from '../../index';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { VALID_FILE_EXTENSIONS } from '../../prompts/constants';
+import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
@@ -35,7 +35,7 @@ import type {
   PromptMetrics,
   ResultsFile,
   Vars,
-} from '../../index';
+} from '../../types/index';
 
 export const evalRouter = Router();
 
@@ -55,7 +55,7 @@ const SERVER_PROMPT_SOURCE_EXECUTABLE_EXTENSIONS = [
 ];
 
 function isPathLikeSegment(value: string): boolean {
-  return /^[\w.-]+$/.test(value) && /[a-z0-9]/i.test(value);
+  return value.length > 1 && /^[\w.-]+$/.test(value) && /[a-z0-9]/i.test(value);
 }
 
 function hasTrailingFileLikeExtension(value: string): boolean {
@@ -76,20 +76,22 @@ function hasPathLikeSeparator(value: string): boolean {
   }
 
   const firstSegment = value.slice(0, separatorIndex);
+  const afterSeparator = value.slice(separatorIndex + 1);
+  if (!firstSegment.trim() || !afterSeparator.trim()) {
+    return false;
+  }
+
   if (/\s/.test(firstSegment)) {
     const pathToken = firstSegment.trimEnd().split(/\s+/).at(-1) ?? '';
     if (!isPathLikeSegment(pathToken)) {
       return false;
     }
-
-    const afterSeparator = value.slice(separatorIndex + 1);
-    return (
-      Boolean(afterSeparator.trim()) &&
-      (!/\s/.test(afterSeparator) || hasTrailingFileLikeExtension(value))
-    );
+    return true;
   }
 
-  return /[a-z0-9]/i.test(firstSegment);
+  return (
+    !/\s/.test(afterSeparator) || firstSegment.length > 1 || hasTrailingFileLikeExtension(value)
+  );
 }
 
 function hasFileLikeExtension(value: string): boolean {
@@ -115,7 +117,9 @@ function hasFileLikeExtension(value: string): boolean {
     return true;
   }
 
-  return /^[\w.-]+$/.test(candidate) && /\.[a-z][a-z0-9]{0,7}$/i.test(candidate);
+  return (
+    candidate.charAt(candidate.length - 3) === '.' || candidate.charAt(candidate.length - 4) === '.'
+  );
 }
 
 function hasGlobLikeWildcard(value: string): boolean {
@@ -146,8 +150,12 @@ function isServerPromptSourceReference(prompt: string): boolean {
     return true;
   }
 
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+  if (/^(?:portkey|langfuse|helicone):\/\//i.test(trimmed)) {
     return false;
+  }
+
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) {
+    return true;
   }
 
   if (
@@ -168,29 +176,13 @@ function isServerPromptSourceReference(prompt: string): boolean {
   );
 }
 
-function getPromptSourceReferences(prompt: string | Record<string, unknown>): string[] {
-  if (typeof prompt === 'string') {
-    return [prompt];
-  }
-
-  if (typeof prompt.raw === 'string') {
-    return [prompt.raw];
-  }
-
-  return typeof prompt.id === 'string' ? [prompt.id] : [];
-}
-
 function validateWebEvalPrompts(prompts: (string | Record<string, unknown>)[]): string | undefined {
   if (getEnvBool(SERVER_PROMPT_SOURCE_OPT_IN, false)) {
     return undefined;
   }
 
   if (
-    prompts.some((prompt) =>
-      getPromptSourceReferences(prompt).some((reference) =>
-        isServerPromptSourceReference(reference),
-      ),
-    )
+    prompts.some((prompt) => typeof prompt === 'string' && isServerPromptSourceReference(prompt))
   ) {
     return `Server-side prompt sources are disabled for web eval jobs. Set ${SERVER_PROMPT_SOURCE_OPT_IN}=true to allow trusted local usage.`;
   }
@@ -317,23 +309,24 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
     logs: [],
   });
 
-  promptfoo
-    .evaluate(
-      Object.assign({}, testSuite as EvaluateTestSuite, {
-        writeLatestResults: true,
-        sharing: testSuite.sharing ?? shouldShareResults({}),
-      }),
-      Object.assign({}, evaluateOptions, {
-        eventSource: 'web',
-        progressCallback: (progress: number, total: number) => {
-          const job = evalJobs.get(id);
-          invariant(job, 'Job not found');
-          job.progress = progress;
-          job.total = total;
-          console.log(`[${id}] ${progress}/${total}`);
-        },
-      }),
-    )
+  evaluateWithSource(
+    {
+      ...(testSuite as EvaluateTestSuite),
+      writeLatestResults: true,
+      sharing: testSuite.sharing ?? shouldShareResults({}),
+    },
+    {
+      ...evaluateOptions,
+      eventSource: 'web',
+      progressCallback: (progress: number, total: number) => {
+        const job = evalJobs.get(id);
+        invariant(job, 'Job not found');
+        job.progress = progress;
+        job.total = total;
+        console.log(`[${id}] ${progress}/${total}`);
+      },
+    },
+  )
     .then(async (evalResult) => {
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
@@ -794,7 +787,7 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Run the prompt through the provider
-    const result = await promptfoo.evaluate(
+    const result = await evaluateWithSource(
       {
         prompts: [
           {

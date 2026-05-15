@@ -4,6 +4,13 @@ import path from 'node:path';
 import { validRange } from 'semver';
 import { describe, expect, it } from 'vitest';
 
+type PackageManifest = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+};
+
 function readPackageJson<T>(relativePath: string): T {
   const packageJsonPath = path.join(process.cwd(), relativePath);
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as T;
@@ -11,6 +18,7 @@ function readPackageJson<T>(relativePath: string): T {
 
 const SOURCE_FILE_EXTENSIONS = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
 const EXPECTED_SHARP_VERSION = '^0.34.5';
+const OPENAI_PACKAGE_NAMES = ['@openai/agents', '@openai/codex-sdk', 'openai'] as const;
 
 function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
   const results: string[] = [];
@@ -29,6 +37,39 @@ function collectSourceFiles(rootDir: string, excluded: Set<string>): string[] {
   };
   walk(rootDir);
   return results;
+}
+
+function collectPackageJsonFiles(rootDir: string): string[] {
+  const results: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules') {
+        continue;
+      }
+
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name === 'package.json') {
+        results.push(full);
+      }
+    }
+  };
+
+  walk(rootDir);
+  return results.sort();
+}
+
+function getDependencyRange(
+  packageJson: PackageManifest,
+  dependencyName: (typeof OPENAI_PACKAGE_NAMES)[number],
+): string | undefined {
+  return (
+    packageJson.dependencies?.[dependencyName] ??
+    packageJson.devDependencies?.[dependencyName] ??
+    packageJson.optionalDependencies?.[dependencyName] ??
+    packageJson.peerDependencies?.[dependencyName]
+  );
 }
 
 describe('package manifests', () => {
@@ -81,5 +122,36 @@ describe('package manifests', () => {
 
     expect(sitePackageJson.devDependencies?.sharp).toBeUndefined();
     expect(sitePackageJson.optionalDependencies?.sharp).toBe(EXPECTED_SHARP_VERSION);
+  });
+
+  it('keeps OpenAI example dependency ranges aligned with the root manifest', () => {
+    const rootPackageJson = readPackageJson<PackageManifest>('package.json');
+    const rootRanges = new Map(
+      OPENAI_PACKAGE_NAMES.map((dependencyName) => [
+        dependencyName,
+        getDependencyRange(rootPackageJson, dependencyName),
+      ]),
+    );
+    const examplesDir = path.join(process.cwd(), 'examples');
+    const mismatches = collectPackageJsonFiles(examplesDir).flatMap((packageJsonPath) => {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as PackageManifest;
+      const relativePath = path.relative(process.cwd(), packageJsonPath);
+
+      return OPENAI_PACKAGE_NAMES.flatMap((dependencyName) => {
+        const exampleRange = getDependencyRange(packageJson, dependencyName);
+        if (!exampleRange) {
+          return [];
+        }
+
+        const rootRange = rootRanges.get(dependencyName);
+        if (exampleRange === rootRange) {
+          return [];
+        }
+
+        return [`${relativePath}: ${dependencyName}=${exampleRange} (root: ${rootRange})`];
+      });
+    });
+
+    expect(mismatches).toEqual([]);
   });
 });
