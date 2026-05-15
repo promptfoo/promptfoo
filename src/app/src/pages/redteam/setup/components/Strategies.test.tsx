@@ -119,12 +119,6 @@ describe('Strategies', () => {
       expect(MULTI_MODAL_STRATEGIES).toBeDefined();
       expect(MULTI_MODAL_STRATEGIES).toEqual(['audio', 'image', 'video']);
     });
-
-    it('contains expected multi-modal strategy identifiers', () => {
-      expect(MULTI_MODAL_STRATEGIES).toContain('audio');
-      expect(MULTI_MODAL_STRATEGIES).toContain('video');
-      expect(MULTI_MODAL_STRATEGIES).toContain('image');
-    });
   });
 
   describe('Hero strategies section', () => {

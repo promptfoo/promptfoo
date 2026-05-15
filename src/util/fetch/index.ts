@@ -3,7 +3,7 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
-import { Agent, type Dispatcher, ProxyAgent } from 'undici';
+import { Agent, type Dispatcher, interceptors, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
@@ -84,7 +84,7 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
     connect: tlsOptions,
-  });
+  }).compose(interceptors.decompress());
   cachedAgents.set(concurrency, agent);
   return agent;
 }
@@ -108,7 +108,7 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
-  });
+  }).compose(interceptors.decompress());
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
 }
