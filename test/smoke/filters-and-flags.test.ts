@@ -1,8 +1,8 @@
 /**
  * Smoke tests for eval command filters and flags.
  *
- * Tests filter flags (--filter-first-n, --filter-pattern, --filter-metadata,
- * --filter-providers, --filter-failing), variable flags (--var), prompt
+ * Tests filter flags (--filter-first-n, --filter-range, --filter-pattern,
+ * --filter-metadata, --filter-providers, --filter-failing), variable flags (--var), prompt
  * modification (--prompt-prefix, --prompt-suffix), and output flags.
  *
  * @see docs/plans/smoke-tests.md for the full checklist
@@ -96,6 +96,101 @@ describe('Count-Based Filter Tests', () => {
 
     // Should have all 5 test results
     expect(parsed.results.results.length).toBe(5);
+  });
+
+  it('1.8.1.6 - --filter-range slices tests by zero-based index', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'range-output.json');
+
+    const { exitCode } = runCli(
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-range', '1:3'],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed.results.results.length).toBe(2);
+    const names = parsed.results.results.map(
+      (r: { response: { output: string } }) => r.response.output,
+    );
+    expect(names[0]).toContain('Bob');
+    expect(names[1]).toContain('Charlie');
+  });
+
+  it('1.8.1.7 - --filter-range slices flattened scenario tests by global index', () => {
+    const configPath = path.join(CONFIGS_DIR, 'scenarios.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'range-scenarios-output.json');
+
+    const { exitCode } = runCli(
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-range', '0:1'],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('Alice');
+  });
+
+  it('1.8.1.8 - commandLineOptions.filterRange slices tests', () => {
+    const configPath = path.join(CONFIGS_DIR, 'range-command-line-options.json');
+    const outputPath = path.join(OUTPUT_DIR, 'range-command-line-options-output.json');
+
+    const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+      cwd: ROOT_DIR,
+    });
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed.results.results.length).toBe(2);
+    const outputs = parsed.results.results.map(
+      (r: { response: { output: string } }) => r.response.output,
+    );
+    expect(outputs[0]).toContain('Bob');
+    expect(outputs[1]).toContain('Charlie');
+  });
+
+  it('1.8.1.9 - --filter-range empty slice runs zero tests', () => {
+    const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'range-empty-output.json');
+
+    const { exitCode } = runCli(
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-range', '0:0'],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed.results.results.length).toBe(0);
+  });
+
+  it('1.8.1.10 - --filter-range empty slice suppresses implicit default test', () => {
+    const configPath = path.join(CONFIGS_DIR, 'config-base.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'range-implicit-empty-output.json');
+
+    const { exitCode } = runCli(
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-range', '0:0'],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed.results.results.length).toBe(0);
   });
 
   it('1.8.1.4 - --filter-sample returns exactly N random tests', () => {
@@ -422,6 +517,101 @@ describe('Provider Filter Tests', () => {
 
     // Only "Custom Echo" provider should match
     expect(parsed.results.results.length).toBe(1);
+  });
+});
+
+describe('--providers Flag Config Preservation Tests', () => {
+  const configPath = path.join(CONFIGS_DIR, 'providers-with-config.yaml');
+
+  beforeAll(() => {
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  });
+
+  afterAll(() => {
+    if (fs.existsSync(OUTPUT_DIR)) {
+      fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
+    }
+  });
+
+  function evalWithProviders(
+    outputFile: string,
+    providers: string[],
+    extraArgs: string[] = [],
+  ): { parsed: any; exitCode: number } {
+    const outputPath = path.join(OUTPUT_DIR, outputFile);
+    const { exitCode } = runCli(
+      [
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--providers',
+        ...providers,
+        ...extraArgs,
+      ],
+      { cwd: CONFIGS_DIR },
+    );
+    const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+    return { parsed, exitCode };
+  }
+
+  it('--providers selects one config provider by label', () => {
+    // Config has 3 providers; select only provider-alpha by label
+    const { exitCode, parsed } = evalWithProviders('providers-flag-select.json', [
+      'provider-alpha',
+    ]);
+
+    expect(exitCode).toBe(0);
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('World');
+  });
+
+  it('--providers selects multiple config providers by label', () => {
+    const { exitCode, parsed } = evalWithProviders('providers-flag-multi.json', [
+      'provider-alpha',
+      'provider-gamma',
+    ]);
+
+    expect(exitCode).toBe(0);
+    // Should have 2 results (1 test x 2 selected providers)
+    expect(parsed.results.results.length).toBe(2);
+  });
+
+  it('--providers with matched + unmatched tokens runs both', () => {
+    // provider-alpha matches config label; 'echo' does NOT match any config
+    // provider (ids are alpha-echo/beta-echo/gamma-echo), so it falls back
+    // to bare string provider creation. Both should execute.
+    const { exitCode, parsed } = evalWithProviders('providers-flag-mixed.json', [
+      'provider-alpha',
+      'echo',
+    ]);
+
+    expect(exitCode).toBe(0);
+    // Should have 2 results: 1 from matched config provider + 1 from bare echo
+    expect(parsed.results.results.length).toBe(2);
+  });
+
+  it('--providers without config file works as before (bare provider)', () => {
+    const outputPath = path.join(OUTPUT_DIR, 'providers-flag-bare.json');
+
+    const { exitCode } = runCli([
+      'eval',
+      '-o',
+      outputPath,
+      '--no-cache',
+      '--providers',
+      'echo',
+      '--prompts',
+      'Hello World',
+    ]);
+
+    expect(exitCode).toBe(0);
+
+    const parsed = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+    expect(parsed.results.results.length).toBe(1);
+    expect(parsed.results.results[0].response.output).toContain('Hello World');
   });
 });
 

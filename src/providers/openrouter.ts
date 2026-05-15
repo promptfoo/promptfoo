@@ -4,7 +4,7 @@ import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../t
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -29,8 +29,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiBaseUrl: 'https://openrouter.ai/api/v1',
-        apiKeyEnvar: 'OPENROUTER_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://openrouter.ai/api/v1',
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'OPENROUTER_API_KEY',
         passthrough: {
           // Pass through OpenRouter-specific options
           // https://openrouter.ai/docs/requests
@@ -157,7 +157,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
             },
             body: JSON.stringify(body),
           },
-          REQUEST_TIMEOUT_MS,
+          getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
         ));
@@ -246,5 +246,13 @@ export function createOpenRouterProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  return new OpenRouterProvider(modelName, options.config || {});
+  const providerOptions: ProviderOptions = options.config ? { ...options.config } : {};
+  if (options.env && !providerOptions.env) {
+    providerOptions.env = options.env as ProviderOptions['env'];
+  }
+  if (options.id && !providerOptions.id) {
+    providerOptions.id = options.id;
+  }
+
+  return new OpenRouterProvider(modelName, providerOptions);
 }

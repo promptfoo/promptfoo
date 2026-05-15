@@ -43,6 +43,17 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
+If Claude Agent SDK will authenticate through an existing local Claude Code session instead of `ANTHROPIC_API_KEY`, disable Promptfoo's upfront API key check:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      apiKeyRequired: false
+```
+
+This is useful when you're using a local Claude Code binary with an active session, such as Claude Code monthly plans. Promptfoo will skip its preflight API key validation, but the SDK still needs to be able to authenticate on its own.
+
 ## Other Model Providers
 
 Apart from using the Anthropic API, you can also use AWS Bedrock and Google Vertex AI.
@@ -98,6 +109,7 @@ prompts:
 ```
 
 This allows you to prepare a directory with files or sub-directories before running your tests.
+Relative `working_dir` values are resolved from the directory containing the config file.
 
 By default, when you specify a working directory, Claude Agent SDK is given read-only access to the directory.
 
@@ -123,46 +135,70 @@ prompts:
 
 ## Supported Parameters
 
-| Parameter                            | Type         | Description                                                                                                  | Default                  |
-| ------------------------------------ | ------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------ |
-| `apiKey`                             | string       | Anthropic API key                                                                                            | Environment variable     |
-| `working_dir`                        | string       | Directory for file operations                                                                                | Temporary directory      |
-| `model`                              | string       | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
-| `fallback_model`                     | string       | Fallback model if primary fails                                                                              | Claude Agent SDK default |
-| `max_turns`                          | number       | Maximum conversation turns                                                                                   | Claude Agent SDK default |
-| `max_thinking_tokens`                | number       | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
-| `max_budget_usd`                     | number       | Maximum cost budget in USD for the agent execution                                                           | None                     |
-| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `delegate`                | `default`                |
-| `allow_dangerously_skip_permissions` | boolean      | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
-| `betas`                              | string[]     | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                                      | None                     |
-| `custom_system_prompt`               | string       | Replace default system prompt                                                                                | None                     |
-| `append_system_prompt`               | string       | Append to default system prompt                                                                              | None                     |
-| `tools`                              | array/object | Base set of built-in tools (array of names or `{type: 'preset', preset: 'claude_code'}`)                     | None                     |
-| `custom_allowed_tools`               | string[]     | Replace default allowed tools                                                                                | None                     |
-| `append_allowed_tools`               | string[]     | Add to default allowed tools                                                                                 | None                     |
-| `allow_all_tools`                    | boolean      | Allow all available tools                                                                                    | false                    |
-| `disallowed_tools`                   | string[]     | Tools to explicitly block (overrides allowed)                                                                | None                     |
-| `additional_directories`             | string[]     | Additional directories the agent can access (beyond working_dir)                                             | None                     |
-| `ask_user_question`                  | object       | Automated handling for AskUserQuestion tool (see [Handling AskUserQuestion](#handling-askuserquestion-tool)) | None                     |
-| `mcp`                                | object       | MCP server configuration                                                                                     | None                     |
-| `strict_mcp_config`                  | boolean      | Only allow configured MCP servers                                                                            | true                     |
-| `setting_sources`                    | string[]     | Where SDK looks for settings, CLAUDE.md, and slash commands                                                  | None (disabled)          |
-| `output_format`                      | object       | Structured output configuration with JSON schema                                                             | None                     |
-| `agents`                             | object       | Programmatic agent definitions for custom subagents                                                          | None                     |
-| `hooks`                              | object       | Event hooks for intercepting tool calls and other events                                                     | None                     |
-| `include_partial_messages`           | boolean      | Include partial/streaming messages in response                                                               | false                    |
-| `resume`                             | string       | Resume from a specific session ID                                                                            | None                     |
-| `fork_session`                       | boolean      | Fork from an existing session instead of continuing                                                          | false                    |
-| `continue`                           | boolean      | Continue an existing session                                                                                 | false                    |
-| `enable_file_checkpointing`          | boolean      | Track file changes for rewinding to previous states                                                          | false                    |
-| `persist_session`                    | boolean      | Save session to disk for later resumption                                                                    | true                     |
-| `sandbox`                            | object       | Sandbox settings for command execution isolation                                                             | None                     |
-| `permission_prompt_tool_name`        | string       | MCP tool name to use for permission prompts                                                                  | None                     |
-| `executable`                         | string       | JavaScript runtime: `node`, `bun`, or `deno`                                                                 | Auto-detected            |
-| `executable_args`                    | string[]     | Arguments to pass to the JavaScript runtime                                                                  | None                     |
-| `extra_args`                         | object       | Additional CLI arguments (keys without `--`, values as strings or null for flags)                            | None                     |
-| `path_to_claude_code_executable`     | string       | Path to a custom Claude Code executable                                                                      | Built-in                 |
-| `spawn_claude_code_process`          | function     | Custom spawn function for VMs/containers (programmatic only)                                                 | Default spawn            |
+| Parameter                            | Type             | Description                                                                                                  | Default                  |
+| ------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------ |
+| `apiKey`                             | string           | Anthropic API key                                                                                            | Environment variable     |
+| `apiKeyRequired`                     | boolean          | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
+| `working_dir`                        | string           | Directory for file operations                                                                                | Temporary directory      |
+| `model`                              | string           | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
+| `fallback_model`                     | string           | Fallback model if primary fails                                                                              | Claude Agent SDK default |
+| `max_turns`                          | number           | Maximum conversation turns                                                                                   | Claude Agent SDK default |
+| `max_thinking_tokens`                | number           | Maximum tokens for thinking                                                                                  | Claude Agent SDK default |
+| `max_budget_usd`                     | number           | Maximum cost budget in USD for the agent execution                                                           | None                     |
+| `task_budget`                        | object           | Token budget for pacing tool use: `{total: N}`                                                               | None                     |
+| `permission_mode`                    | string           | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`, `auto`                    | `default`                |
+| `allow_dangerously_skip_permissions` | boolean          | Required safety flag when using `bypassPermissions` mode                                                     | false                    |
+| `thinking`                           | object           | Thinking config: `{type: 'adaptive'}`, `{type: 'enabled', budgetTokens: N}`, or `{type: 'disabled'}`         | Model default            |
+| `effort`                             | string           | Response effort level: `low`, `medium`, `high`, `xhigh` (Opus 4.7+), `max`                                   | `high`                   |
+| `agent`                              | string           | Named agent for the main thread (must be defined in `agents` or settings)                                    | None                     |
+| `session_id`                         | string           | Custom session UUID (cannot be used with `continue`/`resume` unless `fork_session` is set)                   | Auto-generated           |
+| `title`                              | string           | Custom title for a new session (skips auto-generation from the first message)                                | Auto-generated           |
+| `debug`                              | boolean          | Enable verbose debug logging                                                                                 | false                    |
+| `debug_file`                         | string           | Write debug logs to this file path (implicitly enables debug)                                                | None                     |
+| `betas`                              | string[]         | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                                      | None                     |
+| `custom_system_prompt`               | string           | Replace default system prompt                                                                                | None                     |
+| `append_system_prompt`               | string           | Append to default system prompt                                                                              | None                     |
+| `exclude_dynamic_sections`           | boolean          | Strip per-user dynamic sections from the preset prompt so it stays cacheable across runs                     | false                    |
+| `tools`                              | array/object     | Base set of built-in tools (array of names or `{type: 'preset', preset: 'claude_code'}`)                     | None                     |
+| `custom_allowed_tools`               | string[]         | Replace default allowed tools                                                                                | None                     |
+| `append_allowed_tools`               | string[]         | Add to default allowed tools                                                                                 | None                     |
+| `allow_all_tools`                    | boolean          | Allow all available tools                                                                                    | false                    |
+| `disallowed_tools`                   | string[]         | Tools to explicitly block (overrides allowed)                                                                | None                     |
+| `additional_directories`             | string[]         | Additional directories the agent can access (beyond working_dir)                                             | None                     |
+| `ask_user_question`                  | object           | Automated handling for AskUserQuestion tool (see [Handling AskUserQuestion](#handling-askuserquestion-tool)) | None                     |
+| `mcp`                                | object           | MCP server configuration                                                                                     | None                     |
+| `strict_mcp_config`                  | boolean          | Only allow configured MCP servers                                                                            | true                     |
+| `cache_mcp`                          | boolean          | Enable caching when MCP is configured (for deterministic MCP tools)                                          | false                    |
+| `setting_sources`                    | string[]         | Where SDK looks for settings, CLAUDE.md, and slash commands                                                  | None (disabled)          |
+| `plugins`                            | array            | Local [plugins](#plugins) to load for the session                                                            | None                     |
+| `skills`                             | string[]/`'all'` | Filter which discovered [skills](#testing-skills) load into the session (auto-allows the `Skill` tool)       | None (no filtering)      |
+| `plan_mode_instructions`             | string           | Custom workflow instructions when `permission_mode` is `plan`                                                | None                     |
+| `output_format`                      | object           | Structured output configuration with JSON schema                                                             | None                     |
+| `agents`                             | object           | Programmatic agent definitions for custom subagents                                                          | None                     |
+| `hooks`                              | object           | Event hooks for intercepting tool calls and other events                                                     | None                     |
+| `include_partial_messages`           | boolean          | Include partial/streaming messages in response                                                               | false                    |
+| `include_hook_events`                | boolean          | Include hook lifecycle events in output stream                                                               | false                    |
+| `forward_subagent_text`              | boolean          | Forward subagent text/thinking blocks (default: only tool_use/tool_result are emitted)                       | false                    |
+| `tool_config`                        | object           | Per-tool configuration (e.g., `askUserQuestion.previewFormat`)                                               | None                     |
+| `prompt_suggestions`                 | boolean          | Enable AI-predicted next prompts after each turn                                                             | false                    |
+| `agent_progress_summaries`           | boolean          | Enable periodic AI progress summaries for subagents                                                          | false                    |
+| `settings`                           | string/object    | Additional [settings](#settings) (file path or inline object)                                                | None                     |
+| `managed_settings`                   | object           | Policy-tier [settings](#settings) the SDK loads above user/project layers (for embedders enforcing policy)   | None                     |
+| `can_use_tool`                       | function         | Callback forwarded to Claude Agent SDK's `canUseTool` option (programmatic only)                             | None                     |
+| `on_elicitation`                     | function         | Callback for MCP elicitation requests (programmatic only)                                                    | Auto-decline             |
+| `resume`                             | string           | Resume from a specific session ID                                                                            | None                     |
+| `fork_session`                       | boolean          | Fork from an existing session instead of continuing                                                          | false                    |
+| `continue`                           | boolean          | Continue an existing session                                                                                 | false                    |
+| `enable_file_checkpointing`          | boolean          | Track file changes for rewinding to previous states                                                          | false                    |
+| `persist_session`                    | boolean          | Save session to disk for later resumption                                                                    | true                     |
+| `sandbox`                            | object           | Sandbox settings for command execution isolation                                                             | None                     |
+| `permission_prompt_tool_name`        | string           | MCP tool name to use for permission prompts                                                                  | None                     |
+| `executable`                         | string           | JavaScript runtime: `node`, `bun`, or `deno`                                                                 | Auto-detected            |
+| `executable_args`                    | string[]         | Arguments to pass to the JavaScript runtime                                                                  | None                     |
+| `extra_args`                         | object           | Additional CLI arguments (keys without `--`, values as strings or null for flags)                            | None                     |
+| `env`                                | object           | Extra environment variables to forward to the SDK subprocess (e.g. `OTEL_*`, `CLAUDE_CODE_ENABLE_TELEMETRY`) | None                     |
+| `path_to_claude_code_executable`     | string           | Path to a custom Claude Code executable                                                                      | Built-in                 |
+| `spawn_claude_code_process`          | function         | Custom spawn function for VMs/containers (programmatic only)                                                 | Default spawn            |
 
 ## Models
 
@@ -192,6 +228,8 @@ Claude Agent SDK also supports configuring models through [environment variables
 
 Unless you specify a `custom_system_prompt`, the default Claude Code system prompt will be used. You can append additional instructions to it with `append_system_prompt`.
 
+Set `exclude_dynamic_sections: true` to strip per-user context (working directory, auto-memory, git status) from the preset prompt. This keeps the prompt-caching prefix static across runs, which matters for high-volume evals. The stripped context is re-injected as the first user message. Has no effect when `custom_system_prompt` is set.
+
 :::info
 Note that this differs slightly from the Claude Agent SDK's behavior when used independently of Promptfoo. The Agent SDK will _not_ use the Claude Code system prompt by default unless it's specified—it will instead use an empty system prompt if none is provided. If you want to use an empty system prompt with this provider, set `custom_system_prompt` to an empty string.
 :::
@@ -220,7 +258,7 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `acceptEdits`       | Allow file modifications                                              |
 | `bypassPermissions` | No restrictions (requires `allow_dangerously_skip_permissions: true`) |
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
-| `delegate`          | Delegate mode, restricts agent to only Teammate and Task tools        |
+| `auto`              | Use a model classifier to approve or deny permission prompts          |
 
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
@@ -234,6 +272,18 @@ providers:
 ```
 
 :::
+
+When using `permission_mode: plan`, you can replace the default code-implementation workflow body with custom instructions via `plan_mode_instructions`. The CLI keeps the read-only enforcement preamble and ExitPlanMode protocol footer; only the workflow body changes:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      permission_mode: plan
+      plan_mode_instructions: |
+        Produce a step-by-step migration plan only. Do not propose code edits;
+        each step should describe the action and the file path it affects.
+```
 
 ### Tool Configuration
 
@@ -289,7 +339,7 @@ providers:
       allow_all_tools: true
 ```
 
-The `tools` option specifies the base set of available built-in tools, while `allowedTools` and `disallowedTools` filter from that base.
+The `tools` option specifies the base set of available built-in tools, while `custom_allowed_tools`/`append_allowed_tools` and `disallowed_tools` filter from that base.
 
 ⚠️ **Security Note**: Some tools allow Claude Agent SDK to modify files, run system commands, search the web, and more. Think carefully about security implications before using these tools.
 
@@ -338,6 +388,201 @@ Available values:
 - `project` - Project-level settings
 - `local` - Local directory settings
 
+## Plugins
+
+[Plugins](https://code.claude.com/docs/en/plugins) extend the agent with additional skills, agents, hooks, and MCP servers. While `setting_sources` discovers skills from the standard settings hierarchy (project/local/user), plugins are self-contained directories that bundle capabilities together and namespace their skills—mirroring how marketplace-installed plugins work.
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      plugins:
+        - type: local
+          path: ./my-plugin
+      skills: all
+```
+
+:::note
+Only the `local` type is currently supported. Relative paths in `path` resolve against the config file's directory.
+:::
+
+### Plugin Structure
+
+A plugin is a directory containing a `.claude-plugin/plugin.json` manifest:
+
+```text
+my-plugin/
+├── .claude-plugin/
+│   └── plugin.json
+└── skills/
+    └── code-review/
+        └── SKILL.md
+```
+
+The manifest defines the plugin's name and description:
+
+```json title="my-plugin/.claude-plugin/plugin.json"
+{
+  "name": "my-plugin",
+  "description": "A plugin that provides code review skills"
+}
+```
+
+### Skill Namespacing
+
+Skills from plugins are namespaced with the plugin name. For example, a `standards-check` skill in a plugin named `project-standards` becomes `project-standards:standards-check`. Use this namespaced name when asserting on skill invocations:
+
+```yaml
+assert:
+  - type: skill-used
+    value: project-standards:standards-check
+```
+
+### Plugins vs Setting Sources
+
+Both `plugins` and `setting_sources` can provide skills, but they serve different purposes:
+
+- **`setting_sources`**: Discovers skills from the standard settings hierarchy—project, local, and user-level `.claude/skills/` directories. Skills are not namespaced.
+- **`plugins`**: Loads self-contained plugin directories, mirroring how marketplace-installed plugins work. Skills are namespaced with the plugin name (`plugin:skill`).
+
+You can use both together — skills from both sources are available in the same session.
+
+## Testing Skills
+
+[Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) are reusable capabilities that extend Claude's functionality. They are defined as `SKILL.md` files and can be tested using the Claude Agent SDK provider. Skills can be loaded via `setting_sources` (from the standard settings hierarchy) or from [plugins](#plugins).
+
+### Enabling Skills
+
+There are two steps to enable skills: **discovery** and **filtering**.
+
+**Discovery** brings skills into the session — load them either via `setting_sources` (scans the `.claude/skills/` directory hierarchy) or via [`plugins`](#plugins). Skills aren't discovered by default.
+
+**Filtering** narrows which discovered skills are usable. Use the `skills` option (added in SDK 0.2.120) — pass `'all'` to use every discovered skill, or a string array to allow only specific names. Setting `skills` also auto-allows the `Skill` tool, so you don't need to add it to `allowed_tools`/`append_allowed_tools` yourself.
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project'] # Discover from .claude/skills/
+      skills: all # Or: ['code-review', 'test-generator']
+```
+
+For SDK versions before 0.2.120, omit `skills` and add `'Skill'` manually instead:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project']
+      append_allowed_tools: ['Skill']
+```
+
+`skills` is a context filter, not a sandbox: unlisted skills are hidden from the model's listing and rejected by the `Skill` tool, but their files remain on disk and stay reachable via `Read`/`Bash`. Don't store secrets in skill files.
+
+### How Skills Are Discovered
+
+Skills are automatically discovered at startup from the configured `setting_sources` directories. The SDK scans for `SKILL.md` files in subdirectories of `.claude/skills/`:
+
+```text
+my-project/
+└── .claude/
+    └── skills/
+        ├── code-review/
+        │   └── SKILL.md
+        └── test-generator/
+            └── SKILL.md
+```
+
+Claude automatically invokes the relevant skill when a task matches the skill's description in its frontmatter.
+
+### Testing Skill Invocation
+
+Promptfoo normalizes Claude `Skill` tool invocations into `response.metadata.skillCalls`, so skill evals can use the same `skill-used` assertion style as Codex. The underlying `Skill` tool calls are still available in [`response.metadata.toolCalls`](#tool-call-tracking) when you need the raw tool payload.
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project']
+      skills: ['code-review'] # Only allow this skill; auto-allows the Skill tool
+      append_allowed_tools: ['Read', 'Write']
+
+prompts:
+  - 'Review the authentication module for security issues'
+
+tests:
+  - assert:
+      # Check that a specific skill was invoked
+      - type: skill-used
+        value: code-review
+```
+
+### Checking Available Skills
+
+You can verify skills are loaded by asking Claude to list them. Note that this relies on Claude's free-text response, so use a flexible assertion:
+
+```yaml
+prompts:
+  - 'List all available skills by name'
+
+tests:
+  - assert:
+      - type: icontains
+        value: 'code-review' # Expected skill name
+```
+
+:::note
+Because the response is free-text, `contains` assertions may be fragile. For more reliable testing, check tool calls instead (see [Testing Skill Invocation](#testing-skill-invocation)).
+:::
+
+### Testing Restrictions for CI
+
+For consistent testing in CI/CD environments, restrict to project-level skills only:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project'] # Only team-shared skills, exclude personal
+      skills: all
+      append_allowed_tools: ['Read', 'Bash']
+      permission_mode: 'acceptEdits'
+```
+
+This ensures tests don't depend on user-specific skills that may not be present in CI.
+
+### Example: Complete Skills Testing Configuration
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./my-project
+      setting_sources: ['project']
+      skills: all
+      append_allowed_tools: ['Read', 'Write', 'Bash']
+      permission_mode: 'acceptEdits'
+
+prompts:
+  - 'Generate unit tests for the UserService class'
+
+tests:
+  - assert:
+      # Verify the test-generator skill was invoked
+      - type: skill-used
+        value: test-generator
+      # Verify tests were generated
+      - type: icontains
+        value: 'describe('
+```
+
+For more information about creating skills, see the [Claude Code skills documentation](https://code.claude.com/docs/en/skills).
+
 ## Budget Control
 
 Limit the maximum cost of an agent execution with `max_budget_usd`:
@@ -350,6 +595,20 @@ providers:
 ```
 
 The agent will stop execution if the cost exceeds the specified budget.
+
+## Task Budget
+
+Control how the model paces its tool use within a token budget using `task_budget`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      task_budget:
+        total: 50000
+```
+
+The `total` field sets the token budget for the task. The model uses this to pace its tool use—for example, being more selective about which tools to invoke as the budget is consumed.
 
 ## Additional Directories
 
@@ -389,6 +648,12 @@ When `output_format` is configured, the response will include structured output 
 
 - `output` - The parsed structured output (when available)
 - `metadata.structuredOutput` - The raw structured output value
+
+:::tip
+For evals that depend on parsing JSON from the model's reply, prefer `output_format` over asking for JSON in the prompt and then running `is-json` / `JSON.parse()`. Without it, Claude commonly wraps short JSON answers in Markdown fences or a leading sentence, which makes downstream parsers brittle. With it, the response arrives as a parsed object, so a JavaScript assertion can read fields directly.
+
+This is the Claude Agent SDK's analogue of the OpenAI Codex SDK's [`output_schema`](/docs/providers/openai-codex-sdk#structured-output) — same idea, slightly different wrapper shape (`{type: 'json_schema', schema: {...}}` here vs a bare schema object on Codex). The [Test Agent Skills guide](/docs/guides/test-agent-skills) shows both side by side.
+:::
 
 ## Session Management
 
@@ -481,6 +746,7 @@ Available sandbox options:
 | `allowUnsandboxedCommands`    | boolean  | Allow commands that can't be sandboxed               |
 | `enableWeakerNestedSandbox`   | boolean  | Enable weaker sandbox for nested environments        |
 | `excludedCommands`            | string[] | Commands to exclude from sandboxing                  |
+| `failIfUnavailable`           | boolean  | Fail closed when sandbox dependencies are missing    |
 | `ignoreViolations`            | object   | Map of command patterns to violation types to ignore |
 | `network.allowedDomains`      | string[] | Domains allowed for network access                   |
 | `network.allowLocalBinding`   | boolean  | Allow binding to localhost                           |
@@ -491,7 +757,70 @@ Available sandbox options:
 | `ripgrep.command`             | string   | Path to custom ripgrep executable                    |
 | `ripgrep.args`                | string[] | Additional arguments for ripgrep                     |
 
+When `sandbox.enabled` is `true`, Claude Agent SDK defaults `failIfUnavailable` to `true`; set it to `false` only if you want the SDK to degrade gracefully when sandbox dependencies or platform support are missing.
+
 See the [Claude Code sandbox documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for more details.
+
+## Settings
+
+Apply additional settings via a file path or inline object. These load into the "flag settings" layer, which has the highest priority among user-controlled settings:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      settings:
+        permissions:
+          allow:
+            - 'Bash(*)'
+            - 'Read(*)'
+```
+
+Or reference a settings file:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      settings: /path/to/settings.json
+```
+
+For embedders that derive lockdown configuration from an enterprise policy, use `managed_settings` to load policy-tier settings above user/project layers (so user/project settings cannot widen restrictions set here):
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      managed_settings:
+        sandbox:
+          network:
+            allowManagedDomainsOnly: true
+```
+
+## Per-Tool Configuration
+
+Customize built-in tool behavior with `tool_config`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      tool_config:
+        askUserQuestion:
+          previewFormat: html # 'markdown' (default) or 'html'
+```
+
+## Progress Summaries and Prompt Suggestions
+
+Enable AI-generated progress summaries for running subagents and predicted next prompts:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      agent_progress_summaries: true # periodic summaries for subagents
+      prompt_suggestions: true # AI-predicted next prompts after each turn
+```
 
 ## Advanced Runtime Configuration
 
@@ -537,14 +866,16 @@ providers:
 For running Claude Code in VMs, containers, or remote environments, you can provide a custom spawn function when using the provider programmatically:
 
 ```typescript
-import { ClaudeCodeSDKProvider } from 'promptfoo';
+import { loadApiProvider } from 'promptfoo';
 
-const provider = new ClaudeCodeSDKProvider({
-  config: {
-    spawn_claude_code_process: (options) => {
-      // Custom spawn logic for VM/container execution
-      // options contains: command, args, cwd, env, signal
-      return myVMProcess; // Must satisfy SpawnedProcess interface
+const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+  options: {
+    config: {
+      spawn_claude_code_process: (options) => {
+        // Custom spawn logic for VM/container execution
+        // options contains: command, args, cwd, env, signal
+        return myVMProcess; // Must satisfy SpawnedProcess interface
+      },
     },
   },
 });
@@ -601,13 +932,27 @@ Available behaviors:
 For custom answer selection logic when using the provider programmatically, you can provide your own `canUseTool` callback:
 
 ```typescript
-import { ClaudeCodeSDKProvider } from 'promptfoo';
+import { loadApiProvider } from 'promptfoo';
 
-const provider = new ClaudeCodeSDKProvider({
-  config: {
-    append_allowed_tools: ['AskUserQuestion'],
+const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+  options: {
+    config: {
+      append_allowed_tools: ['AskUserQuestion'],
+      can_use_tool: async (toolName, input) => {
+        if (toolName !== 'AskUserQuestion') {
+          return { behavior: 'allow', updatedInput: input };
+        }
+
+        return {
+          behavior: 'allow',
+          updatedInput: {
+            ...input,
+            answers: { 'Which environment?': 'Staging' },
+          },
+        };
+      },
+    },
   },
-  // Custom canUseTool passed via SDK options
 });
 ```
 
@@ -642,9 +987,151 @@ See the [Claude Agent SDK permissions documentation](https://platform.claude.com
 If you're testing scenarios where the agent asks questions, consider what answer would lead to the most interesting test case. Using `random` behavior can help discover edge cases.
 :::
 
+## Hooks
+
+Promptfoo forwards the `hooks` option to the Claude Agent SDK unchanged, so callbacks receive the SDK's native input shape and return values are honored as documented upstream. Hooks are programmatic-only — define them in a JS/TS provider file rather than YAML.
+
+The `PostToolUse` event lets you rewrite tool output before the model sees it. Return `updatedToolOutput` to replace the result for any tool (built-in or MCP):
+
+```ts title="provider.mjs"
+export default {
+  id: 'anthropic:claude-agent-sdk',
+  config: {
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: 'Bash',
+          hooks: [
+            async (input) => ({
+              hookEventName: 'PostToolUse',
+              updatedToolOutput: redact(input.tool_response),
+            }),
+          ],
+        },
+      ],
+    },
+  },
+};
+```
+
+`updatedMCPToolOutput` (MCP-only) is deprecated in favor of `updatedToolOutput`, which works for every tool. See the [SDK hook reference](https://docs.claude.com/en/docs/claude-code/hooks) for the full list of events and return shapes.
+
+## Tool Call Tracking
+
+The Claude Agent SDK provider captures all tool calls made during the agentic session and exposes them in `response.metadata.toolCalls`. This allows you to assert on tool usage in your evaluations.
+
+Each tool call entry contains:
+
+| Field             | Type           | Description                                                  |
+| ----------------- | -------------- | ------------------------------------------------------------ |
+| `id`              | string         | Unique tool call ID                                          |
+| `name`            | string         | Tool name (e.g., `Read`, `Bash`, `Grep`)                     |
+| `input`           | unknown        | Arguments passed to the tool                                 |
+| `output`          | unknown        | Tool result content (undefined if not available)             |
+| `is_error`        | boolean        | Whether the tool call resulted in an error                   |
+| `parentToolUseId` | string \| null | Parent tool use ID for sub-agent calls, `null` for top-level |
+
+### Asserting on Tool Usage
+
+Use JavaScript assertions to check which tools were called:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const readCalls = toolCalls.filter(t => t.name === 'Read');
+      return readCalls.length > 0;
+```
+
+Check that a specific command was run:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const bashCalls = toolCalls.filter(t => t.name === 'Bash');
+      return bashCalls.some(t => t.input?.command?.includes('npm test'));
+```
+
+Verify tool output content:
+
+```yaml
+assert:
+  - type: javascript
+    value: |
+      const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+      const grepCall = toolCalls.find(t => t.name === 'Grep');
+      return grepCall?.output?.includes('expected match');
+```
+
+For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
+
+By default, only subagent `tool_use` and `tool_result` blocks reach `metadata.toolCalls` — the subagent's text and thinking are summarised away. Set `forward_subagent_text: true` to forward the full subagent transcript so consumers can render or assert against the nested conversation:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      forward_subagent_text: true
+```
+
+## Tracing
+
+When [tracing](/docs/tracing/) is enabled, every provider call emits an OpenTelemetry span using the GenAI semantic conventions (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.response.model`, `gen_ai.response.finish_reasons`, etc.) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, `tool.is_error`). Spans are parented to the evaluation trace so they appear grouped in the Traces tab.
+
+The W3C `TRACEPARENT` environment variable is propagated to the SDK subprocess so telemetry it exports attaches to the same trace:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      env:
+        CLAUDE_CODE_ENABLE_TELEMETRY: '1'
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318'
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+```
+
+### Deep tracing (SDK-internal events)
+
+To also capture Claude Code's internal events — API requests, tool decisions, tool results — set `OTEL_LOGS_EXPORTER=otlp` and use the JSON logs protocol. Each log record becomes a child span on the provider span.
+
+```yaml
+config:
+  env:
+    CLAUDE_CODE_ENABLE_TELEMETRY: '1'
+    OTEL_LOGS_EXPORTER: otlp
+    OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318'
+    OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json'
+```
+
+The receiver's `/v1/logs` endpoint accepts JSON only. The provider automatically injects `OTEL_RESOURCE_ATTRIBUTES=promptfoo.trace_id=...,promptfoo.parent_span_id=...` so logs link to the correct evaluation trace even though the SDK's logs signal doesn't natively inherit `TRACEPARENT`.
+
 ## Caching Behavior
 
 This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
+
+When MCP servers are configured, caching is disabled by default because MCP tools typically interact with external state (APIs, file systems, databases), making cached responses unreliable. To opt back into caching for deterministic MCP tools (e.g., code search, static knowledge bases), set `cache_mcp: true`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      cache_mcp: true
+      mcp:
+        servers:
+          - command: npx
+            args: ['-y', '@my/deterministic-mcp-server']
+            name: my-server
+```
 
 To disable caching globally:
 
@@ -680,8 +1167,13 @@ Here are a few complete example implementations:
 - [Structured output](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#structured-output) - JSON schema validation for agent responses
 - [Advanced options](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#advanced-options) - Sandbox, runtime configuration, and CLI arguments
 - [AskUserQuestion handling](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#askuserquestion-handling) - Automated handling of user questions in evaluations
+- [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#skills-testing) - Testing Agent Skills with the SDK
+- [Plugins](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#plugins) - Loading plugins to extend agent capabilities
 
 ## See Also
 
 - [Claude Agent SDK documentation](https://docs.claude.com/en/api/agent-sdk)
+- [Agent Skills in the SDK](https://platform.claude.com/docs/en/agent-sdk/skills) - Testing and using skills with the SDK
+- [Claude Code skills documentation](https://code.claude.com/docs/en/skills) - Creating custom skills
+- [Claude Code plugins](https://code.claude.com/docs/en/plugins) - Creating and using plugins
 - [Standard Anthropic provider](/docs/providers/anthropic/) - For text-only interactions

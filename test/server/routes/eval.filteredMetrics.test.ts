@@ -8,22 +8,36 @@
  * 4. Handles errors gracefully
  */
 
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
 import { createApp } from '../../../src/server/server';
 import EvalFactory from '../../factories/evalFactory';
 
 describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
 
   beforeAll(async () => {
     await runDbMigrations();
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
   });
 
-  beforeEach(() => {
-    app = createApp();
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   });
 
   beforeEach(async () => {
@@ -49,9 +63,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'errors' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('filteredMetrics');
@@ -81,9 +93,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'all' }); // No filters
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'all' }); // No filters
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).toBeNull();
@@ -97,9 +107,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'passes' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'passes' });
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).not.toBeNull();
@@ -112,9 +120,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         searchableContent: 'searchable',
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ search: 'searchable' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ search: 'searchable' });
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).not.toBeNull();
@@ -127,16 +133,14 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         withNamedScores: true,
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({
-          filter: JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({
+        filter: JSON.stringify({
+          logicOperator: 'and',
+          type: 'metric',
+          operator: 'equals',
+          value: 'accuracy',
+        }),
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).not.toBeNull();
@@ -150,18 +154,16 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         searchableContent: 'searchable',
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({
-          filterMode: 'failures',
-          search: 'searchable',
-          filter: JSON.stringify({
-            logicOperator: 'and',
-            type: 'metric',
-            operator: 'equals',
-            value: 'accuracy',
-          }),
-        });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({
+        filterMode: 'failures',
+        search: 'searchable',
+        filter: JSON.stringify({
+          logicOperator: 'and',
+          type: 'metric',
+          operator: 'equals',
+          value: 'accuracy',
+        }),
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).not.toBeNull();
@@ -175,9 +177,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'errors' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).not.toBeNull();
@@ -194,7 +194,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
+      const response = await api
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'failures' });
 
@@ -213,9 +213,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'passes' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'passes' });
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).not.toBeNull();
@@ -233,9 +231,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         withNamedScores: true,
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'passes' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'passes' });
 
       expect(response.status).toBe(200);
       expect(response.body.filteredMetrics).not.toBeNull();
@@ -250,7 +246,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
 
   describe('Error handling', () => {
     it('should handle nonexistent eval gracefully', async () => {
-      const response = await request(app)
+      const response = await api
         .get('/api/eval/nonexistent-id/table')
         .query({ filterMode: 'errors' });
 
@@ -268,9 +264,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       const db = getDb();
       await db.run(`DELETE FROM eval_results WHERE eval_id = '${eval_.id}'`);
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'errors' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
       // Request should still succeed
       expect(response.status).toBe(200);
@@ -293,9 +287,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'errors' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
       expect(response.status).toBe(200);
 
@@ -313,9 +305,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app)
-        .get(`/api/eval/${eval_.id}/table`)
-        .query({ filterMode: 'errors' });
+      const response = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
 
       expect(response.status).toBe(200);
       expect(response.body).toMatchObject({
@@ -337,7 +327,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       });
 
       // CSV export should not include filteredMetrics
-      const csvResponse = await request(app)
+      const csvResponse = await api
         .get(`/api/eval/${eval_.id}/table`)
         .query({ format: 'csv', filterMode: 'errors' });
 
@@ -346,7 +336,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       expect(typeof csvResponse.text).toBe('string');
 
       // JSON export should not include filteredMetrics (returns table object, not array)
-      const jsonResponse = await request(app)
+      const jsonResponse = await api
         .get(`/api/eval/${eval_.id}/table`)
         .query({ format: 'json', filterMode: 'errors' });
 
@@ -367,7 +357,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
       });
 
       // Request first page (limited results)
-      const response = await request(app)
+      const response = await api
         .get(`/api/eval/${eval_.id}/table`)
         .query({ filterMode: 'passes', limit: 10, offset: 0 });
 
@@ -392,7 +382,7 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         resultTypes: ['success', 'error', 'failure'],
       });
 
-      const response = await request(app).get(`/api/eval/${eval1.id}/table`).query({
+      const response = await api.get(`/api/eval/${eval1.id}/table`).query({
         filterMode: 'passes',
         comparisonEvalIds: eval2.id,
       });

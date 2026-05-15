@@ -15,6 +15,7 @@ interface StrategySectionProps {
   description?: string;
   isStrategyDisabled: (strategyId: string) => boolean;
   isRemoteGenerationDisabled: boolean;
+  isStrategyAuthGated?: (strategyId: string) => boolean;
   isStrategyConfigured?: (strategyId: string) => boolean;
 }
 
@@ -29,6 +30,7 @@ export function StrategySection({
   description,
   isStrategyDisabled,
   isRemoteGenerationDisabled,
+  isStrategyAuthGated,
   isStrategyConfigured,
 }: StrategySectionProps) {
   const selectedStrategiesInSection = strategies
@@ -46,7 +48,7 @@ export function StrategySection({
 
   return (
     <div className="mb-8">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className={cn('text-lg font-semibold', highlighted && 'font-bold text-primary')}>
             {title}
@@ -80,6 +82,7 @@ export function StrategySection({
             onConfigClick={onConfigClick}
             isDisabled={isStrategyDisabled(strategy.id)}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isAuthGated={isStrategyAuthGated ? isStrategyAuthGated(strategy.id) : false}
             isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
           />
         ))}

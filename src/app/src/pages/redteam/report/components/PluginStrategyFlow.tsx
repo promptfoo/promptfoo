@@ -24,6 +24,20 @@ const getCssVarAsHsl = (varName: string, fallbackHsl: string): string => {
   return `hsl(${fallbackHsl})`;
 };
 
+function isNode(value: unknown): value is { name: string } {
+  return typeof value === 'object' && value !== null && 'name' in value;
+}
+
+const getDisplayName = (name: string): string => {
+  if (name === 'Pass') {
+    return 'Defended';
+  }
+  if (name === 'Fail') {
+    return 'Vulnerable';
+  }
+  return displayNameOverrides[name as keyof typeof displayNameOverrides] || name;
+};
+
 // biome-ignore lint/suspicious/noExplicitAny: FIXME: This type in sankey is private
 type SankeyNodeOptions = any;
 // biome-ignore lint/suspicious/noExplicitAny: FIXME: This type in sankey is private
@@ -34,12 +48,7 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: San
   const textRef = React.useRef<SVGTextElement>(null);
   const [labelWidth, setLabelWidth] = React.useState(0);
   const isOut = x + width + 6 > containerWidth;
-  const displayName =
-    payload.name === 'Pass'
-      ? 'Defended'
-      : payload.name === 'Fail'
-        ? 'Vulnerable'
-        : displayNameOverrides[payload.name as keyof typeof displayNameOverrides] || payload.name;
+  const displayName = getDisplayName(payload.name);
 
   const label = `${displayName} (${payload.value || 0})`;
   const color =
@@ -319,35 +328,48 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
   }
 
   return (
-    <div className="h-[400px] w-full">
-      <ResponsiveContainer>
-        <Sankey
-          data={data}
-          nodePadding={50}
-          nodeWidth={15}
-          margin={{ top: 20, bottom: 20, left: 100, right: 100 }}
-          link={<CustomLink />}
-          node={<CustomNode />}
-        >
-          <Tooltip
-            content={({ payload }) => {
-              if (!payload?.[0]) {
-                return null;
-              }
-              const data = payload[0];
-              const { source, target, value } = data;
-              return (
-                <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
-                  <strong>
-                    {source?.name} → {target?.name}
-                  </strong>
-                  : {value} tests
-                </div>
-              );
-            }}
-          />
-        </Sankey>
-      </ResponsiveContainer>
+    <div className="overflow-x-auto">
+      <div className="h-[400px] min-w-[520px]">
+        <ResponsiveContainer>
+          <Sankey
+            data={data}
+            nodePadding={50}
+            nodeWidth={15}
+            margin={{ top: 20, bottom: 20, left: 100, right: 100 }}
+            link={<CustomLink />}
+            node={<CustomNode />}
+          >
+            <Tooltip
+              content={({ payload }) => {
+                if (!payload?.[0]) {
+                  return null;
+                }
+                const entry = payload[0];
+                const entryPayload: Record<string, unknown> | undefined = entry.payload;
+                const source = entryPayload?.source;
+                const target = entryPayload?.target;
+                // Link hover: source and target are resolved SankeyNode objects
+                if (isNode(source) && isNode(target)) {
+                  return (
+                    <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
+                      <strong>
+                        {getDisplayName(source.name)} → {getDisplayName(target.name)}
+                      </strong>
+                      : {entry.value} tests
+                    </div>
+                  );
+                }
+                // Node hover
+                return (
+                  <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
+                    <strong>{getDisplayName(String(entry.name))}</strong>: {entry.value} tests
+                  </div>
+                );
+              }}
+            />
+          </Sankey>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 };

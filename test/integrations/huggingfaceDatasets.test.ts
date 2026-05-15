@@ -289,6 +289,29 @@ describe('huggingfaceDatasets', () => {
     });
   });
 
+  it('should reject an empty non-final page instead of retrying the same offset', async () => {
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce({
+        data: {
+          num_rows_total: 2,
+          features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
+          rows: [],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      } as any)
+      .mockRejectedValueOnce(new Error('Paginator retried the empty page'));
+
+    await expect(
+      fetchHuggingFaceDataset('huggingface://datasets/test/dataset', 200),
+    ).rejects.toThrow(
+      '[HF Dataset] Received an empty page at offset 0 before reaching 2 total rows',
+    );
+
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle API errors by throwing', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: null,

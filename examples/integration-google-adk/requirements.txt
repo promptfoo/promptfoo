@@ -1,0 +1,8 @@
+google-adk>=1.32.0,<2
+
+# provider.py imports these directly for OTLP export. They are also pulled in
+# transitively by google-adk today, but we pin them so the example keeps
+# working if google-adk drops or changes its OTel surface.
+opentelemetry-api>=1.30.0
+opentelemetry-sdk>=1.30.0
+opentelemetry-exporter-otlp-proto-http>=1.30.0

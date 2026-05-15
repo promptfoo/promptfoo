@@ -38,9 +38,9 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     throw new Error(`Failed to import module: ${packageName}. Error: ${error}`);
   }
 
-  const entity = getValue(module, entityName ?? 'default');
+  const entity = getValue(module, entityName);
 
-  if (!entity) {
+  if (entity === undefined) {
     throw new Error(
       `Could not find entity: ${entityName} in module: ${filePath}. ` +
         `Make sure the entity is exported from the package.`,
@@ -56,6 +56,11 @@ export async function parsePackageProvider(
   options: ProviderOptions,
 ): Promise<ApiProvider> {
   const Provider = await loadFromPackage(providerPath, basePath);
+  if (typeof Provider !== 'function') {
+    throw new Error(
+      `Provider malformed: ${providerPath} must export a provider constructor. Received: ${typeof Provider}`,
+    );
+  }
 
   return new Provider(options);
 }
