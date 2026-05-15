@@ -974,6 +974,7 @@ describe('retry command', () => {
       expect(evalRecord.prompts[0].metrics?.tokenUsage?.assertions?.total).toBe(125); // 50 + 75
       expect(evalRecord.prompts[0].metrics?.tokenUsage?.assertions?.prompt).toBe(75); // 30 + 45
       expect(evalRecord.prompts[0].metrics?.tokenUsage?.assertions?.completion).toBe(50); // 20 + 30
+      expect(evalRecord.prompts[0].metrics?.tokenUsage?.assertions?.numRequests).toBe(2);
     });
 
     it('should skip results with invalid promptIdx', async () => {

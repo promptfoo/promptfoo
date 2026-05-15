@@ -190,6 +190,10 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
             metrics.tokenUsage.assertions,
             result.gradingResult.tokensUsed,
           );
+          if (result.gradingResult.tokensUsed.numRequests === undefined) {
+            metrics.tokenUsage.assertions.numRequests =
+              (metrics.tokenUsage.assertions.numRequests ?? 0) + 1;
+          }
         }
       }
 
