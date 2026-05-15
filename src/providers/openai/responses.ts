@@ -547,11 +547,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 ? getTokenUsage(errorData, requestMetadata?.cached ?? false)
                 : undefined,
             isRefusal: true,
-            metadata: { http: { status, statusText, headers } },
+            metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
           }
         : {
             error: errorMessage,
-            metadata: { http: { status, statusText, headers } },
+            metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
           };
     }
 
@@ -560,13 +560,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     await deleteFromCache?.();
     return {
       error: `API call error: ${String(apiCallError)}`,
-      metadata: {
-        http: {
-          status: 0,
-          statusText: 'Error',
-          headers: responseHeaders ?? {},
-        },
-      },
+      metadata: getOpenAiHttpMetadata({
+        headers: responseHeaders,
+        status: 0,
+        statusText: 'Error',
+      }),
     };
   }
 

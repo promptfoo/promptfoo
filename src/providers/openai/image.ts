@@ -732,9 +732,10 @@ export async function processApiResponse(
   n: number = 1,
   outputFormat?: string,
   billingConfig: OpenAiImageOptions = {},
+  deleteFromCache?: () => Promise<void>,
 ): Promise<ProviderResponse> {
   if (data.error) {
-    await data?.deleteFromCache?.();
+    await deleteFromCache?.();
     return {
       error: formatOpenAiError(data),
     };
@@ -764,7 +765,7 @@ export async function processApiResponse(
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
-    await data?.deleteFromCache?.();
+    await deleteFromCache?.();
     return {
       error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
     };
@@ -839,9 +840,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     if (request.ok) {
       const { data } = request;
-      if (requestMetadata.deleteFromCache) {
-        Object.assign(data, { deleteFromCache: requestMetadata.deleteFromCache });
-      }
       cached = requestMetadata.cached;
       latencyMs = requestMetadata.latencyMs;
       status = requestMetadata.status ?? status;
@@ -864,6 +862,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
         config.n ?? 1,
         'output_format' in config ? config.output_format : undefined,
         config,
+        requestMetadata.deleteFromCache,
       );
     }
 

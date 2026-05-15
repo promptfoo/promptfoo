@@ -211,10 +211,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       return {};
     }
 
-    const sumLogprob = validSegments.reduce(
-      (sum, segment) => sum + (segment.avg_logprob || 0),
-      0,
-    );
+    const sumLogprob = validSegments.reduce((sum, segment) => sum + (segment.avg_logprob || 0), 0);
     const sumCompressionRatio = validSegments.reduce(
       (sum, segment) => sum + (segment.compression_ratio || 0),
       0,
