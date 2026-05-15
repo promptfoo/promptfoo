@@ -379,14 +379,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return body;
   }
 
-  private validateDeepResearchConfig(config: OpenAiCompletionOptions): ProviderResponse | undefined {
+  private validateDeepResearchConfig(
+    config: OpenAiCompletionOptions,
+  ): ProviderResponse | undefined {
     if (!this.modelName.includes('deep-research')) {
       return undefined;
     }
 
-    const hasWebSearchTool = config.tools?.some(
-      (tool: any) => tool.type === 'web_search_preview',
-    );
+    const hasWebSearchTool = config.tools?.some((tool: any) => tool.type === 'web_search_preview');
     if (!hasWebSearchTool) {
       return {
         error: `Deep research model ${this.modelName} requires the web_search_preview tool to be configured. Add it to your provider config:\ntools:\n  - type: web_search_preview`,
@@ -520,7 +520,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   private async getTransportErrorResponse(
     err: unknown,
-    result: Pick<ResponsesTransportResult, 'deleteFromCache' | 'requestMetadata' | 'responseHeaders'>,
+    result: Pick<
+      ResponsesTransportResult,
+      'deleteFromCache' | 'requestMetadata' | 'responseHeaders'
+    >,
   ): Promise<ProviderResponse> {
     const failure = isResponsesTransportFailure(err) ? err : undefined;
     const transportError = failure?.error ?? err;
@@ -539,6 +542,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       return getOpenAiInvalidPromptCode(errorData) === 'invalid_prompt'
         ? {
             output: errorMessage,
+            tokenUsage:
+              typeof errorData === 'object' && errorData !== null && 'usage' in errorData
+                ? getTokenUsage(errorData, requestMetadata?.cached ?? false)
+                : undefined,
             isRefusal: true,
             metadata: { http: { status, statusText, headers } },
           }
@@ -727,9 +734,7 @@ function getErrorStatus(error: unknown): number | undefined {
 }
 
 function getErrorData(error: unknown): unknown {
-  return typeof error === 'object' && error !== null && 'error' in error
-    ? error.error
-    : undefined;
+  return typeof error === 'object' && error !== null && 'error' in error ? error.error : undefined;
 }
 
 function isResponsesTransportFailure(error: unknown): error is ResponsesTransportFailure {

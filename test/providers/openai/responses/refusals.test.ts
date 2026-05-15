@@ -91,6 +91,7 @@ describe('OpenAiResponsesProvider refusals', () => {
             param: null,
             code: 'invalid_prompt',
           },
+          usage: { prompt_tokens: 8, completion_tokens: 0, total_tokens: 8 },
         },
         cached: false,
         status: 400,
@@ -112,6 +113,12 @@ describe('OpenAiResponsesProvider refusals', () => {
       expect(result.output).toContain('some random error message');
       expect(result.output).toContain('400 Bad Request');
       expect(result.isRefusal).toBe(true);
+      expect(result.tokenUsage).toEqual({
+        prompt: 8,
+        completion: 0,
+        total: 8,
+        numRequests: 1,
+      });
     });
 
     it('should still treat non-refusal 400 errors as errors', async () => {

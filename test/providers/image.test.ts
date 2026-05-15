@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
-import { callOpenAiImageApi } from '../../src/providers/image';
+import { callOpenAiImageApi } from '../../src/providers/image/utils';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -10,6 +10,10 @@ vi.mock('../../src/cache', async (importOriginal) => ({
 describe('callOpenAiImageApi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('posts JSON image requests through the shared cached transport', async () => {

@@ -1048,7 +1048,7 @@ describe('OpenAiVideoProvider', () => {
       expect((inputReference as File).name).toBe('input-reference.png');
     });
 
-    it('should read and base64 encode file when input_reference starts with file://', async () => {
+    it('should read file input references into multipart uploads when using file://', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: { apiKey: 'test-key', input_reference: 'file:///path/to/image.png' },
       });

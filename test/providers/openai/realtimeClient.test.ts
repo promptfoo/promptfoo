@@ -1,5 +1,5 @@
 import { OpenAIRealtimeWS } from 'openai/realtime/ws';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { createOpenAiRealtimeSocket } from '../../../src/providers/openai/realtimeClient';
 
@@ -19,6 +19,10 @@ describe('createOpenAiRealtimeSocket', () => {
   };
 
   beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
     vi.resetAllMocks();
   });
 
@@ -63,6 +67,29 @@ describe('createOpenAiRealtimeSocket', () => {
     expect(result).toBe(socket);
     expect(MockWebSocket).toHaveBeenCalledWith(
       'ws://localhost:8080/v1/realtime?model=gpt-realtime',
+      websocketOptions,
+    );
+    expect(MockOpenAIRealtimeWS).not.toHaveBeenCalled();
+  });
+
+  it('preserves HTTPS client-secret socket URLs with the legacy socket constructor', () => {
+    const socket = { send: vi.fn(), close: vi.fn() } as unknown as WebSocket;
+    MockWebSocket.mockImplementation(function () {
+      return socket;
+    });
+
+    const result = createOpenAiRealtimeSocket({
+      apiKey: 'test-key',
+      baseURL: 'https://api.openai.com/v1',
+      model: 'gpt-realtime',
+      socketUrl: 'wss://api.openai.com/v1/realtime/socket?client_secret=secret123',
+      websocketOptions,
+      config: { maxRetries: 2 },
+    });
+
+    expect(result).toBe(socket);
+    expect(MockWebSocket).toHaveBeenCalledWith(
+      'wss://api.openai.com/v1/realtime/socket?client_secret=secret123',
       websocketOptions,
     );
     expect(MockOpenAIRealtimeWS).not.toHaveBeenCalled();

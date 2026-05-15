@@ -31,7 +31,7 @@ vi.mock('playwright', () => ({
 // Mock http server
 vi.mock('http', () => ({
   createServer: vi.fn().mockReturnValue({
-    listen: vi.fn((_port: number, callback: () => void) => callback()),
+    listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
     address: vi.fn().mockReturnValue({ port: 3000 }),
     close: vi.fn(),
     once: vi.fn(), // Error handler registration

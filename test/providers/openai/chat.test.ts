@@ -1911,6 +1911,24 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(body.prompt_cache_retention).toBe('in_memory');
     });
 
+    it('should let passthrough override standard chat request options', async () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          top_p: 0.2,
+          response_format: { type: 'json_object' },
+          passthrough: {
+            top_p: 0.8,
+            response_format: { type: 'text' },
+          },
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.top_p).toBe(0.8);
+      expect(body.response_format).toEqual({ type: 'text' });
+    });
+
     it('should not share config between provider instances', () => {
       const sharedConfig = {
         max_tokens: 16000,
@@ -2609,6 +2627,48 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         if (originalOpenAIEnv !== undefined) {
           mockProcessEnv({ OPENAI_API_KEY: originalOpenAIEnv });
         }
+      }
+    });
+
+    it('preserves custom Authorization headers when apiKeyRequired is false', async () => {
+      const originalCustomEnv = process.env.CUSTOM_LOCAL_API_KEY;
+      const originalOpenAIEnv = process.env.OPENAI_API_KEY;
+      mockProcessEnv({ CUSTOM_LOCAL_API_KEY: undefined });
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('local-model', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_LOCAL_API_KEY',
+            apiBaseUrl: 'http://localhost:8080/v1',
+            headers: {
+              Authorization: 'Bearer gateway-token',
+            },
+          },
+        });
+
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            choices: [{ message: { content: 'Response through gateway auth' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const result = await provider.callApi(
+          JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+        );
+
+        expect(result.output).toBe('Response through gateway auth');
+        const callArgs = mockFetchWithCache.mock.calls[0];
+        const headers = new Headers(callArgs[1]?.headers);
+        expect(headers.get('authorization')).toBe('Bearer gateway-token');
+      } finally {
+        mockProcessEnv({ CUSTOM_LOCAL_API_KEY: originalCustomEnv });
+        mockProcessEnv({ OPENAI_API_KEY: originalOpenAIEnv });
       }
     });
   });

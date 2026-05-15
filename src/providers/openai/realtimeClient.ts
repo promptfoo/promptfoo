@@ -28,7 +28,7 @@ export function createOpenAiRealtimeSocket({
   websocketOptions,
   config,
 }: CreateOpenAiRealtimeSocketOptions): WebSocket {
-  if (new URL(baseURL).protocol === 'http:') {
+  if (new URL(baseURL).protocol === 'http:' || isClientSecretSocketUrl(socketUrl)) {
     return new WebSocket(socketUrl, websocketOptions);
   }
 
@@ -46,4 +46,9 @@ export function createOpenAiRealtimeSocket({
   realtime.on('error', () => {});
 
   return realtime.socket;
+}
+
+function isClientSecretSocketUrl(socketUrl: string) {
+  const url = new URL(socketUrl);
+  return url.pathname.endsWith('/realtime/socket') && url.searchParams.has('client_secret');
 }

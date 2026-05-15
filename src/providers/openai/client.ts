@@ -46,6 +46,8 @@ export type OpenAiJsonRequestMetadata = {
   statusText?: string;
 };
 
+const SDK_ANONYMOUS_API_KEY = 'promptfoo-sdk-anonymous';
+
 export function getOpenAiHttpMetadata({
   headers,
   status,
@@ -195,7 +197,7 @@ export function unwrapOpenAiTransportError(err: unknown) {
 }
 
 function getSdkApiKey(apiKey: string | undefined, allowMissingApiKey?: boolean) {
-  return apiKey || (allowMissingApiKey ? 'promptfoo-sdk-anonymous' : apiKey);
+  return apiKey || (allowMissingApiKey ? SDK_ANONYMOUS_API_KEY : apiKey);
 }
 
 function stripSyntheticAuthorization(init: RequestInit, apiKey: string | undefined): RequestInit {
@@ -204,7 +206,9 @@ function stripSyntheticAuthorization(init: RequestInit, apiKey: string | undefin
   }
 
   const headers = new Headers(init.headers);
-  headers.delete('authorization');
+  if (headers.get('authorization') === `Bearer ${SDK_ANONYMOUS_API_KEY}`) {
+    headers.delete('authorization');
+  }
 
   return {
     ...init,

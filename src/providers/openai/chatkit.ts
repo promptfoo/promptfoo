@@ -854,8 +854,9 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
             res.end(JSON.stringify({ client_secret: clientSecret }));
           })
           .catch((error) => {
+            logger.error('[ChatKitProvider] Failed to create ChatKit client secret', { error });
             res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: String(error) }));
+            res.end(JSON.stringify({ error: 'Failed to create ChatKit session' }));
           });
         return;
       }
@@ -868,7 +869,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       this.server!.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit server: ${err.message}`));
       });
-      this.server!.listen(this.chatKitConfig.serverPort, () => {
+      this.server!.listen(this.chatKitConfig.serverPort, '127.0.0.1', () => {
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitProvider] Server started', { port: this.serverPort });
@@ -913,7 +914,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     // Navigate to our HTML page
-    await this.page.goto(`http://localhost:${this.serverPort}`, {
+    await this.page.goto(`http://127.0.0.1:${this.serverPort}`, {
       waitUntil: 'domcontentloaded',
     });
 

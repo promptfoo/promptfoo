@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { callOpenAiImageApi } from '../../../src/providers/image';
+import { callOpenAiImageApi } from '../../../src/providers/image/utils';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
-vi.mock('../../../src/providers/image', () => ({
+vi.mock('../../../src/providers/image/utils', () => ({
   callOpenAiImageApi: vi.fn(),
 }));
 

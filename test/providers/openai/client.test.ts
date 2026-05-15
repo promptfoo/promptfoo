@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createOpenAiClient } from '../../../src/providers/openai/client';
 
 describe('createOpenAiClient', () => {
@@ -19,5 +19,26 @@ describe('createOpenAiClient', () => {
     });
 
     expect(client.maxRetries).toBe(3);
+  });
+
+  it('preserves caller Authorization headers when missing API keys are allowed', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ object: 'list', data: [] }), {
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const client = createOpenAiClient({
+      allowMissingApiKey: true,
+      baseURL: 'https://gateway.example.com/v1',
+      fetch: fetchMock as typeof globalThis.fetch,
+      headers: {
+        Authorization: 'Bearer gateway-token',
+      },
+    });
+
+    await client.models.list();
+
+    const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(new Headers(requestInit.headers).get('authorization')).toBe('Bearer gateway-token');
   });
 });
