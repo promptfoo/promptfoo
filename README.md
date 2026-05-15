@@ -74,12 +74,14 @@ It also can generate [security vulnerability reports](https://www.promptfoo.dev/
 
 Promptfoo can evaluate modern LLM applications that use agents, tool/function calling, structured outputs (JSON mode), and retrieval-augmented generation (RAG).
 
-Agent Workflows
+### Agent workflows
 
-For agent frameworks (e.g., n8n or custom orchestrators), extract the final prompt template and replace framework variables with {{variable}} syntax:
+For agent frameworks (for example, n8n or custom orchestrators), extract the final prompt template and replace framework variables with `{{variable}}` syntax:
 
+```yaml
 prompts:
-  - System: {{system_prompt}}
+  - |
+    System: {{system_prompt}}
     User: {{user_input}}
 
 providers:
@@ -87,34 +89,37 @@ providers:
 
 tests:
   - vars:
-      system_prompt: "You are a helpful assistant."
-      user_input: "Book a flight to Paris."
+      system_prompt: 'You are a helpful assistant.'
+      user_input: 'Book a flight to Paris.'
     assert:
       - type: is-json
+```
 
-
-Tool / Function Calling
+### Tool / function calling
 
 Validate that the correct tool is selected and payload format is valid:
 
+```yaml
 tests:
   - vars:
-      user_query: "Schedule a meeting tomorrow at 3pm"
+      user_query: 'Schedule a meeting tomorrow at 3pm'
     assert:
       - type: is-json
       - type: contains-json
         value:
-          name: "schedule_meeting"
+          name: 'schedule_meeting'
+```
 
-
-RAG Applications
+### RAG applications
 
 Ensure expected facts appear in responses and prevent regressions:
 
+```yaml
 assert:
   - type: contains
-    value: "The Eiffel Tower is located in Paris"
-    
+    value: 'The Eiffel Tower is located in Paris'
+```
+
 ## Why Promptfoo?
 
 - **Developer-first**: Fast, with features like live reload and caching
