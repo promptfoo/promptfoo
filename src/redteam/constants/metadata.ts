@@ -696,6 +696,10 @@ export const riskCategories: Record<string, Plugin[]> = {
     'system-prompt-override',
     'tool-discovery',
     'mcp',
+    'mcp-shadow',
+    'mcp-shadow:content-exfil',
+    'mcp-shadow:content-hijack',
+    'mcp-shadow:tool-poisoning',
 
     // Data protection
     'cross-session-leak',
