@@ -704,7 +704,7 @@ These properties can be set under the provider `config` key:
 | o1                    | Set to `true` if your Azure deployment uses an o1 model. **(Deprecated, use `isReasoningModel` instead)**                                       |
 | isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
 | max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
-| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. For custom chat/completion deployments, set `isReasoningModel`                            |
+| reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. For custom chat/completion deployments, set `isReasoningModel: true`                      |
 | reasoning             | Responses API reasoning object, including `effort` and optional `summary` for visible reasoning summaries                                       |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
 | max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |

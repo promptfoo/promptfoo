@@ -85,10 +85,6 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     );
   }
 
-  supportsTemperature(): boolean {
-    return !this.isReasoningModel();
-  }
-
   async getAzureResponsesBody(
     prompt: string,
     context?: CallApiContextParams,

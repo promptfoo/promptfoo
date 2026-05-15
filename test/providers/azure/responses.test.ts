@@ -102,18 +102,6 @@ describe('AzureResponsesProvider', () => {
     });
   });
 
-  describe('supportsTemperature', () => {
-    it('should support temperature for non-reasoning models', () => {
-      const provider = new AzureResponsesProvider('gpt-4.1');
-      expect(provider.supportsTemperature()).toBe(true);
-    });
-
-    it('should not support temperature for reasoning models', () => {
-      const provider = new AzureResponsesProvider('o1-preview');
-      expect(provider.supportsTemperature()).toBe(false);
-    });
-  });
-
   describe('getAzureResponsesBody', () => {
     it('should create correct request body for basic prompt', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test');
