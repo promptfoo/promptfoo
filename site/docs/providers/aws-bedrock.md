@@ -222,6 +222,57 @@ Because AWS changes that compatibility matrix over time, use the
 [AWS Converse supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html)
 as the source of truth for current support.
 
+### Model Context Protocol (MCP) Servers
+
+The Converse provider can attach [Model Context Protocol](https://modelcontextprotocol.io)
+servers and surface their tools to the model alongside any `tools` you configure
+manually. MCP tool definitions are discovered at provider startup, converted to
+Bedrock `toolSpec` entries, and sent on every request.
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      mcp:
+        enabled: true
+        servers:
+          # Remote MCP server (Streamable HTTP)
+          - name: deepwiki
+            url: https://mcp.deepwiki.com/mcp
+          # Or a local stdio MCP server
+          # - name: filesystem
+          #   command: npx
+          #   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp']
+        # Optional: only expose specific tools
+        tools:
+          - ask_question
+      toolChoice: auto
+```
+
+**Single-turn execution.** When the model returns a `tool_use` block, the provider
+executes the requested MCP tool and returns the **raw tool result** as the final
+output. The result is not fed back to the model for a follow-up turn — there is no
+agent loop. Write your assertions against the tool output text directly, or wrap
+the provider in an agent harness if you need a synthesized natural-language answer.
+
+**Tool name collisions.** If an entry under `config.tools` has the same `name` as
+an MCP-discovered tool, the MCP version wins and the duplicate is dropped with a
+warning. Bedrock rejects duplicate tool names with `ValidationException`, so
+deduping is required.
+
+**Lifecycle.** Stdio MCP servers spawn a child process; the provider registers
+itself with the evaluator's shutdown hook so transports are released when the
+eval finishes. If MCP initialization fails (bad URL, missing binary, handshake
+failure), the failure is surfaced as a `ProviderResponse.error` on the first
+`callApi` rather than crashing the eval. MCP errors during a tool call are
+likewise propagated to `error` so failed runs do not pass silently.
+
+**Disabling tools.** Setting `toolChoice: none` (or `tool_choice: none`) skips
+the entire tool path: no MCP definitions are sent in the request and no MCP
+tools are invoked even if the model returns a stale `tool_use` block.
+
 ## Authentication
 
 Amazon Bedrock supports multiple authentication methods, including API key

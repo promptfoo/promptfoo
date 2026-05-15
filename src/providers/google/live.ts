@@ -35,10 +35,10 @@ const formatContentMessage = (
   contentIndex: number,
   useRealtimeTextInput = false,
 ) => {
-  if (contents[contentIndex].role != 'user') {
+  if (contents[contentIndex].role !== 'user') {
     throw new Error('Can only take user role inputs.');
   }
-  if (contents[contentIndex].parts.length != 1) {
+  if (contents[contentIndex].parts.length !== 1) {
     throw new Error('Unexpected number of parts in user input.');
   }
   const userMessage = contents[contentIndex].parts[0].text;
@@ -68,31 +68,34 @@ const formatContentMessage = (
 /**
  * Helper function to fetch JSON with error handling
  */
-export const fetchJson = async (url: string, options?: RequestInit): Promise<any> => {
+export const fetchJson = async <T = unknown>(url: string, options?: RequestInit): Promise<T> => {
   const response = await fetchWithProxy(url, options);
   if (!response.ok) {
     throw new Error(`HTTP error - status: ${response.status}`);
   }
-  return response.json();
+  return response.json() as Promise<T>;
 };
 
 /**
  * Helper function to try GET with query params, fallback to POST with JSON body
  */
-export const tryGetThenPost = async (url: string, data?: any): Promise<any> => {
+export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): Promise<T> => {
   try {
     // Try GET first with query params
     const urlWithParams = new URL(url);
     if (data) {
-      const params = typeof data === 'string' ? JSON.parse(data) : data;
+      const params = (typeof data === 'string' ? JSON.parse(data) : data) as Record<
+        string,
+        unknown
+      >;
       Object.entries(params).forEach(([key, value]) => {
         urlWithParams.searchParams.append(key, String(value));
       });
     }
-    return await fetchJson(urlWithParams.href);
+    return await fetchJson<T>(urlWithParams.href);
   } catch {
     // Fall back to POST
-    return fetchJson(url, {
+    return fetchJson<T>(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -292,7 +295,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let response_audio_transcript = '';
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
-      let statefulApiState: any = undefined;
+      let statefulApiState: unknown = undefined;
       let hasFinalized = false;
 
       const isTextExpected =
@@ -326,8 +329,11 @@ export class GoogleLiveProvider implements ApiProvider {
         }
         clearTimeout(timeout);
 
-        // Retrieve final state from stateful API before shutting down
-        if (!toolsDisabled && config.functionToolStatefulApi) {
+        // Retrieve final state from stateful API before shutting down. Skip
+        // if the request has already been resolved (e.g. by an early
+        // onclose/timeout) — the caller has moved on and won't read the
+        // result.
+        if (!isResolved && !toolsDisabled && config.functionToolStatefulApi) {
           try {
             const url = new URL('get_state', config.functionToolStatefulApi.url).href;
             statefulApiState = await fetchJson(url);
@@ -442,6 +448,12 @@ export class GoogleLiveProvider implements ApiProvider {
       };
 
       ws.onmessage = async (event) => {
+        // Once the request has been resolved (e.g. by an early onclose or
+        // timeout), drop any in-flight messages so they don't trigger side
+        // effects like stateful-API fetches after the caller has moved on.
+        if (isResolved) {
+          return;
+        }
         // Handle different data types from WebSocket
         logger.debug('WebSocket message received');
         let responseData: string;
@@ -472,6 +484,11 @@ export class GoogleLiveProvider implements ApiProvider {
 
         try {
           const responseText = await new Response(responseData).text();
+          // Re-check after the await: the request may have been resolved by an
+          // onclose/timeout while we were parsing.
+          if (isResolved) {
+            return;
+          }
           const response = JSON.parse(responseText);
 
           if (response.error) {
@@ -599,6 +616,11 @@ export class GoogleLiveProvider implements ApiProvider {
             }
             return;
           } else if (response.toolCall?.functionCalls) {
+            // Skip tool execution and tool_response sends if the request is
+            // already resolved (e.g. via timeout/onclose).
+            if (isResolved) {
+              return;
+            }
             if (toolsDisabled) {
               // Reply with an error tool_response so the model can complete its turn
               // instead of waiting for a response that will never come (which would
@@ -622,7 +644,7 @@ export class GoogleLiveProvider implements ApiProvider {
               for (const functionCall of response.toolCall.functionCalls) {
                 function_calls_total.push(functionCall);
                 if (functionCall && functionCall.id && functionCall.name) {
-                  let callbackResponse = {};
+                  let callbackResponse: unknown = {};
                   const functionName = functionCall.name;
                   try {
                     if (config.functionToolCallbacks?.[functionName]) {
@@ -660,6 +682,11 @@ export class GoogleLiveProvider implements ApiProvider {
                     logger.error(
                       `Error executing function ${functionName}: ${JSON.stringify(err)}`,
                     );
+                  }
+                  // The callback above may have awaited; bail before sending
+                  // a tool_response if the request has since been resolved.
+                  if (isResolved) {
+                    return;
                   }
                   const toolMessage = {
                     tool_response: {

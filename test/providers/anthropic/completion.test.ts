@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
 import logger from '../../../src/logger';
@@ -147,18 +149,111 @@ describe('AnthropicCompletionProvider', () => {
     it('should keep auth cache namespace stable across module reloads', async () => {
       async function getNamespaceFromFreshModule() {
         vi.resetModules();
-        const { getAnthropicAuthCacheNamespace } = await import(
-          '../../../src/providers/anthropic/generic'
-        );
-        return getAnthropicAuthCacheNamespace('sk-ant-reload-secret');
+        const anthropicGeneric = await import('../../../src/providers/anthropic/generic');
+        return {
+          getAnthropicAuthCacheNamespace: anthropicGeneric.getAnthropicAuthCacheNamespace,
+          namespace: anthropicGeneric.getAnthropicAuthCacheNamespace('sk-ant-reload-secret'),
+        };
       }
 
-      const firstNamespace = await getNamespaceFromFreshModule();
-      const secondNamespace = await getNamespaceFromFreshModule();
+      const firstLoad = await getNamespaceFromFreshModule();
+      const secondLoad = await getNamespaceFromFreshModule();
 
-      expect(firstNamespace).toBe(secondNamespace);
-      expect(firstNamespace).toMatch(/^[a-f0-9]{64}$/);
-      expect(firstNamespace).not.toContain('sk-ant-reload-secret');
+      expect(firstLoad.getAnthropicAuthCacheNamespace).not.toBe(
+        secondLoad.getAnthropicAuthCacheNamespace,
+      );
+      expect(firstLoad.namespace).toBe(secondLoad.namespace);
+      expect(firstLoad.namespace).toMatch(/^[a-f0-9]{64}$/);
+      expect(firstLoad.namespace).not.toContain('sk-ant-reload-secret');
+    });
+
+    it('should keep cache key hashes stable across fresh processes', () => {
+      const importProbe = `
+        const { getAnthropicAuthCacheNamespace, hashAnthropicCacheValue } =
+          await import('./src/providers/anthropic/generic.ts');
+        process.stdout.write(JSON.stringify({
+          authNamespace: getAnthropicAuthCacheNamespace('sk-ant-restart-secret'),
+          requestHash: hashAnthropicCacheValue({ prompt: 'same prompt' }),
+        }));
+      `;
+
+      const spawnOptions = {
+        cwd: process.cwd(),
+        encoding: 'utf8' as const,
+        timeout: 10_000,
+      };
+      const firstRun = spawnSync(
+        process.execPath,
+        ['--import', 'tsx', '-e', importProbe],
+        spawnOptions,
+      );
+      const secondRun = spawnSync(
+        process.execPath,
+        ['--import', 'tsx', '-e', importProbe],
+        spawnOptions,
+      );
+
+      expect(firstRun.error, firstRun.error?.message).toBeUndefined();
+      expect(secondRun.error, secondRun.error?.message).toBeUndefined();
+      expect(firstRun.status, firstRun.stderr || firstRun.stdout).toBe(0);
+      expect(secondRun.status, secondRun.stderr || secondRun.stdout).toBe(0);
+      expect(firstRun.stdout).toBe(secondRun.stdout);
+      expect(JSON.parse(firstRun.stdout)).toMatchObject({
+        authNamespace: expect.stringMatching(/^[a-f0-9]{64}$/),
+        requestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(firstRun.stdout).not.toContain('sk-ant-restart-secret');
+    });
+
+    it('should produce known hex digests for fixed inputs', async () => {
+      const { getAnthropicAuthCacheNamespace, hashAnthropicCacheValue } = await import(
+        '../../../src/providers/anthropic/generic'
+      );
+
+      expect(getAnthropicAuthCacheNamespace('sk-ant-restart-secret')).toBe(
+        '7c26fdc69a372e71532057f3039c789205d499e73d7b7356842127c3f9280701',
+      );
+      expect(hashAnthropicCacheValue({ prompt: 'same prompt' })).toBe(
+        '986a0c23b9bf151804afb7cd7ff27307d4450f268f18bdd7d5cea95d52de9114',
+      );
+      expect(hashAnthropicCacheValue(undefined)).toBe(
+        '766c13d249e6c1a4c7ab9b490e2b854b2764a4d88677be73fb242f2238bd3d9d',
+      );
+      expect(getAnthropicAuthCacheNamespace('')).toBe(
+        '7b632cd5180136645b21af8e6f3708e0782bdc3a9d81f094a9385cade8ce0987',
+      );
+    });
+
+    it('should hash semantically identical objects to the same value regardless of key order', async () => {
+      const { hashAnthropicCacheValue } = await import('../../../src/providers/anthropic/generic');
+
+      expect(hashAnthropicCacheValue({ a: 1, b: 2, c: 3 })).toBe(
+        hashAnthropicCacheValue({ c: 3, a: 1, b: 2 }),
+      );
+      expect(
+        hashAnthropicCacheValue({ messages: [{ role: 'user', content: 'hi' }], model: 'claude' }),
+      ).toBe(
+        hashAnthropicCacheValue({ model: 'claude', messages: [{ content: 'hi', role: 'user' }] }),
+      );
+      // Arrays preserve order — element ordering is semantically meaningful.
+      expect(hashAnthropicCacheValue([1, 2, 3])).not.toBe(hashAnthropicCacheValue([3, 2, 1]));
+    });
+
+    it('should preserve non-plain-object semantics so distinct values do not collide', async () => {
+      const { hashAnthropicCacheValue } = await import('../../../src/providers/anthropic/generic');
+
+      // Date and Buffer expose state via toJSON / default serialization rather
+      // than enumerable own keys. Naïve canonicalization would rebuild them as
+      // empty/index-only objects and collapse distinct values to the same hash.
+      expect(hashAnthropicCacheValue(new Date('2026-01-01T00:00:00.000Z'))).not.toBe(
+        hashAnthropicCacheValue(new Date('2027-06-15T12:00:00.000Z')),
+      );
+      expect(hashAnthropicCacheValue({ ts: new Date('2026-01-01T00:00:00.000Z') })).not.toBe(
+        hashAnthropicCacheValue({ ts: new Date('2027-06-15T12:00:00.000Z') }),
+      );
+      expect(hashAnthropicCacheValue(Buffer.from('alpha'))).not.toBe(
+        hashAnthropicCacheValue(Buffer.from('beta')),
+      );
     });
 
     it('should avoid logging prompts and generated outputs in debug metadata', async () => {
@@ -224,29 +319,33 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('should preserve an explicit max_tokens_to_sample value of 0', async () => {
-      mockProcessEnv({ ANTHROPIC_MAX_TOKENS: '1024' });
+      const restoreEnv = mockProcessEnv({ ANTHROPIC_MAX_TOKENS: '1024' });
 
-      const provider = new AnthropicCompletionProvider('claude-2.1', {
-        config: { max_tokens_to_sample: 0 },
-      });
-      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
-        id: 'test-id',
-        model: 'claude-2.1',
-        stop_reason: 'stop_sequence',
-        type: 'completion',
-        completion: 'Test output',
-      });
+      try {
+        const provider = new AnthropicCompletionProvider('claude-2.1', {
+          config: { max_tokens_to_sample: 0 },
+        });
+        vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+          id: 'test-id',
+          model: 'claude-2.1',
+          stop_reason: 'stop_sequence',
+          type: 'completion',
+          completion: 'Test output',
+        });
 
-      await provider.callApi('Test prompt');
+        await provider.callApi('Test prompt');
 
-      expect(provider.anthropic.completions.create).toHaveBeenCalledWith(
-        expect.objectContaining({ max_tokens_to_sample: 0 }),
-      );
+        expect(provider.anthropic.completions.create).toHaveBeenCalledWith(
+          expect.objectContaining({ max_tokens_to_sample: 0 }),
+        );
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
   describe('requiresApiKey', () => {
-    it('always requires an API key even when apiKeyRequired: false is set', () => {
+    it('requires an API key for the Completion API even when apiKeyRequired: false is set', () => {
       // Claude Code OAuth tokens only work on the Messages API; forwarding
       // them to the legacy completions endpoint would fail at request time,
       // so the completion subclass must not honor `apiKeyRequired: false`.

@@ -21,6 +21,15 @@ import ThemeSelector from './ThemeSelector';
 
 const LEGACY_MODEL_AUDIT_HISTORY_ROUTE = `${MODEL_AUDIT_ROUTES.ROOT}/history`;
 
+function isModelAuditResultPath(pathname: string) {
+  return (
+    pathname === MODEL_AUDIT_ROUTES.ROOT ||
+    (pathname.startsWith(`${MODEL_AUDIT_ROUTES.ROOT}/`) &&
+      !pathname.startsWith(MODEL_AUDIT_ROUTES.SETUP) &&
+      !pathname.startsWith(LEGACY_MODEL_AUDIT_HISTORY_ROUTE))
+  );
+}
+
 interface NavLinkProps {
   href: string;
   label: string;
@@ -32,11 +41,7 @@ function NavLink({ href, label }: NavLinkProps) {
   // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
   let isActive: boolean;
   if (href === MODEL_AUDIT_ROUTES.ROOT) {
-    isActive =
-      location.pathname === MODEL_AUDIT_ROUTES.ROOT ||
-      (location.pathname.startsWith(`${MODEL_AUDIT_ROUTES.ROOT}/`) &&
-        !location.pathname.startsWith(MODEL_AUDIT_ROUTES.SETUP) &&
-        !location.pathname.startsWith(LEGACY_MODEL_AUDIT_HISTORY_ROUTE));
+    isActive = isModelAuditResultPath(location.pathname);
   } else {
     isActive = location.pathname.startsWith(href);
   }
@@ -45,7 +50,7 @@ function NavLink({ href, label }: NavLinkProps) {
     <Link
       to={href}
       className={cn(
-        'inline-flex h-8 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors',
+        'inline-flex h-11 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors sm:h-8',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isActive
           ? 'bg-primary/10 text-foreground hover:bg-primary/15 focus-visible:bg-primary/15'
@@ -65,19 +70,22 @@ interface MenuItem {
 
 interface NavDropdownProps {
   label: string;
+  compactLabel?: string;
   items: MenuItem[];
   isActiveCheck: (pathname: string) => boolean;
+  className?: string;
 }
 
-function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
+function NavDropdown({ label, compactLabel, items, isActiveCheck, className }: NavDropdownProps) {
   const location = useLocation();
   const isActive = isActiveCheck(location.pathname);
 
   return (
-    <NavigationMenuItem>
+    <NavigationMenuItem className={className}>
       <NavigationMenuTrigger
+        aria-label={label}
         className={cn(
-          'h-8 bg-transparent px-3 text-sm font-medium',
+          'h-11 bg-transparent px-3 text-sm font-medium sm:h-8',
           'data-[state=open]:bg-accent',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           isActive
@@ -85,7 +93,14 @@ function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
             : 'text-foreground hover:bg-accent focus-visible:bg-accent',
         )}
       >
-        {label}
+        {compactLabel ? (
+          <>
+            <span className="hidden min-[390px]:inline">{label}</span>
+            <span className="min-[390px]:hidden">{compactLabel}</span>
+          </>
+        ) : (
+          label
+        )}
       </NavigationMenuTrigger>
       <NavigationMenuContent>
         <ul className="w-[300px] p-1.5">
@@ -156,6 +171,29 @@ const resultsMenuItems: MenuItem[] = [
   },
 ];
 
+const browseMenuItems: MenuItem[] = [
+  {
+    href: MODEL_AUDIT_ROUTES.ROOT,
+    label: 'Model Audit',
+    description: 'Review model audit runs',
+  },
+  {
+    href: ROUTES.PROMPTS,
+    label: 'Prompts',
+    description: 'Browse saved prompts',
+  },
+  {
+    href: ROUTES.DATASETS,
+    label: 'Datasets',
+    description: 'Browse saved datasets',
+  },
+  {
+    href: ROUTES.HISTORY,
+    label: 'History',
+    description: 'View evaluation history',
+  },
+];
+
 export default function Navigation() {
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
@@ -166,7 +204,7 @@ export default function Navigation() {
   return (
     <>
       <header className="sticky top-0 z-(--z-appbar) w-full border-b border-border bg-card shadow-sm">
-        <div className="flex h-14 items-center justify-between px-4">
+        <div className="flex h-14 min-w-0 items-center justify-between gap-2 px-3 sm:px-4">
           {/* Left section: Logo and Navigation */}
           <div className="flex min-w-0 items-center gap-2 sm:gap-6">
             <Logo />
@@ -183,6 +221,7 @@ export default function Navigation() {
                 />
                 <NavDropdown
                   label="View Results"
+                  compactLabel="Results"
                   items={resultsMenuItems}
                   isActiveCheck={(pathname) =>
                     [EVAL_ROUTES.ROOT, EVAL_ROUTES.LIST, REDTEAM_ROUTES.REPORTS, ROUTES.MEDIA].some(
@@ -190,9 +229,19 @@ export default function Navigation() {
                     )
                   }
                 />
+                <NavDropdown
+                  label="Browse"
+                  items={browseMenuItems}
+                  className="hidden md:block lg:hidden"
+                  isActiveCheck={(pathname) =>
+                    [ROUTES.PROMPTS, ROUTES.DATASETS, ROUTES.HISTORY].some((route) =>
+                      pathname.startsWith(route),
+                    ) || isModelAuditResultPath(pathname)
+                  }
+                />
               </NavigationMenuList>
             </NavigationMenu>
-            <nav className="hidden items-center gap-1 md:flex">
+            <nav className="hidden items-center gap-1 lg:flex">
               <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
               <NavLink href={ROUTES.PROMPTS} label="Prompts" />
               <NavLink href={ROUTES.DATASETS} label="Datasets" />
@@ -201,13 +250,13 @@ export default function Navigation() {
           </div>
 
           {/* Right section: Actions */}
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   onClick={handleModalToggle}
-                  className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  className="inline-flex size-11 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-9"
                 >
                   <Info className="size-5" />
                   <span className="sr-only">Information</span>
@@ -222,7 +271,7 @@ export default function Navigation() {
                   <button
                     type="button"
                     onClick={handleApiSettingsModalToggle}
-                    className="inline-flex size-9 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="inline-flex size-11 items-center justify-center rounded-md text-foreground/60 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:size-9"
                   >
                     <Settings className="size-5" />
                     <span className="sr-only">API and Sharing Settings</span>

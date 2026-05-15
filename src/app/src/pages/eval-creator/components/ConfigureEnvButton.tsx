@@ -93,92 +93,97 @@ const ConfigureEnvButton = () => {
       </Button>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => !open && handleClose()}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Provider Settings</DialogTitle>
           </DialogHeader>
 
-          <div className="border border-border rounded-lg overflow-hidden">
-            <EnvSection title="OpenAI" defaultOpen>
-              <EnvField
-                label="OpenAI API key"
-                envKey="OPENAI_API_KEY"
-                value={env.OPENAI_API_KEY || ''}
-                onChange={handleEnvChange}
-              />
-              <EnvField
-                label="OpenAI API host"
-                envKey="OPENAI_API_HOST"
-                value={env.OPENAI_API_HOST || ''}
-                onChange={handleEnvChange}
-              />
-              <EnvField
-                label="OpenAI organization"
-                envKey="OPENAI_ORGANIZATION"
-                value={env.OPENAI_ORGANIZATION || ''}
-                onChange={handleEnvChange}
-              />
-            </EnvSection>
+          <div
+            data-testid="configure-env-dialog-scroll-body"
+            className="min-h-0 flex-1 overflow-y-auto py-4"
+          >
+            <div className="border border-border rounded-lg overflow-hidden">
+              <EnvSection title="OpenAI" defaultOpen>
+                <EnvField
+                  label="OpenAI API key"
+                  envKey="OPENAI_API_KEY"
+                  value={env.OPENAI_API_KEY || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="OpenAI API host"
+                  envKey="OPENAI_API_HOST"
+                  value={env.OPENAI_API_HOST || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="OpenAI organization"
+                  envKey="OPENAI_ORGANIZATION"
+                  value={env.OPENAI_ORGANIZATION || ''}
+                  onChange={handleEnvChange}
+                />
+              </EnvSection>
 
-            <EnvSection title="Azure">
-              <EnvField
-                label="Azure API key"
-                envKey="AZURE_API_KEY"
-                value={env.AZURE_API_KEY || env.AZURE_OPENAI_API_KEY || ''}
-                onChange={handleEnvChange}
-              />
-            </EnvSection>
+              <EnvSection title="Azure">
+                <EnvField
+                  label="Azure API key"
+                  envKey="AZURE_API_KEY"
+                  value={env.AZURE_API_KEY || env.AZURE_OPENAI_API_KEY || ''}
+                  onChange={handleEnvChange}
+                />
+              </EnvSection>
 
-            <EnvSection title="Amazon Bedrock">
-              <EnvField
-                label="Bedrock Region"
-                envKey="AWS_BEDROCK_REGION"
-                value={env.AWS_BEDROCK_REGION || ''}
-                onChange={handleEnvChange}
-              />
-            </EnvSection>
+              <EnvSection title="Amazon Bedrock">
+                <EnvField
+                  label="Bedrock Region"
+                  envKey="AWS_BEDROCK_REGION"
+                  value={env.AWS_BEDROCK_REGION || ''}
+                  onChange={handleEnvChange}
+                />
+              </EnvSection>
 
-            <EnvSection title="Anthropic">
-              <EnvField
-                label="Anthropic API key"
-                envKey="ANTHROPIC_API_KEY"
-                value={env.ANTHROPIC_API_KEY || ''}
-                onChange={handleEnvChange}
-              />
-            </EnvSection>
+              <EnvSection title="Anthropic">
+                <EnvField
+                  label="Anthropic API key"
+                  envKey="ANTHROPIC_API_KEY"
+                  value={env.ANTHROPIC_API_KEY || ''}
+                  onChange={handleEnvChange}
+                />
+              </EnvSection>
 
-            <EnvSection title="Google Vertex AI">
-              <EnvField
-                label="Vertex API Key"
-                envKey="VERTEX_API_KEY"
-                value={env.VERTEX_API_KEY || ''}
-                onChange={handleEnvChange}
-              />
-              <EnvField
-                label="Vertex Project ID"
-                envKey="VERTEX_PROJECT_ID"
-                value={env.VERTEX_PROJECT_ID || ''}
-                onChange={handleEnvChange}
-              />
-              <EnvField
-                label="Vertex Region"
-                envKey="VERTEX_REGION"
-                value={env.VERTEX_REGION || ''}
-                onChange={handleEnvChange}
-              />
-            </EnvSection>
+              <EnvSection title="Google Vertex AI">
+                <EnvField
+                  label="Vertex API Key"
+                  envKey="VERTEX_API_KEY"
+                  value={env.VERTEX_API_KEY || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="Vertex Project ID"
+                  envKey="VERTEX_PROJECT_ID"
+                  value={env.VERTEX_PROJECT_ID || ''}
+                  onChange={handleEnvChange}
+                />
+                <EnvField
+                  label="Vertex Region"
+                  envKey="VERTEX_REGION"
+                  value={env.VERTEX_REGION || ''}
+                  onChange={handleEnvChange}
+                />
+              </EnvSection>
 
-            <EnvSection title="Replicate">
-              <EnvField
-                label="Replicate API key"
-                envKey="REPLICATE_API_KEY"
-                value={env.REPLICATE_API_KEY || ''}
-                onChange={handleEnvChange}
-              />
-            </EnvSection>
+              <EnvSection title="Replicate">
+                <EnvField
+                  label="Replicate API key"
+                  envKey="REPLICATE_API_KEY"
+                  value={env.REPLICATE_API_KEY || ''}
+                  onChange={handleEnvChange}
+                />
+              </EnvSection>
+            </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter data-testid="configure-env-dialog-footer" className="shrink-0">
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>

@@ -149,6 +149,13 @@ describe('SettingsPanel', () => {
     expect(slider).toHaveAttribute('aria-valuenow', '500');
   });
 
+  it('stacks the settings sections before the small breakpoint', () => {
+    const { container } = renderWithProviders(<SettingsPanel />);
+
+    expect(container.firstElementChild).toHaveClass('grid-cols-1', 'sm:grid-cols-[1fr_1px_1fr]');
+    expect(container.querySelector('.bg-border\\/10')).toHaveClass('hidden', 'sm:block');
+  });
+
   it('should disable Pass reasons when Pass/fail indicators is off', () => {
     mockedUseResultsViewSettingsStore.mockReturnValue({
       ...mockStore,
