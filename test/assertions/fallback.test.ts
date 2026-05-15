@@ -79,6 +79,8 @@ describe('Assertion Fallback Mechanism', () => {
       expect(result.componentResults).toHaveLength(2);
       const values = (result.componentResults ?? []).map((c) => c.assertion?.value);
       expect(values).toEqual(expect.arrayContaining(['nonexistent', 'test output']));
+      expect(result.componentResults?.[0]?.metadata?.fallbackIntermediate).toBeUndefined();
+      expect(result.componentResults?.[1]?.metadata?.fallbackIntermediate).toBe(true);
     });
 
     it('should use fallback: true as equivalent to fallback: next', async () => {

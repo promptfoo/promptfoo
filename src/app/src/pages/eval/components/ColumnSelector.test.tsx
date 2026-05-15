@@ -68,6 +68,21 @@ describe('ColumnSelector', () => {
     });
   });
 
+  it('lets the dialog header stack before the small breakpoint', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ColumnSelector
+        columnData={sampleColumns}
+        selectedColumns={['col1']}
+        onChange={mockOnChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /columns/i }));
+
+    expect(screen.getByText('Select Columns').parentElement).toHaveClass('flex-col', 'sm:flex-row');
+  });
+
   it('displays columns grouped by their group property', async () => {
     const user = userEvent.setup();
     renderWithProviders(

@@ -36,8 +36,8 @@ promptfoo eval --output results.json
 # Create CSV for spreadsheet analysis
 promptfoo eval --output results.csv
 
-# Generate XML for integration with other tools
-promptfoo eval --output results.xml
+# Generate JUnit XML for CI test-report integrations
+promptfoo eval --output results.junit.xml
 ```
 
 ## Available Formats
@@ -124,8 +124,8 @@ promptfoo eval --output results.jsonl
 **Use when:** Working with very large evaluations or when JSON export fails with memory errors.
 
 ```jsonl
-{"testIdx": 0, "promptIdx": 0, "output": "Response 1", "success": true, "score": 1.0}
-{"testIdx": 1, "promptIdx": 0, "output": "Response 2", "success": true, "score": 0.9}
+{"testIdx":0,"promptIdx":0,"success":true,"score":1.0,"response":{"output":"Response 1"},"gradingResult":{"pass":true,"score":1.0,"reason":"All assertions passed","componentResults":[{"pass":true,"score":1.0,"reason":"Expected output to contain \"hello\"","assertion":{"type":"contains","value":"hello"}}]}}
+{"testIdx":1,"promptIdx":0,"success":false,"score":0.0,"response":{"output":"Response 2"},"gradingResult":null}
 ```
 
 For assertion-level details, inspect each row's `gradingResult?.componentResults` array when
@@ -134,9 +134,76 @@ result for the row, while each `componentResults[]` entry contains the pass/fail
 reason, and assertion metadata for one evaluated assertion. Both `gradingResult` and
 `componentResults` may be absent on error rows or rows without assertions.
 
-### XML Format
+To stream a JSONL file and read each row's component results:
 
-Structured data for enterprise integrations:
+```ts
+import fs from 'node:fs';
+import readline from 'node:readline';
+
+const rl = readline.createInterface({
+  input: fs.createReadStream('results.jsonl', { encoding: 'utf8' }),
+  crlfDelay: Infinity,
+});
+
+for await (const line of rl) {
+  if (!line.trim()) {
+    continue;
+  }
+  const row = JSON.parse(line);
+  for (const component of row.gradingResult?.componentResults ?? []) {
+    console.log({
+      type: component.assertion?.type,
+      pass: component.pass,
+      score: component.score,
+      reason: component.reason,
+    });
+  }
+}
+```
+
+`?.` and `?? []` together cover the `gradingResult: null` case shown above and rows
+where a single top-level assertion produced no nested `componentResults`.
+
+### JUnit XML Format
+
+Compact CI test-report output:
+
+```bash
+promptfoo eval --output results.junit.xml
+```
+
+**Structure:**
+
+```xml
+<testsuites tests="2" failures="1" errors="0" time="0.840">
+  <testsuite name="[openai:gpt-4.1] prompt 1" tests="2" failures="1" errors="0" time="0.840">
+    <testcase name="test 1: greets the customer" classname="[openai:gpt-4.1] prompt 1" time="0.420" />
+    <testcase name="test 2: refuses refunds outside policy" classname="[openai:gpt-4.1] prompt 1" time="0.420">
+      <failure message="Assertion failed">Score: 0
+Reason: Assertion failed
+Failed assertions:
+- contains</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
+```
+
+**Use when:** Publishing eval results into CI systems that already understand JUnit-style test reports, such as GitLab, Azure Pipelines, Bitbucket Pipelines, Jenkins, and other test-report viewers.
+
+JUnit XML intentionally stays compact:
+
+- one `testsuite` per prompt/provider pair so CI groups related cases together
+- one `testcase` per eval result so every promptfoo test appears in CI
+- `failure` for failed assertions and `error` for provider/runtime errors so CI can distinguish incorrect behavior from execution problems
+- concise failure/error summaries only; use JSON, HTML, or Promptfoo XML when you need assertion reasons, provider errors, prompts, variables, raw model outputs, or full config
+
+A JUnit report viewer can render the same file into a compact pass/fail report:
+
+![Rendered JUnit XML report showing one suite, two failures, and two passing tests](/img/docs/configuration/junit-xml-report.png)
+
+### Promptfoo XML Full Export
+
+Full eval data for XML-only consumers:
 
 ```bash
 promptfoo eval --output results.xml
@@ -160,7 +227,7 @@ promptfoo eval --output results.xml
 </promptfoo>
 ```
 
-**Use when:** Integrating with enterprise systems, XML-based workflows, or when XML is a requirement.
+**Use when:** A downstream system specifically requires the full Promptfoo export in XML. This is not a JUnit-compatible CI report format; use JUnit XML for CI dashboards and test-report viewers.
 
 ## Configuration Options
 
@@ -191,9 +258,9 @@ promptfoo eval --output results.csv
 
 ## Output Contents
 
-### Standard Fields
+### Structured Output Fields
 
-All formats include:
+`json`, `yaml`, `yml`, `txt`, and Promptfoo XML outputs include:
 
 | Field       | Description                  |
 | ----------- | ---------------------------- |
@@ -207,7 +274,9 @@ All formats include:
 
 :::warning
 
-`json`, `yaml`, `yml`, `txt`, `html`, and `xml` outputs include the eval `config`. Sensitive fields are redacted using Promptfoo's sanitizer rules on a best-effort basis (not comprehensive). Non-sensitive `config.env` values may still appear in exports.
+`json`, `yaml`, `yml`, `txt`, `html`, and Promptfoo XML outputs include the eval `config`. Sensitive fields are redacted using Promptfoo's sanitizer rules on a best-effort basis (not comprehensive). Non-sensitive `config.env` values may still appear in exports.
+
+JUnit XML omits the eval config, prompts, variables, raw model outputs, assertion reasons, and provider error payloads by design so CI test-report viewers stay compact and do not become a second full export surface.
 
 :::
 
