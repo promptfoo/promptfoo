@@ -105,7 +105,7 @@ function resetModulesAndMockFetch(
   fetchMocks: Partial<Record<'fetchWithTimeout' | 'fetchWithProxy', Mock>> = {},
 ) {
   vi.resetModules();
-  vi.doMock('../src/util/fetch/index.ts', () => ({
+  vi.doMock('../src/util/fetch/index', () => ({
     fetchWithTimeout: fetchMocks.fetchWithTimeout ?? vi.fn().mockResolvedValue({ ok: true }),
     fetchWithProxy: fetchMocks.fetchWithProxy ?? vi.fn().mockResolvedValue({ ok: true }),
   }));
