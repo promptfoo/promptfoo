@@ -60,7 +60,7 @@ export function createMockResponse(
     url: 'https://example.com',
     json: options.json || (() => Promise.resolve(options.body || {})),
     text: options.text || (() => Promise.resolve('')),
-    blob: () => Promise.resolve(new Blob()),
+    blob: () => Promise.resolve(new Blob([])),
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
     formData: () => Promise.resolve(new FormData()),
     bodyUsed: false,
