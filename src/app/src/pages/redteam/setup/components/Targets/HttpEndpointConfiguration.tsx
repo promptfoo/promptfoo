@@ -76,6 +76,150 @@ interface GeneratedConfig {
   };
 }
 
+interface ProviderTestResponse {
+  testResult?: {
+    success?: boolean;
+    message?: string;
+    changes_needed?: boolean;
+    changes_needed_reason?: string;
+    changes_needed_suggestions?: string[];
+  };
+  providerResponse?: Record<string, unknown>;
+  transformedRequest?: unknown;
+}
+
+interface ProviderTestErrorResponse {
+  error?: string;
+  providerResponse?: Record<string, unknown>;
+  transformedRequest?: unknown;
+}
+
+function getInitialRequestBody(selectedTarget: ProviderOptions): string {
+  return typeof selectedTarget.config.body === 'string'
+    ? selectedTarget.config.body
+    : JSON.stringify(selectedTarget.config.body, null, 2) || '';
+}
+
+function getInitialHeaders(selectedTarget: ProviderOptions): Array<{ key: string; value: string }> {
+  return Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
+    key,
+    value: String(value),
+  }));
+}
+
+function getInvalidTargetResult(selectedTarget: ProviderOptions): TestResult | null {
+  if (selectedTarget.config?.request) {
+    return null;
+  }
+
+  const targetUrl = selectedTarget.config?.url;
+  if (targetUrl && targetUrl.trim() !== '' && targetUrl !== 'http') {
+    return null;
+  }
+
+  return {
+    success: false,
+    message:
+      'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
+  };
+}
+
+function buildTargetTestResult(data: ProviderTestResponse): TestResult {
+  const hasConfigIssues = data.testResult?.changes_needed === true;
+  const success = hasConfigIssues ? false : (data.testResult?.success ?? true);
+  const message = hasConfigIssues
+    ? data.testResult?.changes_needed_reason || 'Configuration changes are needed'
+    : (data.testResult?.message ?? 'Target configuration is valid!');
+
+  return {
+    success,
+    message,
+    providerResponse: data.providerResponse || {},
+    transformedRequest: data.transformedRequest,
+    changes_needed: hasConfigIssues,
+    changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+  };
+}
+
+function buildFailedTargetTestResult(errorData: ProviderTestErrorResponse): TestResult {
+  return {
+    success: false,
+    message: errorData.error || 'Failed to test target configuration',
+    providerResponse: errorData.providerResponse || {},
+    transformedRequest: errorData.transformedRequest,
+  };
+}
+
+function getTargetTestErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'Failed to test target configuration';
+  }
+  if (error.message.includes('Failed to parse URL') || error.message.includes('Invalid URL')) {
+    return 'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
+  }
+  return error.message;
+}
+
+function useTargetTester({
+  selectedTarget,
+  setIsTestRunning,
+  setTestResult,
+  setTestDetailsExpanded,
+  onTargetTested,
+}: {
+  selectedTarget: ProviderOptions;
+  setIsTestRunning: React.Dispatch<React.SetStateAction<boolean>>;
+  setTestResult: React.Dispatch<React.SetStateAction<TestResult | null>>;
+  setTestDetailsExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  onTargetTested?: (success: boolean) => void;
+}) {
+  return useCallback(async () => {
+    setIsTestRunning(true);
+    setTestResult(null);
+
+    const invalidTargetResult = getInvalidTargetResult(selectedTarget);
+    if (invalidTargetResult) {
+      setTestResult(invalidTargetResult);
+      setTestDetailsExpanded(true);
+      setIsTestRunning(false);
+      onTargetTested?.(false);
+      return;
+    }
+
+    try {
+      const response = await callApi('/providers/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ providerOptions: selectedTarget }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        setTestResult(buildFailedTargetTestResult(errorData));
+        setTestDetailsExpanded(true);
+        onTargetTested?.(false);
+        return;
+      }
+
+      const data = await response.json();
+      const nextResult = buildTargetTestResult(data);
+      setTestResult(nextResult);
+      setTestDetailsExpanded(!nextResult.success || Boolean(nextResult.changes_needed));
+      onTargetTested?.(nextResult.success);
+    } catch (error) {
+      console.error('Error testing target:', error);
+      setTestResult({
+        success: false,
+        message: getTargetTestErrorMessage(error),
+      });
+      setTestDetailsExpanded(true);
+      onTargetTested?.(false);
+    } finally {
+      setIsTestRunning(false);
+    }
+  }, [selectedTarget, onTargetTested, setIsTestRunning, setTestResult, setTestDetailsExpanded]);
+}
+
 const highlightJS = (code: string): string => {
   try {
     const grammar = Prism?.languages?.javascript;
@@ -98,16 +242,9 @@ const HttpEndpointConfiguration = ({
   onTargetTested,
   onSessionTested,
 }: HttpEndpointConfigurationProps): React.ReactElement => {
-  const [requestBody, setRequestBody] = useState(
-    typeof selectedTarget.config.body === 'string'
-      ? selectedTarget.config.body
-      : JSON.stringify(selectedTarget.config.body, null, 2) || '',
-  );
-  const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>(
-    Object.entries(selectedTarget.config.headers || {}).map(([key, value]) => ({
-      key,
-      value: String(value),
-    })),
+  const [requestBody, setRequestBody] = useState(() => getInitialRequestBody(selectedTarget));
+  const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>(() =>
+    getInitialHeaders(selectedTarget),
   );
 
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -153,92 +290,13 @@ Content-Type: application/json
   // Request body type (json or text)
   const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
 
-  // Handle test target
-  const handleTestTarget = useCallback(async () => {
-    setIsTestRunning(true);
-    setTestResult(null);
-
-    // Validate URL before testing (skip validation for raw request mode)
-    if (!selectedTarget.config?.request) {
-      const targetUrl = selectedTarget.config?.url;
-      if (!targetUrl || targetUrl.trim() === '' || targetUrl === 'http') {
-        setTestResult({
-          success: false,
-          message:
-            'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
-        });
-        setTestDetailsExpanded(true);
-        setIsTestRunning(false);
-        onTargetTested?.(false);
-        return;
-      }
-    }
-
-    try {
-      const response = await callApi('/providers/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerOptions: selectedTarget }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // Check for changes_needed field (configuration issues) or success field
-        const hasConfigIssues = data.testResult?.changes_needed === true;
-        const isSuccess = hasConfigIssues ? false : (data.testResult?.success ?? true);
-
-        // Build the message based on the response
-        let message = data.testResult?.message ?? 'Target configuration is valid!';
-        if (hasConfigIssues) {
-          message = data.testResult?.changes_needed_reason || 'Configuration changes are needed';
-        }
-
-        setTestResult({
-          success: isSuccess,
-          message: message,
-          providerResponse: data.providerResponse || {},
-          transformedRequest: data.transformedRequest,
-          changes_needed: hasConfigIssues,
-          changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
-        });
-        setTestDetailsExpanded(!isSuccess || hasConfigIssues);
-        onTargetTested?.(isSuccess);
-      } else {
-        const errorData = await response.json();
-        setTestResult({
-          success: false,
-          message: errorData.error || 'Failed to test target configuration',
-          providerResponse: errorData.providerResponse || {},
-          transformedRequest: errorData.transformedRequest,
-        });
-        setTestDetailsExpanded(true);
-        onTargetTested?.(false);
-      }
-    } catch (error) {
-      console.error('Error testing target:', error);
-      let errorMessage = 'Failed to test target configuration';
-      if (error instanceof Error) {
-        if (
-          error.message.includes('Failed to parse URL') ||
-          error.message.includes('Invalid URL')
-        ) {
-          errorMessage =
-            'Invalid URL configuration. Please enter a complete URL (e.g., https://api.example.com/endpoint).';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      setTestResult({
-        success: false,
-        message: errorMessage,
-      });
-      setTestDetailsExpanded(true);
-      onTargetTested?.(false);
-    } finally {
-      setIsTestRunning(false);
-    }
-  }, [selectedTarget, onTargetTested]);
+  const handleTestTarget = useTargetTester({
+    selectedTarget,
+    setIsTestRunning,
+    setTestResult,
+    setTestDetailsExpanded,
+    onTargetTested,
+  });
 
   // Auto-size the raw request textarea between 10rem and 40rem based on line count
   const computeRawTextareaHeight = useCallback((text: string) => {
