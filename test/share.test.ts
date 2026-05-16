@@ -6,9 +6,11 @@ import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import {
+  createShareableModelAuditUrl,
   createShareableUrl,
   determineShareDomain,
   hasEvalBeenShared,
+  hasModelAuditBeenShared,
   isSharingEnabled,
   stripAuthFromUrl,
 } from '../src/share';
@@ -16,6 +18,7 @@ import { makeRequest } from '../src/util/cloud';
 
 import type Eval from '../src/models/eval';
 import type EvalResult from '../src/models/evalResult';
+import type ModelAudit from '../src/models/modelAudit';
 
 function buildMockEval(): Partial<Eval> {
   return {
@@ -296,6 +299,81 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(configAppBaseUrl);
+  });
+});
+
+describe('model audit sharing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(envars.getEnvBool).mockReset();
+    vi.mocked(cloudConfig.isEnabled).mockReset();
+    vi.mocked(cloudConfig.getApiHost).mockReset();
+    vi.mocked(cloudConfig.getAppUrl).mockReset();
+    vi.mocked(cloudConfig.getApiKey).mockReset();
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReset();
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReset();
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentOrganizationId).mockReturnValue('org-123');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
+  });
+
+  const mockAudit = {
+    id: 'scan-123',
+    createdAt: 1,
+    updatedAt: 2,
+    name: 'Audit',
+    author: 'test@example.com',
+    modelPath: '/tmp/model.pkl',
+    modelType: null,
+    results: {},
+    checks: [],
+    issues: [],
+    hasErrors: false,
+    totalChecks: 1,
+    passedChecks: 1,
+    failedChecks: 0,
+    metadata: {},
+    modelId: 'owner/model',
+    revisionSha: 'abc123',
+    contentHash: 'sha256:def456',
+    modelSource: 'huggingface',
+    sourceLastModified: 123,
+    scannerVersion: '0.2.30',
+  } as unknown as ModelAudit;
+
+  it('does not upload when sharing is disabled', async () => {
+    vi.mocked(envars.getEnvBool).mockImplementation((key) => key === 'PROMPTFOO_DISABLE_SHARING');
+
+    const result = await createShareableModelAuditUrl(mockAudit);
+
+    expect(result).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('includes selected team context in share uploads', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: 'scan-123' }),
+    });
+
+    const result = await createShareableModelAuditUrl(mockAudit);
+
+    expect(result).toBe('https://app.example.com/model-audit/scan-123');
+    const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(requestBody.teamId).toBe('team-456');
+  });
+
+  it('scopes prior-share lookup to the selected team', async () => {
+    vi.mocked(makeRequest).mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    const result = await hasModelAuditBeenShared(mockAudit);
+
+    expect(result).toBe(true);
+    expect(makeRequest).toHaveBeenCalledWith('model-audits/scan-123?teamId=team-456', 'GET');
   });
 });
 

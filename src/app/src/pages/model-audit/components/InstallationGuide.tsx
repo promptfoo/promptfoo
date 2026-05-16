@@ -51,7 +51,7 @@ export default function InstallationGuide({
   return (
     <Card className="border-amber-400/50 bg-amber-50/50 dark:bg-amber-950/20">
       <CardContent className="p-6">
-        <Alert variant="warning" className="mb-6">
+        <Alert variant="warning" className="mb-6 flex-col items-start sm:flex-row sm:items-center">
           <WarningIcon className="size-4" />
           <AlertContent>
             <AlertTitle>ModelAudit CLI Not Found</AlertTitle>
