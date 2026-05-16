@@ -21,19 +21,9 @@ import {
   DefaultGitHubGradingProvider as GitHubGradingProvider,
   DefaultGitHubSuggestionsProvider as GitHubSuggestionsProvider,
 } from './github/defaults';
-import {
-  AIStudioEmbeddingProvider,
-  DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
-  DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
-  DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
-  DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
-} from './google/ai.studio';
+import { AIStudioEmbeddingProvider, getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
-import {
-  DefaultEmbeddingProvider as VertexEmbeddingProvider,
-  DefaultGradingProvider as VertexGradingProvider,
-} from './google/vertex';
+import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -304,14 +294,16 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   {
     name: 'Google AI Studio',
     check: (env) => hasAnyCredential(['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'], env),
-    create: () =>
-      createCompletionProviderSet({
-        grading: GoogleAiStudioGradingProvider,
-        gradingJson: GoogleAiStudioGradingJsonProvider,
-        suggestions: GoogleAiStudioSuggestionsProvider,
-        synthesize: GoogleAiStudioSynthesizeProvider,
-        llmRubric: GoogleAiStudioLlmRubricProvider,
-      }),
+    create: (env) => {
+      const googleAiStudio = getGoogleAiStudioProviders(env);
+      return createCompletionProviderSet({
+        grading: googleAiStudio.gradingProvider,
+        gradingJson: googleAiStudio.gradingJsonProvider,
+        suggestions: googleAiStudio.suggestionsProvider,
+        synthesize: googleAiStudio.synthesizeProvider,
+        llmRubric: googleAiStudio.llmRubricProvider,
+      });
+    },
   },
   {
     name: 'xAI',
@@ -362,10 +354,15 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
   {
     name: 'Google Vertex',
     check: (_env, context) => hasGoogleDefaultCredentialsForSelection(context),
-    create: () =>
-      createCompletionProviderSet({
-        grading: VertexGradingProvider,
-      }),
+    create: (env) => {
+      const googleVertex = getGoogleVertexProviders(env);
+      return createCompletionProviderSet({
+        grading: googleVertex.gradingProvider,
+        gradingJson: googleVertex.gradingJsonProvider,
+        suggestions: googleVertex.suggestionsProvider,
+        synthesize: googleVertex.synthesizeProvider,
+      });
+    },
   },
   {
     name: 'AWS Bedrock',
@@ -435,7 +432,7 @@ const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
   {
     name: 'Google Vertex',
     check: (_env, context) => hasGoogleDefaultCredentialsForSelection(context),
-    create: () => VertexEmbeddingProvider,
+    create: (env) => getGoogleVertexEmbeddingProvider(env),
   },
   // Note: Anthropic, xAI, DeepSeek, Bedrock, GitHub don't support embeddings
 ];

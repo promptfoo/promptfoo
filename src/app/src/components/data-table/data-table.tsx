@@ -35,6 +35,12 @@ import type { DataTableProps } from './types';
 const UTILITY_COLUMN_IDS = new Set(['select', 'expand']);
 
 type RowDisplayMode = 'client-virtualized' | 'server-virtualized';
+type StickyColumnSide = 'left' | 'right';
+type StickyColumnPosition = {
+  side: StickyColumnSide;
+  offset: number;
+  isBoundary: boolean;
+};
 
 type DataTableHeaderActionsProps<TData, TValue> = {
   canFilter: boolean;
@@ -45,18 +51,33 @@ type DataTableHeaderActionsProps<TData, TValue> = {
 };
 
 type DataTableHeaderSortButtonProps = {
+  columnLabel: string;
   onToggleSorting?: (event: unknown) => void;
   sortDirection: false | 'asc' | 'desc';
 };
 
 function renderDataTableHeaderSortButton({
+  columnLabel,
   onToggleSorting,
   sortDirection,
 }: DataTableHeaderSortButtonProps) {
+  const nextSortDirection =
+    sortDirection === 'asc'
+      ? 'descending'
+      : sortDirection === 'desc'
+        ? 'clear sorting'
+        : 'ascending';
+  const sortLabel =
+    nextSortDirection === 'clear sorting'
+      ? `Clear sorting for ${columnLabel}`
+      : `Sort ${columnLabel} ${nextSortDirection}`;
+
   return (
     <Button
       variant="ghost"
       size="sm"
+      aria-label={sortLabel}
+      title={sortLabel}
       className={cn(
         'h-6 w-6 p-0',
         sortDirection ? 'text-blue-700 dark:text-blue-100' : 'text-zinc-400 dark:text-zinc-500',
@@ -92,12 +113,17 @@ function renderDataTableHeaderActions<TData, TValue>({
     <span
       className={cn(
         'flex shrink-0 items-center gap-0.5',
-        'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
-        (sortDirection || isFiltered) && 'opacity-100 pointer-events-auto',
+        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto',
+        (sortDirection || isFiltered) &&
+          'opacity-100 pointer-events-auto sm:opacity-100 sm:pointer-events-auto',
       )}
     >
       {canSort &&
         renderDataTableHeaderSortButton({
+          columnLabel:
+            typeof header.column.columnDef.header === 'string'
+              ? header.column.columnDef.header
+              : header.column.id,
           onToggleSorting: header.column.getToggleSortingHandler(),
           sortDirection,
         })}
@@ -131,6 +157,7 @@ function renderDataTableHeaderResizeHandle<TData, TValue>(header: Header<TData, 
 
 function renderDataTableHeaderCell<TData, TValue = unknown>(
   header: Header<TData, TValue>,
+  stickyColumnPosition?: StickyColumnPosition,
   showFilter = true,
 ) {
   const canSort = header.column.getCanSort();
@@ -138,6 +165,8 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
   const isFiltered = header.column.getIsFiltered();
   const isRightAligned = header.column.columnDef.meta?.align === 'right';
   const sortDirection = header.column.getIsSorted();
+  const ariaSort =
+    sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none';
   const headerSize = `${header.getSize()}px`;
   const isUtilityColumn = UTILITY_COLUMN_IDS.has(header.column.id);
 
@@ -149,18 +178,27 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(
         isRightAligned ? 'text-right' : 'text-left',
         isUtilityColumn ? 'px-3' : 'px-4 overflow-hidden',
         canSort && 'cursor-pointer select-none',
+        stickyColumnPosition && 'sticky z-20 print:static print:z-auto',
+        stickyColumnPosition?.isBoundary &&
+          (stickyColumnPosition.side === 'left'
+            ? 'border-r border-zinc-200 dark:border-zinc-800'
+            : 'border-l border-zinc-200 dark:border-zinc-800'),
       )}
       style={{
         width: headerSize,
         minWidth: headerSize,
         maxWidth: headerSize,
+        ...(stickyColumnPosition
+          ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
+          : {}),
       }}
+      aria-sort={canSort ? ariaSort : undefined}
       onClick={header.column.getToggleSortingHandler()}
     >
       {header.isPlaceholder ? null : (
         <div
           className={cn(
-            'flex min-w-0 items-center gap-1 overflow-hidden',
+            'flex min-w-0 items-center overflow-hidden',
             isRightAligned && 'flex-row-reverse',
           )}
         >
@@ -221,6 +259,7 @@ export function DataTable<TData, TValue = unknown>({
   showColumnToggle = true,
   showFilter = true,
   showExport = true,
+  globalFilterLabel = 'Search table',
   rowDisplayMode,
   virtualRowEstimate = 48,
   virtualOverscan = 10,
@@ -385,7 +424,8 @@ export function DataTable<TData, TValue = unknown>({
               e.stopPropagation();
               row.toggleExpanded();
             }}
-            aria-label="Expand row"
+            aria-label={row.getIsExpanded() ? 'Collapse row' : 'Expand row'}
+            aria-expanded={row.getIsExpanded()}
             className="flex items-center justify-center size-6 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <ChevronRight
@@ -456,7 +496,39 @@ export function DataTable<TData, TValue = unknown>({
     ...(renderSubComponent ? { getExpandedRowModel: getExpandedRowModel() } : {}),
   });
 
-  const visibleColumnCount = table.getVisibleLeafColumns().length;
+  const visibleLeafColumns = table.getVisibleLeafColumns();
+  const visibleColumnCount = visibleLeafColumns.length;
+  const stickyColumnPositions = (() => {
+    const positions = new Map<string, StickyColumnPosition>();
+    const leftStickyColumns = visibleLeafColumns.filter(
+      (column) => column.columnDef.meta?.sticky === 'left',
+    );
+    const rightStickyColumns = visibleLeafColumns.filter(
+      (column) => column.columnDef.meta?.sticky === 'right',
+    );
+
+    let leftOffset = 0;
+    leftStickyColumns.forEach((column, index) => {
+      positions.set(column.id, {
+        side: 'left',
+        offset: leftOffset,
+        isBoundary: index === leftStickyColumns.length - 1,
+      });
+      leftOffset += column.getSize();
+    });
+
+    let rightOffset = 0;
+    [...rightStickyColumns].reverse().forEach((column, index) => {
+      positions.set(column.id, {
+        side: 'right',
+        offset: rightOffset,
+        isBoundary: index === rightStickyColumns.length - 1,
+      });
+      rightOffset += column.getSize();
+    });
+
+    return positions;
+  })();
   const tableMinWidth = table.getTotalSize() ? `${table.getTotalSize()}px` : undefined;
   const clientRows = table.getRowModel().rows;
   const serverRowCount = serverVirtualization?.rowCount ?? 0;
@@ -642,6 +714,7 @@ export function DataTable<TData, TValue = unknown>({
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -667,6 +740,7 @@ export function DataTable<TData, TValue = unknown>({
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -696,6 +770,7 @@ export function DataTable<TData, TValue = unknown>({
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -710,77 +785,106 @@ export function DataTable<TData, TValue = unknown>({
     );
   }
 
-  const renderTableRow = (row: Row<TData>, virtualIndex?: number) => (
-    <React.Fragment key={virtualIndex === undefined ? row.id : `${row.id}-${virtualIndex}`}>
-      <tr
-        data-index={virtualIndex}
-        data-rowindex={virtualIndex ?? row.index}
-        ref={virtualIndex === undefined || isPrinting ? undefined : rowVirtualizer.measureElement}
-        onClick={() => {
-          if (onRowClick) {
-            onRowClick(row.original);
-          } else if (renderSubComponent && row.getCanExpand()) {
-            row.toggleExpanded();
-          }
-        }}
-        className={cn(
-          'border-b border-zinc-200 dark:border-zinc-800 last:border-b-0 transition-colors print:border-gray-300',
-          (onRowClick || (renderSubComponent && row.getCanExpand())) &&
-            'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50',
-        )}
-      >
-        {row.getVisibleCells().map((cell) => {
-          const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
-          const cellSize = `${cell.column.getSize()}px`;
-          const isUtilityColumn = UTILITY_COLUMN_IDS.has(cell.column.id);
+  const renderTableRow = (row: Row<TData>, virtualIndex?: number) => {
+    const canToggleExpansionFromRow =
+      !onRowClick && Boolean(renderSubComponent && row.getCanExpand());
+    const canActivateRow = Boolean(onRowClick);
+    const activateRow = () => {
+      if (onRowClick) {
+        onRowClick(row.original);
+      } else if (canToggleExpansionFromRow) {
+        row.toggleExpanded();
+      }
+    };
 
-          return (
-            <td
-              key={cell.id}
-              className={cn(
-                'py-3 text-sm',
-                isUtilityColumn
-                  ? cn('px-3', cell.column.id === 'select' && 'cursor-pointer')
-                  : 'px-4 overflow-hidden text-ellipsis',
-                cellAlign === 'right' && 'text-right',
-              )}
-              style={{
-                width: cellSize,
-                minWidth: cellSize,
-                maxWidth: cellSize,
-              }}
-              onClick={
-                cell.column.id === 'select'
-                  ? (e) => {
-                      e.stopPropagation();
-                      row.toggleSelected();
-                    }
-                  : undefined
-              }
-            >
-              {isUtilityColumn ? (
-                flexRender(cell.column.columnDef.cell, cell.getContext())
-              ) : (
-                <div className="overflow-hidden min-w-0">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </div>
-              )}
-            </td>
-          );
-        })}
-      </tr>
-      {renderSubComponent && row.getIsExpanded() && (
-        <tr className={cn('bg-neutral-100/30 dark:bg-neutral-800/30', expandedRowClassName)}>
-          <td
-            colSpan={visibleColumnCount}
-            className="border-b border-zinc-200 p-4 dark:border-zinc-800"
-          >
-            {renderSubComponent(row)}
-          </td>
+    return (
+      <React.Fragment key={virtualIndex === undefined ? row.id : `${row.id}-${virtualIndex}`}>
+        <tr
+          data-index={virtualIndex}
+          data-rowindex={virtualIndex ?? row.index}
+          ref={virtualIndex === undefined || isPrinting ? undefined : rowVirtualizer.measureElement}
+          onClick={activateRow}
+          onKeyDown={(event) => {
+            if (
+              event.target !== event.currentTarget ||
+              (event.key !== 'Enter' && event.key !== ' ')
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+            activateRow();
+          }}
+          tabIndex={canActivateRow ? 0 : undefined}
+          className={cn(
+            'group border-b border-zinc-200 dark:border-zinc-800 last:border-b-0 transition-colors print:border-gray-300',
+            (onRowClick || (renderSubComponent && row.getCanExpand())) &&
+              'cursor-pointer hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:hover:bg-zinc-800/50',
+          )}
+        >
+          {row.getVisibleCells().map((cell) => {
+            const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
+            const cellSize = `${cell.column.getSize()}px`;
+            const isUtilityColumn = UTILITY_COLUMN_IDS.has(cell.column.id);
+            const stickyColumnPosition = stickyColumnPositions.get(cell.column.id);
+
+            return (
+              <td
+                key={cell.id}
+                className={cn(
+                  'py-3 text-sm',
+                  isUtilityColumn
+                    ? cn('px-3', cell.column.id === 'select' && 'cursor-pointer')
+                    : 'px-4 overflow-hidden text-ellipsis',
+                  cellAlign === 'right' && 'text-right',
+                  stickyColumnPosition &&
+                    'sticky z-[1] bg-white group-hover:bg-zinc-50 dark:bg-zinc-900 dark:group-hover:bg-zinc-800/50 print:static print:z-auto print:bg-white',
+                  stickyColumnPosition?.isBoundary &&
+                    (stickyColumnPosition.side === 'left'
+                      ? 'border-r border-zinc-200 dark:border-zinc-800'
+                      : 'border-l border-zinc-200 dark:border-zinc-800'),
+                )}
+                style={{
+                  width: cellSize,
+                  minWidth: cellSize,
+                  maxWidth: cellSize,
+                  ...(stickyColumnPosition
+                    ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
+                    : {}),
+                }}
+                onClick={
+                  cell.column.id === 'select'
+                    ? (e) => {
+                        e.stopPropagation();
+                        row.toggleSelected();
+                      }
+                    : undefined
+                }
+              >
+                {isUtilityColumn ? (
+                  flexRender(cell.column.columnDef.cell, cell.getContext())
+                ) : (
+                  <div className="overflow-hidden min-w-0">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </div>
+                )}
+              </td>
+            );
+          })}
         </tr>
-      )}
-    </React.Fragment>
-  );
+        {renderSubComponent && row.getIsExpanded() && (
+          <tr className={cn('bg-neutral-100/30 dark:bg-neutral-800/30', expandedRowClassName)}>
+            <td
+              colSpan={visibleColumnCount}
+              className="border-b border-zinc-200 p-4 dark:border-zinc-800"
+            >
+              {renderSubComponent(row)}
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  };
 
   const renderVirtualSpacerRow = (height: number, key: string) => {
     if (height <= 0) {
@@ -803,14 +907,31 @@ export function DataTable<TData, TValue = unknown>({
       aria-busy={serverIsRowLoading?.(virtualIndex) ?? true}
       className="border-b border-zinc-200 dark:border-zinc-800"
     >
-      {table.getVisibleLeafColumns().map((column) => {
+      {visibleLeafColumns.map((column) => {
         const columnSize = `${column.getSize()}px`;
         const isUtilityColumn = UTILITY_COLUMN_IDS.has(column.id);
+        const stickyColumnPosition = stickyColumnPositions.get(column.id);
         return (
           <td
             key={column.id}
-            className={cn('py-3 text-sm', isUtilityColumn ? 'px-3' : 'px-4')}
-            style={{ width: columnSize, minWidth: columnSize, maxWidth: columnSize }}
+            className={cn(
+              'py-3 text-sm',
+              isUtilityColumn ? 'px-3' : 'px-4',
+              stickyColumnPosition &&
+                'sticky z-[1] bg-white dark:bg-zinc-900 print:static print:z-auto print:bg-white',
+              stickyColumnPosition?.isBoundary &&
+                (stickyColumnPosition.side === 'left'
+                  ? 'border-r border-zinc-200 dark:border-zinc-800'
+                  : 'border-l border-zinc-200 dark:border-zinc-800'),
+            )}
+            style={{
+              width: columnSize,
+              minWidth: columnSize,
+              maxWidth: columnSize,
+              ...(stickyColumnPosition
+                ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
+                : {}),
+            }}
           >
             {!isUtilityColumn && <Skeleton className="h-4 w-full" />}
           </td>
@@ -869,7 +990,7 @@ export function DataTable<TData, TValue = unknown>({
     <div className={cn('flex flex-col gap-3 flex-1 min-h-0', className)}>
       <div
         className={cn(
-          'rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col',
+          'rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col overflow-hidden',
           'print:bg-white print:border-gray-300',
         )}
       >
@@ -886,6 +1007,7 @@ export function DataTable<TData, TValue = unknown>({
               showFilter={showColumnFilterControls}
               showGlobalFilter={showGlobalFilterControl}
               showExport={showExport}
+              globalFilterLabel={globalFilterLabel}
               onExportCSV={onExportCSV}
               onExportJSON={onExportJSON}
               toolbarActions={toolbarActions}
@@ -895,7 +1017,7 @@ export function DataTable<TData, TValue = unknown>({
 
         <div
           ref={scrollContainerRef}
-          className="overflow-auto flex-1 min-h-0 print:overflow-visible print:max-h-none print:flex-none"
+          className="overflow-auto overflow-x-auto overflow-y-auto overscroll-x-contain flex-1 min-h-0 print:overflow-visible print:max-h-none print:flex-none"
           style={maxHeight ? { maxHeight } : undefined}
         >
           <table
@@ -912,7 +1034,11 @@ export function DataTable<TData, TValue = unknown>({
                   className="border-b border-zinc-200 dark:border-zinc-800 print:border-gray-300"
                 >
                   {headerGroup.headers.map((header) =>
-                    renderDataTableHeaderCell(header, showColumnFilterControls),
+                    renderDataTableHeaderCell(
+                      header,
+                      stickyColumnPositions.get(header.column.id),
+                      showColumnFilterControls,
+                    ),
                   )}
                 </tr>
               ))}

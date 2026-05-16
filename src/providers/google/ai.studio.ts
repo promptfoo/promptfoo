@@ -19,6 +19,7 @@ import {
   resolveGoogleToolConfig,
 } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   CallApiContextParams,
@@ -573,14 +574,18 @@ export class AIStudioEmbeddingProvider
   }
 }
 
-export const DefaultGradingProvider = new AIStudioChatProvider('gemini-3-pro-preview');
-export const DefaultGradingJsonProvider = new AIStudioChatProvider('gemini-3-pro-preview', {
-  config: {
-    generationConfig: {
-      response_mime_type: 'application/json',
-    },
-  },
-});
-export const DefaultLlmRubricProvider = new AIStudioChatProvider('gemini-3-pro-preview');
-export const DefaultSuggestionsProvider = new AIStudioChatProvider('gemini-3-pro-preview');
-export const DefaultSynthesizeProvider = new AIStudioChatProvider('gemini-3-pro-preview');
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-3-pro-preview';
+
+export function getGoogleAiStudioProviders(env?: EnvOverrides) {
+  const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });
+  return {
+    gradingJsonProvider: new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, {
+      env,
+      config: { generationConfig: { response_mime_type: 'application/json' } },
+    }),
+    gradingProvider,
+    llmRubricProvider: new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env }),
+    suggestionsProvider: gradingProvider,
+    synthesizeProvider: gradingProvider,
+  };
+}
