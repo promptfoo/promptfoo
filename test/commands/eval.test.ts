@@ -966,12 +966,16 @@ describe('evalCommand', () => {
 
     await doEval({ table: true, write: false }, config, undefined, {});
 
-    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 37);
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 37, 25, {
+      showAssertions: undefined,
+    });
 
     vi.mocked(generateTable).mockClear();
     await doEval({ table: true, tableCellMaxLength: 42, write: false }, config, undefined, {});
 
-    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 42);
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 42, 25, {
+      showAssertions: undefined,
+    });
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {
