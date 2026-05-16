@@ -273,24 +273,23 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     return this.sendTextMessage(sessionId, role, prompt);
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const sessionId = crypto.randomUUID();
-    const session = this.createSession(sessionId);
-
-    let assistantTranscript = '';
-    let userTranscript = '';
-    let audioContent = '';
-    let hasAudioContent = false;
-    let functionCallOccurred = false;
-
-    logger.debug('prompt: ' + prompt.slice(0, 1000));
-    // Set up event handlers
+  private setupResponseHandlers(
+    sessionId: string,
+    session: SessionState,
+    state: {
+      assistantTranscript: string;
+      userTranscript: string;
+      audioContent: string;
+      hasAudioContent: boolean;
+      functionCallOccurred: boolean;
+    },
+  ) {
     session.responseHandlers.set('textOutput', (data) => {
       logger.debug('textOutput: ' + JSON.stringify(data));
       if (data.role === 'USER') {
-        userTranscript += data.content + '\n';
+        state.userTranscript += data.content + '\n';
       } else if (data.role === 'ASSISTANT') {
-        assistantTranscript += data.content + '\n';
+        state.assistantTranscript += data.content + '\n';
       }
     });
 
@@ -302,18 +301,15 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
     });
 
     session.responseHandlers.set('audioOutput', (data) => {
-      hasAudioContent = true;
+      state.hasAudioContent = true;
       logger.debug('audioOutput');
-      audioContent += data.content;
+      state.audioContent += data.content;
     });
 
     session.responseHandlers.set('toolUse', async (data) => {
       logger.debug('toolUse');
-      functionCallOccurred = true;
-      // const result = await this.handleToolUse(data.toolName, data);
-      const result = 'Tool result';
+      state.functionCallOccurred = true;
       const toolResultId = crypto.randomUUID();
-
       await this.sendEvent(sessionId, {
         event: {
           contentStart: {
@@ -325,9 +321,7 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
             toolResultInputConfiguration: {
               toolUseId: data.toolUseId,
               type: 'TEXT',
-              textInputConfiguration: {
-                mediaType: 'text/plain',
-              },
+              textInputConfiguration: { mediaType: 'text/plain' },
             },
           },
         },
@@ -337,11 +331,10 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
           toolResult: {
             promptName: session.promptName,
             contentName: toolResultId,
-            content: JSON.stringify(result),
+            content: JSON.stringify('Tool result'),
           },
         },
       });
-
       await this.sendEvent(sessionId, {
         event: {
           contentEnd: {
@@ -351,167 +344,187 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
         },
       });
     });
+  }
+
+  private async startStreamingSession(sessionId: string, session: SessionState) {
+    const bedrockClient = await this.getBedrockClient();
+    const { InvokeModelWithBidirectionalStreamCommand } = await import(
+      '@aws-sdk/client-bedrock-runtime'
+    );
+    const request = bedrockClient.send(
+      new InvokeModelWithBidirectionalStreamCommand({
+        modelId: this.modelName,
+        body: this.createAsyncIterable(sessionId),
+      }),
+    );
+    logger.debug('Sending sessionStart');
+    await this.sendEvent(sessionId, {
+      event: {
+        sessionStart: {
+          inferenceConfiguration: this.config?.interfaceConfig || DEFAULT_CONFIG.inference,
+        },
+      },
+    });
+    logger.debug('Sending promptStart');
+    await this.sendEvent(sessionId, {
+      event: {
+        promptStart: {
+          promptName: session.promptName,
+          textOutputConfiguration: this.config?.textOutputConfiguration || DEFAULT_CONFIG.text,
+          audioOutputConfiguration:
+            this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output,
+          ...(this.config?.toolConfig && { toolConfiguration: this.config?.toolConfig }),
+        },
+      },
+    });
+    return request;
+  }
+
+  private async replayConversationHistory(sessionId: string, prompt: string) {
+    logger.debug('Processing conversation history');
+    let promptText = prompt;
+    try {
+      const parsedPrompt = JSON.parse(prompt);
+      if (!Array.isArray(parsedPrompt)) {
+        return promptText;
+      }
+      for (const [index, message] of parsedPrompt.entries()) {
+        if (message.role !== 'system' && index !== parsedPrompt.length - 1) {
+          await this.sendTextMessage(
+            sessionId,
+            message.role.toUpperCase(),
+            message.content[0].text,
+          );
+        }
+      }
+      promptText = parsedPrompt[parsedPrompt.length - 1].content[0].text;
+    } catch (err) {
+      logger.error(`Error processing conversation history: ${err}`);
+    }
+    return promptText;
+  }
+
+  private async sendPromptAudio(sessionId: string, session: SessionState, promptText: string) {
+    logger.debug('Sending audioInput start');
+    await this.sendEvent(sessionId, {
+      event: {
+        contentStart: {
+          promptName: session.promptName,
+          contentName: session.audioContentId,
+          type: 'AUDIO',
+          interactive: true,
+          role: 'USER',
+          audioInputConfiguration:
+            this.config?.audioInputConfiguration || DEFAULT_CONFIG.audio.input,
+        },
+      },
+    });
+    logger.debug('Sending audioInput chunks');
+    const chunks = promptText?.match(/.{1,1024}/g)?.map((chunk) => Buffer.from(chunk)) || [];
+    logger.debug('audioInput in chunks: ' + chunks.length);
+    for (const chunk of chunks) {
+      await this.sendEvent(sessionId, {
+        event: {
+          audioInput: {
+            promptName: session.promptName,
+            contentName: session.audioContentId,
+            content: chunk.toString(),
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    logger.debug('Sending audioInput end');
+    await this.sendEvent(sessionId, {
+      event: {
+        contentEnd: {
+          promptName: session.promptName,
+          contentName: session.audioContentId,
+        },
+      },
+    });
+  }
+
+  private async processStreamingResponse(session: SessionState, response: any) {
+    if (!response.body) {
+      return;
+    }
+    for await (const event of response.body) {
+      if (!session.isActive) {
+        break;
+      }
+      if (!event.chunk?.bytes) {
+        continue;
+      }
+      const data = JSON.parse(new TextDecoder().decode(event.chunk.bytes));
+      const eventType = Object.keys(data.event || {})[0];
+      logger.debug('processing eventType: ' + eventType);
+      const handler = session.responseHandlers.get(eventType);
+      if (handler) {
+        await handler(data.event[eventType]);
+      }
+    }
+  }
+
+  private buildNovaSonicResponse(state: {
+    assistantTranscript: string;
+    userTranscript: string;
+    audioContent: string;
+    hasAudioContent: boolean;
+    functionCallOccurred: boolean;
+  }): ProviderResponse {
+    const audioConfig = this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output;
+    const audioOutput =
+      state.hasAudioContent && state.audioContent
+        ? {
+            audio: {
+              data: this.convertRawToWav(
+                Buffer.from(state.audioContent, 'base64'),
+                audioConfig.sampleRateHertz,
+                audioConfig.sampleSizeBits,
+                audioConfig.channelCount,
+              ).toString('base64'),
+              format: 'wav',
+              transcript: state.assistantTranscript,
+            },
+            userTranscript: state.userTranscript,
+          }
+        : {};
+    return {
+      output: state.assistantTranscript || '[No response received from API]',
+      ...audioOutput,
+      tokenUsage: createEmptyTokenUsage(),
+      cached: false,
+      metadata: {
+        ...audioOutput,
+        functionCallOccurred: state.functionCallOccurred,
+      },
+    };
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const sessionId = crypto.randomUUID();
+    const session = this.createSession(sessionId);
+    const state = {
+      assistantTranscript: '',
+      userTranscript: '',
+      audioContent: '',
+      hasAudioContent: false,
+      functionCallOccurred: false,
+    };
+
+    logger.debug('prompt: ' + prompt.slice(0, 1000));
+    this.setupResponseHandlers(sessionId, session, state);
 
     try {
-      // Get the Bedrock client and command class
-      const bedrockClient = await this.getBedrockClient();
-      const { InvokeModelWithBidirectionalStreamCommand } = await import(
-        '@aws-sdk/client-bedrock-runtime'
-      );
-
-      // Process response stream
-      const request = bedrockClient.send(
-        new InvokeModelWithBidirectionalStreamCommand({
-          modelId: this.modelName,
-          body: this.createAsyncIterable(sessionId),
-        }),
-      );
-
-      logger.debug('Sending sessionStart');
-      // Initialize session
-      await this.sendEvent(sessionId, {
-        event: {
-          sessionStart: {
-            inferenceConfiguration: this.config?.interfaceConfig || DEFAULT_CONFIG.inference,
-          },
-        },
-      });
-
-      logger.debug('Sending promptStart');
-      // Start prompt
-      await this.sendEvent(sessionId, {
-        event: {
-          promptStart: {
-            promptName: session.promptName,
-            textOutputConfiguration: this.config?.textOutputConfiguration || DEFAULT_CONFIG.text,
-            audioOutputConfiguration:
-              this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output,
-            ...(this.config?.toolConfig && { toolConfiguration: this.config?.toolConfig }),
-          },
-        },
-      });
-
+      const request = await this.startStreamingSession(sessionId, session);
       logger.debug('Sending system prompt');
       await this.sendSystemPrompt(sessionId, context?.test?.metadata?.systemPrompt || '');
-
-      logger.debug('Processing conversation history');
-      let promptText = prompt;
-
-      try {
-        // Check if the prompt is a JSON string
-        const parsedPrompt = JSON.parse(prompt);
-
-        if (Array.isArray(parsedPrompt)) {
-          // Handle array of messages format
-          for (const [index, message] of parsedPrompt.entries()) {
-            if (message.role !== 'system' && index !== parsedPrompt.length - 1) {
-              await this.sendTextMessage(
-                sessionId,
-                message.role.toUpperCase(),
-                message.content[0].text,
-              );
-            }
-          }
-          promptText = parsedPrompt[parsedPrompt.length - 1].content[0].text;
-        }
-      } catch (err) {
-        logger.error(`Error processing conversation history: ${err}`);
-      }
-
-      logger.debug('Sending audioInput start');
-      // Send prompt content
-      await this.sendEvent(sessionId, {
-        event: {
-          contentStart: {
-            promptName: session.promptName,
-            contentName: session.audioContentId,
-            type: 'AUDIO',
-            interactive: true,
-            role: 'USER',
-            audioInputConfiguration:
-              this.config?.audioInputConfiguration || DEFAULT_CONFIG.audio.input,
-          },
-        },
-      });
-
-      logger.debug('Sending audioInput chunks');
-
-      // Send the actual prompt
-      const chunks = promptText?.match(/.{1,1024}/g)?.map((chunk) => Buffer.from(chunk)) || [];
-      logger.debug('audioInput in chunks: ' + chunks.length);
-      for (const chunk of chunks) {
-        await this.sendEvent(sessionId, {
-          event: {
-            audioInput: {
-              promptName: session.promptName,
-              contentName: session.audioContentId,
-              content: chunk.toString(),
-            },
-          },
-        });
-        await new Promise((resolve) => setTimeout(resolve, 30));
-      }
-
-      logger.debug('Sending audioInput end');
-      // End content and prompt
-      await this.sendEvent(sessionId, {
-        event: {
-          contentEnd: {
-            promptName: session.promptName,
-            contentName: session.audioContentId,
-          },
-        },
-      });
-
+      const promptText = await this.replayConversationHistory(sessionId, prompt);
+      await this.sendPromptAudio(sessionId, session, promptText);
       const response = await request;
-
-      if (response.body) {
-        for await (const event of response.body) {
-          if (!session.isActive) {
-            break;
-          }
-
-          if (event.chunk?.bytes) {
-            const data = JSON.parse(new TextDecoder().decode(event.chunk.bytes));
-            const eventType = Object.keys(data.event || {})[0];
-            logger.debug('processing eventType: ' + eventType);
-            const handler = session.responseHandlers.get(eventType);
-            if (handler) {
-              await handler(data.event[eventType]);
-            }
-          }
-        }
-      }
-
-      const audioConfig = this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output;
-      const audioOutput =
-        hasAudioContent && audioContent
-          ? {
-              audio: {
-                data: this.convertRawToWav(
-                  Buffer.from(audioContent, 'base64'),
-                  audioConfig.sampleRateHertz,
-                  audioConfig.sampleSizeBits,
-                  audioConfig.channelCount,
-                ).toString('base64'),
-                format: 'wav',
-                transcript: assistantTranscript,
-              },
-              userTranscript,
-            }
-          : {};
-
-      return {
-        output: assistantTranscript || '[No response received from API]',
-        ...audioOutput,
-        // TODO: Add proper token usage tracking
-        tokenUsage: createEmptyTokenUsage(),
-        cached: false,
-        metadata: {
-          ...audioOutput,
-          functionCallOccurred,
-        },
-      };
+      await this.processStreamingResponse(session, response);
+      return this.buildNovaSonicResponse(state);
     } catch (error) {
       // Use error categorization for better error messages
       const categorized = categorizeError(error);
