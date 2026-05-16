@@ -7,6 +7,7 @@ import type {
   ProcessorConfig,
   ProcessorContext,
   ResponseOutputItem,
+  ResponseProcessingOptions,
 } from './types';
 
 /**
@@ -92,6 +93,7 @@ export class ResponsesProcessor {
     data: any,
     requestConfig: any,
     cached: boolean,
+    options: ResponseProcessingOptions = {},
   ): Promise<ProviderResponse> {
     // Log response metadata for debugging
     logger.debug(`Processing ${this.config.providerType} responses output`, {
@@ -110,6 +112,7 @@ export class ResponsesProcessor {
         config: requestConfig,
         cached,
         data,
+        suppressReasoningOutput: options.suppressReasoningOutput,
       };
 
       const processedOutput = await this.processOutput(data.output, context);
@@ -246,7 +249,7 @@ export class ResponsesProcessor {
         return this.processToolResult(item);
 
       case 'reasoning':
-        return this.processReasoning(item);
+        return this.processReasoning(item, context);
 
       case 'web_search_call':
         return this.processWebSearch(item);
@@ -359,7 +362,13 @@ export class ResponsesProcessor {
     });
   }
 
-  private processReasoning(item: any): Promise<{ reasoning?: ReasoningContent[] }> {
+  private processReasoning(
+    item: any,
+    context: ProcessorContext,
+  ): Promise<{ reasoning?: ReasoningContent[] }> {
+    if (context.suppressReasoningOutput) {
+      return Promise.resolve({});
+    }
     if (!item.summary || !item.summary.length) {
       return Promise.resolve({});
     }

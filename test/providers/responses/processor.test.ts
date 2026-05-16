@@ -144,6 +144,31 @@ describe('ResponsesProcessor', () => {
       expect(result.output).toBe('');
     });
 
+    it('should suppress reasoning output when requested', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'reasoning',
+            summary: [{ text: 'Internal reasoning summary' }],
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Final answer' }],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 20 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false, {
+        suppressReasoningOutput: true,
+      });
+
+      expect(result.output).toBe('Final answer');
+      expect(result.output).not.toContain('Reasoning:');
+      expect(result.output).not.toContain('Internal reasoning summary');
+    });
+
     it('should process web search calls', async () => {
       const mockData = {
         output: [
