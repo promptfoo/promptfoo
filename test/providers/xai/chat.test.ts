@@ -340,8 +340,31 @@ describe('xAI Chat Provider', () => {
     });
 
     it('does not support reasoning_effort for Grok-4', () => {
+      // xAI's chat-completions endpoint rejects `reasoning_effort` on legacy
+      // Grok-4 family slugs even after the retirement-redirect to grok-4.3 is
+      // documented; the parameter is silently stripped before sending.
       const provider = createXAIProvider('xai:grok-4-0709') as any;
       expect(provider.supportsReasoningEffort()).toBe(false);
+    });
+
+    it('preserves reasoning_effort for Grok 4.3 chat requests', async () => {
+      const provider = createXAIProvider('xai:grok-4.3') as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            reasoning_effort: 'high',
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+          },
+        },
+      });
+
+      expect(provider.supportsReasoningEffort()).toBe(true);
+      expect(result.body.reasoning_effort).toBe('high');
+      expect(result.body.presence_penalty).toBeUndefined();
+      expect(result.body.frequency_penalty).toBeUndefined();
+      expect(result.body.stop).toBeUndefined();
     });
 
     it('filters unsupported parameters for Grok-4 aliases', async () => {
@@ -360,13 +383,12 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok-4
+      // xAI's chat-completions endpoint rejects every one of these on the
+      // Grok-4 family, so they are stripped before send.
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // Temperature should still be present
       expect(result.body.temperature).toBe(0.8);
     });
 
@@ -387,13 +409,10 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok 4.1 Fast
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // These should still be present
       expect(result.body.temperature).toBe(0.7);
       expect(result.body.max_completion_tokens).toBe(2048);
     });
@@ -414,13 +433,10 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok 4 Fast
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // Temperature should still be present
       expect(result.body.temperature).toBe(0.7);
     });
 
@@ -503,6 +519,11 @@ describe('xAI Chat Provider', () => {
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4-0709');
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4');
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4-latest');
+    });
+
+    it('includes Grok 4.3 in reasoning effort models list', () => {
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.3');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.3-latest');
     });
 
     it('includes Grok-3 mini models in reasoning effort models list', () => {
@@ -600,6 +621,27 @@ describe('xAI Chat Provider', () => {
       // grok-3-mini is an alias for grok-3-mini-beta
       const miniAliasCost = calculateXAICost('grok-3-mini', {}, 600, 400);
       expect(miniAliasCost).toBeDefined();
+    });
+
+    it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
+      for (const modelName of [
+        'grok-4-1-fast-reasoning',
+        'grok-4-fast-non-reasoning',
+        'grok-4',
+        'grok-code-fast',
+        // xAI exposes a dated grok-code-fast-1 alias on /v1/language-models;
+        // it shares the post-retirement billing target with the undated slug.
+        'grok-code-fast-1-0825',
+        'grok-3',
+        // The grok-3 family collapses every -beta and -fast variant into the
+        // same id on xAI's catalog, so all of them must redirect together.
+        'grok-3-beta',
+        'grok-3-fast',
+        'grok-3-fast-beta',
+        'grok-3-fast-latest',
+      ]) {
+        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
+      }
     });
 
     it('returns undefined for invalid inputs', () => {

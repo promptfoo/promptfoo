@@ -957,7 +957,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         return new OpenAiRealtimeProvider(
-          modelName || configuredModel || 'gpt-4o-realtime-preview-2024-12-17',
+          modelName || configuredModel || 'gpt-realtime-1.5',
           providerOptions,
         );
       }

@@ -4,6 +4,7 @@ import {
   discoverTokenEndpoint,
   getAuthHeaders,
   getAuthQueryParams,
+  isMcpToolNameFilter,
 } from '../../../src/providers/mcp/util';
 
 import type { MCPServerConfig } from '../../../src/providers/mcp/types';
@@ -13,6 +14,19 @@ const mockFetch = vi.fn();
 vi.mock('../../../src/util/fetch', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
+
+describe('isMcpToolNameFilter', () => {
+  it('identifies plain tool names as MCP filters', () => {
+    expect(isMcpToolNameFilter('search_companies')).toBe(true);
+    expect(isMcpToolNameFilter(['search_companies', 'list_industries'])).toBe(true);
+  });
+
+  it('does not classify file loaders or object tool definitions as MCP filters', () => {
+    expect(isMcpToolNameFilter('file://tools.json')).toBe(false);
+    expect(isMcpToolNameFilter(['file://tools.json'])).toBe(false);
+    expect(isMcpToolNameFilter([{ type: 'function', function: { name: 'lookup' } }])).toBe(false);
+  });
+});
 
 describe('getAuthHeaders', () => {
   it('should return bearer auth header', () => {
@@ -251,6 +265,51 @@ describe('discoverTokenEndpoint', () => {
 
     await expect(discoverTokenEndpoint('https://example.com')).rejects.toThrow(
       /Failed to discover OAuth token endpoint/,
+    );
+  });
+
+  it('should ignore empty token endpoints during discovery', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: '' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+    });
+
+    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
+      'https://auth.example.com/token',
+    );
+  });
+
+  it('should ignore malformed token endpoints during discovery', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'not a url' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+    });
+
+    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
+      'https://auth.example.com/token',
+    );
+  });
+
+  it('should ignore token endpoints with unsupported protocols during discovery', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'ftp://auth.example.com/token' }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+    });
+
+    await expect(discoverTokenEndpoint('https://example.com/path')).resolves.toBe(
+      'https://auth.example.com/token',
     );
   });
 

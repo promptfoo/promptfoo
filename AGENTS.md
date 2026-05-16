@@ -10,7 +10,7 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 
 | Directory           | Purpose                         | Local Docs                   |
 | ------------------- | ------------------------------- | ---------------------------- |
-| `.agents/`          | Codex marketplace metadata      | `.agents/AGENTS.md`          |
+| `.agents/`          | Codex metadata and repo skills  | `.agents/AGENTS.md`          |
 | `.github/`          | GitHub Actions and workflows    | `.github/AGENTS.md`          |
 | `code-scan-action/` | Code scan GitHub Action wrapper | `code-scan-action/AGENTS.md` |
 | `docs/agents/`      | Reusable coding-agent docs      | `docs/agents/AGENTS.md`      |
