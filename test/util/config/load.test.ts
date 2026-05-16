@@ -638,13 +638,16 @@ describe('combineConfigs', () => {
         filePath: fs.PathOrFileDescriptor,
         _options?: fs.ObjectEncodingOptions | BufferEncoding | null,
       ) => {
-        if (typeof filePath === 'string' && filePath.endsWith('dir1/config1.json')) {
+        const normalizedPath =
+          typeof filePath === 'string' ? filePath.replaceAll('\\', '/') : '';
+
+        if (normalizedPath.endsWith('dir1/config1.json')) {
           return JSON.stringify({
             description: 'test1',
             prompts: ['prompt1'],
           });
         }
-        if (typeof filePath === 'string' && filePath.endsWith('dir2/config2.json')) {
+        if (normalizedPath.endsWith('dir2/config2.json')) {
           return JSON.stringify({
             description: 'test2',
             prompts: ['file://prompt2.txt'],
