@@ -178,27 +178,17 @@ export class ReplicateProvider implements ApiProvider {
     return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
   }
 
-  protected async callApiInternal(prompt: string): Promise<ProviderResponse> {
-    if (!this.apiKey) {
-      throw new Error(
-        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
-      );
-    }
+  private applyPromptAffixes(prompt: string) {
+    return `${this.config.prompt?.prefix ?? ''}${prompt}${this.config.prompt?.suffix ?? ''}`;
+  }
 
-    if (this.config.prompt?.prefix) {
-      prompt = this.config.prompt.prefix + prompt;
-    }
-    if (this.config.prompt?.suffix) {
-      prompt = prompt + this.config.prompt.suffix;
-    }
-
+  private buildReplicateInput(prompt: string) {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const systemPrompt =
       messages.find((message) => message.role === 'system')?.content ||
       this.config.system_prompt ||
       getEnvString('REPLICATE_SYSTEM_PROMPT');
     const userPrompt = messages.find((message) => message.role === 'user')?.content || prompt;
-
     const inputOptions = {
       max_length: this.config.max_length ?? getEnvInt('REPLICATE_MAX_LENGTH'),
       max_new_tokens: this.config.max_new_tokens ?? getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
@@ -212,112 +202,135 @@ export class ReplicateProvider implements ApiProvider {
       system_prompt: systemPrompt,
       prompt: userPrompt,
     };
-
-    const data = {
+    return {
       version: this.modelName.includes(':') ? this.modelName.split(':')[1] : undefined,
       input: {
         ...this.config,
-        ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
+        ...Object.fromEntries(
+          Object.entries(inputOptions).filter(([, value]) => value !== undefined),
+        ),
       },
     };
+  }
 
-    let cache;
-    let cacheKey;
-    if (isCacheEnabled()) {
-      cache = await getCache();
-      cacheKey = `replicate:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
-        data,
-      )}`;
+  private async getCachedReplicateResponse(data: Record<string, unknown>) {
+    if (!isCacheEnabled()) {
+      return {};
+    }
+    const cache = await getCache();
+    const cacheKey = `replicate:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
+      data,
+    )}`;
+    const cachedResponse = await cache.get(cacheKey);
+    if (!cachedResponse) {
+      return { cache, cacheKey };
+    }
+    logger.debug('Returning cached Replicate response', { modelName: this.modelName });
+    return {
+      cache,
+      cacheKey,
+      response: { ...JSON.parse(cachedResponse as string), cached: true } as ProviderResponse,
+    };
+  }
 
-      // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
+  private async createReplicatePrediction(data: Record<string, unknown>) {
+    const createResponse = await fetchWithCache(
+      this.modelName.includes(':')
+        ? 'https://api.replicate.com/v1/predictions'
+        : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          Prefer: 'wait=60',
+        },
+        body: JSON.stringify(data),
+      },
+      getRequestTimeoutMs(),
+      'json',
+    );
 
-      if (cachedResponse) {
-        logger.debug('Returning cached Replicate response', { modelName: this.modelName });
-        return { ...JSON.parse(cachedResponse as string), cached: true };
-      }
+    let prediction = createResponse.data as ReplicatePrediction;
+    if (prediction.status === 'starting' || prediction.status === 'processing') {
+      prediction = await this.pollForCompletion(prediction.id);
+    }
+    if (prediction.status === 'failed') {
+      throw new Error(prediction.error || 'Prediction failed');
+    }
+    return prediction.output;
+  }
+
+  private async cacheReplicateResponse(
+    cache: Awaited<ReturnType<typeof getCache>> | undefined,
+    cacheKey: string | undefined,
+    response: ProviderResponse,
+  ) {
+    if (!cache || !cacheKey) {
+      return;
+    }
+    try {
+      await cache.set(cacheKey, JSON.stringify(response));
+    } catch (err) {
+      logger.error(`Failed to cache response: ${String(err)}`);
+    }
+  }
+
+  private async normalizeReplicateResponse(
+    response: unknown,
+    cache: Awaited<ReturnType<typeof getCache>> | undefined,
+    cacheKey: string | undefined,
+  ): Promise<ProviderResponse> {
+    if (typeof response === 'string') {
+      const result = { output: response, tokenUsage: createEmptyTokenUsage() };
+      await this.cacheReplicateResponse(cache, cacheKey, result);
+      return result;
+    }
+    if (Array.isArray(response) && response.every((item) => typeof item === 'string')) {
+      const result = {
+        output: response.join(''),
+        tokenUsage: createEmptyTokenUsage(),
+      };
+      await this.cacheReplicateResponse(cache, cacheKey, result);
+      return result;
+    }
+    logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
+    return {
+      error: 'Unsupported response from Replicate: ' + JSON.stringify(response),
+    };
+  }
+
+  protected async callApiInternal(prompt: string): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      throw new Error(
+        'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
+      );
+    }
+
+    prompt = this.applyPromptAffixes(prompt);
+    const data = this.buildReplicateInput(prompt);
+    const {
+      cache,
+      cacheKey,
+      response: cachedResponse,
+    } = await this.getCachedReplicateResponse(data);
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     logger.debug('Calling Replicate', { modelName: this.modelName, promptLength: prompt.length });
-    let response;
     try {
-      // Create prediction with sync mode (wait up to 60 seconds)
-      const createResponse = await fetchWithCache(
-        this.modelName.includes(':')
-          ? 'https://api.replicate.com/v1/predictions'
-          : `https://api.replicate.com/v1/models/${this.modelName}/predictions`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-            Prefer: 'wait=60',
-          },
-          body: JSON.stringify(data),
-        },
-        getRequestTimeoutMs(),
-        'json',
-      );
-
-      response = createResponse.data as ReplicatePrediction;
-
-      // If still processing, poll for completion
-      if (response.status === 'starting' || response.status === 'processing') {
-        response = await this.pollForCompletion(response.id);
-      }
-
-      if (response.status === 'failed') {
-        throw new Error(response.error || 'Prediction failed');
-      }
-
-      response = response.output;
+      const response = await this.createReplicatePrediction(data);
+      logger.debug('Replicate API response received', {
+        modelName: this.modelName,
+        ...getReplicateValueSummary('response', response),
+      });
+      return this.normalizeReplicateResponse(response, cache, cacheKey);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug('Replicate API response received', {
-      modelName: this.modelName,
-      ...getReplicateValueSummary('response', response),
-    });
-
-    if (typeof response === 'string') {
-      // It's text
-      const ret = {
-        output: response,
-        tokenUsage: createEmptyTokenUsage(),
-      };
-      if (cache && cacheKey) {
-        try {
-          await cache.set(cacheKey, JSON.stringify(ret));
-        } catch (err) {
-          logger.error(`Failed to cache response: ${String(err)}`);
-        }
-      }
-      return ret;
-    } else if (Array.isArray(response)) {
-      // It's a list of generative outputs
-      if (response.every((item) => typeof item === 'string')) {
-        const output = response.join('');
-        const ret = {
-          output,
-          tokenUsage: createEmptyTokenUsage(),
-        };
-        if (cache && cacheKey) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(ret));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-        return ret;
-      }
-    }
-
-    logger.error('Unsupported response from Replicate: ' + JSON.stringify(response));
-    return {
-      error: 'Unsupported response from Replicate: ' + JSON.stringify(response),
-    };
   }
 
   protected async pollForCompletion(predictionId: string): Promise<ReplicatePrediction> {

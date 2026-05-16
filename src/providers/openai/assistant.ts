@@ -220,16 +220,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     }
   }
 
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
-    if (!this.getApiKey()) {
-      throw new Error(this.getMissingApiKeyErrorMessage());
-    }
-
-    const openai = new OpenAI({
+  private createClient() {
+    return new OpenAI({
       apiKey: this.getApiKey(),
       organization: this.getOrganization(),
       baseURL: this.getApiUrl(),
@@ -237,7 +229,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       timeout: getRequestTimeoutMs(),
       defaultHeaders: this.assistantConfig.headers,
     });
+  }
 
+  private async buildCreateAndRunBody(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<OpenAI.Beta.Threads.ThreadCreateAndRunParams> {
     const messages = parseChatPrompt(prompt, [
       {
         role: 'user',
@@ -247,7 +244,8 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
           : {}),
       },
     ]) as OpenAI.Beta.Threads.ThreadCreateParams.Message[];
-    const body: OpenAI.Beta.Threads.ThreadCreateAndRunParams = {
+
+    return {
       assistant_id: this.assistantId,
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
@@ -258,102 +256,208 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       temperature: this.assistantConfig.temperature ?? undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,
       tool_resources: this.assistantConfig.tool_resources || undefined,
-      thread: {
-        messages,
-      },
+      thread: { messages },
+    };
+  }
+
+  private getFunctionCallsWithCallbacks(currentRun: OpenAI.Beta.Threads.Run) {
+    const requiredAction = currentRun.required_action;
+    if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
+      return [];
+    }
+    return requiredAction.submit_tool_outputs.tool_calls.filter(
+      (toolCall): toolCall is OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall =>
+        toolCall.type === 'function' &&
+        toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {}),
+    );
+  }
+
+  private async submitFunctionToolOutputs(
+    openai: OpenAI,
+    currentRun: OpenAI.Beta.Threads.Run,
+    functionCalls: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[],
+  ) {
+    const callbackContext: CallbackContext = {
+      threadId: currentRun.thread_id,
+      runId: currentRun.id,
+      assistantId: this.assistantId,
+      provider: 'openai',
     };
 
-    let run: OpenAI.Beta.Threads.Run;
-    try {
-      run = await openai.beta.threads.createAndRun(body);
-    } catch (err) {
-      return failApiCall(err);
-    }
+    logger.debug(
+      `Calling functionToolCallbacks for functions: ${functionCalls.map(
+        ({ function: { name } }) => name,
+      )}`,
+    );
+    const toolOutputs = await Promise.all(
+      functionCalls.map(async (toolCall) => {
+        logger.debug(
+          `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
+        );
+        return {
+          tool_call_id: toolCall.id,
+          output: await this.executeFunctionCallback(
+            toolCall.function.name,
+            toolCall.function.arguments,
+            callbackContext,
+          ),
+        };
+      }),
+    );
+    logger.debug(
+      `Calling OpenAI API, submitting tool outputs for ${currentRun.thread_id}: ${JSON.stringify(
+        toolOutputs,
+      )}`,
+    );
+    return openai.beta.threads.runs.submitToolOutputs(currentRun.id, {
+      thread_id: currentRun.thread_id,
+      tool_outputs: toolOutputs,
+    });
+  }
 
+  private async waitForRunCompletion(openai: OpenAI, initialRun: OpenAI.Beta.Threads.Run) {
+    let run = initialRun;
     while (true) {
       const currentRun = await openai.beta.threads.runs.retrieve(run.id, {
         thread_id: run.thread_id,
       });
-
       if (currentRun.status === 'completed') {
-        run = currentRun;
-        break;
+        return currentRun;
       }
-
       if (currentRun.status === 'requires_action') {
-        const requiredAction = currentRun.required_action;
-        if (requiredAction === null || requiredAction.type !== 'submit_tool_outputs') {
-          run = currentRun;
-          break;
+        const functionCalls = this.getFunctionCallsWithCallbacks(currentRun);
+        if (functionCalls.length === 0) {
+          return currentRun;
         }
-        const functionCallsWithCallbacks: OpenAI.Beta.Threads.Runs.RequiredActionFunctionToolCall[] =
-          requiredAction.submit_tool_outputs.tool_calls.filter((toolCall) => {
-            return (
-              toolCall.type === 'function' &&
-              toolCall.function.name in (this.assistantConfig.functionToolCallbacks ?? {})
-            );
-          });
-        if (functionCallsWithCallbacks.length === 0) {
-          run = currentRun;
-          break;
-        }
-
-        // Build context for function callbacks
-        const callbackContext: CallbackContext = {
-          threadId: currentRun.thread_id,
-          runId: currentRun.id,
-          assistantId: this.assistantId,
-          provider: 'openai',
-        };
-
-        logger.debug(
-          `Calling functionToolCallbacks for functions: ${functionCallsWithCallbacks.map(
-            ({ function: { name } }) => name,
-          )}`,
-        );
-        const toolOutputs = await Promise.all(
-          functionCallsWithCallbacks.map(async (toolCall) => {
-            logger.debug(
-              `Calling functionToolCallbacks[${toolCall.function.name}]('${toolCall.function.arguments}')`,
-            );
-            const functionResult = await this.executeFunctionCallback(
-              toolCall.function.name,
-              toolCall.function.arguments,
-              callbackContext,
-            );
-            return {
-              tool_call_id: toolCall.id,
-              output: functionResult,
-            };
-          }),
-        );
-        logger.debug(
-          `Calling OpenAI API, submitting tool outputs for ${currentRun.thread_id}: ${JSON.stringify(
-            toolOutputs,
-          )}`,
-        );
         try {
-          run = await openai.beta.threads.runs.submitToolOutputs(currentRun.id, {
-            thread_id: currentRun.thread_id,
-            tool_outputs: toolOutputs,
-          });
+          run = await this.submitFunctionToolOutputs(openai, currentRun, functionCalls);
         } catch (err) {
           return failApiCall(err);
         }
         continue;
       }
-
       if (
         currentRun.status === 'failed' ||
         currentRun.status === 'cancelled' ||
         currentRun.status === 'expired'
       ) {
-        run = currentRun;
-        break;
+        return currentRun;
       }
-
       await sleep(1000);
     }
+  }
+
+  private async loadRunSteps(openai: OpenAI, run: OpenAI.Beta.Threads.Run) {
+    logger.debug(`Calling OpenAI API, getting thread run steps for ${run.thread_id}`);
+    const steps = await openai.beta.threads.runs.steps.list(run.id, {
+      thread_id: run.thread_id,
+      order: 'asc',
+    });
+    logger.debug(`\tOpenAI thread run steps API response: ${JSON.stringify(steps)}`);
+    return steps;
+  }
+
+  private async buildMessageStepOutput(
+    openai: OpenAI,
+    run: OpenAI.Beta.Threads.Run,
+    step: OpenAI.Beta.Threads.Runs.RunStep,
+  ) {
+    if (step.step_details.type !== 'message_creation') {
+      return undefined;
+    }
+    logger.debug(`Calling OpenAI API, getting message ${step.id}`);
+    const message = await openai.beta.threads.messages.retrieve(
+      step.step_details.message_creation.message_id,
+      { thread_id: run.thread_id },
+    );
+    logger.debug(`\tOpenAI thread run step message API response: ${JSON.stringify(message)}`);
+    const content = message.content
+      .map((content) => (content.type === 'text' ? content.text.value : `<${content.type} output>`))
+      .join('\n');
+    return `[${toTitleCase(message.role)}] ${content}`;
+  }
+
+  private buildToolCallStepOutput(step: OpenAI.Beta.Threads.Runs.RunStep) {
+    if (step.step_details.type !== 'tool_calls') {
+      return [];
+    }
+    return step.step_details.tool_calls.flatMap((toolCall) => {
+      if (toolCall.type === 'function') {
+        return [
+          `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
+          `[Function output: ${toolCall.function.output}]`,
+        ];
+      }
+      if (toolCall.type === 'file_search') {
+        return ['[Ran file search]'];
+      }
+      if (toolCall.type === 'code_interpreter') {
+        const output = toolCall.code_interpreter.outputs
+          .map((item) => (item.type === 'logs' ? item.logs : `<${item.type} output>`))
+          .join('\n');
+        return [
+          '[Code interpreter input]',
+          toolCall.code_interpreter.input,
+          '[Code interpreter output]',
+          output,
+        ];
+      }
+      return [`[Unknown tool call type: ${(toolCall as any).type}]`];
+    });
+  }
+
+  private async buildOutputBlocks(openai: OpenAI, run: OpenAI.Beta.Threads.Run) {
+    let steps;
+    try {
+      steps = await this.loadRunSteps(openai, run);
+    } catch (err) {
+      return failApiCall(err);
+    }
+
+    const outputBlocks: string[] = [];
+    for (const step of steps.data) {
+      try {
+        const messageOutput = await this.buildMessageStepOutput(openai, run, step);
+        if (messageOutput) {
+          outputBlocks.push(messageOutput);
+          continue;
+        }
+      } catch (err) {
+        return failApiCall(err);
+      }
+
+      if (step.step_details.type === 'tool_calls') {
+        outputBlocks.push(...this.buildToolCallStepOutput(step));
+      } else {
+        outputBlocks.push(`[Unknown step type: ${(step.step_details as any).type}]`);
+      }
+    }
+    return outputBlocks;
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    if (!this.getApiKey()) {
+      throw new Error(this.getMissingApiKeyErrorMessage());
+    }
+
+    const openai = this.createClient();
+    const body = await this.buildCreateAndRunBody(prompt, context);
+    let run: OpenAI.Beta.Threads.Run;
+    try {
+      run = (await openai.beta.threads.createAndRun(body)) as OpenAI.Beta.Threads.Run;
+    } catch (err) {
+      return failApiCall(err);
+    }
+
+    const completedRun = await this.waitForRunCompletion(openai, run);
+    if ('error' in completedRun) {
+      return completedRun as ProviderResponse;
+    }
+    run = completedRun;
 
     if (run.status !== 'completed' && run.status !== 'requires_action') {
       if (run.last_error) {
@@ -366,66 +470,9 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       };
     }
 
-    // Get run steps
-    logger.debug(`Calling OpenAI API, getting thread run steps for ${run.thread_id}`);
-    let steps;
-    try {
-      steps = await openai.beta.threads.runs.steps.list(run.id, {
-        thread_id: run.thread_id,
-        order: 'asc',
-      });
-    } catch (err) {
-      return failApiCall(err);
-    }
-    logger.debug(`\tOpenAI thread run steps API response: ${JSON.stringify(steps)}`);
-
-    const outputBlocks = [];
-    for (const step of steps.data) {
-      if (step.step_details.type === 'message_creation') {
-        logger.debug(`Calling OpenAI API, getting message ${step.id}`);
-        let message;
-        try {
-          message = await openai.beta.threads.messages.retrieve(
-            step.step_details.message_creation.message_id,
-            {
-              thread_id: run.thread_id,
-            },
-          );
-        } catch (err) {
-          return failApiCall(err);
-        }
-        logger.debug(`\tOpenAI thread run step message API response: ${JSON.stringify(message)}`);
-
-        const content = message.content
-          .map((content) =>
-            content.type === 'text' ? content.text.value : `<${content.type} output>`,
-          )
-          .join('\n');
-        outputBlocks.push(`[${toTitleCase(message.role)}] ${content}`);
-      } else if (step.step_details.type === 'tool_calls') {
-        for (const toolCall of step.step_details.tool_calls) {
-          if (toolCall.type === 'function') {
-            outputBlocks.push(
-              `[Call function ${toolCall.function.name} with arguments ${toolCall.function.arguments}]`,
-            );
-            outputBlocks.push(`[Function output: ${toolCall.function.output}]`);
-          } else if (toolCall.type === 'file_search') {
-            outputBlocks.push(`[Ran file search]`);
-          } else if (toolCall.type === 'code_interpreter') {
-            const output = toolCall.code_interpreter.outputs
-              .map((output) => (output.type === 'logs' ? output.logs : `<${output.type} output>`))
-              .join('\n');
-            outputBlocks.push(`[Code interpreter input]`);
-            outputBlocks.push(toolCall.code_interpreter.input);
-            outputBlocks.push(`[Code interpreter output]`);
-            outputBlocks.push(output);
-          } else {
-            outputBlocks.push(`[Unknown tool call type: ${(toolCall as any).type}]`);
-          }
-        }
-      } else {
-        outputBlocks.push(`[Unknown step type: ${(step.step_details as any).type}]`);
-      }
+    const outputBlocks = await this.buildOutputBlocks(openai, run);
+    if ('error' in outputBlocks) {
+      return outputBlocks;
     }
 
     return {
