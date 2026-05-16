@@ -208,16 +208,19 @@ describe('CustomMetrics', () => {
 
     renderWithProviders(<CustomMetrics lookup={lookup} truncationCount={2} />);
 
-    expect(
-      screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent),
-    ).toEqual(['alpha', 'beta']);
+    expect(screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent)).toEqual([
+      'alpha',
+      'beta',
+    ]);
     expect(screen.queryByTestId('metric-name-zebra')).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId('toggle-show-more'));
 
-    expect(
-      screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent),
-    ).toEqual(['alpha', 'beta', 'zebra']);
+    expect(screen.getAllByTestId(/^metric-name-/).map((element) => element.textContent)).toEqual([
+      'alpha',
+      'beta',
+      'zebra',
+    ]);
   });
 
   it('handles missing metrics in counts/totals objects', () => {
