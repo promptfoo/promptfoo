@@ -433,6 +433,7 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
     | Anthropic.Messages.WebFetchTool20250910
     | Anthropic.Messages.WebFetchTool20260209
     | Anthropic.Messages.WebFetchTool20260309
+    | Anthropic.Messages.MemoryTool20250818
     | Anthropic.Messages.WebSearchTool20250305
     | Anthropic.Messages.WebSearchTool20260209
   )[];
@@ -443,6 +444,7 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
     | Anthropic.Messages.WebFetchTool20250910
     | Anthropic.Messages.WebFetchTool20260209
     | Anthropic.Messages.WebFetchTool20260309
+    | Anthropic.Messages.MemoryTool20250818
     | Anthropic.Messages.WebSearchTool20250305
     | Anthropic.Messages.WebSearchTool20260209
   )[] = [];
@@ -470,6 +472,8 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
       } else if (tool.type === 'web_search_20260209') {
         processedTools.push(transformWebSearchTool20260209(tool as WebSearchToolConfig20260209));
         // Web search doesn't need beta header in latest SDK
+      } else if (tool.type === 'memory_20250818') {
+        processedTools.push(tool as Anthropic.Messages.MemoryTool20250818);
       } else {
         // Pass through other tool types (standard Anthropic tools)
         processedTools.push(tool as Anthropic.Tool);

@@ -400,8 +400,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
           withGenAISpan(
             { system, operationName: 'chat', model, providerId: `${system}:${model}` },
             async () => {
-              // Simulate API latency
-              await new Promise((resolve) => setTimeout(resolve, Math.random() * 50));
+              await Promise.resolve();
               return { output: `Response from ${system}` };
             },
           ),

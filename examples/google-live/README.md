@@ -11,7 +11,7 @@ This example demonstrates how to use promptfoo with Google's WebSocket-based Liv
 
 1. Basic query demonstration
 2. Multiline conversation demonstration
-3. Function calling and built-in tools demonstration
+3. Function calling and Google Search demonstration
 4. Stateful API with Python backend
 
 ## Prerequisites
@@ -56,7 +56,7 @@ promptfoo eval -c promptfooconfig.multiline.yaml -j 3
 
 ### Function Calling and Tools Example
 
-The tools configuration in `promptfooconfig.tools.yaml` demonstrates function calling (where the model can invoke defined functions) and built-in tools like Google Search and code execution:
+The tools configuration in `promptfooconfig.tools.yaml` demonstrates function calling (where the model can invoke defined functions) and built-in Google Search:
 
 ```bash
 promptfoo eval -c promptfooconfig.tools.yaml -j 3
@@ -100,7 +100,6 @@ If you encounter errors, check that:
 
 - Custom function declarations (weather and stock price)
 - Built-in Google Search integration
-- Built-in code execution capabilities
 - Assertions on function calling behavior
 
 ### 4. Stateful API Integration
@@ -113,15 +112,16 @@ If you encounter errors, check that:
 
 ### Provider Configuration
 
-All examples use the `google:live:gemini-2.5-flash-native-audio-preview-12-2025` model with various configurations:
+All examples use the `google:live:gemini-3.1-flash-live-preview` model with various configurations:
 
 ```yaml
 providers:
-  # Using gemini-2.5-flash-native-audio for Live API (supports both text and audio)
-  - id: 'google:live:gemini-2.5-flash-native-audio-preview-12-2025'
+  # Using Gemini 3.1 Flash Live Preview
+  - id: 'google:live:gemini-3.1-flash-live-preview'
     config:
       generationConfig:
-        response_modalities: ['text']
+        response_modalities: ['audio']
+        outputAudioTranscription: {}
       timeoutMs: 10000
 ```
 
@@ -130,8 +130,7 @@ providers:
 The function calling examples use JSON configuration files that define:
 
 1. Custom function declarations
-2. The built-in code execution capability
-3. The built-in Google Search capability
+2. The built-in Google Search capability
 
 For the stateful API, `counter_api.py` implements a simple counter service with endpoints for adding to and retrieving a count value.
 

@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type {
   ApiEmbeddingProvider,
@@ -92,7 +92,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${err}`);
