@@ -492,6 +492,12 @@ const smokeCases: SmokeCase[] = [
     expectedStatus: 400,
   },
   {
+    method: 'get',
+    openApiPath: '/api/eval/{evalId}/results/{resultId}/detail',
+    path: '/api/eval/eval-1/results/result-1/detail',
+    expectedStatus: 404,
+  },
+  {
     method: 'post',
     openApiPath: '/api/eval/replay',
     path: '/api/eval/replay',
