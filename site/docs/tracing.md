@@ -233,7 +233,7 @@ tests:
         provider: openai:gpt-5-mini
 ```
 
-Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments, into command trajectory steps. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
+Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
 ## Configuration Reference
 
@@ -309,10 +309,11 @@ Key points:
 - Create child spans for each operation
 - Set appropriate span attributes and status
 - Add tool-oriented attributes like `tool.name` or `function.name` when you want to use trajectory assertions
+- If you use Vercel AI SDK telemetry for tool calls, Promptfoo can normalize `ai.toolCall.name` plus the matching `ai.toolCall.args` / `ai.toolCall.arguments` / `ai.toolCall.input` attributes into trajectory tool steps
 
 ### Python
 
-For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python). For a framework-specific example that exports OpenAI Agents SDK traces into Promptfoo, see the [OpenAI Agents Python SDK guide](/docs/guides/evaluate-openai-agents-python).
+For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python). For OpenAI Agents SDK workflows, use the built-in [JavaScript provider](/docs/providers/openai-agents) or the [Python SDK guide](/docs/guides/evaluate-openai-agents-python), depending on which SDK you are testing.
 
 :::note
 

@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Checkbox } from '@app/components/ui/checkbox';
+import { Skeleton } from '@app/components/ui/skeleton';
 import { Spinner } from '@app/components/ui/spinner';
 import { useIsPrinting } from '@app/hooks/useIsPrinting';
 import { cn } from '@app/lib/utils';
@@ -10,13 +11,12 @@ import {
   getCoreRowModel,
   getExpandedRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Search } from 'lucide-react';
 import { DataTableHeaderFilter, operatorFilterFn } from './data-table-filter';
-import { DataTablePagination } from './data-table-pagination';
 import { DataTableToolbar } from './data-table-toolbar';
 import type {
   ColumnDef,
@@ -24,6 +24,7 @@ import type {
   ColumnSizingState,
   ExpandedState,
   Header,
+  Row,
   RowSelectionState,
   SortingState,
   VisibilityState,
@@ -33,28 +34,50 @@ import type { DataTableProps } from './types';
 
 const UTILITY_COLUMN_IDS = new Set(['select', 'expand']);
 
+type RowDisplayMode = 'client-virtualized' | 'server-virtualized';
+type StickyColumnSide = 'left' | 'right';
+type StickyColumnPosition = {
+  side: StickyColumnSide;
+  offset: number;
+  isBoundary: boolean;
+};
+
 type DataTableHeaderActionsProps<TData, TValue> = {
   canFilter: boolean;
   canSort: boolean;
   header: Header<TData, TValue>;
   isFiltered: boolean;
-  isRightAligned: boolean;
   sortDirection: false | 'asc' | 'desc';
 };
 
 type DataTableHeaderSortButtonProps = {
+  columnLabel: string;
   onToggleSorting?: (event: unknown) => void;
   sortDirection: false | 'asc' | 'desc';
 };
 
 function renderDataTableHeaderSortButton({
+  columnLabel,
   onToggleSorting,
   sortDirection,
 }: DataTableHeaderSortButtonProps) {
+  const nextSortDirection =
+    sortDirection === 'asc'
+      ? 'descending'
+      : sortDirection === 'desc'
+        ? 'clear sorting'
+        : 'ascending';
+  const sortLabel =
+    nextSortDirection === 'clear sorting'
+      ? `Clear sorting for ${columnLabel}`
+      : `Sort ${columnLabel} ${nextSortDirection}`;
+
   return (
     <Button
       variant="ghost"
       size="sm"
+      aria-label={sortLabel}
+      title={sortLabel}
       className={cn(
         'h-6 w-6 p-0',
         sortDirection ? 'text-primary' : 'text-zinc-400 dark:text-zinc-500',
@@ -80,7 +103,6 @@ function renderDataTableHeaderActions<TData, TValue>({
   canSort,
   header,
   isFiltered,
-  isRightAligned,
   sortDirection,
 }: DataTableHeaderActionsProps<TData, TValue>) {
   if (!canSort && !canFilter) {
@@ -90,15 +112,18 @@ function renderDataTableHeaderActions<TData, TValue>({
   return (
     <span
       className={cn(
-        'absolute top-1/2 -translate-y-1/2 flex items-center gap-0.5',
-        'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity',
-        'bg-inherit',
-        isRightAligned ? 'left-0 pr-1' : 'right-0 pl-1',
-        (sortDirection || isFiltered) && 'opacity-100 pointer-events-auto',
+        'flex shrink-0 items-center gap-0.5',
+        'opacity-100 pointer-events-auto transition-opacity sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto',
+        (sortDirection || isFiltered) &&
+          'opacity-100 pointer-events-auto sm:opacity-100 sm:pointer-events-auto',
       )}
     >
       {canSort &&
         renderDataTableHeaderSortButton({
+          columnLabel:
+            typeof header.column.columnDef.header === 'string'
+              ? header.column.columnDef.header
+              : header.column.id,
           onToggleSorting: header.column.getToggleSortingHandler(),
           sortDirection,
         })}
@@ -130,12 +155,18 @@ function renderDataTableHeaderResizeHandle<TData, TValue>(header: Header<TData, 
   );
 }
 
-function renderDataTableHeaderCell<TData, TValue = unknown>(header: Header<TData, TValue>) {
+function renderDataTableHeaderCell<TData, TValue = unknown>(
+  header: Header<TData, TValue>,
+  stickyColumnPosition?: StickyColumnPosition,
+  showFilter = true,
+) {
   const canSort = header.column.getCanSort();
-  const canFilter = header.column.getCanFilter();
+  const canFilter = showFilter && header.column.getCanFilter();
   const isFiltered = header.column.getIsFiltered();
   const isRightAligned = header.column.columnDef.meta?.align === 'right';
   const sortDirection = header.column.getIsSorted();
+  const ariaSort =
+    sortDirection === 'asc' ? 'ascending' : sortDirection === 'desc' ? 'descending' : 'none';
   const headerSize = `${header.getSize()}px`;
   const isUtilityColumn = UTILITY_COLUMN_IDS.has(header.column.id);
 
@@ -147,22 +178,31 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(header: Header<TData
         isRightAligned ? 'text-right' : 'text-left',
         isUtilityColumn ? 'px-3' : 'px-4 overflow-hidden',
         canSort && 'cursor-pointer select-none',
+        stickyColumnPosition && 'sticky z-20 print:static print:z-auto',
+        stickyColumnPosition?.isBoundary &&
+          (stickyColumnPosition.side === 'left'
+            ? 'border-r border-zinc-200 dark:border-zinc-800'
+            : 'border-l border-zinc-200 dark:border-zinc-800'),
       )}
       style={{
         width: headerSize,
         minWidth: headerSize,
         maxWidth: headerSize,
+        ...(stickyColumnPosition
+          ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
+          : {}),
       }}
+      aria-sort={canSort ? ariaSort : undefined}
       onClick={header.column.getToggleSortingHandler()}
     >
       {header.isPlaceholder ? null : (
         <div
           className={cn(
-            'relative min-w-0 overflow-hidden',
-            isRightAligned && 'flex flex-row-reverse',
+            'flex min-w-0 items-center overflow-hidden',
+            isRightAligned && 'flex-row-reverse',
           )}
         >
-          <span className="truncate block">
+          <span className="block min-w-0 flex-1 truncate">
             {flexRender(header.column.columnDef.header, header.getContext())}
           </span>
           {renderDataTableHeaderActions({
@@ -170,7 +210,6 @@ function renderDataTableHeaderCell<TData, TValue = unknown>(header: Header<TData
             canSort,
             header,
             isFiltered,
-            isRightAligned,
             sortDirection,
           })}
         </div>
@@ -188,6 +227,23 @@ function shouldShowEmptyDataState(
   return !hasData && !(globalFilter || columnFilters.length > 0);
 }
 
+function resolveRowDisplayMode(
+  rowDisplayMode: RowDisplayMode | undefined,
+  hasServerVirtualization: boolean,
+) {
+  const requestedRowDisplayMode = rowDisplayMode ?? 'client-virtualized';
+  const isInvalidServerVirtualizationConfig =
+    requestedRowDisplayMode === 'server-virtualized' && !hasServerVirtualization;
+  const resolvedRowDisplayMode = isInvalidServerVirtualizationConfig
+    ? 'client-virtualized'
+    : requestedRowDisplayMode;
+
+  return {
+    isInvalidServerVirtualizationConfig,
+    isServerVirtualized: resolvedRowDisplayMode === 'server-virtualized',
+  };
+}
+
 export function DataTable<TData, TValue = unknown>({
   columns,
   data,
@@ -203,8 +259,14 @@ export function DataTable<TData, TValue = unknown>({
   showColumnToggle = true,
   showFilter = true,
   showExport = true,
-  showPagination = true,
-  initialPageSize = 25,
+  globalFilterLabel = 'Search table',
+  rowDisplayMode,
+  virtualRowEstimate = 48,
+  virtualOverscan = 10,
+  serverVirtualization,
+  manualSorting = false,
+  sorting: controlledSorting,
+  onSortingChange,
   enableRowSelection = false,
   rowSelection: controlledRowSelection,
   onRowSelectionChange,
@@ -215,13 +277,6 @@ export function DataTable<TData, TValue = unknown>({
   toolbarActions,
   maxHeight,
   initialColumnVisibility = {},
-  manualPagination = false,
-  pageCount: externalPageCount,
-  pageIndex: externalPageIndex,
-  pageSize: externalPageSize,
-  onPaginationChange: externalOnPaginationChange,
-  onPageSizeChange: externalOnPageSizeChange,
-  rowCount,
   renderSubComponent,
   singleExpand = false,
   getRowCanExpand: getRowCanExpandProp,
@@ -229,7 +284,35 @@ export function DataTable<TData, TValue = unknown>({
   columnFilters: externalColumnFilters,
   onColumnFiltersChange: externalOnColumnFiltersChange,
 }: DataTableProps<TData, TValue>) {
-  const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
+  const [internalSorting, setInternalSorting] = React.useState<SortingState>(initialSorting);
+  const sorting = controlledSorting ?? internalSorting;
+  const sortingRef = React.useRef(sorting);
+  sortingRef.current = sorting;
+  const { isInvalidServerVirtualizationConfig, isServerVirtualized } = resolveRowDisplayMode(
+    rowDisplayMode,
+    serverVirtualization != null,
+  );
+  const showColumnFilterControls = showFilter && (!isServerVirtualized || manualFiltering);
+  const showGlobalFilterControl = !isServerVirtualized;
+
+  React.useEffect(() => {
+    if (isInvalidServerVirtualizationConfig) {
+      console.warn(
+        'DataTable: rowDisplayMode="server-virtualized" requires serverVirtualization. Falling back to client virtualization.',
+      );
+    }
+  }, [isInvalidServerVirtualizationConfig]);
+  const handleSortingChange = React.useCallback(
+    (updater: SortingState | ((old: SortingState) => SortingState)) => {
+      const nextValue = typeof updater === 'function' ? updater(sortingRef.current) : updater;
+      if (onSortingChange) {
+        onSortingChange(nextValue);
+      } else {
+        setInternalSorting(nextValue);
+      }
+    },
+    [onSortingChange],
+  );
   const [internalColumnFilters, setInternalColumnFilters] = React.useState<ColumnFiltersState>([]);
   const columnFilters =
     manualFiltering && externalColumnFilters ? externalColumnFilters : internalColumnFilters;
@@ -251,38 +334,12 @@ export function DataTable<TData, TValue = unknown>({
     React.useState<VisibilityState>(initialColumnVisibility);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [internalPagination, setInternalPagination] = React.useState({
-    pageIndex: 0,
-    pageSize: initialPageSize,
-  });
-  // manualPagination indicates parent-controlled pagination (typically server-side). We use
-  // internal state only when manualPagination is false.
-  const pagination = manualPagination
-    ? {
-        pageIndex: externalPageIndex ?? internalPagination.pageIndex,
-        pageSize: externalPageSize ?? internalPagination.pageSize,
-      }
-    : internalPagination;
-  const setInternalPageSize = React.useCallback((pageSize: number) => {
-    setInternalPagination((prev: { pageIndex: number; pageSize: number }) => ({
-      ...prev,
-      pageSize,
-      pageIndex: 0,
-    }));
-  }, []);
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
   const [internalExpanded, setInternalExpanded] = React.useState<ExpandedState>({});
-  const [isPending, startTransition] = React.useTransition();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Detect print mode to show all rows when printing
   const isPrinting = useIsPrinting();
-
-  // Scroll to top when page changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-  React.useEffect(() => {
-    scrollContainerRef.current?.scrollTo?.({ top: 0 });
-  }, [pagination.pageIndex]);
 
   // Use controlled or internal row selection state
   const rowSelection = controlledRowSelection ?? internalRowSelection;
@@ -367,7 +424,8 @@ export function DataTable<TData, TValue = unknown>({
               e.stopPropagation();
               row.toggleExpanded();
             }}
-            aria-label="Expand row"
+            aria-label={row.getIsExpanded() ? 'Collapse row' : 'Expand row'}
+            aria-expanded={row.getIsExpanded()}
             className="flex items-center justify-center size-6 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             <ChevronRight
@@ -411,7 +469,6 @@ export function DataTable<TData, TValue = unknown>({
       columnVisibility,
       columnSizing,
       globalFilter,
-      pagination,
       rowSelection,
       expanded,
     },
@@ -419,6 +476,7 @@ export function DataTable<TData, TValue = unknown>({
     enableColumnResizing: true,
     columnResizeMode: 'onChange',
     manualFiltering,
+    manualSorting: manualSorting || isServerVirtualized,
     filterFns: {
       operator: operatorFilterFn,
     },
@@ -426,37 +484,221 @@ export function DataTable<TData, TValue = unknown>({
     onRowSelectionChange: handleRowSelectionChange,
     onExpandedChange: handleExpandedChange,
     getRowCanExpand: getRowCanExpandProp ?? (renderSubComponent ? () => true : undefined),
-    onSortingChange: setSorting,
+    onSortingChange: handleSortingChange,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onColumnSizingChange: setColumnSizing,
     onGlobalFilterChange: setGlobalFilter,
-    onPaginationChange: (updater) => {
-      if (manualPagination) {
-        const newValue = typeof updater === 'function' ? updater(pagination) : updater;
-        externalOnPaginationChange?.(newValue);
-        return;
-      }
-
-      startTransition(() => {
-        setInternalPagination(updater);
-      });
-    },
-    ...(manualPagination ? { manualPagination: true, pageCount: externalPageCount ?? -1 } : {}),
     getRowId: (row, index) => (getRowId ? getRowId(row) : String(index)),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    ...(manualPagination ? {} : { getPaginationRowModel: getPaginationRowModel() }),
     ...(renderSubComponent ? { getExpandedRowModel: getExpandedRowModel() } : {}),
   });
 
-  const visibleColumnCount = table.getVisibleLeafColumns().length;
+  const visibleLeafColumns = table.getVisibleLeafColumns();
+  const visibleColumnCount = visibleLeafColumns.length;
+  const stickyColumnPositions = (() => {
+    const positions = new Map<string, StickyColumnPosition>();
+    const leftStickyColumns = visibleLeafColumns.filter(
+      (column) => column.columnDef.meta?.sticky === 'left',
+    );
+    const rightStickyColumns = visibleLeafColumns.filter(
+      (column) => column.columnDef.meta?.sticky === 'right',
+    );
+
+    let leftOffset = 0;
+    leftStickyColumns.forEach((column, index) => {
+      positions.set(column.id, {
+        side: 'left',
+        offset: leftOffset,
+        isBoundary: index === leftStickyColumns.length - 1,
+      });
+      leftOffset += column.getSize();
+    });
+
+    let rightOffset = 0;
+    [...rightStickyColumns].reverse().forEach((column, index) => {
+      positions.set(column.id, {
+        side: 'right',
+        offset: rightOffset,
+        isBoundary: index === rightStickyColumns.length - 1,
+      });
+      rightOffset += column.getSize();
+    });
+
+    return positions;
+  })();
   const tableMinWidth = table.getTotalSize() ? `${table.getTotalSize()}px` : undefined;
-  const totalRows = manualPagination ? (rowCount ?? 0) : table.getFilteredRowModel().rows.length;
+  const clientRows = table.getRowModel().rows;
+  const serverRowCount = serverVirtualization?.rowCount ?? 0;
+  const serverGetRow = serverVirtualization?.getRow;
+  const serverLoadRows = serverVirtualization?.loadRows;
+  const serverIsRowLoading = serverVirtualization?.isRowLoading;
+
+  const virtualizerCount = isServerVirtualized ? serverRowCount : clientRows.length;
+  const rowVirtualizer = useVirtualizer({
+    count: isPrinting ? 0 : virtualizerCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => virtualRowEstimate,
+    measureElement: (element) => element?.getBoundingClientRect().height ?? virtualRowEstimate,
+    overscan: virtualOverscan,
+    enabled: !isPrinting,
+    initialRect: { width: 800, height: 600 },
+    useFlushSync: false,
+  });
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const fallbackVirtualItems = React.useMemo(() => {
+    if (isPrinting || virtualItems.length > 0 || virtualizerCount === 0) {
+      return virtualItems;
+    }
+
+    const initialVisibleCount = Math.min(
+      virtualizerCount,
+      Math.ceil(600 / virtualRowEstimate) + virtualOverscan * 2,
+    );
+    return Array.from({ length: initialVisibleCount }, (_, index) => ({
+      key: index,
+      index,
+      start: index * virtualRowEstimate,
+      end: (index + 1) * virtualRowEstimate,
+      size: virtualRowEstimate,
+      lane: 0,
+    }));
+  }, [isPrinting, virtualItems, virtualOverscan, virtualRowEstimate, virtualizerCount]);
+  const activeVirtualItems = fallbackVirtualItems;
+  const firstVirtualIndex = activeVirtualItems[0]?.index;
+  const lastVirtualIndex = activeVirtualItems[activeVirtualItems.length - 1]?.index;
+  const virtualScrollResetKey = React.useMemo(
+    () => JSON.stringify({ columnFilters, globalFilter, sorting }),
+    [columnFilters, globalFilter, sorting],
+  );
+  const loadServerRows = React.useCallback(
+    (range: { startIndex: number; endIndex: number; signal: AbortSignal }) =>
+      serverLoadRows?.(range),
+    [serverLoadRows],
+  );
+
+  React.useEffect(() => {
+    if (!isServerVirtualized || firstVirtualIndex === undefined || lastVirtualIndex === undefined) {
+      return;
+    }
+
+    // Rerun on row-order changes so stale range loads are aborted and replaced.
+    void virtualScrollResetKey;
+
+    const abortController = new AbortController();
+    Promise.resolve(
+      loadServerRows({
+        startIndex: firstVirtualIndex,
+        endIndex: lastVirtualIndex,
+        signal: abortController.signal,
+      }),
+    ).catch((error) => {
+      if (!(error instanceof Error && error.name === 'AbortError')) {
+        // Surface unexpected load errors through the caller-owned error state when possible.
+        console.error('Failed to load virtualized table rows:', error);
+      }
+    });
+
+    return () => abortController.abort();
+  }, [
+    firstVirtualIndex,
+    isServerVirtualized,
+    lastVirtualIndex,
+    loadServerRows,
+    virtualScrollResetKey,
+  ]);
+  const previousVirtualScrollResetKeyRef = React.useRef(virtualScrollResetKey);
+
+  // Reset virtual scroll when row order or filters change.
+  React.useEffect(() => {
+    if (isPrinting || previousVirtualScrollResetKeyRef.current === virtualScrollResetKey) {
+      return;
+    }
+
+    previousVirtualScrollResetKeyRef.current = virtualScrollResetKey;
+    const scrollElement = scrollContainerRef.current;
+    if (!scrollElement || scrollElement.scrollTop === 0) {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      scrollElement.scrollTo({ top: 0, left: scrollElement.scrollLeft });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [isPrinting, virtualScrollResetKey]);
+
+  const emptyVirtualItemsRef = React.useRef<typeof activeVirtualItems>([]);
+  const serverVirtualItems = isServerVirtualized
+    ? activeVirtualItems
+    : emptyVirtualItemsRef.current;
+
+  const serverVisibleRows = React.useMemo(() => {
+    if (!isServerVirtualized || !serverGetRow) {
+      return [];
+    }
+
+    return serverVirtualItems.flatMap((virtualItem) => {
+      const row = serverGetRow(virtualItem.index);
+      return row ? [{ index: virtualItem.index, row }] : [];
+    });
+  }, [isServerVirtualized, serverGetRow, serverVirtualItems]);
+
+  const serverTableData = React.useMemo(
+    () => serverVisibleRows.map(({ row }) => row),
+    [serverVisibleRows],
+  );
+
+  const serverTable = useReactTable({
+    data: serverTableData,
+    columns: allColumns,
+    defaultColumn: {
+      filterFn: operatorFilterFn,
+    },
+    state: {
+      sorting,
+      columnFilters,
+      columnVisibility,
+      columnSizing,
+      globalFilter,
+      rowSelection,
+      expanded,
+    },
+    enableRowSelection,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
+    manualFiltering: true,
+    manualSorting: true,
+    filterFns: {
+      operator: operatorFilterFn,
+    },
+    onRowSelectionChange: handleRowSelectionChange,
+    onExpandedChange: handleExpandedChange,
+    getRowCanExpand: getRowCanExpandProp ?? (renderSubComponent ? () => true : undefined),
+    onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
+    getRowId: (row, index) =>
+      getRowId ? getRowId(row) : String(serverVisibleRows[index]?.index ?? index),
+    getCoreRowModel: getCoreRowModel(),
+    ...(renderSubComponent ? { getExpandedRowModel: getExpandedRowModel() } : {}),
+  });
+
+  const serverRowsByIndex = React.useMemo(() => {
+    const next = new Map<number, Row<TData>>();
+    serverTable.getRowModel().rows.forEach((row, index) => {
+      const virtualIndex = serverVisibleRows[index]?.index;
+      if (virtualIndex !== undefined) {
+        next.set(virtualIndex, row);
+      }
+    });
+    return next;
+  }, [serverTable, serverVisibleRows]);
 
   // When printing, show all rows instead of just the current page
   const rows = isPrinting ? table.getPrePaginationRowModel().rows : table.getRowModel().rows;
+  const hasData = isServerVirtualized ? serverRowCount > 0 : table.getRowModel().rows.length > 0;
 
   if (isLoading) {
     return (
@@ -465,11 +707,14 @@ export function DataTable<TData, TValue = unknown>({
           <DataTableToolbar
             table={table}
             columnFilters={columnFilters}
+            columnVisibility={columnVisibility}
+            setColumnVisibility={setColumnVisibility}
             globalFilter={globalFilter}
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -488,11 +733,14 @@ export function DataTable<TData, TValue = unknown>({
           <DataTableToolbar
             table={table}
             columnFilters={columnFilters}
+            columnVisibility={columnVisibility}
+            setColumnVisibility={setColumnVisibility}
             globalFilter={globalFilter}
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -505,8 +753,6 @@ export function DataTable<TData, TValue = unknown>({
     );
   }
 
-  const hasData = table.getRowModel().rows.length > 0;
-
   // Show initial empty state only when there's no data AND no active filters
   // If filters are active but return no results, we show the table with "no results" message
   // so users can still access the toolbar to clear/modify their filters
@@ -517,11 +763,14 @@ export function DataTable<TData, TValue = unknown>({
           <DataTableToolbar
             table={table}
             columnFilters={columnFilters}
+            columnVisibility={columnVisibility}
+            setColumnVisibility={setColumnVisibility}
             globalFilter={globalFilter}
             setGlobalFilter={setGlobalFilter}
             showColumnToggle={false}
             showFilter={false}
             showExport={false}
+            globalFilterLabel={globalFilterLabel}
             toolbarActions={toolbarActions}
           />
         )}
@@ -536,11 +785,212 @@ export function DataTable<TData, TValue = unknown>({
     );
   }
 
+  const renderTableRow = (row: Row<TData>, virtualIndex?: number) => {
+    const canToggleExpansionFromRow =
+      !onRowClick && Boolean(renderSubComponent && row.getCanExpand());
+    const canActivateRow = Boolean(onRowClick);
+    const activateRow = () => {
+      if (onRowClick) {
+        onRowClick(row.original);
+      } else if (canToggleExpansionFromRow) {
+        row.toggleExpanded();
+      }
+    };
+
+    return (
+      <React.Fragment key={virtualIndex === undefined ? row.id : `${row.id}-${virtualIndex}`}>
+        <tr
+          data-index={virtualIndex}
+          data-rowindex={virtualIndex ?? row.index}
+          ref={virtualIndex === undefined || isPrinting ? undefined : rowVirtualizer.measureElement}
+          onClick={activateRow}
+          onKeyDown={(event) => {
+            if (
+              event.target !== event.currentTarget ||
+              (event.key !== 'Enter' && event.key !== ' ')
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+            activateRow();
+          }}
+          tabIndex={canActivateRow ? 0 : undefined}
+          className={cn(
+            'group border-b border-zinc-200 dark:border-zinc-800 last:border-b-0 transition-colors print:border-gray-300',
+            (onRowClick || (renderSubComponent && row.getCanExpand())) &&
+              'cursor-pointer hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:hover:bg-zinc-800/50',
+          )}
+        >
+          {row.getVisibleCells().map((cell) => {
+            const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
+            const cellSize = `${cell.column.getSize()}px`;
+            const isUtilityColumn = UTILITY_COLUMN_IDS.has(cell.column.id);
+            const stickyColumnPosition = stickyColumnPositions.get(cell.column.id);
+
+            return (
+              <td
+                key={cell.id}
+                className={cn(
+                  'py-3 text-sm',
+                  isUtilityColumn
+                    ? cn('px-3', cell.column.id === 'select' && 'cursor-pointer')
+                    : 'px-4 overflow-hidden text-ellipsis',
+                  cellAlign === 'right' && 'text-right',
+                  stickyColumnPosition &&
+                    'sticky z-[1] bg-white group-hover:bg-zinc-50 dark:bg-zinc-900 dark:group-hover:bg-zinc-800/50 print:static print:z-auto print:bg-white',
+                  stickyColumnPosition?.isBoundary &&
+                    (stickyColumnPosition.side === 'left'
+                      ? 'border-r border-zinc-200 dark:border-zinc-800'
+                      : 'border-l border-zinc-200 dark:border-zinc-800'),
+                )}
+                style={{
+                  width: cellSize,
+                  minWidth: cellSize,
+                  maxWidth: cellSize,
+                  ...(stickyColumnPosition
+                    ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
+                    : {}),
+                }}
+                onClick={
+                  cell.column.id === 'select'
+                    ? (e) => {
+                        e.stopPropagation();
+                        row.toggleSelected();
+                      }
+                    : undefined
+                }
+              >
+                {isUtilityColumn ? (
+                  flexRender(cell.column.columnDef.cell, cell.getContext())
+                ) : (
+                  <div className="overflow-hidden min-w-0">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </div>
+                )}
+              </td>
+            );
+          })}
+        </tr>
+        {renderSubComponent && row.getIsExpanded() && (
+          <tr className={cn('bg-neutral-100/30 dark:bg-neutral-800/30', expandedRowClassName)}>
+            <td
+              colSpan={visibleColumnCount}
+              className="border-b border-zinc-200 p-4 dark:border-zinc-800"
+            >
+              {renderSubComponent(row)}
+            </td>
+          </tr>
+        )}
+      </React.Fragment>
+    );
+  };
+
+  const renderVirtualSpacerRow = (height: number, key: string) => {
+    if (height <= 0) {
+      return null;
+    }
+
+    return (
+      <tr key={key} aria-hidden="true">
+        <td colSpan={visibleColumnCount} style={{ height, padding: 0, border: 0 }} />
+      </tr>
+    );
+  };
+
+  const renderServerSkeletonRow = (virtualIndex: number) => (
+    <tr
+      key={`server-skeleton-${virtualIndex}`}
+      data-index={virtualIndex}
+      data-rowindex={virtualIndex}
+      ref={isPrinting ? undefined : rowVirtualizer.measureElement}
+      aria-busy={serverIsRowLoading?.(virtualIndex) ?? true}
+      className="border-b border-zinc-200 dark:border-zinc-800"
+    >
+      {visibleLeafColumns.map((column) => {
+        const columnSize = `${column.getSize()}px`;
+        const isUtilityColumn = UTILITY_COLUMN_IDS.has(column.id);
+        const stickyColumnPosition = stickyColumnPositions.get(column.id);
+        return (
+          <td
+            key={column.id}
+            className={cn(
+              'py-3 text-sm',
+              isUtilityColumn ? 'px-3' : 'px-4',
+              stickyColumnPosition &&
+                'sticky z-[1] bg-white dark:bg-zinc-900 print:static print:z-auto print:bg-white',
+              stickyColumnPosition?.isBoundary &&
+                (stickyColumnPosition.side === 'left'
+                  ? 'border-r border-zinc-200 dark:border-zinc-800'
+                  : 'border-l border-zinc-200 dark:border-zinc-800'),
+            )}
+            style={{
+              width: columnSize,
+              minWidth: columnSize,
+              maxWidth: columnSize,
+              ...(stickyColumnPosition
+                ? { [stickyColumnPosition.side]: `${stickyColumnPosition.offset}px` }
+                : {}),
+            }}
+          >
+            {!isUtilityColumn && <Skeleton className="h-4 w-full" />}
+          </td>
+        );
+      })}
+    </tr>
+  );
+
+  const renderNoResultsRow = () => (
+    <tr>
+      <td colSpan={visibleColumnCount} className="h-[200px] text-center">
+        <div className="flex flex-col items-center justify-center gap-2">
+          <Search className="size-8 text-zinc-400 dark:text-zinc-500" />
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">No results match your search</p>
+        </div>
+      </td>
+    </tr>
+  );
+
+  const renderTableBodyRows = () => {
+    if (!hasData) {
+      return renderNoResultsRow();
+    }
+
+    if (!isPrinting) {
+      const virtualPaddingTop = activeVirtualItems[0]?.start ?? 0;
+      const virtualPaddingBottom =
+        activeVirtualItems.length > 0
+          ? rowVirtualizer.getTotalSize() -
+            (activeVirtualItems[activeVirtualItems.length - 1]?.end ?? 0)
+          : 0;
+
+      return (
+        <>
+          {renderVirtualSpacerRow(virtualPaddingTop, 'virtual-padding-top')}
+          {activeVirtualItems.map((virtualItem) => {
+            if (isServerVirtualized) {
+              const row = serverRowsByIndex.get(virtualItem.index);
+              return row
+                ? renderTableRow(row, virtualItem.index)
+                : renderServerSkeletonRow(virtualItem.index);
+            }
+
+            const row = clientRows[virtualItem.index];
+            return row ? renderTableRow(row, virtualItem.index) : null;
+          })}
+          {renderVirtualSpacerRow(virtualPaddingBottom, 'virtual-padding-bottom')}
+        </>
+      );
+    }
+
+    return rows.map((row) => renderTableRow(row));
+  };
+
   return (
     <div className={cn('flex flex-col gap-3 flex-1 min-h-0', className)}>
       <div
         className={cn(
-          'rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col',
+          'rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex-1 min-h-0 flex flex-col overflow-hidden',
           'print:bg-white print:border-gray-300',
         )}
       >
@@ -549,11 +999,15 @@ export function DataTable<TData, TValue = unknown>({
             <DataTableToolbar
               table={table}
               columnFilters={columnFilters}
+              columnVisibility={columnVisibility}
+              setColumnVisibility={setColumnVisibility}
               globalFilter={globalFilter}
               setGlobalFilter={setGlobalFilter}
               showColumnToggle={showColumnToggle}
-              showFilter={showFilter}
+              showFilter={showColumnFilterControls}
+              showGlobalFilter={showGlobalFilterControl}
               showExport={showExport}
+              globalFilterLabel={globalFilterLabel}
               onExportCSV={onExportCSV}
               onExportJSON={onExportJSON}
               toolbarActions={toolbarActions}
@@ -563,7 +1017,7 @@ export function DataTable<TData, TValue = unknown>({
 
         <div
           ref={scrollContainerRef}
-          className="overflow-auto flex-1 min-h-0 print:overflow-visible print:max-h-none print:flex-none"
+          className="overflow-auto overflow-x-auto overflow-y-auto overscroll-x-contain flex-1 min-h-0 print:overflow-visible print:max-h-none print:flex-none"
           style={maxHeight ? { maxHeight } : undefined}
         >
           <table
@@ -579,124 +1033,20 @@ export function DataTable<TData, TValue = unknown>({
                   key={headerGroup.id}
                   className="border-b border-zinc-200 dark:border-zinc-800 print:border-gray-300"
                 >
-                  {headerGroup.headers.map(renderDataTableHeaderCell)}
+                  {headerGroup.headers.map((header) =>
+                    renderDataTableHeaderCell(
+                      header,
+                      stickyColumnPositions.get(header.column.id),
+                      showColumnFilterControls,
+                    ),
+                  )}
                 </tr>
               ))}
             </thead>
-            <tbody className={cn(isPending && 'opacity-60 transition-opacity')}>
-              {hasData ? (
-                // When printing, show all rows instead of just the current page
-                rows.map((row) => (
-                  <React.Fragment key={row.id}>
-                    <tr
-                      onClick={() => {
-                        if (onRowClick) {
-                          onRowClick(row.original);
-                        } else if (renderSubComponent && row.getCanExpand()) {
-                          row.toggleExpanded();
-                        }
-                      }}
-                      className={cn(
-                        'border-b border-zinc-200 dark:border-zinc-800 last:border-b-0 transition-colors print:border-gray-300',
-                        (onRowClick || (renderSubComponent && row.getCanExpand())) &&
-                          'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50',
-                      )}
-                    >
-                      {row.getVisibleCells().map((cell) => {
-                        const cellAlign = cell.column.columnDef.meta?.align ?? 'left';
-                        const cellSize = `${cell.column.getSize()}px`;
-                        const isUtilityColumn = UTILITY_COLUMN_IDS.has(cell.column.id);
-
-                        return (
-                          <td
-                            key={cell.id}
-                            className={cn(
-                              'py-3 text-sm',
-                              isUtilityColumn
-                                ? cn('px-3', cell.column.id === 'select' && 'cursor-pointer')
-                                : 'px-4 overflow-hidden text-ellipsis',
-                              cellAlign === 'right' && 'text-right',
-                            )}
-                            style={{
-                              width: cellSize,
-                              minWidth: cellSize,
-                              maxWidth: cellSize,
-                            }}
-                            onClick={
-                              cell.column.id === 'select'
-                                ? (e) => {
-                                    e.stopPropagation();
-                                    row.toggleSelected();
-                                  }
-                                : undefined
-                            }
-                          >
-                            {isUtilityColumn ? (
-                              flexRender(cell.column.columnDef.cell, cell.getContext())
-                            ) : (
-                              <div className="overflow-hidden min-w-0">
-                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                    {renderSubComponent && row.getIsExpanded() && (
-                      <tr
-                        className={cn(
-                          'bg-neutral-100/30 dark:bg-neutral-800/30',
-                          expandedRowClassName,
-                        )}
-                      >
-                        <td
-                          colSpan={visibleColumnCount}
-                          className="border-b border-zinc-200 p-4 dark:border-zinc-800"
-                        >
-                          {renderSubComponent(row)}
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={visibleColumnCount} className="h-[200px] text-center">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <Search className="size-8 text-zinc-400 dark:text-zinc-500" />
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                        No results match your search
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
+            <tbody>{renderTableBodyRows()}</tbody>
           </table>
         </div>
       </div>
-
-      {showPagination && hasData && (
-        <div className="shrink-0 print:hidden">
-          <DataTablePagination
-            table={table}
-            pageIndex={pagination.pageIndex}
-            pageSize={pagination.pageSize}
-            pageCount={table.getPageCount()}
-            totalRows={totalRows}
-            onPageSizeChange={(newPageSize) => {
-              if (manualPagination) {
-                externalOnPageSizeChange?.(newPageSize);
-                return;
-              }
-
-              startTransition(() => {
-                setInternalPageSize(newPageSize);
-              });
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { AnthropicCompletionProvider } from '../../src/providers/anthropic/compl
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
+import { AIStudioEmbeddingProvider } from '../../src/providers/google/ai.studio';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import { GoogleVideoProvider } from '../../src/providers/google/video';
 import {
@@ -683,10 +684,23 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with openrouter', async () => {
-    const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     // OpenRouter provider now returns id with prefix
-    expect(provider.id()).toBe('openrouter:mistralai/mistral-medium');
+    expect(provider.id()).toBe('openrouter:anthropic/claude-opus-4.7');
+  });
+
+  it('loadApiProvider with openrouter preserves a custom apiBaseUrl override', async () => {
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7', {
+      options: {
+        config: {
+          apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+        },
+      },
+    });
+
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
   });
 
   it('loadApiProvider with github', async () => {
@@ -795,6 +809,29 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('vertex:embeddings:vertex-embedding-model');
     expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
     expect(provider.id()).toBe('vertex:vertex-embedding-model');
+  });
+
+  it('vertex:embedding forwards providerOptions.config to this.config', async () => {
+    const provider = (await loadApiProvider('vertex:embedding:gemini-embedding-001', {
+      options: {
+        config: { autoTruncate: true, region: 'us-west1' },
+      },
+    })) as VertexEmbeddingProvider;
+    expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
+    expect(provider.config.autoTruncate).toBe(true);
+    expect(provider.config.region).toBe('us-west1');
+  });
+
+  it('loadApiProvider with google:embedding', async () => {
+    const provider = await loadApiProvider('google:embedding:gemini-embedding-001');
+    expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
+  });
+
+  it('loadApiProvider with google:embeddings', async () => {
+    const provider = await loadApiProvider('google:embeddings:gemini-embedding-001');
+    expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
   });
 
   it('loadApiProvider with vertex:modelname', async () => {

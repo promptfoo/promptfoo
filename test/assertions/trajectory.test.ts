@@ -239,6 +239,32 @@ describe('trajectory utilities', () => {
     expect(steps[0].aliases).toEqual(expect.arrayContaining(['shell', 'echo']));
   });
 
+  it('normalizes shell tool command arrays as one command step', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'shell-command-array',
+          name: 'tool shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'shell',
+            'tool.arguments':
+              '{"commands":["cat skills/discount-review/SKILL.md","python3 skills/discount-review/scripts/analyze_discount_policy.py skill_fixture/repo"]}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe(
+      'cat skills/discount-review/SKILL.md; python3 skills/discount-review/scripts/analyze_discount_policy.py skill_fixture/repo',
+    );
+    expect(steps[0].aliases).toEqual(expect.arrayContaining(['shell', 'cat']));
+  });
+
   it('normalizes array-format command arguments from exec_command', () => {
     const steps = extractTrajectorySteps({
       ...mockTraceData,
@@ -306,6 +332,38 @@ describe('trajectory utilities', () => {
     expect(steps).toHaveLength(1);
     expect(steps[0].type).toBe('command');
     expect(steps[0].name).toBe('pwd');
+  });
+
+  it.each([
+    ['ai.toolCall.args', '{"order_id":"123","include_history":false}'],
+    ['ai.toolCall.arguments', '{"order_id":"123","include_history":false}'],
+    ['ai.toolCall.input', '{"order_id":"123","include_history":false}'],
+  ])('normalizes Vercel AI SDK tool spans with %s', (argKey, argValue) => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'vercel-tool-call',
+          name: 'ai.toolCall',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'ai.toolCall.name': 'search_orders',
+            [argKey]: argValue,
+            'ai.toolCall.result': '{"status":"ok"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('tool');
+    expect(steps[0].name).toBe('search_orders');
+    expect(steps[0].aliases).toEqual(expect.arrayContaining(['ai.toolCall', 'search_orders']));
+    expect(steps[0].args).toEqual({
+      order_id: '123',
+      include_history: false,
+    });
   });
 
   it('preserves original span order when timestamps are tied', () => {
@@ -963,6 +1021,45 @@ describe('trajectory assertions', () => {
           'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
         assertion: params.assertion,
       });
+    });
+
+    it('matches Vercel AI SDK spans end-to-end against expected args', () => {
+      const vercelTrace: TraceData = {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'vercel-span',
+            name: 'ai.toolCall',
+            startTime: 1000,
+            endTime: 1100,
+            attributes: {
+              'ai.toolCall.name': 'lookup_customer',
+              'ai.toolCall.args': '{"customer_id":"cust_1234","include_history":true}',
+              'ai.toolCall.result': '{"plan":"pro"}',
+            },
+          },
+        ],
+      };
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: vercelTrace },
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'lookup_customer',
+            args: { customer_id: 'cust_1234' },
+          },
+        },
+        renderedValue: {
+          name: 'lookup_customer',
+          args: { customer_id: 'cust_1234' },
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
     });
 
     it('fails when no matching tool arguments satisfy the expectation', () => {

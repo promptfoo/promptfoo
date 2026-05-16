@@ -32,7 +32,7 @@ Install promptfoo using [npm](https://nodejs.org/en/download), [npx](https://nod
 </Tabs>
 
 :::note
-npm and npx require [Node.js](https://nodejs.org/en/download) 20.20+ or 22.22+.
+npm and npx require [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0`.
 :::
 
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.
