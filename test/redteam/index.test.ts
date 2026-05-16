@@ -394,7 +394,8 @@ describe('synthesize', () => {
               modifiers: expect.objectContaining({
                 language: expect.stringMatching(/^(fr|de)$/),
                 maxCharsPerMessage: 'Each generated user message must be 50 characters or fewer.',
-                testGenerationInstructions: 'Prefer edge-case probes',
+                testGenerationInstructions:
+                  'Prefer edge-case probes\n\nIMPORTANT: Each generated prompt MUST start with "PromptBlock:"',
                 tone: 'formal',
               }),
             }),
