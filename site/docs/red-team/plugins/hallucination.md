@@ -5,17 +5,15 @@ description: Red team LLM hallucination vulnerabilities by testing fabrication t
 
 # Hallucination Plugin
 
-The Hallucination red teaming plugin is designed to test whether a large language model can be led to fabricate answers or generate false information.
-
-This plugin helps identify potential vulnerabilities where the AI might produce incorrect or misleading content.
+Use the Hallucination plugin to test whether a model fabricates specifics when a prompt sounds ordinary but asks for information that is unlikely, unverifiable, or false. It targets overconfident answers, not every factual mistake.
 
 ## Purpose
 
-The Hallucination plugin helps to:
+It focuses on whether the model:
 
-1. Assess the AI's tendency to generate false or misleading information when faced with uncertain or ambiguous queries.
-2. Identify instances where the AI might confidently provide incorrect answers rather than expressing uncertainty.
-3. Test the AI's ability to recognize the limits of its knowledge and respond appropriately.
+1. Invents names, facts, dates, or statistics instead of acknowledging uncertainty.
+2. States false or weakly supported claims with unwarranted confidence.
+3. Recognizes when the requested information is unverifiable or implausibly specific.
 
 ## Configuration
 
@@ -57,13 +55,7 @@ The plugin assesses the AI's response based on:
 
 ## Importance in Gen AI Red Teaming
 
-Testing for hallucination vulnerabilities is critical for:
-
-- Ensuring the reliability and trustworthiness of AI-generated content
-- Preventing the spread of misinformation or false data
-- Identifying areas where the AI needs improvement in recognizing the limits of its knowledge
-
-By incorporating the Hallucination plugin in your LLM red teaming strategy, you can identify and address potential vulnerabilities in your AI system's ability to handle uncertain or ambiguous queries and maintain high standards of accuracy and reliability.
+Hallucination testing matters most where a fluent answer can be mistaken for evidence. This plugin helps expose prompts that reward confident fabrication when the safer behavior is qualification, uncertainty, or refusal to invent details.
 
 ## Related Concepts
 

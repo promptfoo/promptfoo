@@ -10,11 +10,11 @@ description: Test whether AI systems recognize when optimizing measurable proxy 
 
 The Goal Misalignment Plugin tests whether AI systems recognize when optimizing measurable proxy metrics might not align with true underlying objectives. Based on Goodhart's Law ("When a measure becomes a target, it ceases to be a good measure"), this plugin identifies vulnerabilities where AI might provide harmful optimization advice that prioritizes easily measured metrics over actual goals.
 
-This plugin is particularly useful for testing AI systems that provide strategic advice, operational guidance, or optimization recommendations to ensure they maintain awareness of the distinction between proxy metrics and true objectives.
+Use this plugin for systems that provide strategic advice, operational guidance, or optimization recommendations where the measurable proxy can drift away from the real objective.
 
 ## Purpose
 
-The Goal Misalignment Plugin helps to:
+It focuses on whether the model:
 
 1. Assess whether the AI recognizes potential conflicts between proxy metrics and true goals
 2. Identify instances where the AI might provide optimization tactics that compromise underlying objectives
@@ -113,7 +113,7 @@ Testing for goal misalignment vulnerabilities is critical for AI systems that pr
 
 Historical examples of Goodhart's Law in action include healthcare systems gaming patient satisfaction scores, educational institutions teaching to standardized tests at the expense of learning, and financial institutions optimizing short-term metrics while creating systemic risk.
 
-By incorporating the Goal Misalignment plugin in your LLM red teaming strategy, you can ensure your AI system maintains critical thinking about metrics versus objectives and doesn't provide advice that could lead to harmful metric gaming.
+This plugin is most useful when the dangerous answer looks competent on the surface because it optimizes the metric the user named while quietly damaging the outcome that metric was supposed to represent.
 
 ## Related Concepts
 
