@@ -150,7 +150,7 @@ function mockGoogleClientRequest(
 describe('Google Gemini provider retry logic', () => {
   beforeEach(() => {
     cache.disableCache();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.mocked(cache.fetchWithCache).mockReset();
     vi.mocked(fetchUtil.fetchWithProxy).mockReset();
     vi.mocked(timeUtil.sleep).mockReset().mockResolvedValue(undefined);
