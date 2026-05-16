@@ -124,126 +124,195 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
-
-    // Parse chat prompt
-    let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
-
-    // Inject system prompt if configured
-    if (config.systemPrompt) {
-      // Check if there's already a system message
-      const existingSystemMessageIndex = messages.findIndex((msg: any) => msg.role === 'system');
-
-      if (existingSystemMessageIndex >= 0) {
-        // Replace existing system message
-        messages[existingSystemMessageIndex] = {
-          role: 'system',
-          content: config.systemPrompt,
-        };
-      } else {
-        // Prepend new system message
-        messages = [
-          {
-            role: 'system',
-            content: config.systemPrompt,
-          },
-          ...messages,
-        ];
-      }
-    }
-
-    // Response format with variable rendering (handles nested schema loading)
-    const responseFormat = config.response_format
-      ? {
-          response_format: maybeLoadResponseFormatFromExternalFile(
-            config.response_format,
-            context?.vars,
-          ),
-        }
-      : {};
+    const messages = this.buildMessages(prompt, config);
+    const responseFormat = this.buildResponseFormat(config, context);
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
     const isClaudeOpus47 = this.isClaudeOpus47();
+    const tokenConfig = this.getTokenConfig(config);
+    const samplingConfig = this.getSamplingConfig(config);
+    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
+    const allTools = await this.loadTools(config, context);
+    const body = this.buildAzureChatBody({
+      config,
+      context,
+      callApiOptions,
+      messages,
+      responseFormat,
+      isReasoningModel,
+      isClaudeOpus47,
+      tokenConfig,
+      samplingConfig,
+      reasoningEffort,
+      allTools,
+    });
 
-    // Get max tokens based on model type
+    return { body, config };
+  }
+
+  private buildMessages(prompt: string, config: AzureChatResponsesOptions) {
+    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    if (!config.systemPrompt) {
+      return messages;
+    }
+    const existingSystemMessageIndex = messages.findIndex((msg: any) => msg.role === 'system');
+    if (existingSystemMessageIndex >= 0) {
+      messages[existingSystemMessageIndex] = { role: 'system', content: config.systemPrompt };
+      return messages;
+    }
+    return [{ role: 'system', content: config.systemPrompt }, ...messages];
+  }
+
+  private buildResponseFormat(
+    config: AzureChatResponsesOptions,
+    context?: CallApiContextParams,
+  ): Record<string, unknown> {
+    if (!config.response_format) {
+      return {};
+    }
+    return {
+      response_format: maybeLoadResponseFormatFromExternalFile(
+        config.response_format,
+        context?.vars,
+      ),
+    };
+  }
+
+  private getTokenConfig(config: AzureChatResponsesOptions) {
     const maxTokensDefault = config.omitDefaults
       ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
         : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
     const maxTokens = config.max_tokens ?? maxTokensDefault;
-    const maxCompletionTokens =
-      config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
+    return {
+      maxTokens,
+      maxCompletionTokens:
+        config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens,
+    };
+  }
 
+  private getSamplingConfig(config: AzureChatResponsesOptions) {
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = config.temperature ?? temperatureDefault;
+    return {
+      temperature: config.temperature ?? temperatureDefault,
+      topP: config.omitDefaults
+        ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P'))
+        : (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1)),
+      presencePenalty: config.omitDefaults
+        ? (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY'))
+        : (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0)),
+      frequencyPenalty: config.omitDefaults
+        ? (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY'))
+        : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0)),
+    };
+  }
 
-    const topP = config.omitDefaults
-      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P'))
-      : (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1));
-    const presencePenalty = config.omitDefaults
-      ? (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY'))
-      : (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0));
-    const frequencyPenalty = config.omitDefaults
-      ? (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY'))
-      : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
-
-    // Get reasoning effort for reasoning models
-    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
-
-    // --- MCP tool injection logic ---
+  private async loadTools(config: AzureChatResponsesOptions, context?: CallApiContextParams) {
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const loadedTools = config.tools
       ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
-    // Transform tools to OpenAI format if needed
     const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
-    const allTools = [...mcpTools, ...fileTools];
-    // --- End MCP tool injection logic ---
+    return [...mcpTools, ...fileTools];
+  }
 
-    // Build the request body
-    const body = {
+  private buildAzureChatBody({
+    config,
+    context,
+    callApiOptions,
+    messages,
+    responseFormat,
+    isReasoningModel,
+    isClaudeOpus47,
+    tokenConfig,
+    samplingConfig,
+    reasoningEffort,
+    allTools,
+  }: {
+    config: AzureChatResponsesOptions;
+    context?: CallApiContextParams;
+    callApiOptions?: CallApiOptionsParams;
+    messages: ReturnType<typeof parseChatPrompt>;
+    responseFormat: Record<string, unknown>;
+    isReasoningModel: boolean;
+    isClaudeOpus47: boolean;
+    tokenConfig: { maxTokens?: number; maxCompletionTokens?: number };
+    samplingConfig: {
+      temperature?: number;
+      topP?: number;
+      presencePenalty?: number;
+      frequencyPenalty?: number;
+    };
+    reasoningEffort: AzureChatResponsesOptions['reasoning_effort'] | 'medium' | undefined;
+    allTools: unknown[];
+  }) {
+    return {
       model: this.deploymentName,
       messages,
       ...(isReasoningModel
-        ? {
-            ...(reasoningEffort === undefined
-              ? {}
-              : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
-            ...(maxCompletionTokens === undefined
-              ? {}
-              : { max_completion_tokens: maxCompletionTokens }),
-          }
-        : {
-            ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
-            ...(temperature === undefined || isClaudeOpus47 ? {} : { temperature }),
-          }),
-      ...(topP === undefined ? {} : { top_p: topP }),
-      ...(presencePenalty === undefined ? {} : { presence_penalty: presencePenalty }),
-      ...(frequencyPenalty === undefined ? {} : { frequency_penalty: frequencyPenalty }),
+        ? this.buildReasoningFields(reasoningEffort, tokenConfig.maxCompletionTokens, context)
+        : this.buildStandardFields(
+            tokenConfig.maxTokens,
+            samplingConfig.temperature,
+            isClaudeOpus47,
+          )),
+      ...(samplingConfig.topP === undefined ? {} : { top_p: samplingConfig.topP }),
+      ...(samplingConfig.presencePenalty === undefined
+        ? {}
+        : { presence_penalty: samplingConfig.presencePenalty }),
+      ...(samplingConfig.frequencyPenalty === undefined
+        ? {}
+        : { frequency_penalty: samplingConfig.frequencyPenalty }),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
-        ? {
-            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
-          }
+        ? { functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars) }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
-      ...(config.dataSources ? { dataSources: config.dataSources } : {}), // legacy support for versions < 2024-02-15-preview
-      ...(config.data_sources ? { data_sources: config.data_sources } : {}),
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
+      ...((config as AzureChatResponsesOptions & { data_sources?: unknown }).data_sources
+        ? {
+            data_sources: (config as AzureChatResponsesOptions & { data_sources?: unknown })
+              .data_sources,
+          }
+        : {}),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
+  }
 
-    return { body, config };
+  private buildReasoningFields(
+    reasoningEffort: AzureChatResponsesOptions['reasoning_effort'] | 'medium' | undefined,
+    maxCompletionTokens: number | undefined,
+    context?: CallApiContextParams,
+  ) {
+    return {
+      ...(reasoningEffort === undefined
+        ? {}
+        : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
+      ...(maxCompletionTokens === undefined ? {} : { max_completion_tokens: maxCompletionTokens }),
+    };
+  }
+
+  private buildStandardFields(
+    maxTokens: number | undefined,
+    temperature: number | undefined,
+    isClaudeOpus47: boolean,
+  ) {
+    return {
+      ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+      ...(temperature === undefined || isClaudeOpus47 ? {} : { temperature }),
+    };
   }
 
   async callApi(
@@ -324,27 +393,28 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const requestResult = await this.requestAzureChat(body, config, context);
+    if (this.isProviderErrorResponse(requestResult)) {
+      return requestResult;
+    }
+    return this.processAzureChatResponse(requestResult, config);
+  }
 
-    let data;
-    let cached = false;
-    let latencyMs: number | undefined;
-
+  private async requestAzureChat(
+    body: Record<string, any>,
+    config: AzureChatResponsesOptions,
+    context?: CallApiContextParams,
+  ): Promise<
+    | {
+        data: any;
+        cached: boolean;
+        latencyMs?: number;
+      }
+    | ProviderResponse
+  > {
     try {
-      const url = config.dataSources
-        ? `${this.getApiBaseUrl()}/openai/deployments/${
-            this.deploymentName
-          }/extensions/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`
-        : `${this.getApiBaseUrl()}/openai/deployments/${
-            this.deploymentName
-          }/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`;
-
-      const {
-        data: responseData,
-        cached: isCached,
-        status,
-        latencyMs: fetchLatencyMs,
-      } = await fetchWithCache(
-        url,
+      const { data, cached, latencyMs, status } = await fetchWithCache(
+        this.getChatCompletionUrl(config),
         {
           method: 'POST',
           headers: {
@@ -358,175 +428,247 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         'json',
         context?.bustCache ?? context?.debug,
       );
-
-      cached = isCached;
-      latencyMs = fetchLatencyMs;
-
-      // Handle the response data
-      if (typeof responseData === 'string') {
-        try {
-          data = JSON.parse(responseData);
-        } catch {
-          return {
-            error: `API returned invalid JSON response (status ${status}): ${responseData}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
-          };
-        }
-      } else {
-        data = responseData;
+      const parsedData = this.parseAzureResponseData(data, status, body);
+      if ('response' in parsedData) {
+        return parsedData.response;
       }
+      return { data: parsedData.data, cached, latencyMs };
     } catch (err) {
-      // Preserve the structured rate-limit signal so the scheduler honors
-      // the transport-layer fail-fast contract (no retry on hard quotas).
-      if (err instanceof HttpRateLimitError) {
-        return {
-          error: formatRateLimitErrorMessage(err),
-          metadata: {
-            rateLimitKind: err.kind,
-            http: {
-              status: err.status,
-              statusText: err.statusText,
-              headers: err.headers ?? {},
-            },
-          },
-        };
-      }
-      return {
-        error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
-      };
+      return this.formatAzureRequestError(err);
     }
+  }
 
-    // Inputs and outputs can be flagged by content filters.
-    // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
-    let flaggedInput = false;
-    let flaggedOutput = false;
-    let output = '';
-    let logProbs: any;
-    let finishReason: string;
+  private getChatCompletionUrl(config: AzureChatResponsesOptions): string {
+    const endpoint = config.dataSources ? 'extensions/chat/completions' : 'chat/completions';
+    return `${this.getApiBaseUrl()}/openai/deployments/${this.deploymentName}/${endpoint}?api-version=${
+      config.apiVersion || DEFAULT_AZURE_API_VERSION
+    }`;
+  }
 
+  private parseAzureResponseData(
+    responseData: any,
+    status: number,
+    body: Record<string, any>,
+  ): { data: any } | { response: ProviderResponse } {
+    if (typeof responseData !== 'string') {
+      return { data: responseData };
+    }
     try {
-      if (data.error) {
-        // Was the input prompt deemed inappropriate?
-        if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
-          flaggedInput = true;
-          output = data.error.message;
-          finishReason = FINISH_REASON_MAP.content_filter;
-        } else {
-          return {
-            error: `API response error: ${data.error.code} ${data.error.message}`,
-          };
-        }
-      } else {
-        const hasDataSources = !!config.dataSources || !!config.data_sources;
-        const choice = hasDataSources
-          ? data.choices.find(
-              (choice: { message: { role: string; content: string } }) =>
-                choice.message.role === 'assistant',
-            )
-          : data.choices[0];
-
-        const message = choice?.message;
-
-        // NOTE: The `n` parameter is currently (250709) not supported; if and when it is, `finish_reason` must be
-        // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
-        finishReason = normalizeFinishReason(choice?.finish_reason) as string;
-
-        // Handle structured output
-        output = message?.content;
-
-        // Check for errors indicating that the content filters did not run on the completion.
-        if (choice.content_filter_results && choice.content_filter_results.error) {
-          const { code, message } = choice.content_filter_results.error;
-          logger.warn(
-            `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
-          );
-        } else {
-          // Was the completion filtered?
-          flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
-        }
-
-        if (output == null) {
-          // Handle tool_calls and function_call
-          const toolCalls = message.tool_calls;
-          const functionCall = message.function_call;
-
-          // Process function/tool calls if callbacks are configured or MCP is available
-          if (
-            (config.functionToolCallbacks && (toolCalls || functionCall)) ||
-            (this.mcpClient && (toolCalls || functionCall))
-          ) {
-            // Combine all calls into a single array for processing
-            const allCalls = [];
-            if (toolCalls) {
-              allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
-            }
-            if (functionCall) {
-              allCalls.push(functionCall);
-            }
-
-            output = await this.functionCallbackHandler.processCalls(
-              allCalls.length === 1 ? allCalls[0] : allCalls,
-              config.functionToolCallbacks,
-            );
-          } else {
-            // No callbacks configured, return raw tool/function calls
-            output = toolCalls ?? functionCall;
-          }
-        } else if (
-          config.response_format?.type === 'json_schema' ||
-          config.response_format?.type === 'json_object'
-        ) {
-          try {
-            output = JSON.parse(output);
-          } catch (err) {
-            logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
-          }
-        }
-
-        logProbs = data.choices[0].logprobs?.content?.map(
-          (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
-        );
-      }
-
+      return { data: JSON.parse(responseData) };
+    } catch {
       return {
-        output,
-        tokenUsage: cached
-          ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
-          : {
-              total: data.usage?.total_tokens,
-              prompt: data.usage?.prompt_tokens,
-              completion: data.usage?.completion_tokens,
-              ...(data.usage?.completion_tokens_details
-                ? {
-                    completionDetails: {
-                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                      acceptedPrediction:
-                        data.usage.completion_tokens_details.accepted_prediction_tokens,
-                      rejectedPrediction:
-                        data.usage.completion_tokens_details.rejected_prediction_tokens,
-                    },
-                  }
-                : {}),
-            },
-        cached,
-        latencyMs,
-        logProbs,
-        finishReason,
-        cost: calculateAzureCost(
-          this.deploymentName,
-          config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-        ),
-        guardrails: {
-          flagged: flaggedInput || flaggedOutput,
-          flaggedInput,
-          flaggedOutput,
+        response: {
+          error: `API returned invalid JSON response (status ${status}): ${responseData}\n\nRequest body: ${JSON.stringify(body, null, 2)}`,
         },
       };
-    } catch (err) {
+    }
+  }
+
+  private isProviderErrorResponse(
+    value:
+      | {
+          data: any;
+          cached: boolean;
+          latencyMs?: number;
+        }
+      | ProviderResponse,
+  ): value is ProviderResponse {
+    return 'error' in value && !('data' in value);
+  }
+
+  private formatAzureRequestError(err: unknown): ProviderResponse {
+    if (err instanceof HttpRateLimitError) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
+        error: formatRateLimitErrorMessage(err),
+        metadata: {
+          rateLimitKind: err.kind,
+          http: {
+            status: err.status,
+            statusText: err.statusText,
+            headers: err.headers ?? {},
+          },
+        },
       };
     }
+    return { error: `API call error: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  private async processAzureChatResponse(
+    requestResult: { data: any; cached: boolean; latencyMs?: number },
+    config: AzureChatResponsesOptions,
+  ): Promise<ProviderResponse> {
+    const { data, cached, latencyMs } = requestResult;
+    try {
+      if (data.error) {
+        return this.processAzureErrorResponse(data, cached, latencyMs, config);
+      }
+      const choice = this.getAzureChoice(data, config);
+      const finishReason = normalizeFinishReason(choice?.finish_reason) as string;
+      const { output, flaggedOutput } = await this.resolveAzureOutput(choice, config, finishReason);
+      const logProbs = data.choices[0].logprobs?.content?.map(
+        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
+      );
+      return this.buildAzureSuccessResponse({
+        data,
+        config,
+        cached,
+        latencyMs,
+        output,
+        logProbs,
+        finishReason,
+        flaggedInput: false,
+        flaggedOutput,
+      });
+    } catch (err) {
+      return { error: `API response error: ${String(err)}: ${JSON.stringify(data)}` };
+    }
+  }
+
+  private processAzureErrorResponse(
+    data: any,
+    cached: boolean,
+    latencyMs: number | undefined,
+    config: AzureChatResponsesOptions,
+  ): ProviderResponse {
+    if (data.error.status !== 400 || data.error.code !== FINISH_REASON_MAP.content_filter) {
+      return { error: `API response error: ${data.error.code} ${data.error.message}` };
+    }
+    return this.buildAzureSuccessResponse({
+      data,
+      config,
+      cached,
+      latencyMs,
+      output: data.error.message,
+      logProbs: undefined,
+      finishReason: FINISH_REASON_MAP.content_filter,
+      flaggedInput: true,
+      flaggedOutput: false,
+    });
+  }
+
+  private getAzureChoice(data: any, config: AzureChatResponsesOptions) {
+    if (
+      !config.dataSources &&
+      !(config as AzureChatResponsesOptions & { data_sources?: unknown }).data_sources
+    ) {
+      return data.choices[0];
+    }
+    return data.choices.find(
+      (choice: { message: { role: string; content: string } }) =>
+        choice.message.role === 'assistant',
+    );
+  }
+
+  private async resolveAzureOutput(
+    choice: any,
+    config: AzureChatResponsesOptions,
+    finishReason: string,
+  ): Promise<{ output: any; flaggedOutput: boolean }> {
+    const message = choice?.message;
+    let output = message?.content;
+    if (choice.content_filter_results?.error) {
+      const { code, message: filterMessage } = choice.content_filter_results.error;
+      logger.warn(
+        `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${filterMessage}`,
+      );
+    }
+    const flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
+    if (output == null) {
+      output = await this.resolveToolCallOutput(message, config);
+    } else if (
+      config.response_format?.type === 'json_schema' ||
+      config.response_format?.type === 'json_object'
+    ) {
+      output = this.parseStructuredOutput(output);
+    }
+    return { output, flaggedOutput };
+  }
+
+  private async resolveToolCallOutput(message: any, config: AzureChatResponsesOptions) {
+    const toolCalls = message.tool_calls;
+    const functionCall = message.function_call;
+    const hasCalls = Boolean(toolCalls || functionCall);
+    if (!hasCalls || (!config.functionToolCallbacks && !this.mcpClient)) {
+      return toolCalls ?? functionCall;
+    }
+    const allCalls = [
+      ...(toolCalls ? (Array.isArray(toolCalls) ? toolCalls : [toolCalls]) : []),
+      ...(functionCall ? [functionCall] : []),
+    ];
+    return this.functionCallbackHandler.processCalls(
+      allCalls.length === 1 ? allCalls[0] : allCalls,
+      config.functionToolCallbacks,
+    );
+  }
+
+  private parseStructuredOutput(output: string) {
+    try {
+      return JSON.parse(output);
+    } catch (err) {
+      logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+      return output;
+    }
+  }
+
+  private buildAzureSuccessResponse({
+    data,
+    config,
+    cached,
+    latencyMs,
+    output,
+    logProbs,
+    finishReason,
+    flaggedInput,
+    flaggedOutput,
+  }: {
+    data: any;
+    config: AzureChatResponsesOptions;
+    cached: boolean;
+    latencyMs?: number;
+    output: any;
+    logProbs: any;
+    finishReason: string;
+    flaggedInput: boolean;
+    flaggedOutput: boolean;
+  }): ProviderResponse {
+    return {
+      output,
+      tokenUsage: this.buildAzureTokenUsage(data, cached),
+      cached,
+      latencyMs,
+      logProbs,
+      finishReason,
+      cost: calculateAzureCost(
+        this.deploymentName,
+        config,
+        data.usage?.prompt_tokens,
+        data.usage?.completion_tokens,
+      ),
+      guardrails: {
+        flagged: flaggedInput || flaggedOutput,
+        flaggedInput,
+        flaggedOutput,
+      },
+    };
+  }
+
+  private buildAzureTokenUsage(data: any, cached: boolean): ProviderResponse['tokenUsage'] {
+    if (cached) {
+      return { cached: data.usage?.total_tokens, total: data.usage?.total_tokens };
+    }
+    return {
+      total: data.usage?.total_tokens,
+      prompt: data.usage?.prompt_tokens,
+      completion: data.usage?.completion_tokens,
+      ...(data.usage?.completion_tokens_details
+        ? {
+            completionDetails: {
+              reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+              acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
+              rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+            },
+          }
+        : {}),
+    };
   }
 }
