@@ -1,6 +1,7 @@
 import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
+import type { MinimalApiProvider } from '../contracts/prompts';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
@@ -115,8 +116,7 @@ export interface CallApiOptionsParams {
   abortSignal?: AbortSignal;
 }
 
-export interface ApiProvider {
-  id: () => string;
+export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;

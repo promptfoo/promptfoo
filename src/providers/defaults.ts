@@ -9,18 +9,9 @@ import {
   DefaultGitHubGradingProvider,
   DefaultGitHubSuggestionsProvider,
 } from './github/defaults';
-import {
-  DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
-  DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
-  DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
-  DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
-} from './google/ai.studio';
+import { getGoogleAiStudioProviders } from './google/ai.studio';
 import { hasGoogleDefaultCredentials } from './google/util';
-import {
-  DefaultEmbeddingProvider as GeminiEmbeddingProvider,
-  DefaultGradingProvider as GeminiGradingProvider,
-} from './google/vertex';
+import { getGoogleVertexEmbeddingProvider, getGoogleVertexProviders } from './google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -331,23 +322,15 @@ async function resolveDefaultProviders(
   } else if (useGoogleAiStudioDefaults) {
     logger.debug('Using Google AI Studio default providers');
     providers = {
-      embeddingProvider: GeminiEmbeddingProvider, // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
-      gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
-      gradingProvider: GoogleAiStudioGradingProvider,
-      llmRubricProvider: GoogleAiStudioLlmRubricProvider,
+      embeddingProvider: getGoogleVertexEmbeddingProvider(env), // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
       moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: GoogleAiStudioSuggestionsProvider,
-      synthesizeProvider: GoogleAiStudioSynthesizeProvider,
+      ...getGoogleAiStudioProviders(env),
     };
   } else if (useGoogleVertexDefaults) {
     logger.debug('Using Google Vertex default providers');
     providers = {
-      embeddingProvider: GeminiEmbeddingProvider,
-      gradingJsonProvider: GeminiGradingProvider,
-      gradingProvider: GeminiGradingProvider,
       moderationProvider: OpenAiModerationProvider,
-      suggestionsProvider: GeminiGradingProvider,
-      synthesizeProvider: GeminiGradingProvider,
+      ...getGoogleVertexProviders(env),
     };
   } else if (useMistralDefaults) {
     logger.debug('Using Mistral default providers');
@@ -655,9 +638,9 @@ function getDefaultProviderSlots({
       case 'Anthropic':
         return getAnthropicProviderSlots(selectedProvider);
       case 'Google AI Studio':
-        return getGoogleAiStudioProviderSlots(selectedProvider);
+        return getGoogleAiStudioProviderSlots(env, selectedProvider);
       case 'Google Vertex':
-        return getGoogleVertexProviderSlots(selectedProvider);
+        return getGoogleVertexProviderSlots(env, selectedProvider);
       case 'Mistral':
         return getMistralProviderSlots(selectedProvider);
       case 'xAI':
@@ -737,31 +720,35 @@ function getAnthropicProviderSlots(
 }
 
 function getGoogleAiStudioProviderSlots(
+  env: EnvOverrides | undefined,
   selectedProvider: string,
 ): DefaultProviderSelectionInfo['providerSlots'] {
+  const providers = getGoogleAiStudioProviders(env);
+
   return {
-    embedding: { id: getProviderId(GeminiEmbeddingProvider) || selectedProvider },
-    grading: { id: getProviderId(GoogleAiStudioGradingProvider) || selectedProvider },
-    gradingJson: { id: getProviderId(GoogleAiStudioGradingJsonProvider) || selectedProvider },
-    llmRubric: { id: getProviderId(GoogleAiStudioLlmRubricProvider) || selectedProvider },
+    embedding: { id: getProviderId(getGoogleVertexEmbeddingProvider(env)) || selectedProvider },
+    grading: { id: getProviderId(providers.gradingProvider) || selectedProvider },
+    gradingJson: { id: getProviderId(providers.gradingJsonProvider) || selectedProvider },
+    llmRubric: { id: getProviderId(providers.llmRubricProvider) || selectedProvider },
     moderation: { id: getProviderId(OpenAiModerationProvider) || selectedProvider },
-    suggestions: { id: getProviderId(GoogleAiStudioSuggestionsProvider) || selectedProvider },
-    synthesize: { id: getProviderId(GoogleAiStudioSynthesizeProvider) || selectedProvider },
+    suggestions: { id: getProviderId(providers.suggestionsProvider) || selectedProvider },
+    synthesize: { id: getProviderId(providers.synthesizeProvider) || selectedProvider },
   };
 }
 
 function getGoogleVertexProviderSlots(
+  env: EnvOverrides | undefined,
   selectedProvider: string,
 ): DefaultProviderSelectionInfo['providerSlots'] {
-  const vertexSlot = { id: getProviderId(GeminiGradingProvider) || selectedProvider };
+  const providers = getGoogleVertexProviders(env);
 
   return {
-    embedding: { id: getProviderId(GeminiEmbeddingProvider) || selectedProvider },
-    grading: vertexSlot,
-    gradingJson: vertexSlot,
+    embedding: { id: getProviderId(providers.embeddingProvider) || selectedProvider },
+    grading: { id: getProviderId(providers.gradingProvider) || selectedProvider },
+    gradingJson: { id: getProviderId(providers.gradingJsonProvider) || selectedProvider },
     moderation: { id: getProviderId(OpenAiModerationProvider) || selectedProvider },
-    suggestions: vertexSlot,
-    synthesize: vertexSlot,
+    suggestions: { id: getProviderId(providers.suggestionsProvider) || selectedProvider },
+    synthesize: { id: getProviderId(providers.synthesizeProvider) || selectedProvider },
   };
 }
 

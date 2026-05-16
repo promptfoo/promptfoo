@@ -1236,5 +1236,20 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-export const DefaultGradingProvider = new VertexChatProvider('gemini-2.5-pro');
-export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('gemini-embedding-001');
+const DEFAULT_VERTEX_MODEL = 'gemini-2.5-pro';
+const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';
+
+export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
+  return new VertexEmbeddingProvider(DEFAULT_VERTEX_EMBEDDING_MODEL, { env });
+}
+
+export function getGoogleVertexProviders(env?: EnvOverrides) {
+  const gradingProvider = new VertexChatProvider(DEFAULT_VERTEX_MODEL, { env });
+  return {
+    embeddingProvider: getGoogleVertexEmbeddingProvider(env),
+    gradingJsonProvider: gradingProvider,
+    gradingProvider,
+    suggestionsProvider: gradingProvider,
+    synthesizeProvider: gradingProvider,
+  };
+}

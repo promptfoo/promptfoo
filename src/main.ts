@@ -6,7 +6,7 @@ import { cacheCommand } from './commands/cache';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
-import { evalCommand } from './commands/eval';
+import { EvalRunError, evalCommand } from './commands/eval';
 import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
@@ -30,6 +30,7 @@ import {
   addCommonOptionsRecursively,
   isMainModule,
   setupEnvFilesFromArgv,
+  shouldSkipDefaultConfigLoading,
   shutdownGracefully,
 } from './mainUtils';
 import { runDbMigrations } from './migrate';
@@ -40,6 +41,7 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
+import { ServerError } from './server/errors';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { ConfigResolutionError, logConfigResolutionError } from './util/config/load';
@@ -48,7 +50,8 @@ import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonError
 import { VERSION } from './version';
 
 async function main() {
-  setupEnvFilesFromArgv();
+  const argv = process.argv.slice(2);
+  setupEnvFilesFromArgv(argv);
   initializeRunLogging();
 
   // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
@@ -59,7 +62,10 @@ async function main() {
   await checkForUpdates();
   await runDbMigrations({ suppressNativeAddonLogging: true });
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+  const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
+  const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
+    ? { defaultConfig: {}, defaultConfigPath: undefined }
+    : await loadDefaultConfig();
 
   const program = new Command('promptfoo');
   program
@@ -110,7 +116,9 @@ async function main() {
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
-    await loadDefaultConfig(undefined, 'redteam');
+    skipDefaultConfigLoading
+      ? { defaultConfig: {}, defaultConfigPath: undefined }
+      : await loadDefaultConfig(undefined, 'redteam');
 
   redteamInitCommand(redteamBaseCommand);
   evalCommand(
@@ -164,8 +172,10 @@ if (isMain) {
         error: error instanceof Error ? (error.stack ?? error.message) : String(error),
       });
     }
-    // Set exit code immediately so watchdog timeouts preserve the error state
-    process.exitCode = 1;
+    // Set exit code immediately so watchdog timeouts preserve the error state.
+    // EvalRunError carries an explicit exit code (defaults to 1) so library
+    // callers and CLI wrappers see the same outcome.
+    process.exitCode = error instanceof EvalRunError ? error.exitCode : 1;
   } finally {
     try {
       await shutdownGracefully();
@@ -176,11 +186,16 @@ if (isMain) {
       );
     }
   }
-  // Re-throw unexpected errors after cleanup is complete. Config resolution
-  // errors and email-validation failures are expected user input failures that
-  // have already been rendered before reaching this boundary.
+  // ConfigResolutionError / EmailValidationError / ServerError / EvalRunError
+  // already rendered a user-facing message before reaching this boundary;
+  // everything else is unexpected and bubbles up.
   if (mainError) {
-    if (mainError instanceof ConfigResolutionError || mainError instanceof EmailValidationError) {
+    if (
+      mainError instanceof ConfigResolutionError ||
+      mainError instanceof EmailValidationError ||
+      mainError instanceof ServerError ||
+      mainError instanceof EvalRunError
+    ) {
       // User-facing message has already been rendered.
     } else if (nativeAddonVersionMismatchMessage) {
       console.error(nativeAddonVersionMismatchMessage);

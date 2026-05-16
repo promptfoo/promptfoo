@@ -146,6 +146,27 @@ describe('PluginConfigDialog - OSS', () => {
   });
 
   describe('Plugin-Specific Config', () => {
+    it('keeps footer actions visible while long plugin content scrolls independently', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="ssrf"
+          config={{ targetUrls: [''] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      const dialog = screen.getByRole('dialog');
+      const scrollBody = screen.getByText(/Server-Side Request Forgery/).parentElement
+        ?.parentElement;
+      const footer = screen.getByRole('button', { name: 'Save' }).parentElement;
+
+      expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+      expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+      expect(footer).toHaveClass('shrink-0');
+    });
+
     it('shows gradingGuidance alongside BOLA config', () => {
       render(
         <PluginConfigDialog
@@ -163,6 +184,21 @@ describe('PluginConfigDialog - OSS', () => {
 
       // Should ALSO show gradingGuidance field
       expect(screen.getByText('Grading Guidance (Optional)')).toBeInTheDocument();
+    });
+
+    it('labels removable array items', () => {
+      render(
+        <PluginConfigDialog
+          open={true}
+          plugin="bola"
+          config={{ targetSystems: ['system1', 'system2'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: 'Remove Target System 1' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove Target System 2' })).toBeInTheDocument();
     });
 
     it('shows gradingGuidance alongside BFLA config', () => {
