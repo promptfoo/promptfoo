@@ -21,6 +21,8 @@ describe('SettingsPanel', () => {
     setShowPassFail: vi.fn(),
     showPassReasons: false,
     setShowPassReasons: vi.fn(),
+    showMetricPills: true,
+    setShowMetricPills: vi.fn(),
     showInferenceDetails: true,
     setShowInferenceDetails: vi.fn(),
     maxTextLength: 500,
@@ -69,6 +71,12 @@ describe('SettingsPanel', () => {
       name: 'Inference details',
       initialState: true,
       setter: 'setShowInferenceDetails' as const,
+      expectedNewValue: false,
+    },
+    {
+      name: 'Metrics pills',
+      initialState: true,
+      setter: 'setShowMetricPills' as const,
       expectedNewValue: false,
     },
     {
