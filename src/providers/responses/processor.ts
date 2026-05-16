@@ -7,6 +7,7 @@ import type {
   ProcessorConfig,
   ProcessorContext,
   ResponseOutputItem,
+  ResponseProcessingOptions,
 } from './types';
 
 /**
@@ -48,6 +49,10 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
       const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
       const totalTokens = data.usage.total_tokens || promptTokens + completionTokens;
+      const cachedInputTokens =
+        data.usage.prompt_tokens_details?.cached_tokens ??
+        data.usage.input_tokens_details?.cached_tokens ??
+        0;
 
       return {
         total: totalTokens,
@@ -60,9 +65,16 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
                 reasoning: data.usage.completion_tokens_details.reasoning_tokens,
                 acceptedPrediction: data.usage.completion_tokens_details.accepted_prediction_tokens,
                 rejectedPrediction: data.usage.completion_tokens_details.rejected_prediction_tokens,
+                ...(cachedInputTokens > 0 ? { cacheReadInputTokens: cachedInputTokens } : {}),
               },
             }
-          : {}),
+          : cachedInputTokens > 0
+            ? {
+                completionDetails: {
+                  cacheReadInputTokens: cachedInputTokens,
+                },
+              }
+            : {}),
       };
     }
   }
@@ -81,6 +93,7 @@ export class ResponsesProcessor {
     data: any,
     requestConfig: any,
     cached: boolean,
+    options: ResponseProcessingOptions = {},
   ): Promise<ProviderResponse> {
     // Log response metadata for debugging
     logger.debug(`Processing ${this.config.providerType} responses output`, {
@@ -99,9 +112,11 @@ export class ResponsesProcessor {
         config: requestConfig,
         cached,
         data,
+        suppressReasoningOutput: options.suppressReasoningOutput,
       };
 
       const processedOutput = await this.processOutput(data.output, context);
+      const cost = this.config.costCalculator(this.config.modelName, data.usage, requestConfig);
 
       if (processedOutput.isRefusal) {
         return {
@@ -109,7 +124,7 @@ export class ResponsesProcessor {
           tokenUsage: getTokenUsage(data, cached),
           isRefusal: true,
           cached,
-          cost: this.config.costCalculator(this.config.modelName, data.usage, requestConfig),
+          ...(cost === undefined ? {} : { cost }),
           raw: data,
           metadata: extractMetadata(data, processedOutput),
         };
@@ -133,7 +148,7 @@ export class ResponsesProcessor {
         output: finalOutput,
         tokenUsage: getTokenUsage(data, cached),
         cached,
-        cost: this.config.costCalculator(this.config.modelName, data.usage, requestConfig),
+        ...(cost === undefined ? {} : { cost }),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
       };
@@ -220,7 +235,7 @@ export class ResponsesProcessor {
         return this.processToolResult(item);
 
       case 'reasoning':
-        return this.processReasoning(item);
+        return this.processReasoning(item, context);
 
       case 'web_search_call':
         return this.processWebSearch(item);
@@ -333,7 +348,11 @@ export class ResponsesProcessor {
     });
   }
 
-  private processReasoning(item: any): Promise<{ content?: string }> {
+  private processReasoning(item: any, context: ProcessorContext): Promise<{ content?: string }> {
+    if (context.suppressReasoningOutput) {
+      return Promise.resolve({});
+    }
+
     if (!item.summary || !item.summary.length) {
       return Promise.resolve({});
     }

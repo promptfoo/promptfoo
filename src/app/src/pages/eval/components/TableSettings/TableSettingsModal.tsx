@@ -27,7 +27,7 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
-      <DialogContent className="max-w-[680px] p-0 overflow-hidden">
+      <DialogContent className="flex max-h-[90vh] max-w-[680px] flex-col overflow-hidden p-0">
         <DialogHeader className="p-5 pb-3 border-b border-border/10">
           <DialogTitle className="flex items-center gap-2 text-lg font-semibold">
             <Settings className="size-5 text-primary" />
@@ -35,13 +35,13 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="p-0">
+        <div className="min-h-0 overflow-y-auto p-0">
           <SettingsPanel />
         </div>
 
         <Separator className="opacity-60" />
 
-        <DialogFooter className="px-5 py-3 justify-between">
+        <DialogFooter className="shrink-0 justify-between px-5 py-3">
           <Button
             onClick={resetToDefaults}
             variant="ghost"

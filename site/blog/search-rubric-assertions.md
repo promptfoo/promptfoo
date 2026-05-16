@@ -115,7 +115,7 @@ It prefers a provider with web search configured:
   - `openai:responses:gpt-5.1` with `web_search_preview`
   - `google:gemini-3-pro-preview` with `googleSearch`
   - `perplexity:sonar-pro` (built-in search)
-  - `xai:grok-4-1-fast-reasoning` with live search enabled
+  - `xai:responses:grok-4.3` with the `web_search` tool enabled
 
 ### 3. It sends a grading prompt
 

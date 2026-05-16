@@ -240,6 +240,26 @@ describe('useModelAuditConfigStore', () => {
       expect(result.current.error).toBeNull();
       expect(result.current.scanResults).toBeNull();
     });
+
+    it('should start a new scan with a fresh draft', () => {
+      const { result } = renderHook(() => useModelAuditConfigStore());
+
+      act(() => {
+        result.current.setPaths([{ path: '/test/model.bin', type: 'file', name: 'model.bin' }]);
+        result.current.setIsScanning(true);
+        result.current.setError('Some error');
+        result.current.setScanResults({ path: '/test', success: true, issues: [] } as any);
+      });
+
+      act(() => {
+        result.current.startNewScan();
+      });
+
+      expect(result.current.paths).toEqual([]);
+      expect(result.current.isScanning).toBe(false);
+      expect(result.current.error).toBeNull();
+      expect(result.current.scanResults).toBeNull();
+    });
   });
 
   describe('installation check', () => {

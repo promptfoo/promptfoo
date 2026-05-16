@@ -1,13 +1,37 @@
 import path from 'path';
 
-import { Agent, handoff, tool } from '@openai/agents';
+import {
+  Agent,
+  handoff,
+  MemorySession,
+  OpenAIConversationsSession,
+  OpenAIResponsesCompactionSession,
+  tool,
+} from '@openai/agents';
+import { Manifest, SandboxAgent } from '@openai/agents/sandbox';
+import { DockerSandboxClient, UnixLocalSandboxClient } from '@openai/agents/sandbox/local';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { resolveModelSettings } from './agents-model-settings';
-import type { Handoff, InputGuardrail, Tool as OpenAiTool, OutputGuardrail } from '@openai/agents';
+import type {
+  Handoff,
+  InputGuardrail,
+  Tool as OpenAiTool,
+  OutputGuardrail,
+  Session,
+} from '@openai/agents';
+import type { SandboxRunConfig } from '@openai/agents/sandbox';
 
-import type { AgentDefinition, HandoffDefinition, ToolDefinition } from './agents-types';
+import type {
+  AgentDefinition,
+  HandoffDefinition,
+  OpenAiAgentsSandboxConfig,
+  OpenAiAgentsSandboxDefinition,
+  OpenAiAgentsSessionConfig,
+  OpenAiAgentsSessionDefinition,
+  ToolDefinition,
+} from './agents-types';
 
 /**
  * Load agent definition from file path or return inline definition
@@ -156,6 +180,56 @@ export async function loadOutputGuardrails(
 }
 
 /**
+ * Load a persistent conversation session from config, file export, or factory.
+ */
+export async function loadSessionDefinition(
+  sessionConfig?: OpenAiAgentsSessionConfig,
+  context?: any,
+): Promise<Session | undefined> {
+  if (!sessionConfig) {
+    return undefined;
+  }
+
+  const resolved = await resolveConfigValue(sessionConfig, 'session', context);
+  if (isSessionInstance(resolved)) {
+    return resolved;
+  }
+
+  if (isSessionDefinition(resolved)) {
+    return createSessionFromDefinition(resolved, context);
+  }
+
+  throw new Error(
+    'Invalid session configuration: expected Session instance, file:// URL, factory, or supported inline definition',
+  );
+}
+
+/**
+ * Load sandbox runtime config from config, file export, or factory.
+ */
+export async function loadSandboxConfig(
+  sandboxConfig?: OpenAiAgentsSandboxConfig,
+  context?: any,
+): Promise<SandboxRunConfig | undefined> {
+  if (!sandboxConfig) {
+    return undefined;
+  }
+
+  const resolved = await resolveConfigValue<any>(sandboxConfig as any, 'sandbox config', context);
+  if (!resolved || typeof resolved !== 'object') {
+    throw new Error(
+      'Invalid sandbox configuration: expected SandboxRunConfig, file:// URL, factory, or supported inline definition',
+    );
+  }
+
+  if (isSandboxDefinition(resolved)) {
+    return createSandboxConfigFromDefinition(resolved);
+  }
+
+  return normalizeSandboxRunConfig(resolved as SandboxRunConfig);
+}
+
+/**
  * Load agent from file
  */
 async function loadAgentFromFile(filePath: string): Promise<Agent<any, any>> {
@@ -205,14 +279,14 @@ async function createAgentFromDefinition(definition: AgentDefinition): Promise<A
   try {
     const tools = await normalizeTools(definition.tools);
     const handoffs = await normalizeHandoffs(definition.handoffs);
-
-    const agent = new Agent({
+    const baseConfig = {
       name: definition.name,
       instructions: definition.instructions,
       prompt: definition.prompt,
       model: definition.model,
       modelSettings: resolveModelSettings(definition.modelSettings),
       handoffDescription: definition.handoffDescription,
+      handoffOutputTypeWarningEnabled: definition.handoffOutputTypeWarningEnabled,
       outputType: definition.outputType,
       tools,
       handoffs,
@@ -221,7 +295,18 @@ async function createAgentFromDefinition(definition: AgentDefinition): Promise<A
       mcpServers: definition.mcpServers,
       toolUseBehavior: definition.toolUseBehavior,
       resetToolChoice: definition.resetToolChoice,
-    });
+    };
+
+    const agent =
+      definition.type === 'sandbox'
+        ? new SandboxAgent({
+            ...baseConfig,
+            defaultManifest: normalizeManifest(definition.defaultManifest),
+            baseInstructions: definition.baseInstructions,
+            capabilities: definition.capabilities,
+            runAs: definition.runAs,
+          })
+        : new Agent(baseConfig);
 
     return agent;
   } catch (error) {
@@ -335,6 +420,22 @@ async function loadArrayFromFile<T>(filePath: string, label: string): Promise<T[
   }
 }
 
+export async function loadValueFromFile<T>(filePath: string, label: string): Promise<T> {
+  const resolvedPath = resolveFilePath(filePath);
+  logger.debug(`[AgentsLoader] Loading ${label} from resolved path`, { path: resolvedPath });
+
+  try {
+    const module = await importModule(resolvedPath);
+    return (module.default || module) as T;
+  } catch (error) {
+    logger.error(`[AgentsLoader] Failed to load ${label} from file`, {
+      path: resolvedPath,
+      error,
+    });
+    throw new Error(`Failed to load ${label} from ${resolvedPath}: ${error}`);
+  }
+}
+
 /**
  * Resolve file:// path to absolute file system path
  */
@@ -358,4 +459,111 @@ function resolveFilePath(filePath: string): string {
   });
 
   return resolvedPath;
+}
+
+async function resolveConfigValue<T>(
+  config: T | string | ((context?: any) => T | Promise<T>),
+  label: string,
+  context?: any,
+): Promise<T> {
+  let resolved = config;
+
+  if (typeof resolved === 'string' && resolved.startsWith('file://')) {
+    resolved = await loadValueFromFile<any>(resolved, label);
+  }
+
+  if (typeof resolved === 'function') {
+    return await (resolved as (context?: any) => T | Promise<T>)(context);
+  }
+
+  return resolved as T;
+}
+
+function isSessionInstance(value: unknown): value is Session {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as Session).getSessionId === 'function' &&
+    typeof (value as Session).getItems === 'function' &&
+    typeof (value as Session).addItems === 'function' &&
+    typeof (value as Session).popItem === 'function' &&
+    typeof (value as Session).clearSession === 'function'
+  );
+}
+
+function isSessionDefinition(value: unknown): value is OpenAiAgentsSessionDefinition {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'type' in value &&
+    ['memory', 'openai-conversations', 'openai-responses-compaction'].includes(
+      String((value as { type?: unknown }).type),
+    )
+  );
+}
+
+async function createSessionFromDefinition(
+  definition: OpenAiAgentsSessionDefinition,
+  context?: any,
+): Promise<Session> {
+  switch (definition.type) {
+    case 'memory': {
+      const { type: _type, ...options } = definition;
+      return new MemorySession(options);
+    }
+    case 'openai-conversations': {
+      const { type: _type, ...options } = definition;
+      return new OpenAIConversationsSession(options);
+    }
+    case 'openai-responses-compaction': {
+      const { type: _type, underlyingSession, ...options } = definition;
+      const resolvedUnderlyingSession = await loadSessionDefinition(underlyingSession, context);
+      return new OpenAIResponsesCompactionSession({
+        ...options,
+        ...(resolvedUnderlyingSession ? { underlyingSession: resolvedUnderlyingSession } : {}),
+      });
+    }
+  }
+
+  throw new Error(`Unsupported session type: ${(definition as { type?: string }).type}`);
+}
+
+function isSandboxDefinition(value: unknown): value is OpenAiAgentsSandboxDefinition {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'type' in value &&
+    ['unix-local', 'docker'].includes(String((value as { type?: unknown }).type))
+  );
+}
+
+function createSandboxConfigFromDefinition(
+  definition: OpenAiAgentsSandboxDefinition,
+): SandboxRunConfig {
+  const { type, clientOptions, manifest, ...runConfig } = definition;
+  const client =
+    type === 'docker'
+      ? new DockerSandboxClient(clientOptions)
+      : new UnixLocalSandboxClient(clientOptions);
+
+  return {
+    ...runConfig,
+    client,
+    ...(manifest ? { manifest: normalizeManifest(manifest) } : {}),
+  };
+}
+
+function normalizeSandboxRunConfig(config: SandboxRunConfig): SandboxRunConfig {
+  return {
+    ...config,
+    ...(config.manifest ? { manifest: normalizeManifest(config.manifest) } : {}),
+  };
+}
+
+function normalizeManifest(manifest: unknown): Manifest | undefined {
+  if (!manifest) {
+    return undefined;
+  }
+
+  return manifest instanceof Manifest ? manifest : new Manifest(manifest as any);
 }

@@ -4,12 +4,13 @@ import WebSocket, { type ClientOptions } from 'ws';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
 import { getRequestTimeoutMs } from './shared';
+import { normalizeResponseTransformResult } from './transformResult';
+import { parseFileTransformReference } from './transformUtils';
 
 import type {
   ApiProvider,
@@ -20,15 +21,7 @@ import type {
 
 const nunjucks = getNunjucksEngine();
 
-export const processResult = (transformedResponse: any): ProviderResponse => {
-  if (
-    typeof transformedResponse === 'object' &&
-    (transformedResponse.output || transformedResponse.error)
-  ) {
-    return transformedResponse;
-  }
-  return { output: transformedResponse };
-};
+export const processResult = normalizeResponseTransformResult;
 
 interface WebSocketProviderConfig {
   messageTemplate: string;
@@ -91,14 +84,7 @@ export async function createStreamResponse(
   }
 
   if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
+    const { filename, functionName } = parseFileTransformReference(transform);
     const requiredModule = await importModule(
       path.resolve(cliState.basePath || '', filename),
       functionName,
