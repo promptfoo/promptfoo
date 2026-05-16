@@ -1,6 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
-import { AlertTriangle, Code, File, FolderOpen, Settings, Wrench } from 'lucide-react';
+import { AlertTriangle, Code, FolderOpen } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 /**
@@ -24,16 +24,33 @@ export default function ReconSummaryBanner() {
     }).format(new Date(timestamp));
   };
 
-  const truncateDirectory = (path: string | undefined) => {
-    if (!path) {
-      return 'Unknown';
-    }
+  const truncateDirectory = (path: string) => {
     const parts = path.split('/');
     if (parts.length <= 3) {
       return path;
     }
     return `.../${parts.slice(-2).join('/')}`;
   };
+
+  const keyFilesAnalyzed = reconContext.keyFilesAnalyzed ?? 0;
+  const fieldsPopulated = reconContext.fieldsPopulated ?? 0;
+  const discoveredToolsCount = reconContext.discoveredToolsCount ?? 0;
+  const securityNotes = reconContext.securityNotes ?? [];
+  const countSummaryParts: string[] = [];
+
+  if (keyFilesAnalyzed > 0) {
+    countSummaryParts.push(`${keyFilesAnalyzed} key files analyzed`);
+  }
+
+  if (fieldsPopulated > 0) {
+    countSummaryParts.push(`${fieldsPopulated} fields populated`);
+  }
+
+  if (discoveredToolsCount > 0) {
+    countSummaryParts.push(`${discoveredToolsCount} tools discovered`);
+  }
+
+  const countSummary = countSummaryParts.join(' • ');
 
   return (
     <Alert variant="info">
@@ -54,48 +71,23 @@ export default function ReconSummaryBanner() {
                 {truncateDirectory(reconContext.codebaseDirectory)}
               </Badge>
             )}
-            {reconContext.keyFilesAnalyzed !== undefined && reconContext.keyFilesAnalyzed > 0 && (
-              <Badge
-                variant="outline"
-                className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-              >
-                <File className="h-3 w-3 mr-1" />
-                {reconContext.keyFilesAnalyzed} key files analyzed
-              </Badge>
-            )}
-            {reconContext.fieldsPopulated !== undefined && reconContext.fieldsPopulated > 0 && (
-              <Badge
-                variant="outline"
-                className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-              >
-                <Settings className="h-3 w-3 mr-1" />
-                {reconContext.fieldsPopulated} fields populated
-              </Badge>
-            )}
-            {reconContext.discoveredToolsCount !== undefined &&
-              reconContext.discoveredToolsCount > 0 && (
-                <Badge
-                  variant="outline"
-                  className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
-                >
-                  <Wrench className="h-3 w-3 mr-1" />
-                  {reconContext.discoveredToolsCount} tools discovered
-                </Badge>
-              )}
+            {countSummary ? (
+              <span className="text-sm text-blue-700 dark:text-blue-300">{countSummary}</span>
+            ) : null}
           </div>
-          {reconContext.securityNotes && reconContext.securityNotes.length > 0 && (
+          {securityNotes.length > 0 ? (
             <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md">
               <p className="text-xs font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1 mb-1">
                 <AlertTriangle className="h-3 w-3" />
                 Security observations
               </p>
               <ul className="text-xs text-amber-600 dark:text-amber-400 list-disc list-inside space-y-0.5">
-                {reconContext.securityNotes.map((note, i) => (
+                {securityNotes.map((note, i) => (
                   <li key={i}>{note}</li>
                 ))}
               </ul>
             </div>
-          )}
+          ) : null}
           <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
             Analyzed on {formatDate(reconContext.timestamp)}. Review and adjust the details below as
             needed.
