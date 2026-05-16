@@ -85,6 +85,7 @@ describe('FiltersForm', () => {
     render(<FiltersForm />);
     await openFiltersPopover(user);
     expect(screen.getByText('Add filter')).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveClass('w-[min(500px,calc(100vw_-_1rem))]');
   });
 
   it('automatically adds a default filter when opened with no existing filters', async () => {

@@ -1,6 +1,6 @@
 ---
 sidebar_label: DeepSeek
-description: Configure DeepSeek's OpenAI-compatible API with specialized chat and reasoning models, featuring 64K context windows and advanced caching for cost-effective LLM testing
+description: Configure DeepSeek's OpenAI-compatible API with V4 chat and reasoning models, 1M context windows, and prompt caching for cost-effective LLM testing
 ---
 
 # DeepSeek
@@ -24,7 +24,7 @@ providers:
       max_tokens: 4000
       apiKey: YOUR_DEEPSEEK_API_KEY
 
-  - id: deepseek:deepseek-reasoner # DeepSeek-R1 model
+  - id: deepseek:deepseek-reasoner # Legacy alias for V4 Flash thinking mode
     config:
       max_tokens: 8000
 ```
@@ -42,28 +42,41 @@ providers:
 
 :::note
 
-The API model names are aliases that automatically point to the latest versions: both `deepseek-chat` and `deepseek-reasoner` currently point to DeepSeek-V3.2, with the chat model using non-thinking mode and the reasoner model using thinking mode.
+The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. The legacy aliases `deepseek-chat` and `deepseek-reasoner` remain available until July 24, 2026 and currently map to the non-thinking and thinking modes of `deepseek-v4-flash`, respectively.
 
 :::
 
+### deepseek-v4-flash
+
+- General purpose V4 model for conversations and reasoning
+- 1M context window, up to 384K output tokens
+- Input: $0.0028/1M (cache hit), $0.14/1M (cache miss)
+- Output: $0.28/1M
+
+### deepseek-v4-pro
+
+- Higher-capability V4 model with thinking and non-thinking modes
+- 1M context window, up to 384K output tokens
+- Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
+- Output: $0.87/1M
+- Promotional pricing is documented through May 31, 2026
+
+### Legacy aliases
+
 ### deepseek-chat
 
-- General purpose model for conversations and content generation
-- 128K context window, up to 8K output tokens
-- Input: $0.028/1M (cache hit), $0.28/1M (cache miss)
-- Output: $0.42/1M
+- Legacy alias that currently maps to non-thinking `deepseek-v4-flash`
+- Scheduled for retirement on July 24, 2026
 
 ### deepseek-reasoner
 
-- Specialized reasoning model with extended thinking capabilities
-- 128K context window, up to 64K output tokens (32K reasoning + final answer)
-- Input: $0.028/1M (cache hit), $0.28/1M (cache miss)
-- Output: $0.42/1M
+- Legacy alias that currently maps to thinking `deepseek-v4-flash`
+- Scheduled for retirement on July 24, 2026
 - Supports showing or hiding reasoning content through the `showThinking` parameter
 
 :::warning
 
-The reasoning model does not support `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, or `top_logprobs` parameters. Setting these parameters will not trigger an error but will have no effect.
+Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, or `top_logprobs` parameters. Setting these parameters will not trigger an error but will have no effect.
 
 :::
 
@@ -91,7 +104,9 @@ tests:
 
 ### Controlling Reasoning Output
 
-The DeepSeek-R1 model (deepseek-reasoner) includes detailed reasoning steps in its output. You can control whether this reasoning content is shown using the `showThinking` parameter:
+The legacy `deepseek-reasoner` alias uses V4 Flash thinking mode and includes detailed
+reasoning steps in its output. You can control whether this reasoning content is shown
+using the `showThinking` parameter:
 
 ```yaml
 providers:

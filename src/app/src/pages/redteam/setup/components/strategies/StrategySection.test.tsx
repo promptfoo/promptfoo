@@ -56,6 +56,12 @@ describe('StrategySection', () => {
       );
 
       expect(screen.getByText('Test Section')).toBeInTheDocument();
+      expect(screen.getByText('Test Section').parentElement?.parentElement).toHaveClass(
+        'flex-col',
+        'items-start',
+        'sm:flex-row',
+        'sm:items-center',
+      );
     });
 
     it('renders section description when provided', () => {
