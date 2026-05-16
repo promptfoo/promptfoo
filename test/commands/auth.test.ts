@@ -1,4 +1,4 @@
-import select from '@inquirer/select';
+import search from '@inquirer/search';
 import { Command } from 'commander';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authCommand } from '../../src/commands/auth';
@@ -11,7 +11,7 @@ import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
 import { createMockResponse, mockGlobal, stripAnsi } from '../util/utils';
 
-vi.mock('@inquirer/select');
+vi.mock('@inquirer/search');
 
 const mockCloudUser = {
   id: '1',
@@ -259,7 +259,7 @@ describe('auth command', () => {
         {
           id: 'team-2',
           name: 'Security Team',
-          slug: 'security',
+          slug: 'security-alpha',
           organizationId: '1',
           createdAt: '2024-01-01',
           updatedAt: '2024-01-01',
@@ -514,7 +514,7 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
-      expect(select).not.toHaveBeenCalled();
+      expect(search).not.toHaveBeenCalled();
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', '1');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Only Team'));
     });
@@ -541,20 +541,45 @@ describe('auth command', () => {
 
       vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
       vi.mocked(isNonInteractive).mockReturnValue(false);
-      vi.mocked(select).mockResolvedValue('team-2');
+      vi.mocked(search).mockResolvedValue('team-2');
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
-      expect(select).toHaveBeenCalledWith({
+      expect(search).toHaveBeenCalledWith({
         message: 'Select a team to use:',
-        choices: expect.arrayContaining([
-          expect.objectContaining({ name: 'Default', value: 'team-1' }),
-          expect.objectContaining({ name: 'Security Team', value: 'team-2' }),
-        ]),
+        source: expect.any(Function),
       });
+
+      const source = vi.mocked(search).mock.calls[0]?.[0].source;
+      const signal = new AbortController().signal;
+      await expect(source?.(undefined, { signal })).resolves.toEqual([
+        expect.objectContaining({ name: 'Default', value: 'team-1', description: 'default' }),
+        expect.objectContaining({
+          name: 'Security Team',
+          value: 'team-2',
+          description: 'security-alpha',
+        }),
+      ]);
+      await expect(source?.('sec', { signal })).resolves.toEqual([
+        expect.objectContaining({
+          name: 'Security Team',
+          value: 'team-2',
+          description: 'security-alpha',
+        }),
+      ]);
+      await expect(source?.('alpha', { signal })).resolves.toEqual([
+        expect.objectContaining({
+          name: 'Security Team',
+          value: 'team-2',
+          description: 'security-alpha',
+        }),
+      ]);
+      await expect(source?.('DEFAULT', { signal })).resolves.toEqual([
+        expect.objectContaining({ name: 'Default', value: 'team-1', description: 'default' }),
+      ]);
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', '1');
     });
 
@@ -586,7 +611,7 @@ describe('auth command', () => {
         ?.commands.find((cmd) => cmd.name() === 'login');
       await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
 
-      expect(select).not.toHaveBeenCalled();
+      expect(search).not.toHaveBeenCalled();
       expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', '1');
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('You have access to 2 teams'),
@@ -616,7 +641,7 @@ describe('auth command', () => {
 
       vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
       vi.mocked(isNonInteractive).mockReturnValue(false);
-      vi.mocked(select).mockRejectedValue(new Error('User cancelled'));
+      vi.mocked(search).mockRejectedValue(new Error('User cancelled'));
 
       const loginCmd = program.commands
         .find((cmd) => cmd.name() === 'auth')
