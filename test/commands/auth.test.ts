@@ -259,7 +259,7 @@ describe('auth command', () => {
         {
           id: 'team-2',
           name: 'Security Team',
-          slug: 'security-alpha',
+          slug: 'security',
           organizationId: '1',
           createdAt: '2024-01-01',
           updatedAt: '2024-01-01',
@@ -532,7 +532,7 @@ describe('auth command', () => {
         {
           id: 'team-2',
           name: 'Security Team',
-          slug: 'security',
+          slug: 'security-alpha',
           organizationId: '1',
           createdAt: '2024-01-01',
           updatedAt: '2024-01-01',
