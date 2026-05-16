@@ -2,7 +2,7 @@ import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { toDataUri } from '../../util/dataUrl';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import {
   createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
@@ -10,6 +10,8 @@ import {
   loadCredentials,
   normalizeSafetySettings,
   normalizeTools,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
 
@@ -155,7 +157,7 @@ export class GeminiImageProvider implements ApiProvider {
           body: JSON.stringify(body),
           ...(authDiscriminator && { _authHash: authDiscriminator }),
         } as RequestInit,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         false,
       )) as { data: any; cached: boolean };
@@ -216,7 +218,7 @@ export class GeminiImageProvider implements ApiProvider {
           ...(this.config.headers || {}),
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
       const latencyMs = Date.now() - startTime;
 
@@ -263,13 +265,21 @@ export class GeminiImageProvider implements ApiProvider {
       body.safetySettings = normalizeSafetySettings(this.config.safetySettings);
     }
 
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(this.config);
+
     // Add tool configuration if provided (e.g. Google Search grounding)
-    if (this.config.toolConfig) {
-      body.toolConfig = this.config.toolConfig;
+    if (toolConfig) {
+      body.toolConfig = toolConfig;
     }
 
     if (Array.isArray(this.config.tools) && this.config.tools.length > 0) {
-      body.tools = normalizeTools(this.config.tools);
+      const normalizedTools = normalizeTools(this.config.tools);
+      const requestTools = toolsDisabled
+        ? removeGoogleFunctionDeclarations(normalizedTools)
+        : normalizedTools;
+      if (requestTools.length > 0) {
+        body.tools = requestTools;
+      }
     }
 
     return body;

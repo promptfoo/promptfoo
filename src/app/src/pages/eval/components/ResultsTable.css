@@ -194,7 +194,8 @@ table.results-table,
 .results-table tr .stat-item {
   font-weight: normal;
   font-size: 0.75rem;
-  color: #888;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
 }
 
 /* Remove default button styling - but not for MUI IconButton */
@@ -280,7 +281,8 @@ table.results-table,
   row-gap: 0.25rem;
 
   font-size: 0.75rem;
-  color: #888;
+  color: hsl(var(--muted-foreground));
+  font-variant-numeric: tabular-nums;
   margin-top: auto; /* Floats element to the bottom of the container */
 }
 

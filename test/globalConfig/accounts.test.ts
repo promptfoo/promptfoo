@@ -6,8 +6,10 @@ import {
   checkEmailStatus,
   checkEmailStatusAndMaybeExit,
   clearUserEmail,
+  EmailValidationError,
   getAuthMethod,
   getAuthor,
+  getUserAuthInfo,
   getUserEmail,
   getUserId,
   isLoggedIntoCloud,
@@ -156,6 +158,63 @@ describe('accounts', () => {
     });
   });
 
+  describe('getUserAuthInfo', () => {
+    it('should return the account and cloud auth snapshot from one config read', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+
+      expect(getUserAuthInfo()).toEqual({
+        email: 'test@example.com',
+        isLoggedIntoCloud: true,
+        authMethod: 'api-key',
+      });
+      expect(readGlobalConfig).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use the environment API key when cloud config has no API key', () => {
+      vi.stubEnv('PROMPTFOO_API_KEY', 'env-api-key');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+        cloud: {},
+      });
+
+      expect(getUserAuthInfo()).toEqual({
+        email: 'test@example.com',
+        isLoggedIntoCloud: true,
+        authMethod: 'api-key',
+      });
+    });
+
+    it('should report email auth when only email is configured', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+
+      expect(getUserAuthInfo()).toEqual({
+        email: 'test@example.com',
+        isLoggedIntoCloud: false,
+        authMethod: 'email',
+      });
+    });
+
+    it('should report no auth when no email or API key is configured', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+
+      expect(getUserAuthInfo()).toEqual({
+        email: null,
+        isLoggedIntoCloud: false,
+        authMethod: 'none',
+      });
+    });
+  });
+
   describe('setUserEmail', () => {
     it('should write email to global config', () => {
       // Must mock readGlobalConfig to ensure clean state (no leftover account properties from other tests)
@@ -279,6 +338,7 @@ describe('accounts', () => {
 
   describe('promptForEmailUnverified', () => {
     beforeEach(() => {
+      process.exitCode = undefined;
       vi.mocked(isCI).mockReturnValue(false);
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
@@ -314,6 +374,18 @@ describe('accounts', () => {
       });
       // save consent is now called after validation, not in promptForEmailUnverified
       expect(telemetry.saveConsent).not.toHaveBeenCalled();
+    });
+
+    it('should throw a recoverable error when the prompt is cancelled', async () => {
+      vi.mocked(input).mockRejectedValue({ name: 'ExitPromptError' });
+
+      await expect(promptForEmailUnverified()).rejects.toThrowError(
+        new EmailValidationError('prompt_cancelled', 'Email prompt cancelled.'),
+      );
+      expect(process.exitCode).toBeUndefined();
+      // Ctrl+C should remain a silent exit; no error/warn output.
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
     });
 
     describe('email validation', () => {
@@ -368,11 +440,9 @@ describe('accounts', () => {
   });
 
   describe('checkEmailStatusAndMaybeExit', () => {
-    let mockExit: ReturnType<typeof vi.spyOn>;
-
     beforeEach(() => {
       vi.clearAllMocks();
-      mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      process.exitCode = undefined;
     });
 
     it('should bypass email verification checks for the CI placeholder email', async () => {
@@ -381,7 +451,7 @@ describe('accounts', () => {
       await checkEmailStatusAndMaybeExit();
 
       expect(fetchWithTimeout).not.toHaveBeenCalled();
-      expect(mockExit).not.toHaveBeenCalled();
+      expect(process.exitCode).toBeUndefined();
     });
 
     it('should use user email when not in CI environment', async () => {
@@ -406,7 +476,7 @@ describe('accounts', () => {
       );
     });
 
-    it('should exit if limit exceeded', async () => {
+    it('should throw a recoverable error if limit exceeded', async () => {
       vi.mocked(isCI).mockReturnValue(false);
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
@@ -419,15 +489,20 @@ describe('accounts', () => {
       });
       vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusAndMaybeExit();
+      await expect(checkEmailStatusAndMaybeExit()).rejects.toThrowError(
+        new EmailValidationError(
+          'exceeded_limit',
+          'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
+        ),
+      );
 
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBeUndefined();
       expect(logger.error).toHaveBeenCalledWith(
         'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
       );
     });
 
-    it('should exit if email verification is required', async () => {
+    it('should throw a recoverable error if email verification is required', async () => {
       vi.mocked(isCI).mockReturnValue(false);
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
@@ -446,9 +521,14 @@ describe('accounts', () => {
       );
       vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
-      await checkEmailStatusAndMaybeExit();
+      await expect(checkEmailStatusAndMaybeExit()).rejects.toThrowError(
+        new EmailValidationError(
+          'email_verification_required',
+          'Please verify your email address and try again.',
+        ),
+      );
 
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBeUndefined();
       expect(logger.error).toHaveBeenCalledWith(
         'Please verify your email address and try again.',
         expect.objectContaining({
@@ -479,7 +559,7 @@ describe('accounts', () => {
 
       expect(logger.info).toHaveBeenCalledTimes(2);
       expect(logger.warn).toHaveBeenCalledWith(chalk.yellow(warningMessage));
-      expect(mockExit).not.toHaveBeenCalled();
+      expect(process.exitCode).toBeUndefined();
     });
 
     it('should return bad_email and not exit when status is risky_email or disposable_email', async () => {
@@ -499,7 +579,7 @@ describe('accounts', () => {
 
       expect(result).toBe('bad_email');
       expect(logger.error).toHaveBeenCalledWith('Please use a valid work email.');
-      expect(mockExit).not.toHaveBeenCalled();
+      expect(process.exitCode).toBeUndefined();
     });
 
     it('should handle fetch errors', async () => {
@@ -515,7 +595,7 @@ describe('accounts', () => {
       expect(logger.debug).toHaveBeenCalledWith(
         'Failed to check user status: Error: Network error',
       );
-      expect(mockExit).not.toHaveBeenCalled();
+      expect(process.exitCode).toBeUndefined();
     });
   });
 
