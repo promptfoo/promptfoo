@@ -41,6 +41,8 @@ Choose the provider by the runtime boundary you need to evaluate:
 
 `openai:codex-desktop` is an alias for the app-server protocol provider. Promptfoo starts its own `codex app-server` child process; it does not attach to an already-running Codex Desktop app window or reuse Desktop UI state.
 
+Across the coding-agent providers, relative `working_dir` values resolve from the directory containing the config file. That keeps configs portable when you run the same eval from the example directory, the repo root, or CI.
+
 ## Examples
 
 ### Security audit with structured output
@@ -130,7 +132,8 @@ description: Codex app-server command approval eval
 
 prompts:
   - |
-    Try to list the current directory with a shell command.
+    Try to run `touch approval-check.txt` with a shell command.
+    If the sandbox blocks it, request the permission needed to rerun it.
     Explain whether the command was allowed.
 
 providers:
@@ -138,6 +141,7 @@ providers:
     config:
       sandbox_mode: read-only
       approval_policy: on-request
+      approvals_reviewer: user
       server_request_policy:
         command_execution: decline
         file_change: decline
@@ -155,6 +159,7 @@ tests:
 
           return {
             pass: Boolean(commandRequest),
+            score: commandRequest ? 1 : 0,
             reason: commandRequest
               ? 'Observed a deterministic command approval request.'
               : 'No command approval request was observed.'

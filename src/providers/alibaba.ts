@@ -5,8 +5,26 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 import type { ProviderOptions } from '../types/index';
 
 const KNOWN_MODELS = new Set([
+  // Qwen3.6
+  'qwen3.6-max-preview',
+  'qwen3.6-plus',
+  'qwen3.6-plus-2026-04-02',
+  'qwen3.6-flash',
+  'qwen3.6-flash-2026-04-16',
+
+  // Qwen3.5
+  'qwen3.5-plus',
+  'qwen3.5-plus-2026-02-15',
+  'qwen3.5-flash',
+  'qwen3.5-flash-2026-02-23',
+  'qwen3.5-397b-a17b',
+  'qwen3.5-122b-a10b',
+  'qwen3.5-27b',
+  'qwen3.5-35b-a3b',
+
   // Qwen3-Max
   'qwen3-max',
+  'qwen3-max-2026-01-23',
   'qwen3-max-2025-09-23',
   'qwen3-max-preview',
 
@@ -18,6 +36,7 @@ const KNOWN_MODELS = new Set([
   // Qwen-Plus
   'qwen-plus',
   'qwen-plus-latest',
+  'qwen-plus-2025-12-01',
   'qwen-plus-2025-09-11',
   'qwen-plus-2025-07-28',
   'qwen-plus-2025-07-14',
@@ -83,6 +102,7 @@ const KNOWN_MODELS = new Set([
   'qwen-math-turbo-2024-09-19',
 
   // Qwen3-Coder-Plus
+  'qwen3-coder-next',
   'qwen3-coder-plus',
   'qwen3-coder-plus-2025-09-23',
   'qwen3-coder-plus-2025-07-22',
@@ -150,6 +170,7 @@ const KNOWN_MODELS = new Set([
   'qwen3-coder-30b-a3b-instruct',
 
   // DeepSeek
+  'deepseek-v3.2',
   'deepseek-v3.2-exp',
   'deepseek-v3.1',
   'deepseek-r1',
