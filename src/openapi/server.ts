@@ -70,7 +70,7 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+export const SERVER_OPENAPI_ROUTE_COUNT = 68;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -1164,6 +1164,18 @@ export function createServerOpenApiRegistry() {
     summary: 'Get Promptfoo Cloud app config',
     responses: {
       200: jsonResponse('CloudConfigResponse', UserSchemas.CloudConfig.Response),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/user/cloud/status',
+    operationId: 'getUserCloudStatus',
+    tags: ['User'],
+    summary: 'Get Promptfoo Cloud authentication status',
+    responses: {
+      200: jsonResponse('CloudStatusResponse', UserSchemas.CloudStatus.Response),
       500: serverError(),
     },
   });
