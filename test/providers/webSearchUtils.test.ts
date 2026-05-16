@@ -71,7 +71,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for Google provider with googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
         config: {
           tools: [{ googleSearch: {} }],
         },
@@ -81,7 +81,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for Google provider without googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
         config: {
           tools: [{ codeExecution: {} }],
         },
@@ -91,7 +91,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for Vertex provider with googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'vertex:gemini-3-pro-preview',
+        id: () => 'vertex:gemini-3.1-pro-preview',
         config: {
           tools: [{ googleSearch: {} }],
         },
@@ -107,6 +107,27 @@ describe('webSearchUtils', () => {
         },
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return true for xAI Responses provider with web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'xai:responses:grok-4.3',
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return false for xAI chat provider with Responses-only web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'xai:grok-4.3',
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      };
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
     it('should return false for xAI provider without search_parameters', () => {
@@ -401,7 +422,7 @@ describe('webSearchUtils', () => {
 
     it('should configure Google provider with googleSearch tool', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -412,7 +433,7 @@ describe('webSearchUtils', () => {
       await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'google:gemini-3-pro-preview',
+        'google:gemini-3.1-pro-preview',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -423,9 +444,9 @@ describe('webSearchUtils', () => {
       );
     });
 
-    it('should configure xAI provider with search_parameters', async () => {
+    it('should configure xAI provider with Responses API web search', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'xai:grok-4-1-fast-reasoning',
+        id: () => 'xai:responses:grok-4.3',
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -438,11 +459,11 @@ describe('webSearchUtils', () => {
       await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'xai:grok-4-1-fast-reasoning',
+        'xai:responses:grok-4.3',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
-              search_parameters: { mode: 'on' },
+              tools: [{ type: 'web_search' }],
             }),
           }),
         }),

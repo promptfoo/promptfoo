@@ -9,6 +9,12 @@ Promptfoo Codex plugin bundle.
   setup, and redteam run.
 - The existing Claude `promptfoo-evals` plugin stays separate from the Codex
   bundle.
+- The repo-local Claude copy of `promptfoo-evals` stays byte-for-byte aligned
+  with the published Claude plugin copy.
+- Every repo-local Claude skill uses canonical `SKILL.md` casing so discovery
+  stays predictable.
+- Shared repo-local contributor skills stay aligned between `.claude/skills/`
+  and `.agents/skills/`.
 - Skill bodies stay concise; detailed examples live in `references/`.
 - `agents/openai.yaml` files keep short descriptions, default prompts, and
   implicit invocation aligned with each skill.
@@ -41,3 +47,6 @@ for config in $(find test/fixtures/agent-skills -name promptfooconfig.yaml -o -n
   npm run local -- validate config -c "$config"
 done
 ```
+
+For bundle behavior changes, also run a live Promptfoo skill eval with positive
+and near-miss routing prompts, following `site/docs/guides/test-agent-skills.md`.
