@@ -15,6 +15,16 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 
+type OpenRouterMessage = {
+  content?: string;
+  reasoning?: string;
+  function_call?: {
+    name?: string;
+    [key: string]: unknown;
+  };
+  tool_calls?: unknown[];
+};
+
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
  * for models like Gemini that include thinking/reasoning tokens.
@@ -181,44 +191,9 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     }
 
     // Process the response with special handling for Gemini
-    const message: any = data.choices[0].message;
+    const message = data.choices[0].message as OpenRouterMessage;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
-
-    // Prioritize tool calls over content and reasoning
-    let output: string | object = '';
-    const hasFunctionCall = !!(message.function_call && message.function_call.name);
-    const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
-    if (hasFunctionCall || hasToolCalls) {
-      // Tool calls always take priority and never include thinking
-      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
-    } else if (message.content && message.content.trim()) {
-      output = message.content;
-      // Add reasoning as thinking content if present and showThinking is enabled
-      if (message.reasoning && (this.config.showThinking ?? true)) {
-        output = `Thinking: ${message.reasoning}\n\n${output}`;
-      }
-    } else if (message.reasoning && (this.config.showThinking ?? true)) {
-      // Fallback to reasoning if no content and showThinking is enabled
-      output = message.reasoning;
-    }
-    // Handle structured output
-    if (config.response_format?.type === 'json_schema') {
-      // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
-      const jsonCandidate =
-        typeof message?.content === 'string'
-          ? message.content
-          : typeof output === 'string'
-            ? output
-            : null;
-      if (jsonCandidate) {
-        try {
-          output = JSON.parse(jsonCandidate);
-        } catch (error) {
-          // Keep the original output (which may include "Thinking:" prefix) if parsing fails
-          logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
-        }
-      }
-    }
+    const output = this.buildOpenRouterOutput(message, config);
 
     return {
       output,
@@ -232,6 +207,56 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ),
       ...(finishReason && { finishReason }),
     };
+  }
+
+  private buildOpenRouterOutput(
+    message: OpenRouterMessage,
+    config: Record<string, any>,
+  ): string | object {
+    const output = this.getPreferredOpenRouterOutput(message);
+    if (config.response_format?.type !== 'json_schema') {
+      return output;
+    }
+
+    const jsonCandidate =
+      typeof message.content === 'string'
+        ? message.content
+        : typeof output === 'string'
+          ? output
+          : null;
+    if (!jsonCandidate) {
+      return output;
+    }
+
+    try {
+      return JSON.parse(jsonCandidate);
+    } catch (error) {
+      logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
+      return output;
+    }
+  }
+
+  private getPreferredOpenRouterOutput(message: OpenRouterMessage): string | object {
+    if (message.function_call?.name) {
+      return message.function_call;
+    }
+    if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      return message.tool_calls;
+    }
+    if (message.content?.trim()) {
+      return this.addThinkingIfNeeded(message.content, message.reasoning);
+    }
+    if (message.reasoning && (this.config.showThinking ?? true)) {
+      return message.reasoning;
+    }
+    return '';
+  }
+
+  private addThinkingIfNeeded(content: string, reasoning?: string): string {
+    if (!reasoning || !(this.config.showThinking ?? true)) {
+      return content;
+    }
+    return `Thinking: ${reasoning}\n\n${content}`;
   }
 }
 

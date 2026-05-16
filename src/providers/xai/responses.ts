@@ -105,6 +105,13 @@ type XAIResponsesStreamEvent = {
   [key: string]: any;
 };
 
+type XAIResponsesRequestResult = {
+  data: any;
+  cached: boolean;
+  status: number;
+  statusText: string;
+};
+
 /**
  * Parses a single Server-Sent Events (SSE) chunk into an xAI Responses stream event.
  *
@@ -469,73 +476,15 @@ export class XAIResponsesProvider implements ApiProvider {
       toolTypes: body.tools?.map((t: any) => t.type),
     });
 
-    let data: any;
-    let cached = false;
-    let status: number;
-    let statusText: string;
-
+    let requestResult: XAIResponsesRequestResult;
     try {
-      if (body.stream) {
-        const timeoutMs = getRequestTimeoutMs();
-        const controller = new AbortController();
-        const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-          const response = await fetchWithProxy(`${this.getApiUrl()}/responses`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${apiKey}`,
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-          });
-
-          status = response.status;
-          statusText = response.statusText;
-          // Streaming bypasses fetchWithCache, so cache-hit telemetry is always false.
-          cached = false;
-          if (status < 200 || status >= 300) {
-            const text = await response.text();
-            try {
-              data = JSON.parse(text);
-            } catch {
-              data = text;
-            }
-          } else {
-            data = await readStreamingResponse(response);
-          }
-        } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') {
-            throw new Error(`xAI streaming response timed out after ${timeoutMs}ms`);
-          }
-          throw err;
-        } finally {
-          clearTimeout(timeoutHandle);
-        }
-      } else {
-        const response = await fetchWithCache(
-          `${this.getApiUrl()}/responses`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${apiKey}`,
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
-          },
-          getRequestTimeoutMs(),
-          'json',
-          context?.bustCache ?? context?.debug,
-          this.config.maxRetries,
-        );
-
-        data = response.data;
-        cached = response.cached;
-        status = response.status;
-        statusText = response.statusText;
-      }
+      requestResult = await this.executeResponsesRequest({
+        apiKey,
+        body,
+        config,
+        context,
+      });
+      const { data, cached, status, statusText } = requestResult;
 
       if (status < 200 || status >= 300) {
         const errorMessage = `xAI API error: ${status} ${statusText}\n${
@@ -568,6 +517,8 @@ export class XAIResponsesProvider implements ApiProvider {
       };
     }
 
+    const { data, cached } = requestResult;
+
     if (data.error) {
       return {
         error: `xAI API error: ${typeof data.error === 'string' ? data.error : JSON.stringify(data.error)}`,
@@ -578,6 +529,94 @@ export class XAIResponsesProvider implements ApiProvider {
     return this.processor.processResponseOutput(data, config, cached, {
       suppressReasoningOutput: Boolean(body.stream),
     });
+  }
+
+  private async executeResponsesRequest({
+    apiKey,
+    body,
+    config,
+    context,
+  }: {
+    apiKey: string;
+    body: Record<string, any>;
+    config: XAIResponsesConfig;
+    context?: CallApiContextParams;
+  }): Promise<XAIResponsesRequestResult> {
+    if (body.stream) {
+      return this.fetchStreamingResponsesRequest(apiKey, body, config);
+    }
+
+    const response = await fetchWithCache(
+      `${this.getApiUrl()}/responses`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          ...config.headers,
+        },
+        body: JSON.stringify(body),
+      },
+      getRequestTimeoutMs(),
+      'json',
+      context?.bustCache ?? context?.debug,
+      this.config.maxRetries,
+    );
+
+    return {
+      data: response.data,
+      cached: response.cached,
+      status: response.status,
+      statusText: response.statusText,
+    };
+  }
+
+  private async fetchStreamingResponsesRequest(
+    apiKey: string,
+    body: Record<string, any>,
+    config: XAIResponsesConfig,
+  ): Promise<XAIResponsesRequestResult> {
+    const timeoutMs = getRequestTimeoutMs();
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchWithProxy(`${this.getApiUrl()}/responses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          ...config.headers,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      return {
+        data:
+          response.status < 200 || response.status >= 300
+            ? await this.parseErrorResponse(response)
+            : await readStreamingResponse(response),
+        cached: false,
+        status: response.status,
+        statusText: response.statusText,
+      };
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`xAI streaming response timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
+  }
+
+  private async parseErrorResponse(response: Response): Promise<any> {
+    const text = await response.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
   }
 
   private getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
