@@ -490,7 +490,7 @@ describe('OpenCodeSDKProvider', () => {
           {
             name: 'review-standards',
             input: { name: 'review-standards' },
-            path: '/repo/.agents/skills/review-standards/SKILL.md',
+            path: path.join('/repo/.agents/skills/review-standards', 'SKILL.md'),
             source: 'tool',
           },
         ]);
