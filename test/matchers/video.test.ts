@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { ApiProvider, ProviderResponse } from '../../src/types/index';
+import type { ApiProvider, Assertion, ProviderResponse } from '../../src/types/index';
 
 const mocks = vi.hoisted(() => {
   const gradingProvider: ApiProvider = {
@@ -239,13 +239,17 @@ describe('matchesVideoRubric', () => {
       output: { pass: 'yes', score: '0.75' },
       tokenUsage: { total: 6, prompt: 4, completion: 2 },
     });
+    const stringThresholdAssertion = {
+      type: 'video-rubric',
+      threshold: '0.8',
+    } as unknown as Assertion;
 
     const result = await matchesVideoRubric(
       { criteria: ['motion', 'composition'] },
       { url: 'https://example.com/video.mp4' },
       { provider: mocks.gradingProvider },
       undefined,
-      { type: 'video-rubric', threshold: '0.8' },
+      stringThresholdAssertion,
     );
 
     expect(result).toEqual(
