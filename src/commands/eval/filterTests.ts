@@ -60,6 +60,7 @@ export interface FilterOptions {
 }
 
 type Tests = NonNullable<TestSuite['tests']>;
+type ParsedMetadataFilter = { key: string; value: string };
 
 /**
  * Filters a test suite to only include all tests that did not pass (failures + errors)
@@ -101,6 +102,144 @@ async function filterErrorTests(testSuite: TestSuite, pathOrId: string): Promise
   );
 }
 
+function parseMetadataFilters(metadata: string | string[]): ParsedMetadataFilter[] {
+  const metadataFilters = Array.isArray(metadata) ? metadata : [metadata];
+  return metadataFilters.map((filter) => {
+    const [key, ...valueParts] = filter.split('=');
+    const value = valueParts.join('=');
+    if (!key || value === undefined || value === '') {
+      throw new Error('--filter-metadata must be specified in key=value format');
+    }
+    return { key, value };
+  });
+}
+
+function testMatchesMetadata(test: Tests[number], parsedFilters: ParsedMetadataFilter[]): boolean {
+  if (!test.metadata) {
+    logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
+    return false;
+  }
+
+  for (const { key, value } of parsedFilters) {
+    const testValue = test.metadata[key];
+    const matches = Array.isArray(testValue)
+      ? testValue.some((metadataValue) => metadataValue.toString().includes(value))
+      : testValue !== undefined && testValue.toString().includes(value);
+
+    if (!matches) {
+      logger.debug(
+        `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
+      );
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function applyMetadataFilter(tests: Tests, metadata: string | string[]): Tests {
+  const parsedFilters = parseMetadataFilters(metadata);
+  logger.debug(
+    `Filtering for metadata conditions (AND logic): ${parsedFilters.map((filter) => `${filter.key}=${filter.value}`).join(', ')}`,
+  );
+  logger.debug(`Before metadata filter: ${tests.length} tests`);
+  const filteredTests = tests.filter((test) => testMatchesMetadata(test, parsedFilters));
+  logger.debug(`After metadata filter: ${filteredTests.length} tests remain`);
+  return filteredTests;
+}
+
+function deduplicateTests(tests: Tests): Tests {
+  const seen = new Set<string>();
+  return tests.filter((test) => {
+    const key = getTestCaseDeduplicationKey(test);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+async function applyResultFilters(testSuite: TestSuite, options: FilterOptions): Promise<Tests | undefined> {
+  if (options.failingOnly && options.errorsOnly) {
+    logger.debug(
+      'Using both --filter-failing-only and --filter-errors-only together (equivalent to --filter-failing)',
+    );
+    const failingOnlyTests = await filterFailingOnlyTests(testSuite, options.failingOnly);
+    const errorTests = await filterErrorTests(testSuite, options.errorsOnly);
+    const tests = deduplicateTests([...failingOnlyTests, ...errorTests]);
+    logger.debug(
+      `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
+    );
+    if (tests.length === 0) {
+      logger.warn(
+        'Combined --filter-failing-only and --filter-errors-only returned no tests. ' +
+          'The specified evaluations may have no failures or errors, or the test suite may have changed.',
+      );
+    }
+    return tests;
+  }
+
+  if (options.failing) {
+    const tests = await filterFailingTests(testSuite, options.failing);
+    if (tests.length === 0) {
+      logNoTestsWarning('filter-failing', options.failing, 'no failures/errors');
+    }
+    return tests;
+  }
+
+  if (options.failingOnly) {
+    const tests = await filterFailingOnlyTests(testSuite, options.failingOnly);
+    if (tests.length === 0) {
+      logNoTestsWarning(
+        'filter-failing-only',
+        options.failingOnly,
+        'no assertion failures (only errors)',
+      );
+    }
+    return tests;
+  }
+
+  if (options.errorsOnly) {
+    const tests = await filterErrorTests(testSuite, options.errorsOnly);
+    if (tests.length === 0) {
+      logNoTestsWarning('filter-errors-only', options.errorsOnly, 'no errors');
+    }
+    return tests;
+  }
+
+  return undefined;
+}
+
+function applyPatternFilter(tests: Tests, patternText: string): Tests {
+  let pattern: RegExp;
+  try {
+    pattern = new RegExp(patternText);
+  } catch (error) {
+    throw new Error(
+      `Invalid regex pattern "${patternText}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
+  }
+  return tests.filter((test) => test.description && pattern.test(test.description));
+}
+
+function parseCount(value: number | string, label: 'firstN' | 'sample'): number {
+  const count = typeof value === 'number' ? value : Number.parseInt(value);
+  if (Number.isNaN(count)) {
+    throw new Error(`${label} must be a number, got: ${value}`);
+  }
+  return count;
+}
+
+function sampleTests(tests: Tests, count: number): Tests {
+  const shuffled = [...tests];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled.slice(0, count);
+}
+
 /**
  * Applies multiple filters to a test suite based on the provided options.
  * Filters are applied in the following order:
@@ -129,124 +268,16 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   if (options.metadata) {
-    // Normalize to array for consistent handling
-    const metadataFilters = Array.isArray(options.metadata) ? options.metadata : [options.metadata];
-
-    // Validate all filters first
-    const parsedFilters: Array<{ key: string; value: string }> = [];
-    for (const filter of metadataFilters) {
-      const [key, ...valueParts] = filter.split('=');
-      const value = valueParts.join('='); // Rejoin in case value contains '='
-      if (!key || value === undefined || value === '') {
-        throw new Error('--filter-metadata must be specified in key=value format');
-      }
-      parsedFilters.push({ key, value });
-    }
-
-    logger.debug(
-      `Filtering for metadata conditions (AND logic): ${parsedFilters.map((f) => `${f.key}=${f.value}`).join(', ')}`,
-    );
-    logger.debug(`Before metadata filter: ${tests.length} tests`);
-
-    tests = tests.filter((test) => {
-      if (!test.metadata) {
-        logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
-        return false;
-      }
-
-      // ALL conditions must match (AND logic)
-      for (const { key, value } of parsedFilters) {
-        const testValue = test.metadata[key];
-        let matches = false;
-
-        if (Array.isArray(testValue)) {
-          // For array metadata, check if any value includes the search term
-          matches = testValue.some((v) => v.toString().includes(value));
-        } else if (testValue !== undefined) {
-          // For single value metadata, check if it includes the search term
-          matches = testValue.toString().includes(value);
-        }
-
-        if (!matches) {
-          logger.debug(
-            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include ${value}, got ${JSON.stringify(test.metadata)}`,
-          );
-          return false;
-        }
-      }
-
-      return true;
-    });
-
-    logger.debug(`After metadata filter: ${tests.length} tests remain`);
+    tests = applyMetadataFilter(tests, options.metadata);
   }
 
-  // Handle failing, failingOnly, and errorsOnly filters
-  // - failing: all non-successful results (failures + errors)
-  // - failingOnly: assertion failures only (excludes errors)
-  // - errorsOnly: errors only
-  // When failingOnly and errorsOnly are both provided, combine results (union)
-  if (options.failingOnly && options.errorsOnly) {
-    logger.debug(
-      'Using both --filter-failing-only and --filter-errors-only together (equivalent to --filter-failing)',
-    );
-    const failingOnlyTests = await filterFailingOnlyTests(testSuite, options.failingOnly);
-    const errorTests = await filterErrorTests(testSuite, options.errorsOnly);
-
-    // Create a union of both sets, deduplicating by test identity
-    const seen = new Set<string>();
-
-    tests = [...failingOnlyTests, ...errorTests].filter((test) => {
-      const key = getTestCaseDeduplicationKey(test);
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
-
-    logger.debug(
-      `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
-    );
-    if (tests.length === 0) {
-      logger.warn(
-        'Combined --filter-failing-only and --filter-errors-only returned no tests. ' +
-          'The specified evaluations may have no failures or errors, or the test suite may have changed.',
-      );
-    }
-  } else if (options.failing) {
-    // --filter-failing includes both failures and errors
-    tests = await filterFailingTests(testSuite, options.failing);
-    if (tests.length === 0) {
-      logNoTestsWarning('filter-failing', options.failing, 'no failures/errors');
-    }
-  } else if (options.failingOnly) {
-    // --filter-failing-only includes only assertion failures (excludes errors)
-    tests = await filterFailingOnlyTests(testSuite, options.failingOnly);
-    if (tests.length === 0) {
-      logNoTestsWarning(
-        'filter-failing-only',
-        options.failingOnly,
-        'no assertion failures (only errors)',
-      );
-    }
-  } else if (options.errorsOnly) {
-    tests = await filterErrorTests(testSuite, options.errorsOnly);
-    if (tests.length === 0) {
-      logNoTestsWarning('filter-errors-only', options.errorsOnly, 'no errors');
-    }
+  const resultFilteredTests = await applyResultFilters(testSuite, options);
+  if (resultFilteredTests) {
+    tests = resultFilteredTests;
   }
 
   if (options.pattern) {
-    let pattern: RegExp;
-    try {
-      pattern = new RegExp(options.pattern);
-    } catch (e) {
-      throw new Error(
-        `Invalid regex pattern "${options.pattern}": ${e instanceof Error ? e.message : 'Unknown error'}`,
-      );
-    }
-    tests = tests.filter((test) => test.description && pattern.test(test.description));
+    tests = applyPatternFilter(tests, options.pattern);
   }
 
   if (options.range !== undefined) {
@@ -254,31 +285,11 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   if (options.firstN !== undefined) {
-    const count =
-      typeof options.firstN === 'number' ? options.firstN : Number.parseInt(options.firstN);
-
-    if (Number.isNaN(count)) {
-      throw new Error(`firstN must be a number, got: ${options.firstN}`);
-    }
-
-    tests = tests.slice(0, count);
+    tests = tests.slice(0, parseCount(options.firstN, 'firstN'));
   }
 
   if (options.sample !== undefined) {
-    const count =
-      typeof options.sample === 'number' ? options.sample : Number.parseInt(options.sample);
-
-    if (Number.isNaN(count)) {
-      throw new Error(`sample must be a number, got: ${options.sample}`);
-    }
-
-    // Fisher-Yates shuffle and take first n elements
-    const shuffled = [...tests];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    tests = shuffled.slice(0, count);
+    tests = sampleTests(tests, parseCount(options.sample, 'sample'));
   }
 
   return tests;
