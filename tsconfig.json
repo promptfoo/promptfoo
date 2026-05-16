@@ -13,32 +13,29 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
+    "ignoreDeprecations": "6.0",
     "baseUrl": "./"
   },
-  "ts-node": {
-    "swc": true
-  },
   "include": [
+    "*.ts",
+    "*.tsx",
+    "*.mts",
+    "*.cts",
     "src/",
     "test/",
+    "scripts/",
+    "site/src/utils/markdown.ts",
     "./package.json",
     "src/**/*.json",
     "test/**/*.json",
-    "src/types/globals.d.ts"
+    "src/types/globals.d.ts",
+    "src/types/optional-deps.d.ts"
   ],
   "exclude": [
     "dist",
     "node_modules",
     "src/app/**/*",
-    "src/workers/**/*",
-    "test/app/**/*",
     "test/code-scan-action/**/*",
-    "test/codeScans/**/*",
-    "test/database/**/*",
-    "test/matchers/**/*",
-    "test/site/",
-    "test/testCase/**/*",
-    "test/utils/**/*",
-    "test/validators/**/*"
+    "test/fixtures/rubric-json-template/rubric.json"
   ]
 }

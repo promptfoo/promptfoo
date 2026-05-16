@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -9,17 +8,20 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
+import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
+import { fetchWithRetries } from '../util/fetch/index';
+import { getRequestTimeoutMs } from './shared';
+
 import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  Inputs,
   PluginConfig,
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import { fetchWithRetries } from '../util/fetch/index';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -144,7 +146,13 @@ interface PromptfooChatCompletionOptions {
     | 'judge'
     | 'blocking-question-analysis'
     | 'meta-agent-decision'
-    | 'hydra-decision';
+    | 'hydra-decision'
+    | 'voice-crescendo'
+    | 'voice-crescendo-eval';
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   */
+  inputs?: Inputs;
 }
 
 /**
@@ -186,6 +194,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       };
     }
 
+    const materializationContext = getRemoteMaterializationContextFromVars(context?.vars);
     const body = {
       jsonOnly: this.options.jsonOnly,
       preferSmallModel: this.options.preferSmallModel,
@@ -193,6 +202,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       step: context?.prompt.label,
       task: this.options.task,
       email: getUserEmail(),
+      // Pass inputs schema for multi-input mode
+      ...(this.options.inputs && { inputs: this.options.inputs }),
+      ...(materializationContext ? { materializationContext } : {}),
     };
 
     try {
@@ -206,13 +218,13 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       const data = await response.json();
 
       if (!data.result) {
-        logger.error(
+        logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
@@ -221,6 +233,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       }
 
       return {
+        inputMaterialization: data.inputMaterialization,
+        materializationHandled: data.materializationHandled,
+        materializedVars: data.materializedVars,
         output: data.result,
         tokenUsage: data.tokenUsage,
       };
@@ -321,7 +336,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (!response.ok) {

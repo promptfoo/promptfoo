@@ -1,23 +1,45 @@
-import fs from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import path from 'node:path';
 
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { Agent, interceptors, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import cliState from '../src/cliState';
-import { VERSION } from '../src/constants';
-import { getEnvBool, getEnvString } from '../src/envars';
+import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
+import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
+import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
+import { getRequestTimeoutMs } from '../src/providers/shared';
+import { HttpRateLimitError } from '../src/util/fetch/errors';
 import {
+  clearAgentCache,
+  computeRateLimitWaitMs,
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
+  isTransientError,
 } from '../src/util/fetch/index';
+import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep } from '../src/util/time';
-import { createMockResponse } from './util/utils';
+import { clearProxyEnv, createMockResponse, mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
+
+const FETCH_TEST_ENV_KEYS = [
+  ...PROXY_ENV_KEYS,
+  'PROMPTFOO_INSECURE_SSL',
+  'PROMPTFOO_CA_CERT_PATH',
+] as const;
+
+function mockFetchTestEnv(): () => void {
+  return mockProcessEnv(
+    Object.fromEntries(FETCH_TEST_ENV_KEYS.map((key) => [key, undefined])) as Record<
+      string,
+      string | undefined
+    >,
+  );
+}
+
+let restoreFetchTestEnv = () => {};
 
 vi.mock('../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
@@ -41,31 +63,33 @@ vi.mock('../src/globalConfig/cloud', () => ({
 }));
 
 vi.mock('undici', () => {
-  const mockProxyAgentInstance = {
-    options: null,
-    addRequest: vi.fn(),
-    destroy: vi.fn(),
-  };
-
-  const mockAgentInstance = {
-    addRequest: vi.fn(),
-    destroy: vi.fn(),
+  const createMockDispatcher = (options: any) => {
+    const dispatcher = {
+      options,
+      addRequest: vi.fn(),
+      close: vi.fn(),
+      destroy: vi.fn(),
+      compose: vi.fn(),
+    };
+    dispatcher.compose.mockReturnValue(dispatcher);
+    return dispatcher;
   };
 
   // Use regular functions instead of arrow functions for constructors
   const ProxyAgent = vi.fn(function (this: any, options: any) {
-    mockProxyAgentInstance.options = options;
-    return mockProxyAgentInstance;
+    return createMockDispatcher(options);
   });
 
-  const Agent = vi.fn(function (this: any) {
-    return mockAgentInstance;
+  const Agent = vi.fn(function (this: any, options: any) {
+    return createMockDispatcher(options);
   });
 
   return {
     ProxyAgent,
     Agent,
-    setGlobalDispatcher: vi.fn(),
+    interceptors: {
+      decompress: vi.fn(() => ({ name: 'decompress' })),
+    },
   };
 });
 
@@ -100,13 +124,13 @@ vi.mock('../src/envars', () => {
     }),
     getEnvBool: vi.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
-        return process.env.PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true';
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return process.env.PROMPTFOO_INSECURE_SSL === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true';
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
-        return process.env.PROMPTFOO_RETRY_5XX === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true';
       }
       return defaultValue;
     }),
@@ -119,37 +143,35 @@ vi.mock('../src/envars', () => {
   };
 });
 
-vi.mock('node:fs', () => ({
-  default: {
-    readFileSync: vi.fn(),
-  },
-  readFileSync: vi.fn(),
+vi.mock('node:fs/promises', () => ({
+  readFile: vi.fn(),
 }));
 
 vi.mock('../src/cliState', () => ({
   default: {
     basePath: undefined,
+    maxConcurrency: undefined,
   },
 }));
 
 describe('fetchWithProxy', () => {
   beforeEach(() => {
+    restoreFetchTestEnv();
+    restoreFetchTestEnv = mockFetchTestEnv();
     vi.clearAllMocks();
+    clearAgentCache();
     vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
     vi.mocked(ProxyAgent).mockClear();
-    vi.mocked(setGlobalDispatcher).mockClear();
-    delete process.env.HTTPS_PROXY;
-    delete process.env.https_proxy;
-    delete process.env.HTTP_PROXY;
-    delete process.env.http_proxy;
-    delete process.env.npm_config_https_proxy;
-    delete process.env.npm_config_http_proxy;
-    delete process.env.npm_config_proxy;
-    delete process.env.all_proxy;
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   afterEach(() => {
     vi.resetAllMocks();
+    restoreFetchTestEnv();
+    restoreFetchTestEnv = () => {};
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   it('should add version header to all requests', async () => {
@@ -162,6 +184,42 @@ describe('fetchWithProxy', () => {
         headers: expect.objectContaining({
           'x-promptfoo-version': VERSION,
         }),
+      }),
+    );
+  });
+
+  it('should preserve Request headers when init headers are absent', async () => {
+    const request = new Request('https://example.com/api', {
+      headers: { Authorization: 'Bearer request-token' },
+    });
+
+    await fetchWithProxy(request);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer request-token',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should replace Request headers when init headers are provided', async () => {
+    const request = new Request('https://example.com/api', {
+      headers: { Authorization: 'Bearer request-token' },
+    });
+
+    await fetchWithProxy(request, { headers: { Accept: 'application/json' } });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({
+        headers: {
+          Accept: 'application/json',
+          'x-promptfoo-version': VERSION,
+        },
       }),
     );
   });
@@ -230,6 +288,36 @@ describe('fetchWithProxy', () => {
           'Content-Type': 'application/json',
           'x-promptfoo-version': VERSION,
         },
+      }),
+    );
+  });
+
+  it('should add cloud auth only for the exact Promptfoo cloud origin', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('cloud-token');
+
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/task');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/v1/task',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer cloud-token',
+        }),
+      }),
+    );
+  });
+
+  it('should not add cloud auth to lookalike Promptfoo cloud hosts', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('cloud-token');
+
+    await fetchWithProxy('https://api.promptfoo.dev.evil.example/api/v1/task');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev.evil.example/api/v1/task',
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          Authorization: 'Bearer cloud-token',
+        }),
       }),
     );
   });
@@ -317,8 +405,8 @@ describe('fetchWithProxy', () => {
     const mockCertContent = 'mock-cert-content';
     const mockProxyUrl = 'http://proxy.example.com';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: mockCertPath });
 
     vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
@@ -335,15 +423,15 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    vi.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(mockCertContent);
 
     const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
-    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
-    const actualEncoding = vi.mocked(fs.readFileSync).mock.calls[0][1];
+    const actualPath = vi.mocked(fsPromises.readFile).mock.calls[0][0] as string;
+    const actualEncoding = vi.mocked(fsPromises.readFile).mock.calls[0][1];
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
@@ -358,17 +446,23 @@ describe('fetchWithProxy', () => {
         ca: mockCertContent,
         rejectUnauthorized: true,
       },
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      headersTimeout: getRequestTimeoutMs(),
+      keepAliveTimeout: 30_000,
+      keepAliveMaxTimeout: 60_000,
+      connections: DEFAULT_MAX_CONCURRENCY,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should handle missing CA certificate file gracefully', async () => {
     const mockCertPath = path.normalize('/path/to/nonexistent.pem');
     const mockProxyUrl = 'http://proxy.example.com';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: mockCertPath });
 
     vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
@@ -379,16 +473,20 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    vi.mocked(fs.readFileSync).mockImplementation(() => {
-      throw new Error('File not found');
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_INSECURE_SSL') {
+        return false;
+      }
+      return defaultValue;
     });
+    vi.mocked(fsPromises.readFile).mockRejectedValue(new Error('File not found'));
 
     const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
-    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualPath = vi.mocked(fsPromises.readFile).mock.calls[0][0] as string;
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
@@ -400,16 +498,22 @@ describe('fetchWithProxy', () => {
       requestTls: {
         rejectUnauthorized: true,
       },
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      headersTimeout: getRequestTimeoutMs(),
+      keepAliveTimeout: 30_000,
+      keepAliveMaxTimeout: 60_000,
+      connections: DEFAULT_MAX_CONCURRENCY,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.PROMPTFOO_INSECURE_SSL = 'true';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ PROMPTFOO_INSECURE_SSL: 'true' });
 
     vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY') {
@@ -437,9 +541,15 @@ describe('fetchWithProxy', () => {
       requestTls: {
         rejectUnauthorized: false,
       },
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      headersTimeout: getRequestTimeoutMs(),
+      keepAliveTimeout: 30_000,
+      keepAliveMaxTimeout: 60_000,
+      connections: DEFAULT_MAX_CONCURRENCY,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should resolve CA certificate path relative to basePath when available', async () => {
@@ -448,8 +558,8 @@ describe('fetchWithProxy', () => {
     const mockCertContent = 'mock-cert-content';
     const mockProxyUrl = 'http://proxy.example.com';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ PROMPTFOO_CA_CERT_PATH: mockCertPath });
 
     cliState.basePath = mockBasePath;
 
@@ -468,7 +578,7 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    vi.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(mockCertContent);
 
     const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
@@ -476,8 +586,8 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     const expectedPath = path.normalize(path.join(mockBasePath, mockCertPath));
-    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
-    const actualEncoding = vi.mocked(fs.readFileSync).mock.calls[0][1];
+    const actualPath = vi.mocked(fsPromises.readFile).mock.calls[0][0] as string;
+    const actualEncoding = vi.mocked(fsPromises.readFile).mock.calls[0][1];
 
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(expectedPath).replace(/^\w:/, '');
@@ -498,9 +608,15 @@ describe('fetchWithProxy', () => {
         ca: mockCertContent,
         rejectUnauthorized: true,
       },
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      headersTimeout: getRequestTimeoutMs(),
+      keepAliveTimeout: 30_000,
+      keepAliveMaxTimeout: 60_000,
+      connections: DEFAULT_MAX_CONCURRENCY,
     });
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
 
     cliState.basePath = undefined;
   });
@@ -511,15 +627,46 @@ describe('fetchWithProxy', () => {
     expect(ProxyAgent).not.toHaveBeenCalled();
   });
 
+  it('should read REQUEST_TIMEOUT_MS when creating the default agent', async () => {
+    vi.mocked(getEnvInt).mockReturnValueOnce(1234);
+
+    await fetchWithProxy('https://example.com/api');
+
+    expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
+    expect(Agent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headersTimeout: 1234,
+        connections: DEFAULT_MAX_CONCURRENCY,
+      }),
+    );
+  });
+
+  it('should read REQUEST_TIMEOUT_MS when creating the proxy agent', async () => {
+    const mockProxyUrl = 'http://proxy.example.com';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    vi.mocked(getEnvInt).mockReturnValueOnce(4321);
+
+    await fetchWithProxy('https://example.com/api');
+
+    expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        headersTimeout: 4321,
+        connections: DEFAULT_MAX_CONCURRENCY,
+      }),
+    );
+  });
+
   it('should use proxy URL from environment variables in order of precedence', async () => {
     const mockProxyUrls = {
       HTTPS_PROXY: 'http://https-proxy.example.com',
       https_proxy: 'http://https-proxy-lower.example.com',
       HTTP_PROXY: 'http://http-proxy.example.com',
       http_proxy: 'http://http-proxy-lower.example.com',
+      ALL_PROXY: 'http://all-proxy.example.com',
+      all_proxy: 'http://all-proxy-lower.example.com',
     } as const;
-
-    const allProxyVars = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy'];
 
     const httpTestCases = [
       {
@@ -529,6 +676,14 @@ describe('fetchWithProxy', () => {
       {
         env: { http_proxy: mockProxyUrls.http_proxy },
         expected: { url: mockProxyUrls.http_proxy },
+      },
+      {
+        env: { ALL_PROXY: mockProxyUrls.ALL_PROXY },
+        expected: { url: mockProxyUrls.ALL_PROXY },
+      },
+      {
+        env: { all_proxy: mockProxyUrls.all_proxy },
+        expected: { url: mockProxyUrls.all_proxy },
       },
     ];
 
@@ -541,17 +696,24 @@ describe('fetchWithProxy', () => {
         env: { https_proxy: mockProxyUrls.https_proxy },
         expected: { url: mockProxyUrls.https_proxy },
       },
+      {
+        env: { ALL_PROXY: mockProxyUrls.ALL_PROXY },
+        expected: { url: mockProxyUrls.ALL_PROXY },
+      },
+      {
+        env: { all_proxy: mockProxyUrls.all_proxy },
+        expected: { url: mockProxyUrls.all_proxy },
+      },
     ];
 
     for (const testCase of httpTestCases) {
       vi.clearAllMocks();
+      clearAgentCache();
 
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      clearProxyEnv();
 
       Object.entries(testCase.env).forEach(([key, value]) => {
-        process.env[key] = value;
+        mockProcessEnv({ [key]: value });
       });
 
       await fetchWithProxy('http://example.com');
@@ -564,9 +726,15 @@ describe('fetchWithProxy', () => {
         requestTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
-        headersTimeout: REQUEST_TIMEOUT_MS,
+        headersTimeout: getRequestTimeoutMs(),
+        keepAliveTimeout: 30_000,
+        keepAliveMaxTimeout: 60_000,
+        connections: DEFAULT_MAX_CONCURRENCY,
       });
-      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ dispatcher: expect.any(Object) }),
+      );
 
       const debugCalls = vi.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
@@ -575,20 +743,17 @@ describe('fetchWithProxy', () => {
 
       expect(proxyConfigCalls).toEqual([`Using proxy: ${testCase.expected.url}`]);
 
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      clearProxyEnv();
     }
 
     for (const testCase of httpsTestCases) {
       vi.clearAllMocks();
+      clearAgentCache();
 
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      clearProxyEnv();
 
       Object.entries(testCase.env).forEach(([key, value]) => {
-        process.env[key] = value;
+        mockProcessEnv({ [key]: value });
       });
 
       await fetchWithProxy('https://example.com');
@@ -601,9 +766,15 @@ describe('fetchWithProxy', () => {
         requestTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
-        headersTimeout: REQUEST_TIMEOUT_MS,
+        headersTimeout: getRequestTimeoutMs(),
+        keepAliveTimeout: 30_000,
+        keepAliveMaxTimeout: 60_000,
+        connections: DEFAULT_MAX_CONCURRENCY,
       });
-      expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ dispatcher: expect.any(Object) }),
+      );
 
       const debugCalls = vi.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
@@ -612,17 +783,15 @@ describe('fetchWithProxy', () => {
 
       expect(proxyConfigCalls).toEqual([`Using proxy: ${testCase.expected.url}`]);
 
-      allProxyVars.forEach((key) => {
-        delete process.env[key];
-      });
+      clearProxyEnv();
     }
   });
 
   it('should use proxy for domains not in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,internal.example.com';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,internal.example.com' });
 
     await fetchWithProxy('https://api.example.com/v1');
 
@@ -631,7 +800,133 @@ describe('fetchWithProxy', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
+  });
+
+  it('should reuse the same Agent dispatcher across concurrent requests', async () => {
+    const dispatchers: unknown[] = [];
+    const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
+      dispatchers.push(opts?.dispatcher);
+      return Promise.resolve(new Response());
+    });
+    global.fetch = mockFetch;
+
+    // Fire 10 concurrent requests without awaiting individually
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) => fetchWithProxy(`https://example.com/api/${i}`)),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(10);
+    expect(Agent).toHaveBeenCalledTimes(1);
+    // Every request should have received the exact same dispatcher instance
+    const first = dispatchers[0];
+    expect(first).toBeDefined();
+    for (const d of dispatchers) {
+      expect(d).toBe(first);
+    }
+  });
+
+  it('should reuse a dedicated Agent dispatcher per maxConcurrency value', async () => {
+    const dispatchers: unknown[] = [];
+    const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
+      dispatchers.push(opts?.dispatcher);
+      return Promise.resolve(new Response());
+    });
+    global.fetch = mockFetch;
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-1');
+
+    cliState.maxConcurrency = 5;
+    await fetchWithProxy('https://example.com/api/high');
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-2');
+
+    expect(Agent).toHaveBeenCalledTimes(2);
+    expect(Agent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        connections: 2,
+      }),
+    );
+    expect(Agent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        connections: 5,
+      }),
+    );
+    expect(dispatchers[0]).toBe(dispatchers[2]);
+    expect(dispatchers[1]).not.toBe(dispatchers[0]);
+  });
+
+  it('should compose default Agent dispatchers with response decompression', async () => {
+    await fetchWithProxy('https://example.com/api');
+
+    const agent = vi.mocked(Agent).mock.results[0]?.value as { compose: ReturnType<typeof vi.fn> };
+    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
+    expect(agent.compose).toHaveBeenCalledWith({ name: 'decompress' });
+  });
+
+  it('should create a dedicated ProxyAgent dispatcher per proxy URL and maxConcurrency value', async () => {
+    const mockProxyUrl = 'http://proxy.example.com';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low');
+
+    cliState.maxConcurrency = 5;
+    await fetchWithProxy('https://example.com/api/high');
+
+    cliState.maxConcurrency = 2;
+    await fetchWithProxy('https://example.com/api/low-again');
+
+    expect(ProxyAgent).toHaveBeenCalledTimes(2);
+    expect(ProxyAgent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        connections: 2,
+      }),
+    );
+    expect(ProxyAgent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        connections: 5,
+      }),
+    );
+  });
+
+  it('should compose ProxyAgent dispatchers with response decompression', async () => {
+    mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com' });
+
+    await fetchWithProxy('https://example.com/api');
+
+    const proxyAgent = vi.mocked(ProxyAgent).mock.results[0]?.value as {
+      compose: ReturnType<typeof vi.fn>;
+    };
+    expect(interceptors.decompress).toHaveBeenCalledTimes(1);
+    expect(proxyAgent.compose).toHaveBeenCalledWith({ name: 'decompress' });
+  });
+
+  it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {
+    const customDispatcher = { custom: true };
+    let receivedDispatcher: unknown;
+    const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
+      receivedDispatcher = opts?.dispatcher;
+      return Promise.resolve(new Response());
+    });
+    global.fetch = mockFetch;
+
+    await fetchWithProxy('https://example.com/api', { dispatcher: customDispatcher } as any);
+
+    expect(receivedDispatcher).toBe(customDispatcher);
+    // Should not create a default agent when caller provides a dispatcher
+    expect(Agent).not.toHaveBeenCalled();
   });
 
   describe('Abort Signal Handling', () => {
@@ -700,9 +995,7 @@ describe('fetchWithTimeout', () => {
   });
 
   it('should reject when request times out', async () => {
-    vi.mocked(global.fetch).mockImplementationOnce(
-      () => new Promise((resolve) => setTimeout(resolve, 6000)),
-    );
+    vi.mocked(global.fetch).mockImplementationOnce(() => new Promise(() => {}));
 
     const fetchPromise = fetchWithTimeout('https://example.com', {}, 5000);
     vi.advanceTimersByTime(5000);
@@ -778,13 +1071,21 @@ describe('isRateLimited', () => {
 });
 
 describe('handleRateLimit', () => {
+  const originalRandom = Math.random;
+  let randomReturn = 0;
+
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.mocked(sleep).mockClear();
+    vi.clearAllMocks();
+    // Pin Math.random so jitter is deterministic across tests. Tests can
+    // mutate `randomReturn` to control the value returned on the next call.
+    randomReturn = 0;
+    Math.random = () => randomReturn;
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    Math.random = originalRandom;
   });
 
   it('should handle OpenAI reset headers', async () => {
@@ -798,7 +1099,31 @@ describe('handleRateLimit', () => {
     vi.advanceTimersByTime(5000);
     await promise;
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 5000ms'));
+  });
+
+  it('should handle OpenAI reset headers with millisecond durations', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '500ms',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 500ms'));
+  });
+
+  it('should handle OpenAI reset headers with compound durations', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '1m30s',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 90000ms'));
   });
 
   it('should handle standard rate limit reset headers', async () => {
@@ -812,9 +1137,7 @@ describe('handleRateLimit', () => {
     const promise = handleRateLimit(response);
     await promise;
 
-    expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringMatching(/Rate limited, waiting \d+ms before retry/),
-    );
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringMatching(/Rate limited, waiting \d+ms/));
   });
 
   it('should handle Retry-After headers', async () => {
@@ -828,7 +1151,32 @@ describe('handleRateLimit', () => {
     vi.advanceTimersByTime(5000);
     await promise;
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 5000ms'));
+  });
+
+  it('should handle Retry-After HTTP-date headers', async () => {
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+    const response = createMockResponse({
+      headers: new Headers({
+        'Retry-After': 'Mon, 01 Jan 2024 00:00:05 GMT',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 5000ms'));
+  });
+
+  it('should use default wait time for invalid Retry-After headers', async () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'Retry-After': 'invalid',
+      }),
+    });
+
+    await handleRateLimit(response);
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 60000ms'));
   });
 
   it('should use default wait time when no headers present', async () => {
@@ -838,7 +1186,67 @@ describe('handleRateLimit', () => {
     vi.advanceTimersByTime(60000);
     await promise;
 
-    expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('base 60000ms'));
+  });
+
+  it('adds bounded jitter to spread concurrent retries', async () => {
+    randomReturn = 0.5; // -> jitter = floor(0.5 * 1000) = 500ms
+    const response = createMockResponse({
+      headers: new Headers({ 'Retry-After': '5' }),
+    });
+
+    const promise = handleRateLimit(response);
+    vi.advanceTimersByTime(5500);
+    await promise;
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('base 5000ms + 500ms jitter'),
+    );
+    // Total wait used in sleep should be base + jitter
+    expect(sleep).toHaveBeenCalledWith(5500);
+  });
+
+  it('jitter draws from [0, 1000) so two concurrent waiters can desynchronize', async () => {
+    // Vary the value Math.random returns across two sequential calls
+    let callCount = 0;
+    Math.random = () => {
+      callCount++;
+      return callCount === 1 ? 0.1 : 0.9;
+    };
+
+    const response1 = createMockResponse({ headers: new Headers({ 'Retry-After': '5' }) });
+    const response2 = createMockResponse({ headers: new Headers({ 'Retry-After': '5' }) });
+
+    await handleRateLimit(response1);
+    await handleRateLimit(response2);
+
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(sleep).mock.calls[0][0]).toBe(5100); // 5000 + floor(0.1 * 1000)
+    expect(vi.mocked(sleep).mock.calls[1][0]).toBe(5900); // 5000 + floor(0.9 * 1000)
+  });
+});
+
+describe('computeRateLimitWaitMs', () => {
+  it('returns 60000ms by default', () => {
+    expect(computeRateLimitWaitMs(createMockResponse())).toBe(60_000);
+  });
+
+  it('reads Retry-After in seconds', () => {
+    const response = createMockResponse({ headers: new Headers({ 'Retry-After': '7' }) });
+    expect(computeRateLimitWaitMs(response)).toBe(7_000);
+  });
+
+  it('prefers OpenAI reset headers when present', () => {
+    const response = createMockResponse({
+      headers: new Headers({
+        'x-ratelimit-reset-requests': '3s',
+        'Retry-After': '60',
+      }),
+    });
+    const wait = computeRateLimitWaitMs(response);
+    // resolves close to 3000ms; allow a few ms of clock drift
+    expect(wait).toBeGreaterThanOrEqual(2_900);
+    expect(wait).toBeLessThanOrEqual(3_100);
   });
 });
 
@@ -867,6 +1275,28 @@ describe('fetchWithRetries', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should honor retry context maxRetries when explicit argument is omitted', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      withFetchRetryContext(0, () => fetchWithRetries('https://example.com', {}, 1000)),
+    ).rejects.toThrow('Request failed after 0 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should prefer explicit maxRetries over retry context', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      withFetchRetryContext(0, () => fetchWithRetries('https://example.com', {}, 1000, 2)),
+    ).rejects.toThrow('Request failed after 2 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
   });
 
   it('should make retries+1 total attempts', async () => {
@@ -1019,8 +1449,69 @@ describe('fetchWithRetries', () => {
     vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
-      'Rate limited: 429 Too Many Requests',
+      /Rate limit exceeded.*429.*Too Many Requests/,
     );
+  });
+
+  it('should fail fast on rate limit when maxRetries is 0 without honoring Retry-After', async () => {
+    const rateLimitResponse = createMockResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: new Headers({ 'Retry-After': '60' }),
+    });
+    vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 0)).rejects.toThrow(
+      /Rate limit exceeded.*429.*Too Many Requests/,
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    // Crucially, we must NOT sleep on the 60s Retry-After when no retries remain.
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should still retry on 429 and return success when a later attempt succeeds', async () => {
+    const rateLimitResponse = createMockResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: new Headers({ 'Retry-After': '0' }),
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(rateLimitResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithRetries('https://example.com', {}, 1000, 2);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+    // handleRateLimit invokes sleep exactly once for the single retry before success.
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should use the default maxRetries (4) when no context and no explicit arg', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000)).rejects.toThrow(
+      'Request failed after 4 retries: Error: Network error',
+    );
+
+    expect(global.fetch).toHaveBeenCalledTimes(5);
+  });
+
+  it('should let an inner retry context shadow an outer context', async () => {
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+    await expect(
+      withFetchRetryContext(0, () =>
+        withFetchRetryContext(2, () => fetchWithRetries('https://example.com', {}, 1000)),
+      ),
+    ).rejects.toThrow('Request failed after 2 retries: Error: Network error');
+
+    expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 
   describe('Abort Signal Handling', () => {
@@ -1069,45 +1560,228 @@ describe('fetchWithRetries', () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('HttpRateLimitError classification', () => {
+    function rateLimitedJsonResponse(opts: {
+      headers?: Headers;
+      body?: unknown;
+      statusText?: string;
+    }): Response {
+      const text = JSON.stringify(opts.body ?? {});
+      return createMockResponse({
+        status: 429,
+        statusText: opts.statusText ?? 'Too Many Requests',
+        headers: opts.headers ?? new Headers(),
+        text: () => Promise.resolve(text),
+      });
+    }
+
+    it('throws HttpRateLimitError when retries exhausted with rate-limit body code', async () => {
+      const rateLimitResponse = rateLimitedJsonResponse({
+        headers: new Headers({ 'Retry-After': '7' }),
+        body: { error: { code: 'rate_limit_exceeded', message: 'too many requests' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
+
+      try {
+        await fetchWithRetries('https://example.com', {}, 1000, 1);
+        throw new Error('expected to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpRateLimitError);
+        const rl = err as HttpRateLimitError;
+        expect(rl.kind).toBe('rate_limit');
+        expect(rl.status).toBe(429);
+        expect(rl.code).toBe('rate_limit_exceeded');
+        expect(rl.retryAfterMs).toBe(7000);
+      }
+    });
+
+    it('fails fast on insufficient_quota without consuming retries', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: {
+          error: {
+            code: 'insufficient_quota',
+            message: 'You exceeded your current quota',
+            type: 'insufficient_quota',
+          },
+        },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      try {
+        await fetchWithRetries('https://example.com', {}, 1000, 4);
+        throw new Error('expected to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpRateLimitError);
+        const rl = err as HttpRateLimitError;
+        expect(rl.kind).toBe('quota');
+        expect(rl.code).toBe('insufficient_quota');
+      }
+
+      // Single attempt — no retries on a hard quota failure
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
+    });
+
+    it('fails fast on billing_hard_limit_reached', async () => {
+      const quotaResponse = rateLimitedJsonResponse({
+        body: { error: { code: 'billing_hard_limit_reached', message: 'billing limit hit' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(quotaResponse);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 3).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      expect((err as HttpRateLimitError).kind).toBe('quota');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves headers and reset metadata on the structured error', async () => {
+      const headers = new Headers({
+        'Retry-After': '12',
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '12s',
+      });
+      vi.mocked(global.fetch).mockResolvedValue(rateLimitedJsonResponse({ headers }));
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.retryAfterMs).toBe(12_000);
+      expect(rl.resetAt).toBeGreaterThanOrEqual(Date.now() - 1_000);
+      expect(rl.headers?.['retry-after']).toBe('12');
+    });
+
+    it('falls back to status-only when body has no JSON code', async () => {
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.resolve('plain text rate limit notice'),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBeUndefined();
+      // Body is preserved as raw text for diagnostics.
+      expect(rl.body).toBe('plain text rate limit notice');
+    });
+
+    it('handles empty body without bubbling up the read', async () => {
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.resolve(''),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBeUndefined();
+      expect(rl.body).toBeUndefined();
+    });
+
+    it('degrades gracefully when body read fails', async () => {
+      // Simulate a stream that errors mid-read — the structured error must
+      // still surface, just without body code (worst case: misclassify
+      // quota as rate_limit, which is the safer side).
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.reject(new Error('stream consumed')),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBeUndefined();
+    });
+
+    it('classifies via error.type when error.code is missing (Anthropic shape)', async () => {
+      // Anthropic error envelopes use `error.type`, not `error.code`. The
+      // body-code extractor falls back to `type`; verify a quota-shaped
+      // type still triggers the quota fail-fast path.
+      const response = rateLimitedJsonResponse({
+        body: { error: { type: 'insufficient_quota', message: 'quota exhausted' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      expect((err as HttpRateLimitError).kind).toBe('quota');
+      expect((err as HttpRateLimitError).code).toBe('insufficient_quota');
+      // Single attempt — quota fail-fast must not retry.
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('bounds streamed 429 body to RATE_LIMIT_BODY_PEEK_BYTES under a single oversized chunk', async () => {
+      // Hostile / buggy upstream: one chunk much larger than the 64KB peek
+      // cap. The classifier must surface a structured error without
+      // buffering the full payload — the truncated body proves the cap is
+      // honored before the stream is drained.
+      const oversize = 1024 * 1024; // 1 MB
+      const payload = `{"x":"${'A'.repeat(oversize - 10)}"}`;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(payload));
+          controller.close();
+        },
+      });
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.resolve(payload),
+      });
+      Object.defineProperty(response, 'body', { value: stream });
+      Object.defineProperty(response, 'clone', { value: () => response });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      // Body is truncated, so JSON.parse fails and we fall through to raw text.
+      expect(typeof rl.body).toBe('string');
+      expect((rl.body as string).length).toBeLessThanOrEqual(64 * 1024);
+      // Sanity: payload was much larger than the cap.
+      expect((rl.body as string).length).toBeLessThan(payload.length);
+    });
+  });
 });
 
 describe('fetchWithProxy with NO_PROXY', () => {
   beforeEach(() => {
+    restoreFetchTestEnv();
+    restoreFetchTestEnv = mockFetchTestEnv();
     vi.clearAllMocks();
+    clearAgentCache();
     vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
     vi.mocked(ProxyAgent).mockClear();
-    vi.mocked(setGlobalDispatcher).mockClear();
-    delete process.env.HTTPS_PROXY;
-    delete process.env.https_proxy;
-    delete process.env.HTTP_PROXY;
-    delete process.env.http_proxy;
-    delete process.env.npm_config_https_proxy;
-    delete process.env.npm_config_http_proxy;
-    delete process.env.npm_config_proxy;
-    delete process.env.all_proxy;
-    delete process.env.NO_PROXY;
-    delete process.env.no_proxy;
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   afterEach(() => {
-    delete process.env.HTTPS_PROXY;
-    delete process.env.https_proxy;
-    delete process.env.HTTP_PROXY;
-    delete process.env.http_proxy;
-    delete process.env.npm_config_https_proxy;
-    delete process.env.npm_config_http_proxy;
-    delete process.env.npm_config_proxy;
-    delete process.env.all_proxy;
-    delete process.env.NO_PROXY;
-    delete process.env.no_proxy;
     vi.resetAllMocks();
+    restoreFetchTestEnv();
+    restoreFetchTestEnv = () => {};
+    cliState.basePath = undefined;
+    cliState.maxConcurrency = undefined;
   });
 
   it('should respect NO_PROXY for localhost URLs', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost' });
 
     await fetchWithProxy('http://localhost:3000/api');
 
@@ -1117,8 +1791,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should respect NO_PROXY for 127.0.0.1', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = '127.0.0.1';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: '127.0.0.1' });
 
     await fetchWithProxy('http://127.0.0.1:3000/api');
 
@@ -1129,41 +1803,44 @@ describe('fetchWithProxy with NO_PROXY', () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
     const noProxyList = 'example.org,localhost,internal.example.com';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = noProxyList;
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: noProxyList });
 
     await fetchWithProxy('http://localhost:3000/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = noProxyList;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: noProxyList });
     await fetchWithProxy('https://example.org/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = noProxyList;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: noProxyList });
     await fetchWithProxy('https://internal.example.com/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = noProxyList;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: noProxyList });
     await fetchWithProxy('https://example.com/api');
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should use proxy for domains not in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,internal.example.com';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,internal.example.com' });
 
     await fetchWithProxy('https://api.example.com/v1');
 
@@ -1172,25 +1849,28 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
-    expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
   });
 
   it('should handle wildcard patterns in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = '*.example.org,localhost';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: '*.example.org,localhost' });
 
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://subdomain.api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://example.com/v1');
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1202,24 +1882,24 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle domain suffix patterns in NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = '.example.org,localhost';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: '.example.org,localhost' });
 
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://subdomain.api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://abc.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
-    process.env.HTTPS_PROXY = mockProxyUrl;
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
     await fetchWithProxy('https://abc.example.com/v1');
     expect(ProxyAgent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1231,8 +1911,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle URLs without schemes', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,example.org';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,example.org' });
 
     await fetchWithProxy('localhost:3000');
     expect(ProxyAgent).not.toHaveBeenCalled();
@@ -1245,8 +1925,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should properly parse URLs with credentials when checking against NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'api.example.org';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'api.example.org' });
 
     await fetchWithProxy('https://username:password@api.example.org/v1');
 
@@ -1264,9 +1944,9 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle bad URL inputs gracefully when checking NO_PROXY', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost' });
 
     await fetchWithProxy(':::not-a-valid-url:::');
 
@@ -1276,8 +1956,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should use lowercase for NO_PROXY checks', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'LOCALHOST,API.EXAMPLE.ORG';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'LOCALHOST,API.EXAMPLE.ORG' });
 
     await fetchWithProxy('http://localhost:3000');
     expect(ProxyAgent).not.toHaveBeenCalled();
@@ -1290,8 +1970,8 @@ describe('fetchWithProxy with NO_PROXY', () => {
   it('should handle URL objects and Request objects', async () => {
     const mockProxyUrl = 'http://proxy.example.com:8080';
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,example.org';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,example.org' });
 
     const urlObj = new URL('http://localhost:3000');
     await fetchWithProxy(urlObj.toString());
@@ -1299,16 +1979,16 @@ describe('fetchWithProxy with NO_PROXY', () => {
 
     vi.clearAllMocks();
 
-    process.env.HTTPS_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,example.org';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,example.org' });
     const request = new Request('https://example.org/api');
     await fetchWithProxy(request);
     expect(ProxyAgent).not.toHaveBeenCalled();
 
     vi.clearAllMocks();
 
-    process.env.HTTP_PROXY = mockProxyUrl;
-    process.env.NO_PROXY = 'localhost,example.org';
+    mockProcessEnv({ HTTP_PROXY: mockProxyUrl });
+    mockProcessEnv({ NO_PROXY: 'localhost,example.org' });
     const otherRequest = new Request('http://example.com/api');
     await fetchWithProxy(otherRequest);
     expect(ProxyAgent).toHaveBeenCalledWith(
@@ -1316,5 +1996,325 @@ describe('fetchWithProxy with NO_PROXY', () => {
         uri: mockProxyUrl,
       }),
     );
+  });
+});
+
+describe('isTransientError', () => {
+  it('should return true for 502 Bad Gateway', () => {
+    const response = createMockResponse({
+      status: 502,
+      statusText: 'Bad Gateway',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should return true for 503 Service Unavailable', () => {
+    const response = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should return true for 504 Gateway Timeout', () => {
+    const response = createMockResponse({
+      status: 504,
+      statusText: 'Gateway Timeout',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should be case insensitive for status text', () => {
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 502,
+          statusText: 'BAD GATEWAY',
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 503,
+          statusText: 'SERVICE UNAVAILABLE',
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 504,
+          statusText: 'GATEWAY TIMEOUT',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('should return false for 502 without matching text', () => {
+    const response = createMockResponse({
+      status: 502,
+      statusText: 'Invalid API Key',
+    });
+    expect(isTransientError(response)).toBe(false);
+  });
+
+  it('should return false for 500 Internal Server Error', () => {
+    const response = createMockResponse({
+      status: 500,
+      statusText: 'Internal Server Error',
+    });
+    expect(isTransientError(response)).toBe(false);
+  });
+
+  it('should return true for 524 A Timeout Occurred (Cloudflare)', () => {
+    const response = createMockResponse({
+      status: 524,
+      statusText: 'A Timeout Occurred',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should return true for 524 with lowercase timeout', () => {
+    const response = createMockResponse({
+      status: 524,
+      statusText: 'timeout',
+    });
+    expect(isTransientError(response)).toBe(true);
+  });
+
+  it('should be case insensitive for 524 status text', () => {
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 524,
+          statusText: 'A TIMEOUT OCCURRED',
+        }),
+      ),
+    ).toBe(true);
+
+    expect(
+      isTransientError(
+        createMockResponse({
+          status: 524,
+          statusText: 'TIMEOUT',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('should return false for 524 without matching text', () => {
+    const response = createMockResponse({
+      status: 524,
+      statusText: 'Unknown Error',
+    });
+    expect(isTransientError(response)).toBe(false);
+  });
+});
+
+describe('fetchWithProxy transient error retries', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
+    vi.mocked(sleep).mockClear();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should retry on 503 Service Unavailable', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(1000); // First retry: 2^0 * 1000 = 1000ms
+  });
+
+  it('should not retry on 502 without matching status text', async () => {
+    const nonTransientResponse = createMockResponse({
+      status: 502,
+      statusText: 'Invalid API Key',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(nonTransientResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(nonTransientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should retry up to 3 times with exponential backoff', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 1000); // 2^0 * 1000
+    expect(sleep).toHaveBeenNthCalledWith(2, 2000); // 2^1 * 1000
+    expect(sleep).toHaveBeenNthCalledWith(3, 4000); // 2^2 * 1000
+  });
+
+  it('should not retry when disableTransientRetries is true', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(transientResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com', {
+      disableTransientRetries: true,
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(transientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should disable transient retries when retry context maxRetries is 0', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(transientResponse);
+    global.fetch = mockFetch;
+
+    const result = await withFetchRetryContext(0, () => fetchWithProxy('https://example.com'));
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(transientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('should let explicit disableTransientRetries=false override retry context maxRetries=0', async () => {
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await withFetchRetryContext(0, () =>
+      fetchWithProxy('https://example.com', {
+        disableTransientRetries: false,
+      }),
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('should retry on 524 A Timeout Occurred (Cloudflare)', async () => {
+    const transientResponse = createMockResponse({
+      status: 524,
+      statusText: 'A Timeout Occurred',
+    });
+    const successResponse = createMockResponse({ ok: true });
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(transientResponse)
+      .mockResolvedValueOnce(successResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toBe(successResponse);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep).toHaveBeenCalledWith(1000); // First retry: 2^0 * 1000 = 1000ms
+  });
+
+  it('should not retry on 524 without matching status text', async () => {
+    const nonTransientResponse = createMockResponse({
+      status: 524,
+      statusText: 'Unknown Error',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValueOnce(nonTransientResponse);
+    global.fetch = mockFetch;
+
+    const result = await fetchWithProxy('https://example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(nonTransientResponse);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchWithRetries with disableTransientRetries', () => {
+  beforeEach(() => {
+    vi.mocked(sleep).mockClear();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
+    vi.clearAllMocks();
+    // Ensure PROMPTFOO_RETRY_5XX is false so 503 responses don't throw
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+      if (key === 'PROMPTFOO_RETRY_5XX') {
+        return false;
+      }
+      return defaultValue;
+    });
+  });
+
+  it('should disable transient retries in fetchWithProxy to avoid double-retrying', async () => {
+    // This test verifies that fetchWithRetries passes disableTransientRetries: true
+    // to prevent fetchWithProxy from also retrying transient errors
+    const transientResponse = createMockResponse({
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue(transientResponse);
+    global.fetch = mockFetch;
+
+    // fetchWithRetries with 0 retries - should make exactly 1 attempt
+    // If disableTransientRetries wasn't being passed, fetchWithProxy would retry 3 times
+    const result = await fetchWithRetries('https://example.com', {}, 1000, 0);
+
+    // With disableTransientRetries: true, fetchWithProxy shouldn't retry
+    // So we should see exactly 1 fetch call
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result).toBe(transientResponse);
   });
 });

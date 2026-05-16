@@ -1,4 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { mockWindowOpen } from '@app/tests/browserMocks';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
@@ -73,24 +76,22 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     evalId: 'test-eval-123',
     numPassed: 8,
     numFailed: 2,
-    strategyStats: {},
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useNavigate).mockReturnValue(mockNavigate);
 
-    // Mock window.open
-    global.window.open = vi.fn();
+    mockWindowOpen();
   });
 
-  it('should navigate to eval page when clicking View All Logs button', () => {
-    render(<RiskCategoryDrawer {...defaultProps} />);
+  it('should navigate to eval page when clicking View All Logs button', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
     const viewAllLogsButton = screen.getByText('View All Logs');
 
-    // Test normal click - should use navigate
-    fireEvent.click(viewAllLogsButton);
+    await user.click(viewAllLogsButton);
 
     const expectedUrl =
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
@@ -98,13 +99,15 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(window.open).not.toHaveBeenCalled();
   });
 
-  it('should open in new tab when ctrl/cmd clicking View All Logs button', () => {
-    render(<RiskCategoryDrawer {...defaultProps} />);
+  it('should open in new tab when ctrl/cmd clicking View All Logs button', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
     const viewAllLogsButton = screen.getByText('View All Logs');
 
-    // Test Ctrl+click - should open new tab
-    fireEvent.click(viewAllLogsButton, { ctrlKey: true });
+    await user.keyboard('{Control>}');
+    await user.click(viewAllLogsButton);
+    await user.keyboard('{/Control}');
 
     const expectedUrl =
       '/eval/test-eval-123?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
@@ -114,31 +117,48 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     // Reset mocks
     vi.clearAllMocks();
 
-    // Test Cmd+click (Mac) - should also open new tab
-    fireEvent.click(viewAllLogsButton, { metaKey: true });
+    await user.keyboard('{Meta>}');
+    await user.click(viewAllLogsButton);
+    await user.keyboard('{/Meta}');
 
     expect(window.open).toHaveBeenCalledWith(expectedUrl, '_blank');
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('should close drawer when close button is clicked', () => {
+  it('should close drawer when close button is clicked', async () => {
+    const user = userEvent.setup();
     const onCloseMock = vi.fn();
     const props = { ...defaultProps, onClose: onCloseMock };
 
-    render(<RiskCategoryDrawer {...props} />);
+    renderWithProviders(<RiskCategoryDrawer {...props} />);
 
-    const closeButton = screen.getByLabelText('close drawer');
-    fireEvent.click(closeButton);
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    await user.click(closeButton);
 
     expect(onCloseMock).toHaveBeenCalled();
   });
 
   it('should display correct pass/fail statistics', () => {
-    render(<RiskCategoryDrawer {...defaultProps} />);
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
     expect(screen.getByText('8')).toBeInTheDocument(); // numPassed
     expect(screen.getByText('10')).toBeInTheDocument(); // total (8 + 2)
     expect(screen.getByText('80%')).toBeInTheDocument(); // pass rate
+  });
+
+  it('keeps the populated drawer full width on mobile while preserving the desktop width', () => {
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    const drawer = screen.getByRole('dialog');
+
+    expect(drawer).toHaveClass('w-full', 'sm:w-[750px]', 'sm:max-w-[750px]');
+    expect(drawer).not.toHaveClass('w-[750px]');
+  });
+
+  it('stacks drawer tabs on narrow screens', () => {
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
+
+    expect(screen.getByRole('tablist')).toHaveClass('grid-cols-1', 'sm:grid-cols-3', 'sm:!h-10');
   });
 
   it('displays malformed JSON prompts without crashing', () => {
@@ -159,7 +179,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       ],
     };
 
-    render(<RiskCategoryDrawer {...propsWithMalformedJson} />);
+    renderWithProviders(<RiskCategoryDrawer {...propsWithMalformedJson} />);
 
     expect(screen.getByText(malformedJsonPrompt)).toBeInTheDocument();
   });
@@ -192,7 +212,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       ],
     };
 
-    render(<RiskCategoryDrawer {...props} />);
+    renderWithProviders(<RiskCategoryDrawer {...props} />);
 
     expect(stringifySpy).toHaveBeenCalledWith(complexOutput);
     expect(screen.getByText(JSON.stringify(complexOutput))).toBeInTheDocument();
@@ -211,10 +231,9 @@ describe('RiskCategoryDrawer Component Invalid Category', () => {
       evalId: 'test-eval-123',
       numPassed: 0,
       numFailed: 0,
-      strategyStats: {},
     };
 
-    const { container } = render(<RiskCategoryDrawer {...props} />);
+    const { container } = renderWithProviders(<RiskCategoryDrawer {...props} />);
 
     expect(container.firstChild).toBeNull();
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -223,5 +242,27 @@ describe('RiskCategoryDrawer Component Invalid Category', () => {
     );
 
     consoleErrorSpy.mockRestore();
+  });
+});
+
+describe('RiskCategoryDrawer Component Empty State', () => {
+  it('keeps the empty drawer full width on mobile while preserving the desktop width', () => {
+    renderWithProviders(
+      <RiskCategoryDrawer
+        open
+        onClose={vi.fn()}
+        category="bola"
+        failures={[]}
+        passes={[]}
+        evalId="test-eval-123"
+        numPassed={0}
+        numFailed={0}
+      />,
+    );
+
+    const drawer = screen.getByRole('dialog');
+
+    expect(drawer).toHaveClass('w-full', 'sm:w-[500px]', 'sm:max-w-[500px]');
+    expect(drawer).not.toHaveClass('w-[500px]');
   });
 });

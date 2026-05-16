@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
 import { loadApiProvider } from '../../src/providers/index';
+import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
+
 import type { ApiProvider } from '../../src/types/index';
 
 vi.mock('../../src/providers', async (importOriginal) => {
@@ -33,6 +35,26 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(undefined)).toBe(false);
     });
 
+    it('should return false for provider-like values without an id function', () => {
+      expect(hasWebSearchCapability('openai:responses:gpt-5.5-2026-04-23' as any)).toBe(false);
+      expect(hasWebSearchCapability({ id: 'openai:responses:gpt-5.5-2026-04-23' } as any)).toBe(
+        false,
+      );
+    });
+
+    it('should return false when a provider id function throws', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => {
+          throw new Error('bad provider id');
+        },
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      };
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
     it('should return true for Perplexity provider', () => {
       const provider: Partial<ApiProvider> = {
         id: () => 'perplexity:sonar-pro',
@@ -49,7 +71,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for Google provider with googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
         config: {
           tools: [{ googleSearch: {} }],
         },
@@ -59,7 +81,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for Google provider without googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
         config: {
           tools: [{ codeExecution: {} }],
         },
@@ -69,7 +91,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for Vertex provider with googleSearch tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'vertex:gemini-3-pro-preview',
+        id: () => 'vertex:gemini-3.1-pro-preview',
         config: {
           tools: [{ googleSearch: {} }],
         },
@@ -85,6 +107,27 @@ describe('webSearchUtils', () => {
         },
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return true for xAI Responses provider with web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'xai:responses:grok-4.3',
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return false for xAI chat provider with Responses-only web_search tool', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'xai:grok-4.3',
+        config: {
+          tools: [{ type: 'web_search' }],
+        },
+      };
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
     it('should return false for xAI provider without search_parameters', () => {
@@ -107,7 +150,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for OpenAI responses provider with web_search_preview tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.5-2026-04-23',
         config: {
           tools: [{ type: 'web_search_preview' }],
         },
@@ -115,9 +158,81 @@ describe('webSearchUtils', () => {
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
     });
 
+    it('should return true for a real OpenAI Responses provider whose id omits the responses prefix', () => {
+      const provider = new OpenAiResponsesProvider('gpt-5.5-2026-04-23', {
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      expect(provider.id()).toBe('openai:gpt-5.5-2026-04-23');
+      expect(hasWebSearchCapability(provider)).toBe(true);
+    });
+
+    it('should return false for a generic OpenAI provider whose id omits the responses prefix', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:gpt-4.1',
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      };
+
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
+    it('should return true for Codex SDK with live web search enabled', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:codex-sdk',
+        config: {
+          web_search_mode: 'live',
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return true for Codex SDK with cached web search enabled', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:codex-sdk',
+        config: {
+          web_search_mode: 'cached',
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return true for Codex SDK with web_search_enabled set', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:codex:gpt-5.4',
+        config: {
+          web_search_enabled: true,
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(true);
+    });
+
+    it('should return false for Codex SDK when web search is disabled', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'openai:codex-sdk',
+        config: {
+          web_search_mode: 'disabled',
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
+    it('should return false for provider IDs that only contain openai:codex later in the ID', () => {
+      const provider: Partial<ApiProvider> = {
+        id: () => 'custom:openai:codex-sdk',
+        config: {
+          web_search_mode: 'live',
+        },
+      };
+      expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
+    });
+
     it('should return false for OpenAI responses provider without web_search_preview', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.5-2026-04-23',
         config: {
           tools: [{ type: 'code_interpreter' }],
         },
@@ -137,7 +252,7 @@ describe('webSearchUtils', () => {
 
     it('should return true for Anthropic provider with web_search tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-5-20251101',
+        id: () => 'anthropic:messages:claude-opus-4-6',
         config: {
           tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         },
@@ -147,7 +262,7 @@ describe('webSearchUtils', () => {
 
     it('should return false for Anthropic provider without web_search tool', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-5-20251101',
+        id: () => 'anthropic:messages:claude-opus-4-6',
         config: {
           tools: [{ type: 'computer_use' }],
         },
@@ -157,14 +272,14 @@ describe('webSearchUtils', () => {
 
     it('should return false for Anthropic provider without config', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-5-20251101',
+        id: () => 'anthropic:messages:claude-opus-4-6',
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
     });
 
     it('should return false for provider with no tools configured', () => {
       const provider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
+        id: () => 'openai:responses:gpt-5.5-2026-04-23',
         config: {},
       };
       expect(hasWebSearchCapability(provider as ApiProvider)).toBe(false);
@@ -181,6 +296,20 @@ describe('webSearchUtils', () => {
 
   describe('loadWebSearchProvider', () => {
     const mockLoadApiProvider = vi.mocked(loadApiProvider);
+    const mockAnthropicWebSearchProvider = (): Partial<ApiProvider> => ({
+      id: () => 'anthropic:messages:claude-opus-4-6',
+      config: {
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+      },
+    });
+    const mockOpenAiWebSearchProvider = (): Partial<ApiProvider> =>
+      ({
+        id: () => 'openai:gpt-5.5-2026-04-23',
+        constructor: { name: 'OpenAiResponsesProvider' },
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
+      }) as any;
 
     it('should return null when no providers can be loaded', async () => {
       mockLoadApiProvider.mockRejectedValue(new Error('API key not found'));
@@ -190,17 +319,33 @@ describe('webSearchUtils', () => {
       expect(result).toBeNull();
     });
 
-    it('should load Anthropic provider first when preferAnthropic is true', async () => {
-      const mockProvider: Partial<ApiProvider> = {
-        id: () => 'anthropic:messages:claude-opus-4-5-20251101',
+    it('should skip loaded providers whose id function throws', async () => {
+      const malformedProvider: Partial<ApiProvider> = {
+        id: () => {
+          throw new Error('bad provider id');
+        },
+        config: {
+          tools: [{ type: 'web_search_preview' }],
+        },
       };
+      mockLoadApiProvider
+        .mockResolvedValueOnce(malformedProvider as ApiProvider)
+        .mockRejectedValue(new Error('API key not found'));
+
+      const result = await loadWebSearchProvider(false);
+
+      expect(result).toBeNull();
+    });
+
+    it('should load Anthropic provider first when preferAnthropic is true', async () => {
+      const mockProvider = mockAnthropicWebSearchProvider();
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
       const result = await loadWebSearchProvider(true);
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'anthropic:messages:claude-opus-4-5-20251101',
+        'anthropic:messages:claude-opus-4-6',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -214,16 +359,14 @@ describe('webSearchUtils', () => {
     });
 
     it('should load OpenAI provider first when preferAnthropic is false', async () => {
-      const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
-      };
+      const mockProvider = mockOpenAiWebSearchProvider();
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
       const result = await loadWebSearchProvider(false);
 
       expect(result).toBe(mockProvider);
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.1',
+        'openai:responses:gpt-5.5-2026-04-23',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -237,9 +380,7 @@ describe('webSearchUtils', () => {
     });
 
     it('should fallback to next provider when first fails', async () => {
-      const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
-      };
+      const mockProvider = mockOpenAiWebSearchProvider();
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic API key not found'))
         .mockResolvedValueOnce(mockProvider as ApiProvider);
@@ -281,7 +422,7 @@ describe('webSearchUtils', () => {
 
     it('should configure Google provider with googleSearch tool', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'google:gemini-3-pro-preview',
+        id: () => 'google:gemini-3.1-pro-preview',
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -292,7 +433,7 @@ describe('webSearchUtils', () => {
       await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'google:gemini-3-pro-preview',
+        'google:gemini-3.1-pro-preview',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
@@ -303,9 +444,9 @@ describe('webSearchUtils', () => {
       );
     });
 
-    it('should configure xAI provider with search_parameters', async () => {
+    it('should configure xAI provider with Responses API web search', async () => {
       const mockProvider: Partial<ApiProvider> = {
-        id: () => 'xai:grok-4-1-fast-reasoning',
+        id: () => 'xai:responses:grok-4.3',
       };
       mockLoadApiProvider
         .mockRejectedValueOnce(new Error('Anthropic failed'))
@@ -318,11 +459,11 @@ describe('webSearchUtils', () => {
       await loadWebSearchProvider(true);
 
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'xai:grok-4-1-fast-reasoning',
+        'xai:responses:grok-4.3',
         expect.objectContaining({
           options: expect.objectContaining({
             config: expect.objectContaining({
-              search_parameters: { mode: 'on' },
+              tools: [{ type: 'web_search' }],
             }),
           }),
         }),
@@ -330,16 +471,14 @@ describe('webSearchUtils', () => {
     });
 
     it('should use default value (false) for preferAnthropic parameter', async () => {
-      const mockProvider: Partial<ApiProvider> = {
-        id: () => 'openai:responses:gpt-5.1',
-      };
+      const mockProvider = mockOpenAiWebSearchProvider();
       mockLoadApiProvider.mockResolvedValueOnce(mockProvider as ApiProvider);
 
       await loadWebSearchProvider();
 
       // Should try OpenAI first (since preferAnthropic defaults to false)
       expect(mockLoadApiProvider).toHaveBeenCalledWith(
-        'openai:responses:gpt-5.1',
+        'openai:responses:gpt-5.5-2026-04-23',
         expect.anything(),
       );
     });

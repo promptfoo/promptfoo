@@ -1,10 +1,10 @@
-import { vi } from 'vitest';
+import fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEnvString } from '../src/envars';
 import { fetchCsvFromSharepoint } from '../src/microsoftSharepoint';
 import { fetchWithProxy } from '../src/util/fetch/index';
-import { getEnvString } from '../src/envars';
 import { createMockResponse } from './util/utils';
-import fs from 'fs';
 
 vi.mock('../src/util/fetch/index.ts', () => ({
   fetchWithProxy: vi.fn(),
@@ -14,7 +14,26 @@ vi.mock('../src/envars', () => ({
   getEnvString: vi.fn(),
 }));
 
-vi.mock('fs');
+const mockReadFileSync = vi.hoisted(() => vi.fn());
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFileSync: mockReadFileSync,
+    },
+    readFileSync: mockReadFileSync,
+  };
+});
+
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: mockReadFileSync,
+  },
+  readFile: mockReadFileSync,
+}));
 
 // Mock the MSAL node module
 const mockMsalClient = {

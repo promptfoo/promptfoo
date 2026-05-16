@@ -67,7 +67,7 @@ Anthropic Claude models support web search through the `web_search_20250305` too
 
 ```yaml
 grading:
-  provider: anthropic:messages:claude-opus-4-5-20251101
+  provider: anthropic:messages:claude-opus-4-6
   providerOptions:
     config:
       tools:
@@ -104,7 +104,7 @@ Google's Gemini models support web search through the `googleSearch` tool:
 
 ```yaml
 grading:
-  provider: google:gemini-3-pro-preview
+  provider: google:gemini-3.1-pro-preview
   providerOptions:
     config:
       tools:
@@ -113,15 +113,15 @@ grading:
 
 ### 5. xAI Grok
 
-xAI's Grok models have built-in web search capabilities:
+xAI's Grok models can use server-side web search tools through the Responses API:
 
 ```yaml
 grading:
-  provider: xai:grok-4-1-fast-reasoning
+  provider: xai:responses:grok-4.3
   providerOptions:
     config:
-      search_parameters:
-        mode: 'on'
+      tools:
+        - type: web_search
 ```
 
 ## Use Cases
@@ -205,7 +205,7 @@ assert:
 1. **Write clear rubrics**: Be specific about what information you expect
 2. **Use thresholds appropriately**: Higher thresholds for factual accuracy, lower for general correctness
 3. **Include acceptable ranges**: For volatile data like prices, specify acceptable accuracy (e.g., "within 5%")
-4. **Enable caching**: Use `promptfoo eval --cache` during development to avoid repeated searches
+4. **Use caching**: Caching is enabled by default; use `promptfoo eval --no-cache` to force fresh searches
 5. **Test variable substitution**: Ensure your rubrics work with different variable values
 
 ## Expected Behavior
@@ -280,7 +280,7 @@ Web search adds cost on top of model tokens.
 
 **Cost reduction strategies:**
 
-- Use `promptfoo eval --cache` during development
+- Caching is enabled by default to reduce API calls
 - Reserve `search-rubric` for tests that truly need real-time verification
 - Use `llm-rubric` for static fact-checking that doesn't require current data
 - Consider Perplexity's `sonar` model for built-in search without per-call fees

@@ -1,5 +1,5 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { matchesContextRelevance } from '../../src/matchers';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesContextRelevance } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
@@ -35,6 +35,9 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.score).toBeCloseTo(0.33, 2);
     expect(result.pass).toBe(true); // 0.33 >= 0.3
     expect(result.reason).toContain('Context relevance');
+    expect(result.metadata?.graderOutputs).toEqual({
+      final: 'Paris is the capital of France',
+    });
     expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France']);
     expect(result.metadata?.totalContextUnits).toBe(3);
     expect(result.metadata?.relevantSentenceCount).toBe(1);
@@ -61,6 +64,9 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     expect(result.score).toBe(0);
     expect(result.pass).toBe(false);
     expect(result.metadata?.insufficientInformation).toBe(true);
+    expect(result.metadata?.graderOutputs).toEqual({
+      final: 'Insufficient Information',
+    });
     expect(result.metadata?.extractedSentences).toEqual([]);
     expect(result.metadata?.relevantSentenceCount).toBe(0);
   });
@@ -193,6 +199,27 @@ This policy excludes all staff going on any outgoing structured programs, short 
   });
 
   describe('Edge Cases', () => {
+    it('should dedupe repeated relevant sentences and keep scores at most 1', async () => {
+      const query = 'What is the answer?';
+      const context = 'The answer is 42.';
+
+      const mockCallApi = vi.fn().mockImplementation(() => {
+        return Promise.resolve({
+          output: 'The answer is 42.\nThe answer is 42.\nThe answer is 42.',
+          tokenUsage: { total: 5, prompt: 3, completion: 2 },
+        });
+      });
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextRelevance(query, context, 0.5);
+
+      expect(result.score).toBe(1);
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.relevantSentenceCount).toBe(1);
+      expect(result.metadata?.extractedSentences).toEqual(['The answer is 42.']);
+    });
+
     it('should handle empty context', async () => {
       const query = 'What is the answer?';
       const context = '';

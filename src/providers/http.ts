@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 import http from 'http';
 import https from 'https';
 import path from 'path';
@@ -12,21 +12,46 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
-import { isJavascriptFile } from '../util/fileExtensions';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import {
+  maybeLoadConfigFromExternalFile,
+  maybeLoadFromExternalFile,
+  pathExists,
+} from '../util/file';
+import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
-import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
+import {
+  isSecretField,
+  looksLikeSecret,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrl,
+} from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  HttpMultipartConfigSchema,
+  type RenderedHttpMultipartBody,
+  renderHttpMultipartBody,
+} from './httpMultipart';
 import {
   createTransformRequest,
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import {
+  getRequestTimeoutMs,
+  type ToolFormat,
+  transformToolChoice,
+  transformTools,
+} from './shared';
+import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+
+export { loadTransformModule } from './transformUtils';
 
 import type {
   ApiProvider,
@@ -321,7 +346,7 @@ export async function generateSignature(
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
-          privateKey = fs.readFileSync(resolvedPath, 'utf8');
+          privateKey = await fs.readFile(resolvedPath, 'utf8');
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
         } else if (signatureAuth.certificateContent) {
@@ -365,7 +390,7 @@ export async function generateSignature(
         } else if (signatureAuth.keystorePath) {
           // Use file path (existing behavior)
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
-          keystoreData = fs.readFileSync(resolvedPath);
+          keystoreData = await fs.readFile(resolvedPath);
         } else {
           throw new Error(
             'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
@@ -461,7 +486,7 @@ export async function generateSignature(
               const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
               try {
-                const stat = await fs.promises.stat(resolvedPath);
+                const stat = await fs.stat(resolvedPath);
                 logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
               } catch (e) {
                 logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
@@ -523,15 +548,20 @@ export async function generateSignature(
                 `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
               );
 
-              // Read the private key directly from the key file
-              if (!fs.existsSync(resolvedKeyPath)) {
-                throw new Error(`Key file not found: ${resolvedKeyPath}`);
-              }
-              if (!fs.existsSync(resolvedCertPath)) {
+              // Verify the cert path resolves; the cert contents aren't consumed
+              // here, only its presence is validated for early operator feedback.
+              if (!(await pathExists(resolvedCertPath))) {
                 throw new Error(`Certificate file not found: ${resolvedCertPath}`);
               }
-
-              privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+              try {
+                // Read the key directly — readFile surfaces ENOENT with the path.
+                privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+              } catch (err) {
+                if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+                  throw new Error(`Key file not found: ${resolvedKeyPath}`);
+                }
+                throw err;
+              }
               logger.debug(
                 `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
               );
@@ -593,15 +623,15 @@ function needsSignatureRefresh(timestamp: number, validityMs: number, bufferMs?:
 }
 
 const TokenEstimationConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  multiplier: z.number().min(0.01).default(1.3),
+  enabled: z.boolean().prefault(false),
+  multiplier: z.number().min(0.01).prefault(1.3),
 });
 
 // Base signature auth fields
 const BaseSignatureAuthSchema = z.object({
-  signatureValidityMs: z.number().default(300000),
-  signatureDataTemplate: z.string().default('{{signatureTimestamp}}'),
-  signatureAlgorithm: z.string().default('SHA256'),
+  signatureValidityMs: z.number().prefault(300000),
+  signatureDataTemplate: z.string().prefault('{{signatureTimestamp}}'),
+  signatureAlgorithm: z.string().prefault('SHA256'),
   signatureRefreshBufferMs: z.number().optional(),
 });
 
@@ -611,7 +641,7 @@ const PemSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   privateKeyPath: z.string().optional(),
   privateKey: z.string().optional(),
 }).refine((data) => data.privateKeyPath !== undefined || data.privateKey !== undefined, {
-  message: 'Either privateKeyPath or privateKey must be provided for PEM type',
+  error: 'Either privateKeyPath or privateKey must be provided for PEM type',
 });
 
 // JKS signature auth schema
@@ -622,7 +652,7 @@ const JksSignatureAuthSchema = BaseSignatureAuthSchema.extend({
   keystorePassword: z.string().optional(),
   keyAlias: z.string().optional(),
 }).refine((data) => data.keystorePath !== undefined || data.keystoreContent !== undefined, {
-  message: 'Either keystorePath or keystoreContent must be provided for JKS type',
+  error: 'Either keystorePath or keystoreContent must be provided for JKS type',
 });
 
 // PFX signature auth schema
@@ -645,46 +675,50 @@ const PfxSignatureAuthSchema = BaseSignatureAuthSchema.extend({
     );
   },
   {
-    message:
+    error:
       'Either pfxPath, pfxContent, both certPath and keyPath, or both certContent and keyContent must be provided for PFX type',
   },
 );
 
 // Legacy signature auth schema (for backward compatibility)
-const LegacySignatureAuthSchema = BaseSignatureAuthSchema.extend({
-  privateKeyPath: z.string().optional(),
-  privateKey: z.string().optional(),
-  keystorePath: z.string().optional(),
-  keystorePassword: z.string().optional(),
-  keyAlias: z.string().optional(),
-  keyPassword: z.string().optional(),
-  pfxPath: z.string().optional(),
-  pfxPassword: z.string().optional(),
-  certPath: z.string().optional(),
-  keyPath: z.string().optional(),
-}).passthrough();
+const LegacySignatureAuthSchema = z.looseObject(
+  BaseSignatureAuthSchema.extend({
+    privateKeyPath: z.string().optional(),
+    privateKey: z.string().optional(),
+    keystorePath: z.string().optional(),
+    keystorePassword: z.string().optional(),
+    keyAlias: z.string().optional(),
+    keyPassword: z.string().optional(),
+    pfxPath: z.string().optional(),
+    pfxPassword: z.string().optional(),
+    certPath: z.string().optional(),
+    keyPath: z.string().optional(),
+  }).shape,
+);
 
 // Generic certificate auth schema (for UI-based certificate uploads)
-const GenericCertificateAuthSchema = BaseSignatureAuthSchema.extend({
-  certificateContent: z.string().optional(),
-  certificatePassword: z.string().optional(),
-  certificateFilename: z.string().optional(),
-  type: z.enum(['pem', 'jks', 'pfx']).optional(),
-  // Include type-specific fields that might be present or added by transform
-  pfxContent: z.string().optional(),
-  pfxPassword: z.string().optional(),
-  pfxPath: z.string().optional(),
-  keystoreContent: z.string().optional(),
-  keystorePassword: z.string().optional(),
-  keystorePath: z.string().optional(),
-  privateKey: z.string().optional(),
-  privateKeyPath: z.string().optional(),
-  keyAlias: z.string().optional(),
-  certPath: z.string().optional(),
-  keyPath: z.string().optional(),
-  certContent: z.string().optional(),
-  keyContent: z.string().optional(),
-}).passthrough();
+const GenericCertificateAuthSchema = z.looseObject(
+  BaseSignatureAuthSchema.extend({
+    certificateContent: z.string().optional(),
+    certificatePassword: z.string().optional(),
+    certificateFilename: z.string().optional(),
+    type: z.enum(['pem', 'jks', 'pfx']).optional(),
+    // Include type-specific fields that might be present or added by transform
+    pfxContent: z.string().optional(),
+    pfxPassword: z.string().optional(),
+    pfxPath: z.string().optional(),
+    keystoreContent: z.string().optional(),
+    keystorePassword: z.string().optional(),
+    keystorePath: z.string().optional(),
+    privateKey: z.string().optional(),
+    privateKeyPath: z.string().optional(),
+    keyAlias: z.string().optional(),
+    certPath: z.string().optional(),
+    keyPath: z.string().optional(),
+    certContent: z.string().optional(),
+    keyContent: z.string().optional(),
+  }).shape,
+);
 
 // TLS Certificate configuration schema for HTTPS connections
 const TlsCertificateSchema = z
@@ -713,7 +747,7 @@ const TlsCertificateSchema = z
     passphrase: z.string().optional().describe('Passphrase for PFX certificate'),
 
     // Security options
-    rejectUnauthorized: z.boolean().default(true),
+    rejectUnauthorized: z.boolean().prefault(true),
     servername: z.string().optional(),
 
     // Cipher configuration
@@ -742,30 +776,136 @@ const TlsCertificateSchema = z
       return true;
     },
     {
-      message:
+      error:
         'Both certificate and key must be provided for client certificate authentication (unless using PFX)',
     },
   );
 
+const OAuthClientCredentialsSchema = z.object({
+  type: z.literal('oauth'),
+  grantType: z.literal('client_credentials'),
+  clientId: z.string(),
+  clientSecret: z.string(),
+  tokenUrl: z.string(),
+  scopes: z.array(z.string()).optional(),
+});
+
+const OAuthPasswordSchema = z.object({
+  type: z.literal('oauth'),
+  grantType: z.literal('password'),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  tokenUrl: z.string(),
+  scopes: z.array(z.string()).optional(),
+  username: z.string(),
+  password: z.string(),
+});
+
+const BasicAuthSchema = z.object({
+  type: z.literal('basic'),
+  username: z.string(),
+  password: z.string(),
+});
+
+const BearerAuthSchema = z.object({
+  type: z.literal('bearer'),
+  token: z.string(),
+});
+
+const ApiKeyAuthSchema = z.object({
+  type: z.literal('api_key'),
+  value: z.string(),
+  placement: z.enum(['header', 'query']),
+  keyName: z.string(),
+});
+
+const FileAuthSchema = z.object({
+  type: z.literal('file'),
+  path: z.string().min(1),
+});
+
+const AuthSchema = z.union([
+  OAuthClientCredentialsSchema,
+  OAuthPasswordSchema,
+  BasicAuthSchema,
+  BearerAuthSchema,
+  ApiKeyAuthSchema,
+  FileAuthSchema,
+]);
+
+const FileAuthResultSchema = z.object({
+  token: z.string().min(1),
+  expiration: z.number().finite().nullable().optional(),
+});
+
+type FileAuthResult = {
+  token: string;
+  expiration?: number;
+};
+
+/**
+ * Configuration for a separate session endpoint that must be called before the main API.
+ * The session endpoint returns a session ID that is then used in the main request.
+ */
+export const SessionEndpointConfigSchema = z.object({
+  /** URL of the session endpoint */
+  url: z.string(),
+  /** HTTP method for the session endpoint (default: POST) */
+  method: z.enum(['GET', 'POST']).optional().default('POST'),
+  /** Headers to send with the session endpoint request */
+  headers: z.record(z.string(), z.string()).optional(),
+  /** Request body for the session endpoint (for POST requests) */
+  body: z.union([z.record(z.string(), z.any()), z.string()]).optional(),
+  /**
+   * Path to extract sessionId from response.
+   * Can be a JavaScript expression like 'data.body.sessionId' or 'data.headers["x-session-id"]'
+   */
+  responseParser: z.union([z.string(), z.function()]),
+});
+
+export type SessionEndpointConfig = z.infer<typeof SessionEndpointConfigSchema>;
+
 export const HttpProviderConfigSchema = z.object({
-  body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
-  headers: z.record(z.string()).optional(),
+  body: z.union([z.record(z.string(), z.any()), z.string(), z.array(z.any())]).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
-  queryParams: z.record(z.string()).optional(),
+  multipart: HttpMultipartConfigSchema.optional(),
+  queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
+  /**
+   * Tools to make available to the model, in OpenAI format.
+   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
+   */
+  tools: z.array(z.any()).optional(),
+  /**
+   * Tool choice configuration, in OpenAI format.
+   * Use with `transformToolsFormat` to auto-convert to provider-specific format.
+   */
+  tool_choice: z.any().optional(),
+  /**
+   * Transform OpenAI-format tools/tool_choice to provider-specific format.
+   * Use 'openai' for OpenAI-compatible endpoints, 'anthropic' for Anthropic, etc.
+   */
+  transformToolsFormat: z.enum(['openai', 'anthropic', 'bedrock', 'google']).optional(),
   useHttps: z
     .boolean()
     .optional()
     .describe('Use HTTPS for the request. This only works with the raw request option'),
+  /**
+   * Configuration for a separate session endpoint.
+   * When configured, the provider will call this endpoint to get a session ID
+   * before making the main API request.
+   */
+  session: SessionEndpointConfigSchema.optional(),
   sessionParser: z.union([z.string(), z.function()]).optional(),
-  sessionSource: z.enum(['client', 'server']).optional(),
+  sessionSource: z.enum(['client', 'server', 'endpoint']).optional(),
   stateful: z.boolean().optional(),
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   url: z.string().optional(),
   validateStatus: z
-    .union([z.string(), z.function().returns(z.boolean()).args(z.number())])
+    .union([z.string(), z.function({ input: [z.number()], output: z.boolean() })])
     .optional(),
   /**
    * @deprecated use transformResponse instead
@@ -773,6 +913,7 @@ export const HttpProviderConfigSchema = z.object({
   responseParser: z.union([z.string(), z.function()]).optional(),
   // Token estimation configuration
   tokenEstimation: TokenEstimationConfigSchema.optional(),
+  auth: AuthSchema.optional(),
   // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
     .union([
@@ -788,7 +929,7 @@ export const HttpProviderConfigSchema = z.object({
   tls: TlsCertificateSchema.optional(),
 });
 
-type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
+export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;
 
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
@@ -802,49 +943,63 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
   });
 }
 
+function removeMultipartContentType(headers: Record<string, string>): void {
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'content-type') {
+      delete headers[key];
+    }
+  }
+}
+
+function sanitizeMultipartFields(fields: RenderedHttpMultipartBody['fields']) {
+  return fields.map((field) => ({
+    ...field,
+    value: isSecretField(field.field) || looksLikeSecret(field.value) ? REDACTED : field.value,
+  }));
+}
+
+function sanitizeMultipartFiles(files: RenderedHttpMultipartBody['files']) {
+  return files.map((file) => ({
+    field: isSecretField(file.field) ? REDACTED : file.field,
+    filename: looksLikeSecret(file.filename) ? REDACTED : file.filename,
+    contentType: file.contentType,
+    sizeBytes: file.sizeBytes,
+    source: file.source,
+  }));
+}
+
+function validateMultipartConfig(config: HttpProviderConfig): void {
+  if (!config.multipart) {
+    return;
+  }
+  if (config.request) {
+    throw new Error('HTTP provider config cannot include both request and multipart');
+  }
+  if (config.body != null) {
+    throw new Error('HTTP provider config cannot include both body and multipart');
+  }
+}
+
 interface SessionParserData {
   headers?: Record<string, string> | null;
   body?: Record<string, any> | string | null;
 }
 
-/**
- * Loads a module from a file:// reference if needed
- * This function should be called before passing transforms to createTransformResponse/createTransformRequest
- *
- * @param transform - The transform config (string or function)
- * @returns The loaded function, or the original value if not a file:// reference
- */
-export async function loadTransformModule(
-  transform: string | Function | undefined,
-): Promise<string | Function | undefined> {
-  if (!transform) {
-    return transform;
+function hasOwnProperty(obj: Record<string, any>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function parseFileAuthReference(filePath: string): { filePath: string; functionName?: string } {
+  return filePath.startsWith('file://') ? parseFileUrl(filePath) : { filePath };
+}
+
+function formatFileAuthFreshness(expiration?: number | null): string {
+  if (expiration == null) {
+    return 'never expires';
   }
-  if (typeof transform === 'function') {
-    return transform;
-  }
-  if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Transform module malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  }
-  // For string expressions, return as-is
-  return transform;
+
+  const freshForSeconds = Math.max(0, Math.ceil((expiration - Date.now()) / 1000));
+  return `expires in ${freshForSeconds} seconds`;
 }
 
 export async function createSessionParser(
@@ -857,14 +1012,7 @@ export async function createSessionParser(
     return (response) => parser(response);
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
+    const { filename, functionName } = parseFileTransformReference(parser);
     const requiredModule = await importModule(
       path.resolve(cliState.basePath || '', filename),
       functionName,
@@ -923,24 +1071,19 @@ export function processJsonBody(
         }
         return result;
       } else if (typeof obj === 'string') {
-        // Only parse strings that are clearly JSON objects or arrays
-        // This preserves strings that would parse to primitives (numbers, booleans, null)
         const trimmed = obj.trim();
         if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          // Parse JSON objects and arrays (e.g. from pre-serialized template vars)
           try {
             const parsed = JSON.parse(obj);
-            // Only return parsed value if it's an object or array
-            // This prevents primitive values (numbers, booleans, null) from being converted
             if (typeof parsed === 'object' && parsed !== null) {
               return parsed;
             }
-            // If it parsed to a primitive, keep the original string
             return obj;
           } catch {
             return obj;
           }
         }
-        // Not a JSON object/array, return as-is
         return obj;
       }
       return obj;
@@ -1009,9 +1152,17 @@ export function processTextBody(body: string, vars: Record<string, any>): string
   }
 }
 
-function parseRawRequest(input: string) {
+/**
+ * Normalize line endings in raw HTTP request strings.
+ * Converts all line endings to \r\n (HTTP standard) and trims whitespace.
+ */
+function normalizeHttpLineEndings(input: string): string {
   const normalized = input.replace(/\r\n/g, '\n').trim();
-  const adjusted = normalized.replace(/\n/g, '\r\n') + '\r\n\r\n';
+  return normalized.replace(/\n/g, '\r\n');
+}
+
+function parseRawRequest(input: string) {
+  const adjusted = normalizeHttpLineEndings(input) + '\r\n\r\n';
   // If the injectVar is in a query param, we need to encode the URL in the first line
   const encoded = urlEncodeRawRequestPath(adjusted);
   try {
@@ -1030,18 +1181,36 @@ function parseRawRequest(input: string) {
     return {
       method: requestModel.method,
       url: requestModel.target,
-      headers: requestModel.headers.reduce(
+      headers: requestModel.headers.reduce<Record<string, string>>(
         (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
           return acc;
         },
-        {} as Record<string, string>,
+        {},
       ),
       body: requestModel.body,
     };
   } catch (err) {
     throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
   }
+}
+
+/**
+ * Extract the raw body from an HTTP request string.
+ * Used when http-z parses the body into params (e.g., multipart/form-data, application/x-www-form-urlencoded)
+ * instead of preserving the raw text.
+ */
+export function extractBodyFromRawRequest(rawRequest: string): string | undefined {
+  const adjusted = normalizeHttpLineEndings(rawRequest);
+
+  // Find header/body separator (blank line)
+  const separatorIndex = adjusted.indexOf('\r\n\r\n');
+  if (separatorIndex === -1) {
+    return undefined;
+  }
+
+  const body = adjusted.slice(separatorIndex + 4).trim();
+  return body.length > 0 ? body : undefined;
 }
 
 export function determineRequestBody(
@@ -1096,14 +1265,7 @@ export async function createValidateStatus(
 
   if (typeof validator === 'string') {
     if (validator.startsWith('file://')) {
-      let filename = validator.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
-      }
+      const { filename, functionName } = parseFileTransformReference(validator);
       try {
         const requiredModule = await importModule(
           path.resolve(cliState.basePath || '', filename),
@@ -1158,18 +1320,44 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
  */
 async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
   const tlsOptions: https.AgentOptions = {};
+  const basePath = cliState.basePath || '';
+  const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
+
+  // Kick off all independent file reads in parallel. JKS and cert/key are
+  // mutually exclusive, so at most we read CA + cert + key + PFX concurrently.
+  type ReadResult = { resolved: string; contents: string | Buffer } | undefined;
+  const readUtf8 = async (p: string | undefined): Promise<ReadResult> => {
+    if (!p) {
+      return undefined;
+    }
+    const resolved = safeResolve(basePath, p);
+    return { resolved, contents: await fs.readFile(resolved, 'utf8') };
+  };
+  const readBuffer = async (p: string | undefined): Promise<ReadResult> => {
+    if (!p) {
+      return undefined;
+    }
+    const resolved = safeResolve(basePath, p);
+    return { resolved, contents: await fs.readFile(resolved) };
+  };
+
+  const [caResult, certResult, keyResult, pfxResult] = await Promise.all([
+    tlsConfig.ca ? Promise.resolve(undefined) : readUtf8(tlsConfig.caPath),
+    !usingJks && !tlsConfig.cert ? readUtf8(tlsConfig.certPath) : Promise.resolve(undefined),
+    !usingJks && !tlsConfig.key ? readUtf8(tlsConfig.keyPath) : Promise.resolve(undefined),
+    tlsConfig.pfx ? Promise.resolve(undefined) : readBuffer(tlsConfig.pfxPath),
+  ]);
 
   // Load CA certificates
   if (tlsConfig.ca) {
     tlsOptions.ca = tlsConfig.ca;
-  } else if (tlsConfig.caPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.caPath);
-    tlsOptions.ca = fs.readFileSync(resolvedPath, 'utf8');
-    logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
+  } else if (caResult) {
+    tlsOptions.ca = caResult.contents;
+    logger.debug(`[HTTP Provider] Loaded CA certificate from ${caResult.resolved}`);
   }
 
   // Handle JKS certificates for TLS (extract cert and key)
-  if ((tlsConfig as any).jksPath || (tlsConfig as any).jksContent) {
+  if (usingJks) {
     try {
       const jksModule = await import('jks-js').catch(() => {
         throw new Error(
@@ -1178,7 +1366,6 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       });
       const jks = jksModule as any;
 
-      let keystoreData: Buffer;
       const keystorePassword =
         (tlsConfig as any).keystorePassword ||
         tlsConfig.passphrase ||
@@ -1190,15 +1377,14 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
         );
       }
 
+      let keystoreData: Buffer;
       if ((tlsConfig as any).jksContent) {
-        // Use base64 encoded content
         logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
         keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
       } else if ((tlsConfig as any).jksPath) {
-        // Use file path
-        const resolvedPath = safeResolve(cliState.basePath || '', (tlsConfig as any).jksPath);
+        const resolvedPath = safeResolve(basePath, (tlsConfig as any).jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
-        keystoreData = fs.readFileSync(resolvedPath);
+        keystoreData = await fs.readFile(resolvedPath);
       } else {
         throw new Error('JKS content or path is required');
       }
@@ -1245,19 +1431,17 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     // Load client certificate (non-JKS)
     if (tlsConfig.cert) {
       tlsOptions.cert = tlsConfig.cert;
-    } else if (tlsConfig.certPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
-      tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
+    } else if (certResult) {
+      tlsOptions.cert = certResult.contents;
+      logger.debug(`[HTTP Provider] Loaded client certificate from ${certResult.resolved}`);
     }
 
     // Load private key (non-JKS)
     if (tlsConfig.key) {
       tlsOptions.key = tlsConfig.key;
-    } else if (tlsConfig.keyPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
-      tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+    } else if (keyResult) {
+      tlsOptions.key = keyResult.contents;
+      logger.debug(`[HTTP Provider] Loaded private key from ${keyResult.resolved}`);
     }
   }
 
@@ -1279,10 +1463,9 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       tlsOptions.pfx = tlsConfig.pfx;
       logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
     }
-  } else if (tlsConfig.pfxPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
-    tlsOptions.pfx = fs.readFileSync(resolvedPath);
-    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
+  } else if (pfxResult) {
+    tlsOptions.pfx = pfxResult.contents;
+    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${pfxResult.resolved}`);
   }
 
   // Set passphrase if provided
@@ -1332,11 +1515,24 @@ export class HttpProvider implements ApiProvider {
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
+  private lastToken?: string;
+  private lastTokenExpiresAt?: number;
+  private tokenRefreshLock?: TokenRefreshLock;
   private httpsAgent?: Agent;
   private httpsAgentPromise?: Promise<Agent>;
+  /**
+   * Tracks session IDs that were fetched from the session endpoint.
+   * Used to distinguish sessions we created from client-generated UUIDs.
+   */
+  private fetchedSessions: Set<string> = new Set();
+  /**
+   * Parser for extracting session ID from session endpoint response.
+   */
+  private sessionEndpointParser?: Promise<(data: SessionParserData) => string>;
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
+    validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
@@ -1353,6 +1549,11 @@ export class HttpProvider implements ApiProvider {
     );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
 
+    // Initialize session endpoint parser if session config is provided
+    if (this.config.session) {
+      this.sessionEndpointParser = createSessionParser(this.config.session.responseParser);
+    }
+
     // Initialize HTTPS agent if TLS configuration is provided
     // Note: We can't use async in constructor, so we'll initialize on first use
     if (this.config.tls) {
@@ -1365,7 +1566,7 @@ export class HttpProvider implements ApiProvider {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
       invariant(
-        this.config.body || this.config.method === 'GET',
+        this.config.body || this.config.multipart || this.config.method === 'GET',
         `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
           this.config,
         )}`,
@@ -1416,7 +1617,257 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private async refreshSignatureIfNeeded(): Promise<void> {
+  private async refreshOAuthTokenIfNeeded(vars: Record<string, any> = {}): Promise<void> {
+    if (!this.config.auth || this.config.auth.type !== 'oauth') {
+      logger.debug('[HTTP Provider Auth]: No OAuth auth configured');
+      return;
+    }
+
+    // Render OAuth config values with template substitution
+    const nunjucks = getNunjucksEngine();
+    const baseConfig = {
+      ...this.config.auth,
+      clientId: this.config.auth.clientId
+        ? nunjucks.renderString(this.config.auth.clientId, vars)
+        : undefined,
+      clientSecret: this.config.auth.clientSecret
+        ? nunjucks.renderString(this.config.auth.clientSecret, vars)
+        : undefined,
+      tokenUrl: nunjucks.renderString(this.config.auth.tokenUrl, vars),
+      scopes: this.config.auth.scopes
+        ? this.config.auth.scopes.map((scope) => nunjucks.renderString(scope, vars))
+        : undefined,
+    };
+
+    // Add username/password for password grant type
+    const oauthConfig =
+      this.config.auth.grantType === 'password' && 'username' in this.config.auth
+        ? {
+            ...baseConfig,
+            username: this.config.auth.username
+              ? nunjucks.renderString(this.config.auth.username, vars)
+              : undefined,
+            password: this.config.auth.password
+              ? nunjucks.renderString(this.config.auth.password, vars)
+              : undefined,
+          }
+        : baseConfig;
+    if (this.hasValidCachedToken()) {
+      logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
+      return;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
+    await this.refreshTokenWithLock(() => this.performTokenRefresh(oauthConfig));
+  }
+
+  private async performTokenRefresh(oauthConfig: {
+    grantType: string;
+    clientId?: string;
+    clientSecret?: string;
+    tokenUrl: string;
+    scopes?: string[];
+    username?: string;
+    password?: string;
+  }): Promise<void> {
+    try {
+      // Prepare the token request body
+      const tokenRequestBody = new URLSearchParams();
+      tokenRequestBody.append('grant_type', oauthConfig.grantType);
+      if (oauthConfig.clientId) {
+        tokenRequestBody.append('client_id', oauthConfig.clientId);
+      }
+      if (oauthConfig.clientSecret) {
+        tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
+      }
+
+      // Add username and password for password grant type
+      if (oauthConfig.grantType === 'password') {
+        if (!oauthConfig.username || !oauthConfig.password) {
+          throw new Error('Username and password are required for password grant type');
+        }
+        tokenRequestBody.append('username', oauthConfig.username);
+        tokenRequestBody.append('password', oauthConfig.password);
+      }
+
+      if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
+        tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
+      }
+
+      // Make the token request
+      const httpsAgent = await this.getHttpsAgent();
+      const fetchOptions: any = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: tokenRequestBody.toString(),
+      };
+
+      if (httpsAgent) {
+        fetchOptions.dispatcher = httpsAgent;
+      }
+
+      const response = await fetchWithCache(
+        oauthConfig.tokenUrl,
+        fetchOptions,
+        getRequestTimeoutMs(),
+        'text',
+        true, // Always bust cache for token requests
+        0, // No retries for token requests
+      );
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(
+          `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
+        );
+      }
+
+      const tokenData = JSON.parse(response.data as string);
+
+      if (!tokenData.access_token) {
+        throw new Error('OAuth token response missing access_token');
+      }
+
+      this.lastToken = tokenData.access_token;
+
+      // Calculate expiration time
+      // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
+      const expiresInSeconds = tokenData.expires_in || 3600;
+      this.lastTokenExpiresAt = Date.now() + expiresInSeconds * 1000;
+
+      logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
+    } catch (err) {
+      logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
+      throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
+    }
+
+    invariant(this.lastToken, 'OAuth token should be defined at this point');
+  }
+
+  private hasValidCachedToken(now = Date.now()): boolean {
+    if (!this.lastToken) {
+      return false;
+    }
+
+    if (this.lastTokenExpiresAt == null) {
+      return this.config.auth?.type === 'file';
+    }
+
+    return now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
+  }
+
+  private async waitForInFlightTokenRefresh(): Promise<boolean> {
+    const refreshPromise = this.tokenRefreshLock?.promise;
+    if (refreshPromise == null) {
+      return false;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
+
+    try {
+      await refreshPromise;
+      if (this.hasValidCachedToken()) {
+        return true;
+      }
+      logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
+    } catch {
+      logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
+    }
+
+    return false;
+  }
+
+  private async refreshTokenWithLock(
+    refreshToken: () => Promise<void>,
+    onLockAcquired?: () => void,
+  ): Promise<void> {
+    while (this.tokenRefreshLock != null) {
+      if (await this.waitForInFlightTokenRefresh()) {
+        return;
+      }
+    }
+
+    const refreshLock = { promise: Promise.resolve() as Promise<void> };
+    this.tokenRefreshLock = refreshLock;
+    onLockAcquired?.();
+    refreshLock.promise = refreshToken();
+
+    try {
+      await refreshLock.promise;
+    } finally {
+      // Only clear the lock if it's still the one we created (prevents race conditions)
+      if (this.tokenRefreshLock === refreshLock) {
+        this.tokenRefreshLock = undefined;
+      }
+    }
+  }
+
+  private async refreshFileTokenIfNeeded(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    if (!this.config.auth || this.config.auth.type !== 'file') {
+      logger.debug('[HTTP Provider Auth]: No file auth configured');
+      return;
+    }
+
+    if (this.hasValidCachedToken()) {
+      logger.debug('[HTTP Provider Auth]: Using cached file auth token');
+      return;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
+    await this.refreshTokenWithLock(
+      () => this.performFileTokenRefresh(prompt, vars, context),
+      () => {
+        logger.debug('[HTTP Provider Auth]: Acquired file auth refresh lock');
+      },
+    );
+  }
+
+  private async performFileTokenRefresh(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    invariant(this.config.auth?.type === 'file', 'File auth should be configured');
+
+    const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
+    const defaultFunctionName = filePath.endsWith('.py') ? 'get_auth' : 'default';
+    const authContext: CallApiContextParams = {
+      ...(context ?? {}),
+      prompt: context?.prompt ?? ({ raw: prompt, label: prompt } as CallApiContextParams['prompt']),
+      vars,
+    };
+
+    try {
+      logger.debug(
+        `[HTTP Provider Auth]: Invoking file auth function ${filePath}#${functionName ?? defaultFunctionName}`,
+      );
+      const authFn = await loadFunction<
+        (authContext: CallApiContextParams) => Promise<FileAuthResult> | FileAuthResult
+      >({
+        filePath,
+        functionName,
+        defaultFunctionName,
+      });
+      const result = FileAuthResultSchema.parse(await authFn(authContext));
+      this.lastToken = result.token;
+      this.lastTokenExpiresAt = result.expiration ?? undefined;
+      logger.info(
+        `[HTTP Provider Auth]: Successfully refreshed file auth token (${formatFileAuthFreshness(result.expiration)})`,
+      );
+    } catch (err) {
+      logger.error(`[HTTP Provider Auth]: Failed to refresh file auth token: ${String(err)}`);
+      throw new Error(`Failed to refresh file auth token: ${String(err)}`);
+    }
+
+    invariant(this.lastToken, 'File auth token should be defined at this point');
+  }
+
+  private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
     if (!this.config.signatureAuth) {
       logger.debug('[HTTP Provider Auth]: No signature auth configured');
       return;
@@ -1436,10 +1887,19 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider Auth]: Generating new signature');
       this.lastSignatureTimestamp = Date.now();
 
+      // Render privateKey with template substitution
+      const nunjucks = getNunjucksEngine();
+      const renderedConfig: any = {
+        ...signatureAuth,
+        privateKey: signatureAuth.privateKey
+          ? nunjucks.renderString(signatureAuth.privateKey, vars)
+          : undefined,
+      };
+
       // Determine the signature auth type for legacy configurations
-      let authConfig = signatureAuth;
-      if (!('type' in signatureAuth)) {
-        authConfig = { ...signatureAuth, type: 'pem' };
+      let authConfig = renderedConfig;
+      if (!('type' in renderedConfig)) {
+        authConfig = { ...renderedConfig, type: 'pem' };
       }
 
       this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
@@ -1450,6 +1910,139 @@ export class HttpProvider implements ApiProvider {
 
     invariant(this.lastSignature, 'Signature should be defined at this point');
     invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+  }
+
+  /**
+   * Resolves the session ID to use for the main API request.
+   *
+   * For session endpoint configurations, this method handles the logic of when to
+   * fetch a new session vs reuse an existing one:
+   *
+   * - Hydra/Crescendo (shared session): The strategy passes the sessionId we returned
+   *   in a previous response. We recognize it (it's in fetchedSessions) and reuse it.
+   *
+   * - Meta-agent (fresh session): The strategy may pass a client-generated UUID or
+   *   no sessionId. We don't recognize it, so we fetch a new session.
+   *
+   * @param vars - Variables including potential sessionId from context
+   * @returns The session ID to use, or undefined if no session endpoint is configured
+   */
+  private async resolveSessionId(vars: Record<string, any>): Promise<string | undefined> {
+    if (!this.config.session || !this.sessionEndpointParser) {
+      return undefined;
+    }
+
+    const contextSessionId = vars.sessionId as string | undefined;
+
+    // If we have a sessionId from context AND it's one we fetched, reuse it
+    if (contextSessionId && this.fetchedSessions.has(contextSessionId)) {
+      logger.debug(
+        `[HTTP Provider Session]: Reusing existing session from context: ${contextSessionId}`,
+      );
+      return contextSessionId;
+    }
+
+    // Otherwise, fetch a new session from the endpoint
+    logger.debug('[HTTP Provider Session]: Fetching new session from endpoint');
+    const newSessionId = await this.fetchSessionFromEndpoint(vars);
+    this.fetchedSessions.add(newSessionId);
+    logger.debug(`[HTTP Provider Session]: Fetched new session: ${newSessionId}`);
+    return newSessionId;
+  }
+
+  /**
+   * Fetches a session ID from the configured session endpoint.
+   */
+  private async fetchSessionFromEndpoint(vars: Record<string, any>): Promise<string> {
+    invariant(this.config.session, 'Session config should be defined');
+    invariant(this.sessionEndpointParser, 'Session endpoint parser should be defined');
+
+    const sessionConfig = this.config.session;
+    const nunjucks = getNunjucksEngine();
+
+    // Render URL with variables
+    const url = nunjucks.renderString(sessionConfig.url, vars);
+
+    // Render headers with variables
+    const headers: Record<string, string> = {};
+    if (sessionConfig.headers) {
+      for (const [key, value] of Object.entries(sessionConfig.headers)) {
+        headers[key.toLowerCase()] = nunjucks.renderString(value, vars);
+      }
+    }
+
+    // Prepare request body
+    let body: string | undefined;
+    if (sessionConfig.body && sessionConfig.method !== 'GET') {
+      if (typeof sessionConfig.body === 'string') {
+        body = nunjucks.renderString(sessionConfig.body, vars);
+      } else {
+        // It's an object, render each value and JSON stringify
+        const renderedBody = renderVarsInObject(sessionConfig.body, vars);
+        body = JSON.stringify(renderedBody);
+        if (!headers['content-type']) {
+          headers['content-type'] = 'application/json';
+        }
+      }
+    }
+
+    const method = sessionConfig.method || 'POST';
+
+    logger.debug(`[HTTP Provider Session]: Calling session endpoint ${method} ${sanitizeUrl(url)}`);
+
+    // Get HTTPS agent if configured
+    const httpsAgent = await this.getHttpsAgent();
+
+    const fetchOptions: any = {
+      method,
+      headers,
+    };
+
+    if (body) {
+      fetchOptions.body = body;
+    }
+
+    if (httpsAgent) {
+      fetchOptions.dispatcher = httpsAgent;
+    }
+
+    const response = await fetchWithCache(
+      url,
+      fetchOptions,
+      getRequestTimeoutMs(),
+      'text',
+      true, // Always bust cache for session requests
+      this.config.maxRetries,
+    );
+
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `Session endpoint request failed with status ${response.status} ${response.statusText}: ${response.data}`,
+      );
+    }
+
+    // Parse response
+    const rawText = response.data as string;
+    let parsedData: any;
+    try {
+      parsedData = JSON.parse(rawText);
+    } catch {
+      parsedData = null;
+    }
+
+    // Extract session ID using the parser
+    const sessionId = (await this.sessionEndpointParser)({
+      headers: response.headers,
+      body: parsedData ?? rawText,
+    });
+
+    if (!sessionId) {
+      throw new Error(
+        `Session endpoint did not return a session ID. Response: ${safeJsonStringify(sanitizeObject(parsedData ?? rawText, { context: 'session response' }))}`,
+      );
+    }
+
+    return sessionId;
   }
 
   private async getHttpsAgent(): Promise<Agent | undefined> {
@@ -1463,7 +2056,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     // If agent creation is in progress, wait for it
-    if (this.httpsAgentPromise) {
+    if (this.httpsAgentPromise != null) {
       return this.httpsAgentPromise;
     }
 
@@ -1482,6 +2075,9 @@ export class HttpProvider implements ApiProvider {
 
   private getDefaultHeaders(body: any): Record<string, string> {
     if (this.config.method === 'GET') {
+      return {};
+    }
+    if (this.config.multipart) {
       return {};
     }
     if (typeof body === 'object' && body !== null) {
@@ -1524,12 +2120,40 @@ export class HttpProvider implements ApiProvider {
 
     const nunjucks = getNunjucksEngine();
 
-    return Object.fromEntries(
+    const allHeaders = Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
         nunjucks.renderString(value, vars),
       ]),
     );
+
+    // Add OAuth Bearer token if configured
+    if (this.config.auth?.type === 'oauth' && this.lastToken) {
+      allHeaders.authorization = `Bearer ${this.lastToken}`;
+    }
+
+    // Add Bearer token if configured
+    if (this.config.auth?.type === 'bearer') {
+      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
+      allHeaders.authorization = `Bearer ${renderedToken}`;
+    }
+
+    // Add Basic Auth credentials if configured
+    if (this.config.auth?.type === 'basic') {
+      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
+      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
+      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
+      allHeaders.authorization = `Basic ${credentials}`;
+    }
+
+    // Add API Key to header if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      allHeaders[renderedKeyName.toLowerCase()] = renderedValue;
+    }
+
+    return allHeaders;
   }
 
   async callApi(
@@ -1537,14 +2161,115 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'http',
+      operationName: 'chat',
+      model: this.url,
+      providerId: this.id(),
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, options),
+      resultExtractor,
+    );
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    // Transform tools and tool_choice if transformToolsFormat is specified
+    // Merge prompt.config with this.config (prompt.config takes precedence)
+    const rawTools = context?.prompt?.config?.tools ?? this.config.tools;
+    const rawToolChoice = context?.prompt?.config?.tool_choice ?? this.config.tool_choice;
+    const format = this.config.transformToolsFormat as ToolFormat | undefined;
+
+    const transformedTools = format ? transformTools(rawTools, format) : rawTools;
+    const transformedToolChoice = format
+      ? transformToolChoice(rawToolChoice, format)
+      : rawToolChoice;
+
+    // Warn if tool_choice is set but tools is empty or undefined
+    if (
+      transformedToolChoice &&
+      (!transformedTools || (Array.isArray(transformedTools) && transformedTools.length === 0))
+    ) {
+      logger.warn(
+        '[HTTP Provider]: tool_choice is set but tools is empty or undefined. This may cause API errors.',
+      );
+    }
+
+    // Pre-serialize tools and tool_choice as JSON strings so templates can use
+    // {{ tools }} and {{ tool_choice }} without the dump filter. processJsonBody
+    // will parse JSON strings starting with { or [ back into objects/arrays.
+    // String values (e.g. tool_choice: 'required') are passed through as-is.
+    const serializeForTemplate = (value: unknown): unknown =>
+      typeof value === 'object' && value !== null ? JSON.stringify(value) : value;
+
     const vars = {
       ...(context?.vars || {}),
       prompt,
+      ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
+      // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
+      ...(transformedTools === undefined ? {} : { tools: serializeForTemplate(transformedTools) }),
+      ...(transformedToolChoice === undefined
+        ? {}
+        : { tool_choice: serializeForTemplate(transformedToolChoice) }),
     } as Record<string, any>;
+
+    if (this.config.auth?.type === 'oauth') {
+      await this.refreshOAuthTokenIfNeeded(vars);
+      invariant(this.lastToken, 'OAuth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
+    } else if (this.config.auth?.type === 'file') {
+      await this.refreshFileTokenIfNeeded(prompt, vars, context);
+      invariant(this.lastToken, 'File auth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+      if (hasOwnProperty(vars, 'expiration')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `expiration` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
+      vars.expiration = this.lastTokenExpiresAt;
+    }
 
     // Add signature values to vars if signature auth is enabled
     if (this.config.signatureAuth) {
-      await this.refreshSignatureIfNeeded();
+      await this.refreshSignatureIfNeeded(vars);
       invariant(this.lastSignature, 'Signature should be defined at this point');
       invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
 
@@ -1563,6 +2288,14 @@ export class HttpProvider implements ApiProvider {
       vars.signatureTimestamp = this.lastSignatureTimestamp;
     }
 
+    // Resolve session ID from session endpoint if configured
+    if (this.config.session) {
+      const resolvedSessionId = await this.resolveSessionId(vars);
+      if (resolvedSessionId) {
+        vars.sessionId = resolvedSessionId;
+      }
+    }
+
     if (this.config.request) {
       return this.callApiWithRawRequest(vars, context, options);
     }
@@ -1579,7 +2312,11 @@ export class HttpProvider implements ApiProvider {
       headers.tracestate = context.tracestate;
     }
 
-    this.validateContentTypeAndBody(headers, this.config.body);
+    if (this.config.multipart) {
+      removeMultipartContentType(headers);
+    } else {
+      this.validateContentTypeAndBody(headers, this.config.body);
+    }
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
@@ -1589,22 +2326,38 @@ export class HttpProvider implements ApiProvider {
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
-      method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
-      headers,
-      body: determineRequestBody(
-        contentTypeIsJson(headers),
-        transformedPrompt,
-        this.config.body,
+      method: getNunjucksEngine().renderString(
+        this.config.method || (this.config.multipart ? 'POST' : 'GET'),
         vars,
       ),
-      queryParams: this.config.queryParams
-        ? Object.fromEntries(
-            Object.entries(this.config.queryParams).map(([key, value]) => [
-              key,
-              getNunjucksEngine().renderString(value, vars),
-            ]),
-          )
-        : undefined,
+      headers,
+      body: this.config.multipart
+        ? undefined
+        : determineRequestBody(
+            contentTypeIsJson(headers),
+            transformedPrompt,
+            this.config.body,
+            vars,
+          ),
+      queryParams: (() => {
+        const baseQueryParams = this.config.queryParams
+          ? Object.fromEntries(
+              Object.entries(this.config.queryParams).map(([key, value]) => [
+                key,
+                getNunjucksEngine().renderString(value, vars),
+              ]),
+            )
+          : {};
+
+        // Add API Key to query params if configured
+        if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
+          const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+          const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+          baseQueryParams[renderedKeyName] = renderedValue;
+        }
+
+        return Object.keys(baseQueryParams).length > 0 ? baseQueryParams : undefined;
+      })(),
       transformResponse: this.config.transformResponse || this.config.responseParser,
     };
 
@@ -1612,6 +2365,9 @@ export class HttpProvider implements ApiProvider {
 
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
+    if (this.config.multipart && ['GET', 'HEAD'].includes(method.toUpperCase())) {
+      throw new Error(`HTTP provider ${method} requests cannot use multipart`);
+    }
 
     // Template the base URL first, then construct URL with query parameters
     let url = renderedConfig.url as string;
@@ -1635,6 +2391,17 @@ export class HttpProvider implements ApiProvider {
       config: renderedConfig,
     });
 
+    const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
+      ? await renderHttpMultipartBody(
+          this.config.multipart,
+          {
+            ...vars,
+            prompt: transformedPrompt,
+          },
+          options?.abortSignal,
+        )
+      : undefined;
+
     // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
@@ -1642,6 +2409,11 @@ export class HttpProvider implements ApiProvider {
       headers: renderedConfig.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
+        multipartBody && {
+          body: multipartBody.body,
+        }),
+      ...(method !== 'GET' &&
+        !multipartBody &&
         renderedConfig.body != null && {
           body: contentTypeIsJson(headers)
             ? typeof renderedConfig.body === 'string'
@@ -1676,9 +2448,9 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
-        context?.bustCache ?? context?.debug,
+        multipartBody ? true : (context?.bustCache ?? context?.debug),
         this.config.maxRetries,
       ));
     } catch (err) {
@@ -1709,7 +2481,14 @@ export class HttpProvider implements ApiProvider {
     };
     if (context?.debug) {
       ret.metadata.transformedRequest = transformedPrompt;
-      ret.metadata.finalRequestBody = renderedConfig.body;
+      if (multipartBody) {
+        ret.metadata.multipart = {
+          fields: sanitizeMultipartFields(multipartBody.fields),
+          files: sanitizeMultipartFiles(multipartBody.files),
+        };
+      } else {
+        ret.metadata.finalRequestBody = renderedConfig.body;
+      }
     }
 
     const rawText = data as string;
@@ -1718,6 +2497,12 @@ export class HttpProvider implements ApiProvider {
       parsedData = JSON.parse(rawText);
     } catch {
       parsedData = null;
+    }
+
+    // If we used a session endpoint, set the sessionId we used
+    // This can be overridden by sessionParser if the server returns a different session
+    if (vars.sessionId && this.config.session) {
+      ret.sessionId = vars.sessionId;
     }
 
     try {
@@ -1773,7 +2558,7 @@ export class HttpProvider implements ApiProvider {
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
-    const url = new URL(
+    let url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
@@ -1790,6 +2575,59 @@ export class HttpProvider implements ApiProvider {
       parsedRequest.headers.tracestate = context.tracestate;
     }
 
+    // Add OAuth Bearer token if configured
+    if (this.config.auth?.type === 'oauth' && this.lastToken) {
+      parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
+    }
+
+    // Add Bearer token if configured
+    if (this.config.auth?.type === 'bearer') {
+      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
+      parsedRequest.headers.authorization = `Bearer ${renderedToken}`;
+    }
+
+    // Add Basic Auth credentials if configured
+    if (this.config.auth?.type === 'basic') {
+      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
+      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
+      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
+      parsedRequest.headers.authorization = `Basic ${credentials}`;
+    }
+
+    // Add API Key to header if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      parsedRequest.headers[renderedKeyName.toLowerCase()] = renderedValue;
+    }
+
+    // Add API Key to query params if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
+      try {
+        const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+        const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+        const urlObj = new URL(url);
+        urlObj.searchParams.append(renderedKeyName, renderedValue);
+        url = urlObj.toString();
+        // Extract the path and query from the full URL
+        const urlPath = urlObj.pathname + urlObj.search;
+        // Update the request line with the new URL path
+        const requestLines = renderedRequest.split('\n');
+        const firstLine = requestLines[0];
+        const method = firstLine.split(' ')[0];
+        const protocol = firstLine.split(' ').slice(-1)[0];
+        requestLines[0] = `${method} ${urlPath} ${protocol}`;
+        // Re-parse with updated URL
+        const updatedRequest = requestLines.join('\n');
+        const reParsed = parseRawRequest(updatedRequest.trim());
+        Object.assign(parsedRequest, reParsed);
+      } catch (err) {
+        logger.warn(
+          `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
+        );
+      }
+    }
+
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
       {
@@ -1799,11 +2637,23 @@ export class HttpProvider implements ApiProvider {
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
+
+    // Determine body content:
+    // - For JSON/text bodies, http-z provides body.text
+    // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
+    //   but we need the raw body text, so extract it from the rendered request
+    let bodyContent: string | undefined;
+    if (parsedRequest.body?.text) {
+      bodyContent = parsedRequest.body.text.trim();
+    } else if (parsedRequest.body?.params) {
+      bodyContent = extractBodyFromRawRequest(renderedRequest);
+    }
+
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
-      ...(parsedRequest.body?.text && { body: parsedRequest.body.text.trim() }),
+      ...(bodyContent && { body: bodyContent }),
     };
 
     // Add HTTPS agent as dispatcher if configured
@@ -1829,7 +2679,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         context?.bustCache ?? context?.debug,
         this.config.maxRetries,
@@ -1857,9 +2707,41 @@ export class HttpProvider implements ApiProvider {
     const ret: ProviderResponse = {};
     ret.latencyMs = latencyMs;
     ret.cached = cached;
+
+    // If we used a session endpoint, set the sessionId we used
+    if (vars.sessionId && this.config.session) {
+      ret.sessionId = vars.sessionId;
+    }
+
+    // Also check sessionParser for raw request mode
+    try {
+      const sessionId =
+        this.sessionParser == null
+          ? undefined
+          : (await this.sessionParser)({ headers: responseHeaders, body: parsedData ?? rawText });
+      if (sessionId) {
+        ret.sessionId = sessionId;
+      }
+    } catch (err) {
+      logger.error(
+        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
+      );
+      throw err;
+    }
+
+    // Always include HTTP status for error detection (e.g., aborting on non-transient errors)
+    ret.metadata = {
+      ...ret.metadata,
+      http: {
+        status,
+        statusText,
+      },
+    };
+
     if (context?.debug) {
       ret.raw = data;
       ret.metadata = {
+        ...ret.metadata,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt

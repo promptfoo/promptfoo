@@ -1,15 +1,8 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-
 import ChatMessages, { type Message } from './ChatMessages';
 
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme({
-    palette: { mode: 'light' },
-  });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
+const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
 
 describe('ChatMessages', () => {
   it('should render a ChatMessage for each message when messages is a non-empty array', () => {
@@ -19,7 +12,7 @@ describe('ChatMessages', () => {
       { role: 'system', content: 'System instruction.' },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     expect(screen.getByText('Hello, this is a user message.')).toBeInTheDocument();
     expect(screen.getByText('This is the assistant responding.')).toBeInTheDocument();
@@ -32,7 +25,7 @@ describe('ChatMessages', () => {
   it('should render null when messages is undefined', () => {
     const messages: any = [];
 
-    const { container } = renderWithTheme(<ChatMessages messages={messages} />);
+    const { container } = render(<ChatMessages messages={messages} />);
 
     expect(container.firstChild).toBeNull();
   });
@@ -44,7 +37,7 @@ describe('ChatMessages', () => {
       { role: 'system', content: 'Third message.' },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     const messageElements = screen.getAllByRole('alert');
     expect(messageElements).toHaveLength(mockMessages.length);
@@ -57,13 +50,10 @@ describe('ChatMessages', () => {
     const longMessageContent = 'This is a very long message. '.repeat(1000);
     const mockMessages: Message[] = [{ role: 'assistant', content: longMessageContent }];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
-    expect(
-      screen.getByText((_content, element) => {
-        return element?.textContent?.startsWith('This is a very long message.') ?? false;
-      }),
-    ).toBeInTheDocument();
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent?.startsWith('This is a very long message.')).toBe(true);
   });
 
   it('should render audio player when message has audio data', () => {
@@ -75,7 +65,7 @@ describe('ChatMessages', () => {
       },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     const audioElement = screen.getByTestId('audio-with-transcript');
     expect(audioElement).toBeInTheDocument();
@@ -90,16 +80,16 @@ describe('ChatMessages', () => {
       {
         role: 'user',
         content: 'This is the image description',
-        image: { data: 'base64imagedata', format: 'png' },
+        image: { data: FAKE_IMAGE_DATA_URL, format: 'png' },
       },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     // Find img element by its src attribute
     const imageElement = screen.getByAltText('Input');
     expect(imageElement).toBeInTheDocument();
-    expect(imageElement).toHaveAttribute('src', 'data:image/png;base64,base64imagedata');
+    expect(imageElement).toHaveAttribute('src', FAKE_IMAGE_DATA_URL);
     expect(screen.getByText('This is the image description')).toBeInTheDocument();
   });
 
@@ -109,11 +99,11 @@ describe('ChatMessages', () => {
         role: 'user',
         content: 'Multi-modal message',
         audio: { data: 'audiodata', format: 'wav' },
-        image: { data: 'imagedata', format: 'jpeg' },
+        image: { data: FAKE_IMAGE_DATA_URL, format: 'jpeg' },
       },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     expect(screen.getByTestId('audio-with-transcript')).toBeInTheDocument();
     expect(screen.getByAltText('Input')).toBeInTheDocument();
@@ -129,7 +119,7 @@ describe('ChatMessages', () => {
       },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     const audioElement = screen.getByTestId('audio-with-transcript');
     const sourceElement = audioElement.querySelector('source');
@@ -142,14 +132,14 @@ describe('ChatMessages', () => {
       {
         role: 'user',
         content: 'Image without format',
-        image: { data: 'base64imagedata' },
+        image: { data: FAKE_IMAGE_DATA_URL },
       },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     const imageElement = screen.getByAltText('Input');
-    expect(imageElement).toHaveAttribute('src', 'data:image/png;base64,base64imagedata');
+    expect(imageElement).toHaveAttribute('src', FAKE_IMAGE_DATA_URL);
   });
 
   it('should render contentType audio as dedicated audio player', () => {
@@ -161,25 +151,33 @@ describe('ChatMessages', () => {
       },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     const audioElement = screen.getByTestId('audio');
     expect(audioElement).toBeInTheDocument();
+    expect(audioElement).toHaveClass('w-full', 'max-w-[500px]');
   });
 
   it('should render contentType image as image element', () => {
     const mockMessages: Message[] = [
       {
         role: 'assistant',
-        content: 'base64imagecontent',
+        content: FAKE_IMAGE_DATA_URL,
         contentType: 'image',
       },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
-    const imageElement = screen.getByTestId('image');
+    const imageElement = screen.getByRole('img', { name: 'Assistant message image' });
     expect(imageElement).toBeInTheDocument();
+    expect(imageElement).toHaveClass(
+      'w-[min(500px,70vw)]',
+      'max-w-full',
+      'min-h-[180px]',
+      'sm:min-h-[300px]',
+    );
+    expect(imageElement).not.toHaveClass('min-w-[500px]');
   });
 
   it('should render contentType video as video element', () => {
@@ -191,9 +189,11 @@ describe('ChatMessages', () => {
       },
     ];
 
-    renderWithTheme(<ChatMessages messages={mockMessages} />);
+    render(<ChatMessages messages={mockMessages} />);
 
     const videoElement = screen.getByTestId('video');
     expect(videoElement).toBeInTheDocument();
+    expect(videoElement).toHaveClass('max-w-full');
+    expect(videoElement.parentElement).toHaveClass('w-full', 'max-w-[500px]');
   });
 });

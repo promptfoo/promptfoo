@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateXAICost,
   createXAIProvider,
@@ -6,6 +6,7 @@ import {
   GROK_4_MODELS,
   GROK_REASONING_EFFORT_MODELS,
   GROK_REASONING_MODELS,
+  getXAICostInUsd,
   XAI_CHAT_MODELS,
 } from '../../../src/providers/xai/chat';
 
@@ -65,11 +66,11 @@ describe('xAI Chat Provider', () => {
       const provider = createXAIProvider('xai:grok-2', {
         config: {
           config: {
-            region: 'us-west-1',
+            region: 'eu-west-1',
           },
         },
       }) as any;
-      expect(provider.config.apiBaseUrl).toBe('https://us-west-1.api.x.ai/v1');
+      expect(provider.config.apiBaseUrl).toBe('https://eu-west-1.api.x.ai/v1');
       expect(provider.config.apiKeyEnvar).toBe('XAI_API_KEY');
     });
 
@@ -92,11 +93,64 @@ describe('xAI Chat Provider', () => {
       const config = {
         config: {
           search_parameters: { mode: 'test' },
-          region: 'us-west-1',
+          region: 'eu-west-1',
         },
       };
       const provider = createXAIProvider('xai:grok-2', { config }) as any;
       expect(provider.originalConfig).toEqual(config.config);
+    });
+  });
+
+  describe('supported models', () => {
+    it('includes Grok 4.3 and 4.20 in the reasoning and Grok-4 parameter-restriction lists', () => {
+      expect(XAI_CHAT_MODELS).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'grok-4.3' }),
+          expect.objectContaining({ id: 'grok-4.20-0309-reasoning' }),
+          expect.objectContaining({ id: 'grok-4.20-0309-non-reasoning' }),
+          expect.objectContaining({ id: 'grok-4.20-multi-agent-0309' }),
+        ]),
+      );
+      expect(GROK_REASONING_MODELS).toEqual(
+        expect.arrayContaining(['grok-4.3', 'grok-4.3-latest', 'grok-4.20-reasoning', 'grok-4.20']),
+      );
+      expect(GROK_4_MODELS).toEqual(
+        expect.arrayContaining([
+          'grok-4.3',
+          'grok-4.20-reasoning',
+          'grok-4.20-non-reasoning',
+          'grok-4.20-multi-agent',
+        ]),
+      );
+    });
+
+    it('tracks a reviewed snapshot of public text model ids reported by xAI /v1/language-models', () => {
+      // Maintenance note:
+      // This is a point-in-time snapshot of xAI public text model ids.
+      // Review and update periodically (or whenever models are added/renamed/deprecated)
+      // against xAI /v1/language-models.
+      const currentPublicTextModelIds = [
+        'grok-3',
+        'grok-3-mini',
+        'grok-4-0709',
+        'grok-4-1-fast-non-reasoning',
+        'grok-4-1-fast-reasoning',
+        'grok-4-fast-non-reasoning',
+        'grok-4-fast-reasoning',
+        'grok-4.20-0309-non-reasoning',
+        'grok-4.20-0309-reasoning',
+        'grok-4.20-multi-agent-0309',
+        'grok-4.3',
+        'grok-code-fast-1',
+      ];
+      const trackedModelIds = XAI_CHAT_MODELS.flatMap((model) => [
+        model.id,
+        ...(model.aliases ?? []),
+      ]);
+
+      for (const modelId of currentPublicTextModelIds) {
+        expect(trackedModelIds).toContain(modelId);
+      }
     });
   });
 
@@ -126,6 +180,13 @@ describe('xAI Chat Provider', () => {
       });
       // Verify API key is not exposed in serialized output
       expect(json.config?.apiKey).toBeUndefined();
+    });
+  });
+
+  describe('Reported cost handling', () => {
+    it('converts xAI cost ticks to USD', () => {
+      expect(getXAICostInUsd({ cost_in_usd_ticks: 37_756_000 })).toBe(0.0037756);
+      expect(getXAICostInUsd()).toBeUndefined();
     });
   });
 
@@ -181,6 +242,23 @@ describe('xAI Chat Provider', () => {
       }) as any;
 
       expect(providerWithParams.originalConfig.search_parameters).toEqual(searchParams);
+    });
+  });
+
+  describe('Temperature zero handling', () => {
+    it('should correctly send temperature: 0 in the request body', async () => {
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = createXAIProvider('xai:grok-3-beta', {
+        config: {
+          temperature: 0,
+        } as any,
+      });
+
+      const result = await (provider as any).getOpenAiBody('test prompt');
+
+      // temperature: 0 should be present in the request body
+      expect(result.body.temperature).toBe(0);
+      expect('temperature' in result.body).toBe(true);
     });
   });
 
@@ -245,6 +323,14 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('Grok-4 specific functionality', () => {
+    it('recognizes Grok 4.3 models as reasoning models', () => {
+      const provider = createXAIProvider('xai:grok-4.3') as any;
+      expect(provider.isReasoningModel()).toBe(true);
+
+      const providerAlias = createXAIProvider('xai:grok-4.3-latest') as any;
+      expect(providerAlias.isReasoningModel()).toBe(true);
+    });
+
     it('recognizes Grok-4 models as reasoning models', () => {
       const provider = createXAIProvider('xai:grok-4-0709') as any;
       expect(provider.isReasoningModel()).toBe(true);
@@ -254,8 +340,31 @@ describe('xAI Chat Provider', () => {
     });
 
     it('does not support reasoning_effort for Grok-4', () => {
+      // xAI's chat-completions endpoint rejects `reasoning_effort` on legacy
+      // Grok-4 family slugs even after the retirement-redirect to grok-4.3 is
+      // documented; the parameter is silently stripped before sending.
       const provider = createXAIProvider('xai:grok-4-0709') as any;
       expect(provider.supportsReasoningEffort()).toBe(false);
+    });
+
+    it('preserves reasoning_effort for Grok 4.3 chat requests', async () => {
+      const provider = createXAIProvider('xai:grok-4.3') as any;
+      const result = await provider.getOpenAiBody('test prompt', {
+        prompt: {
+          config: {
+            reasoning_effort: 'high',
+            presence_penalty: 0.5,
+            frequency_penalty: 0.7,
+            stop: ['\\n'],
+          },
+        },
+      });
+
+      expect(provider.supportsReasoningEffort()).toBe(true);
+      expect(result.body.reasoning_effort).toBe('high');
+      expect(result.body.presence_penalty).toBeUndefined();
+      expect(result.body.frequency_penalty).toBeUndefined();
+      expect(result.body.stop).toBeUndefined();
     });
 
     it('filters unsupported parameters for Grok-4 aliases', async () => {
@@ -274,13 +383,12 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok-4
+      // xAI's chat-completions endpoint rejects every one of these on the
+      // Grok-4 family, so they are stripped before send.
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // Temperature should still be present
       expect(result.body.temperature).toBe(0.8);
     });
 
@@ -301,13 +409,10 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok 4.1 Fast
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // These should still be present
       expect(result.body.temperature).toBe(0.7);
       expect(result.body.max_completion_tokens).toBe(2048);
     });
@@ -328,13 +433,10 @@ describe('xAI Chat Provider', () => {
 
       const result = await provider.getOpenAiBody('test prompt', mockContext);
 
-      // These should be filtered out for Grok 4 Fast
       expect(result.body.presence_penalty).toBeUndefined();
       expect(result.body.frequency_penalty).toBeUndefined();
       expect(result.body.stop).toBeUndefined();
       expect(result.body.reasoning_effort).toBeUndefined();
-
-      // Temperature should still be present
       expect(result.body.temperature).toBe(0.7);
     });
 
@@ -370,38 +472,58 @@ describe('xAI Chat Provider', () => {
       expect(GROK_REASONING_MODELS).toContain('grok-4-latest');
     });
 
+    it('includes Grok 4.3 in reasoning models list', () => {
+      expect(GROK_REASONING_MODELS).toContain('grok-4.3');
+      expect(GROK_REASONING_MODELS).toContain('grok-4.3-latest');
+    });
+
     it('includes Grok 4.1 Fast reasoning models in reasoning models list', () => {
       expect(GROK_REASONING_MODELS).toContain('grok-4-1-fast-reasoning');
       expect(GROK_REASONING_MODELS).toContain('grok-4-1-fast');
       expect(GROK_REASONING_MODELS).toContain('grok-4-1-fast-latest');
+      expect(GROK_REASONING_MODELS).toContain('grok-4-1-fast-reasoning-latest');
     });
 
     it('includes Grok 4 Fast reasoning models in reasoning models list', () => {
       expect(GROK_REASONING_MODELS).toContain('grok-4-fast-reasoning');
       expect(GROK_REASONING_MODELS).toContain('grok-4-fast');
       expect(GROK_REASONING_MODELS).toContain('grok-4-fast-latest');
+      expect(GROK_REASONING_MODELS).toContain('grok-4-fast-reasoning-latest');
     });
 
     it('does NOT include non-reasoning variants in reasoning models list', () => {
       expect(GROK_REASONING_MODELS).not.toContain('grok-4-1-fast-non-reasoning');
+      expect(GROK_REASONING_MODELS).not.toContain('grok-4-1-fast-non-reasoning-latest');
       expect(GROK_REASONING_MODELS).not.toContain('grok-4-fast-non-reasoning');
+      expect(GROK_REASONING_MODELS).not.toContain('grok-4-fast-non-reasoning-latest');
     });
 
-    it('includes all Grok 4.1 Fast and Grok 4 Fast models in GROK_4_MODELS', () => {
+    it('includes Grok 4.3 and Grok 4-family models in GROK_4_MODELS', () => {
+      expect(GROK_4_MODELS).toContain('grok-4.3');
+      expect(GROK_4_MODELS).toContain('grok-4.3-latest');
       expect(GROK_4_MODELS).toContain('grok-4-1-fast-reasoning');
       expect(GROK_4_MODELS).toContain('grok-4-1-fast');
       expect(GROK_4_MODELS).toContain('grok-4-1-fast-latest');
+      expect(GROK_4_MODELS).toContain('grok-4-1-fast-reasoning-latest');
       expect(GROK_4_MODELS).toContain('grok-4-1-fast-non-reasoning');
+      expect(GROK_4_MODELS).toContain('grok-4-1-fast-non-reasoning-latest');
       expect(GROK_4_MODELS).toContain('grok-4-fast-reasoning');
       expect(GROK_4_MODELS).toContain('grok-4-fast');
       expect(GROK_4_MODELS).toContain('grok-4-fast-latest');
+      expect(GROK_4_MODELS).toContain('grok-4-fast-reasoning-latest');
       expect(GROK_4_MODELS).toContain('grok-4-fast-non-reasoning');
+      expect(GROK_4_MODELS).toContain('grok-4-fast-non-reasoning-latest');
     });
 
     it('does not include Grok-4 in reasoning effort models list', () => {
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4-0709');
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4');
       expect(GROK_REASONING_EFFORT_MODELS).not.toContain('grok-4-latest');
+    });
+
+    it('includes Grok 4.3 in reasoning effort models list', () => {
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.3');
+      expect(GROK_REASONING_EFFORT_MODELS).toContain('grok-4.3-latest');
     });
 
     it('includes Grok-3 mini models in reasoning effort models list', () => {
@@ -414,6 +536,29 @@ describe('xAI Chat Provider', () => {
       expect(grok4).toBeDefined();
       expect(grok4?.cost?.input).toBeDefined();
       expect(grok4?.cost?.output).toBeDefined();
+    });
+
+    it('includes Grok 4.3 in XAI_CHAT_MODELS with API-sourced pricing', () => {
+      const grok43 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-4.3');
+      expect(grok43).toBeDefined();
+      expect(grok43?.aliases).toContain('grok-4.3-latest');
+      // Verified against xAI /v1/language-models/grok-4.3 (12500/25000/2000 ticks).
+      expect(grok43?.cost?.input).toBe(1.25 / 1e6);
+      expect(grok43?.cost?.output).toBe(2.5 / 1e6);
+      expect(grok43?.cost?.cache_read).toBe(0.2 / 1e6);
+    });
+
+    it('includes Grok 4.20 family with API-sourced pricing', () => {
+      for (const modelId of [
+        'grok-4.20-0309-reasoning',
+        'grok-4.20-0309-non-reasoning',
+        'grok-4.20-multi-agent-0309',
+      ]) {
+        const model = XAI_CHAT_MODELS.find((candidate) => candidate.id === modelId);
+        expect(model?.cost?.input).toBe(1.25 / 1e6);
+        expect(model?.cost?.output).toBe(2.5 / 1e6);
+        expect(model?.cost?.cache_read).toBe(0.2 / 1e6);
+      }
     });
 
     it('includes Grok 4.1 Fast in XAI_CHAT_MODELS with correct pricing', () => {
@@ -478,13 +623,32 @@ describe('xAI Chat Provider', () => {
       expect(miniAliasCost).toBeDefined();
     });
 
+    it('uses Grok 4.3 fallback pricing for redirected legacy chat slugs', () => {
+      for (const modelName of [
+        'grok-4-1-fast-reasoning',
+        'grok-4-fast-non-reasoning',
+        'grok-4',
+        'grok-code-fast',
+        // xAI exposes a dated grok-code-fast-1 alias on /v1/language-models;
+        // it shares the post-retirement billing target with the undated slug.
+        'grok-code-fast-1-0825',
+        'grok-3',
+        // The grok-3 family collapses every -beta and -fast variant into the
+        // same id on xAI's catalog, so all of them must redirect together.
+        'grok-3-beta',
+        'grok-3-fast',
+        'grok-3-fast-beta',
+        'grok-3-fast-latest',
+      ]) {
+        expect(calculateXAICost(modelName, {}, 1_000_000, 1_000_000)).toBeCloseTo(3.75, 10);
+      }
+    });
+
     it('returns undefined for invalid inputs', () => {
       // Unknown model
       expect(calculateXAICost('invalid-model', {}, 600, 400)).toBe(undefined);
       // Missing token counts
-      expect(calculateXAICost('grok-2-1212', {}, undefined as any, undefined as any)).toBe(
-        undefined,
-      );
+      expect(calculateXAICost('grok-2-1212', {})).toBe(undefined);
       expect(calculateXAICost('grok-2-1212', {}, 0, 0)).toBe(undefined);
     });
 
@@ -496,10 +660,35 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBeCloseTo(12.0, 2);
     });
 
-    it('handles reasoning tokens correctly', () => {
-      // reasoningTokens is passed as 5th argument but doesn't affect calculation currently
-      const costWithReasoning = calculateXAICost('grok-3-mini-beta', {}, 500, 500, 200);
-      expect(costWithReasoning).toBeDefined();
+    it('uses separate custom input and output costs from config', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
+
+    it('prefers separate custom costs over custom cost', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { cost: 0.02, inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
+
+    it('bills reasoning tokens at the output rate', () => {
+      // grok-3-mini-beta: input $0.30/M, output $0.50/M.
+      const baseline = calculateXAICost('grok-3-mini-beta', {}, 500, 500);
+      // 500 input @ 0.30/M + 500 output @ 0.50/M = 0.00015 + 0.00025 = 0.0004
+      expect(baseline).toBeCloseTo(0.0004, 10);
+
+      const withReasoning = calculateXAICost('grok-3-mini-beta', {}, 500, 500, 200);
+      // Adds 200 reasoning @ 0.50/M = 0.0001 → total 0.0005
+      expect(withReasoning).toBeCloseTo(0.0005, 10);
     });
   });
 

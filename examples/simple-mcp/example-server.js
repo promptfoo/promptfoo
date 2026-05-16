@@ -2,6 +2,8 @@
 
 import { exec } from 'child_process';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 
 /**
@@ -27,24 +29,26 @@ const server = new McpServer({
 });
 
 const execAsync = promisify(exec);
+const serverDir = path.dirname(fileURLToPath(import.meta.url));
 
 // File operations
-function readFile(path, encoding = 'utf8') {
+function readFile(filePath, encoding = 'utf8') {
   // Security check - prevent path traversal
-  if (path.includes('..') || path.includes('~')) {
+  if (filePath.includes('..') || filePath.includes('~')) {
     throw new Error('Invalid path: Path traversal not allowed');
   }
 
   // Simulate reading restricted files
-  if (path.includes('/etc/passwd') || path.includes('/etc/shadow')) {
+  if (filePath.includes('/etc/passwd') || filePath.includes('/etc/shadow')) {
     throw new Error('Permission denied: Cannot read system files');
   }
 
   try {
+    const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(serverDir, filePath);
     if (encoding === 'base64') {
-      return fs.readFileSync(path).toString('base64');
+      return fs.readFileSync(resolvedPath).toString('base64');
     }
-    return fs.readFileSync(path, encoding);
+    return fs.readFileSync(resolvedPath, encoding);
   } catch (error) {
     throw new Error(`File read error: ${error.message}`);
   }
@@ -132,6 +136,9 @@ function processData(data, operation, format = 'text') {
       case 'extract':
         return `Extracted fields from ${format} data`;
 
+      case 'preview':
+        return `Preview: ${data.substring(0, 50)}`;
+
       default:
         throw new Error(`Unknown operation: ${operation}`);
     }
@@ -162,7 +169,7 @@ server.registerTool(
     description: 'Read contents of a file from the local filesystem',
     inputSchema: {
       path: z.string().describe('File path to read'),
-      encoding: z.enum(['utf8', 'base64', 'binary']).default('utf8').describe('File encoding'),
+      encoding: z.enum(['utf8', 'base64', 'binary']).prefault('utf8').describe('File encoding'),
     },
   },
   async (args) => {
@@ -198,7 +205,7 @@ server.registerTool(
     inputSchema: {
       path: z.string().describe('File path to write to'),
       content: z.string().describe('Content to write to the file'),
-      mode: z.enum(['write', 'append']).default('write').describe('Write mode'),
+      mode: z.enum(['write', 'append']).prefault('write').describe('Write mode'),
     },
   },
   async (args) => {
@@ -233,8 +240,8 @@ server.registerTool(
     description: 'Execute a system command',
     inputSchema: {
       command: z.string().describe('Command to execute'),
-      args: z.array(z.string()).default([]).describe('Command arguments'),
-      timeout: z.number().default(5000).describe('Timeout in milliseconds'),
+      args: z.array(z.string()).prefault([]).describe('Command arguments'),
+      timeout: z.number().prefault(5000).describe('Timeout in milliseconds'),
     },
   },
   async (args) => {
@@ -269,8 +276,8 @@ server.registerTool(
     description: 'Fetch content from a URL',
     inputSchema: {
       url: z.string().describe('URL to fetch'),
-      method: z.enum(['GET', 'POST', 'PUT', 'DELETE']).default('GET').describe('HTTP method'),
-      headers: z.record(z.string()).default({}).describe('HTTP headers'),
+      method: z.enum(['GET', 'POST', 'PUT', 'DELETE']).prefault('GET').describe('HTTP method'),
+      headers: z.record(z.string(), z.string()).prefault({}).describe('HTTP headers'),
       body: z.string().optional().describe('Request body for POST/PUT requests'),
     },
   },
@@ -306,8 +313,8 @@ server.registerTool(
     description: 'Execute a database query',
     inputSchema: {
       query: z.string().describe('SQL query to execute'),
-      database: z.string().default('default').describe('Database name'),
-      params: z.array(z.string()).default([]).describe('Query parameters'),
+      database: z.string().prefault('default').describe('Database name'),
+      params: z.array(z.string()).prefault([]).describe('Query parameters'),
     },
   },
   async (args) => {
@@ -342,10 +349,12 @@ server.registerTool(
     description: 'Process and transform data',
     inputSchema: {
       data: z.string().describe('Data to process (JSON string or plain text)'),
-      operation: z.enum(['validate', 'transform', 'extract']).describe('Operation to perform'),
+      operation: z
+        .enum(['validate', 'transform', 'extract', 'preview'])
+        .describe('Operation to perform'),
       format: z
         .enum(['json', 'xml', 'csv', 'text'])
-        .default('text')
+        .prefault('text')
         .describe('Expected data format'),
     },
   },
@@ -383,7 +392,7 @@ server.registerTool(
       info_type: z
         .enum(['cpu', 'memory', 'disk', 'network', 'processes', 'environment'])
         .describe('Type of system information'),
-      detailed: z.boolean().default(false).describe('Return detailed information'),
+      detailed: z.boolean().prefault(false).describe('Return detailed information'),
     },
   },
   async (args) => {
@@ -409,6 +418,33 @@ server.registerTool(
       };
     }
   },
+);
+
+server.registerTool(
+  'get_user_profile',
+  {
+    title: 'Get User Profile',
+    description: 'Return a structured user profile for parser demonstrations',
+    inputSchema: {
+      user_id: z.string().describe('User identifier'),
+    },
+  },
+  async (args) => ({
+    content: [
+      {
+        type: 'text',
+        text: `Profile lookup complete for ${args.user_id}`,
+      },
+    ],
+    structuredContent: {
+      user: {
+        id: args.user_id,
+        name: 'Ada Lovelace',
+        status: 'active',
+      },
+      summary: 'Ada Lovelace is active',
+    },
+  }),
 );
 
 // Start the server

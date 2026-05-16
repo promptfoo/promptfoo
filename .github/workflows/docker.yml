@@ -1,23 +1,36 @@
 # This GitHub Action builds the Docker image Promptfoo,
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
-# if all checks pass. This action is triggered on release creation, workflow dispatch,
-# pull requests to main that modify the Dockerfile, and pushes to main.
+# if all checks pass. This action is triggered by the release-please workflow,
+# published human-created releases, workflow dispatch, pull requests to main that
+# modify the Dockerfile, and pushes to main.
 
 name: Test and Publish Multi-arch Docker Image
 run-name: |
-  ${{ github.event_name == 'release' && 'Release' ||
+  ${{ (inputs.tag_name || github.event.release.tag_name) && 'Release' ||
       github.event_name == 'workflow_dispatch' && 'Manual' ||
       github.event_name == 'pull_request' && 'PR' ||
       'Push' }}
-  Docker build for ${{ github.ref_name }}
+  Docker build for ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   ${{ github.event_name == 'pull_request' && format('(PR #{0})', github.event.number) || '' }}
   by @${{ github.actor }}
 
 on:
-  release:
-    types: [created]
+  workflow_call:
+    inputs:
+      tag_name:
+        description: 'The release tag name (e.g., 0.120.0)'
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Optional release tag to publish (e.g., 0.121.6)'
+        required: false
+        type: string
+  release:
+    types:
+      - published
   pull_request:
     branches:
       - main
@@ -30,23 +43,43 @@ on:
       - 'Dockerfile'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Reusable workflow calls inherit the caller's github.workflow value. Keep this
+  # group Docker-specific so release-please callers are not cancelled mid-release.
+  group: ${{ github.event_name == 'pull_request' && format('docker-pr-{0}', github.ref) || format('docker-publish-{0}', github.repository) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
+  SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
+  BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
+  BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+  # Fallback release paths build a specific tag outside release-please.yml.
+  IS_RELEASE_FALLBACK: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   test:
+    # Bot-authored releases are already handled by release-please.yml after npm publish.
+    # The release event path is for human-published fallback releases and backfills.
+    if: github.event_name != 'release' || github.event.release.author.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
 
     steps:
+      - name: Validate release tag
+        if: github.event_name == 'release' || env.RELEASE_TAG != ''
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::RELEASE_TAG '$RELEASE_TAG' is empty or invalid"
+            exit 1
+          fi
+
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet
@@ -58,16 +91,23 @@ jobs:
           df -h
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ env.SOURCE_REF }}
+
+      # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
+      - name: Resolve source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Build Docker image for testing
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-linux-amd64
           context: .
@@ -76,30 +116,17 @@ jobs:
           tags: local-test-image:latest
           platforms: linux/amd64
           build-args: |
-            BUILD_VERSION=${{ github.ref_name }}
-            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
-            GIT_SHA=${{ github.sha }}
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            GIT_SHA=${{ steps.source.outputs.sha }}
 
       - name: Run Docker container for testing
         run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
 
-      - name: Verify Python and promptfoo
-        run: |
-          echo "Checking Python version:"
-          if ! docker exec promptfoo-container python --version; then
-            echo "Python check failed"
-            exit 1
-          fi
-
-          echo "Checking promptfoo version:"
-          if ! docker exec promptfoo-container promptfoo --version; then
-            echo "promptfoo check failed"
-            exit 1
-          fi
-
       - name: Run health check
         run: |
-          # Loop to check if the server is up
+          # Wait for server to be fully ready (including database migrations)
+          # before running any CLI commands that also trigger migrations
           for ((retry=1; retry<=10; retry++)); do
             if curl -f http://localhost:3000/health; then
               echo -e "\nHealth check passed"
@@ -117,15 +144,29 @@ jobs:
             exit 1
           fi
 
+      - name: Verify Python and promptfoo
+        run: |
+          echo "Checking Python version:"
+          if ! docker exec promptfoo-container python --version; then
+            echo "Python check failed"
+            exit 1
+          fi
+
+          echo "Checking promptfoo version:"
+          if ! docker exec promptfoo-container promptfoo --version; then
+            echo "promptfoo check failed"
+            exit 1
+          fi
+
       - name: Use Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.11.0
 
       - name: run promptfoo eval
         id: eval
@@ -151,18 +192,16 @@ jobs:
             exit 1
           fi
 
+      - name: Stop and remove Docker container
+        if: always()
+        run: docker rm -f promptfoo-container || true
+
       - name: Clean up Docker images
         if: always()
         run: |
           docker system prune -af
           docker volume prune -f
           df -h
-
-      - name: Stop and remove Docker container
-        if: always()
-        run: |
-          docker stop promptfoo-container
-          docker rm promptfoo-container
 
   build-docker-and-push-digests:
     if: (github.event_name != 'pull_request')
@@ -174,25 +213,46 @@ jobs:
             { runner: ubuntu-24.04-arm, platform: linux/arm64, digest-suffix: linux-arm64 },
           ]
     runs-on: ${{ matrix.platforms.runner }}
+    timeout-minutes: 60
     needs: [test]
+    permissions:
+      contents: read
+      packages: write
     steps:
+      - name: Validate release tag
+        if: github.event_name == 'release' || env.RELEASE_TAG != ''
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::RELEASE_TAG '$RELEASE_TAG' is empty or invalid"
+            exit 1
+          fi
+
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ env.SOURCE_REF }}
+
+      # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
+      - name: Resolve source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
 
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -200,7 +260,7 @@ jobs:
 
       - name: Build and push multi-arch Docker image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7
         with:
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }}
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.platforms.digest-suffix }},mode=max
@@ -209,9 +269,9 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_VERSION=${{ github.ref_name }}
-            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
-            GIT_SHA=${{ github.sha }}
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
+            GIT_SHA=${{ steps.source.outputs.sha }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
 
@@ -222,7 +282,7 @@ jobs:
           touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: digests-${{ matrix.platforms.digest-suffix }}
           path: ${{ runner.temp }}/digests/*
@@ -231,37 +291,44 @@ jobs:
 
   merge-docker-digests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [build-docker-and-push-digests]
+    permissions:
+      packages: write
+    outputs:
+      manifest_digest: ${{ steps.inspect.outputs.digest }}
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: ${{ runner.temp }}/digests
           pattern: digests-*
           merge-multiple: true
 
       - name: Log in to the Container registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Fallback release builds publish immutable version tags only so moving aliases stay on normal release paths.
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
+            type=ref,event=branch,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
+            type=ref,event=pr,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'release' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
+            type=sha,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
+            type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.IS_RELEASE_FALLBACK != 'true' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
@@ -271,5 +338,44 @@ jobs:
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
 
       - name: Inspect image
+        id: inspect
+        env:
+          IMAGE_TAG: ${{ env.RELEASE_TAG || steps.meta.outputs.version }}
         run: |
-          docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}"
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
+          # Log full inspection details and extract digest
+          INSPECT_OUTPUT=$(docker buildx imagetools inspect "${IMAGE_REF}")
+          echo "$INSPECT_OUTPUT"
+          # Extract the manifest digest (first Digest: line)
+          DIGEST=$(echo "$INSPECT_OUTPUT" | grep -m1 "^Digest:" | awk '{print $2}')
+          if [ -z "$DIGEST" ]; then
+            echo "Error: Failed to extract manifest digest from inspect output"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Manifest digest: $DIGEST"
+
+  attest-docker-image:
+    name: 'Attest Multi-arch Image'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [merge-docker-digests]
+    permissions:
+      id-token: write
+      attestations: write
+      packages: write
+
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-name: '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}'
+          subject-digest: '${{ needs.merge-docker-digests.outputs.manifest_digest }}'
+          push-to-registry: true

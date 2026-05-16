@@ -1,11 +1,20 @@
-import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
+import crypto from 'crypto';
+import { mkdtempSync, rmSync, unlinkSync } from 'fs';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 
 import chalk from 'chalk';
+import ora from 'ora';
+import semver from 'semver';
 import { z } from 'zod';
+import { getEnvBool, isCI } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
+import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import ModelAudit from '../models/modelAudit';
+import { createShareableModelAuditUrl, isModelAuditSharingEnabled } from '../share';
 import { checkModelAuditUpdates, getModelAuditCurrentVersion } from '../updates';
 import {
   getHuggingFaceMetadata,
@@ -13,9 +22,10 @@ import {
   parseHuggingFaceModel,
 } from '../util/huggingfaceMetadata';
 import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
+import { getModelAuditVerdict, parseCompleteModelAuditResults } from '../util/modelAuditResults';
 import type { Command } from 'commander';
 
-import type { ModelAuditScanResults, ModelAuditIssue } from '../types/modelAudit';
+import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
 
 // ============================================================================
 // Types
@@ -23,6 +33,7 @@ import type { ModelAuditScanResults, ModelAuditIssue } from '../types/modelAudit
 
 interface SpawnResult {
   code: number | null;
+  signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
 }
@@ -33,6 +44,12 @@ interface RevisionInfo {
   contentHash?: string;
   modelSource?: string;
   sourceLastModified?: number;
+}
+
+interface HuggingFaceRevisionSnapshot {
+  modelId: string;
+  sha: string;
+  lastModified: string;
 }
 
 interface ScanOptions {
@@ -52,11 +69,44 @@ interface ScanOptions {
   write?: boolean;
   name?: string;
   force?: boolean;
+  share?: boolean;
+  noShare?: boolean;
+  scanners?: string[];
+  excludeScanner?: string[];
+  listScanners?: boolean;
 }
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+/**
+ * Create a unique temp file path for JSON output.
+ * Uses crypto.randomUUID() for better security against TOCTOU attacks.
+ * @internal Exported for testing
+ */
+export function createTempOutputPath(): string {
+  const tempDir = mkdtempSync(
+    path.join(os.tmpdir(), `promptfoo-modelscan-${crypto.randomUUID()}-`),
+  );
+  return path.join(tempDir, 'results.json');
+}
+
+/**
+ * Check if modelaudit version supports CLI UI with --output flag.
+ * This feature was added in v0.2.20.
+ * @internal Exported for testing
+ */
+export function supportsCliUiWithOutput(version: string | null): boolean {
+  if (!version) {
+    return false;
+  }
+  const parsed = semver.valid(semver.coerce(version));
+  if (!parsed) {
+    return false;
+  }
+  return semver.gte(parsed, '0.2.20');
+}
 
 /**
  * Check if modelaudit is installed and get its version.
@@ -70,13 +120,50 @@ export async function checkModelAuditInstalled(): Promise<{
 }
 
 /**
- * Determine if scan results contain errors.
+ * Determine if scan results contain any non-clean findings.
  */
-function hasErrorsInResults(results: ModelAuditScanResults): boolean {
-  return Boolean(
-    results.has_errors ||
-      results.issues?.some((issue) => issue.severity === 'critical' || issue.severity === 'error'),
-  );
+function hasFindingsInResults(results: ModelAuditScanResults): boolean {
+  return getModelAuditVerdict(results).hasFindings;
+}
+
+/**
+ * Resolve abnormal subprocess termination into a non-zero wrapper exit code.
+ *
+ * modelaudit exit codes:
+ * - 0: Scan completed successfully, no security issues found
+ * - 1: Scan completed successfully, security issues were found (NOT an error)
+ * - 2+: Fatal errors (e.g., invalid arguments)
+ *
+ * Child processes that terminate by signal report `code === null`, so they must be
+ * handled separately instead of collapsing to a successful wrapper exit.
+ */
+function getProcessErrorExitCode(result: Pick<SpawnResult, 'code' | 'signal'>): number | null {
+  if (result.signal !== null) {
+    return 1;
+  }
+
+  if (result.code === null) {
+    return 1;
+  }
+
+  return result.code > 1 ? result.code : null;
+}
+
+function logProcessError(result: Pick<SpawnResult, 'code' | 'signal'>): number | null {
+  const exitCode = getProcessErrorExitCode(result);
+  if (exitCode === null) {
+    return null;
+  }
+
+  if (result.signal !== null) {
+    logger.error(`Model scan process terminated by signal ${result.signal}`);
+  } else if (result.code === null) {
+    logger.error('Model scan process exited without an exit code');
+  } else {
+    logger.error(`Model scan process exited with code ${result.code}`);
+  }
+
+  return exitCode;
 }
 
 /**
@@ -127,6 +214,11 @@ function warnDeprecatedOptions(options: Record<string, unknown>): void {
 /**
  * Spawn modelaudit with proper signal handling and Promise wrapper.
  * Returns stdout/stderr content when capturing output, or empty strings for inherited stdio.
+ *
+ * Signal handling note: Node.js does NOT automatically forward signals to child
+ * processes, even with inherited stdio. When the parent receives SIGINT (Ctrl+C)
+ * or SIGTERM, the child keeps running unless we explicitly kill it. This affects
+ * ALL code paths that use this function (--no-write, saveToDatabase, etc.).
  */
 function spawnModelAudit(
   args: string[],
@@ -146,37 +238,39 @@ function spawnModelAudit(
       ? { env: options.env }
       : { stdio: 'inherit' as const, env: options.env };
 
-    const modelAudit: ChildProcess = spawn('modelaudit', args, spawnOptions);
+    const childProcess = spawn('modelaudit', args, spawnOptions);
 
-    // Graceful shutdown - kill child on SIGINT/SIGTERM
-    const cleanup = () => {
-      if (!modelAudit.killed) {
-        modelAudit.kill('SIGTERM');
+    // Graceful shutdown - forward SIGINT/SIGTERM to child process
+    const forwardSignal = (signal: NodeJS.Signals) => () => {
+      if (!childProcess.killed) {
+        childProcess.kill(signal);
       }
     };
-    process.once('SIGINT', cleanup);
-    process.once('SIGTERM', cleanup);
+    const forwardSigint = forwardSignal('SIGINT');
+    const forwardSigterm = forwardSignal('SIGTERM');
+    process.once('SIGINT', forwardSigint);
+    process.once('SIGTERM', forwardSigterm);
 
     const removeListeners = () => {
-      process.removeListener('SIGINT', cleanup);
-      process.removeListener('SIGTERM', cleanup);
+      process.removeListener('SIGINT', forwardSigint);
+      process.removeListener('SIGTERM', forwardSigterm);
     };
 
     if (options.captureOutput) {
-      modelAudit.stdout?.on('data', (data: Buffer) => {
+      childProcess.stdout?.on('data', (data: Buffer) => {
         const str = data.toString();
         stdout += str;
         options.onStdout?.(str);
       });
 
-      modelAudit.stderr?.on('data', (data: Buffer) => {
+      childProcess.stderr?.on('data', (data: Buffer) => {
         const str = data.toString();
         stderr += str;
         options.onStderr?.(str);
       });
     }
 
-    modelAudit.on('error', (error: Error) => {
+    childProcess.on('error', (error: Error) => {
       removeListeners();
       if (settled) {
         return;
@@ -185,15 +279,96 @@ function spawnModelAudit(
       reject(error);
     });
 
-    modelAudit.on('close', (code: number | null) => {
+    childProcess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
       removeListeners();
       if (settled) {
         return;
       }
       settled = true;
-      resolve({ code, stdout, stderr });
+      resolve({ code, signal: signal ?? null, stdout, stderr });
     });
   });
+}
+
+function collectRepeatableOption(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
+function hasScannerSelectionOptions(options: ScanOptions): boolean {
+  return Boolean(options.scanners?.length || options.excludeScanner?.length);
+}
+
+function hasScannerSelectionValue(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function hasPersistedScannerSelection(metadata: ModelAudit['metadata']): boolean {
+  const options = metadata?.options;
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    return false;
+  }
+
+  return (
+    hasScannerSelectionValue(options.scanners) || hasScannerSelectionValue(options.excludeScanner)
+  );
+}
+
+/**
+ * Parse CLI options through Zod, logging validation errors to the CLI.
+ * Returns null when validation fails (and sets process.exitCode to 1).
+ */
+function buildCliArgs(
+  paths: string[],
+  cliOptions: Record<string, unknown>,
+): { args: string[]; unsupportedOptions: string[] } | null {
+  try {
+    return parseModelAuditArgs(paths, cliOptions);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.error(`Invalid model audit options provided:\n${z.prettifyError(error)}`);
+      process.exitCode = 1;
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Run modelaudit with inherited stdio and propagate its exit code.
+ *
+ * `treatExitOneAsIssues=true` suppresses the error log for exit code 1, which
+ * modelaudit uses to mean "scan completed, issues found" — callers that expect
+ * findings (like the main scan flow) should set this, while list/help flows
+ * (where a non-zero exit is always unexpected) should leave it false.
+ */
+async function runPassthroughModelAudit(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  treatExitOneAsIssues = false,
+): Promise<void> {
+  try {
+    const spawnResult = await spawnModelAudit(args, { captureOutput: false, env });
+    const processErrorExitCode = logProcessError(spawnResult);
+    if (processErrorExitCode !== null) {
+      process.exitCode = processErrorExitCode;
+      return;
+    }
+
+    const isIssuesExit = treatExitOneAsIssues && spawnResult.code === 1;
+    if (spawnResult.code !== null && spawnResult.code !== 0 && !isIssuesExit) {
+      logger.error(`Model scan process exited with code ${spawnResult.code}`);
+    }
+    process.exitCode = spawnResult.code ?? 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to start modelaudit: ${message}`);
+    logger.info('Make sure modelaudit is installed and available in your PATH.');
+    logger.info('Install it using: pip install modelaudit');
+    process.exitCode = 1;
+  }
 }
 
 /**
@@ -204,7 +379,11 @@ async function checkExistingScan(
   paths: string[],
   options: ScanOptions,
   currentScannerVersion: string | null,
-): Promise<{ shouldSkip: boolean; existingAudit: ModelAudit | null }> {
+): Promise<{
+  shouldSkip: boolean;
+  existingAudit: ModelAudit | null;
+  huggingFaceRevision?: HuggingFaceRevisionSnapshot;
+}> {
   if (paths.length !== 1 || !isHuggingFaceModel(paths[0])) {
     return { shouldSkip: false, existingAudit: null };
   }
@@ -218,15 +397,30 @@ async function checkExistingScan(
     const parsed = parseHuggingFaceModel(paths[0]);
     const modelId = parsed ? `${parsed.owner}/${parsed.repo}` : paths[0];
     const existing = await ModelAudit.findByRevision(modelId, metadata.sha);
+    const huggingFaceRevision = {
+      modelId: metadata.modelId,
+      sha: metadata.sha,
+      lastModified: metadata.lastModified,
+    };
 
     if (!existing) {
-      return { shouldSkip: false, existingAudit: null };
+      return { shouldSkip: false, existingAudit: null, huggingFaceRevision };
+    }
+
+    if (hasScannerSelectionOptions(options)) {
+      logger.debug('Re-scanning with scanner selection options');
+      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
+    }
+
+    if (hasPersistedScannerSelection(existing.metadata)) {
+      logger.debug('Re-scanning because cached revision used scanner selection options');
+      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
     }
 
     // Force flag - re-scan but update existing record
     if (options.force) {
       logger.debug(`Re-scanning (--force): ${modelId}`);
-      return { shouldSkip: false, existingAudit: existing };
+      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
     }
 
     // Version changed - re-scan
@@ -235,22 +429,13 @@ async function checkExistingScan(
         ? `modelaudit upgraded from ${existing.scannerVersion} to ${currentScannerVersion}`
         : `previous scan missing version info (now using ${currentScannerVersion})`;
       logger.debug(`Re-scanning: ${reason}`);
-      return { shouldSkip: false, existingAudit: existing };
+      return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
     }
 
-    // Already scanned - skip
-    logger.info(chalk.yellow('✓ Model already scanned'));
-    logger.info(`  Model: ${modelId}`);
-    logger.info(`  Revision: ${metadata.sha}`);
-    if (existing.scannerVersion) {
-      logger.info(`  Scanner version: ${existing.scannerVersion}`);
-    }
-    logger.info(`  Previous scan: ${new Date(existing.createdAt).toISOString()}`);
-    logger.info(`  Scan ID: ${existing.id}`);
-    logger.info(`\n${chalk.gray('Use --force to scan anyway, or view existing results with:')}`);
-    logger.info(chalk.green(`  promptfoo view ${existing.id}`));
-
-    return { shouldSkip: true, existingAudit: null };
+    // HuggingFace aliases are mutable. Without a pinned revision handed to the scanner,
+    // a cached alias match is not strong enough evidence to skip a fresh scan safely.
+    logger.debug(`Re-scanning mutable HuggingFace alias: ${modelId}`);
+    return { shouldSkip: false, existingAudit: existing, huggingFaceRevision };
   } catch (error) {
     logger.debug(`Failed to check for existing scan: ${error}`);
     return { shouldSkip: false, existingAudit: null };
@@ -263,6 +448,7 @@ async function checkExistingScan(
 async function fetchRevisionInfo(
   paths: string[],
   results: ModelAuditScanResults,
+  preScanRevision?: HuggingFaceRevisionSnapshot,
 ): Promise<RevisionInfo> {
   const revisionInfo: RevisionInfo = {};
 
@@ -273,12 +459,19 @@ async function fetchRevisionInfo(
   const modelPath = paths[0];
   if (isHuggingFaceModel(modelPath)) {
     try {
-      const metadata = await getHuggingFaceMetadata(modelPath);
+      const postScanMetadata = await getHuggingFaceMetadata(modelPath);
+      const metadata = preScanRevision ?? postScanMetadata;
       if (metadata) {
         revisionInfo.modelId = metadata.modelId;
-        revisionInfo.revisionSha = metadata.sha;
         revisionInfo.modelSource = 'huggingface';
         revisionInfo.sourceLastModified = new Date(metadata.lastModified).getTime();
+        if (preScanRevision && postScanMetadata && preScanRevision.sha !== postScanMetadata.sha) {
+          logger.warn(
+            `HuggingFace revision changed during scan for ${metadata.modelId}; omitting cached revision SHA`,
+          );
+        } else {
+          revisionInfo.revisionSha = metadata.sha;
+        }
       }
     } catch (error) {
       logger.debug(`Failed to fetch revision info: ${error}`);
@@ -306,8 +499,10 @@ function displayScanSummary(
   logger.info('\n' + chalk.bold('Model Audit Summary'));
   logger.info('=' + '='.repeat(50));
 
-  if (results.has_errors || (results.failed_checks ?? 0) > 0) {
-    logger.info(chalk.yellow(`⚠  Found ${results.failed_checks || 0} issues`));
+  const verdict = getModelAuditVerdict(results);
+  if (verdict.hasFindings) {
+    const issueCount = Math.max(results.failed_checks ?? 0, results.issues?.length ?? 0);
+    logger.info(chalk.yellow(`⚠  Found ${issueCount} issues`));
     displayIssuesBySeverity(results.issues);
   } else {
     logger.info(chalk.green(`✓ No issues found. ${results.passed_checks || 0} checks passed.`));
@@ -337,17 +532,14 @@ function displayIssuesBySeverity(issues: ModelAuditIssue[] | undefined): void {
     return;
   }
 
-  const issuesBySeverity = issues.reduce(
-    (acc, issue) => {
-      const severity = issue.severity || 'info';
-      if (!acc[severity]) {
-        acc[severity] = [];
-      }
-      acc[severity].push(issue);
-      return acc;
-    },
-    {} as Record<string, ModelAuditIssue[]>,
-  );
+  const issuesBySeverity = issues.reduce<Record<string, ModelAuditIssue[]>>((acc, issue) => {
+    const severity = issue.severity || 'info';
+    if (!acc[severity]) {
+      acc[severity] = [];
+    }
+    acc[severity].push(issue);
+    return acc;
+  }, {});
 
   const severityOrder = ['critical', 'error', 'warning', 'info'];
   const severityColors: Record<string, typeof chalk.red> = {
@@ -406,26 +598,59 @@ async function saveAuditRecord(
       quiet: options.quiet,
       progress: options.progress,
       stream: options.stream,
+      scanners: options.scanners,
+      excludeScanner: options.excludeScanner,
     },
   };
 
-  if (existingAudit) {
+  const matchedAudit =
+    existingAudit ??
+    (revisionInfo.modelId
+      ? await ModelAudit.findByRevision(
+          revisionInfo.modelId,
+          revisionInfo.revisionSha,
+          revisionInfo.contentHash,
+        )
+      : null);
+
+  const shouldCreateNewAudit =
+    matchedAudit?.contentHash &&
+    revisionInfo.contentHash &&
+    matchedAudit.contentHash !== revisionInfo.contentHash;
+
+  if (matchedAudit && !shouldCreateNewAudit) {
     // Update existing record with new scan results
-    existingAudit.results = results;
-    existingAudit.checks = results.checks ?? null;
-    existingAudit.issues = results.issues ?? null;
-    existingAudit.hasErrors = hasErrorsInResults(results);
-    existingAudit.totalChecks = results.total_checks ?? null;
-    existingAudit.passedChecks = results.passed_checks ?? null;
-    existingAudit.failedChecks = results.failed_checks ?? null;
-    existingAudit.scannerVersion = currentScannerVersion ?? null;
-    existingAudit.metadata = auditMetadata;
-    existingAudit.updatedAt = Date.now();
-    if (revisionInfo.contentHash) {
-      existingAudit.contentHash = revisionInfo.contentHash;
+    matchedAudit.results = results;
+    matchedAudit.checks = results.checks ?? null;
+    matchedAudit.issues = results.issues ?? null;
+    matchedAudit.hasErrors = hasFindingsInResults(results);
+    matchedAudit.totalChecks = results.total_checks ?? null;
+    matchedAudit.passedChecks = results.passed_checks ?? null;
+    matchedAudit.failedChecks = results.failed_checks ?? null;
+    matchedAudit.scannerVersion = currentScannerVersion ?? null;
+    matchedAudit.metadata = auditMetadata;
+    matchedAudit.updatedAt = Date.now();
+    if (revisionInfo.modelId) {
+      matchedAudit.modelId = revisionInfo.modelId;
     }
-    await existingAudit.save();
-    return existingAudit;
+    if (revisionInfo.revisionSha) {
+      matchedAudit.revisionSha = revisionInfo.revisionSha;
+    }
+    if (revisionInfo.contentHash) {
+      matchedAudit.contentHash = revisionInfo.contentHash;
+    }
+    if (revisionInfo.modelSource) {
+      matchedAudit.modelSource = revisionInfo.modelSource;
+    }
+    if (revisionInfo.sourceLastModified) {
+      matchedAudit.sourceLastModified = revisionInfo.sourceLastModified;
+    }
+    await matchedAudit.save();
+    return matchedAudit;
+  }
+
+  if (shouldCreateNewAudit) {
+    logger.debug('Creating new audit because model content changed since the previous scan');
   }
 
   return ModelAudit.create({
@@ -440,26 +665,18 @@ async function saveAuditRecord(
 }
 
 /**
- * Process scan results: parse JSON, save to database, display summary.
+ * Common logic for processing scan results after JSON is obtained.
+ * Parses JSON, saves to database, and displays summary.
  */
-async function processScanResults(
-  spawnResult: SpawnResult,
+async function processJsonResults(
+  jsonOutput: string,
+  exitCode: number,
   paths: string[],
   options: ScanOptions,
   currentScannerVersion: string | null,
   existingAudit: ModelAudit | null,
+  preScanRevision?: HuggingFaceRevisionSnapshot,
 ): Promise<number> {
-  // Handle non-zero exit codes (0 and 1 are both valid - 1 means issues found)
-  if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
-    logger.error(`Model scan process exited with code ${spawnResult.code}`);
-    if (spawnResult.stderr) {
-      logger.error(`Error output: ${spawnResult.stderr}`);
-    }
-    return spawnResult.code;
-  }
-
-  // Parse JSON output
-  const jsonOutput = spawnResult.stdout.trim();
   if (!jsonOutput) {
     logger.error('No output received from model scan');
     return 1;
@@ -467,17 +684,17 @@ async function processScanResults(
 
   let results: ModelAuditScanResults;
   try {
-    results = JSON.parse(jsonOutput);
+    results = parseCompleteModelAuditResults(JSON.parse(jsonOutput));
   } catch (error) {
     logger.error(`Failed to parse scan results: ${error}`);
     if (options.verbose) {
-      logger.error(`Raw output: ${spawnResult.stdout}`);
+      logger.error(`Raw output: ${jsonOutput}`);
     }
     return 1;
   }
 
   // Fetch revision info and save to database
-  const revisionInfo = await fetchRevisionInfo(paths, results);
+  const revisionInfo = await fetchRevisionInfo(paths, results, preScanRevision);
   const audit = await saveAuditRecord(
     paths,
     results,
@@ -487,19 +704,174 @@ async function processScanResults(
     revisionInfo,
   );
 
-  // Display summary (unless JSON format requested)
+  // Determine if we should share (matches eval command behavior)
+  const hasExplicitDisable =
+    options.share === false || options.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+
+  let wantsToShare: boolean;
+  if (hasExplicitDisable) {
+    wantsToShare = false;
+  } else if (options.share === true) {
+    wantsToShare = true;
+  } else {
+    // Default: auto-share when cloud is enabled
+    wantsToShare = cloudConfig.isEnabled();
+  }
+
+  // Check if sharing is actually possible (cloud enabled or custom share URL configured)
+  const canShare = isModelAuditSharingEnabled();
+
+  logger.debug(`Model audit sharing decision: wantsToShare=${wantsToShare}, canShare=${canShare}`);
+
+  // Start sharing in background (don't await yet - non-blocking like evals!)
+  let sharePromise: Promise<string | null> | null = null;
+  if (wantsToShare && canShare) {
+    sharePromise = createShareableModelAuditUrl(audit);
+  }
+
+  // Display summary immediately (don't wait for upload)
   if (options.format !== 'json') {
     displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
   }
 
-  // Save to file if requested
+  // Save to user-specified output file if requested. Persisted scans always emit
+  // Promptfoo's normalized JSON payload; use --no-write for raw ModelAudit output.
   if (options.output) {
-    const fs = await import('fs');
-    fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-    logger.info(`Results also saved to ${options.output}`);
+    try {
+      await fs.writeFile(options.output, JSON.stringify(results, null, 2));
+      logger.info(`Results also saved to ${options.output}`);
+    } catch (error) {
+      logger.error(`Failed to save results to ${options.output}: ${error}`);
+      return 1;
+    }
   }
 
-  return spawnResult.code || 0;
+  // Now wait for share to complete and show spinner (like evals)
+  if (sharePromise != null) {
+    if (process.stdout.isTTY && !isCI()) {
+      const spinner = ora({
+        text: 'Sharing model audit...',
+        prefixText: chalk.dim('»'),
+        spinner: 'dots',
+      }).start();
+
+      try {
+        const shareableUrl = await sharePromise;
+        if (shareableUrl) {
+          spinner.succeed(shareableUrl);
+        } else {
+          spinner.fail(chalk.red('Share failed'));
+        }
+      } catch (error) {
+        spinner.fail(chalk.red('Share failed'));
+        logger.debug(`Share error: ${error}`);
+      }
+    } else {
+      // CI mode - direct log
+      try {
+        const shareableUrl = await sharePromise;
+        if (shareableUrl) {
+          logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
+        }
+      } catch (error) {
+        logger.debug(`Share error: ${error}`);
+      }
+    }
+  }
+
+  return exitCode === 0 && getModelAuditVerdict(results).hasFindings ? 1 : exitCode;
+}
+
+/**
+ * Process scan results from a JSON file (used when CLI UI is displayed).
+ * Reads JSON from temp file, processes results, and cleans up the temp file.
+ */
+async function processScanResultsFromFile(
+  spawnResult: SpawnResult,
+  jsonFilePath: string,
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAudit: ModelAudit | null,
+  preScanRevision?: HuggingFaceRevisionSnapshot,
+): Promise<number> {
+  // Helper to clean up temp file
+  const cleanupTempFile = async () => {
+    try {
+      await fs.rm(path.dirname(jsonFilePath), { recursive: true, force: true });
+    } catch (error) {
+      logger.debug(`Failed to cleanup temp file ${jsonFilePath}: ${error}`);
+    }
+  };
+
+  // Handle process errors (stderr already displayed via inherited stdio)
+  const processErrorExitCode = logProcessError(spawnResult);
+  if (processErrorExitCode !== null) {
+    await cleanupTempFile();
+    return processErrorExitCode;
+  }
+
+  // Read JSON from temp file
+  let jsonOutput: string;
+  try {
+    jsonOutput = (await fs.readFile(jsonFilePath, 'utf-8')).trim();
+  } catch (error) {
+    logger.error(`Failed to read scan results from file: ${error}`);
+    await cleanupTempFile();
+    return 1;
+  }
+
+  // Clean up temp file after successful read
+  await cleanupTempFile();
+
+  return processJsonResults(
+    jsonOutput,
+    spawnResult.code ?? 0,
+    paths,
+    options,
+    currentScannerVersion,
+    existingAudit,
+    preScanRevision,
+  );
+}
+
+/**
+ * Process scan results from stdout (used for older modelaudit versions).
+ * Parses JSON from captured stdout and saves to database.
+ */
+async function processScanResultsFromStdout(
+  spawnResult: SpawnResult,
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAudit: ModelAudit | null,
+  preScanRevision?: HuggingFaceRevisionSnapshot,
+): Promise<number> {
+  // Handle process errors
+  const processErrorExitCode = logProcessError(spawnResult);
+  if (processErrorExitCode !== null) {
+    if (spawnResult.stderr) {
+      logger.error(spawnResult.stderr);
+    }
+    return processErrorExitCode;
+  }
+
+  const jsonOutput = spawnResult.stdout.trim();
+  if (!jsonOutput && spawnResult.stderr) {
+    logger.error('No output received from model scan');
+    logger.error(spawnResult.stderr);
+    return 1;
+  }
+
+  return processJsonResults(
+    jsonOutput,
+    spawnResult.code ?? 0,
+    paths,
+    options,
+    currentScannerVersion,
+    existingAudit,
+    preScanRevision,
+  );
 }
 
 // ============================================================================
@@ -510,7 +882,7 @@ export function modelScanCommand(program: Command): void {
   program
     .command('scan-model')
     .description('Scan model files for security and quality issues')
-    .argument('<paths...>', 'Model files or directories to scan')
+    .argument('[paths...]', 'Model files or directories to scan')
 
     // Core configuration
     .option(
@@ -539,14 +911,29 @@ export function modelScanCommand(program: Command): void {
     .option('--quiet', 'Silence detection messages')
     .option('--progress', 'Force enable progress reporting (auto-detected by default)')
     .option('--stream', 'Scan and delete downloaded files immediately after scan')
+    .option(
+      '--scanners <scanner>',
+      'Only run selected ModelAudit scanners (IDs/classes; comma-separated or repeated)',
+      collectRepeatableOption,
+    )
+    .option(
+      '--exclude-scanner <scanner>',
+      'Exclude a ModelAudit scanner from the active set (comma-separated or repeated)',
+      collectRepeatableOption,
+    )
+    .option('--list-scanners', 'List registered ModelAudit scanners and exit')
 
     // Miscellaneous
     .option('-v, --verbose', 'Enable verbose output')
     .option('--force', 'Force scan even if model was already scanned')
 
+    // Sharing options
+    .option('--share', 'Share the model audit results')
+    .option('--no-share', 'Do not share the model audit results')
+
     .action(async (paths: string[], options: ScanOptions) => {
       // Validate input
-      if (!paths || paths.length === 0) {
+      if (!options.listScanners && (!paths || paths.length === 0)) {
         logger.error('No paths specified. Provide at least one model file or directory to scan.');
         process.exitCode = 1;
         return;
@@ -571,97 +958,158 @@ export function modelScanCommand(program: Command): void {
         logger.debug(`Using modelaudit version: ${currentScannerVersion}`);
       }
 
-      // Determine if we should save to database
-      const saveToDatabase = options.write === undefined || options.write === true;
-
-      // Check for existing scan (skip or get audit to update)
-      let existingAuditToUpdate: ModelAudit | null = null;
-      if (saveToDatabase) {
-        const { shouldSkip, existingAudit } = await checkExistingScan(
-          paths,
-          options,
-          currentScannerVersion,
-        );
-        if (shouldSkip) {
-          process.exitCode = 0;
-          return;
-        }
-        existingAuditToUpdate = existingAudit;
-      }
-
-      // Parse CLI arguments
-      const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
-      const cliOptions = {
-        ...options,
-        format: outputFormat,
-        output: options.output && !saveToDatabase ? options.output : undefined,
-        timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
-      };
-
-      let args: string[];
-      try {
-        const result = parseModelAuditArgs(paths, cliOptions);
-        args = result.args;
-        if (result.unsupportedOptions.length > 0) {
-          logger.warn(`Unsupported options detected: ${result.unsupportedOptions.join(', ')}`);
-        }
-      } catch (error) {
-        if (error instanceof z.ZodError) {
-          logger.error('Invalid model audit options provided:');
-          for (const err of error.errors) {
-            logger.error(`  - ${err.path.join('.')}: ${err.message}`);
-          }
-          process.exitCode = 1;
-          return;
-        }
-        throw error;
-      }
-
-      logger.info(`Running model scan on: ${paths.join(', ')}`);
-
-      // Set up environment
       const delegationEnv = {
         ...process.env,
         PROMPTFOO_DELEGATED: 'true',
       };
 
+      if (options.listScanners) {
+        const parsed = buildCliArgs(paths || [], {
+          ...options,
+          format: options.format || 'text',
+          output: options.output,
+          timeout: undefined,
+        });
+        if (!parsed) {
+          return;
+        }
+        await runPassthroughModelAudit(parsed.args, delegationEnv);
+        return;
+      }
+
+      // Determine if we should save to database
+      const saveToDatabase = options.write === undefined || options.write === true;
+
+      // Check for existing scan (skip or get audit to update)
+      let existingAuditToUpdate: ModelAudit | null = null;
+      let huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined;
+      if (saveToDatabase) {
+        const {
+          shouldSkip,
+          existingAudit,
+          huggingFaceRevision: scannedRevision,
+        } = await checkExistingScan(paths, options, currentScannerVersion);
+        if (shouldSkip) {
+          process.exitCode = 0;
+          return;
+        }
+        existingAuditToUpdate = existingAudit;
+        huggingFaceRevision = scannedRevision;
+      }
+
+      // Parse CLI arguments
+      const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
+      const parsed = buildCliArgs(paths, {
+        ...options,
+        format: outputFormat,
+        output: options.output && !saveToDatabase ? options.output : undefined,
+        timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+      });
+      if (!parsed) {
+        return;
+      }
+      const args = parsed.args;
+      if (parsed.unsupportedOptions.length > 0) {
+        logger.warn(`Unsupported options detected: ${parsed.unsupportedOptions.join(', ')}`);
+      }
+
+      if (saveToDatabase || outputFormat === 'text') {
+        logger.info(`Running model scan on: ${paths.join(', ')}`);
+      }
+
+      if (!saveToDatabase) {
+        await runPassthroughModelAudit(args, delegationEnv, true);
+        return;
+      }
+
       try {
-        if (saveToDatabase) {
-          // Capture output for database storage
+        // Check if modelaudit version supports CLI UI with --output flag (v0.2.20+)
+        const useCliUiFlow = supportsCliUiWithOutput(currentScannerVersion);
+
+        if (useCliUiFlow) {
+          // Use temp file for JSON output so CLI UI can display
+          // (modelaudit 0.2.20+ shows CLI UI when --output is used)
+          const tempOutputPath = createTempOutputPath();
+          args.push('--output', tempOutputPath);
+
+          // Cleanup handler for temp file on abnormal termination.
+          // Note: Child process termination is handled by spawnModelAudit's signal
+          // handlers - this only handles temp file cleanup.
+          //
+          // IMPORTANT: We use unlinkSync (synchronous) instead of fs.promises.unlink
+          // because signal handlers must complete synchronously. Async operations
+          // in signal handlers are unsafe - the process may exit before they complete.
+          let cleanedUp = false;
+          const cleanupTempFileOnExit = () => {
+            if (cleanedUp) {
+              return;
+            }
+            cleanedUp = true;
+            try {
+              unlinkSync(tempOutputPath);
+            } catch {
+              // Ignore - file may already be cleaned up or doesn't exist
+            }
+            try {
+              rmSync(path.dirname(tempOutputPath), { recursive: true, force: true });
+            } catch {
+              // Ignore - directory may already be removed
+            }
+          };
+
+          // Register cleanup handlers for abnormal termination.
+          // We use once() so handlers auto-remove after firing, but we also manually
+          // remove them in finally{} for the normal exit path. The cleanedUp flag
+          // prevents double-cleanup if a signal fires between our manual cleanup call
+          // and removeListener calls. This belt-and-suspenders approach ensures:
+          // 1. Normal exit: finally{} cleans up and removes handlers
+          // 2. Signal during await: once() handler cleans up, auto-removes itself
+          // 3. Signal during finally{}: cleanedUp flag prevents double-cleanup
+          process.once('exit', cleanupTempFileOnExit);
+          process.once('SIGINT', cleanupTempFileOnExit);
+          process.once('SIGTERM', cleanupTempFileOnExit);
+
+          try {
+            // Use inherited stdio so CLI UI displays (spinners, progress, colors)
+            const spawnResult = await spawnModelAudit(args, {
+              captureOutput: false,
+              env: delegationEnv,
+            });
+
+            // Read JSON from temp file and process results
+            process.exitCode = await processScanResultsFromFile(
+              spawnResult,
+              tempOutputPath,
+              paths,
+              options,
+              currentScannerVersion,
+              existingAuditToUpdate,
+              huggingFaceRevision,
+            );
+          } finally {
+            // Cleanup first, then remove handlers. Order matters: if we removed
+            // handlers first, a signal arriving before cleanup would be missed.
+            cleanupTempFileOnExit();
+            process.removeListener('exit', cleanupTempFileOnExit);
+            process.removeListener('SIGINT', cleanupTempFileOnExit);
+            process.removeListener('SIGTERM', cleanupTempFileOnExit);
+          }
+        } else {
+          // Fallback for older modelaudit versions: capture stdout for JSON
+          logger.debug('Using stdout capture (modelaudit < 0.2.20)');
           const spawnResult = await spawnModelAudit(args, {
             captureOutput: true,
             env: delegationEnv,
-            onStdout: (data) => {
-              // Show raw JSON if user explicitly requested it
-              if (options.format === 'json' && !options.output) {
-                process.stdout.write(data);
-              }
-            },
-            onStderr: (data) => {
-              if (options.verbose) {
-                process.stderr.write(data);
-              }
-            },
           });
 
-          process.exitCode = await processScanResults(
+          process.exitCode = await processScanResultsFromStdout(
             spawnResult,
             paths,
             options,
             currentScannerVersion,
             existingAuditToUpdate,
+            huggingFaceRevision,
           );
-        } else {
-          // Pass through to terminal (inherited stdio)
-          const spawnResult = await spawnModelAudit(args, {
-            captureOutput: false,
-            env: delegationEnv,
-          });
-
-          if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
-            logger.error(`Model scan process exited with code ${spawnResult.code}`);
-          }
-          process.exitCode = spawnResult.code || 0;
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

@@ -1,17 +1,18 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
+
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TRANSCRIPTION_MODELS } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 
 export interface OpenAiTranscriptionOptions {
   apiKey?: string;
@@ -51,10 +52,10 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     return `[OpenAI Transcription Provider ${this.modelName}]`;
   }
 
-  private calculateTranscriptionCost(durationSeconds: number): number {
+  private calculateTranscriptionCost(durationSeconds: number | undefined): number | undefined {
     const model = OPENAI_TRANSCRIPTION_MODELS.find((m) => m.id === this.modelName);
-    if (!model || !model.cost) {
-      return 0;
+    if (!model || !model.cost || durationSeconds === undefined) {
+      return undefined;
     }
     const durationMinutes = durationSeconds / 60;
     return durationMinutes * model.cost.perMinute;
@@ -66,9 +67,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const config = {
@@ -79,15 +78,19 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     // The prompt should be a file path to an audio file
     const audioFilePath = prompt.trim();
 
-    if (!fs.existsSync(audioFilePath)) {
-      return {
-        error: `Audio file not found: ${audioFilePath}`,
-      };
+    let fileBuffer: Awaited<ReturnType<typeof fs.readFile>>;
+    try {
+      fileBuffer = await fs.readFile(audioFilePath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { error: `Audio file not found: ${audioFilePath}` };
+      }
+      logger.error('Failed to read audio file', { error: err, audioFilePath });
+      return { error: `Failed to read audio file ${audioFilePath}: ${String(err)}` };
     }
 
     try {
-      // Read the audio file and create a File object for native FormData
-      const fileBuffer = fs.readFileSync(audioFilePath);
+      // Create a File object for native FormData from the loaded buffer
       const fileName = path.basename(audioFilePath);
       const file = new File([fileBuffer], fileName);
 
@@ -141,7 +144,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
             headers,
             body: formData,
           },
-          REQUEST_TIMEOUT_MS,
+          getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
         ));
@@ -165,7 +168,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       }
 
       // Calculate cost based on audio duration
-      const durationSeconds = data.duration || 0;
+      const durationSeconds = typeof data.duration === 'number' ? data.duration : undefined;
       const cost = cached ? 0 : this.calculateTranscriptionCost(durationSeconds);
 
       // Calculate average quality metrics from segments
@@ -236,12 +239,12 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         cost,
         metadata: {
           task: data.task,
-          duration: durationSeconds,
+          ...(durationSeconds === undefined ? {} : { duration: durationSeconds }),
           language: data.language,
           segments: data.segments?.length || 0,
-          ...(avgLogprob !== undefined ? { avgLogprob } : {}),
-          ...(avgCompressionRatio !== undefined ? { avgCompressionRatio } : {}),
-          ...(avgNoSpeechProb !== undefined ? { avgNoSpeechProb } : {}),
+          ...(avgLogprob === undefined ? {} : { avgLogprob }),
+          ...(avgCompressionRatio === undefined ? {} : { avgCompressionRatio }),
+          ...(avgNoSpeechProb === undefined ? {} : { avgNoSpeechProb }),
           ...(this.modelName.includes('diarize') && data.speakers
             ? { speakers: data.speakers }
             : {}),

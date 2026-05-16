@@ -1,14 +1,14 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
 
 export type HyperbolicAudioOptions = {
@@ -129,7 +129,7 @@ export class HyperbolicAudioProvider implements ApiProvider {
           headers,
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       ));
 
       if (status < 200 || status >= 300) {

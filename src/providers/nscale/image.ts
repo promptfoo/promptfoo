@@ -2,14 +2,14 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
 import type { OpenAiSharedOptions } from '../openai/types';
 
@@ -188,7 +188,7 @@ export class NscaleImageProvider extends OpenAiImageProvider {
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       ));
       if (status < 200 || status >= 300) {
         return {

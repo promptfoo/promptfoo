@@ -1,6 +1,16 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
+
+const AllProviders = ({ children }: { children: React.ReactNode }) => (
+  <TooltipProvider>{children}</TooltipProvider>
+);
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(ui, { wrapper: AllProviders });
+};
 
 describe('StrategyConfigDialog', () => {
   const mockOnSave = vi.fn();
@@ -10,8 +20,9 @@ describe('StrategyConfigDialog', () => {
     vi.clearAllMocks();
   });
 
-  it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', () => {
-    render(
+  it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="layer"
@@ -24,22 +35,26 @@ describe('StrategyConfigDialog', () => {
     );
 
     const specificPluginsButton = screen.getByText('Specific plugins only');
-    fireEvent.click(specificPluginsButton);
+    await user.click(specificPluginsButton);
 
-    const addStepInput = screen.getByLabelText('Add Strategy Step');
-    fireEvent.change(addStepInput, { target: { value: 'base64' } });
-    fireEvent.keyDown(addStepInput, { key: 'Enter' });
+    // Use the custom file:// input field to add a step
+    const customStepInput = screen.getByPlaceholderText('Or type file://path/to/custom.js');
+    await user.click(customStepInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('file://base64.js');
+    customStepInput.focus();
+    await user.keyboard('{Enter}');
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
-    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['file://base64.js'] });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
   it('should compute availableStrategies correctly with stable empty array for allStrategies', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="layer"
@@ -51,12 +66,15 @@ describe('StrategyConfigDialog', () => {
       />,
     );
 
-    const autocomplete = screen.getByLabelText('Add Strategy Step');
-    expect(autocomplete).toBeInTheDocument();
+    // Check that the strategy selector and custom input field are present
+    const strategySelector = screen.getByRole('combobox');
+    expect(strategySelector).toBeInTheDocument();
+    const customInput = screen.getByPlaceholderText('Or type file://path/to/custom.js');
+    expect(customInput).toBeInTheDocument();
   });
 
   it('should use stable empty arrays when selectedPlugins and allStrategies are not provided', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="basic"
@@ -88,13 +106,14 @@ describe('StrategyConfigDialog', () => {
       );
     };
 
-    render(<TestComponent />);
+    renderWithProviders(<TestComponent />);
 
     expect(renderCount).toBeLessThan(5);
   });
 
-  it('should not mutate the default empty arrays, which could affect other component instances', () => {
-    render(
+  it('should not mutate the default empty arrays, which could affect other component instances', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="layer"
@@ -105,14 +124,18 @@ describe('StrategyConfigDialog', () => {
       />,
     );
 
-    const addStrategyStepInput = screen.getByLabelText('Add Strategy Step');
-    fireEvent.change(addStrategyStepInput, { target: { value: 'base64' } });
-    fireEvent.keyDown(addStrategyStepInput, { key: 'Enter' });
+    // Use the custom file:// input field to add a step
+    const customStepInput = screen.getByPlaceholderText('Or type file://path/to/custom.js');
+    await user.click(customStepInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('file://base64.js');
+    customStepInput.focus();
+    await user.keyboard('{Enter}');
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="layer"
@@ -124,11 +147,11 @@ describe('StrategyConfigDialog', () => {
     );
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
-    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['file://base64.js'] });
   });
 
   it('should handle null or undefined values for selectedPlugins and allStrategies without crashing', () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="basic"
@@ -146,7 +169,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should render the correct title and switch when open is true and strategy is 'basic'", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="basic"
@@ -166,10 +189,11 @@ describe('StrategyConfigDialog', () => {
     expect(switchElement).toBeInTheDocument();
   });
 
-  it('should save basic strategy configuration correctly', () => {
+  it('should save basic strategy configuration correctly', async () => {
+    const user = userEvent.setup();
     const initialConfig = { enabled: false };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="basic"
@@ -183,10 +207,10 @@ describe('StrategyConfigDialog', () => {
     const switchElement = screen.getByRole('switch', {
       name: /Include plugin-generated test cases/,
     });
-    fireEvent.click(switchElement);
+    await user.click(switchElement);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('basic', {
@@ -196,11 +220,12 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it("should call onSave with the correct arguments and then onClose when Save is clicked for a valid 'custom' strategy", () => {
+  it("should call onSave with the correct arguments and then onClose when Save is clicked for a valid 'custom' strategy", async () => {
+    const user = userEvent.setup();
     const initialConfig = {};
     const strategyText = 'This is a valid custom strategy.';
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="custom"
@@ -212,11 +237,13 @@ describe('StrategyConfigDialog', () => {
     );
 
     const strategyTextField = screen.getByLabelText('Strategy Text');
-    fireEvent.change(strategyTextField, { target: { value: strategyText } });
+    await user.click(strategyTextField);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(strategyText);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     expect(saveButton).not.toBeDisabled();
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('custom', { strategyText });
@@ -224,10 +251,11 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should return early from handleSave when custom strategy is invalid', () => {
+  it('should return early from handleSave when custom strategy is invalid', async () => {
+    const user = userEvent.setup();
     const initialConfig = {};
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="custom"
@@ -240,14 +268,15 @@ describe('StrategyConfigDialog', () => {
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     expect(saveButton).toBeDisabled();
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).not.toHaveBeenCalled();
     expect(mockOnClose).not.toHaveBeenCalled();
   });
 
-  it("should render the number input for maximum tests and update the value when changed for the 'retry' strategy", () => {
-    render(
+  it("should render the number input for maximum tests and update the value when changed for the 'retry' strategy", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="retry"
@@ -262,19 +291,22 @@ describe('StrategyConfigDialog', () => {
     expect(numTestsInput).toBeInTheDocument();
     expect(numTestsInput).toHaveValue(5);
 
-    fireEvent.change(numTestsInput, { target: { value: '15' } });
+    await user.click(numTestsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('15');
     expect(numTestsInput).toHaveValue(15);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('retry', { numTests: 15 });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should not call onSave and disable the Save button when a non-numeric value is entered for numTests in the retry strategy', () => {
-    render(
+  it('should not call onSave and disable the Save button when a non-numeric value is entered for numTests in the retry strategy', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="retry"
@@ -286,20 +318,30 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numTestsInput = screen.getByLabelText('Maximum Tests Per Plugin');
-    fireEvent.change(numTestsInput, { target: { value: 'abc' } });
+    // Bypass browser type="number" validation via the native setter — userEvent
+    // correctly rejects non-numeric input, but we need to test defensive handling.
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        numTestsInput,
+        'abc',
+      );
+      numTestsInput.dispatchEvent(new Event('input', { bubbles: true }));
+      numTestsInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
     expect(saveButton).toBeDisabled();
 
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
     expect(mockOnSave).not.toHaveBeenCalled();
   });
 
-  it("should render the number of iterations input and update local config when changed for the 'jailbreak' strategy", () => {
-    const initialConfig = { numIterations: 10 };
-    const newNumIterations = 20;
+  it("should render the number of iterations input and update local config when changed for the 'jailbreak' strategy", async () => {
+    const user = userEvent.setup();
+    const initialConfig = { numIterations: 5 };
+    const newNumIterations = 8;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak"
@@ -311,25 +353,28 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
-    fireEvent.change(numIterationsInput, { target: { value: newNumIterations.toString() } });
-    fireEvent.blur(numIterationsInput);
+    await user.click(numIterationsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(String(newNumIterations));
+    await user.tab();
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak', { numIterations: newNumIterations });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it("should render switches for academic, journal, and book citations and update local config when toggled for the 'citation' strategy", () => {
+  it("should render switches for academic, journal, and book citations and update local config when toggled for the 'citation' strategy", async () => {
+    const user = userEvent.setup();
     const initialConfig = {
       useAcademic: true,
       useJournals: false,
       useBooks: true,
     };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="citation"
@@ -348,12 +393,12 @@ describe('StrategyConfigDialog', () => {
     expect(journalsSwitch).not.toBeChecked();
     expect(booksSwitch).toBeChecked();
 
-    fireEvent.click(academicSwitch);
-    fireEvent.click(journalsSwitch);
-    fireEvent.click(booksSwitch);
+    await user.click(academicSwitch);
+    await user.click(journalsSwitch);
+    await user.click(booksSwitch);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('citation', {
@@ -363,14 +408,15 @@ describe('StrategyConfigDialog', () => {
     });
   });
 
-  it('should render and handle best-of-n strategy configuration correctly', () => {
+  it('should render and handle best-of-n strategy configuration correctly', async () => {
+    const user = userEvent.setup();
     const initialConfig = {
       maxConcurrency: 3,
       nSteps: 10,
       maxCandidatesPerStep: 5,
     };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="best-of-n"
@@ -385,12 +431,18 @@ describe('StrategyConfigDialog', () => {
     const nStepsInput = screen.getByLabelText('Number of Steps');
     const maxCandidatesPerStepInput = screen.getByLabelText('Max Candidates Per Step');
 
-    fireEvent.change(maxConcurrencyInput, { target: { value: '5' } });
-    fireEvent.change(nStepsInput, { target: { value: '15' } });
-    fireEvent.change(maxCandidatesPerStepInput, { target: { value: '7' } });
+    await user.click(maxConcurrencyInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('5');
+    await user.click(nStepsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('15');
+    await user.click(maxCandidatesPerStepInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('7');
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('best-of-n', {
@@ -401,11 +453,12 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should render and handle gcg strategy configuration correctly', () => {
+  it('should render and handle gcg strategy configuration correctly', async () => {
+    const user = userEvent.setup();
     const initialConfig = { n: 5 };
     const newN = 10;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="gcg"
@@ -417,10 +470,12 @@ describe('StrategyConfigDialog', () => {
     );
 
     const nTextField = screen.getByLabelText('Number of Outputs (n)');
-    fireEvent.change(nTextField, { target: { value: newN.toString() } });
+    await user.click(nTextField);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(String(newN));
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('gcg', { n: newN });
@@ -428,7 +483,8 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should update jailbreak:tree strategy parameters when changed', () => {
+  it('should update jailbreak:tree strategy parameters when changed', async () => {
+    const user = userEvent.setup();
     const initialConfig = {
       maxDepth: 25,
       maxAttempts: 250,
@@ -437,7 +493,7 @@ describe('StrategyConfigDialog', () => {
       maxNoImprovement: 25,
     };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:tree"
@@ -453,37 +509,48 @@ describe('StrategyConfigDialog', () => {
     );
 
     const maxDepthInput = screen.getByLabelText('Maximum Depth');
-    fireEvent.change(maxDepthInput, { target: { value: '30' } });
+    await user.click(maxDepthInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('4');
 
     const maxAttemptsInput = screen.getByLabelText('Maximum Attempts');
-    fireEvent.change(maxAttemptsInput, { target: { value: '300' } });
+    await user.click(maxAttemptsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('25');
 
     const maxWidthInput = screen.getByLabelText('Max Width');
-    fireEvent.change(maxWidthInput, { target: { value: '15' } });
+    await user.click(maxWidthInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('3');
 
     const branchingFactorInput = screen.getByLabelText('Branching Factor');
-    fireEvent.change(branchingFactorInput, { target: { value: '5' } });
+    await user.click(branchingFactorInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('2');
 
     const maxNoImprovementInput = screen.getByLabelText('Max No Improvement');
-    fireEvent.change(maxNoImprovementInput, { target: { value: '30' } });
+    await user.click(maxNoImprovementInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('8');
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak:tree', {
-      maxDepth: 30,
-      maxAttempts: 300,
-      maxWidth: 15,
-      branchingFactor: 5,
-      maxNoImprovement: 30,
+      maxDepth: 4,
+      maxAttempts: 25,
+      maxWidth: 3,
+      branchingFactor: 2,
+      maxNoImprovement: 8,
     });
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should reset local state when switching between strategies', () => {
-    const { rerender } = render(
+  it('should reset local state when switching between strategies', async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="custom"
@@ -496,10 +563,14 @@ describe('StrategyConfigDialog', () => {
 
     const customMaxTurnsInput = screen.getByLabelText('Max Turns');
     expect(customMaxTurnsInput).toHaveValue(4);
-    fireEvent.change(customMaxTurnsInput, { target: { value: '12' } });
-    expect(customMaxTurnsInput).toHaveValue(12);
+    await user.click(customMaxTurnsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('8');
+    expect(customMaxTurnsInput).toHaveValue(8);
 
-    const customStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const customStatefulSwitch = screen.getByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(customStatefulSwitch).toBeChecked();
 
     rerender(
@@ -516,12 +587,14 @@ describe('StrategyConfigDialog', () => {
     const goatMaxTurnsInput = screen.getByLabelText('Max Turns');
     expect(goatMaxTurnsInput).toHaveValue(3);
 
-    const goatStatefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const goatStatefulSwitch = screen.getByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(goatStatefulSwitch).not.toBeChecked();
   });
 
   it("should render Hydra configuration fields when strategy is 'jailbreak:hydra'", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:hydra"
@@ -542,12 +615,15 @@ describe('StrategyConfigDialog', () => {
     expect(maxTurnsInput).toHaveValue(10);
 
     expect(screen.queryByLabelText('Max Backtracks')).not.toBeInTheDocument();
-    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
+    const statefulSwitch = screen.getByRole('switch', {
+      name: /Use target-managed session memory/,
+    });
     expect(statefulSwitch).not.toBeChecked();
   });
 
-  it("should save updated Hydra configuration when strategy is 'jailbreak:hydra'", () => {
-    render(
+  it("should save updated Hydra configuration when strategy is 'jailbreak:hydra'", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:hydra"
@@ -563,25 +639,30 @@ describe('StrategyConfigDialog', () => {
     );
 
     const maxTurnsInput = screen.getByLabelText('Max Turns');
-    fireEvent.change(maxTurnsInput, { target: { value: '15' } });
+    await user.click(maxTurnsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('8');
 
-    const statefulSwitch = screen.getByRole('switch', { name: /Stateful/ });
-    fireEvent.click(statefulSwitch);
+    const statefulSwitch = screen.getByRole('switch', {
+      name: /Use target-managed session memory/,
+    });
+    await user.click(statefulSwitch);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak:hydra', {
-      maxTurns: 15,
+      maxTurns: 8,
       stateful: true,
     });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should not persist localConfig changes when closing the dialog without saving for the jailbreak:meta strategy', () => {
+  it('should not persist localConfig changes when closing the dialog without saving for the jailbreak:meta strategy', async () => {
+    const user = userEvent.setup();
     const initialConfig = { numIterations: 10 };
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -597,17 +678,19 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
-    fireEvent.change(numIterationsInput, { target: { value: '20' } });
+    await user.click(numIterationsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('20');
 
     const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-    fireEvent.click(cancelButton);
+    await user.click(cancelButton);
 
     expect(mockOnSave).not.toHaveBeenCalled();
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
   it("should render the 'jailbreak:meta' strategy config without falling through to multi-turn or default", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -633,7 +716,9 @@ describe('StrategyConfigDialog', () => {
     const maxTurnsInput = screen.queryByLabelText('Max Turns');
     expect(maxTurnsInput).toBeNull();
 
-    const statefulSwitch = screen.queryByRole('switch', { name: /Stateful/ });
+    const statefulSwitch = screen.queryByRole('switch', {
+      name: /When enabled, Promptfoo should only send/,
+    });
     expect(statefulSwitch).toBeNull();
 
     const noConfigMessage = screen.queryByText(
@@ -646,7 +731,7 @@ describe('StrategyConfigDialog', () => {
     const initialConfig = { numIterations: 25 };
     const newConfig = { numIterations: 35 };
 
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="custom"
@@ -705,11 +790,12 @@ describe('StrategyConfigDialog', () => {
     expect(numIterationsInputUpdated).toHaveValue(35);
   });
 
-  it("should call onSave with localConfig and the strategy string when Save is clicked for the 'jailbreak:meta' strategy", () => {
+  it("should call onSave with localConfig and the strategy string when Save is clicked for the 'jailbreak:meta' strategy", async () => {
+    const user = userEvent.setup();
     const initialConfig = {};
-    const numIterations = 25;
+    const numIterations = 8;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -725,20 +811,23 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
-    fireEvent.change(numIterationsInput, { target: { value: numIterations.toString() } });
+    await user.click(numIterationsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(String(numIterations));
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: numIterations });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it("should save 'jailbreak:meta' strategy with default numIterations when input is empty", () => {
+  it("should save 'jailbreak:meta' strategy with default numIterations when input is empty", async () => {
+    const user = userEvent.setup();
     const initialConfig = {};
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -754,10 +843,10 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
-    fireEvent.change(numIterationsInput, { target: { value: '' } });
+    await user.clear(numIterationsInput);
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: 10 });
@@ -765,11 +854,11 @@ describe('StrategyConfigDialog', () => {
   });
 
   it('should reset localConfig when the jailbreak:meta strategy dialog is opened multiple times with different config values', () => {
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
-        config={{ numIterations: 20 }}
+        config={{ numIterations: 8 }}
         onClose={mockOnClose}
         onSave={mockOnSave}
         strategyData={{
@@ -781,7 +870,7 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numIterationsInput1 = screen.getByLabelText('Number of Iterations');
-    expect(numIterationsInput1).toHaveValue(20);
+    expect(numIterationsInput1).toHaveValue(8);
 
     rerender(
       <StrategyConfigDialog
@@ -802,15 +891,16 @@ describe('StrategyConfigDialog', () => {
     expect(numIterationsInput2).toHaveValue(5);
   });
 
-  it('should preserve other config properties when saving numIterations for jailbreak:meta', () => {
+  it('should preserve other config properties when saving numIterations for jailbreak:meta', async () => {
+    const user = userEvent.setup();
     const initialConfig = {
-      numIterations: 10,
+      numIterations: 5,
       someOtherField: 'someValue',
       anotherField: 123,
     };
-    const newNumIterations = 20;
+    const newNumIterations = 8;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -826,10 +916,12 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
-    fireEvent.change(numIterationsInput, { target: { value: newNumIterations.toString() } });
+    await user.click(numIterationsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(String(newNumIterations));
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', {
@@ -840,11 +932,12 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it("should call onSave with the updated numIterations and then onClose when Save is clicked for the 'jailbreak:meta' strategy", () => {
-    const initialConfig = { numIterations: 10 };
-    const newNumIterations = 20;
+  it("should call onSave with the updated numIterations and then onClose when Save is clicked for the 'jailbreak:meta' strategy", async () => {
+    const user = userEvent.setup();
+    const initialConfig = { numIterations: 5 };
+    const newNumIterations = 8;
 
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -860,10 +953,12 @@ describe('StrategyConfigDialog', () => {
     );
 
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
-    fireEvent.change(numIterationsInput, { target: { value: newNumIterations.toString() } });
+    await user.click(numIterationsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(String(newNumIterations));
 
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
     expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: newNumIterations });
@@ -871,7 +966,7 @@ describe('StrategyConfigDialog', () => {
   });
 
   it("should render the number of iterations input and relevant instructions when open is true and strategy is 'jailbreak:meta'", () => {
-    render(
+    renderWithProviders(
       <StrategyConfigDialog
         open={true}
         strategy="jailbreak:meta"
@@ -893,7 +988,7 @@ describe('StrategyConfigDialog', () => {
 
   describe('layer strategy', () => {
     it('should render layer strategy configuration correctly', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -906,11 +1001,14 @@ describe('StrategyConfigDialog', () => {
 
       expect(screen.getByText('Target Plugins')).toBeInTheDocument();
       expect(screen.getByText('Steps (in order)')).toBeInTheDocument();
-      expect(screen.getByLabelText('Add Strategy Step')).toBeInTheDocument();
+      // Check that the strategy selector and custom input field are present
+      expect(screen.getByRole('combobox')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Or type file://path/to/custom.js')).toBeInTheDocument();
     });
 
-    it('should save layer strategy with all plugins by default', () => {
-      render(
+    it('should save layer strategy with all plugins by default', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -922,13 +1020,14 @@ describe('StrategyConfigDialog', () => {
       );
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['base64'] });
     });
 
-    it('should save layer strategy with specific plugins when selected', () => {
-      render(
+    it('should save layer strategy with specific plugins when selected', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -941,7 +1040,7 @@ describe('StrategyConfigDialog', () => {
       );
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith('layer', {
         plugins: ['harmful', 'pii'],
@@ -950,7 +1049,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should disable save button when no steps are configured', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -970,7 +1069,7 @@ describe('StrategyConfigDialog', () => {
         steps: [{ id: 'base64', config: { plugins: ['harmful'] } }, 'rot13'],
       };
 
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -989,7 +1088,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Configure Layer Strategy" description when no steps are added', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1007,7 +1106,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Transform Chain" mode when only transform steps are added', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1025,7 +1124,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Multi-Turn + Multi-Modal Attack" mode when agentic and multi-modal steps are combined', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1045,7 +1144,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Multi-Turn Agentic Attack" mode when only agentic step is added', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1063,7 +1162,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "Multi-Modal Transform" mode when only multi-modal step is added', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1081,7 +1180,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "agentic" chip for agentic strategies', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1096,7 +1195,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "multi-modal" chip for multi-modal strategies', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1111,7 +1210,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should display "configured" chip when step has config', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1126,7 +1225,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should show warning when agentic strategy is not first step', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1143,7 +1242,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should show warning when transforms are between agentic and multi-modal steps', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1158,7 +1257,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should disable step movement when multi-modal is at the end', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"
@@ -1175,7 +1274,7 @@ describe('StrategyConfigDialog', () => {
     });
 
     it('should show validation message when last step is multi-modal', () => {
-      render(
+      renderWithProviders(
         <StrategyConfigDialog
           open={true}
           strategy="layer"

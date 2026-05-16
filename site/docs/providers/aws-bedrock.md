@@ -7,13 +7,13 @@ description: Configure Amazon Bedrock for LLM evals with Claude, Llama, Nova, an
 
 # Bedrock
 
-The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a common way to access Anthropic's Claude, Meta's Llama 3.3, Amazon's Nova, OpenAI's GPT-OSS models, AI21's Jamba, Alibaba's Qwen, and other models. The complete list of available models can be found in the [AWS Bedrock model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns).
+The `bedrock` provider lets you use Amazon Bedrock in your evals. It supports Bedrock model IDs directly, including regional IDs and inference profile IDs. Because AWS changes the Bedrock catalog over time, use the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html), [model IDs documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns), or `aws bedrock list-foundation-models` as the source of truth for current model IDs and regional availability.
 
 ## Setup
 
-1. **Model Access**: Amazon Bedrock provides automatic access to serverless foundation models with no manual approval required.
-   - **Most models**: Amazon, DeepSeek, Mistral, Meta, Qwen, and OpenAI models (including GPT-OSS and Qwen3) are available immediately - just start using them
-   - **Anthropic models**: Require one-time use case submission through the model catalog (access granted immediately after submission)
+1. **Model Access**: Access rules vary by provider and can change over time.
+   - Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html) for the current access path and regional availability of the model you want to use
+   - **Anthropic models**: May require one-time use case submission through the model catalog
    - **AWS Marketplace models**: Some third-party models require IAM permissions with `aws-marketplace:Subscribe`
    - **Access control**: Organizations maintain control through IAM policies and Service Control Policies (SCPs)
 
@@ -34,7 +34,7 @@ The `bedrock` provider lets you use Amazon Bedrock in your evals. This is a comm
 
    ```yaml
    providers:
-     - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+     - id: bedrock:us.anthropic.claude-opus-4-7-v1:0
    ```
 
    Note that the provider is `bedrock:` followed by the [ARN/model id](https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html#model-ids-arns) of the model.
@@ -75,8 +75,9 @@ providers:
 The `inferenceModelType` config option supports the following values:
 
 - `claude` - For Anthropic Claude models
-- `nova` - For Amazon Nova models
-- `llama` - Defaults to Llama 4 (latest version)
+- `nova` - For Amazon Nova models (v1)
+- `nova2` - For Amazon Nova 2 models (with reasoning support)
+- `llama` - For Meta Llama models (defaults to Llama 4)
 - `llama2` - For Meta Llama 2 models
 - `llama3` - For Meta Llama 3 models
 - `llama3.1` or `llama3_1` - For Meta Llama 3.1 models
@@ -96,8 +97,8 @@ The `inferenceModelType` config option supports the following values:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  # Claude Opus 4.5 via global inference profile (required for this model)
-  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-5-20251101-v1:0
+  # Claude Opus 4.7 via global inference profile
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-7
     config:
       inferenceModelType: 'claude'
       region: 'us-east-2'
@@ -142,7 +143,9 @@ When using inference profiles, ensure the `inferenceModelType` matches the model
 
 ## Converse API
 
-The Converse API provides a unified interface across all Bedrock models with native support for extended thinking (reasoning), tool calling, and guardrails. Use the `bedrock:converse:` prefix to access this API.
+The Converse API provides a unified interface across supported Bedrock models with
+native support for extended thinking (reasoning), tool calling, and guardrails. Use
+the `bedrock:converse:` prefix to access this API.
 
 ### Basic Usage
 
@@ -190,7 +193,8 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 | `temperature`         | Sampling temperature (0-1)                      |
 | `topP`                | Nucleus sampling parameter                      |
 | `stopSequences`       | Array of stop sequences                         |
-| `thinking`            | Extended thinking configuration                 |
+| `thinking`            | Extended thinking configuration (Claude models) |
+| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
 | `showThinking`        | Include thinking in output (default: false)     |
 | `performanceConfig`   | Performance settings (`latency: optimized`)     |
 | `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
@@ -213,20 +217,66 @@ providers:
 
 ### Supported Models
 
-The Converse API works with all Bedrock models that support the Converse operation:
+The Converse API works with Bedrock models that support the `Converse` operation.
+Because AWS changes that compatibility matrix over time, use the
+[AWS Converse supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference-supported-models-features.html)
+as the source of truth for current support.
 
-- **Claude**: All Claude 3.x and 4.x models
-- **Amazon Nova**: Lite, Micro, Pro, Premier (not Sonic)
-- **Meta Llama**: 3.x, 4.x models
-- **Mistral**: All Mistral models
-- **Cohere**: Command R and R+ models
-- **AI21**: Jamba models
-- **DeepSeek**: R1 and other models
-- **Qwen**: Qwen3 models
+### Model Context Protocol (MCP) Servers
+
+The Converse provider can attach [Model Context Protocol](https://modelcontextprotocol.io)
+servers and surface their tools to the model alongside any `tools` you configure
+manually. MCP tool definitions are discovered at provider startup, converted to
+Bedrock `toolSpec` entries, and sent on every request.
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      mcp:
+        enabled: true
+        servers:
+          # Remote MCP server (Streamable HTTP)
+          - name: deepwiki
+            url: https://mcp.deepwiki.com/mcp
+          # Or a local stdio MCP server
+          # - name: filesystem
+          #   command: npx
+          #   args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp']
+        # Optional: only expose specific tools
+        tools:
+          - ask_question
+      toolChoice: auto
+```
+
+**Single-turn execution.** When the model returns a `tool_use` block, the provider
+executes the requested MCP tool and returns the **raw tool result** as the final
+output. The result is not fed back to the model for a follow-up turn — there is no
+agent loop. Write your assertions against the tool output text directly, or wrap
+the provider in an agent harness if you need a synthesized natural-language answer.
+
+**Tool name collisions.** If an entry under `config.tools` has the same `name` as
+an MCP-discovered tool, the MCP version wins and the duplicate is dropped with a
+warning. Bedrock rejects duplicate tool names with `ValidationException`, so
+deduping is required.
+
+**Lifecycle.** Stdio MCP servers spawn a child process; the provider registers
+itself with the evaluator's shutdown hook so transports are released when the
+eval finishes. If MCP initialization fails (bad URL, missing binary, handshake
+failure), the failure is surfaced as a `ProviderResponse.error` on the first
+`callApi` rather than crashing the eval. MCP errors during a tool call are
+likewise propagated to `error` so failed runs do not pass silently.
+
+**Disabling tools.** Setting `toolChoice: none` (or `tool_choice: none`) skips
+the entire tool path: no MCP definitions are sent in the request and no MCP
+tools are invoked even if the model returns a stale `tool_use` block.
 
 ## Authentication
 
-Amazon Bedrock supports multiple authentication methods, including the new API key authentication for simplified access. Credentials are resolved in this priority order:
+Amazon Bedrock supports multiple authentication methods, including API key
+authentication for simplified access. Credentials are resolved in this priority order:
 
 ### Credential Resolution Order
 
@@ -498,7 +548,7 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `nova2`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
 
 ### Amazon Nova Models
 
@@ -538,6 +588,63 @@ Nova models use a slightly different configuration structure compared to other B
 
 :::
 
+### Amazon Nova 2 Models (Reasoning)
+
+Amazon Nova 2 models introduce extended thinking capabilities with configurable reasoning levels. Nova 2 Lite (`amazon.nova-2-lite-v1:0`) supports step-by-step reasoning and task decomposition with a 1 million token context window.
+
+```yaml
+providers:
+  # Use cross-region model ID (us.) for on-demand access
+  - id: bedrock:us.amazon.nova-2-lite-v1:0
+    config:
+      interfaceConfig:
+        max_new_tokens: 4096
+      reasoningConfig:
+        type: enabled # Enable extended thinking
+        maxReasoningEffort: medium # low, medium, or high
+```
+
+**Reasoning Configuration:**
+
+- `type`: Set to `enabled` to activate extended thinking, or `disabled` for fast responses (default)
+- `maxReasoningEffort`: Controls thinking depth - `low`, `medium`, or `high`
+
+When extended thinking is enabled, the model's reasoning process is captured in the response output with `<thinking>` tags, similar to other reasoning models.
+
+:::warning
+
+When using `reasoningConfig` with `type: enabled`:
+
+- **For all reasoning modes**: Do not set `temperature`, `top_p`, or `top_k` - these are incompatible with reasoning mode
+- **For `maxReasoningEffort: high`**: Also do not set `max_new_tokens` - the model manages output length automatically
+
+:::
+
+**Regional Model IDs:**
+
+Nova 2 models require cross-region inference profiles for on-demand access:
+
+- `us.amazon.nova-2-lite-v1:0` - US region (recommended)
+- `eu.amazon.nova-2-lite-v1:0` - EU region
+- `apac.amazon.nova-2-lite-v1:0` - Asia Pacific region
+- `global.amazon.nova-2-lite-v1:0` - Global cross-region inference
+
+**Using Nova 2 with Converse API:**
+
+Nova 2 reasoning is also supported via the Converse API, which provides a unified interface across Bedrock models:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
+    config:
+      maxTokens: 4096
+      reasoningConfig:
+        type: enabled
+        maxReasoningEffort: medium
+```
+
+The same parameter constraints apply when using the Converse API.
+
 ### Amazon Nova Sonic Model
 
 The Amazon Nova Sonic model (`amazon.nova-sonic-v1:0`) is a multimodal model that supports audio input and text/audio output with tool-using capabilities. It has a different configuration structure compared to other Nova models:
@@ -574,6 +681,112 @@ providers:
 
 Note: Nova Sonic has advanced multimodal capabilities including audio input/output, but audio input requires base64 encoded data which may be better handled through the API directly rather than in the configuration file.
 
+### Amazon Nova Reel (Video Generation)
+
+Amazon Nova Reel (`amazon.nova-reel-v1:1`) generates studio-quality videos from text prompts. Videos are generated in 6-second increments up to 2 minutes.
+
+:::note Prerequisites
+
+Nova Reel requires an Amazon S3 bucket for video output. Your AWS credentials must have:
+
+- `bedrock:InvokeModel` and `bedrock:StartAsyncInvoke` permissions
+- `s3:PutObject` permission on the output bucket
+- `s3:GetObject` permission for downloading generated videos
+
+:::
+
+Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+for current Nova Reel regional availability.
+
+#### Basic Configuration
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      region: us-east-1
+      s3OutputUri: s3://my-bucket/videos # Required
+      durationSeconds: 6 # Default: 6
+      seed: 42 # Optional: for reproducibility
+```
+
+#### Task Types
+
+Nova Reel supports three task types:
+
+**TEXT_VIDEO (default)** - Generate a 6-second video from a text prompt:
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      s3OutputUri: s3://my-bucket/videos
+      taskType: TEXT_VIDEO
+      durationSeconds: 6
+```
+
+**MULTI_SHOT_AUTOMATED** - Generate longer videos (12-120 seconds) from a single prompt:
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      s3OutputUri: s3://my-bucket/videos
+      taskType: MULTI_SHOT_AUTOMATED
+      durationSeconds: 18 # Must be multiple of 6
+```
+
+**MULTI_SHOT_MANUAL** - Define individual shots with separate prompts:
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      s3OutputUri: s3://my-bucket/videos
+      taskType: MULTI_SHOT_MANUAL
+      durationSeconds: 12
+      shots:
+        - text: 'Drone footage of a forest from high altitude'
+        - text: 'Camera arcs around vehicles in a forest'
+```
+
+#### Image-to-Video Generation
+
+Use an image as the starting frame (must be 1280x720):
+
+```yaml
+providers:
+  - id: bedrock:video:amazon.nova-reel-v1:1
+    config:
+      s3OutputUri: s3://my-bucket/videos
+      image: file://path/to/image.png
+```
+
+#### Configuration Options
+
+| Option            | Description                                                  | Default    |
+| ----------------- | ------------------------------------------------------------ | ---------- |
+| `s3OutputUri`     | S3 bucket URI for output (required)                          | -          |
+| `taskType`        | `TEXT_VIDEO`, `MULTI_SHOT_AUTOMATED`, or `MULTI_SHOT_MANUAL` | TEXT_VIDEO |
+| `durationSeconds` | Video duration (6, or 12-120 in multiples of 6)              | 6          |
+| `seed`            | Random seed (0-2,147,483,646)                                | -          |
+| `image`           | Starting frame image (file:// path or base64)                | -          |
+| `shots`           | Shot definitions for MULTI_SHOT_MANUAL                       | -          |
+| `pollIntervalMs`  | Polling interval in ms                                       | 10000      |
+| `maxPollTimeMs`   | Maximum polling time in ms                                   | 900000     |
+| `downloadFromS3`  | Download video to local blob storage                         | true       |
+
+Generated videos are 1280x720 resolution at 24 FPS in MP4 format.
+
+:::warning Generation Time
+Video generation is asynchronous and takes approximately:
+
+- 6-second video: ~90 seconds
+- 2-minute video: ~14-17 minutes
+
+The provider polls for completion automatically.
+:::
+
 ### AI21 Models
 
 For AI21 models (e.g., `ai21.jamba-1-5-mini-v1:0`, `ai21.jamba-1-5-large-v1:0`), you can use the following configuration options:
@@ -589,9 +802,9 @@ config:
 
 ### Claude Models
 
-For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+For Claude models (e.g., `anthropic.claude-sonnet-4-6`, `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
-**Note**: Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) requires an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
+**Note**: Claude Opus 4.7 (`anthropic.claude-opus-4-7`) is available via cross-region inference profiles (`us.`, `eu.`, `jp.`, `global.`) and — at launch — through the base foundation model ID in select regions (US East/N. Virginia, Europe/Ireland, Europe/Stockholm, Asia Pacific/Tokyo). Claude Opus 4.6 (`anthropic.claude-opus-4-6-v1`) and Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) still require an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
 
 ```yaml
 config:
@@ -649,6 +862,61 @@ config:
   top_p: 0.9
 ```
 
+#### Llama 3.2 Vision
+
+Llama 3.2 Vision models (`us.meta.llama3-2-11b-instruct-v1:0`, `us.meta.llama3-2-90b-instruct-v1:0`) support image inputs. You can use them with either the legacy InvokeModel API or the Converse API:
+
+**Using InvokeModel API (legacy):**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.meta.llama3-2-11b-instruct-v1:0
+    config:
+      region: us-east-1
+      max_gen_len: 256
+
+prompts:
+  - file://llama_vision_prompt.json
+
+tests:
+  - vars:
+      image: file://path/to/image.jpg
+```
+
+```json title="llama_vision_prompt.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "image",
+        "source": {
+          "type": "base64",
+          "media_type": "image/jpeg",
+          "data": "{{image}}"
+        }
+      },
+      {
+        "type": "text",
+        "text": "What is in this image?"
+      }
+    ]
+  }
+]
+```
+
+**Using Converse API:**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:converse:us.meta.llama3-2-11b-instruct-v1:0
+    config:
+      region: us-east-1
+      maxTokens: 256
+```
+
+The Converse API uses the same prompt format shown above for [Nova Vision](#nova-vision-capabilities).
+
 ### Cohere Models
 
 For Cohere models (e.g., `cohere.command-text-v14`), you can use the following configuration options:
@@ -664,7 +932,7 @@ config:
 
 ### Mistral Models
 
-For Mistral models (e.g., `mistral.mistral-7b-instruct-v0:2`), you can use the following configuration options:
+Legacy Mistral text-completion models such as `mistral.mistral-7b-instruct-v0:2` support:
 
 ```yaml
 config:
@@ -673,6 +941,11 @@ config:
   top_p: 0.9
   top_k: 50
 ```
+
+Mistral chat-completion models such as `mistral.mistral-large-2407-v1:0`,
+`mistral.devstral-2-123b`, `mistral.mistral-large-3-675b-instruct`, and
+`mistral.pixtral-large-2502-v1:0` use `messages` requests and support the same
+options except `top_k`.
 
 ### DeepSeek Models
 
@@ -689,19 +962,23 @@ config:
   showThinking: true # Optional: Control whether thinking content is included in output
 ```
 
-DeepSeek models support an extended thinking capability. The `showThinking` parameter controls whether thinking content is included in the response output:
+`deepseek.r1-v1:0` supports extended thinking output. The `showThinking` parameter controls whether R1 thinking content is included in the response output:
 
 - When set to `true` (default), thinking content will be included in the output
 - When set to `false`, thinking content will be excluded from the output
 
-This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
+`deepseek.v3-v1:0` and `deepseek.v3.2` use chat-completion style `messages`
+requests and return the final assistant message directly.
 
 ### OpenAI Models
 
-OpenAI's open-weight models are available through AWS Bedrock with full support for their reasoning capabilities and parameters. The available models include:
+OpenAI models on Bedrock use OpenAI-style request parameters. Available model IDs
+include:
 
-- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter model with strong reasoning capabilities
-- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter model, more cost-effective
+- **`openai.gpt-oss-120b-1:0`**: 120 billion parameter general-purpose model
+- **`openai.gpt-oss-20b-1:0`**: 20 billion parameter general-purpose model
+- **`openai.gpt-oss-safeguard-120b`**: 120 billion parameter safety model
+- **`openai.gpt-oss-safeguard-20b`**: 20 billion parameter safety model
 
 ```yaml
 config:
@@ -716,7 +993,7 @@ config:
 
 #### Reasoning Effort
 
-OpenAI models support adjustable reasoning effort through the `reasoning_effort` parameter:
+General-purpose GPT OSS models support adjustable reasoning effort through the `reasoning_effort` parameter:
 
 - **`low`**: Faster responses with basic reasoning
 - **`medium`**: Balanced performance and reasoning depth
@@ -752,7 +1029,11 @@ OpenAI models use `max_completion_tokens` instead of `max_tokens` like other Bed
 
 ### Qwen Models
 
-Alibaba's Qwen models (e.g., `qwen.qwen3-coder-480b-a35b-v1:0`, `qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, `qwen.qwen3-32b-v1:0`) support advanced features including hybrid thinking modes, tool calling, and extended context understanding.
+Qwen model IDs include `qwen.qwen3-coder-next`, `qwen.qwen3-next-80b-a3b`,
+`qwen.qwen3-vl-235b-a22b`, `qwen.qwen3-coder-480b-a35b-v1:0`,
+`qwen.qwen3-coder-30b-a3b-v1:0`, `qwen.qwen3-235b-a22b-2507-v1:0`, and
+`qwen.qwen3-32b-v1:0`. Qwen models support advanced features including hybrid
+thinking modes, tool calling, and extended context understanding.
 
 **Regional Availability**: Check the [AWS Bedrock console](https://console.aws.amazon.com/bedrock/home) or use `aws bedrock list-foundation-models` to verify which Qwen models are available in your target region, as availability varies by model and region.
 
@@ -780,9 +1061,9 @@ Qwen models support hybrid thinking modes where the model can apply step-by-step
 
 This allows you to access the model's reasoning process during generation while having the option to present only the final response to end users.
 
-#### Tool Calling Support
+#### Tool Calling
 
-Qwen models support tool calling with OpenAI-compatible function definitions:
+Qwen models support tool calling with OpenAI-compatible function definitions.
 
 ```yaml
 config:
@@ -805,6 +1086,9 @@ config:
 
 - **Qwen3-Coder-480B-A35B**: Mixture-of-experts model optimized for coding and agentic tasks with 480B total parameters and 35B active parameters
 - **Qwen3-Coder-30B-A3B**: Smaller MoE model with 30B total parameters and 3B active parameters, optimized for coding tasks
+- **Qwen3-Coder-Next**: Coding model exposed through Bedrock
+- **Qwen3-Next-80B-A3B**: General-purpose MoE model
+- **Qwen3-VL-235B-A22B**: Vision-language model that also accepts text prompts
 - **Qwen3-235B-A22B**: General-purpose MoE model with 235B total parameters and 22B active parameters for reasoning and coding
 - **Qwen3-32B**: Dense model with 32B parameters for consistent performance in resource-constrained environments
 
@@ -901,7 +1185,14 @@ tests:
 
 ## Multimodal Capabilities
 
-Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
+Several Bedrock models support multimodal inputs including images and text:
+
+- **Amazon Nova** - Supports images and videos
+- **Llama 3.2 Vision** - Supports images (11B and 90B variants)
+- **Claude 3+** - Supports images (via Converse API)
+- **Pixtral Large** - Supports images (via Converse API)
+
+To use these capabilities, structure your prompts to include both image data and text content.
 
 ### Nova Vision Capabilities
 
@@ -953,7 +1244,7 @@ The prompt file (`nova_multimodal_prompt.json`) should be structured to include 
 ]
 ```
 
-See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/promptfooconfig.nova.multimodal.yaml) for a runnable example.
+See [Github](https://github.com/promptfoo/promptfoo/blob/main/examples/amazon-bedrock/models/promptfooconfig.nova.multimodal.yaml) for a runnable example.
 
 When loading image files as variables, Promptfoo automatically converts them to the appropriate format for the model. The supported image formats include:
 
@@ -1122,17 +1413,17 @@ Make sure to:
 
 If you see this error, the cause depends on which model provider you're using:
 
-**For most serverless models** (Amazon, DeepSeek, Mistral, Meta, Qwen, OpenAI):
+**For models without provider-specific access steps**:
 
-- These models have instant access with no approval required
+- Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+  for the current access flow
 - Verify your IAM permissions include `bedrock:InvokeModel`
 - Check your region configuration matches the model's region
 
 **For Anthropic models (Claude)**:
 
-- First-time use requires submitting use case details in the Bedrock console
-- Access is granted immediately after submission
-- This is a one-time step per AWS account or organization
+- First-time use may require submitting use case details in the Bedrock console
+- Check the AWS documentation for the current access flow
 
 **For AWS Marketplace models**:
 
@@ -1166,6 +1457,7 @@ providers:
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
       temperature: 0.0
       max_tokens: 1000
+      numberOfResults: 5 # Optional: number of chunks to retrieve (AWS default when not specified)
 ```
 
 The provider ID follows this pattern: `bedrock:kb:[REGIONAL_MODEL_ID]`
@@ -1181,6 +1473,7 @@ Configuration options include:
 - `region`: AWS region where your Knowledge Base is deployed (e.g., 'us-east-1', 'us-east-2', 'eu-west-1')
 - `temperature`: Controls randomness in response generation (default: 0.0)
 - `max_tokens`: Maximum number of tokens in the generated response
+- `numberOfResults`: Number of chunks to retrieve from the knowledge base (optional, uses AWS default when not specified)
 - `accessKeyId`, `secretAccessKey`, `sessionToken`: AWS credentials (if not using environment variables or IAM roles)
 - `profile`: AWS profile name for SSO authentication
 
@@ -1194,13 +1487,13 @@ prompts:
   - 'Tell me about quantum computing.'
 
 providers:
-  # Knowledge Base provider
   - id: bedrock:kb:us.anthropic.claude-3-7-sonnet-20250219-v1:0
     config:
       region: 'us-east-2'
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID'
       temperature: 0.0
       max_tokens: 1000
+      numberOfResults: 10
 
   # Regular Claude model for comparison
   - id: bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
@@ -1280,6 +1573,120 @@ providers:
       agentAliasId: PROD_ALIAS
       region: us-east-1
       enableTrace: true
+```
+
+## Video Generation
+
+AWS Bedrock supports video generation through asynchronous invoke APIs. Videos are generated in the cloud and output to an S3 bucket that you specify.
+
+### Luma Ray 2
+
+Generate videos using Luma Ray 2, which produces high-quality videos from text prompts or images.
+
+**Provider ID:** `bedrock:video:luma.ray-v2:0`
+
+Check the [AWS supported models documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/models-supported.html)
+for current Luma Ray regional availability.
+
+#### Basic Configuration
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:video:luma.ray-v2:0
+    config:
+      region: us-west-2
+      s3OutputUri: s3://my-bucket/luma-outputs/
+```
+
+#### Configuration Options
+
+| Option           | Type    | Default | Description                                |
+| ---------------- | ------- | ------- | ------------------------------------------ |
+| `s3OutputUri`    | string  | -       | **Required.** S3 bucket for video output   |
+| `duration`       | string  | "5s"    | Video duration: "5s" or "9s"               |
+| `resolution`     | string  | "720p"  | Output resolution: "540p" or "720p"        |
+| `aspectRatio`    | string  | "16:9"  | Aspect ratio (see supported ratios below)  |
+| `loop`           | boolean | false   | Whether video should seamlessly loop       |
+| `startImage`     | string  | -       | Start frame image (file:// path or base64) |
+| `endImage`       | string  | -       | End frame image (file:// path or base64)   |
+| `pollIntervalMs` | number  | 10000   | Polling interval in milliseconds           |
+| `maxPollTimeMs`  | number  | 600000  | Maximum wait time (10 min default)         |
+| `downloadFromS3` | boolean | true    | Download video from S3 after generation    |
+
+#### Supported Aspect Ratios
+
+- `1:1` - Square
+- `16:9` - Widescreen (default)
+- `9:16` - Vertical/Portrait
+- `4:3` - Standard
+- `3:4` - Portrait standard
+- `21:9` - Ultrawide
+- `9:21` - Ultra-tall
+
+#### Text-to-Video Example
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:video:luma.ray-v2:0
+    config:
+      region: us-west-2
+      s3OutputUri: s3://my-bucket/videos/
+      duration: '5s'
+      resolution: '720p'
+      aspectRatio: '16:9'
+
+prompts:
+  - 'A majestic eagle soaring through clouds at golden hour'
+
+tests:
+  - vars: {}
+```
+
+#### Image-to-Video Example
+
+Animate images by providing start and/or end frames:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:video:luma.ray-v2:0
+    config:
+      region: us-west-2
+      s3OutputUri: s3://my-bucket/videos/
+      startImage: file://./start-frame.jpg
+      endImage: file://./end-frame.jpg
+      duration: '5s'
+
+prompts:
+  - 'Smooth transition with camera movement'
+
+tests:
+  - vars: {}
+```
+
+#### Processing Time
+
+- **5-second videos:** 2-5 minutes
+- **9-second videos:** 4-8 minutes
+
+#### Required Permissions
+
+Your AWS credentials need these IAM permissions:
+
+```json
+{
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel", "bedrock:GetAsyncInvoke", "bedrock:StartAsyncInvoke"],
+      "Resource": "arn:aws:bedrock:*:*:model/luma.ray-v2:0"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::my-bucket/*"
+    }
+  ]
+}
 ```
 
 ## See Also

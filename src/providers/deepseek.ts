@@ -1,6 +1,6 @@
 import logger from '../logger';
-import { calculateCost } from './shared';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { calculateCost } from './shared';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -15,19 +15,36 @@ type DeepSeekProviderOptions = Omit<ProviderOptions, 'config'> & {
 
 export const DEEPSEEK_CHAT_MODELS = [
   {
+    id: 'deepseek-v4-flash',
+    cost: {
+      input: 0.14 / 1e6,
+      output: 0.28 / 1e6,
+      cache_read: 0.0028 / 1e6,
+    },
+  },
+  {
+    id: 'deepseek-v4-pro',
+    cost: {
+      input: 0.435 / 1e6,
+      output: 0.87 / 1e6,
+      cache_read: 0.003625 / 1e6,
+    },
+  },
+  // Legacy aliases retained for compatibility.
+  {
     id: 'deepseek-chat',
     cost: {
-      input: 0.28 / 1e6,
-      output: 0.42 / 1e6,
-      cache_read: 0.028 / 1e6,
+      input: 0.14 / 1e6,
+      output: 0.28 / 1e6,
+      cache_read: 0.0028 / 1e6,
     },
   },
   {
     id: 'deepseek-reasoner',
     cost: {
-      input: 0.28 / 1e6,
-      output: 0.42 / 1e6,
-      cache_read: 0.028 / 1e6,
+      input: 0.14 / 1e6,
+      output: 0.28 / 1e6,
+      cache_read: 0.0028 / 1e6,
     },
   },
 ];
@@ -53,8 +70,8 @@ export function calculateDeepSeekCost(
   }
 
   const uncachedPromptTokens = cachedTokens ? promptTokens - cachedTokens : promptTokens;
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
   const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;
@@ -159,6 +176,8 @@ export function createDeepSeekProvider(
   options: DeepSeekProviderOptions = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
+  // Preserve the historical non-thinking default for `deepseek` while the
+  // compatibility alias remains available upstream.
   const modelName = splits.slice(1).join(':') || 'deepseek-chat';
   return new DeepSeekProvider(modelName, options);
 }

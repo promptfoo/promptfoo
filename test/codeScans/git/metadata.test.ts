@@ -2,7 +2,7 @@
  * Git Metadata Tests
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { extractMetadata } from '../../../src/codeScan/git/metadata';
 import { GitMetadataError } from '../../../src/types/codeScan';
 import type { SimpleGit } from 'simple-git';

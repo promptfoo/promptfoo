@@ -1,13 +1,24 @@
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
-import { renderHook } from '@testing-library/react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { useMemo } from 'react';
+
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockWindowLocation } from '@app/tests/browserMocks';
+import { callApi } from '@app/utils/api';
+import { ResultFailureReason } from '@promptfoo/types';
+import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { useMemo } from 'react';
-import type { ResultsFile, EvaluateResult, GradingResult } from '@promptfoo/types';
-import { ResultFailureReason } from '@promptfoo/types';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
-import { callApi } from '@app/utils/api';
+import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
+
+// Helper to render with all needed providers
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <TooltipProvider>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </TooltipProvider>,
+  );
+};
 
 vi.mock('@app/utils/api');
 vi.mock('react-router-dom', async () => {
@@ -100,6 +111,7 @@ describe('Report filtering logic', () => {
 
       // Simulate the useMemo logic
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -147,6 +159,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -186,6 +199,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -236,6 +250,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -244,31 +259,30 @@ describe('Report filtering logic', () => {
           const prompts = evalData.prompts || [];
           const selectedPrompt = prompts[0];
 
-          return evalData.results.results.reduce(
-            (acc, row) => {
-              if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
-                return acc;
-              }
-
-              const pluginId = row.metadata?.pluginId;
-              if (!pluginId) {
-                return acc;
-              }
-
-              if (!acc[pluginId]) {
-                acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-              }
-
-              if (row.success && row.gradingResult?.pass) {
-                acc[pluginId].pass++;
-              } else {
-                acc[pluginId].fail++;
-              }
-
+          return evalData.results.results.reduce<
+            Record<string, { pass: number; fail: number; error: number }>
+          >((acc, row) => {
+            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
               return acc;
-            },
-            {} as Record<string, { pass: number; fail: number; error: number }>,
-          );
+            }
+
+            const pluginId = row.metadata?.pluginId;
+            if (!pluginId) {
+              return acc;
+            }
+
+            if (!acc[pluginId]) {
+              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
+            }
+
+            if (row.success && row.gradingResult?.pass) {
+              acc[pluginId].pass++;
+            } else {
+              acc[pluginId].fail++;
+            }
+
+            return acc;
+          }, {});
         }, [evalData]),
       );
 
@@ -282,6 +296,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -290,31 +305,30 @@ describe('Report filtering logic', () => {
           const prompts = evalData.prompts || [];
           const selectedPrompt = prompts[1];
 
-          return evalData.results.results.reduce(
-            (acc, row) => {
-              if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
-                return acc;
-              }
-
-              const pluginId = row.metadata?.pluginId;
-              if (!pluginId) {
-                return acc;
-              }
-
-              if (!acc[pluginId]) {
-                acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-              }
-
-              if (row.success && row.gradingResult?.pass) {
-                acc[pluginId].pass++;
-              } else {
-                acc[pluginId].fail++;
-              }
-
+          return evalData.results.results.reduce<
+            Record<string, { pass: number; fail: number; error: number }>
+          >((acc, row) => {
+            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
               return acc;
-            },
-            {} as Record<string, { pass: number; fail: number; error: number }>,
-          );
+            }
+
+            const pluginId = row.metadata?.pluginId;
+            if (!pluginId) {
+              return acc;
+            }
+
+            if (!acc[pluginId]) {
+              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
+            }
+
+            if (row.success && row.gradingResult?.pass) {
+              acc[pluginId].pass++;
+            } else {
+              acc[pluginId].fail++;
+            }
+
+            return acc;
+          }, {});
         }, [evalData]),
       );
 
@@ -339,6 +353,7 @@ describe('Report filtering logic', () => {
       const selectedPromptIndex = 0;
 
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -385,6 +400,7 @@ describe('Report filtering logic', () => {
       const selectedPromptIndex = 999; // Out of bounds
 
       const { result } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -448,6 +464,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 0
       const { result: result0 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -486,6 +503,7 @@ describe('Report filtering logic', () => {
 
       // Test selecting prompt 1
       const { result: result1 } = renderHook(() =>
+        // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
         useMemo(() => {
           if (!evalData) {
             return {};
@@ -575,25 +593,10 @@ const createComponentMockEvalData = (numPrompts: number, results: EvaluateResult
 
 describe('App component target selection', () => {
   const mockCallApi = callApi as Mock;
-  let originalWindowLocation: Location;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    originalWindowLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        ...originalWindowLocation,
-        search: '?evalId=test-eval-id',
-      },
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
   });
 
   it('should handle evalData with empty prompts array and non-zero selectedPromptIndex gracefully', async () => {
@@ -612,11 +615,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const overviewTotal = await screen.findByTestId('overview-total');
     expect(overviewTotal).toHaveTextContent('1');
@@ -635,11 +634,7 @@ describe('App component target selection', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const dropdown = await screen.findByRole('combobox');
     expect(dropdown).toHaveTextContent('Target: Provider 0');
@@ -665,25 +660,10 @@ describe('App component target selection', () => {
 
 describe('App component target selector rendering', () => {
   const mockCallApi = callApi as Mock;
-  let originalWindowLocation: Location;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    originalWindowLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        ...originalWindowLocation,
-        search: '?evalId=test-eval-id',
-      },
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
   });
 
   it('should render the target selector dropdown when there are multiple prompts', async () => {
@@ -696,11 +676,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const dropdown = await screen.findByRole('combobox');
     expect(dropdown).toBeInTheDocument();
@@ -713,11 +689,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     const chip = await screen.findByText('Target:');
     expect(chip).toBeInTheDocument();
@@ -725,29 +697,46 @@ describe('App component target selector rendering', () => {
     const dropdown = screen.queryByRole('combobox');
     expect(dropdown).toBeNull();
   });
+
+  it('keeps report header actions in normal flow on narrow screens', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    expect(await screen.findByTestId('report-header-card')).toHaveClass('sm:pr-48');
+    expect(screen.getByTestId('report-header-actions')).toHaveClass(
+      'mb-4',
+      'justify-end',
+      'sm:absolute',
+      'sm:mb-0',
+    );
+  });
+
+  it('allows embedded reports to shrink within narrow result views', async () => {
+    const results = [createComponentMockResult(0, 'plugin1', true)];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    const { container } = renderWithProviders(<App embedded />);
+
+    await screen.findByTestId('overview-total');
+
+    expect(container.querySelector('.mx-auto.max-w-7xl')).toHaveClass('w-full', 'min-w-0');
+  });
 });
 
 describe('App component categoryStats calculation with moderation', () => {
   const mockCallApi = callApi as Mock;
-  let originalWindowLocation: Location;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    originalWindowLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        ...originalWindowLocation,
-        search: '?evalId=test-eval-id',
-      },
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
   });
 
   it('should correctly increment passWithFilter but not pass when moderation tests fail but other tests pass', async () => {
@@ -773,11 +762,7 @@ describe('App component categoryStats calculation with moderation', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    render(
-      <MemoryRouter>
-        <App />,
-      </MemoryRouter>,
-    );
+    renderWithProviders(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId('overview-category-stats')).toBeInTheDocument();
@@ -791,5 +776,113 @@ describe('App component categoryStats calculation with moderation', () => {
     expect(categoryStats[pluginId].passWithFilter).toBe(1);
     expect(categoryStats[pluginId].total).toBe(1);
     expect(categoryStats[pluginId].failCount).toBe(1);
+  });
+});
+
+describe('Filter panel regression tests', () => {
+  const mockCallApi = callApi as Mock;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
+  });
+
+  it('should open filter panel without errors when filter button is clicked', async () => {
+    // Regression test for #7246 - clicking filter button caused Radix UI error
+    // due to SelectItem components with empty string values
+    const results = [
+      createComponentMockResult(0, 'harmful:violent-crime', false),
+      createComponentMockResult(0, 'pii:direct', true),
+    ];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    // Wait for component to load
+    await waitFor(() => {
+      expect(screen.queryByText('Waiting for report data')).not.toBeInTheDocument();
+    });
+
+    // Find and click the filter button (there are two, one in sticky header and one in main content)
+    const filterButtons = screen.getAllByLabelText('filter results');
+    await userEvent.click(filterButtons[0]);
+
+    // Verify filter panel is visible (proves no Radix UI error was thrown)
+    await waitFor(() => {
+      expect(screen.getByText('Filters')).toBeInTheDocument();
+    });
+
+    // Verify filter controls are rendered
+    expect(screen.getByPlaceholderText('Search prompts & outputs')).toBeInTheDocument();
+    expect(screen.getByText('Risk Categories')).toBeInTheDocument();
+    expect(screen.getByText('Strategies')).toBeInTheDocument();
+  });
+
+  it('should not use empty string values in Select components', async () => {
+    // Regression test for #7246 - Radix UI requires SelectItem values to be non-empty
+    const results = [
+      createComponentMockResult(0, 'harmful:violent-crime', false),
+      createComponentMockResult(0, 'pii:direct', true),
+    ];
+    const evalData = createComponentMockEvalData(1, results);
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App />);
+
+    await waitFor(() => {
+      expect(screen.queryByText('Waiting for report data')).not.toBeInTheDocument();
+    });
+
+    // Open filter panel (there are two filter buttons, use the first one)
+    const filterButtons = screen.getAllByLabelText('filter results');
+    await userEvent.click(filterButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('Filters')).toBeInTheDocument();
+    });
+
+    // Get all comboboxes (Select triggers) - there's Status, Risk Categories, and Strategies
+    const comboboxes = screen.getAllByRole('combobox');
+
+    // Open Risk Categories dropdown (should be the second combobox after Status)
+    const categorySelect = comboboxes.find((box) => box.textContent?.includes('Risk Categories'));
+    expect(categorySelect).toBeDefined();
+    await userEvent.click(categorySelect!);
+
+    // Verify "All Categories" option exists and click it
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'All Categories' })).toBeInTheDocument();
+    });
+
+    // Click "All Categories" - this would throw an error if value was ""
+    const allCategoriesOption = screen.getByRole('option', { name: 'All Categories' });
+    await userEvent.click(allCategoriesOption);
+
+    // Wait for dropdown to close
+    await waitFor(() => {
+      expect(screen.queryByRole('option', { name: 'All Categories' })).not.toBeInTheDocument();
+    });
+
+    // Open Strategies dropdown
+    const strategiesSelect = comboboxes.find((box) => box.textContent?.includes('Strategies'));
+    expect(strategiesSelect).toBeDefined();
+    await userEvent.click(strategiesSelect!);
+
+    // Verify "All Strategies" option exists and click it
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'All Strategies' })).toBeInTheDocument();
+    });
+
+    // Click "All Strategies" - this would throw an error if value was ""
+    const allStrategiesOption = screen.getByRole('option', { name: 'All Strategies' });
+    await userEvent.click(allStrategiesOption);
+
+    // If we got here without errors, the fix is working
+    expect(screen.getByText('Filters')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,9 @@
-import type { ToolContent, ToolResponse, ToolResult } from './types';
+import type { TextContent, ToolResponse, ToolResult } from './types';
+
+/**
+ * Default timeout for long-running operations (5 minutes)
+ */
+export const DEFAULT_TOOL_TIMEOUT_MS = 5 * 60 * 1000;
 
 /**
  * Creates a standardized tool response with proper typing
@@ -8,7 +13,7 @@ export function createToolResponse<T = unknown>(
   success: boolean,
   data?: T,
   error?: string,
-): ToolResult<T> {
+): ToolResult {
   const response: ToolResponse<T> = {
     tool,
     success,
@@ -23,7 +28,7 @@ export function createToolResponse<T = unknown>(
     response.error = error;
   }
 
-  const content: ToolContent = {
+  const content: TextContent = {
     type: 'text',
     text: JSON.stringify(response, null, 2),
   };
@@ -42,10 +47,18 @@ export function withTimeout<T>(
   timeoutMs: number,
   errorMessage: string,
 ): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(errorMessage)), timeoutMs)),
-  ]);
+    new Promise<T>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  });
 }
 
 /**
@@ -110,7 +123,7 @@ export function assertNotNull<T>(value: T | null | undefined, message?: string):
  * Type-safe array filtering that removes null/undefined values
  */
 export function filterNonNull<T>(array: (T | null | undefined)[]): T[] {
-  return array.filter((item): item is T => Boolean(item));
+  return array.filter((item): item is T => item != null);
 }
 
 /**
@@ -188,11 +201,18 @@ export function formatDuration(ms: number): string {
 }
 
 /**
- * Truncate text to specified length with ellipsis
+ * Truncate text to specified length with ellipsis.
+ * The returned string is guaranteed to be at most maxLength characters.
  */
 export function truncateText(text: string, maxLength: number): string {
+  if (maxLength <= 0) {
+    return '';
+  }
   if (text.length <= maxLength) {
     return text;
+  }
+  if (maxLength <= 3) {
+    return text.slice(0, maxLength);
   }
   return text.slice(0, maxLength - 3) + '...';
 }

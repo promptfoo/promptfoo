@@ -1,15 +1,43 @@
 import path from 'path';
-import type { Agent } from '@openai/agents';
+
+import {
+  Agent,
+  handoff,
+  MemorySession,
+  OpenAIConversationsSession,
+  OpenAIResponsesCompactionSession,
+  tool,
+} from '@openai/agents';
+import { Manifest, SandboxAgent } from '@openai/agents/sandbox';
+import { DockerSandboxClient, UnixLocalSandboxClient } from '@openai/agents/sandbox/local';
+import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import cliState from '../../cliState';
-import type { AgentDefinition, ToolDefinition, HandoffDefinition } from './agents-types';
+import { resolveModelSettings } from './agents-model-settings';
+import type {
+  Handoff,
+  InputGuardrail,
+  Tool as OpenAiTool,
+  OutputGuardrail,
+  Session,
+} from '@openai/agents';
+import type { SandboxRunConfig } from '@openai/agents/sandbox';
+
+import type {
+  AgentDefinition,
+  HandoffDefinition,
+  OpenAiAgentsSandboxConfig,
+  OpenAiAgentsSandboxDefinition,
+  OpenAiAgentsSessionConfig,
+  OpenAiAgentsSessionDefinition,
+  ToolDefinition,
+} from './agents-types';
 
 /**
  * Load agent definition from file path or return inline definition
  */
 export async function loadAgentDefinition(
-  agentConfig: Agent<any, any> | string | AgentDefinition,
+  agentConfig: Agent<any, any> | string | AgentDefinition | null | undefined,
 ): Promise<Agent<any, any>> {
   // If it's already an Agent instance, return it
   if (isAgentInstance(agentConfig)) {
@@ -24,9 +52,9 @@ export async function loadAgentDefinition(
   }
 
   // If it's an inline definition, convert to Agent
-  if (typeof agentConfig === 'object') {
+  if (agentConfig !== null && typeof agentConfig === 'object' && !Array.isArray(agentConfig)) {
     logger.debug('[AgentsLoader] Creating agent from inline definition');
-    return await createAgentFromDefinition(agentConfig as AgentDefinition);
+    return await createAgentFromDefinition(agentConfig);
   }
 
   logger.debug('[AgentsLoader] Invalid agent configuration', {
@@ -45,8 +73,8 @@ export async function loadAgentDefinition(
  * Load tools from file path or return inline definitions
  */
 export async function loadTools(
-  toolsConfig?: string | ToolDefinition[],
-): Promise<ToolDefinition[] | undefined> {
+  toolsConfig?: string | Array<OpenAiTool<any> | ToolDefinition>,
+): Promise<OpenAiTool<any>[] | undefined> {
   if (!toolsConfig) {
     return undefined;
   }
@@ -57,10 +85,9 @@ export async function loadTools(
     return await loadToolsFromFile(toolsConfig);
   }
 
-  // If it's an array, return as is
   if (Array.isArray(toolsConfig)) {
     logger.debug('[AgentsLoader] Using inline tool definitions');
-    return toolsConfig;
+    return normalizeTools(toolsConfig);
   }
 
   logger.debug('[AgentsLoader] Invalid tools configuration', {
@@ -74,8 +101,8 @@ export async function loadTools(
  * Load handoffs from file path or return inline definitions
  */
 export async function loadHandoffs(
-  handoffsConfig?: string | HandoffDefinition[],
-): Promise<HandoffDefinition[] | undefined> {
+  handoffsConfig?: string | Array<Agent<any, any> | Handoff<any, any> | HandoffDefinition>,
+): Promise<Array<Agent<any, any> | Handoff<any, any>> | undefined> {
   if (!handoffsConfig) {
     return undefined;
   }
@@ -86,10 +113,9 @@ export async function loadHandoffs(
     return await loadHandoffsFromFile(handoffsConfig);
   }
 
-  // If it's an array, return as is
   if (Array.isArray(handoffsConfig)) {
     logger.debug('[AgentsLoader] Using inline handoff definitions');
-    return handoffsConfig;
+    return normalizeHandoffs(handoffsConfig);
   }
 
   logger.debug('[AgentsLoader] Invalid handoffs configuration', {
@@ -97,6 +123,110 @@ export async function loadHandoffs(
     isArray: Array.isArray(handoffsConfig),
   });
   throw new Error('Invalid handoffs configuration: expected file:// URL or array');
+}
+
+/**
+ * Load input guardrails from file path or return inline definitions
+ */
+export async function loadInputGuardrails(
+  guardrailsConfig?: string | InputGuardrail[],
+): Promise<InputGuardrail[] | undefined> {
+  if (!guardrailsConfig) {
+    return undefined;
+  }
+
+  if (typeof guardrailsConfig === 'string' && guardrailsConfig.startsWith('file://')) {
+    logger.debug('[AgentsLoader] Loading input guardrails from file', { path: guardrailsConfig });
+    return await loadArrayFromFile<InputGuardrail>(guardrailsConfig, 'input guardrails');
+  }
+
+  if (Array.isArray(guardrailsConfig)) {
+    logger.debug('[AgentsLoader] Using inline input guardrails');
+    return guardrailsConfig;
+  }
+
+  logger.debug('[AgentsLoader] Invalid input guardrails configuration', {
+    type: typeof guardrailsConfig,
+    isArray: Array.isArray(guardrailsConfig),
+  });
+  throw new Error('Invalid input guardrails configuration: expected file:// URL or array');
+}
+
+/**
+ * Load output guardrails from file path or return inline definitions
+ */
+export async function loadOutputGuardrails(
+  guardrailsConfig?: string | OutputGuardrail<any>[],
+): Promise<OutputGuardrail<any>[] | undefined> {
+  if (!guardrailsConfig) {
+    return undefined;
+  }
+
+  if (typeof guardrailsConfig === 'string' && guardrailsConfig.startsWith('file://')) {
+    logger.debug('[AgentsLoader] Loading output guardrails from file', { path: guardrailsConfig });
+    return await loadArrayFromFile<OutputGuardrail<any>>(guardrailsConfig, 'output guardrails');
+  }
+
+  if (Array.isArray(guardrailsConfig)) {
+    logger.debug('[AgentsLoader] Using inline output guardrails');
+    return guardrailsConfig;
+  }
+
+  logger.debug('[AgentsLoader] Invalid output guardrails configuration', {
+    type: typeof guardrailsConfig,
+    isArray: Array.isArray(guardrailsConfig),
+  });
+  throw new Error('Invalid output guardrails configuration: expected file:// URL or array');
+}
+
+/**
+ * Load a persistent conversation session from config, file export, or factory.
+ */
+export async function loadSessionDefinition(
+  sessionConfig?: OpenAiAgentsSessionConfig,
+  context?: any,
+): Promise<Session | undefined> {
+  if (!sessionConfig) {
+    return undefined;
+  }
+
+  const resolved = await resolveConfigValue(sessionConfig, 'session', context);
+  if (isSessionInstance(resolved)) {
+    return resolved;
+  }
+
+  if (isSessionDefinition(resolved)) {
+    return createSessionFromDefinition(resolved, context);
+  }
+
+  throw new Error(
+    'Invalid session configuration: expected Session instance, file:// URL, factory, or supported inline definition',
+  );
+}
+
+/**
+ * Load sandbox runtime config from config, file export, or factory.
+ */
+export async function loadSandboxConfig(
+  sandboxConfig?: OpenAiAgentsSandboxConfig,
+  context?: any,
+): Promise<SandboxRunConfig | undefined> {
+  if (!sandboxConfig) {
+    return undefined;
+  }
+
+  const resolved = await resolveConfigValue<any>(sandboxConfig as any, 'sandbox config', context);
+  if (!resolved || typeof resolved !== 'object') {
+    throw new Error(
+      'Invalid sandbox configuration: expected SandboxRunConfig, file:// URL, factory, or supported inline definition',
+    );
+  }
+
+  if (isSandboxDefinition(resolved)) {
+    return createSandboxConfigFromDefinition(resolved);
+  }
+
+  return normalizeSandboxRunConfig(resolved as SandboxRunConfig);
 }
 
 /**
@@ -124,48 +254,22 @@ async function loadAgentFromFile(filePath: string): Promise<Agent<any, any>> {
 /**
  * Load tools from file
  */
-async function loadToolsFromFile(filePath: string): Promise<ToolDefinition[]> {
-  const resolvedPath = resolveFilePath(filePath);
-  logger.debug('[AgentsLoader] Loading tools from resolved path', { path: resolvedPath });
-
-  try {
-    const module = await importModule(resolvedPath);
-    const tools = module.default || module;
-
-    if (!Array.isArray(tools)) {
-      throw new Error(`File ${resolvedPath} does not export an array of tools`);
-    }
-
-    return tools;
-  } catch (error) {
-    logger.error('[AgentsLoader] Failed to load tools from file', { path: resolvedPath, error });
-    throw new Error(`Failed to load tools from ${resolvedPath}: ${error}`);
-  }
+async function loadToolsFromFile(filePath: string): Promise<OpenAiTool<any>[]> {
+  const tools = await loadArrayFromFile<OpenAiTool<any> | ToolDefinition>(filePath, 'tools');
+  return (await normalizeTools(tools)) ?? [];
 }
 
 /**
  * Load handoffs from file
  */
-async function loadHandoffsFromFile(filePath: string): Promise<HandoffDefinition[]> {
-  const resolvedPath = resolveFilePath(filePath);
-  logger.debug('[AgentsLoader] Loading handoffs from resolved path', { path: resolvedPath });
-
-  try {
-    const module = await importModule(resolvedPath);
-    const handoffs = module.default || module;
-
-    if (!Array.isArray(handoffs)) {
-      throw new Error(`File ${resolvedPath} does not export an array of handoffs`);
-    }
-
-    return handoffs;
-  } catch (error) {
-    logger.error('[AgentsLoader] Failed to load handoffs from file', {
-      path: resolvedPath,
-      error,
-    });
-    throw new Error(`Failed to load handoffs from ${resolvedPath}: ${error}`);
-  }
+async function loadHandoffsFromFile(
+  filePath: string,
+): Promise<Array<Agent<any, any> | Handoff<any, any>>> {
+  const handoffs = await loadArrayFromFile<Agent<any, any> | Handoff<any, any> | HandoffDefinition>(
+    filePath,
+    'handoffs',
+  );
+  return (await normalizeHandoffs(handoffs)) ?? [];
 }
 
 /**
@@ -173,24 +277,36 @@ async function loadHandoffsFromFile(filePath: string): Promise<HandoffDefinition
  */
 async function createAgentFromDefinition(definition: AgentDefinition): Promise<Agent<any, any>> {
   try {
-    // Dynamically import Agent class
-    const { Agent } = await import('@openai/agents');
-
-    // Create agent with definition
-    // Note: tools and handoffs should be actual Tool/Handoff objects, not definitions
-    // They should be included in the definition if needed
-    const agent = new Agent({
+    const tools = await normalizeTools(definition.tools);
+    const handoffs = await normalizeHandoffs(definition.handoffs);
+    const baseConfig = {
       name: definition.name,
       instructions: definition.instructions,
+      prompt: definition.prompt,
       model: definition.model,
+      modelSettings: resolveModelSettings(definition.modelSettings),
       handoffDescription: definition.handoffDescription,
-      // @ts-ignore - outputType might be various types
+      handoffOutputTypeWarningEnabled: definition.handoffOutputTypeWarningEnabled,
       outputType: definition.outputType,
-      // @ts-ignore - tools and handoffs will be added separately if needed
-      tools: definition.tools,
-      // @ts-ignore
-      handoffs: definition.handoffs,
-    });
+      tools,
+      handoffs,
+      inputGuardrails: definition.inputGuardrails,
+      outputGuardrails: definition.outputGuardrails,
+      mcpServers: definition.mcpServers,
+      toolUseBehavior: definition.toolUseBehavior,
+      resetToolChoice: definition.resetToolChoice,
+    };
+
+    const agent =
+      definition.type === 'sandbox'
+        ? new SandboxAgent({
+            ...baseConfig,
+            defaultManifest: normalizeManifest(definition.defaultManifest),
+            baseInstructions: definition.baseInstructions,
+            capabilities: definition.capabilities,
+            runAs: definition.runAs,
+          })
+        : new Agent(baseConfig);
 
     return agent;
   } catch (error) {
@@ -209,14 +325,115 @@ async function createAgentFromDefinition(definition: AgentDefinition): Promise<A
  * Check if a value is an Agent instance
  */
 function isAgentInstance(value: any): value is Agent<any, any> {
-  // Check if it has the Agent class properties/methods
+  return value instanceof Agent;
+}
+
+function isToolInstance(value: unknown): value is OpenAiTool<any> {
   return (
-    value &&
+    !!value &&
     typeof value === 'object' &&
-    'name' in value &&
-    'instructions' in value &&
-    typeof value.name === 'string'
+    'type' in value &&
+    typeof (value as OpenAiTool<any>).type === 'string'
   );
+}
+
+function isHandoffInstance(value: unknown): value is Handoff<any, any> {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'agent' in value &&
+    'getHandoffAsFunctionTool' in value &&
+    typeof (value as Handoff<any, any>).getHandoffAsFunctionTool === 'function'
+  );
+}
+
+async function normalizeTools(
+  definitions?: Array<OpenAiTool<any> | ToolDefinition>,
+): Promise<OpenAiTool<any>[] | undefined> {
+  if (!definitions?.length) {
+    return undefined;
+  }
+
+  return definitions.map((definition) => {
+    if (isToolInstance(definition)) {
+      return definition;
+    }
+
+    return tool({
+      name: definition.name,
+      description: definition.description,
+      parameters: definition.parameters,
+      strict: definition.strict ?? true,
+      deferLoading: definition.deferLoading,
+      execute:
+        typeof definition.execute === 'function'
+          ? definition.execute
+          : async () => definition.execute,
+    });
+  });
+}
+
+async function normalizeHandoffs(
+  definitions?: Array<Agent<any, any> | Handoff<any, any> | HandoffDefinition>,
+): Promise<Array<Agent<any, any> | Handoff<any, any>> | undefined> {
+  if (!definitions?.length) {
+    return undefined;
+  }
+
+  return Promise.all(
+    definitions.map(async (definition) => {
+      if (isAgentInstance(definition) || isHandoffInstance(definition)) {
+        return definition;
+      }
+
+      const agent = await loadAgentDefinition(definition.agent);
+      if (!definition.description) {
+        return agent;
+      }
+
+      return handoff(agent, {
+        toolDescriptionOverride: definition.description,
+      });
+    }),
+  );
+}
+
+async function loadArrayFromFile<T>(filePath: string, label: string): Promise<T[]> {
+  const resolvedPath = resolveFilePath(filePath);
+  logger.debug(`[AgentsLoader] Loading ${label} from resolved path`, { path: resolvedPath });
+
+  try {
+    const module = await importModule(resolvedPath);
+    const exported = module.default || module;
+
+    if (!Array.isArray(exported)) {
+      throw new Error(`File ${resolvedPath} does not export an array of ${label}`);
+    }
+
+    return exported as T[];
+  } catch (error) {
+    logger.error(`[AgentsLoader] Failed to load ${label} from file`, {
+      path: resolvedPath,
+      error,
+    });
+    throw new Error(`Failed to load ${label} from ${resolvedPath}: ${error}`);
+  }
+}
+
+export async function loadValueFromFile<T>(filePath: string, label: string): Promise<T> {
+  const resolvedPath = resolveFilePath(filePath);
+  logger.debug(`[AgentsLoader] Loading ${label} from resolved path`, { path: resolvedPath });
+
+  try {
+    const module = await importModule(resolvedPath);
+    return (module.default || module) as T;
+  } catch (error) {
+    logger.error(`[AgentsLoader] Failed to load ${label} from file`, {
+      path: resolvedPath,
+      error,
+    });
+    throw new Error(`Failed to load ${label} from ${resolvedPath}: ${error}`);
+  }
 }
 
 /**
@@ -242,4 +459,111 @@ function resolveFilePath(filePath: string): string {
   });
 
   return resolvedPath;
+}
+
+async function resolveConfigValue<T>(
+  config: T | string | ((context?: any) => T | Promise<T>),
+  label: string,
+  context?: any,
+): Promise<T> {
+  let resolved = config;
+
+  if (typeof resolved === 'string' && resolved.startsWith('file://')) {
+    resolved = await loadValueFromFile<any>(resolved, label);
+  }
+
+  if (typeof resolved === 'function') {
+    return await (resolved as (context?: any) => T | Promise<T>)(context);
+  }
+
+  return resolved as T;
+}
+
+function isSessionInstance(value: unknown): value is Session {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    typeof (value as Session).getSessionId === 'function' &&
+    typeof (value as Session).getItems === 'function' &&
+    typeof (value as Session).addItems === 'function' &&
+    typeof (value as Session).popItem === 'function' &&
+    typeof (value as Session).clearSession === 'function'
+  );
+}
+
+function isSessionDefinition(value: unknown): value is OpenAiAgentsSessionDefinition {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'type' in value &&
+    ['memory', 'openai-conversations', 'openai-responses-compaction'].includes(
+      String((value as { type?: unknown }).type),
+    )
+  );
+}
+
+async function createSessionFromDefinition(
+  definition: OpenAiAgentsSessionDefinition,
+  context?: any,
+): Promise<Session> {
+  switch (definition.type) {
+    case 'memory': {
+      const { type: _type, ...options } = definition;
+      return new MemorySession(options);
+    }
+    case 'openai-conversations': {
+      const { type: _type, ...options } = definition;
+      return new OpenAIConversationsSession(options);
+    }
+    case 'openai-responses-compaction': {
+      const { type: _type, underlyingSession, ...options } = definition;
+      const resolvedUnderlyingSession = await loadSessionDefinition(underlyingSession, context);
+      return new OpenAIResponsesCompactionSession({
+        ...options,
+        ...(resolvedUnderlyingSession ? { underlyingSession: resolvedUnderlyingSession } : {}),
+      });
+    }
+  }
+
+  throw new Error(`Unsupported session type: ${(definition as { type?: string }).type}`);
+}
+
+function isSandboxDefinition(value: unknown): value is OpenAiAgentsSandboxDefinition {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    'type' in value &&
+    ['unix-local', 'docker'].includes(String((value as { type?: unknown }).type))
+  );
+}
+
+function createSandboxConfigFromDefinition(
+  definition: OpenAiAgentsSandboxDefinition,
+): SandboxRunConfig {
+  const { type, clientOptions, manifest, ...runConfig } = definition;
+  const client =
+    type === 'docker'
+      ? new DockerSandboxClient(clientOptions)
+      : new UnixLocalSandboxClient(clientOptions);
+
+  return {
+    ...runConfig,
+    client,
+    ...(manifest ? { manifest: normalizeManifest(manifest) } : {}),
+  };
+}
+
+function normalizeSandboxRunConfig(config: SandboxRunConfig): SandboxRunConfig {
+  return {
+    ...config,
+    ...(config.manifest ? { manifest: normalizeManifest(config.manifest) } : {}),
+  };
+}
+
+function normalizeManifest(manifest: unknown): Manifest | undefined {
+  if (!manifest) {
+    return undefined;
+  }
+
+  return manifest instanceof Manifest ? manifest : new Manifest(manifest as any);
 }

@@ -1,5 +1,6 @@
-import http from 'node:http';
 import { EventEmitter } from 'node:events';
+import http from 'node:http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
@@ -36,52 +37,61 @@ vi.mock('../../src/models/eval', () => ({
   getEvalSummaries: vi.fn().mockResolvedValue([]),
 }));
 
-// Import after mocks are set up
-import { startServer, handleServerError } from '../../src/server/server';
 import { setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
+// Import after mocks are set up
+import { ServerError } from '../../src/server/errors';
+import { handleServerError, startServer } from '../../src/server/server';
 
 describe('server', () => {
   describe('handleServerError', () => {
-    const originalExit = process.exit;
-
     beforeEach(() => {
-      process.exit = vi.fn() as never;
       vi.clearAllMocks();
-    });
-
-    afterEach(() => {
-      process.exit = originalExit;
     });
 
     it('should log specific message for EADDRINUSE error', () => {
       const error = new Error('Address in use') as NodeJS.ErrnoException;
       error.code = 'EADDRINUSE';
 
-      handleServerError(error, 3000);
+      const startupError = handleServerError(error, 3000);
 
       expect(logger.error).toHaveBeenCalledWith(
         'Port 3000 is already in use. Do you have another Promptfoo instance running?',
       );
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(startupError).toBeInstanceOf(ServerError);
+      expect(startupError).toMatchObject({
+        code: 'EADDRINUSE',
+        phase: 'startup',
+        message: 'Port 3000 is already in use. Do you have another Promptfoo instance running?',
+        port: 3000,
+      });
     });
 
     it('should log generic message for other errors', () => {
       const error = new Error('Some other error') as NodeJS.ErrnoException;
       error.code = 'ENOENT';
 
-      handleServerError(error, 3000);
+      const startupError = handleServerError(error, 3000);
 
       expect(logger.error).toHaveBeenCalledWith('Failed to start server: Some other error');
-      expect(process.exit).toHaveBeenCalledWith(1);
+      expect(startupError).toBeInstanceOf(ServerError);
+      expect(startupError).toMatchObject({
+        code: 'ENOENT',
+        phase: 'startup',
+        message: 'Failed to start server: Some other error',
+        port: 3000,
+      });
     });
   });
 
   describe('startServer shutdown behavior', () => {
-    let mockHttpServer: EventEmitter & {
+    type MockHttpServer = EventEmitter & {
       listen: ReturnType<typeof vi.fn>;
       close: ReturnType<typeof vi.fn>;
+      listening: boolean;
     };
+
+    let mockHttpServer: MockHttpServer;
     let originalCreateServer: typeof http.createServer;
     let signalHandlers: Map<string | symbol, ((...args: unknown[]) => void)[]>;
 
@@ -105,16 +115,22 @@ describe('server', () => {
 
       // Create mock HTTP server
       mockHttpServer = Object.assign(new EventEmitter(), {
+        listening: false,
         listen: vi.fn().mockImplementation(function (
-          this: EventEmitter,
+          this: MockHttpServer,
           _port: number,
           callback: () => void,
         ) {
-          // Simulate async listen
+          // Simulate async listen - server is now listening
+          this.listening = true;
           setImmediate(() => callback());
           return this;
         }),
-        close: vi.fn().mockImplementation(function (callback?: (err?: Error) => void) {
+        close: vi.fn().mockImplementation(function (
+          this: MockHttpServer,
+          callback?: (err?: Error) => void,
+        ) {
+          this.listening = false;
           setImmediate(() => callback?.());
         }),
       });
@@ -153,9 +169,59 @@ describe('server', () => {
       await serverPromise;
     });
 
+    it('should reject startup errors without exiting the process', async () => {
+      const startupError = new Error('Address in use') as NodeJS.ErrnoException;
+      startupError.code = 'EADDRINUSE';
+      const mockWatcher = { close: vi.fn(), on: vi.fn() };
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
+
+      mockHttpServer.listen = vi.fn().mockImplementation(function (this: MockHttpServer) {
+        setImmediate(() => this.emit('error', startupError));
+        return this;
+      });
+
+      await expect(startServer(3000)).rejects.toMatchObject({
+        name: 'ServerError',
+        code: 'EADDRINUSE',
+        phase: 'startup',
+        message: 'Port 3000 is already in use. Do you have another Promptfoo instance running?',
+        port: 3000,
+      });
+
+      expect(mockWatcher.close).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        'Port 3000 is already in use. Do you have another Promptfoo instance running?',
+      );
+    });
+
+    it('should close the live server before rejecting runtime server errors', async () => {
+      const runtimeError = new Error('Unexpected runtime failure') as NodeJS.ErrnoException;
+      const mockWatcher = { close: vi.fn(), on: vi.fn() };
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
+
+      const serverPromise = startServer(0);
+
+      await vi.waitFor(() =>
+        expect(logger.info).toHaveBeenCalledWith(
+          'Server running at http://localhost:0 and monitoring for new evals.',
+        ),
+      );
+      mockHttpServer.emit('error', runtimeError);
+
+      await expect(serverPromise).rejects.toMatchObject({
+        name: 'ServerError',
+        phase: 'runtime',
+        message: 'Server error: Unexpected runtime failure',
+        port: 0,
+      });
+      expect(mockWatcher.close).toHaveBeenCalled();
+      expect(mockHttpServer.close).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Server error: Unexpected runtime failure');
+    });
+
     it('should close file watcher on shutdown', async () => {
       const mockWatcher = { close: vi.fn(), on: vi.fn() };
-      vi.mocked(setupSignalWatcher).mockReturnValue(mockWatcher as never);
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
 
       const serverPromise = startServer(0);
 
@@ -166,6 +232,50 @@ describe('server', () => {
       triggerSignal('SIGINT');
       await serverPromise;
 
+      expect(mockWatcher.close).toHaveBeenCalled();
+    });
+
+    it('should not deadlock the shutdown promise if watcher.close throws', async () => {
+      const mockWatcher = {
+        close: vi.fn().mockImplementation(() => {
+          throw new Error('watcher already closed');
+        }),
+        on: vi.fn(),
+      };
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
+
+      const serverPromise = startServer(0);
+      await new Promise((resolve) => setImmediate(resolve));
+
+      triggerSignal('SIGINT');
+      await expect(serverPromise).resolves.toBeUndefined();
+
+      expect(mockWatcher.close).toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Error closing file watcher'),
+      );
+    });
+
+    it('should not deadlock startup-error rejection if watcher.close throws', async () => {
+      const startupError = new Error('Address in use') as NodeJS.ErrnoException;
+      startupError.code = 'EADDRINUSE';
+      const mockWatcher = {
+        close: vi.fn().mockImplementation(() => {
+          throw new Error('watcher unhappy');
+        }),
+        on: vi.fn(),
+      };
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
+
+      mockHttpServer.listen = vi.fn().mockImplementation(function (this: MockHttpServer) {
+        setImmediate(() => this.emit('error', startupError));
+        return this;
+      });
+
+      await expect(startServer(3000)).rejects.toMatchObject({
+        name: 'ServerError',
+        phase: 'startup',
+      });
       expect(mockWatcher.close).toHaveBeenCalled();
     });
 
@@ -204,6 +314,10 @@ describe('server', () => {
       expect(logger.info).toHaveBeenCalledWith('Server closed');
     });
 
+    // Note: Testing the case where socket.io already closed the HTTP server would require
+    // mocking socket.io at the module level. The fix (checking httpServer.listening) handles
+    // this case in production where io.close() closes the underlying server.
+    //
     // Note: Testing the 5-second force shutdown timeout requires mocking socket.io
     // at the module level, which is complex. The timeout exists as a safety measure
     // and the core shutdown logic is tested by the other tests.

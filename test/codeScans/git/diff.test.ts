@@ -2,7 +2,7 @@
  * Git Diff Tests
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { extractDiff, validateOnBranch } from '../../../src/codeScan/git/diff';
 import { GitError } from '../../../src/types/codeScan';
 import type { SimpleGit, StatusResult } from 'simple-git';
@@ -39,7 +39,7 @@ describe('Git Diff', () => {
         detached: false,
       } as StatusResult);
 
-      const branchName = await validateOnBranch(mockGit);
+      const branchName = await validateOnBranch(mockGit as unknown as SimpleGit);
 
       expect(branchName).toBe('feature/test-branch');
     });
@@ -50,8 +50,10 @@ describe('Git Diff', () => {
         detached: true,
       } as StatusResult);
 
-      await expect(validateOnBranch(mockGit)).rejects.toThrow(GitError);
-      await expect(validateOnBranch(mockGit)).rejects.toThrow('Not on a branch');
+      await expect(validateOnBranch(mockGit as unknown as SimpleGit)).rejects.toThrow(GitError);
+      await expect(validateOnBranch(mockGit as unknown as SimpleGit)).rejects.toThrow(
+        'Not on a branch',
+      );
     });
   });
 

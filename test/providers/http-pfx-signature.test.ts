@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import crypto from 'crypto';
+import fs from 'fs/promises';
+import * as os from 'os';
+import path from 'path';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateSignature } from '../../src/providers/http';
 
 // Hoisted mock for fs.promises.stat
@@ -27,6 +31,7 @@ describe('PFX signature paths (generateSignature)', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    mockStat.mockReset();
   });
 
   it('throws when PFX password is missing', async () => {
@@ -65,6 +70,30 @@ describe('PFX signature paths (generateSignature)', () => {
     await expect(generateSignature(signatureAuth, Date.now())).rejects.toThrow(
       /PFX file not found/,
     );
+  });
+
+  it('throws when separate key file path does not exist', async () => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pf-pfx-key-'));
+    const certPath = path.join(tmpDir, 'cert.pem');
+    const keyPath = path.join(tmpDir, 'missing-key.pem');
+    await fs.writeFile(certPath, 'CERT');
+
+    try {
+      const signatureAuth = {
+        type: 'pfx' as const,
+        certPath,
+        keyPath,
+        signatureDataTemplate: '{{signatureTimestamp}}',
+        signatureAlgorithm: 'SHA256',
+        signatureValidityMs: 300000,
+      };
+
+      await expect(generateSignature(signatureAuth, Date.now())).rejects.toThrow(
+        /Key file not found/,
+      );
+    } finally {
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('throws when PFX content has wrong password', async () => {

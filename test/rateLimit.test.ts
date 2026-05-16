@@ -1,6 +1,6 @@
-import { vi } from 'vitest';
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithRetries } from '../src/util/fetch/index';
+import { mockGlobal } from './util/utils';
 
 const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}) => {
   const responseText = JSON.stringify(response);
@@ -29,16 +29,18 @@ const mockedSetTimeout = (reqTimeout: number) =>
 const mockFetch = vi.fn();
 
 describe('fetchWithRetries', () => {
+  let restoreFetch: (() => void) | undefined;
+
   beforeEach(() => {
     vi.useFakeTimers();
-    // Use stubGlobal which properly replaces the global fetch for all modules
-    vi.stubGlobal('fetch', mockFetch);
+    restoreFetch = mockGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
     mockFetch.mockReset();
     vi.useRealTimers();
-    vi.unstubAllGlobals();
+    restoreFetch?.();
+    restoreFetch = undefined;
   });
 
   it('should fetch data', async () => {
@@ -75,8 +77,13 @@ describe('fetchWithRetries', () => {
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Base wait = `(reset_seconds * 1000) - now + 1000` from
+    // computeRateLimitWaitMs. parseInt on the seconds value truncates the
+    // sub-second portion, so the base sits in [rateLimitReset, rateLimitReset+1000].
+    // handleRateLimit then adds 0–999ms of jitter, so the captured wait
+    // spans approximately [rateLimitReset, rateLimitReset+2000).
     expect(waitTime).toBeGreaterThan(rateLimitReset);
-    expect(waitTime).toBeLessThanOrEqual(rateLimitReset + 1000);
+    expect(waitTime).toBeLessThan(rateLimitReset + 2000);
     await expect(result.json()).resolves.toEqual(response);
   });
 
@@ -98,7 +105,9 @@ describe('fetchWithRetries', () => {
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(waitTime).toBe(retryAfter * 1000);
+    // Base wait = Retry-After seconds; handleRateLimit adds 0–999ms jitter.
+    expect(waitTime).toBeGreaterThanOrEqual(retryAfter * 1000);
+    expect(waitTime).toBeLessThan(retryAfter * 1000 + 1000);
     await expect(result.json()).resolves.toEqual(response);
   });
 
@@ -117,7 +126,9 @@ describe('fetchWithRetries', () => {
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(waitTime).toBe(60_000);
+    // Default base = 60s; handleRateLimit adds 0–999ms jitter.
+    expect(waitTime).toBeGreaterThanOrEqual(60_000);
+    expect(waitTime).toBeLessThan(61_000);
     await expect(result.json()).resolves.toEqual(response);
   });
 });

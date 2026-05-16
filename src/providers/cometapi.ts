@@ -5,10 +5,10 @@ import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
-import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 export interface CometApiModel {
@@ -38,7 +38,7 @@ export async function fetchCometApiModels(env?: EnvOverrides): Promise<CometApiM
     const { data } = await fetchWithCache<any>(
       'https://api.cometapi.com/v1/models',
       { headers },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
     );
 
     const raw = data?.data || data?.models || data;

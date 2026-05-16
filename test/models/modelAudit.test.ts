@@ -1,5 +1,6 @@
-import { vi, describe, it, expect } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ModelAudit from '../../src/models/modelAudit';
+
 import type { ModelAuditScanResults } from '../../src/types/modelAudit';
 
 // Mock the database
@@ -14,6 +15,9 @@ vi.mock('../../src/database', () => ({
       from: () => ({
         where: () => ({
           get: vi.fn().mockResolvedValue(null),
+          orderBy: () => ({
+            get: vi.fn().mockResolvedValue(null),
+          }),
         }),
         orderBy: () => ({
           all: vi.fn().mockResolvedValue([]),
@@ -76,7 +80,7 @@ describe('ModelAudit', () => {
       expect(audit.hasErrors).toBe(true);
     });
 
-    it('should set hasErrors to false when has_errors is false and only warnings exist', () => {
+    it('should set hasErrors to true when warning findings exist', () => {
       const results: ModelAuditScanResults = {
         has_errors: false,
         issues: [
@@ -90,7 +94,7 @@ describe('ModelAudit', () => {
         results,
       });
 
-      expect(audit.hasErrors).toBe(false);
+      expect(audit.hasErrors).toBe(true);
     });
 
     it('should set hasErrors to false when has_errors is false and no issues exist', () => {
@@ -105,6 +109,22 @@ describe('ModelAudit', () => {
       });
 
       expect(audit.hasErrors).toBe(false);
+    });
+
+    it('should set hasErrors to true when failed checks exist without issue rows', () => {
+      const results: ModelAuditScanResults = {
+        has_errors: false,
+        failed_checks: 1,
+        issues: [],
+        checks: [{ name: 'pickle', status: 'failed', message: 'Check failed' }],
+      };
+
+      const audit = new ModelAudit({
+        modelPath: '/test/path',
+        results,
+      });
+
+      expect(audit.hasErrors).toBe(true);
     });
 
     it('should handle missing issues array gracefully', () => {
@@ -167,7 +187,7 @@ describe('ModelAudit', () => {
       expect(audit.hasErrors).toBe(true);
     });
 
-    it('should keep hasErrors false when only warnings exist', async () => {
+    it('should keep warning findings visible in create method', async () => {
       const results: ModelAuditScanResults = {
         has_errors: false,
         issues: [{ severity: 'warning', message: 'Test warning' }],
@@ -178,7 +198,7 @@ describe('ModelAudit', () => {
         results,
       });
 
-      expect(audit.hasErrors).toBe(false);
+      expect(audit.hasErrors).toBe(true);
     });
   });
 });

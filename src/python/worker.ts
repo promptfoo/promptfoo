@@ -1,10 +1,11 @@
-import { PythonShell } from 'python-shell';
-import fs from 'fs';
-import path from 'path';
+import fs from 'fs/promises';
 import os from 'os';
+import path from 'path';
+
+import { PythonShell } from 'python-shell';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { getRequestTimeoutMs } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
 import { validatePythonPath } from './pythonUtils';
 
@@ -16,7 +17,7 @@ export class PythonWorker {
   private crashCount: number = 0;
   private readonly maxCrashes: number = 3;
   private pendingRequest: {
-    resolve: (result: any) => void;
+    resolve: (result: unknown) => void;
     reject: (error: Error) => void;
   } | null = null;
   private requestTimeout: NodeJS.Timeout | null = null;
@@ -25,7 +26,7 @@ export class PythonWorker {
     private scriptPath: string,
     private functionName: string,
     private pythonPath?: string,
-    private timeout: number = REQUEST_TIMEOUT_MS,
+    private timeout: number = getRequestTimeoutMs(),
     private onReady?: () => void,
   ) {}
 
@@ -52,6 +53,13 @@ export class PythonWorker {
     // Listen for READY signal
     return new Promise((resolve, reject) => {
       const readyTimeout = setTimeout(() => {
+        // Kill the process to prevent orphaned Python processes
+        // and avoid triggering handleCrash() which would retry
+        this.shuttingDown = true;
+        if (this.process) {
+          this.process.kill('SIGTERM');
+          this.process = null;
+        }
         reject(new Error('Worker failed to become ready within timeout'));
       }, 30000);
 
@@ -87,7 +95,7 @@ export class PythonWorker {
     });
   }
 
-  async call(functionName: string, args: any[]): Promise<any> {
+  async call(functionName: string, args: unknown[]): Promise<unknown> {
     if (!this.ready) {
       throw new Error('Worker not ready');
     }
@@ -109,7 +117,7 @@ export class PythonWorker {
     }
   }
 
-  private async executeCall(functionName: string, args: any[]): Promise<any> {
+  private async executeCall(functionName: string, args: unknown[]): Promise<unknown> {
     const requestFile = path.join(
       os.tmpdir(),
       `promptfoo-worker-req-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
@@ -121,7 +129,7 @@ export class PythonWorker {
 
     try {
       // Write request
-      fs.writeFileSync(requestFile, safeJsonStringify(args) as string, 'utf-8');
+      await fs.writeFile(requestFile, safeJsonStringify(args) as string, 'utf-8');
 
       // Send CALL command with function name
       // Note: PythonShell.send() adds newline automatically in 'text' mode
@@ -130,27 +138,27 @@ export class PythonWorker {
       this.process!.send(command);
 
       // Wait for DONE
-      await new Promise<any>((resolve, reject) => {
+      await new Promise<unknown>((resolve, reject) => {
         this.pendingRequest = { resolve, reject };
       });
 
       // Read response with exponential backoff retry
       // Python verifies file readability before sending DONE, but OS-level delays may still occur
       let responseData: string;
-      let lastError: any;
+      let lastError: unknown;
 
       // Exponential backoff: 1ms, 2ms, 4ms, 8ms, 16ms, 32ms, 64ms, 128ms, 256ms, 512ms, 1024ms, 2048ms, 4096ms, 5000ms (capped)...
       // Total max wait: ~18 seconds (handles severe filesystem delays)
       for (let attempt = 0, delay = 1; attempt < 16; attempt++, delay = Math.min(delay * 2, 5000)) {
         try {
-          responseData = fs.readFileSync(responseFile, 'utf-8');
+          responseData = await fs.readFile(responseFile, 'utf-8');
           if (attempt > 0) {
             logger.debug(`Response file read succeeded on attempt ${attempt + 1} after ${delay}ms`);
           }
           break;
-        } catch (error: any) {
+        } catch (error: unknown) {
           lastError = error;
-          if (error.code === 'ENOENT') {
+          if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
             // File doesn't exist yet, wait and retry with exponential backoff
             await new Promise((resolve) => setTimeout(resolve, delay));
             continue;
@@ -164,7 +172,9 @@ export class PythonWorker {
       if (!responseData!) {
         const tempDir = path.dirname(responseFile);
         try {
-          const files = fs.readdirSync(tempDir).filter((f) => f.startsWith('promptfoo-worker-'));
+          const files = (await fs.readdir(tempDir)).filter((f) =>
+            f.startsWith('promptfoo-worker-'),
+          );
           logger.error(
             `Failed to read response file after 16 attempts (~18s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
           );
@@ -183,15 +193,17 @@ export class PythonWorker {
       return response.data;
     } finally {
       // Cleanup temp files
-      [requestFile, responseFile].forEach((file) => {
-        try {
-          if (fs.existsSync(file)) {
-            fs.unlinkSync(file);
+      await Promise.all(
+        [requestFile, responseFile].map(async (file) => {
+          try {
+            await fs.unlink(file);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+              logger.error(`Error removing ${file}: ${error}`);
+            }
           }
-        } catch (error) {
-          logger.error(`Error removing ${file}: ${error}`);
-        }
-      });
+        }),
+      );
     }
   }
 

@@ -1,10 +1,12 @@
-import { fetchWithProxy } from './util/fetch/index';
+import crypto from 'crypto';
+import fs from 'fs/promises';
+
 import { getEnvString } from './envars';
 import logger from './logger';
-import type { CsvRow } from './types/index';
-import fs from 'fs';
-import crypto from 'crypto';
+import { fetchWithProxy } from './util/fetch/index';
 import type { ConfidentialClientApplication } from '@azure/msal-node';
+
+import type { CsvRow } from './types/index';
 
 let cca: ConfidentialClientApplication | null = null;
 
@@ -90,7 +92,7 @@ async function getConfidentialClient(): Promise<ConfidentialClientApplication> {
 
     let pemContent: string;
     try {
-      pemContent = fs.readFileSync(certPath, 'utf8');
+      pemContent = await fs.readFile(certPath, 'utf8');
     } catch (error) {
       throw new Error(`Failed to read certificate from path: ${certPath}. Error: ${error}`);
     }

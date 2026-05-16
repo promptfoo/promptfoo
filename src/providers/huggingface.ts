@@ -1,16 +1,23 @@
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
+import { OpenAiChatCompletionProvider } from './openai/chat';
+import { getRequestTimeoutMs } from './shared';
 
 import type {
   ApiProvider,
   ApiSimilarityProvider,
+  CallApiContextParams,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
+  ProviderOptions,
   ProviderResponse,
   ProviderSimilarityResponse,
 } from '../types/index';
+
+const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
+const HF_CHAT_API_BASE_URL = 'https://router.huggingface.co/v1';
 
 interface HuggingfaceProviderOptions {
   apiKey?: string;
@@ -29,6 +36,9 @@ type HuggingfaceTextGenerationOptions = HuggingfaceProviderOptions & {
   do_sample?: boolean;
   use_cache?: boolean;
   wait_for_model?: boolean;
+  // When true, use OpenAI-compatible chat completions format instead of HF Inference API format.
+  // Auto-detected if apiEndpoint contains '/v1/chat'.
+  chatCompletion?: boolean;
 };
 
 const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOptions>([
@@ -45,9 +55,80 @@ const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOpt
   'wait_for_model',
 ]);
 
+/**
+ * HuggingFace Chat Completion Provider - extends OpenAI provider for HuggingFace's
+ * OpenAI-compatible chat completions API at router.huggingface.co/v1/chat/completions.
+ *
+ * Supports HuggingFace Inference Provider routing via:
+ * - Provider suffix in model name: `huggingface:chat:org/model:provider-name`
+ * - Config option: `config.inferenceProvider: 'provider-name'`
+ *
+ * See https://huggingface.co/docs/inference-providers for available providers.
+ */
+export class HuggingfaceChatCompletionProvider extends OpenAiChatCompletionProvider {
+  constructor(modelName: string, providerOptions: ProviderOptions = {}) {
+    const config = providerOptions.config || {};
+
+    // Append inference provider suffix if configured and not already in model name
+    let resolvedModelName = modelName;
+    if (config.inferenceProvider && !modelName.includes(':')) {
+      resolvedModelName = `${modelName}:${config.inferenceProvider}`;
+    }
+
+    // Determine API base URL: strip /chat/completions suffix if user provided full URL
+    let apiBaseUrl = config.apiBaseUrl || config.apiEndpoint;
+    if (apiBaseUrl) {
+      apiBaseUrl = apiBaseUrl.replace(/\/chat\/completions\/?$/, '');
+    } else {
+      apiBaseUrl = HF_CHAT_API_BASE_URL;
+    }
+
+    super(resolvedModelName, {
+      ...providerOptions,
+      config: {
+        ...config,
+        apiBaseUrl,
+        apiKeyEnvar: 'HF_TOKEN',
+        // Map max_new_tokens to max_tokens if not already set
+        ...(config.max_new_tokens !== undefined &&
+          config.max_tokens === undefined && { max_tokens: config.max_new_tokens }),
+      },
+    });
+  }
+
+  id(): string {
+    return `huggingface:chat:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[HuggingFace Chat Provider ${this.modelName}]`;
+  }
+
+  getApiUrlDefault(): string {
+    return HF_CHAT_API_BASE_URL;
+  }
+
+  requiresApiKey(): boolean {
+    return false;
+  }
+
+  getApiKey(): string | undefined {
+    return (
+      this.config.apiKey ||
+      this.env?.HF_TOKEN ||
+      this.env?.HF_API_TOKEN ||
+      getEnvString('HF_TOKEN') ||
+      getEnvString('HF_API_TOKEN') ||
+      undefined
+    );
+  }
+}
+
 export class HuggingfaceTextGenerationProvider implements ApiProvider {
   modelName: string;
   config: HuggingfaceTextGenerationOptions;
+  private chatProvider?: HuggingfaceChatCompletionProvider;
+  private providerOptions: { id?: string; config?: HuggingfaceTextGenerationOptions };
 
   constructor(
     modelName: string,
@@ -57,6 +138,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
     this.modelName = modelName;
     this.id = id ? () => id : this.id;
     this.config = config || {};
+    this.providerOptions = { ...options };
   }
 
   id(): string {
@@ -72,21 +154,77 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
   }
 
   getConfig() {
-    return Object.keys(this.config).reduce(
-      (options, key) => {
-        const optionName = key as keyof HuggingfaceTextGenerationOptions;
-        if (HuggingFaceTextGenerationKeys.has(optionName)) {
-          options[optionName] = this.config[optionName];
-        }
-        return options;
-      },
-      {} as Partial<
-        Record<keyof HuggingfaceTextGenerationOptions, number | boolean | string | undefined>
-      >,
-    );
+    return Object.keys(this.config).reduce<
+      Partial<Record<keyof HuggingfaceTextGenerationOptions, number | boolean | string | undefined>>
+    >((options, key) => {
+      const optionName = key as keyof HuggingfaceTextGenerationOptions;
+      if (HuggingFaceTextGenerationKeys.has(optionName)) {
+        options[optionName] = this.config[optionName];
+      }
+      return options;
+    }, {});
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  private useChatCompletionFormat(): boolean {
+    // Explicit config takes precedence
+    if (this.config.chatCompletion !== undefined) {
+      return this.config.chatCompletion;
+    }
+    // Auto-detect based on endpoint URL - only match chat-specific endpoints
+    if (this.config.apiEndpoint) {
+      return this.config.apiEndpoint.includes('/v1/chat');
+    }
+    return false;
+  }
+
+  private getChatProvider(): HuggingfaceChatCompletionProvider {
+    if (!this.chatProvider) {
+      this.chatProvider = new HuggingfaceChatCompletionProvider(this.modelName, {
+        ...this.providerOptions,
+        config: this.config,
+      });
+    }
+    return this.chatProvider;
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Delegate to chat provider if using chat completion format
+    if (this.useChatCompletionFormat()) {
+      return this.getChatProvider().callApi(prompt, context);
+    }
+
+    // Set up tracing context for Inference API
+    const spanContext: GenAISpanContext = {
+      system: 'huggingface',
+      operationName: 'completion',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      maxTokens: this.config.max_new_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor (Huggingface doesn't return token usage by default)
+    const resultExtractor = (_response: ProviderResponse): GenAISpanResult => {
+      return {};
+    };
+
+    return withGenAISpan(spanContext, () => this.callInferenceApi(prompt), resultExtractor);
+  }
+
+  async cleanup(): Promise<void> {
+    await this.chatProvider?.cleanup();
+  }
+
+  private async callInferenceApi(prompt: string): Promise<ProviderResponse> {
+    const url = this.config.apiEndpoint
+      ? this.config.apiEndpoint
+      : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
+
     const params = {
       inputs: prompt,
       parameters: {
@@ -95,14 +233,17 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       },
     };
 
-    const url = this.config.apiEndpoint
-      ? this.config.apiEndpoint
-      : `https://api-inference.huggingface.co/models/${this.modelName}`;
-    logger.debug(`Huggingface API request: ${url}`, { params });
+    logger.debug(`Huggingface Inference API request: ${url}`, { params });
 
-    let response;
+    interface HuggingfaceTextGenerationResponse {
+      error?: string;
+      generated_text?: string;
+      [0]?: { generated_text?: string };
+    }
+
+    let response: FetchWithCacheResult<HuggingfaceTextGenerationResponse> | undefined;
     try {
-      response = await fetchWithCache(
+      response = await fetchWithCache<HuggingfaceTextGenerationResponse>(
         url,
         {
           method: 'POST',
@@ -113,10 +254,10 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
-      logger.debug('Huggingface API response', { data: response.data });
+      logger.debug('Huggingface Inference API response', { data: response.data });
 
       if (response.data.error) {
         return {
@@ -174,12 +315,17 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
       parameters: {},
     };
 
-    let response;
+    interface HuggingfaceTextClassificationResponse {
+      error?: string;
+      [0]?: Array<{ label: string; score: number }>;
+    }
+
+    let response: FetchWithCacheResult<HuggingfaceTextClassificationResponse> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
-      response = await fetchWithCache(
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
+      response = await fetchWithCache<HuggingfaceTextClassificationResponse>(
         url,
         {
           method: 'POST',
@@ -189,7 +335,7 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (response.data.error) {
@@ -272,13 +418,17 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
       },
     };
 
-    let response;
+    interface HuggingfaceFeatureExtractionResponse {
+      error?: string;
+    }
+
+    let response: FetchWithCacheResult<HuggingfaceFeatureExtractionResponse | number[]> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       logger.debug('Huggingface API request', { url, params });
-      response = await fetchWithCache(
+      response = await fetchWithCache<HuggingfaceFeatureExtractionResponse | number[]>(
         url,
         {
           method: 'POST',
@@ -288,10 +438,10 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
-      if (response.data.error) {
+      if (typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
@@ -361,12 +511,19 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
       },
     };
 
-    let response;
+    interface HuggingfaceSentenceSimilarityResponse {
+      error?: string;
+      [0]?: number;
+    }
+
+    let response:
+      | FetchWithCacheResult<HuggingfaceSentenceSimilarityResponse | number[]>
+      | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
-      response = await fetchWithCache(
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
+      response = await fetchWithCache<HuggingfaceSentenceSimilarityResponse | number[]>(
         url,
         {
           method: 'POST',
@@ -376,10 +533,10 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
-      if (response.data.error) {
+      if (typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
@@ -441,12 +598,22 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
       },
     };
 
-    let response;
+    interface HuggingfaceTokenClassificationResponse {
+      error?: string;
+    }
+
+    let response:
+      | FetchWithCacheResult<
+          HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
+        >
+      | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
-      response = await fetchWithCache(
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
+      response = await fetchWithCache<
+        HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
+      >(
         url,
         {
           method: 'POST',
@@ -456,10 +623,10 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
           },
           body: JSON.stringify(params),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
-      if (response.data.error) {
+      if (typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };

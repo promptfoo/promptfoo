@@ -1,14 +1,25 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
-import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
+
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn());
 const mockCheckPenalizedPhrases = vi.hoisted(() => vi.fn());
 const mockGetGraderById = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
 
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -41,47 +52,50 @@ vi.mock('../../../src/redteam/graders', async (importOriginal) => {
 });
 
 describe('RedteamIterativeProvider', () => {
-  let mockRedteamProvider: Mocked<ApiProvider>;
-  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockRedteamProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockRedteamProvider = {
-      id: vi.fn().mockReturnValue('mock-redteam'),
-      callApi: vi
-        .fn<(prompt: string, context?: any) => Promise<ProviderResponse>>()
-        .mockImplementation(async function (prompt: string) {
-          const input = JSON.parse(prompt);
+    // Reset hoisted mocks to ensure test isolation
+    // mockReset clears both call history AND mock implementations
+    mockGetProvider.mockReset();
+    mockGetTargetResponse.mockReset();
+    mockCheckPenalizedPhrases.mockReset();
+    mockGetGraderById.mockReset();
 
-          if (Array.isArray(input) && input[0]?.role === 'system') {
-            return {
-              output: JSON.stringify({
-                improvement: 'test improvement',
-                prompt: 'test prompt',
-              }),
-            };
-          } else if (Array.isArray(input) && input[0]?.content?.includes('on-topic')) {
-            return {
-              output: JSON.stringify({ onTopic: true }),
-            };
-          } else {
-            return {
-              output: JSON.stringify({
-                currentResponse: { rating: 5, explanation: 'test' },
-                previousBestResponse: { rating: 0, explanation: 'none' },
-              }),
-            };
-          }
-        }),
-    } as Mocked<ApiProvider>;
+    mockRedteamProvider = createMockProvider({
+      id: 'mock-redteam',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function (prompt) {
+        const input = JSON.parse(prompt as string);
 
-    mockTargetProvider = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
-        output: 'mock target response',
+        if (Array.isArray(input) && input[0]?.role === 'system') {
+          return createProviderResponse({
+            output: JSON.stringify({
+              improvement: 'test improvement',
+              prompt: 'test prompt',
+            }),
+          });
+        } else if (Array.isArray(input) && input[0]?.content?.includes('on-topic')) {
+          return createProviderResponse({
+            output: JSON.stringify({ onTopic: true }),
+          });
+        } else {
+          return createProviderResponse({
+            output: JSON.stringify({
+              currentResponse: { rating: 5, explanation: 'test' },
+              previousBestResponse: { rating: 0, explanation: 'none' },
+            }),
+          });
+        }
       }),
-    } as Mocked<ApiProvider>;
+    });
+
+    mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({ output: 'mock target response' }),
+    });
 
     mockGetProvider.mockImplementation(function () {
       return Promise.resolve(mockRedteamProvider);
@@ -122,10 +136,13 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it('should use environment variable for numIterations if set', () => {
-      process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS = '15';
-      const provider = new RedteamIterativeProvider({ injectVar: 'test' });
-      expect(provider['numIterations']).toBe(15);
-      delete process.env.PROMPTFOO_NUM_JAILBREAK_ITERATIONS;
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_NUM_JAILBREAK_ITERATIONS: '15' });
+      try {
+        const provider = new RedteamIterativeProvider({ injectVar: 'test' });
+        expect(provider['numIterations']).toBe(15);
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -153,7 +170,7 @@ describe('RedteamIterativeProvider', () => {
         context: { prompt: { raw: '', label: '' }, vars: {} },
         filters: undefined,
         injectVar: 'test',
-        numIterations: 5,
+        numIterations: 2,
         options: {},
         prompt: { raw: 'test', label: 'test' },
         redteamProvider: mockRedteamProvider,
@@ -164,7 +181,7 @@ describe('RedteamIterativeProvider', () => {
         excludeTargetOutputFromAgenticAttackGeneration: false,
       });
 
-      expect(result.metadata.finalIteration).toBe(5);
+      expect(result.metadata.finalIteration).toBe(2);
       expect(result.metadata.highestScore).toBe(10);
     });
 
@@ -233,6 +250,7 @@ describe('RedteamIterativeProvider', () => {
         score: 0,
         reason: 'Jailbreak detected by grader',
         tokensUsed: { total: 100, prompt: 50, completion: 50 },
+        assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
       expect(mockGrader.getResult).toHaveBeenCalledWith(
         'test',
@@ -769,6 +787,7 @@ describe('RedteamIterativeProvider', () => {
         pass: false,
         score: 0,
         reason: 'Grader detected jailbreak',
+        assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
     });
 

@@ -4,11 +4,13 @@ import WebSocket, { type ClientOptions } from 'ws';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { getProcessShim } from '../util/processShim';
 import { getNunjucksEngine } from '../util/templates';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
+import { normalizeResponseTransformResult } from './transformResult';
+import { parseFileTransformReference } from './transformUtils';
 
 import type {
   ApiProvider,
@@ -19,15 +21,7 @@ import type {
 
 const nunjucks = getNunjucksEngine();
 
-export const processResult = (transformedResponse: any): ProviderResponse => {
-  if (
-    typeof transformedResponse === 'object' &&
-    (transformedResponse.output || transformedResponse.error)
-  ) {
-    return transformedResponse;
-  }
-  return { output: transformedResponse };
-};
+export const processResult = normalizeResponseTransformResult;
 
 interface WebSocketProviderConfig {
   messageTemplate: string;
@@ -52,7 +46,12 @@ export function createTransformResponse(parser: any): (data: any) => ProviderRes
     return parser;
   }
   if (typeof parser === 'string') {
-    return new Function('data', `return ${parser}`) as (data: any) => ProviderResponse;
+    // Add process parameter for ESM compatibility - allows process.mainModule.require to work
+    const fn = new Function('data', 'process', `return ${parser}`) as (
+      data: any,
+      process: typeof globalThis.process,
+    ) => ProviderResponse;
+    return (data) => fn(data, getProcessShim());
   }
   return (data) => ({ output: data });
 }
@@ -85,14 +84,7 @@ export async function createStreamResponse(
   }
 
   if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
+    const { filename, functionName } = parseFileTransformReference(transform);
     const requiredModule = await importModule(
       path.resolve(cliState.basePath || '', filename),
       functionName,
@@ -121,12 +113,14 @@ export async function createStreamResponse(
       const isFunctionExpression = /^(\(.*?\)\s*=>|function\s*\(.*?\))/.test(trimmedTransform);
 
       let transformFn: Function;
+      // Add process parameter for ESM compatibility - allows process.mainModule.require to work
       if (isFunctionExpression) {
         // For function expressions, call them with the arguments
         transformFn = new Function(
           'accumulator',
           'data',
           'context',
+          'process',
           `try { return (${trimmedTransform})(accumulator, data, context); } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message) }`,
         );
       } else {
@@ -139,6 +133,7 @@ export async function createStreamResponse(
             'accumulator',
             'data',
             'context',
+            'process',
             `try { ${trimmedTransform} } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message); }`,
           );
         } else {
@@ -147,12 +142,18 @@ export async function createStreamResponse(
             'accumulator',
             'data',
             'context',
+            'process',
             `try { return (${trimmedTransform}); } catch(e) { throw new Error('Error executing streamResponse function: ' + e.message); }`,
           );
         }
       }
 
-      const result: [ProviderResponse, boolean] = transformFn(accumulator, data, context);
+      const result: [ProviderResponse, boolean] = transformFn(
+        accumulator,
+        data,
+        context,
+        getProcessShim(),
+      );
       return result;
     };
   }
@@ -178,7 +179,7 @@ export class WebSocketProvider implements ApiProvider {
   constructor(url: string, options: ProviderOptions) {
     this.config = options.config as WebSocketProviderConfig;
     this.url = this.config.url || url;
-    this.timeoutMs = this.config.timeoutMs || REQUEST_TIMEOUT_MS;
+    this.timeoutMs = this.config.timeoutMs || getRequestTimeoutMs();
     this.transformResponse = createTransformResponse(
       this.config.transformResponse || this.config.responseParser,
     );
@@ -207,7 +208,7 @@ export class WebSocketProvider implements ApiProvider {
       prompt,
     };
     const message = nunjucks.renderString(this.config.messageTemplate, vars);
-    const streamResponse = this.streamResponse ? await this.streamResponse : undefined;
+    const streamResponse = this.streamResponse == null ? undefined : await this.streamResponse;
 
     logger.debug(`Sending WebSocket message to ${this.url}: ${message}`);
     let accumulator: ProviderResponse = { error: 'unknown error occurred' };

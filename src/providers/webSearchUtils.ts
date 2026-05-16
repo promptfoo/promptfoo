@@ -1,6 +1,37 @@
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
+
 import type { ApiProvider } from '../types/index';
+
+function hasTool(
+  provider: ApiProvider,
+  predicate: (tool: Record<string, unknown>) => boolean,
+): boolean {
+  return Array.isArray(provider.config?.tools) && provider.config.tools.some(predicate);
+}
+
+function getProviderId(provider: ApiProvider): string | null {
+  if (typeof provider.id !== 'function') {
+    return null;
+  }
+
+  try {
+    return provider.id();
+  } catch (err) {
+    logger.debug(`Failed to read provider id: ${err}`);
+    return null;
+  }
+}
+
+function isOpenAiResponsesProvider(provider: ApiProvider, id: string): boolean {
+  return (
+    id.includes('openai:responses') || provider.constructor?.name === 'OpenAiResponsesProvider'
+  );
+}
+
+function isXAIResponsesProvider(provider: ApiProvider, id: string): boolean {
+  return id.includes('xai:responses') || provider.constructor?.name === 'XAIResponsesProvider';
+}
 
 /**
  * Check if a provider has web search capabilities
@@ -11,7 +42,11 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
   if (!provider) {
     return false;
   }
-  const id = provider.id();
+
+  const id = getProviderId(provider);
+  if (!id) {
+    return false;
+  }
 
   // Perplexity has built-in web search
   if (id.includes('perplexity')) {
@@ -21,29 +56,40 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
   // Check for Google/Gemini with search tools
   if (
     (id.includes('google') || id.includes('gemini') || id.includes('vertex')) &&
-    provider.config?.tools?.some((t: any) => t.googleSearch !== undefined)
+    hasTool(provider, (t) => t.googleSearch !== undefined)
   ) {
     return true;
   }
 
-  // Check for xAI with search parameters
-  if (id.includes('xai') && provider.config?.search_parameters?.mode === 'on') {
+  // Check for xAI with either the current Responses API tools or legacy Live Search params.
+  if (
+    id.includes('xai') &&
+    (provider.config?.search_parameters?.mode === 'on' ||
+      (isXAIResponsesProvider(provider, id) && hasTool(provider, (t) => t.type === 'web_search')))
+  ) {
     return true;
   }
 
   // Check for OpenAI responses API with web_search_preview tool
   if (
-    id.includes('openai:responses') &&
-    provider.config?.tools?.some((t: any) => t.type === 'web_search_preview')
+    isOpenAiResponsesProvider(provider, id) &&
+    hasTool(provider, (t) => t.type === 'web_search_preview')
+  ) {
+    return true;
+  }
+
+  // Codex SDK supports web search when explicitly enabled.
+  if (
+    id.startsWith('openai:codex') &&
+    (provider.config?.web_search_mode === 'live' ||
+      provider.config?.web_search_mode === 'cached' ||
+      provider.config?.web_search_enabled === true)
   ) {
     return true;
   }
 
   // Check for Anthropic with web_search tool
-  if (
-    id.includes('anthropic') &&
-    provider.config?.tools?.some((t: any) => t.type === 'web_search_20250305')
-  ) {
+  if (id.includes('anthropic') && hasTool(provider, (t) => t.type === 'web_search_20250305')) {
     return true;
   }
 
@@ -61,10 +107,10 @@ export function hasWebSearchCapability(provider: ApiProvider | null | undefined)
 export async function loadWebSearchProvider(
   preferAnthropic: boolean = false,
 ): Promise<ApiProvider | null> {
-  // Anthropic Claude 4.5 Opus (November 2024 checkpoint) with web search tool
+  // Anthropic Claude 4.6 Opus with web search tool
   const loadAnthropicWebSearch = async () => {
     try {
-      return await loadApiProvider('anthropic:messages:claude-opus-4-5-20251101', {
+      return await loadApiProvider('anthropic:messages:claude-opus-4-6', {
         options: {
           config: {
             tools: [
@@ -83,10 +129,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // OpenAI GPT-5.1 with web search tool (via responses API)
+  // OpenAI GPT-5.5 snapshot with web search tool (via responses API)
   const loadOpenAIWebSearch = async () => {
     try {
-      return await loadApiProvider('openai:responses:gpt-5.1', {
+      return await loadApiProvider('openai:responses:gpt-5.5-2026-04-23', {
         options: {
           config: { tools: [{ type: 'web_search_preview' }] },
         },
@@ -107,10 +153,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // Google Gemini 3 Pro Preview with googleSearch tool
+  // Google Gemini 3.1 Pro Preview with googleSearch tool
   const loadGoogleWebSearch = async () => {
     try {
-      return await loadApiProvider('google:gemini-3-pro-preview', {
+      return await loadApiProvider('google:gemini-3.1-pro-preview', {
         options: {
           config: { tools: [{ googleSearch: {} }] },
         },
@@ -121,10 +167,10 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // Vertex AI Gemini 3 Pro Preview with googleSearch tool
+  // Vertex AI Gemini 3.1 Pro Preview with googleSearch tool
   const loadVertexWebSearch = async () => {
     try {
-      return await loadApiProvider('vertex:gemini-3-pro-preview', {
+      return await loadApiProvider('vertex:gemini-3.1-pro-preview', {
         options: {
           config: { tools: [{ googleSearch: {} }] },
         },
@@ -135,12 +181,12 @@ export async function loadWebSearchProvider(
     }
   };
 
-  // xAI Grok 4.1 Fast Reasoning with live web search
+  // xAI Grok 4.3 with Responses API web search
   const loadXaiWebSearch = async () => {
     try {
-      return await loadApiProvider('xai:grok-4-1-fast-reasoning', {
+      return await loadApiProvider('xai:responses:grok-4.3', {
         options: {
-          config: { search_parameters: { mode: 'on' } },
+          config: { tools: [{ type: 'web_search' }] },
         },
       });
     } catch (err) {
@@ -170,9 +216,14 @@ export async function loadWebSearchProvider(
 
   for (const getProvider of providers) {
     const provider = await getProvider();
-    if (provider) {
-      logger.info(`Using ${provider.id()} as web search provider`);
+    if (provider && hasWebSearchCapability(provider)) {
+      logger.info(`Using ${getProviderId(provider) ?? 'loaded provider'} as web search provider`);
       return provider;
+    }
+    if (provider) {
+      logger.debug(
+        `Loaded provider ${getProviderId(provider) ?? 'unknown'} does not support web search`,
+      );
     }
   }
 

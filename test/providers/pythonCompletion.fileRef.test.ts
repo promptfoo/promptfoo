@@ -1,16 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import fs from 'fs';
+import fsSync from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
-import { parsePathOrGlob } from '../../src/util/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
+import { parsePathOrGlob } from '../../src/util/index';
 import type { Logger } from 'winston';
 
 vi.mock('fs');
+vi.mock('fs/promises');
 vi.mock('path');
 vi.mock('../../src/util/file');
 vi.mock('../../src/logger');
@@ -122,9 +123,10 @@ describe('PythonProvider with file references', () => {
       };
     });
 
-    vi.mocked(fs.readFileSync).mockImplementation(function () {
+    vi.mocked(fsSync.readFileSync).mockImplementation(function () {
       return 'mock file content';
     });
+    vi.mocked(fs.readFile).mockResolvedValue('mock file content');
   });
 
   afterEach(async () => {

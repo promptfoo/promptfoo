@@ -1,5 +1,7 @@
 import { LRUCache } from 'lru-cache';
 
+import type { EvalSummary } from '../../../types/index';
+
 /**
  * Performance utilities for MCP server operations
  */
@@ -8,21 +10,21 @@ import { LRUCache } from 'lru-cache';
  * Simple in-memory cache for evaluation results
  */
 export class EvaluationCache {
-  private cache: LRUCache<string, any>;
+  private cache: LRUCache<string, EvalSummary[]>;
 
   constructor(maxSize: number = 100, ttlMs: number = 5 * 60 * 1000) {
     // 5 minutes default
-    this.cache = new LRUCache({
+    this.cache = new LRUCache<string, EvalSummary[]>({
       max: maxSize,
       ttl: ttlMs,
     });
   }
 
-  get(key: string): any {
+  get(key: string) {
     return this.cache.get(key);
   }
 
-  set(key: string, value: any): void {
+  set(key: string, value: EvalSummary[]): void {
     this.cache.set(key, value);
   }
 
@@ -92,7 +94,8 @@ export function paginate<T>(items: T[], options: PaginationOptions = {}): Pagina
  * Batch processor for handling multiple operations efficiently
  */
 export class BatchProcessor<T, R> {
-  private queue: Array<{ item: T; resolve: (value: R) => void; reject: (error: any) => void }> = [];
+  private queue: Array<{ item: T; resolve: (value: R) => void; reject: (error: Error) => void }> =
+    [];
   private processing = false;
 
   constructor(
@@ -104,7 +107,7 @@ export class BatchProcessor<T, R> {
   async add(item: T): Promise<R> {
     return new Promise((resolve, reject) => {
       this.queue.push({ item, resolve, reject });
-      this.processQueue();
+      void this.processQueue();
     });
   }
 
@@ -128,43 +131,51 @@ export class BatchProcessor<T, R> {
       const results = await this.processor(items);
       batch.forEach((b, i) => b.resolve(results[i]));
     } catch (error) {
-      batch.forEach((b) => b.reject(error));
+      batch.forEach((b) => b.reject(error as Error));
     }
 
     this.processing = false;
 
     // Continue processing if more items
     if (this.queue.length > 0) {
-      this.processQueue();
+      void this.processQueue();
     }
   }
 }
 
 /**
- * Stream processor for handling large datasets
+ * Stream processor for handling large datasets with controlled concurrency.
+ * Yields results as they complete while maintaining the concurrency limit.
  */
 export async function* streamProcess<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
   concurrency: number = 5,
 ): AsyncGenerator<R, void, unknown> {
-  const executing: Promise<R>[] = [];
+  // Use a Map to track promises and identify which one completed
+  type WrappedResult = { result: R; id: number };
+  const executing = new Map<number, Promise<WrappedResult>>();
+  let nextId = 0;
 
   for (const item of items) {
-    const promise = processor(item);
-    executing.push(promise);
+    const id = nextId++;
+    // Wrap the promise to include an identifier
+    const wrappedPromise = processor(item).then((result) => ({ result, id }));
+    executing.set(id, wrappedPromise);
 
-    if (executing.length >= concurrency) {
-      yield await Promise.race(executing);
-      const index = executing.findIndex((p) => p === promise);
-      executing.splice(index, 1);
+    if (executing.size >= concurrency) {
+      // Wait for one to complete and yield its result
+      const { result, id: completedId } = await Promise.race(executing.values());
+      executing.delete(completedId);
+      yield result;
     }
   }
 
-  // Yield remaining results
-  while (executing.length > 0) {
-    yield await Promise.race(executing);
-    executing.shift();
+  // Yield remaining results as they complete
+  while (executing.size > 0) {
+    const { result, id: completedId } = await Promise.race(executing.values());
+    executing.delete(completedId);
+    yield result;
   }
 }
 

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 6
+sidebar_label: Deterministic metrics
 title: Deterministic Metrics for LLM Output Validation
 description: Learn how to validate LLM outputs using deterministic logical tests including exact matching, regex patterns, JSON/XML validation, and text similarity metrics
 keywords:
@@ -38,7 +39,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
-| [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
+| [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
 | [f-score](#f-score)                                             | F-score is above a threshold                                       |
@@ -52,6 +53,12 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
+| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
+| [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
+| [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
+| [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
+| [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
 | [is-xml](#is-xml)                                               | output is valid xml                                                |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
@@ -69,6 +76,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
+| [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -451,13 +459,15 @@ Note: The `is-xml` assertion requires the entire output to be valid XML. For che
 
 ### Contains-XML
 
-The `contains-xml` is identical to `is-xml`, except it checks if the LLM output contains valid XML content, even if it's not the entire output. For example, the following is valid.
+The `contains-xml` assertion checks if the LLM output contains valid XML content, even if it's not the entire output. It uses the same `value.requiredElements` format as `is-xml`; required element paths are checked from the extracted XML fragment's root.
 
 ```xml
 Sure, here is your xml:
 <root><child>Content</child></root>
 let me know if you have any other questions!
 ```
+
+For example, `contains-xml` with `root.child` passes for `Text <root><child>Content</child></root>`. If the XML fragment is wrapped, use the wrapper in the required path, such as `wrapper.root.child` for `<wrapper><root><child>Content</child></root></wrapper>`.
 
 ### Is-SQL
 
@@ -533,15 +543,15 @@ assert:
 
 ### is-valid-function-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. This is implemented for a subset of providers. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#function-calling), [Google Live provider](/docs/providers/google#function-calling-example) and [OpenAI provider](/docs/providers/openai/#using-tools-and-functions), which this is implemented for.
+This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. This is implemented for a subset of providers. Learn more about the [Google Vertex provider](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider](/docs/providers/google/#tool-calling), [Google Live provider](/docs/providers/google#function-calling-example) and [OpenAI provider](/docs/providers/openai/#tool-calling), which this is implemented for.
 
 ### is-valid-openai-function-call
 
-Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
+Legacy - please use is-valid-function-call instead. This ensures that any JSON LLM output adheres to the schema specified in the `functions` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
 ### is-valid-openai-tools-call
 
-This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#using-tools-and-functions).
+This ensures that any JSON LLM output adheres to the schema specified in the `tools` configuration of the provider. Learn more about the [OpenAI provider](/docs/providers/openai/#tool-calling).
 
 **MCP Support**: This assertion also validates MCP (Model Context Protocol) tool calls when using OpenAI's Responses API. It will:
 
@@ -568,6 +578,219 @@ tests:
       - type: is-valid-openai-tools-call # Validates MCP tool success
       - type: contains
         value: 'MCP Tool Result' # Alternative way to check for MCP success
+```
+
+### tool-call-f1
+
+The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
+
+This assertion supports multiple provider formats including OpenAI, Anthropic, and Google/Vertex.
+
+The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
+
+- **Precision** = |actual ∩ expected| / |actual| — "Of the tools called, how many were correct?"
+- **Recall** = |actual ∩ expected| / |expected| — "Of the expected tools, how many were called?"
+- **F1** = 2 × (precision × recall) / (precision + recall)
+
+This uses **unordered set comparison** — only the presence of tool names matters, not the order or frequency of calls.
+
+Example:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            parameters:
+              type: object
+              properties:
+                city:
+                  type: string
+        - type: function
+          function:
+            name: book_flight
+            parameters:
+              type: object
+              properties:
+                destination:
+                  type: string
+
+tests:
+  - vars:
+      query: "What's the weather in NYC and book me a flight to LA?"
+    assert:
+      # Require exact match (F1 = 1.0)
+      - type: tool-call-f1
+        value:
+          - get_weather
+          - book_flight
+
+      # Allow partial matches with custom threshold
+      - type: tool-call-f1
+        value: ['get_weather', 'book_flight']
+        threshold: 0.8
+```
+
+The `value` can be specified as:
+
+- An array of tool names: `['get_weather', 'book_flight']`
+- A comma-separated string: `'get_weather, book_flight'`
+
+The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow partial matches, which is useful during development or when some flexibility is acceptable.
+
+**Scoring examples:**
+
+| Expected Tools               | Actual Tools Called                  | Precision | Recall | F1    |
+| ---------------------------- | ------------------------------------ | --------- | ------ | ----- |
+| `[get_weather, book_flight]` | `[get_weather, book_flight]`         | 1.0       | 1.0    | 1.0   |
+| `[get_weather, book_flight]` | `[get_weather]`                      | 1.0       | 0.5    | 0.667 |
+| `[get_weather, book_flight]` | `[get_weather, book_flight, search]` | 0.667     | 1.0    | 0.8   |
+| `[get_weather]`              | `[book_flight]`                      | 0.0       | 0.0    | 0.0   |
+
+### skill-used {#skill-used}
+
+The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?".
+
+Promptfoo currently populates `metadata.skillCalls` for:
+
+- Claude Agent SDK, by normalizing `Skill` tool calls.
+- OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+
+Example:
+
+```yaml
+assert:
+  - type: skill-used
+    value: code-review
+
+  - type: skill-used
+    value:
+      pattern: 'project-*:*'
+      min: 1
+
+  - type: not-skill-used
+    value: forbidden-skill
+```
+
+Use `skill-used` when provider-level routing evidence is enough. If you also need to verify what the skill actually did, combine it with trace assertions such as [`trajectory:tool-used`](#trajectorytool-used), [`trajectory:tool-args-match`](#trajectorytool-args-match), or [`trajectory:step-count`](#trajectorystep-count).
+
+### trajectory:tool-used {#trajectorytool-used}
+
+The `trajectory:tool-used` assertion checks traced tool steps rather than the model's final output. It works well for agent evals where the important question is "did the agent actually use the right tool?".
+
+:::note
+Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
+:::
+
+Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-used
+        value: search_orders
+
+      - type: trajectory:tool-used
+        value:
+          pattern: 'search*'
+          min: 2
+          max: 3
+```
+
+`value` may be:
+
+- A string, such as `search_orders`
+- An array of strings, such as `['search_orders', 'compose_reply']`
+- An object with `pattern`, `min`, and optional `max`
+
+### trajectory:tool-args-match {#trajectorytool-args-match}
+
+The `trajectory:tool-args-match` assertion checks traced tool-call arguments. Use it when the agent must not only invoke the right tool, but also pass the right parameters.
+
+Example:
+
+```yaml
+tests:
+  - vars:
+      order_id: '123'
+    assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          args:
+            order_id: '{{ order_id }}'
+
+      - type: trajectory:tool-args-match
+        value:
+          pattern: 'compose_*'
+          mode: exact
+          arguments:
+            tone: friendly
+            citations:
+              - doc_1
+              - doc_2
+```
+
+`value` must be an object with:
+
+- `name` or `pattern` to identify the traced tool call
+- `args` or `arguments` containing the expected payload
+- optional `mode`, either `partial` (default) or `exact`
+
+In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
+
+Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
+
+### trajectory:tool-sequence {#trajectorytool-sequence}
+
+The `trajectory:tool-sequence` assertion checks the order of traced tool usage. This is useful when an agent must gather information before taking a follow-up action.
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-sequence
+        value:
+          steps:
+            - search_orders
+            - compose_reply
+
+      - type: trajectory:tool-sequence
+        value:
+          mode: exact
+          steps:
+            - search_orders
+            - compose_reply
+```
+
+`mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
+
+### trajectory:step-count {#trajectorystep-count}
+
+The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
+
+Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd`, `command`, or `commands`.
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:step-count
+        value:
+          type: command
+          max: 3
+
+      - type: trajectory:step-count
+        value:
+          pattern: 'reasoning*'
+          min: 1
 ```
 
 ### Javascript
@@ -718,7 +941,7 @@ assert:
   # Ensure exactly 2-4 retrieval operations
   - type: trace-span-count
     value:
-      pattern: '*retriev*'
+      pattern: '*retrieve*'
       min: 2
       max: 4
 ```
@@ -898,6 +1121,11 @@ assert:
   # With custom threshold
   - type: rouge-n
     threshold: 0.6
+    value: hello world
+
+  # Ensure Rouge-N score is below a threshold
+  - type: not-rouge-n
+    threshold: 0.75
     value: hello world
 ```
 
@@ -1195,7 +1423,7 @@ The F-score will be calculated automatically after the eval completes. A score c
 
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
+See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) for a complete example.
 
 ### Finish Reason
 
@@ -1550,6 +1778,33 @@ assert:
   - type: select-best
     value: 'choose the most engaging response'
     provider: openai:gpt-5-mini
+```
+
+### Word Count
+
+The `word-count` assertion checks if the LLM output has a specific number of words or falls within a range.
+
+```yaml
+assert:
+  # Exact count
+  - type: word-count
+    value: 50
+
+  # Range (inclusive)
+  - type: word-count
+    value:
+      min: 20
+      max: 100
+
+  # Minimum only
+  - type: word-count
+    value:
+      min: 50
+
+  # Maximum only
+  - type: word-count
+    value:
+      max: 200
 ```
 
 ## See Also

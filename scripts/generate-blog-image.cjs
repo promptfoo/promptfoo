@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const fs = require('fs');
+const fs = require('fs/promises');
 const path = require('path');
 const https = require('https');
 // Load environment variables from .env file
@@ -14,6 +14,8 @@ if (!OPENAI_API_KEY) {
 const args = process.argv.slice(2);
 let filename = 'blog-image.png';
 let prompt = '';
+let size = '1024x1024';
+let outputDir = 'blog';
 // Parse arguments
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--filename' || args[i] === '-f') {
@@ -22,16 +24,24 @@ for (let i = 0; i < args.length; i++) {
   } else if (args[i] === '--prompt' || args[i] === '-p') {
     prompt = args[i + 1];
     i++;
+  } else if (args[i] === '--size' || args[i] === '-s') {
+    size = args[i + 1];
+    i++;
+  } else if (args[i] === '--output-dir' || args[i] === '-o') {
+    outputDir = args[i + 1];
+    i++;
   } else if (args[i] === '--help' || args[i] === '-h') {
     console.log(`
 Usage: node generate-blog-image.js [options]
 Options:
   -f, --filename <name>    Output filename (default: blog-image.png)
   -p, --prompt <text>      Image generation prompt
+  -s, --size <size>        Image size: 1024x1024, 1536x1024, 1024x1536, auto (default: 1024x1024)
+  -o, --output-dir <dir>   Output subdirectory under site/static/img/ (default: blog)
   -h, --help              Show this help message
 Examples:
   node generate-blog-image.js -f system-cards-hero.png -p "A red panda reading documentation"
-  node generate-blog-image.js --filename security-test.png --prompt "Cybersecurity visualization"
+  node generate-blog-image.js --filename hero.jpg --prompt "Conference banner" --size 1536x1024 --output-dir events
 `);
     process.exit(0);
   }
@@ -59,7 +69,7 @@ async function generateImage() {
   const data = JSON.stringify({
     model: 'gpt-image-1',
     prompt: prompt,
-    size: '1024x1024',
+    size: size,
     quality: 'high',
     n: 1,
   });
@@ -101,20 +111,31 @@ async function generateImage() {
   });
 }
 async function downloadImage(url, filepath) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(filepath);
+  const buffer = await new Promise((resolve, reject) => {
     https
       .get(url, (response) => {
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close(resolve);
+        if (response.statusCode && response.statusCode >= 400) {
+          response.resume();
+          reject(new Error(`Failed to download image: ${response.statusCode}`));
+          return;
+        }
+        const chunks = [];
+        response.on('data', (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         });
+        response.on('end', () => {
+          resolve(Buffer.concat(chunks));
+        });
+        response.on('error', reject);
       })
-      .on('error', (error) => {
-        fs.unlink(filepath, () => {}); // Delete the file on error
-        reject(error);
-      });
+      .on('error', reject);
   });
+  try {
+    await fs.writeFile(filepath, buffer);
+  } catch (error) {
+    await fs.unlink(filepath).catch(() => {}); // Delete the file on error
+    throw error;
+  }
 }
 async function main() {
   try {
@@ -122,13 +143,13 @@ async function main() {
     const imageData = await generateImage();
     if (imageData.b64_json) {
       // If we get base64 data, save it directly
-      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', 'blog', filename);
+      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
       const buffer = Buffer.from(imageData.b64_json, 'base64');
-      fs.writeFileSync(outputPath, buffer);
+      await fs.writeFile(outputPath, buffer);
       console.log(`Image saved to: ${outputPath}`);
     } else if (imageData.url) {
       // If we get a URL, download the image
-      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', 'blog', filename);
+      const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
       await downloadImage(imageData.url, outputPath);
       console.log(`Image downloaded and saved to: ${outputPath}`);
     } else {
@@ -139,4 +160,5 @@ async function main() {
     process.exit(1);
   }
 }
+// biome-ignore lint/nursery/noFloatingPromises: convert this to ESM
 main();

@@ -1,14 +1,25 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
+import {
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import invariant from '../../util/invariant';
+import { isClaudeOpus47Model } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -18,13 +29,19 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 export class AzureChatCompletionProvider extends AzureGenericProvider {
+  declare config: AzureChatResponsesOptions;
+
   private mcpClient: MCPClient | null = null;
   private functionCallbackHandler: FunctionCallbackHandler;
 
-  constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
-    super(...args);
+  constructor(
+    deploymentName: string,
+    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
+  ) {
+    super(deploymentName, options);
 
     // Initialize callback handler immediately (will be replaced if MCP is enabled)
     this.functionCallbackHandler = new FunctionCallbackHandler();
@@ -87,6 +104,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     );
   }
 
+  /**
+   * Claude Opus 4.7 deprecates `temperature` at the model level — the
+   * deployment returns 400 for any request that includes it. Opus 4.7 keeps
+   * the standard `max_tokens` field (not `max_completion_tokens`) and does
+   * not accept `reasoning_effort`, so we only strip temperature here and
+   * leave the rest of the chat body intact.
+   */
+  protected isClaudeOpus47(): boolean {
+    return isClaudeOpus47Model(this.deploymentName);
+  }
+
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
@@ -123,30 +151,57 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       }
     }
 
-    // Response format with variable rendering
+    // Response format with variable rendering (handles nested schema loading)
     const responseFormat = config.response_format
       ? {
-          response_format: maybeLoadFromExternalFile(
-            renderVarsInObject(config.response_format, context?.vars),
+          response_format: maybeLoadResponseFormatFromExternalFile(
+            config.response_format,
+            context?.vars,
           ),
         }
       : {};
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
+    const isClaudeOpus47 = this.isClaudeOpus47();
 
     // Get max tokens based on model type
-    const maxTokens = config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxCompletionTokens = config.max_completion_tokens;
+    const maxTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxTokens = config.max_tokens ?? maxTokensDefault;
+    const maxCompletionTokens =
+      config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
+
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature = config.temperature ?? temperatureDefault;
+
+    const topP = config.omitDefaults
+      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P'))
+      : (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1));
+    const presencePenalty = config.omitDefaults
+      ? (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY'))
+      : (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0));
+    const frequencyPenalty = config.omitDefaults
+      ? (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY'))
+      : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const reasoningEffort = config.reasoning_effort ?? 'medium';
+    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
+    const loadedTools = config.tools
       ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
+    // Transform tools to OpenAI format if needed
+    const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
@@ -156,22 +211,24 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       messages,
       ...(isReasoningModel
         ? {
-            max_completion_tokens: maxCompletionTokens ?? maxTokens,
-            reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars),
+            ...(reasoningEffort === undefined
+              ? {}
+              : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
+            ...(maxCompletionTokens === undefined
+              ? {}
+              : { max_completion_tokens: maxCompletionTokens }),
           }
         : {
-            max_tokens: maxTokens,
-            temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+            ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+            ...(temperature === undefined || isClaudeOpus47 ? {} : { temperature }),
           }),
-      top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
-      presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
-      frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      ...(topP === undefined ? {} : { top_p: topP }),
+      ...(presencePenalty === undefined ? {} : { presence_penalty: presencePenalty }),
+      ...(frequencyPenalty === undefined ? {} : { frequency_penalty: frequencyPenalty }),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
+            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
@@ -194,7 +251,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
     await this.ensureInitialized();
@@ -204,6 +261,68 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throw new Error('Azure API host must be set.');
     }
 
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'azure',
+      operationName: 'chat',
+      model: this.deploymentName,
+      providerId: this.id(),
+      // Optional request parameters
+      maxTokens: this.config.max_tokens,
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      stopSequences: this.config.stop,
+      frequencyPenalty: this.config.frequency_penalty,
+      presencePenalty: this.config.presence_penalty,
+      // Promptfoo context from test case if available
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+          cached: response.tokenUsage.cached,
+          completionDetails: {
+            reasoning: response.tokenUsage.completionDetails?.reasoning,
+            acceptedPrediction: response.tokenUsage.completionDetails?.acceptedPrediction,
+            rejectedPrediction: response.tokenUsage.completionDetails?.rejectedPrediction,
+          },
+        };
+      }
+
+      // Extract finish reason if available
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+
+      return result;
+    };
+
+    // Wrap the API call in a span
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      resultExtractor,
+    );
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
@@ -235,7 +354,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         context?.bustCache ?? context?.debug,
       );
@@ -256,6 +375,21 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         data = responseData;
       }
     } catch (err) {
+      // Preserve the structured rate-limit signal so the scheduler honors
+      // the transport-layer fail-fast contract (no retry on hard quotas).
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatRateLimitErrorMessage(err),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: err.headers ?? {},
+            },
+          },
+        };
+      }
       return {
         error: `API call error: ${err instanceof Error ? err.message : String(err)}`,
       };

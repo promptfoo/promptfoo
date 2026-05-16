@@ -1,6 +1,6 @@
 import cliProgress from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
@@ -14,6 +14,7 @@ import type { TestCase, Vars } from '../types/index';
 function castRowToVars(row: Record<string, unknown>): Vars {
   return row as Record<
     string,
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME
     string | number | boolean | any[] | Record<string, any> | (string | number | boolean)[]
   >;
 }
@@ -117,9 +118,9 @@ interface HuggingFaceResponse {
  */
 interface ConcurrentFetchResult {
   offset: number;
-  response: any;
+  response: FetchWithCacheResult<HuggingFaceResponse> | null;
   success: boolean;
-  error?: Error;
+  error?: unknown;
 }
 
 export function parseDatasetPath(path: string): {
@@ -238,15 +239,15 @@ export async function fetchHuggingFaceDataset(
       requestParams.set('offset', offset.toString());
 
       const remainingUserLimit =
-        userLimit !== undefined ? Math.max(userLimit - offset, 0) : undefined;
+        userLimit === undefined ? undefined : Math.max(userLimit - offset, 0);
       const remainingDatasetRows =
-        totalRows !== undefined ? Math.max(totalRows - offset, 0) : undefined;
+        totalRows === undefined ? undefined : Math.max(totalRows - offset, 0);
       const requestedLength =
-        remainingUserLimit !== undefined
-          ? Math.min(pageSize, remainingUserLimit)
-          : remainingDatasetRows !== undefined
-            ? Math.min(pageSize, remainingDatasetRows)
-            : pageSize;
+        remainingUserLimit === undefined
+          ? remainingDatasetRows === undefined
+            ? pageSize
+            : Math.min(pageSize, remainingDatasetRows)
+          : Math.min(pageSize, remainingUserLimit);
 
       if (requestedLength <= 0) {
         logger.debug(
@@ -296,6 +297,12 @@ export async function fetchHuggingFaceDataset(
       }
 
       const data = response.data as HuggingFaceResponse;
+      const isDatasetExhausted = offset >= data.num_rows_total;
+      if (data.rows.length === 0 && !isDatasetExhausted) {
+        const error = `[HF Dataset] Received an empty page at offset ${offset} before reaching ${data.num_rows_total} total rows. Aborting to avoid retrying the same page indefinitely.\nFetched ${url}`;
+        logger.error(error);
+        throw new Error(error);
+      }
 
       if (offset === 0) {
         // Smart logging: contextual info with cache status on first successful request
@@ -398,8 +405,8 @@ export async function fetchHuggingFaceDataset(
         const maxConcurrent = Math.min(MAX_CONCURRENT_REQUESTS, pagesRemaining);
         const concurrentPromises: Promise<ConcurrentFetchResult>[] = [];
 
-        for (let i = 1; i < maxConcurrent; i++) {
-          // Start from next page
+        for (let i = 0; i < maxConcurrent - 1; i++) {
+          // Start from the next page and prefetch additional pages
           const futureOffset = offset + i * pageSize;
           const futureParams = new URLSearchParams(queryParams);
           futureParams.set('offset', futureOffset.toString());
@@ -407,20 +414,19 @@ export async function fetchHuggingFaceDataset(
 
           const futureUrl = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${futureParams.toString()}`;
 
-          concurrentPromises.push(
-            fetchWithCache(futureUrl, { headers })
-              .then((resp) => ({
-                offset: futureOffset,
-                response: resp,
-                success: resp.status >= 200 && resp.status < 300,
-              }))
-              .catch((err) => ({
-                offset: futureOffset,
-                response: null,
-                success: false,
-                error: err,
-              })),
-          );
+          const p = fetchWithCache<HuggingFaceResponse>(futureUrl, { headers })
+            .then((resp) => ({
+              offset: futureOffset,
+              response: resp,
+              success: resp.status >= 200 && resp.status < 300,
+            }))
+            .catch((err) => ({
+              offset: futureOffset,
+              response: null,
+              success: false,
+              error: err,
+            }));
+          concurrentPromises.push(p);
         }
 
         if (concurrentPromises.length > 0) {
@@ -430,21 +436,42 @@ export async function fetchHuggingFaceDataset(
           // Process concurrent results in order
           let concurrentRowCount = 0;
           for (const result of concurrentResults) {
-            if (result.status === 'fulfilled' && result.value.success) {
-              const concurrentData = result.value.response.data as HuggingFaceResponse;
-              if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
-                totalRows = concurrentData.num_rows_total;
+            if (result.status === 'rejected') {
+              logger.warn(`[HF Dataset] Concurrent fetch promise rejected`, {
+                reason: result.reason,
+              });
+              continue;
+            }
+
+            if (!result.value.success) {
+              const errorInfo = result.value.error
+                ? String(result.value.error)
+                : `HTTP ${result.value.response?.status ?? 'unknown'}`;
+              logger.warn(
+                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} failed: ${errorInfo}`,
+              );
+              continue;
+            }
+
+            const concurrentData = result.value.response?.data;
+            if (!concurrentData) {
+              logger.warn(
+                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} returned success but no data`,
+              );
+              continue;
+            }
+            if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
+              totalRows = concurrentData.num_rows_total;
+            }
+            for (const { row } of concurrentData.rows) {
+              if (tests.length >= totalNeeded) {
+                break;
               }
-              for (const { row } of concurrentData.rows) {
-                if (tests.length >= totalNeeded) {
-                  break;
-                }
-                tests.push({
-                  vars: castRowToVars(row),
-                  options: { disableVarExpansion: true },
-                });
-                concurrentRowCount++;
-              }
+              tests.push({
+                vars: castRowToVars(row),
+                options: { disableVarExpansion: true },
+              });
+              concurrentRowCount++;
             }
           }
 

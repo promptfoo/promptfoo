@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import invariant from '../../util/invariant';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 
@@ -34,7 +34,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       )) as unknown as any);
     } catch (err) {
       return {
@@ -43,6 +43,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
           total: 0,
           prompt: 0,
           completion: 0,
+          numRequests: 1,
         },
       };
     }
@@ -55,11 +56,12 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
       const ret = {
         embedding,
         tokenUsage: cached
-          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens }
+          ? { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 }
           : {
               total: data.usage.total_tokens,
               prompt: data.usage.prompt_tokens,
               completion: data.usage.completion_tokens,
+              numRequests: 1,
             },
       };
       return ret;
@@ -70,11 +72,13 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
           ? {
               cached: data.usage.total_tokens,
               total: data.usage.total_tokens,
+              numRequests: 1,
             }
           : {
               total: data?.usage?.total_tokens,
               prompt: data?.usage?.prompt_tokens,
               completion: data?.usage?.completion_tokens,
+              numRequests: 1,
             },
       };
     }

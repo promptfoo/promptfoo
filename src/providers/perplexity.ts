@@ -1,5 +1,6 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -7,7 +8,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
@@ -156,7 +156,7 @@ export class PerplexityProvider extends OpenAiChatCompletionProvider {
 
     // Replace the cost calculation with our own
     if (response.tokenUsage) {
-      if (response.tokenUsage.cached) {
+      if (response.cached) {
         // For cached responses, don't recalculate cost
         return response;
       }
