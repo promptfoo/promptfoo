@@ -7,6 +7,7 @@ import logger from '../src/logger';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
+import { doRedteamRun } from '../src/redteam/shared';
 import * as fileUtils from '../src/util/file';
 import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 import { createMockProvider } from './factories/provider';
@@ -69,6 +70,14 @@ vi.mock('../src/prompts', async () => {
     readProviderPromptMap: vi.fn().mockReturnValue({}),
   };
 });
+vi.mock('../src/redteam/shared', async () => {
+  const originalModule =
+    await vi.importActual<typeof import('../src/redteam/shared')>('../src/redteam/shared');
+  return {
+    ...originalModule,
+    doRedteamRun: vi.fn(),
+  };
+});
 vi.mock('../src/providers', async () => {
   const originalModule =
     await vi.importActual<typeof import('../src/providers')>('../src/providers');
@@ -84,6 +93,14 @@ vi.mock('../src/util/file');
 
 describe('index.ts exports', () => {
   const expectedNamedExports = [
+    'ConfigResolutionError',
+    'EmailValidationError',
+    'EvalRunError',
+    'EVENT_SOURCES',
+    'isCliEventSource',
+    'MAX_SUGGESTIONS_COUNT',
+    'PromptSuggestionsRejectedError',
+    'ServerError',
     'assertions',
     'buildInputPromptDescription',
     'cache',
@@ -98,8 +115,10 @@ describe('index.ts exports', () => {
     'isResultFailureReason',
     'isTransformFunction',
     'loadApiProvider',
+    'loadApiProviders',
     'normalizeInputDefinition',
     'normalizeInputs',
+    'ProbeLimitExceededError',
     'redteam',
   ];
 
@@ -122,6 +141,7 @@ describe('index.ts exports', () => {
     'DocxInjectionPlacementValues',
     'EvalResultsFilterMode',
     'EvaluateOptionsSchema',
+    'EventSourceSchema',
     'GradingConfigSchema',
     'InputConfigSchema',
     'InputDefinitionObjectSchema',
@@ -196,6 +216,7 @@ describe('index.ts exports', () => {
       evaluate: index.evaluate,
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
+      loadApiProviders: index.loadApiProviders,
       redteam: index.redteam,
     });
   });
@@ -207,6 +228,7 @@ describe('index.ts exports', () => {
     expect(cache).toHaveProperty('disableCache');
     expect(cache).toHaveProperty('clearCache');
     expect(cache).toHaveProperty('isCacheEnabled');
+    expect(cache).toHaveProperty('withCacheEnabled');
   });
 });
 
@@ -216,6 +238,7 @@ describe('evaluate function', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -259,6 +282,25 @@ describe('evaluate function', () => {
         ],
         providerPromptMap: {},
       }),
+      expect.anything(),
+      expect.objectContaining({
+        eventSource: 'library',
+      }),
+    );
+  });
+
+  it('should pin package callers to library semantics', async () => {
+    await evaluate(
+      {
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [],
+      },
+      { eventSource: 'cli' } as never,
+    );
+
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.anything(),
       expect.anything(),
       expect.objectContaining({
         eventSource: 'library',
@@ -417,9 +459,11 @@ describe('evaluate function', () => {
     );
   });
 
-  it('should disable cache when specified', async () => {
+  it('should scope cache disabling to the eval when specified', async () => {
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
+
     await evaluate({ prompts: ['test'], providers: [] }, { cache: false });
-    expect(cache.disableCache).toHaveBeenCalledWith();
+    expect(cache.withCacheEnabled).toHaveBeenCalledWith(false, expect.any(Function));
   });
 
   it('should write results to database when writeLatestResults is true', async () => {
@@ -514,6 +558,17 @@ describe('evaluate function', () => {
     };
     await evaluate(testSuite);
     expect(writeOutput).toHaveBeenCalledWith('test.json', expect.any(Eval), null);
+  });
+
+  it('should skip writing output when outputPath is empty', async () => {
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      outputPath: '',
+    };
+    await evaluate(testSuite);
+    expect(writeOutput).not.toHaveBeenCalled();
+    expect(writeMultipleOutputs).not.toHaveBeenCalled();
   });
 
   it('should write multiple outputs when outputPath is an array', async () => {
@@ -911,6 +966,27 @@ describe('evaluate function', () => {
   });
 });
 
+describe('redteam package wrapper', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(doRedteamRun).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.mocked(doRedteamRun).mockReset();
+  });
+
+  it('should pin package callers to library semantics', async () => {
+    await index.redteam.run({ eventSource: 'cli' } as never);
+
+    expect(doRedteamRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventSource: 'library',
+      }),
+    );
+  });
+});
+
 describe('evaluate with external defaultTest', () => {
   let loadApiProvidersSpy: ReturnType<typeof vi.spyOn>;
   let loadApiProviderSpy: ReturnType<typeof vi.spyOn>;
@@ -918,6 +994,7 @@ describe('evaluate with external defaultTest', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
@@ -1757,7 +1834,7 @@ describe('evaluate with external defaultTest', () => {
     });
 
     it('passes scenario-nested test cases through unchanged (provider resolution there is the evaluator runtime path, not evaluate())', async () => {
-      // Pin current behavior: src/index.ts only resolves providers on
+      // Pin current behavior: the Node evaluate surface only resolves providers on
       // `constructedTestSuite.tests`, NOT on `scenarios[i].tests`. If a future change
       // adds scenario provider resolution at this layer, it must extend
       // `cloneTestForResolve` coverage to scenarios — otherwise #8687 recurs.
@@ -1788,6 +1865,7 @@ describe('evaluate sharing functionality', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(cache.withCacheEnabled).mockImplementation((_enabled, fn) => fn());
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
