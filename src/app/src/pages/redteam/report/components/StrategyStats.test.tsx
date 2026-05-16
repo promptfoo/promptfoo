@@ -155,6 +155,22 @@ describe('StrategyStats', () => {
       expect(totalAttemptsValue).toBeInTheDocument();
     });
 
+    it('keeps the strategy cards within the mobile content width', () => {
+      const { container } = render(
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+          plugins={[]}
+        />,
+      );
+
+      expect(container.querySelector('.grid')).toHaveClass(
+        'grid-cols-1',
+        'sm:grid-cols-[repeat(auto-fill,minmax(300px,1fr))]',
+      );
+    });
+
     it('should display the correct total attempts, flagged attempts, and attack success rate for the selected strategy in the drawer', async () => {
       render(
         <StrategyStats
@@ -175,6 +191,43 @@ describe('StrategyStats', () => {
       const percentages80 = screen.getAllByText('80.00%');
       expect(percentages80.length).toBeGreaterThan(0);
     });
+
+    it('keeps the strategy drawer full width on mobile while preserving the desktop width', async () => {
+      render(
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+          plugins={[]}
+        />,
+      );
+
+      const drawer = await openStrategyDrawer('prompt-injection');
+
+      expect(drawer).toHaveClass('w-full', 'sm:w-[750px]', 'sm:max-w-[750px]');
+      expect(drawer).not.toHaveClass('w-[750px]');
+    });
+
+    it('lets the drawer tabs wrap cleanly on narrow screens', async () => {
+      render(
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={failuresByPlugin}
+          passesByPlugin={passesByPlugin}
+          plugins={[]}
+        />,
+      );
+
+      await openStrategyDrawer('prompt-injection');
+
+      const flaggedTab = screen.getByRole('tab', { name: /Flagged Attempts/ });
+      const successfulTab = screen.getByRole('tab', { name: /Successful Attacks/ });
+
+      expect(flaggedTab.parentElement).toHaveClass('h-auto');
+      expect(flaggedTab).toHaveClass('whitespace-normal', 'text-xs', 'sm:text-sm');
+      expect(successfulTab).toHaveClass('whitespace-normal', 'text-xs', 'sm:text-sm');
+    });
+
     it('should display a table of plugin performance for the selected strategy in the drawer', async () => {
       render(
         <StrategyStats
@@ -190,11 +243,15 @@ describe('StrategyStats', () => {
 
       const table = await screen.findByRole('table');
       expect(table).toBeInTheDocument();
+      expect(table.parentElement).toHaveClass('overflow-hidden');
 
       expect(screen.getByText('Plugin')).toBeInTheDocument();
       expect(within(table).getByText('Attack Success Rate')).toBeInTheDocument();
-      expect(within(table).getByText('# Flagged Attempts')).toBeInTheDocument();
-      expect(within(table).getByText('# Attempts')).toBeInTheDocument();
+      expect(within(table).getByText('# Flagged Attempts')).toHaveClass('hidden', 'sm:table-cell');
+      expect(within(table).getByText('# Attempts')).toHaveClass('hidden', 'sm:table-cell');
+      const mobileCountSummaries = within(table).getAllByText('4 flagged / 5 attempts');
+      expect(mobileCountSummaries).toHaveLength(2);
+      mobileCountSummaries.forEach((summary) => expect(summary).toHaveClass('sm:hidden'));
 
       const pluginAStats = {
         plugin: 'plugin-A',

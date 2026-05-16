@@ -1,3 +1,5 @@
+import { createHash, createHmac } from 'crypto';
+
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -34,6 +36,50 @@ interface AnthropicBaseOptions {
   cost?: number;
   inputCost?: number;
   outputCost?: number;
+}
+
+const ANTHROPIC_CACHE_HASH_CONTEXT = 'promptfoo:anthropic:cache-key:v1';
+
+// Canonicalize before hashing so semantically identical plain objects with
+// different property insertion orders produce the same cache key. See
+// `src/providers/AGENTS.md` "Cache Key Hygiene". Class instances such as
+// `Date` or `Buffer` are passed through so their `toJSON` / default
+// serialization is preserved — rebuilding them via `Object.keys` would
+// collapse distinct values to the same shape and cause cache collisions.
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (isPlainObject(value)) {
+    const entries = Object.keys(value)
+      .sort()
+      .map((k) => [k, canonicalize(value[k])] as const);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+export function hashAnthropicCacheValue(value: unknown): string {
+  const canonical = canonicalize(value);
+  const serialized =
+    typeof canonical === 'string' ? canonical : (JSON.stringify(canonical) ?? String(canonical));
+  return createHash('sha256')
+    .update(ANTHROPIC_CACHE_HASH_CONTEXT)
+    .update('\0')
+    .update(serialized)
+    .digest('hex');
+}
+
+export function getAnthropicAuthCacheNamespace(apiKey: string): string {
+  return createHmac('sha256', apiKey).update(`${ANTHROPIC_CACHE_HASH_CONTEXT}:auth`).digest('hex');
 }
 
 /**
@@ -177,6 +223,17 @@ export class AnthropicGenericProvider implements ApiProvider {
     return (
       this.config?.apiBaseUrl || this.env?.ANTHROPIC_BASE_URL || getEnvString('ANTHROPIC_BASE_URL')
     );
+  }
+
+  protected getCacheIdentityHash(): string {
+    return hashAnthropicCacheValue({
+      apiBaseUrl: this.getApiBaseUrl(),
+    });
+  }
+
+  protected getCacheAuthNamespace(): string {
+    const apiKey = this.apiKey ?? this.getApiKey();
+    return apiKey ? getAnthropicAuthCacheNamespace(apiKey) : 'no-api-key';
   }
 
   /**

@@ -11,8 +11,14 @@ export default function UpdateBanner() {
   const [copied, setCopied] = useState(false);
   const bannerRef = useRef<HTMLDivElement | null>(null);
   const dismissLabel = "Don't remind me of this version";
+  const shouldShowBanner = !loading && !error && !!versionInfo?.updateAvailable && !dismissed;
 
   useEffect(() => {
+    if (!shouldShowBanner) {
+      document.documentElement.style.removeProperty('--update-banner-height');
+      return;
+    }
+
     const element = bannerRef.current;
 
     if (!element) {
@@ -46,7 +52,7 @@ export default function UpdateBanner() {
       window.removeEventListener('resize', updateHeight);
       document.documentElement.style.removeProperty('--update-banner-height');
     };
-  }, []);
+  }, [shouldShowBanner]);
 
   useEffect(() => {
     if (copied) {
@@ -91,7 +97,7 @@ export default function UpdateBanner() {
   };
 
   // Don't show banner if loading, error, no update available, or dismissed
-  if (loading || error || !versionInfo?.updateAvailable || dismissed) {
+  if (!shouldShowBanner) {
     return null;
   }
 
@@ -100,15 +106,15 @@ export default function UpdateBanner() {
       ref={bannerRef}
       variant="info"
       className={cn(
-        'rounded-none py-2 px-4 relative z-(--z-banner)',
-        'flex items-center justify-between gap-4',
+        'relative z-(--z-banner) rounded-none px-4 py-2',
+        'flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4',
         // Use solid background to prevent content showing through the banner
         'dark:bg-blue-950',
       )}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3 sm:items-center">
         <RefreshCw className="size-4 shrink-0" />
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="text-sm font-medium">
             Update available: v{versionInfo.latestVersion}
           </span>
@@ -117,7 +123,7 @@ export default function UpdateBanner() {
           </span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         <Button variant="ghost" size="sm" asChild className="gap-1.5 text-xs">
           <a
             href="https://github.com/promptfoo/promptfoo/releases/latest"

@@ -8,7 +8,10 @@
  * that cause cryptic syntax errors on Node.js < 20. By checking the version first,
  * we can provide a helpful error message instead.
  */
+import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 
 type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
 type NodeEngineVersionTuple = [number, number, number];
@@ -148,6 +151,19 @@ if (!isBun && !isDeno) {
     console.error(formatUnsupportedNodeVersionMessage(process.version));
     process.exit(1);
   }
+}
+
+// Only mutate global state when this file is the actual CLI entry point. Test runners
+// that import this module (e.g. to exercise version checks) keep `process.argv` from the
+// runner itself, which would otherwise leak `LOG_LEVEL=error` into the test process.
+const entryUrl = fileURLToPath(import.meta.url);
+const invokedAsCli =
+  typeof process.argv[1] === 'string' && path.resolve(process.argv[1]) === entryUrl;
+
+// Structured code-scan modes reserve stdout for the payload. This has to happen
+// before importing main.ts because some startup modules log while they initialize.
+if (invokedAsCli && requestsStructuredCodeScanOutput(process.argv.slice(2))) {
+  Object.assign(process.env, { LOG_LEVEL: 'error' });
 }
 
 // Update argv[1] so isMainModule() in main.ts correctly detects CLI execution.
