@@ -187,7 +187,7 @@ Examples:
 import promptfoo from 'promptfoo';
 
 // Basic usage
-const results = await promptfoo.evaluate({
+const evalRecord = await promptfoo.evaluate({
   providers: ['github:openai/gpt-5', 'github:anthropic/claude-4-opus'],
   prompts: ['Write a function to {{task}}'],
   tests: [
@@ -202,9 +202,10 @@ const results = await promptfoo.evaluate({
     },
   ],
 });
+const results = await evalRecord.toEvaluateSummary();
 
 // Using specialized models
-const specializedModels = await promptfoo.evaluate({
+const specializedModelsEvalRecord = await promptfoo.evaluate({
   providers: [
     'github:azureml-mistral/Codestral-2501', // Code generation
     'github:deepseek/deepseek-r1', // Advanced reasoning
@@ -224,6 +225,7 @@ const specializedModels = await promptfoo.evaluate({
     },
   ],
 });
+const specializedModels = await specializedModelsEvalRecord.toEvaluateSummary();
 ```
 
 For more information on specific models and their capabilities, refer to the [GitHub Models marketplace](https://github.com/marketplace/models/).

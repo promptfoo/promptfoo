@@ -1,13 +1,13 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies BEFORE imports
-vi.mock('../../../src/index', () => ({
-  default: {
-    evaluate: vi.fn().mockResolvedValue({
-      toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
-    }),
-  },
+vi.mock('../../../src/node', () => ({
+  evaluateWithSource: vi.fn().mockResolvedValue({
+    toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
+  }),
 }));
 
 vi.mock('../../../src/util/sharing', () => ({
@@ -21,38 +21,55 @@ vi.mock('../../../src/models/eval', () => ({
 }));
 vi.mock('../../../src/globalConfig/accounts');
 
-import promptfoo from '../../../src/index';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
+import { evaluateWithSource } from '../../../src/node';
 import { createApp } from '../../../src/server/server';
 import { shouldShareResults } from '../../../src/util/sharing';
 
 const errorSpy = vi.spyOn(logger, 'error');
 const mockedEvalCreate = vi.mocked(Eval.create);
-const mockedEvaluate = vi.mocked(promptfoo.evaluate);
+const mockedEvaluateWithSource = vi.mocked(evaluateWithSource);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
 describe('Eval Routes - Sharing behavior', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
+
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
     errorSpy.mockClear();
 
-    mockedEvaluate.mockResolvedValue({
+    mockedEvaluateWithSource.mockResolvedValue({
       toEvaluateSummary: vi.fn().mockResolvedValue({ results: [] }),
     } as any);
 
     mockedShouldShareResults.mockReturnValue(false);
-
-    app = createApp();
   });
 
   afterEach(() => {
     vi.resetAllMocks();
   });
 
-  const postJob = (body: Record<string, unknown>) => request(app).post('/api/eval/job').send(body);
+  const postJob = (body: Record<string, unknown>) => api.post('/api/eval/job').send(body);
 
   const minimalTestSuite = {
     prompts: ['test prompt'],
@@ -65,10 +82,10 @@ describe('Eval Routes - Sharing behavior', () => {
 
     // Wait for async evaluate call
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(true);
   });
 
@@ -78,10 +95,10 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob({ ...minimalTestSuite, sharing: false });
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(false);
   });
 
@@ -91,16 +108,16 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob(minimalTestSuite);
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(true);
     expect(mockedShouldShareResults).toHaveBeenCalledWith({});
   });
 
   it('should not log the raw job body on evaluation failure', async () => {
-    mockedEvaluate.mockRejectedValueOnce(new Error('boom'));
+    mockedEvaluateWithSource.mockRejectedValueOnce(new Error('boom'));
 
     const sensitiveBody = {
       prompts: ['test prompt'],
@@ -135,15 +152,13 @@ describe('Eval Routes - Sharing behavior', () => {
     mockedEvalCreate.mockRejectedValueOnce(new Error('db down'));
 
     const secret = 'sk-test-12345678901234567890';
-    const response = await request(app)
-      .post('/api/eval')
-      .send({
-        config: {
-          providers: [{ id: 'openai:gpt-4o', config: { apiKey: secret } }],
-        },
-        prompts: [{ raw: 'test prompt', label: 'test prompt' }],
-        results: [{ promptIdx: 0, testIdx: 0, success: true, score: 1 }],
-      });
+    const response = await api.post('/api/eval').send({
+      config: {
+        providers: [{ id: 'openai:gpt-4o', config: { apiKey: secret } }],
+      },
+      prompts: [{ raw: 'test prompt', label: 'test prompt' }],
+      results: [{ promptIdx: 0, testIdx: 0, success: true, score: 1 }],
+    });
 
     expect(response.status).toBe(500);
     expect(errorSpy).toHaveBeenCalledWith(
@@ -169,10 +184,10 @@ describe('Eval Routes - Sharing behavior', () => {
     await postJob(minimalTestSuite);
 
     await vi.waitFor(() => {
-      expect(mockedEvaluate).toHaveBeenCalled();
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
     });
 
-    const evaluateArg = mockedEvaluate.mock.calls[0][0] as any;
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
     expect(evaluateArg.sharing).toBe(false);
   });
 });
