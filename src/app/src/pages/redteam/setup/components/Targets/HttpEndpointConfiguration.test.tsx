@@ -1,8 +1,8 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { callApi } from '@app/utils/api';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
@@ -444,7 +444,8 @@ describe('HttpEndpointConfiguration - resetState batched config updates', () => 
     vi.clearAllMocks();
   });
 
-  it('should call updateCustomTarget once with batched config when switching to raw mode', () => {
+  it('should call updateCustomTarget once with batched config when switching to raw mode', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <HttpEndpointConfiguration
         {...defaultProps}
@@ -457,7 +458,7 @@ describe('HttpEndpointConfiguration - resetState batched config updates', () => 
 
     // Find and click the raw request toggle
     const rawToggle = screen.getByLabelText('Use Raw HTTP Request');
-    fireEvent.click(rawToggle);
+    await user.click(rawToggle);
 
     // Should call updateCustomTarget once with 'config' field
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
@@ -473,7 +474,8 @@ describe('HttpEndpointConfiguration - resetState batched config updates', () => 
     );
   });
 
-  it('should call updateCustomTarget once with batched config when switching to structured mode', () => {
+  it('should call updateCustomTarget once with batched config when switching to structured mode', async () => {
+    const user = userEvent.setup();
     const propsWithRawMode = {
       ...defaultProps,
       selectedTarget: {
@@ -496,7 +498,7 @@ describe('HttpEndpointConfiguration - resetState batched config updates', () => 
 
     // Find and click the raw request toggle to switch to structured mode
     const rawToggle = screen.getByLabelText('Use Raw HTTP Request');
-    fireEvent.click(rawToggle);
+    await user.click(rawToggle);
 
     // Should call updateCustomTarget once with 'config' field
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
@@ -513,7 +515,8 @@ describe('HttpEndpointConfiguration - resetState batched config updates', () => 
     );
   });
 
-  it('should preserve existing config fields when switching modes with overrides', () => {
+  it('should preserve existing config fields when switching modes with overrides', async () => {
+    const user = userEvent.setup();
     const propsWithTransforms = {
       ...defaultProps,
       selectedTarget: {
@@ -539,7 +542,7 @@ describe('HttpEndpointConfiguration - resetState batched config updates', () => 
 
     // Switch to raw mode
     const rawToggle = screen.getByLabelText('Use Raw HTTP Request');
-    fireEvent.click(rawToggle);
+    await user.click(rawToggle);
 
     // Should preserve transformResponse and sessionParser
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
@@ -551,7 +554,8 @@ describe('HttpEndpointConfiguration - resetState batched config updates', () => 
     );
   });
 
-  it('should apply config overrides correctly when provided to resetState', () => {
+  it('should apply config overrides correctly when provided to resetState', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <HttpEndpointConfiguration
         {...defaultProps}
@@ -564,7 +568,7 @@ describe('HttpEndpointConfiguration - resetState batched config updates', () => 
 
     // Switch to raw mode - this should apply example request as override
     const rawToggle = screen.getByLabelText('Use Raw HTTP Request');
-    fireEvent.click(rawToggle);
+    await user.click(rawToggle);
 
     // Should include the example request in the config
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
@@ -600,27 +604,24 @@ describe('HttpEndpointConfiguration - handleApply batched updates', () => {
     mockUpdateCustomTarget = vi.fn();
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
-    vi.mocked(callApi).mockReset();
+    resetCallApiMock();
     vi.clearAllMocks();
   });
 
   it('applies generated structured config with one batched provider update', async () => {
     const user = userEvent.setup();
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        id: 'http',
-        config: {
-          url: 'https://generated.example.com/chat',
-          method: 'PUT',
-          headers: { Authorization: 'Bearer generated' },
-          body: '{"message":"{{prompt}}"}',
-          transformRequest: 'requestTransform',
-          transformResponse: 'responseTransform',
-          sessionParser: 'session.id',
-        },
-      }),
-    } as Response);
+    mockCallApiResponse({
+      id: 'http',
+      config: {
+        url: 'https://generated.example.com/chat',
+        method: 'PUT',
+        headers: { Authorization: 'Bearer generated' },
+        body: '{"message":"{{prompt}}"}',
+        transformRequest: 'requestTransform',
+        transformResponse: 'responseTransform',
+        sessionParser: 'session.id',
+      },
+    });
 
     renderWithProviders(
       <HttpEndpointConfiguration
@@ -637,7 +638,7 @@ describe('HttpEndpointConfiguration - handleApply batched updates', () => {
     await user.click(screen.getByRole('button', { name: 'Generate' }));
     await screen.findByRole('button', { name: 'Apply Configuration' });
 
-    mockUpdateCustomTarget.mockClear();
+    vi.mocked(mockUpdateCustomTarget).mockClear();
     await user.click(screen.getByRole('button', { name: 'Apply Configuration' }));
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
@@ -699,7 +700,7 @@ describe('HttpEndpointConfiguration - handlePostmanImport batched updates', () =
     await user.click(screen.getByRole('button', { name: 'Import' }));
     await user.click(screen.getByRole('menuitem', { name: 'Postman' }));
 
-    mockUpdateCustomTarget.mockClear();
+    vi.mocked(mockUpdateCustomTarget).mockClear();
     await user.click(screen.getByRole('button', { name: 'Mock Postman Import' }));
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
@@ -728,7 +729,8 @@ describe('HttpEndpointConfiguration - config immutability', () => {
     vi.clearAllMocks();
   });
 
-  it('should not mutate selectedTarget.config when switching modes', () => {
+  it('should not mutate selectedTarget.config when switching modes', async () => {
+    const user = userEvent.setup();
     const originalConfig = {
       url: 'https://api.example.com/chat',
       method: 'POST',
@@ -758,7 +760,7 @@ describe('HttpEndpointConfiguration - config immutability', () => {
 
     // Switch to raw mode
     const rawToggle = screen.getByLabelText('Use Raw HTTP Request');
-    fireEvent.click(rawToggle);
+    await user.click(rawToggle);
 
     // Original config should remain unchanged
     expect(props.selectedTarget.config).toBe(originalConfig);
@@ -766,7 +768,8 @@ describe('HttpEndpointConfiguration - config immutability', () => {
     expect(props.selectedTarget.config.method).toBe('POST');
   });
 
-  it('should create new config object with spread operator in resetState', () => {
+  it('should create new config object with spread operator in resetState', async () => {
+    const user = userEvent.setup();
     const originalConfig = {
       url: 'https://api.example.com/chat',
       method: 'POST',
@@ -795,7 +798,7 @@ describe('HttpEndpointConfiguration - config immutability', () => {
 
     // Switch to raw mode
     const rawToggle = screen.getByLabelText('Use Raw HTTP Request');
-    fireEvent.click(rawToggle);
+    await user.click(rawToggle);
 
     // updateCustomTarget should be called with a new config object
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', expect.any(Object));
@@ -808,7 +811,8 @@ describe('HttpEndpointConfiguration - config immutability', () => {
     expect(newConfig).toHaveProperty('transformResponse', 'json.data');
   });
 
-  it('should handle rapid mode switches without state mutation', () => {
+  it('should handle rapid mode switches without state mutation', async () => {
+    const user = userEvent.setup();
     const originalConfig = {
       url: 'https://api.example.com/chat',
       method: 'POST',
@@ -839,14 +843,14 @@ describe('HttpEndpointConfiguration - config immutability', () => {
     const rawToggle = screen.getByLabelText('Use Raw HTTP Request');
 
     // Switch to raw mode
-    fireEvent.click(rawToggle);
+    await user.click(rawToggle);
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
 
     // Clear the mock
     vi.mocked(mockUpdateCustomTarget).mockClear();
 
     // Switch back to structured mode
-    fireEvent.click(rawToggle);
+    await user.click(rawToggle);
     expect(mockUpdateCustomTarget).toHaveBeenCalledTimes(1);
 
     // Original config should remain unchanged
