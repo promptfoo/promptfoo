@@ -34,54 +34,69 @@ function wrapTextToLines(text: string, maxLineWidthPx: number, fontSize: number)
   const wrappedLines: string[] = [];
 
   for (const paragraph of normalizedText.split('\n')) {
-    if (paragraph.trim() === '') {
-      wrappedLines.push('');
-      continue;
-    }
-
-    const words = paragraph.split(/\s+/);
-    let currentLine = '';
-
-    for (const word of words) {
-      if (!word) {
-        continue;
-      }
-
-      if (word.length > maxCharsPerLine) {
-        if (currentLine) {
-          wrappedLines.push(currentLine);
-          currentLine = '';
-        }
-
-        let sliceIndex = 0;
-        while (sliceIndex < word.length) {
-          const slice = word.slice(sliceIndex, sliceIndex + maxCharsPerLine);
-          if (slice.length === maxCharsPerLine) {
-            wrappedLines.push(slice);
-          } else {
-            currentLine = slice;
-          }
-          sliceIndex += maxCharsPerLine;
-        }
-        continue;
-      }
-
-      if (!currentLine) {
-        currentLine = word;
-      } else if (currentLine.length + 1 + word.length <= maxCharsPerLine) {
-        currentLine = `${currentLine} ${word}`;
-      } else {
-        wrappedLines.push(currentLine);
-        currentLine = word;
-      }
-    }
-
-    if (currentLine) {
-      wrappedLines.push(currentLine);
-    }
+    wrappedLines.push(...wrapParagraph(paragraph, maxCharsPerLine));
   }
 
   return wrappedLines;
+}
+
+function wrapParagraph(paragraph: string, maxCharsPerLine: number): string[] {
+  if (paragraph.trim() === '') {
+    return [''];
+  }
+  const lines: string[] = [];
+  let currentLine = '';
+  for (const word of paragraph.split(/\s+/)) {
+    if (!word) {
+      continue;
+    }
+    if (word.length > maxCharsPerLine) {
+      currentLine = appendLongWord(lines, currentLine, word, maxCharsPerLine);
+      continue;
+    }
+    currentLine = appendRegularWord(lines, currentLine, word, maxCharsPerLine);
+  }
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  return lines;
+}
+
+function appendLongWord(
+  lines: string[],
+  currentLine: string,
+  word: string,
+  maxCharsPerLine: number,
+): string {
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  let trailingSlice = '';
+  for (let sliceIndex = 0; sliceIndex < word.length; sliceIndex += maxCharsPerLine) {
+    const slice = word.slice(sliceIndex, sliceIndex + maxCharsPerLine);
+    if (slice.length === maxCharsPerLine) {
+      lines.push(slice);
+    } else {
+      trailingSlice = slice;
+    }
+  }
+  return trailingSlice;
+}
+
+function appendRegularWord(
+  lines: string[],
+  currentLine: string,
+  word: string,
+  maxCharsPerLine: number,
+): string {
+  if (!currentLine) {
+    return word;
+  }
+  if (currentLine.length + 1 + word.length <= maxCharsPerLine) {
+    return `${currentLine} ${word}`;
+  }
+  lines.push(currentLine);
+  return word;
 }
 
 /**
