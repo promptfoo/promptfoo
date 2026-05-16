@@ -40,81 +40,25 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
         });
 
   try {
-    let configPath: string = options.config ?? 'promptfooconfig.yaml';
-
-    // If output filepath is not provided, locate the out file in the same directory as the config file:
-    let redteamPath;
-    if (options.output) {
-      redteamPath = options.output;
-    } else {
-      const configDir = path.dirname(configPath);
-      redteamPath = path.join(configDir, 'redteam.yaml');
-    }
-
-    // Check API health before proceeding
-    try {
-      const healthUrl = getRemoteHealthUrl();
-      if (healthUrl) {
-        logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
-        const healthResult = await checkRemoteHealth(healthUrl);
-        if (healthResult.status !== 'OK') {
-          throw new Error(
-            `Unable to proceed with redteam: ${healthResult.message}\n` +
-              'Please check your API configuration or try again later.',
-          );
-        }
-        logger.debug('API health check passed');
-      }
-    } catch (error) {
-      logger.warn(
-        `API health check failed with error: ${error}.\nPlease check your API configuration or try again later.`,
-      );
-    }
+    let { configPath, redteamPath } = getRedteamPaths(options);
+    await checkRedteamApiHealth();
 
     if (options.liveRedteamConfig) {
-      // Write liveRedteamConfig to a temporary file
-      const filename = `redteam-${Date.now()}.yaml`;
-      const tmpDir = options.loadedFromCloud ? '' : os.tmpdir();
-      const tmpFile = path.join(tmpDir, filename);
-      await fs.mkdir(path.dirname(tmpFile), { recursive: true });
-      await fs.writeFile(tmpFile, yaml.dump(options.liveRedteamConfig));
-      redteamPath = tmpFile;
-      // Do not use default config.
-      configPath = tmpFile;
-      logger.debug(`Using live config from ${tmpFile}`);
-      logger.debug(`Live config: ${JSON.stringify(options.liveRedteamConfig, null, 2)}`);
+      ({ configPath, redteamPath } = await writeLiveRedteamConfig(options));
     }
 
     // Generate new test cases
     logger.info('Generating test cases...');
     const { maxConcurrency, ...passThroughOptions } = options;
 
-    let redteamConfig;
     const generationStartTime = Date.now();
-    try {
-      redteamConfig = await doGenerateRedteam({
-        ...passThroughOptions,
-        ...(options.liveRedteamConfig?.commandLineOptions || {}),
-        ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
-        config: configPath,
-        output: redteamPath,
-        force: options.force,
-        verbose: options.verbose,
-        delay: options.delay,
-        inRedteamRun: true,
-        abortSignal: options.abortSignal,
-        progressBar: options.progressBar,
-      });
-    } catch (error) {
-      if (error instanceof PartialGenerationError) {
-        // Log the detailed error message - this will be visible in CLI and UI (via logCallback)
-        logger.error(chalk.red('\n' + error.message));
-        // Re-throw so CLI exits with non-zero code and callers can handle appropriately
-        throw error;
-      }
-      // Re-throw other errors
-      throw error;
-    }
+    const redteamConfig = await generateRedteamConfig({
+      options,
+      passThroughOptions,
+      maxConcurrency,
+      configPath,
+      redteamPath,
+    });
 
     const generationDurationMs = Date.now() - generationStartTime;
 
@@ -124,71 +68,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       return;
     }
 
-    // Run evaluation
-    logger.info('Running scan...');
-    const { defaultConfig } = await loadDefaultConfig();
-    // Exclude 'description' from options to avoid conflict with Commander's description method
-    const { description: _description, ...evalOptions } = options;
-    const evalResult = await doEval(
-      {
-        ...evalOptions,
-        config: [redteamPath],
-        output: options.output ? [options.output] : undefined,
-        cache: true,
-        write: true,
-        filterPrompts: options.filterPrompts,
-        filterProviders: options.filterProviders,
-        filterTargets: options.filterTargets,
-      },
-      defaultConfig,
+    const evalResult = await runGeneratedRedteamEval({
+      options,
       redteamPath,
-      {
-        showProgressBar: options.progressBar,
-        abortSignal: options.abortSignal,
-        progressCallback: options.progressCallback,
-        eventSource: options.eventSource,
-      },
-    );
-
-    // Set generation duration on the eval and save
-    if (evalResult && generationDurationMs >= 0) {
-      evalResult.setGenerationDurationMs(generationDurationMs);
-      if (evalResult.persisted) {
-        await evalResult.save();
-      }
-
-      const totalMs = evalResult.durationMs ?? 0;
-      const evalMs = evalResult.evaluationDurationMs ?? 0;
-      logger.info(
-        chalk.gray(
-          `Total scan time: ${formatDuration(totalMs / 1000)} (generation: ${formatDuration(generationDurationMs / 1000)}, evaluation: ${formatDuration(evalMs / 1000)})`,
-        ),
-      );
-    }
-
-    // Show appropriate completion message based on abort status
-    // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
-    // Check if scan was aborted due to target error (efficient DB query, not loading all results)
-    const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
-    if (hasTargetError) {
-      // Abort details already shown in summary - no need to repeat
-    } else {
-      logger.info(chalk.green('\nRed team scan complete!'));
-    }
-    if (!evalResult?.shared) {
-      if (options.liveRedteamConfig) {
-        logger.info(
-          chalk.blue(
-            `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(promptfooCommand('redteam report'))} on the command line.`,
-          ),
-        );
-      } else {
-        logger.info(
-          chalk.blue(`To view the results, run ${chalk.bold(promptfooCommand('redteam report'))}`),
-        );
-      }
-    }
-
+      generationDurationMs,
+    });
+    await logRedteamCompletion({ evalResult, options });
     return evalResult;
   } finally {
     clearLogCallbackIfOwned(options.logCallback ?? null);
@@ -196,6 +81,161 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       verboseToggleCleanup();
     }
   }
+}
+
+function getRedteamPaths(options: RedteamRunOptions): { configPath: string; redteamPath: string } {
+  const configPath = options.config ?? 'promptfooconfig.yaml';
+  const redteamPath = options.output || path.join(path.dirname(configPath), 'redteam.yaml');
+  return { configPath, redteamPath };
+}
+
+async function checkRedteamApiHealth(): Promise<void> {
+  try {
+    const healthUrl = getRemoteHealthUrl();
+    if (!healthUrl) {
+      return;
+    }
+    logger.debug(`Checking Promptfoo API health at ${healthUrl}...`);
+    const healthResult = await checkRemoteHealth(healthUrl);
+    if (healthResult.status !== 'OK') {
+      throw new Error(
+        `Unable to proceed with redteam: ${healthResult.message}\n` +
+          'Please check your API configuration or try again later.',
+      );
+    }
+    logger.debug('API health check passed');
+  } catch (error) {
+    logger.warn(
+      `API health check failed with error: ${error}.\nPlease check your API configuration or try again later.`,
+    );
+  }
+}
+
+async function writeLiveRedteamConfig(
+  options: RedteamRunOptions,
+): Promise<{ configPath: string; redteamPath: string }> {
+  const filename = `redteam-${Date.now()}.yaml`;
+  const tmpDir = options.loadedFromCloud ? '' : os.tmpdir();
+  const tmpFile = path.join(tmpDir, filename);
+  await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+  await fs.writeFile(tmpFile, yaml.dump(options.liveRedteamConfig));
+  logger.debug(`Using live config from ${tmpFile}`);
+  logger.debug(`Live config: ${JSON.stringify(options.liveRedteamConfig, null, 2)}`);
+  return { configPath: tmpFile, redteamPath: tmpFile };
+}
+
+async function generateRedteamConfig({
+  options,
+  passThroughOptions,
+  maxConcurrency,
+  configPath,
+  redteamPath,
+}: {
+  options: RedteamRunOptions;
+  passThroughOptions: Omit<RedteamRunOptions, 'maxConcurrency'>;
+  maxConcurrency: RedteamRunOptions['maxConcurrency'];
+  configPath: string;
+  redteamPath: string;
+}) {
+  try {
+    return await doGenerateRedteam({
+      ...passThroughOptions,
+      ...(options.liveRedteamConfig?.commandLineOptions || {}),
+      ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
+      config: configPath,
+      output: redteamPath,
+      force: options.force,
+      verbose: options.verbose,
+      delay: options.delay,
+      inRedteamRun: true,
+      abortSignal: options.abortSignal,
+      progressBar: options.progressBar,
+    });
+  } catch (error) {
+    if (error instanceof PartialGenerationError) {
+      logger.error(chalk.red('\n' + error.message));
+    }
+    throw error;
+  }
+}
+
+async function runGeneratedRedteamEval({
+  options,
+  redteamPath,
+  generationDurationMs,
+}: {
+  options: RedteamRunOptions;
+  redteamPath: string;
+  generationDurationMs: number;
+}): Promise<Eval | undefined> {
+  logger.info('Running scan...');
+  const { defaultConfig } = await loadDefaultConfig();
+  const { description: _description, ...evalOptions } = options;
+  const evalResult = await doEval(
+    {
+      ...evalOptions,
+      config: [redteamPath],
+      output: options.output ? [options.output] : undefined,
+      cache: true,
+      write: true,
+      filterPrompts: options.filterPrompts,
+      filterProviders: options.filterProviders,
+      filterTargets: options.filterTargets,
+    },
+    defaultConfig,
+    redteamPath,
+    {
+      showProgressBar: options.progressBar,
+      abortSignal: options.abortSignal,
+      progressCallback: options.progressCallback,
+      eventSource: options.eventSource,
+    },
+  );
+
+  if (evalResult && generationDurationMs >= 0) {
+    evalResult.setGenerationDurationMs(generationDurationMs);
+    if (evalResult.persisted) {
+      await evalResult.save();
+    }
+
+    const totalMs = evalResult.durationMs ?? 0;
+    const evalMs = evalResult.evaluationDurationMs ?? 0;
+    logger.info(
+      chalk.gray(
+        `Total scan time: ${formatDuration(totalMs / 1000)} (generation: ${formatDuration(generationDurationMs / 1000)}, evaluation: ${formatDuration(evalMs / 1000)})`,
+      ),
+    );
+  }
+
+  return evalResult;
+}
+
+async function logRedteamCompletion({
+  evalResult,
+  options,
+}: {
+  evalResult: Eval | undefined;
+  options: RedteamRunOptions;
+}): Promise<void> {
+  const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
+  if (!hasTargetError) {
+    logger.info(chalk.green('\nRed team scan complete!'));
+  }
+  if (evalResult?.shared) {
+    return;
+  }
+
+  if (options.liveRedteamConfig) {
+    logger.info(
+      chalk.blue(
+        `To view the results, click the ${chalk.bold('View Report')} button or run ${chalk.bold(promptfooCommand('redteam report'))} on the command line.`,
+      ),
+    );
+    return;
+  }
+  logger.info(
+    chalk.blue(`To view the results, run ${chalk.bold(promptfooCommand('redteam report'))}`),
+  );
 }
 
 /**

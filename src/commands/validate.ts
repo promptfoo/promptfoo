@@ -86,70 +86,85 @@ function displayTestResult(result: any, testName: string): void {
   const indent = '    ';
 
   if (result.success) {
-    logger.info(chalk.green(`  ✓ ${testName}`));
-    if (result.message && result.message !== 'Test completed') {
-      logger.info(chalk.dim(`${indent}${result.message}`));
+    displaySuccessfulTestResult(result, testName, indent);
+  } else {
+    displayFailedTestResult(result, testName, indent);
+  }
+
+  displaySuggestions(result, indent);
+  displayTransformedRequest(result, indent);
+}
+
+function displaySuccessfulTestResult(result: any, testName: string, indent: string): void {
+  logger.info(chalk.green(`  ✓ ${testName}`));
+  if (result.message && result.message !== 'Test completed') {
+    logger.info(chalk.dim(`${indent}${result.message}`));
+  }
+  if (result.sessionId) {
+    logger.info(chalk.dim(`${indent}Session ID: ${result.sessionId}`));
+  }
+}
+
+function displayFailedTestResult(result: any, testName: string, indent: string): void {
+  const hasSuggestions = result.analysis?.changes_needed;
+  const isHardError = result.error && !hasSuggestions;
+
+  if (isHardError) {
+    logger.error(chalk.red(`  ✗ ${testName}`));
+    if (result.message) {
+      logger.error(chalk.red(`${indent}${result.message}`));
     }
-    if (result.sessionId) {
-      logger.info(chalk.dim(`${indent}Session ID: ${result.sessionId}`));
+    if (result.error && result.error !== result.message) {
+      logger.error(chalk.red(`${indent}${result.error}`));
+    }
+  } else if (hasSuggestions) {
+    logger.warn(chalk.yellow(`  ⚠ ${testName}`));
+    if (result.message) {
+      logger.info(`${indent}${result.message}`);
     }
   } else {
-    // Check if this is a "suggestions" failure (configuration issue) vs a hard error
-    const hasSuggestions = result.analysis?.changes_needed;
-    const isHardError = result.error && !hasSuggestions;
-
-    if (isHardError) {
-      logger.error(chalk.red(`  ✗ ${testName}`));
-      if (result.message) {
-        logger.error(chalk.red(`${indent}${result.message}`));
-      }
-      if (result.error && result.error !== result.message) {
-        logger.error(chalk.red(`${indent}${result.error}`));
-      }
-    } else if (hasSuggestions) {
-      logger.warn(chalk.yellow(`  ⚠ ${testName}`));
-      if (result.message) {
-        logger.info(`${indent}${result.message}`);
-      }
-    } else {
-      logger.warn(chalk.yellow(`  ✗ ${testName}`));
-      if (result.message) {
-        logger.info(`${indent}${result.message}`);
-      }
-    }
-
-    if (result.reason) {
-      logger.info(chalk.dim(`${indent}Reason: ${result.reason}`));
+    logger.warn(chalk.yellow(`  ✗ ${testName}`));
+    if (result.message) {
+      logger.info(`${indent}${result.message}`);
     }
   }
 
-  // Display API analysis feedback if available (from testAnalyzerResponse)
-  if (result.analysis?.changes_needed) {
-    const analysis = result.analysis;
+  if (result.reason) {
+    logger.info(chalk.dim(`${indent}Reason: ${result.reason}`));
+  }
+}
 
+function displaySuggestions(result: any, indent: string): void {
+  if (!result.analysis?.changes_needed) {
+    return;
+  }
+
+  const analysis = result.analysis;
+  logger.info('');
+  logger.info(chalk.cyan(`${indent}Suggestions:`));
+  if (analysis.changes_needed_reason) {
+    logger.info(`${indent}${analysis.changes_needed_reason}`);
+  }
+  if (analysis.changes_needed_suggestions && Array.isArray(analysis.changes_needed_suggestions)) {
     logger.info('');
-    logger.info(chalk.cyan(`${indent}Suggestions:`));
-    if (analysis.changes_needed_reason) {
-      logger.info(`${indent}${analysis.changes_needed_reason}`);
-    }
-    if (analysis.changes_needed_suggestions && Array.isArray(analysis.changes_needed_suggestions)) {
-      logger.info('');
-      analysis.changes_needed_suggestions.forEach((suggestion: string, idx: number) => {
-        logger.info(`${indent}${chalk.cyan(`${idx + 1}.`)} ${suggestion}`);
-      });
-    }
+    analysis.changes_needed_suggestions.forEach((suggestion: string, idx: number) => {
+      logger.info(`${indent}${chalk.cyan(`${idx + 1}.`)} ${suggestion}`);
+    });
+  }
+}
+
+function displayTransformedRequest(result: any, indent: string): void {
+  if (!result.transformedRequest) {
+    return;
   }
 
-  // Show transformed request if available (only when verbose or debug)
-  if (result.transformedRequest) {
-    logger.debug('');
-    logger.debug(chalk.dim(`${indent}Request details:`));
-    if (result.transformedRequest.url) {
-      logger.debug(chalk.dim(`${indent}  URL: ${result.transformedRequest.url}`));
-    }
-    if (result.transformedRequest.method) {
-      logger.debug(chalk.dim(`${indent}  Method: ${result.transformedRequest.method}`));
-    }
+  logger.debug('');
+  logger.debug(chalk.dim(`${indent}Request details:`));
+  if (result.transformedRequest.url) {
+    logger.debug(chalk.dim(`${indent}  URL: ${result.transformedRequest.url}`));
+  }
+  if (result.transformedRequest.method) {
+    logger.debug(chalk.dim(`${indent}  Method: ${result.transformedRequest.method}`));
   }
 }
 

@@ -359,57 +359,21 @@ export function logsCommand(program: Command) {
         });
 
         try {
-          // Validate --type option
-          const validTypes = ['debug', 'error', 'all'] as const;
-          if (!validTypes.includes(cmdObj.type as LogType)) {
-            logger.error(
-              `Invalid log type: ${cmdObj.type}. Must be one of: ${validTypes.join(', ')}`,
-            );
+          const parsedOptions = parseLogsOptions(cmdObj);
+          if (!parsedOptions.success) {
+            logger.error(parsedOptions.error);
             process.exitCode = 1;
             return;
-          }
-          const logType = cmdObj.type as LogType;
-
-          // Validate numeric options
-          if (cmdObj.lines) {
-            const lineCount = parseInt(cmdObj.lines, 10);
-            if (isNaN(lineCount) || lineCount <= 0) {
-              logger.error('--lines must be a positive number');
-              process.exitCode = 1;
-              return;
-            }
-          }
-          if (cmdObj.head) {
-            const headCount = parseInt(cmdObj.head, 10);
-            if (isNaN(headCount) || headCount <= 0) {
-              logger.error('--head must be a positive number');
-              process.exitCode = 1;
-              return;
-            }
-          }
-
-          // Validate grep pattern
-          let grepPattern: RegExp | undefined;
-          if (cmdObj.grep) {
-            try {
-              grepPattern = new RegExp(cmdObj.grep, 'i');
-            } catch {
-              logger.error(
-                `Invalid grep pattern: "${cmdObj.grep}" is not a valid regular expression`,
-              );
-              process.exitCode = 1;
-              return;
-            }
           }
 
           // Handle list mode
           if (cmdObj.list) {
-            await listLogFiles(logType);
+            await listLogFiles(parsedOptions.logType);
             return;
           }
 
           // Resolve the log path
-          const logPath = await resolveLogPath(file, logType);
+          const logPath = await resolveLogPath(file, parsedOptions.logType);
 
           if (!logPath) {
             const logDir = getLogDirectory();
@@ -454,9 +418,9 @@ export function logsCommand(program: Command) {
           await printLogHeader(logPath, isCurrentSession);
 
           await printLogContent(logPath, {
-            lines: cmdObj.lines ? parseInt(cmdObj.lines, 10) : undefined,
-            head: cmdObj.head ? parseInt(cmdObj.head, 10) : undefined,
-            grep: grepPattern,
+            lines: parsedOptions.lines,
+            head: parsedOptions.head,
+            grep: parsedOptions.grepPattern,
             noColor: !cmdObj.color,
           });
         } catch (error) {
@@ -485,4 +449,74 @@ export function logsCommand(program: Command) {
       }
       await listLogFiles(cmdObj.type as LogType);
     });
+}
+
+function parseLogsOptions(cmdObj: { type: string; lines?: string; head?: string; grep?: string }):
+  | {
+      success: true;
+      logType: LogType;
+      lines?: number;
+      head?: number;
+      grepPattern?: RegExp;
+    }
+  | { success: false; error: string } {
+  const validTypes = ['debug', 'error', 'all'] as const;
+  if (!validTypes.includes(cmdObj.type as LogType)) {
+    return {
+      success: false,
+      error: `Invalid log type: ${cmdObj.type}. Must be one of: ${validTypes.join(', ')}`,
+    };
+  }
+
+  const lines = parsePositiveCount(cmdObj.lines, '--lines');
+  if (!lines.success) {
+    return lines;
+  }
+  const head = parsePositiveCount(cmdObj.head, '--head');
+  if (!head.success) {
+    return head;
+  }
+
+  const grepPattern = parseGrepPattern(cmdObj.grep);
+  if (!grepPattern.success) {
+    return grepPattern;
+  }
+
+  return {
+    success: true,
+    logType: cmdObj.type as LogType,
+    ...(lines.value === undefined ? {} : { lines: lines.value }),
+    ...(head.value === undefined ? {} : { head: head.value }),
+    ...(grepPattern.value ? { grepPattern: grepPattern.value } : {}),
+  };
+}
+
+function parsePositiveCount(
+  value: string | undefined,
+  optionName: '--lines' | '--head',
+): { success: true; value?: number } | { success: false; error: string } {
+  if (!value) {
+    return { success: true };
+  }
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return { success: false, error: `${optionName} must be a positive number` };
+  }
+  return { success: true, value: parsed };
+}
+
+function parseGrepPattern(
+  value: string | undefined,
+): { success: true; value?: RegExp } | { success: false; error: string } {
+  if (!value) {
+    return { success: true };
+  }
+  try {
+    return { success: true, value: new RegExp(value, 'i') };
+  } catch {
+    return {
+      success: false,
+      error: `Invalid grep pattern: "${value}" is not a valid regular expression`,
+    };
+  }
 }
