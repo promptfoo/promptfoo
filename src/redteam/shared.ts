@@ -154,7 +154,7 @@ async function generateRedteamTestCases(
   options: RedteamRunOptions,
   configPath: string,
   redteamPath: string,
-  verboseToggleCleanup: ReturnType<typeof initVerboseToggle>,
+  _verboseToggleCleanup: ReturnType<typeof initVerboseToggle>,
 ) {
   logger.info('Generating test cases...');
   const { maxConcurrency, ...passThroughOptions } = options;
