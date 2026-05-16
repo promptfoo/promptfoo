@@ -29,6 +29,7 @@ import {
   addCommonOptionsRecursively,
   isMainModule,
   setupEnvFilesFromArgv,
+  shouldSkipDefaultConfigLoading,
   shutdownGracefully,
 } from './mainUtils';
 import { runDbMigrations } from './migrate';
@@ -48,7 +49,8 @@ import { formatNativeAddonVersionMismatchMessage } from './util/nativeAddonError
 import { VERSION } from './version';
 
 async function main() {
-  setupEnvFilesFromArgv();
+  const argv = process.argv.slice(2);
+  setupEnvFilesFromArgv(argv);
   initializeRunLogging();
 
   // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
@@ -59,7 +61,10 @@ async function main() {
   await checkForUpdates();
   await runDbMigrations({ suppressNativeAddonLogging: true });
 
-  const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+  const skipDefaultConfigLoading = shouldSkipDefaultConfigLoading(argv);
+  const { defaultConfig, defaultConfigPath } = skipDefaultConfigLoading
+    ? { defaultConfig: {}, defaultConfigPath: undefined }
+    : await loadDefaultConfig();
 
   const program = new Command('promptfoo');
   program
@@ -109,7 +114,9 @@ async function main() {
   redteamGenerateCommand(generateCommand, 'redteam', defaultConfig, defaultConfigPath);
 
   const { defaultConfig: redteamConfig, defaultConfigPath: redteamConfigPath } =
-    await loadDefaultConfig(undefined, 'redteam');
+    skipDefaultConfigLoading
+      ? { defaultConfig: {}, defaultConfigPath: undefined }
+      : await loadDefaultConfig(undefined, 'redteam');
 
   redteamInitCommand(redteamBaseCommand);
   evalCommand(

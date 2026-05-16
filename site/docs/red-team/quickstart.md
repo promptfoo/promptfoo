@@ -28,7 +28,7 @@ Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) tool for r
 
 ## Prerequisites
 
-- Install [Node.js](https://nodejs.org/en/download/package-manager/) 20.20+ or 22.22+
+- Install [Node.js](https://nodejs.org/en/download/package-manager/) `^20.20.0` or `>=22.22.0`
 - Optional: Set your `OPENAI_API_KEY` environment variable
 
 ## Initialize the project

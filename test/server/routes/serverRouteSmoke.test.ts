@@ -9,6 +9,8 @@ import {
 import { createApp } from '../../../src/server/server';
 import type { Express } from 'express';
 
+const REQUEST_TIMEOUT_MS = 2000;
+
 const mocks = vi.hoisted(() => ({
   checkEmailStatus: vi.fn(),
   checkModelAuditInstalled: vi.fn(),
@@ -227,7 +229,7 @@ vi.mock('../../../src/server/config/serverConfig', () => ({
   getAvailableProviders: mocks.getAvailableProviders,
 }));
 
-const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
+const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
 
 type HttpMethod = (typeof HTTP_METHODS)[number];
 
@@ -244,9 +246,12 @@ type SmokeCase = {
 class MockSocket extends Duplex {
   remoteAddress = '127.0.0.1';
 
-  _read() {}
+  _read() {
+    // This test double never emits readable data; IncomingMessage only needs the stream shape.
+  }
 
   _write(_chunk: unknown, _encoding: BufferEncoding, callback: (error?: Error | null) => void) {
+    // Accept and discard smoke-test transport writes.
     callback();
   }
 }
@@ -792,7 +797,7 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
   }>((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error(`${routeKey(testCase)} did not finish`));
-    }, 2000);
+    }, REQUEST_TIMEOUT_MS);
 
     res.once('finish', () => {
       clearTimeout(timeout);
@@ -825,7 +830,7 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
   return response;
 }
 
-describe.sequential('server route end-to-end smoke coverage', () => {
+describe('server route end-to-end smoke coverage', { concurrent: false }, () => {
   let app: Express;
 
   beforeAll(() => {
@@ -856,13 +861,10 @@ describe.sequential('server route end-to-end smoke coverage', () => {
 
     const response = await sendRequest(app, testCase);
 
-    if (response.status !== testCase.expectedStatus) {
-      throw new Error(
-        `${routeKey(testCase)} expected ${testCase.expectedStatus}, got ${response.status}: ${
-          response.text
-        }`,
-      );
-    }
+    expect(
+      response.status,
+      `${routeKey(testCase)} expected ${testCase.expectedStatus}, got ${response.status}: ${response.text}`,
+    ).toBe(testCase.expectedStatus);
 
     if (response.status !== 204) {
       expect(response.headers['content-type']).toContain('application/json');
