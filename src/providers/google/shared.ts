@@ -69,26 +69,17 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   })),
   // gemini-flash-latest is a Google-maintained alias that resolves server-side to the
   // current Flash snapshot. Pricing tracks the Flash tier ($0.30/$2.50 per 1M tokens).
-  ...[
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-preview-04-17',
-    'gemini-2.5-flash-preview-09-2025',
-    'gemini-flash-latest',
-  ].map((id) => ({
+  ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17', 'gemini-flash-latest'].map((id) => ({
     id,
     cost: { input: 0.3 / 1e6, output: 2.5 / 1e6 },
   })),
-  ...[
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash-lite-preview-09-2025',
-    'gemini-flash-lite-latest',
-  ].map((id) => ({
+  ...['gemini-2.5-flash-lite', 'gemini-flash-lite-latest'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
   })),
 
   // Gemini 2.0 models
-  ...['gemini-2.0-flash', 'gemini-2.0-flash-001', 'gemini-2.0-flash-exp'].map((id) => ({
+  ...['gemini-2.0-flash', 'gemini-2.0-flash-001'].map((id) => ({
     id,
     cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
     vertexCost: { input: 0.15 / 1e6, output: 0.6 / 1e6 },
@@ -97,15 +88,6 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     id,
     cost: { input: 0.075 / 1e6, output: 0.3 / 1e6 },
   })),
-  {
-    id: 'gemini-2.0-flash-thinking-exp',
-    cost: { input: 0.1 / 1e6, output: 0.4 / 1e6 },
-  },
-  {
-    id: 'gemini-2.0-pro',
-    cost: { input: 1.25 / 1e6, output: 10.0 / 1e6 },
-  },
-
   // Gemini 1.5 models
   {
     id: 'gemini-1.5-pro',

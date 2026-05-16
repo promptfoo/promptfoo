@@ -17,9 +17,14 @@
     "baseUrl": "./"
   },
   "include": [
+    "*.ts",
+    "*.tsx",
+    "*.mts",
+    "*.cts",
     "src/",
     "test/",
     "scripts/",
+    "site/src/utils/markdown.ts",
     "./package.json",
     "src/**/*.json",
     "test/**/*.json",
@@ -30,16 +35,7 @@
     "dist",
     "node_modules",
     "src/app/**/*",
-    "src/workers/**/*",
-    "test/app/**/*",
     "test/code-scan-action/**/*",
-    "test/codeScans/**/*",
-    "test/database/**/*",
-    "test/fixtures/rubric-json-template/**/*",
-    "test/matchers/**/*",
-    "test/site/",
-    "test/testCase/**/*",
-    "test/utils/**/*",
-    "test/validators/**/*"
+    "test/fixtures/rubric-json-template/rubric.json"
   ]
 }

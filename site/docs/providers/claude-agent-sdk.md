@@ -109,6 +109,7 @@ prompts:
 ```
 
 This allows you to prepare a directory with files or sub-directories before running your tests.
+Relative `working_dir` values are resolved from the directory containing the config file.
 
 By default, when you specify a working directory, Claude Agent SDK is given read-only access to the directory.
 
@@ -183,6 +184,7 @@ prompts:
 | `agent_progress_summaries`           | boolean          | Enable periodic AI progress summaries for subagents                                                          | false                    |
 | `settings`                           | string/object    | Additional [settings](#settings) (file path or inline object)                                                | None                     |
 | `managed_settings`                   | object           | Policy-tier [settings](#settings) the SDK loads above user/project layers (for embedders enforcing policy)   | None                     |
+| `can_use_tool`                       | function         | Callback forwarded to Claude Agent SDK's `canUseTool` option (programmatic only)                             | None                     |
 | `on_elicitation`                     | function         | Callback for MCP elicitation requests (programmatic only)                                                    | Auto-decline             |
 | `resume`                             | string           | Resume from a specific session ID                                                                            | None                     |
 | `fork_session`                       | boolean          | Fork from an existing session instead of continuing                                                          | false                    |
@@ -398,7 +400,7 @@ providers:
       plugins:
         - type: local
           path: ./my-plugin
-      append_allowed_tools: ['Skill', 'Read']
+      skills: all
 ```
 
 :::note
@@ -467,7 +469,7 @@ providers:
       skills: all # Or: ['code-review', 'test-generator']
 ```
 
-If you don't set `skills`, you must add `'Skill'` to allowed tools manually for the model to invoke them:
+For SDK versions before 0.2.120, omit `skills` and add `'Skill'` manually instead:
 
 ```yaml
 providers:
@@ -547,7 +549,8 @@ providers:
     config:
       working_dir: ./my-project
       setting_sources: ['project'] # Only team-shared skills, exclude personal
-      append_allowed_tools: ['Skill', 'Read', 'Bash']
+      skills: all
+      append_allowed_tools: ['Read', 'Bash']
       permission_mode: 'acceptEdits'
 ```
 
@@ -561,7 +564,8 @@ providers:
     config:
       working_dir: ./my-project
       setting_sources: ['project']
-      append_allowed_tools: ['Skill', 'Read', 'Write', 'Bash']
+      skills: all
+      append_allowed_tools: ['Read', 'Write', 'Bash']
       permission_mode: 'acceptEdits'
 
 prompts:
@@ -862,14 +866,16 @@ providers:
 For running Claude Code in VMs, containers, or remote environments, you can provide a custom spawn function when using the provider programmatically:
 
 ```typescript
-import { ClaudeCodeSDKProvider } from 'promptfoo';
+import { loadApiProvider } from 'promptfoo';
 
-const provider = new ClaudeCodeSDKProvider({
-  config: {
-    spawn_claude_code_process: (options) => {
-      // Custom spawn logic for VM/container execution
-      // options contains: command, args, cwd, env, signal
-      return myVMProcess; // Must satisfy SpawnedProcess interface
+const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+  options: {
+    config: {
+      spawn_claude_code_process: (options) => {
+        // Custom spawn logic for VM/container execution
+        // options contains: command, args, cwd, env, signal
+        return myVMProcess; // Must satisfy SpawnedProcess interface
+      },
     },
   },
 });
@@ -926,13 +932,27 @@ Available behaviors:
 For custom answer selection logic when using the provider programmatically, you can provide your own `canUseTool` callback:
 
 ```typescript
-import { ClaudeCodeSDKProvider } from 'promptfoo';
+import { loadApiProvider } from 'promptfoo';
 
-const provider = new ClaudeCodeSDKProvider({
-  config: {
-    append_allowed_tools: ['AskUserQuestion'],
+const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+  options: {
+    config: {
+      append_allowed_tools: ['AskUserQuestion'],
+      can_use_tool: async (toolName, input) => {
+        if (toolName !== 'AskUserQuestion') {
+          return { behavior: 'allow', updatedInput: input };
+        }
+
+        return {
+          behavior: 'allow',
+          updatedInput: {
+            ...input,
+            answers: { 'Which environment?': 'Staging' },
+          },
+        };
+      },
+    },
   },
-  // Custom canUseTool passed via SDK options
 });
 ```
 

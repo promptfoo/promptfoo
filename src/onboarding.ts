@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import confirm from '@inquirer/confirm';
-import { ExitPromptError } from '@inquirer/core';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
@@ -730,7 +730,7 @@ export async function initializeProject(directory: string | null, interactive: b
 
     return telemetryDetails;
   } catch (err) {
-    if (err instanceof ExitPromptError) {
+    if (err instanceof AbortPromptError || err instanceof ExitPromptError) {
       const runCommand = promptfooCommand('init');
       logger.info(
         '\n' +
@@ -742,7 +742,8 @@ export async function initializeProject(directory: string | null, interactive: b
           chalk.green('https://www.promptfoo.dev/contact/'),
       );
       await recordOnboardingStep('early exit');
-      process.exit(130);
+      process.exitCode = 130;
+      return;
     } else {
       throw err;
     }

@@ -189,7 +189,13 @@ function TableHeader({
           {resourceId && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank" className="action">
+                <Link
+                  to={ROUTES.PROMPT_DETAIL(resourceId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View other evals and datasets for this prompt"
+                  className="action"
+                >
                   <ExternalLink className="size-4" />
                 </Link>
               </TooltipTrigger>
@@ -1385,7 +1391,7 @@ function ResultsTableHeader({
     <div
       data-testid="results-table-header"
       className={cn(
-        'relative',
+        'relative -mx-4 overflow-hidden px-4',
         stickyHeader && 'results-table-sticky',
         hasMinimalScrollRoom && 'minimal-scroll-room',
       )}
@@ -1394,6 +1400,7 @@ function ResultsTableHeader({
         <button
           type="button"
           onClick={() => setStickyHeader(false)}
+          aria-label="Dismiss sticky header"
           className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
         >
           <X className="size-4" />
@@ -2246,7 +2253,7 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-      <div className="pagination sticky bottom-0 z-10 flex shrink-0 items-center gap-4 flex-wrap justify-between bg-background border-t border-border w-screen px-4 -mx-4 shadow-lg py-2">
+      <div className="pagination sticky bottom-0 z-10 flex w-screen shrink-0 flex-col items-stretch gap-3 border-t border-border bg-background px-4 py-2 shadow-lg -mx-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div>
           Showing{' '}
           {filteredResultsCount === 0 ? (
@@ -2274,10 +2281,10 @@ function ResultsTable({
           </div>
         )}
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* PAGE SIZE SELECTOR */}
           <div className="flex items-center gap-2">
-            <span>Results per page:</span>
+            <span className="whitespace-nowrap">Results per page:</span>
             <Select
               value={String(pagination.pageSize)}
               onValueChange={(value) => {
@@ -2289,7 +2296,7 @@ function ResultsTable({
               }}
               disabled={filteredResultsCount <= 10}
             >
-              <SelectTrigger className="w-20 h-8">
+              <SelectTrigger aria-label="Results per page" className="w-20 h-8">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -2317,7 +2324,7 @@ function ResultsTable({
               pageCount <= 1 && 'opacity-50 pointer-events-none',
             )}
           >
-            <span>Go to:</span>
+            <span className="whitespace-nowrap">Go to:</span>
             <NumberInput
               value={pagination.pageIndex + 1}
               onChange={(v) => {
@@ -2331,6 +2338,7 @@ function ResultsTable({
                 }
               }}
               className="w-[60px] h-8 text-center"
+              aria-label="Go to page"
               min={1}
               max={pageCount || 1}
               disabled={pageCount === 1}
@@ -2343,6 +2351,7 @@ function ResultsTable({
               variant="outline"
               size="icon"
               className="rounded-r-none"
+              aria-label="Previous page"
               onClick={() => {
                 setPagination((prev) => ({
                   ...prev,
@@ -2359,6 +2368,7 @@ function ResultsTable({
               variant="outline"
               size="icon"
               className="rounded-l-none -ml-px"
+              aria-label="Next page"
               onClick={() => {
                 setPagination((prev) => ({
                   ...prev,

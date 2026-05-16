@@ -17,10 +17,13 @@ import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
+import type { CacheOptions } from './types/cache';
+
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
+const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
 
 let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 
@@ -153,6 +156,19 @@ function getCurrentCacheNamespace() {
   return cacheNamespaceStorage.getStore()?.namespace;
 }
 
+function currentNamespaceIncludesRepeatIndex(repeatIndex: number) {
+  const namespaceParts = getCurrentCacheNamespace()?.split(':') ?? [];
+  return namespaceParts.some(
+    (part, index) => part === 'repeat' && namespaceParts[index + 1] === String(repeatIndex),
+  );
+}
+
+function shouldApplyRepeatCacheSuffix(repeatIndex?: number) {
+  return (
+    repeatIndex != null && repeatIndex > 0 && !currentNamespaceIncludesRepeatIndex(repeatIndex)
+  );
+}
+
 export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheNamespace()) {
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
@@ -236,6 +252,18 @@ export function withCacheNamespace<T>(namespace: string | undefined, fn: () => P
 
   const scopedNamespace = parentNamespace ? `${parentNamespace}:${namespace}` : namespace;
   return cacheNamespaceStorage.run({ namespace: scopedNamespace }, fn);
+}
+
+export function withCacheEnabled<T>(enabledOverride: boolean | undefined, fn: () => Promise<T>) {
+  if (enabledOverride === undefined) {
+    return fn();
+  }
+
+  return cacheEnabledStorage.run({ enabled: enabledOverride }, fn);
+}
+
+function getEffectiveCacheEnabled() {
+  return cacheEnabledStorage.getStore()?.enabled ?? enabled;
 }
 
 export type FetchWithCacheResult<T> = {
@@ -352,6 +380,7 @@ function getFetchCacheKey(
   options: RequestInit,
   method: string,
   format: 'json' | 'text',
+  repeatIndex?: number,
 ) {
   const bodyForCacheKey = getBodyForFetchCacheKey(
     options.body ?? (url instanceof Request ? url.body : undefined),
@@ -365,6 +394,7 @@ function getFetchCacheKey(
     return null;
   }
 
+  const repeatSuffix = shouldApplyRepeatCacheSuffix(repeatIndex) ? `:repeat${repeatIndex}` : '';
   return getScopedCacheKey(
     `fetch:v3:${hashFetchCacheKey({
       format,
@@ -372,7 +402,7 @@ function getFetchCacheKey(
       method,
       options: optionsForCacheKey.identity,
       url: url instanceof Request ? url.url : String(url),
-    })}`,
+    })}${repeatSuffix}`,
   );
 }
 
@@ -537,7 +567,7 @@ async function prepareFetchResponse(
  * @param options Fetch options (method, headers, body, etc.)
  * @param timeout Request timeout in milliseconds (default: standard timeout)
  * @param format Response format: 'json' or 'text' (default: 'json')
- * @param bust Bypass cache for this request (default: false)
+ * @param bustOrOptions Bypass cache or provide cache options for this request
  * @param maxRetries Maximum number of retries on transient errors
  *
  * @returns FetchWithCacheResult with data, cache status, and HTTP metadata
@@ -567,18 +597,24 @@ export async function fetchWithCache<T = unknown>(
   options: RequestInit = {},
   timeout: number = getRequestTimeoutMs(),
   format: 'json' | 'text' = 'json',
-  bust: boolean = false,
+  bustOrOptions: boolean | CacheOptions | undefined = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  const cacheOptions: CacheOptions =
+    typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : (bustOrOptions ?? {});
+  const { bust = false, repeatIndex } = cacheOptions;
+
   // Only retry body-read for idempotent methods to avoid double-submitting
   // POST/PATCH requests (the server already processed the request once
   // headers arrived; only the response body stream failed).
   const method = (options.method ?? (url instanceof Request ? url.method : 'GET')).toUpperCase();
   const isIdempotent = ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(method);
 
-  const cacheKey = enabled && !bust ? getFetchCacheKey(url, options, method, format) : null;
+  const cacheEnabled = getEffectiveCacheEnabled();
+  const cacheKey =
+    cacheEnabled && !bust ? getFetchCacheKey(url, options, method, format, repeatIndex) : null;
 
-  if (!enabled || bust || cacheKey == null) {
+  if (!cacheEnabled || bust || cacheKey == null) {
     const { respText, resp, fetchLatencyMs } = await fetchAndReadBody(
       url,
       options,
@@ -702,5 +738,5 @@ export async function clearCache() {
  * ```
  */
 export function isCacheEnabled() {
-  return enabled;
+  return getEffectiveCacheEnabled();
 }

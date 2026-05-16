@@ -143,16 +143,40 @@ console.log(response.output);
 
 ---
 
-To load several providers for manual testing, call `loadApiProvider()` for each one:
+### `loadApiProviders(providers, options?)`
+
+Load multiple providers in parallel. Accepts the same `ProvidersConfig` shape that `evaluate()` uses internally, so you can mix string identifiers with inline config objects or functions.
 
 ```typescript
-import { loadApiProvider } from 'promptfoo';
+async function loadApiProviders(
+  providers: ProvidersConfig,
+  options?: { env?: Record<string, string> },
+): Promise<ApiProvider[]>;
+```
 
-const providers = await Promise.all(
-  ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'].map((providerPath) =>
-    loadApiProvider(providerPath),
-  ),
-);
+**Parameters:**
+
+- `providers`: Array of provider identifiers or config objects
+- `options`: Optional environment overrides
+
+**Returns:** Array of configured provider instances
+
+**Example:**
+
+```typescript
+import { loadApiProviders } from 'promptfoo';
+
+const providers = await loadApiProviders([
+  'openai:chat:gpt-5.5',
+  'anthropic:messages:claude-opus-4-7',
+  {
+    id: 'custom-provider',
+    config: {
+      model: 'my-model',
+      temperature: 0.7,
+    },
+  },
+]);
 
 for (const provider of providers) {
   const result = await provider.callApi('Test');
@@ -473,9 +497,10 @@ interface Cache {
 
 ---
 
-### `fetchWithCache(url, options?, timeout?, format?, bust?, maxRetries?)`
+### `fetchWithCache(url, options?, timeout?, format?, bustOrOptions?, maxRetries?)`
 
 Fetch with caching enabled.
+The fifth argument accepts either the legacy boolean cache-bust flag or an options object.
 
 ```typescript
 export async function fetchWithCache<T>(
@@ -483,7 +508,7 @@ export async function fetchWithCache<T>(
   options?: RequestInit,
   timeout?: number,
   format?: 'json' | 'text',
-  bust?: boolean,
+  bustOrOptions?: boolean | { bust?: boolean; repeatIndex?: number },
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>>;
 ```
@@ -511,8 +536,8 @@ Set cache location and TTL via environment variables:
 # Cache directory (default: ~/.promptfoo/cache)
 export PROMPTFOO_CACHE_PATH=/path/to/cache
 
-# Cache TTL in seconds (default: 604800 = 7 days)
-export PROMPTFOO_CACHE_TTL=604800
+# Cache TTL in seconds (default: 1209600 = 14 days)
+export PROMPTFOO_CACHE_TTL=1209600
 
 # Disable cache via env
 export PROMPTFOO_CACHE_ENABLED=false
@@ -866,13 +891,12 @@ const evalRecord = await evaluate({
 Load providers and test in parallel:
 
 ```typescript
-import { assertions, loadApiProvider } from 'promptfoo';
+import { assertions, loadApiProviders } from 'promptfoo';
 
-const providers = await Promise.all(
-  ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'].map((providerPath) =>
-    loadApiProvider(providerPath),
-  ),
-);
+const providers = await loadApiProviders([
+  'openai:chat:gpt-5.5',
+  'anthropic:messages:claude-opus-4-7',
+]);
 
 const testCases = ['2+2=?', 'What is AI?'];
 
@@ -975,7 +999,7 @@ import type {
 ### Stable APIs (Safe for production)
 
 - `evaluate()`
-- `loadApiProvider()`
+- `loadApiProvider()`, `loadApiProviders()`
 - `assertions.runAssertion()`, `assertions.runAssertions()`
 - Cache namespace functions
 - Guardrails namespace

@@ -17,6 +17,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
+import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
 
@@ -408,7 +409,7 @@ async function loadCodexSDK(): Promise<any> {
       To use the OpenAI Codex SDK provider, install it with:
         npm install @openai/codex-sdk
 
-      Requires Node.js 20.20+ or 22.22+.
+      Requires Node.js ^20.20.0 or >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -425,7 +426,7 @@ async function loadCodexSDK(): Promise<any> {
       dedent`Failed to load @openai/codex-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js 20.20+ or 22.22+)
+      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -1933,10 +1934,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // This allows the Codex CLI to export its internal spans as children of our span
     const currentTraceparent = getTraceparent();
     const apiKey = this.getApiKey(config);
-    const workingDirectory = config.working_dir ?? process.cwd();
+    const workingDirectory =
+      resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
+    const additionalDirectories = config.additional_directories?.map(
+      (directory) => resolveAgenticWorkingDir(directory, cliState.basePath) ?? directory,
+    );
     const resolvedConfig: OpenAICodexSDKConfig = {
       ...config,
       working_dir: workingDirectory,
+      ...(additionalDirectories ? { additional_directories: additionalDirectories } : {}),
     };
 
     // Prepare environment with OTEL config for deep tracing
