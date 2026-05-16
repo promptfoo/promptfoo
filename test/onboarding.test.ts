@@ -1,8 +1,13 @@
 import { rm } from 'fs/promises';
 
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
+import {
+  createDummyFiles,
+  initializeProject,
+  reportProviderAPIKeyWarnings,
+} from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -14,6 +19,14 @@ const mockFs = vi.hoisted(() => ({
   existsSync: vi.fn(),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
+  access: vi.fn((path: string) => {
+    if (mockFs.existsSync(path)) {
+      return undefined;
+    }
+    throw Object.assign(new Error(`ENOENT: no such file or directory, access '${path}'`), {
+      code: 'ENOENT',
+    });
+  }),
 }));
 
 vi.mock('fs', () => ({
@@ -22,6 +35,16 @@ vi.mock('fs', () => ({
 }));
 
 vi.mock('fs/promises', () => ({
+  default: {
+    access: mockFs.access,
+    writeFile: mockFs.writeFileSync,
+    mkdir: mockFs.mkdirSync,
+    mkdtemp: vi.fn(),
+    rm: vi.fn(),
+  },
+  access: mockFs.access,
+  writeFile: mockFs.writeFileSync,
+  mkdir: mockFs.mkdirSync,
   mkdtemp: vi.fn(),
   rm: vi.fn(),
 }));
@@ -78,6 +101,7 @@ beforeEach(() => {
   mockFs.existsSync.mockReset();
   mockFs.writeFileSync.mockReset();
   mockFs.mkdirSync.mockReset();
+  mockFs.access.mockClear();
 });
 
 describe('reportProviderAPIKeyWarnings', () => {
@@ -246,5 +270,34 @@ describe('createDummyFiles', () => {
         message: expect.stringContaining('already exist'),
       }),
     );
+  });
+});
+
+describe('initializeProject', () => {
+  let originalExitCode: number | string | null | undefined;
+
+  beforeEach(() => {
+    originalExitCode = process.exitCode;
+    process.exitCode = undefined;
+  });
+
+  afterEach(() => {
+    process.exitCode = originalExitCode;
+  });
+
+  it('should return after prompt cancellation without terminating the host process', async () => {
+    mockSelect.mockRejectedValueOnce(new ExitPromptError());
+
+    await expect(initializeProject(null, true)).resolves.toBeUndefined();
+
+    expect(process.exitCode).toBe(130);
+  });
+
+  it('should return after prompt abort without terminating the host process', async () => {
+    mockSelect.mockRejectedValueOnce(new AbortPromptError());
+
+    await expect(initializeProject(null, true)).resolves.toBeUndefined();
+
+    expect(process.exitCode).toBe(130);
   });
 });

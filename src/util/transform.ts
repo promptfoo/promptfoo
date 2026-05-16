@@ -17,7 +17,7 @@ const INLINE_STRING_LABEL_MAX_LENGTH = 80;
 
 /**
  * Every config field that accepts a `StringOrFunctionSchema`. Shared between the
- * runtime sanitizer in `src/index.ts` (which replaces function values with
+ * runtime sanitizer in `src/node/evaluate.ts` (which replaces function values with
  * markers before persistence) and `scripts/generateJsonSchema.ts` (which rewrites
  * these fields to string-only in the generated JSON schema).
  */

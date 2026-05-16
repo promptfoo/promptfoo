@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -22,7 +22,7 @@ export async function runRubyCode<T = unknown>(
     `temp-ruby-code-${Date.now()}-${Math.random().toString(16).slice(2)}.rb`,
   );
   try {
-    fs.writeFileSync(tempFilePath, code);
+    await fs.writeFile(tempFilePath, code);
     // Necessary to await so temp file doesn't get deleted.
     const result = await runRuby<T>(tempFilePath, method, args);
     return result;
@@ -31,7 +31,7 @@ export async function runRubyCode<T = unknown>(
     throw error;
   } finally {
     try {
-      fs.unlinkSync(tempFilePath);
+      await fs.unlink(tempFilePath);
     } catch (error) {
       logger.error(`Error removing temporary file: ${error}`);
     }

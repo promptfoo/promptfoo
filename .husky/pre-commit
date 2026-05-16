@@ -21,8 +21,13 @@ fi
 
 echo "Running pre-commit lint checks..."
 
-# Get list of staged JS/TS files
-STAGED_JS_TS_FILES=$(git diff --cached --name-only --diff-filter=ACMRTUXB | grep -E '\.(js|ts|tsx)$' || true)
+# Get list of staged JS/TS files. Biome ignores declaration files, so exclude them
+# here instead of failing d.ts-only commits with "No files were processed".
+STAGED_JS_TS_FILES=$(
+  git diff --cached --name-only --diff-filter=ACMRTUXB |
+    grep -E '\.(js|ts|tsx)$' |
+    grep -Ev '\.d\.ts$' || true
+)
 
 # Get list of staged CSS/HTML/MD/YAML files for Prettier
 STAGED_PRETTIER_FILES=$(git diff --cached --name-only --diff-filter=ACMRTUXB | grep -E '\.(css|scss|html|md|mdc|mdx|yaml|yml)$' || true)
