@@ -341,19 +341,20 @@ async function askForPermissionToOverwrite({
   return hasPermissionToWrite;
 }
 
-export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
-  const outDirectory = directory || '.';
-  const outDirAbsolute = path.join(process.cwd(), outDirectory);
+type OnboardingFile = {
+  file: string;
+  contents: string;
+  required: boolean;
+};
 
-  async function writeFile({
-    file,
-    contents,
-    required,
-  }: {
-    file: string;
-    contents: string;
-    required: boolean;
-  }) {
+type OnboardingWriter = (file: OnboardingFile) => Promise<void>;
+
+function createOnboardingWriter(
+  outDirectory: string,
+  outDirAbsolute: string,
+  interactive: boolean,
+): OnboardingWriter {
+  return async ({ file, contents, required }) => {
     const relativePath = path.join(outDirectory, file);
     const absolutePath = path.join(outDirAbsolute, file);
 
@@ -376,7 +377,245 @@ export async function createDummyFiles(directory: string | null, interactive: bo
 
     await fs.writeFile(absolutePath, contents);
     logger.info(`📝 Wrote ${relativePath}`);
+  };
+}
+
+function getProviderChoices(action: string): { name: string; value: (string | ProviderOptions)[] }[] {
+  return [
+    { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
+    {
+      name: '[OpenAI] GPT 5, GPT 4.1, ...',
+      value:
+        action === 'agent'
+          ? [
+              {
+                id: 'openai:gpt-5',
+                config: {
+                  tools: [
+                    {
+                      type: 'function',
+                      function: {
+                        name: 'get_current_weather',
+                        description: 'Get the current weather in a given location',
+                        parameters: {
+                          type: 'object',
+                          properties: {
+                            location: {
+                              type: 'string',
+                              description: 'The city and state, e.g. San Francisco, CA',
+                            },
+                          },
+                          required: ['location'],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            ]
+          : ['openai:gpt-5-mini', 'openai:gpt-5'],
+    },
+    {
+      name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
+      value: [
+        'anthropic:messages:claude-opus-4-6',
+        'anthropic:messages:claude-sonnet-4-5-20250929',
+        'anthropic:messages:claude-opus-4-1-20250805',
+        'anthropic:messages:claude-3-7-sonnet-20250219',
+      ],
+    },
+    {
+      name: '[Google] Gemini 3.1 Pro, ...',
+      value: ['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'],
+    },
+    {
+      name: '[HuggingFace] Llama, Phi, Gemma, ...',
+      value: [
+        'huggingface:text-generation:meta-llama/Meta-Llama-3.1-8B-Instruct',
+        'huggingface:text-generation:microsoft/Phi-4-mini-instruct',
+        'huggingface:text-generation:google/gemma-3-4b-it',
+      ],
+    },
+    { name: 'Local Python script', value: ['file://provider.py'] },
+    { name: 'Local Javascript script', value: ['file://provider.js'] },
+    {
+      name: 'Local executable',
+      value: [process.platform === 'win32' ? 'exec:provider.bat' : 'exec:provider.sh'],
+    },
+    { name: 'HTTP endpoint', value: ['https://example.com/api/generate'] },
+    {
+      name: '[Azure] OpenAI, DeepSeek, Llama, ...',
+      value: [{ id: 'azure:chat:deploymentNameHere', config: { apiHost: 'xxxxxxxx.openai.azure.com' } }],
+    },
+    {
+      name: '[AWS Bedrock] Claude, Llama, Titan, ...',
+      value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
+    },
+    {
+      name: '[Cohere] Command R, Command R+, ...',
+      value: ['cohere:command-r', 'cohere:command-r-plus'],
+    },
+    { name: '[Ollama] Llama, Qwen, Phi, ...', value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'] },
+    {
+      name: '[WatsonX] Llama, IBM Granite, ...',
+      value: [
+        'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
+        'watsonx:ibm/granite-3-3-8b-instruct',
+      ],
+    },
+  ];
+}
+
+async function writeProviderSupportFiles(
+  providerChoices: (string | ProviderOptions)[],
+  writeFile: OnboardingWriter,
+) {
+  if (
+    providerChoices.some(
+      (choice) => typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
+    )
+  ) {
+    await writeFile({ file: 'provider.js', contents: JAVASCRIPT_PROVIDER, required: true });
   }
+  if (providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))) {
+    const isWindows = process.platform === 'win32';
+    await writeFile({
+      file: isWindows ? 'provider.bat' : 'provider.sh',
+      contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
+      required: true,
+    });
+  }
+  if (
+    providerChoices.some(
+      (choice) =>
+        typeof choice === 'string' &&
+        (choice.startsWith('python:') || (choice.startsWith('file://') && choice.endsWith('.py'))),
+    )
+  ) {
+    await writeFile({ file: 'provider.py', contents: PYTHON_PROVIDER, required: true });
+  }
+}
+
+function addDefaultPrompts(prompts: string[], providers: (string | object)[], action: string) {
+  if (action === 'compare') {
+    prompts.push(`Write a tweet about {{topic}}`);
+    if (providers.length < 3) {
+      prompts.push(`Write a concise, funny tweet about {{topic}}`);
+    }
+    return;
+  }
+  if (action === 'rag') {
+    prompts.push(
+      'Write a customer service response to:\n\n{{inquiry}}\n\nUse these documents:\n\n{{context}}',
+    );
+    return;
+  }
+  if (action === 'agent') {
+    prompts.push(`Fulfill this user helpdesk ticket: {{inquiry}}`);
+  }
+}
+
+async function writeContextFile(action: string, language: string, writeFile: OnboardingWriter) {
+  if (action !== 'rag' && action !== 'agent') {
+    return;
+  }
+  if (language === 'javascript') {
+    await writeFile({ file: 'context.js', contents: JAVASCRIPT_VAR, required: true });
+    return;
+  }
+  await writeFile({ file: 'context.py', contents: PYTHON_VAR, required: true });
+}
+
+async function collectInteractiveOnboarding(
+  outDirectory: string,
+  prompts: string[],
+  providers: (string | object)[],
+  writeFile: OnboardingWriter,
+) {
+  recordOnboardingStep('start');
+  logger.info(
+    chalk.bold('\nWelcome to Promptfoo!\n') +
+      chalk.gray("We'll set up a configuration file to get you started.\n"),
+  );
+
+  const action = await select({
+    message: 'What would you like to do?',
+    choices: [
+      { name: 'Not sure yet', value: 'compare', description: 'Get started with a basic prompt comparison' },
+      {
+        name: 'Compare prompts and models',
+        value: 'compare',
+        description: 'Test different prompts, models, or parameters side by side',
+      },
+      {
+        name: 'Improve RAG performance',
+        value: 'rag',
+        description: 'Evaluate retrieval-augmented generation pipelines',
+      },
+      {
+        name: 'Improve agent/chain of thought performance',
+        value: 'agent',
+        description: 'Test agent workflows and tool-calling behavior',
+      },
+      {
+        name: 'Run a red team evaluation',
+        value: 'redteam',
+        description: 'Scan for security vulnerabilities and compliance risks',
+      },
+    ],
+  });
+  recordOnboardingStep('choose app type', { value: action });
+
+  if (action === 'redteam') {
+    await redteamInit(outDirectory);
+    return { action, language: 'not_applicable', earlyReturn: true as const };
+  }
+
+  let language = 'not_sure';
+  if (action === 'rag' || action === 'agent') {
+    language = await select({
+      message: 'What programming language are you developing the app in?',
+      choices: [
+        { name: 'Not sure yet', value: 'not_sure' },
+        { name: 'Python', value: 'python' },
+        { name: 'Javascript', value: 'javascript' },
+      ],
+    });
+    recordOnboardingStep('choose language', { value: language });
+  }
+
+  const providerChoice = await select({
+    message: 'Which model provider would you like to use?',
+    choices: getProviderChoices(action),
+    loop: false,
+    pageSize: process.stdout.rows - 6,
+  });
+  const providerChoices: (string | ProviderOptions)[] = Array.isArray(providerChoice)
+    ? providerChoice
+    : [providerChoice];
+
+  recordOnboardingStep('choose providers', {
+    value: providerChoices.map((choice) => (typeof choice === 'string' ? choice : JSON.stringify(choice))),
+  });
+  reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) => logger.warn(warningText));
+
+  if (providerChoices.length > 0) {
+    providers.push(...(providerChoices.length > 3 ? providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)) : providerChoices));
+    await writeProviderSupportFiles(providerChoices, writeFile);
+  } else {
+    providers.push('openai:gpt-5-mini', 'openai:gpt-5');
+  }
+
+  addDefaultPrompts(prompts, providers, action);
+  await writeContextFile(action, language, writeFile);
+  recordOnboardingStep('complete');
+  return { action, language, earlyReturn: false as const };
+}
+
+export async function createDummyFiles(directory: string | null, interactive: boolean = true) {
+  const outDirectory = directory || '.';
+  const outDirAbsolute = path.join(process.cwd(), outDirectory);
+  const writeFile = createOnboardingWriter(outDirectory, outDirAbsolute, interactive);
 
   const prompts: string[] = [];
   const providers: (string | object)[] = [];
@@ -386,51 +625,10 @@ export async function createDummyFiles(directory: string | null, interactive: bo
   await fs.mkdir(outDirAbsolute, { recursive: true });
 
   if (interactive) {
-    recordOnboardingStep('start');
-
-    logger.info(
-      chalk.bold('\nWelcome to Promptfoo!\n') +
-        chalk.gray("We'll set up a configuration file to get you started.\n"),
-    );
-
-    // Choose use case
-    action = await select({
-      message: 'What would you like to do?',
-      choices: [
-        {
-          name: 'Not sure yet',
-          value: 'compare',
-          description: 'Get started with a basic prompt comparison',
-        },
-        {
-          name: 'Compare prompts and models',
-          value: 'compare',
-          description: 'Test different prompts, models, or parameters side by side',
-        },
-        {
-          name: 'Improve RAG performance',
-          value: 'rag',
-          description: 'Evaluate retrieval-augmented generation pipelines',
-        },
-        {
-          name: 'Improve agent/chain of thought performance',
-          value: 'agent',
-          description: 'Test agent workflows and tool-calling behavior',
-        },
-        {
-          name: 'Run a red team evaluation',
-          value: 'redteam',
-          description: 'Scan for security vulnerabilities and compliance risks',
-        },
-      ],
-    });
-
-    recordOnboardingStep('choose app type', {
-      value: action,
-    });
-
-    if (action === 'redteam') {
-      await redteamInit(outDirectory);
+    const setup = await collectInteractiveOnboarding(outDirectory, prompts, providers, writeFile);
+    action = setup.action;
+    language = setup.language;
+    if (setup.earlyReturn) {
       return {
         numPrompts: 0,
         providerPrefixes: [],
@@ -438,232 +636,6 @@ export async function createDummyFiles(directory: string | null, interactive: bo
         language: 'not_applicable',
       };
     }
-
-    language = 'not_sure';
-    if (action === 'rag' || action === 'agent') {
-      language = await select({
-        message: 'What programming language are you developing the app in?',
-        choices: [
-          { name: 'Not sure yet', value: 'not_sure' },
-          { name: 'Python', value: 'python' },
-          { name: 'Javascript', value: 'javascript' },
-        ],
-      });
-
-      recordOnboardingStep('choose language', {
-        value: language,
-      });
-    }
-
-    const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-5-mini', 'openai:gpt-5'] },
-      {
-        name: '[OpenAI] GPT 5, GPT 4.1, ...',
-        value:
-          action === 'agent'
-            ? [
-                {
-                  id: 'openai:gpt-5',
-                  config: {
-                    tools: [
-                      {
-                        type: 'function',
-                        function: {
-                          name: 'get_current_weather',
-                          description: 'Get the current weather in a given location',
-                          parameters: {
-                            type: 'object',
-                            properties: {
-                              location: {
-                                type: 'string',
-                                description: 'The city and state, e.g. San Francisco, CA',
-                              },
-                            },
-                            required: ['location'],
-                          },
-                        },
-                      },
-                    ],
-                  },
-                },
-              ]
-            : ['openai:gpt-5-mini', 'openai:gpt-5'],
-      },
-      {
-        name: '[Anthropic] Claude Opus, Sonnet, Haiku, ...',
-        value: [
-          'anthropic:messages:claude-opus-4-6',
-          'anthropic:messages:claude-sonnet-4-5-20250929',
-          'anthropic:messages:claude-opus-4-1-20250805',
-          'anthropic:messages:claude-3-7-sonnet-20250219',
-        ],
-      },
-      {
-        name: '[Google] Gemini 3.1 Pro, ...',
-        value: ['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'],
-      },
-      {
-        name: '[HuggingFace] Llama, Phi, Gemma, ...',
-        value: [
-          'huggingface:text-generation:meta-llama/Meta-Llama-3.1-8B-Instruct',
-          'huggingface:text-generation:microsoft/Phi-4-mini-instruct',
-          'huggingface:text-generation:google/gemma-3-4b-it',
-        ],
-      },
-      {
-        name: 'Local Python script',
-        value: ['file://provider.py'],
-      },
-      {
-        name: 'Local Javascript script',
-        value: ['file://provider.js'],
-      },
-      {
-        name: 'Local executable',
-        value: [process.platform === 'win32' ? 'exec:provider.bat' : 'exec:provider.sh'],
-      },
-      {
-        name: 'HTTP endpoint',
-        value: ['https://example.com/api/generate'],
-      },
-      {
-        name: '[Azure] OpenAI, DeepSeek, Llama, ...',
-        value: [
-          {
-            id: 'azure:chat:deploymentNameHere',
-            config: {
-              apiHost: 'xxxxxxxx.openai.azure.com',
-            },
-          },
-        ],
-      },
-      {
-        name: '[AWS Bedrock] Claude, Llama, Titan, ...',
-        value: ['bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0'],
-      },
-      {
-        name: '[Cohere] Command R, Command R+, ...',
-        value: ['cohere:command-r', 'cohere:command-r-plus'],
-      },
-      {
-        name: '[Ollama] Llama, Qwen, Phi, ...',
-        value: ['ollama:chat:llama3.3', 'ollama:chat:phi4'],
-      },
-      {
-        name: '[WatsonX] Llama, IBM Granite, ...',
-        value: [
-          'watsonx:meta-llama/llama-3-2-11b-vision-instruct',
-          'watsonx:ibm/granite-3-3-8b-instruct',
-        ],
-      },
-    ];
-
-    /**
-     * The potential of the object type here is given by the agent action conditional
-     * for openai as a value choice
-     */
-    const providerChoice = await select({
-      message: 'Which model provider would you like to use?',
-      choices,
-      loop: false,
-      pageSize: process.stdout.rows - 6,
-    });
-    const providerChoices: (string | ProviderOptions)[] = Array.isArray(providerChoice)
-      ? providerChoice
-      : [providerChoice];
-
-    recordOnboardingStep('choose providers', {
-      value: providerChoices.map((choice) =>
-        typeof choice === 'string' ? choice : JSON.stringify(choice),
-      ),
-    });
-
-    // Tell the user if they have providers selected without relevant API keys set in env.
-    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) =>
-      logger.warn(warningText),
-    );
-
-    if (providerChoices.length > 0) {
-      if (providerChoices.length > 3) {
-        providers.push(
-          ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
-        );
-      } else {
-        providers.push(...providerChoices);
-      }
-
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' && choice.startsWith('file://') && choice.endsWith('.js'),
-        )
-      ) {
-        await writeFile({
-          file: 'provider.js',
-          contents: JAVASCRIPT_PROVIDER,
-          required: true,
-        });
-      }
-      if (
-        providerChoices.some((choice) => typeof choice === 'string' && choice.startsWith('exec:'))
-      ) {
-        // Generate platform-appropriate executable provider script
-        const isWindows = process.platform === 'win32';
-        await writeFile({
-          file: isWindows ? 'provider.bat' : 'provider.sh',
-          contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
-          required: true,
-        });
-      }
-      if (
-        providerChoices.some(
-          (choice) =>
-            typeof choice === 'string' &&
-            (choice.startsWith('python:') ||
-              (choice.startsWith('file://') && choice.endsWith('.py'))),
-        )
-      ) {
-        await writeFile({
-          file: 'provider.py',
-          contents: PYTHON_PROVIDER,
-          required: true,
-        });
-      }
-    } else {
-      providers.push('openai:gpt-5-mini');
-      providers.push('openai:gpt-5');
-    }
-
-    if (action === 'compare') {
-      prompts.push(`Write a tweet about {{topic}}`);
-      if (providers.length < 3) {
-        prompts.push(`Write a concise, funny tweet about {{topic}}`);
-      }
-    } else if (action === 'rag') {
-      prompts.push(
-        'Write a customer service response to:\n\n{{inquiry}}\n\nUse these documents:\n\n{{context}}',
-      );
-    } else if (action === 'agent') {
-      prompts.push(`Fulfill this user helpdesk ticket: {{inquiry}}`);
-    }
-
-    if (action === 'rag' || action === 'agent') {
-      if (language === 'javascript') {
-        await writeFile({
-          file: 'context.js',
-          contents: JAVASCRIPT_VAR,
-          required: true,
-        });
-      } else {
-        await writeFile({
-          file: 'context.py',
-          contents: PYTHON_VAR,
-          required: true,
-        });
-      }
-    }
-
-    recordOnboardingStep('complete');
   } else {
     action = 'compare';
     language = 'not_sure';
