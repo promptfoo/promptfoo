@@ -49,7 +49,7 @@ export function StrategySection({
 
   return (
     <div className="mb-8">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Typography
             variant="subtitle"

@@ -46,7 +46,8 @@ export default function ConfigurationTab({
   const installationUnknown = installationStatus?.installed === null;
   const installationError = installationStatus?.error ?? null;
 
-  const scanButtonDisabled = isScanning || paths.length === 0 || isCheckingInstallation;
+  const scanButtonDisabled =
+    isScanning || paths.length === 0 || isCheckingInstallation || isNotInstalled;
 
   const getScanButtonText = () => {
     if (isScanning) {
@@ -72,7 +73,7 @@ export default function ConfigurationTab({
       return 'Checking if ModelAudit is installed...';
     }
     if (isNotInstalled) {
-      return 'Click to see installation instructions';
+      return 'Install ModelAudit to start a scan';
     }
     if (installationUnknown) {
       return 'Installation status will be verified when you click';
@@ -93,7 +94,7 @@ export default function ConfigurationTab({
         />
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Typography variant="pageTitle" as="h2">
           Select Models
         </Typography>
@@ -142,8 +143,8 @@ export default function ConfigurationTab({
         {error && (
           <Alert variant="destructive" className="mt-4">
             <AlertContent>
-              <AlertDescription className="flex items-center justify-between">
-                <span>{error}</span>
+              <AlertDescription className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0">{error}</span>
                 <Button type="button" variant="destructive" onClick={onClearError}>
                   Dismiss
                 </Button>

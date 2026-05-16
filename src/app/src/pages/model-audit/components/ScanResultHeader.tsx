@@ -17,6 +17,7 @@ interface ScanResultHeaderProps {
   createdAt: string;
   author?: string;
   severityCounts: SeverityCounts;
+  hasFindings?: boolean;
   /** Content rendered above the main header (e.g., back button, actions dropdown) */
   topBar?: ReactNode;
   /** Size variant for the scorecard */
@@ -29,10 +30,11 @@ export default function ScanResultHeader({
   createdAt,
   author,
   severityCounts,
+  hasFindings = severityCounts.critical > 0 || severityCounts.warning > 0,
   topBar,
   size = 'default',
 }: ScanResultHeaderProps) {
-  const isClean = severityCounts.critical === 0 && severityCounts.warning === 0;
+  const isClean = !hasFindings;
 
   return (
     <div

@@ -173,7 +173,10 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div
+        data-testid="framework-compliance-header"
+        className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
         <Typography variant="title" as="h2">
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
           {frameworksToShow.length})

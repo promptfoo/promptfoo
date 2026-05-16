@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
@@ -182,10 +182,13 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       let imageData = config.input_reference;
       if (config.input_reference.startsWith('file://')) {
         const filePath = config.input_reference.slice(7);
-        if (fs.existsSync(filePath)) {
-          const buffer = fs.readFileSync(filePath);
+        try {
+          const buffer = await fs.readFile(filePath);
           imageData = buffer.toString('base64');
-        } else {
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw error;
+          }
           return {
             job: {} as OpenAiVideoJob,
             error: `Input reference file not found: ${filePath}`,
@@ -385,7 +388,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       const storage = getMediaStorage();
 
       // Read the cache mapping from filesystem to get thumbnail/spritesheet keys
-      const mapping = readCacheMapping(cacheKey);
+      const mapping = await readCacheMapping(cacheKey);
       const thumbnailKey = mapping?.thumbnailKey;
       const spritesheetKey = mapping?.spritesheetKey;
 
@@ -505,7 +508,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const cost = calculateVideoCost(model, seconds, false);
 
     // Store cache mapping for future lookups
-    storeCacheMapping(
+    await storeCacheMapping(
       cacheKey,
       videoRef.key,
       thumbnailRef?.key,

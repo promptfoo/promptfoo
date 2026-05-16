@@ -18,10 +18,12 @@ import {
 } from '@app/components/ui/dialog';
 import {
   AddIcon,
+  AlertTriangleIcon,
   CheckCircleIcon,
   DeleteIcon,
   ErrorIcon,
   HistoryIcon,
+  SearchIcon,
 } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -30,13 +32,14 @@ import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { type ListScansQuery, MODEL_AUDIT_SORT_FIELDS } from '../../../../types/api/modelAudit';
-import { useModelAuditHistoryStore } from '../model-audit/stores';
+import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import type { HistoricalScan } from '../model-audit/stores';
 
 export default function ModelAuditHistory() {
   const navigate = useNavigate();
+  const startNewScan = useModelAuditConfigStore((state) => state.startNewScan);
 
   const {
     historicalScans,
@@ -102,8 +105,9 @@ export default function ModelAuditHistory() {
   );
 
   const handleNewScan = useCallback(() => {
+    startNewScan();
     navigate(MODEL_AUDIT_ROUTES.SETUP);
-  }, [navigate]);
+  }, [navigate, startNewScan]);
 
   const handleDelete = useCallback(async () => {
     if (!scanToDelete) {
@@ -235,6 +239,7 @@ export default function ModelAuditHistory() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={`Delete ${row.original.name || `Unnamed scan ${row.original.id}`}`}
                 className="size-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -287,15 +292,19 @@ export default function ModelAuditHistory() {
         <Card className="overflow-hidden bg-white dark:bg-zinc-900">
           {historyError ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="text-4xl mb-4">⚠️</div>
-              <Typography variant="subtitle" as="h3" className="text-destructive mb-1">
+              <div className="mb-4 flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <AlertTriangleIcon className="size-6" />
+              </div>
+              <Typography variant="subtitle" as="h3" className="mb-1 text-destructive">
                 Error loading history
               </Typography>
               <p className="text-sm text-muted-foreground">{historyError}</p>
             </div>
           ) : totalCount === 0 && historicalScans.length === 0 && !isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
-              <div className="text-4xl">🔍</div>
+              <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <SearchIcon className="size-6" />
+              </div>
               <Typography variant="subtitle" as="h3">
                 No scan history found
               </Typography>
@@ -318,6 +327,7 @@ export default function ModelAuditHistory() {
               getRowId={(row) => row.id}
               rowDisplayMode="server-virtualized"
               maxHeight="70vh"
+              globalFilterLabel="Search scans"
               manualSorting
               sorting={tableSorting}
               onSortingChange={handleSortingChange}

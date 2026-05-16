@@ -2,7 +2,6 @@ import React from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
-import { Card } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES } from '@app/constants/routes';
@@ -28,7 +27,7 @@ import {
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import { Download } from 'lucide-react';
+import { Download, ScrollText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from '../utils/color';
 import { type TestResultStats } from './FrameworkComplianceUtils';
@@ -301,7 +300,8 @@ const TestSuites = ({
       {
         accessorKey: 'type',
         header: 'Type',
-        size: 180,
+        size: 200,
+        meta: { sticky: 'left' },
         accessorFn: (row) =>
           displayNameOverrides[row.pluginName as keyof typeof displayNameOverrides] || row.type,
         cell: ({ getValue }) => <span style={{ fontWeight: 500 }}>{getValue<string>()}</span>,
@@ -309,7 +309,7 @@ const TestSuites = ({
       {
         accessorKey: 'description',
         header: 'Description',
-        size: 220,
+        size: 230,
         cell: ({ getValue }) => (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -321,14 +321,22 @@ const TestSuites = ({
       },
       {
         accessorKey: 'riskScore',
-        header: 'Risk Score',
-        size: 100,
+        header: () => (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">Risk</span>
+            </TooltipTrigger>
+            <TooltipContent>Risk Score</TooltipContent>
+          </Tooltip>
+        ),
+        size: 110,
+        meta: { align: 'right' },
         cell: ({ row }) => {
           const value = row.original.riskScore;
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex cursor-help items-center gap-2">
+                <span className="flex cursor-help items-center justify-end gap-2 tabular-nums">
                   <span
                     className="size-3 rounded-full"
                     style={{ backgroundColor: getRiskScoreColor(value) }}
@@ -361,12 +369,13 @@ const TestSuites = ({
         accessorKey: 'complexityScore',
         header: 'Complexity',
         size: 100,
+        meta: { align: 'right' },
         cell: ({ row }) => {
           const value = row.original.complexityScore;
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help">{value.toFixed(0)}</span>
+                <span className="cursor-help tabular-nums">{value.toFixed(0)}</span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 <div className="space-y-1">
@@ -393,8 +402,17 @@ const TestSuites = ({
       },
       {
         accessorKey: 'successfulAttacks',
-        header: 'Successful Attacks',
-        size: 110,
+        header: () => (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">Succeeded</span>
+            </TooltipTrigger>
+            <TooltipContent>Successful Attacks</TooltipContent>
+          </Tooltip>
+        ),
+        size: 120,
+        meta: { align: 'right' },
+        cell: ({ getValue }) => <span className="tabular-nums">{getValue<number>()}</span>,
       },
       {
         accessorKey: 'attackSuccessRate',
@@ -406,13 +424,14 @@ const TestSuites = ({
             <TooltipContent>Attack Success Rate</TooltipContent>
           </Tooltip>
         ),
-        size: 80,
+        size: 88,
+        meta: { align: 'right' },
         cell: ({ row }) => {
           const value = row.original.attackSuccessRate;
           const passRateWithFilter = row.original.passRateWithFilter;
           const passRate = row.original.passRate;
           return (
-            <div>
+            <div className="tabular-nums">
               <strong>{formatASRForDisplay(value)}%</strong>
               {passRateWithFilter !== passRate && (
                 <>
@@ -426,7 +445,7 @@ const TestSuites = ({
       {
         accessorKey: 'severity',
         header: 'Severity',
-        size: 90,
+        size: 100,
         cell: ({ getValue }) => {
           const value = getValue<Severity>();
           return severityDisplayNames[value] || 'Unknown';
@@ -457,34 +476,42 @@ const TestSuites = ({
       {
         id: 'actions',
         header: 'Actions',
-        size: 100,
+        size: 72,
+        meta: { sticky: 'right' },
         enableSorting: false,
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => {
-                const pluginId = row.original.pluginName;
-                const plugin = pluginsById[pluginId];
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-label="View logs"
+                onClick={() => {
+                  const pluginId = row.original.pluginName;
+                  const plugin = pluginsById[pluginId];
 
-                const filterParam = encodeURIComponent(
-                  JSON.stringify([
-                    {
-                      type: plugin?.id === 'policy' ? 'policy' : 'plugin',
-                      operator: 'equals',
-                      value: pluginId,
-                    },
-                  ]),
-                );
+                  const filterParam = encodeURIComponent(
+                    JSON.stringify([
+                      {
+                        type: plugin?.id === 'policy' ? 'policy' : 'plugin',
+                        operator: 'equals',
+                        value: pluginId,
+                      },
+                    ]),
+                  );
 
-                // If ASR is 0, show passes
-                const mode = row.original.attackSuccessRate === 0 ? 'passes' : 'failures';
-                navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
-              }}
-            >
-              View logs
-            </Button>
-          </div>
+                  // If ASR is 0, show passes
+                  const mode = row.original.attackSuccessRate === 0 ? 'passes' : 'failures';
+                  navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
+                }}
+              >
+                <ScrollText className="size-4" />
+                <span className="sr-only">View logs</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View logs</TooltipContent>
+          </Tooltip>
         ),
       },
     ],
@@ -492,8 +519,11 @@ const TestSuites = ({
   );
 
   return (
-    <div ref={vulnerabilitiesDataGridRef}>
-      <div className="mb-4 flex items-center justify-between">
+    <div ref={vulnerabilitiesDataGridRef} className="min-w-0">
+      <div
+        data-testid="vulnerabilities-header"
+        className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
         <Typography variant="title" as="h2">
           Vulnerabilities and Mitigations
         </Typography>
@@ -502,19 +532,18 @@ const TestSuites = ({
           Export vulnerabilities to CSV
         </Button>
       </div>
-      <Card className="pb-4">
-        <DataTable
-          columns={columns}
-          data={rows}
-          initialSorting={sortModel}
-          onExportCSV={exportToCSV}
-          showToolbar={true}
-          showColumnToggle={true}
-          showFilter={true}
-          showExport={false}
-          getRowId={(row) => row.id}
-        />
-      </Card>
+      <DataTable
+        className="[&_td]:py-2.5 [&_th]:py-2.5"
+        columns={columns}
+        data={rows}
+        initialSorting={sortModel}
+        onExportCSV={exportToCSV}
+        showToolbar={true}
+        showColumnToggle={true}
+        showFilter={true}
+        showExport={false}
+        getRowId={(row) => row.id}
+      />
     </div>
   );
 };

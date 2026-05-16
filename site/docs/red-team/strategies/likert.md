@@ -58,5 +58,4 @@ Provide examples of both score 1 and score 2 responses to demonstrate the scorin
 - [Citation Strategy](citation.md) - Similar academic framing approach
 - [Iterative Jailbreaks](iterative.md) - Advanced single-turn agent-based jailbreak
 - [Composite Jailbreaks](composite-jailbreaks.md) - Can be combined for enhanced testing
-
-For more information on LLM vulnerabilities and testing strategies, see our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) guide.
+- [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
