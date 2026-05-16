@@ -28,10 +28,7 @@ const SectionHeader = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-const SettingsPanel = ({
-  resultsTableZoom,
-  onResultsTableZoomChange,
-}: SettingsPanelProps) => {
+const SettingsPanel = ({ resultsTableZoom, onResultsTableZoomChange }: SettingsPanelProps) => {
   const {
     stickyHeader,
     setStickyHeader,
@@ -168,10 +165,7 @@ const SettingsPanel = ({
         <div className="mt-3">
           <div className="mb-3 flex items-center justify-between gap-3">
             <span className="text-[0.8125rem] leading-normal">Zoom</span>
-            <Select
-              value={String(resultsTableZoom)}
-              onValueChange={handleResultsTableZoomChange}
-            >
+            <Select value={String(resultsTableZoom)} onValueChange={handleResultsTableZoomChange}>
               <SelectTrigger aria-label="Results zoom" className="h-8 w-[110px] text-xs">
                 {Math.round(resultsTableZoom * 100)}%
               </SelectTrigger>
