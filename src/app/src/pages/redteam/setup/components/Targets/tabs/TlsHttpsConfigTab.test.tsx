@@ -255,6 +255,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             caPath: '/etc/ssl/custom-ca.pem',
           },
         },
@@ -297,6 +298,7 @@ describe('TlsHttpsConfigTab', () => {
         id: 'http-provider',
         config: {
           tls: {
+            rejectUnauthorized: true,
             cert: '-----BEGIN CERTIFICATE-----',
             key: '-----BEGIN PRIVATE KEY-----',
           },
@@ -329,7 +331,7 @@ describe('TlsHttpsConfigTab', () => {
         <TlsHttpsConfigTab
           selectedTarget={{
             id: 'http-provider-b',
-            config: { tls: { caPath: '/etc/ssl/custom-ca.pem' } },
+            config: { tls: { rejectUnauthorized: true, caPath: '/etc/ssl/custom-ca.pem' } },
           }}
           updateCustomTarget={mockUpdateCustomTarget}
         />,
