@@ -285,151 +285,185 @@ export class GoogleProvider extends GoogleGenericProvider {
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
-    // Merge configs from the provider and the prompt
     const config = mergeGoogleCompletionOptions(
       this.config,
       context?.prompt?.config as Partial<CompletionOptions> | undefined,
     );
+    const body = await this.buildGeminiRequestBody(prompt, config, context);
+    const requestResult = await this.requestGeminiResponse(body, config);
+    if (this.isProviderErrorResponse(requestResult)) {
+      return requestResult;
+    }
+    return this.parseGeminiResponse(requestResult.data, requestResult.cached, config, context);
+  }
 
+  private async buildGeminiRequestBody(
+    prompt: string,
+    config: CompletionOptions,
+    context?: CallApiContextParams,
+  ): Promise<Record<string, any>> {
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       config.systemInstruction,
       { useAssistantRole: config.useAssistantRole },
     );
-
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
-    // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context, {
-      skipExecutableToolFiles: toolsDisabled,
-    });
+    const allTools = await this.getAllTools(context, { skipExecutableToolFiles: toolsDisabled });
     const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
-
     const body: Record<string, any> = {
       contents,
-      generationConfig: {
-        ...(config.temperature !== undefined && { temperature: config.temperature }),
-        ...(config.topP !== undefined && { topP: config.topP }),
-        ...(config.topK !== undefined && { topK: config.topK }),
-        ...(config.stopSequences !== undefined && { stopSequences: config.stopSequences }),
-        ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
-        ...config.generationConfig,
-      },
+      generationConfig: this.buildGenerationConfig(config),
       safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(toolConfig ? { toolConfig } : {}),
       ...(requestTools.length > 0 ? { tools: requestTools } : {}),
-      // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
-      ...(systemInstruction
-        ? this.isVertexMode
-          ? { systemInstruction }
-          : { system_instruction: systemInstruction }
-        : {}),
+      ...(systemInstruction ? this.buildSystemInstruction(systemInstruction) : {}),
     };
+    this.applyResponseSchema(body, config, context);
+    return body;
+  }
 
-    // Handle response schema
-    if (config.responseSchema) {
-      if (body.generationConfig.response_schema) {
-        throw new Error(
-          '`responseSchema` provided but `generationConfig.response_schema` already set.',
-        );
-      }
+  private buildGenerationConfig(config: CompletionOptions) {
+    return {
+      ...(config.temperature !== undefined && { temperature: config.temperature }),
+      ...(config.topP !== undefined && { topP: config.topP }),
+      ...(config.topK !== undefined && { topK: config.topK }),
+      ...(config.stopSequences !== undefined && { stopSequences: config.stopSequences }),
+      ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
+      ...config.generationConfig,
+    };
+  }
 
-      let schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
-      );
+  private buildSystemInstruction(systemInstruction: unknown) {
+    return this.isVertexMode ? { systemInstruction } : { system_instruction: systemInstruction };
+  }
 
-      // Parse JSON string if it's a string
-      if (typeof schema === 'string') {
-        try {
-          schema = JSON.parse(schema);
-        } catch (error) {
-          throw new Error(`Invalid JSON in responseSchema: ${error}`);
-        }
-      }
-
-      // Apply variable substitution to the loaded schema
-      schema = renderVarsInObject(schema, context?.vars);
-
-      body.generationConfig.response_schema = schema;
-      body.generationConfig.response_mime_type = 'application/json';
+  private applyResponseSchema(
+    body: Record<string, any>,
+    config: CompletionOptions,
+    context?: CallApiContextParams,
+  ): void {
+    if (!config.responseSchema) {
+      return;
     }
+    if (body.generationConfig.response_schema) {
+      throw new Error(
+        '`responseSchema` provided but `generationConfig.response_schema` already set.',
+      );
+    }
+    body.generationConfig.response_schema = this.loadResponseSchema(config.responseSchema, context);
+    body.generationConfig.response_mime_type = 'application/json';
+  }
 
-    let data: GeminiApiResponse;
-    let cached = false;
+  private loadResponseSchema(responseSchema: unknown, context?: CallApiContextParams): unknown {
+    let schema = maybeLoadFromExternalFile(
+      renderVarsInObject(responseSchema as any, context?.vars),
+    );
+    if (typeof schema === 'string') {
+      try {
+        schema = JSON.parse(schema);
+      } catch (error) {
+        throw new Error(`Invalid JSON in responseSchema: ${error}`);
+      }
+    }
+    return renderVarsInObject(schema, context?.vars);
+  }
 
+  private async requestGeminiResponse(
+    body: Record<string, any>,
+    config: CompletionOptions,
+  ): Promise<{ data: GeminiApiResponse; cached: boolean } | ProviderResponse> {
     try {
       if (this.isVertexMode && !this.isExpressMode()) {
-        // Vertex AI OAuth mode
-        const client = await this.getClientWithCredentials();
-        const projectId = await this.getProjectId();
-        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
-
-        const res = await client.request({
-          url,
-          method: 'POST',
-          data: body,
-          timeout: getRequestTimeoutMs(),
-        });
-        data = res.data as GeminiApiResponse;
-      } else if (this.isVertexMode && this.isExpressMode()) {
-        // Vertex AI express mode (API key)
-        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
-
-        const res = await fetchWithProxy(url, {
-          method: 'POST',
-          headers: await this.getAuthHeaders(),
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(getRequestTimeoutMs()),
-        });
-
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => null);
-          logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
-          return {
-            error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
-          };
-        }
-
-        data = (await res.json()) as GeminiApiResponse;
-      } else {
-        // AI Studio mode
-        const endpoint = this.getApiEndpoint('generateContent');
-        const headers = await this.getAuthHeaders();
-        const authDiscriminator = createAuthCacheDiscriminator(headers);
-        const result = await fetchWithCache(
-          endpoint,
-          {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-            // Include auth discriminator in cache key to prevent cross-tenant cache sharing
-            ...(authDiscriminator && { _authHash: authDiscriminator }),
-          } as RequestInit,
-          getRequestTimeoutMs(),
-          'json',
-          false,
-        );
-        data = result.data as GeminiApiResponse;
-        cached = result.cached;
+        return { data: await this.requestVertexOauth(body, config), cached: false };
       }
+      if (this.isVertexMode) {
+        return await this.requestVertexExpress(body, config);
+      }
+      return await this.requestAiStudio(body);
     } catch (err) {
-      const geminiError = err as GaxiosError;
-      if (geminiError.response?.data?.[0]?.error) {
-        const errorDetails = geminiError.response.data[0].error;
-        logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
-        return {
-          error: `API call error: Status ${errorDetails.status}, Code ${errorDetails.code}, Message:\n\n${errorDetails.message}`,
-        };
-      }
+      return this.formatGeminiRequestError(err);
+    }
+  }
+
+  private async requestVertexOauth(
+    body: Record<string, any>,
+    config: CompletionOptions,
+  ): Promise<GeminiApiResponse> {
+    const client = await this.getClientWithCredentials();
+    const projectId = await this.getProjectId();
+    const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+    const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+    const res = await client.request({
+      url,
+      method: 'POST',
+      data: body,
+      timeout: getRequestTimeoutMs(),
+    });
+    return res.data as GeminiApiResponse;
+  }
+
+  private async requestVertexExpress(
+    body: Record<string, any>,
+    config: CompletionOptions,
+  ): Promise<{ data: GeminiApiResponse; cached: boolean } | ProviderResponse> {
+    const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+    const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+    const res = await fetchWithProxy(url, {
+      method: 'POST',
+      headers: await this.getAuthHeaders(),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(getRequestTimeoutMs()),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
       return {
-        error: `API call error: ${String(err)}`,
+        error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
       };
     }
+    return { data: (await res.json()) as GeminiApiResponse, cached: false };
+  }
 
-    // Parse response
-    return this.parseGeminiResponse(data, cached, config, context);
+  private async requestAiStudio(
+    body: Record<string, any>,
+  ): Promise<{ data: GeminiApiResponse; cached: boolean } | ProviderResponse> {
+    const headers = await this.getAuthHeaders();
+    const authDiscriminator = createAuthCacheDiscriminator(headers);
+    const result = await fetchWithCache(
+      this.getApiEndpoint('generateContent'),
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        ...(authDiscriminator && { _authHash: authDiscriminator }),
+      } as RequestInit,
+      getRequestTimeoutMs(),
+      'json',
+      false,
+    );
+    if (!result) {
+      return { error: 'API call error: Empty response from Google API' };
+    }
+    return { data: result.data as GeminiApiResponse, cached: result.cached };
+  }
+
+  private formatGeminiRequestError(err: unknown): ProviderResponse {
+    const geminiError = err as GaxiosError;
+    if (geminiError.response?.data?.[0]?.error) {
+      const errorDetails = geminiError.response.data[0].error;
+      logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+      return {
+        error: `API call error: Status ${errorDetails.status}, Code ${errorDetails.code}, Message:\n\n${errorDetails.message}`,
+      };
+    }
+    return { error: `API call error: ${String(err)}` };
+  }
+
+  private isProviderErrorResponse(
+    value: { data: GeminiApiResponse; cached: boolean } | ProviderResponse,
+  ): value is ProviderResponse {
+    return 'error' in value && !('data' in value);
   }
 
   /**
@@ -443,214 +477,249 @@ export class GoogleProvider extends GoogleGenericProvider {
   ): Promise<ProviderResponse> {
     try {
       const { toolsDisabled } = resolveGoogleToolConfig(config);
-
-      // Normalize response: non-streaming returns single object, streaming returns array
       const normalizedData = Array.isArray(data) ? data : [data];
-
-      // Check for error response
       const dataWithError = normalizedData as GeminiErrorResponse[];
       const error = dataWithError[0]?.error;
       if (error) {
         return { error: `Error ${error.code}: ${error.message}` };
       }
-
       const dataWithResponse = normalizedData as GeminiResponseData[];
-      let output;
-
-      for (const datum of dataWithResponse) {
-        // Check for blockReason first
-        if (datum.promptFeedback?.blockReason) {
-          const isModelArmor = datum.promptFeedback.blockReason === 'MODEL_ARMOR';
-          const blockReasonMessage =
-            datum.promptFeedback.blockReasonMessage ||
-            `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
-
-          const tokenUsage = {
-            total: datum.usageMetadata?.totalTokenCount || 0,
-            prompt: datum.usageMetadata?.promptTokenCount || 0,
-            completion: datum.usageMetadata?.candidatesTokenCount || 0,
-          };
-
-          const guardrails: GuardrailResponse = {
-            flagged: true,
-            flaggedInput: true,
-            flaggedOutput: false,
-            reason: blockReasonMessage,
-          };
-
-          return {
-            output: blockReasonMessage,
-            tokenUsage,
-            guardrails,
-            metadata: {
-              modelArmor: isModelArmor
-                ? {
-                    blockReason: datum.promptFeedback.blockReason,
-                    ...(datum.promptFeedback.blockReasonMessage && {
-                      blockReasonMessage: datum.promptFeedback.blockReasonMessage,
-                    }),
-                  }
-                : undefined,
-            },
-          };
-        }
-
-        const candidate = getCandidate(datum);
-        const safetyFinishReasons = [
-          'SAFETY',
-          'PROHIBITED_CONTENT',
-          'RECITATION',
-          'BLOCKLIST',
-          'SPII',
-          'IMAGE_SAFETY',
-        ];
-
-        if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
-          const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
-          const tokenUsage = {
-            total: datum.usageMetadata?.totalTokenCount || 0,
-            prompt: datum.usageMetadata?.promptTokenCount || 0,
-            completion: datum.usageMetadata?.candidatesTokenCount || 0,
-          };
-          const guardrails: GuardrailResponse = {
-            flagged: true,
-            flaggedInput: false,
-            flaggedOutput: true,
-            reason: finishReason,
-          };
-          return { output: finishReason, tokenUsage, guardrails };
-        } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
-          // MAX_TOKENS is treated as a successful completion
-          if (candidate.content?.parts) {
-            output = formatCandidateContents(candidate);
-          }
-        } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-          return {
-            error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
-          };
-        } else if (candidate.content?.parts) {
-          output = formatCandidateContents(candidate);
-        } else {
-          return {
-            error: `No output found in response: ${JSON.stringify(data)}`,
-          };
-        }
+      const outputResult = this.extractGeminiOutput(dataWithResponse, data);
+      if ('error' in outputResult || 'guardrails' in outputResult) {
+        return outputResult;
       }
 
       const lastData = dataWithResponse[dataWithResponse.length - 1];
-      const tokenUsage: TokenUsage = cached
-        ? {
-            cached: lastData.usageMetadata?.totalTokenCount,
-            total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 0,
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
-          }
-        : {
-            prompt: lastData.usageMetadata?.promptTokenCount,
-            completion: lastData.usageMetadata?.candidatesTokenCount,
-            total: lastData.usageMetadata?.totalTokenCount,
-            numRequests: 1,
-            ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
-              completionDetails: {
-                reasoning: lastData.usageMetadata.thoughtsTokenCount,
-                acceptedPrediction: 0,
-                rejectedPrediction: 0,
-              },
-            }),
-          };
-
-      let guardrails: GuardrailResponse | undefined;
-      const candidate = getCandidate(lastData);
-      if (lastData.promptFeedback?.safetyRatings || candidate.safetyRatings) {
-        const flaggedInput = lastData.promptFeedback?.safetyRatings?.some(
-          (r) => r.probability !== 'NEGLIGIBLE',
-        );
-        const flaggedOutput = candidate.safetyRatings?.some((r) => r.probability !== 'NEGLIGIBLE');
-        const flagged = flaggedInput || flaggedOutput;
-        guardrails = { flaggedInput, flaggedOutput, flagged };
-      }
-
-      // Extract grounding metadata
-      const candidateWithMetadata = dataWithResponse
-        .map((datum) => getCandidate(datum))
-        .find(
-          (c) =>
-            c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
-        );
-
-      // Include thinking tokens in output cost - Google bills them as output tokens
-      const completionForCost =
-        tokenUsage.completion == null
-          ? undefined
-          : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
-      const cost = cached
-        ? undefined
-        : calculateGoogleCost(
-            this.modelName,
-            config,
-            tokenUsage.prompt,
-            completionForCost,
-            this.isVertexMode,
-          );
-
+      const tokenUsage = this.buildGeminiTokenUsage(lastData, cached);
+      const guardrails = this.buildGeminiGuardrails(lastData);
+      const candidateWithMetadata = this.findGroundedCandidate(dataWithResponse);
       const response: ProviderResponse = {
-        output,
+        output: outputResult.output,
         tokenUsage,
-        cost,
+        cost: this.calculateGeminiCost(tokenUsage, lastData, config, cached),
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
-        metadata: {
-          ...(candidateWithMetadata?.groundingMetadata && {
-            groundingMetadata: candidateWithMetadata.groundingMetadata,
-          }),
-          ...(candidateWithMetadata?.groundingChunks && {
-            groundingChunks: candidateWithMetadata.groundingChunks,
-          }),
-          ...(candidateWithMetadata?.groundingSupports && {
-            groundingSupports: candidateWithMetadata.groundingSupports,
-          }),
-          ...(candidateWithMetadata?.webSearchQueries && {
-            webSearchQueries: candidateWithMetadata.webSearchQueries,
-          }),
-        },
+        metadata: this.buildGeminiMetadata(candidateWithMetadata),
       };
 
-      // Handle function tool callbacks
-      if (!toolsDisabled && config.functionToolCallbacks && typeof output === 'string') {
-        try {
-          const parsed = JSON.parse(output);
-          if (parsed.functionCall) {
-            const functionName = parsed.functionCall.name;
-            if (config.functionToolCallbacks[functionName]) {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                JSON.stringify(
-                  typeof parsed.functionCall.args === 'string'
-                    ? JSON.parse(parsed.functionCall.args)
-                    : parsed.functionCall.args,
-                ),
-                config,
-              );
-              response.output = functionResult;
-            }
-          }
-        } catch {
-          // Not JSON or no function call, ignore
-        }
-      }
-
+      await this.applyGeminiFunctionCallback(response, config, toolsDisabled);
       return response;
     } catch (err) {
       return {
         error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
+    }
+  }
+
+  private extractGeminiOutput(
+    data: GeminiResponseData[],
+    rawData: GeminiApiResponse,
+  ): { output: unknown } | ProviderResponse {
+    let output: unknown;
+    for (const datum of data) {
+      const blockedPrompt = this.getBlockedPromptResponse(datum);
+      if (blockedPrompt) {
+        return blockedPrompt;
+      }
+      const candidate = getCandidate(datum);
+      const blockedCandidate = this.getBlockedCandidateResponse(candidate, datum);
+      if (blockedCandidate) {
+        return blockedCandidate;
+      }
+      if (
+        candidate.finishReason &&
+        candidate.finishReason !== 'STOP' &&
+        candidate.finishReason !== 'MAX_TOKENS'
+      ) {
+        return { error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(rawData)}` };
+      }
+      if (!candidate.content?.parts) {
+        return { error: `No output found in response: ${JSON.stringify(rawData)}` };
+      }
+      output = formatCandidateContents(candidate);
+    }
+    return { output };
+  }
+
+  private getBlockedPromptResponse(datum: GeminiResponseData): ProviderResponse | undefined {
+    if (!datum.promptFeedback?.blockReason) {
+      return undefined;
+    }
+    const isModelArmor = datum.promptFeedback.blockReason === 'MODEL_ARMOR';
+    const blockReasonMessage =
+      datum.promptFeedback.blockReasonMessage ||
+      `Content was blocked due to ${isModelArmor ? 'Model Armor' : 'safety settings'}: ${datum.promptFeedback.blockReason}`;
+    return {
+      output: blockReasonMessage,
+      tokenUsage: this.buildBlockedTokenUsage(datum),
+      guardrails: {
+        flagged: true,
+        flaggedInput: true,
+        flaggedOutput: false,
+        reason: blockReasonMessage,
+      },
+      metadata: {
+        modelArmor: isModelArmor
+          ? {
+              blockReason: datum.promptFeedback.blockReason,
+              ...(datum.promptFeedback.blockReasonMessage && {
+                blockReasonMessage: datum.promptFeedback.blockReasonMessage,
+              }),
+            }
+          : undefined,
+      },
+    };
+  }
+
+  private getBlockedCandidateResponse(
+    candidate: ReturnType<typeof getCandidate>,
+    datum: GeminiResponseData,
+  ): ProviderResponse | undefined {
+    const safetyFinishReasons = [
+      'SAFETY',
+      'PROHIBITED_CONTENT',
+      'RECITATION',
+      'BLOCKLIST',
+      'SPII',
+      'IMAGE_SAFETY',
+    ];
+    if (!candidate.finishReason || !safetyFinishReasons.includes(candidate.finishReason)) {
+      return undefined;
+    }
+    const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
+    return {
+      output: finishReason,
+      tokenUsage: this.buildBlockedTokenUsage(datum),
+      guardrails: {
+        flagged: true,
+        flaggedInput: false,
+        flaggedOutput: true,
+        reason: finishReason,
+      },
+    };
+  }
+
+  private buildBlockedTokenUsage(datum: GeminiResponseData) {
+    return {
+      total: datum.usageMetadata?.totalTokenCount || 0,
+      prompt: datum.usageMetadata?.promptTokenCount || 0,
+      completion: datum.usageMetadata?.candidatesTokenCount || 0,
+    };
+  }
+
+  private buildGeminiTokenUsage(lastData: GeminiResponseData, cached: boolean): TokenUsage {
+    const completionDetails =
+      lastData.usageMetadata?.thoughtsTokenCount === undefined
+        ? {}
+        : {
+            completionDetails: {
+              reasoning: lastData.usageMetadata.thoughtsTokenCount,
+              acceptedPrediction: 0,
+              rejectedPrediction: 0,
+            },
+          };
+    return cached
+      ? {
+          cached: lastData.usageMetadata?.totalTokenCount,
+          total: lastData.usageMetadata?.totalTokenCount,
+          numRequests: 0,
+          ...completionDetails,
+        }
+      : {
+          prompt: lastData.usageMetadata?.promptTokenCount,
+          completion: lastData.usageMetadata?.candidatesTokenCount,
+          total: lastData.usageMetadata?.totalTokenCount,
+          numRequests: 1,
+          ...completionDetails,
+        };
+  }
+
+  private buildGeminiGuardrails(lastData: GeminiResponseData): GuardrailResponse | undefined {
+    const candidate = getCandidate(lastData);
+    if (!lastData.promptFeedback?.safetyRatings && !candidate.safetyRatings) {
+      return undefined;
+    }
+    const flaggedInput = lastData.promptFeedback?.safetyRatings?.some(
+      (rating) => rating.probability !== 'NEGLIGIBLE',
+    );
+    const flaggedOutput = candidate.safetyRatings?.some(
+      (rating) => rating.probability !== 'NEGLIGIBLE',
+    );
+    return { flaggedInput, flaggedOutput, flagged: flaggedInput || flaggedOutput };
+  }
+
+  private findGroundedCandidate(data: GeminiResponseData[]) {
+    return data
+      .map((datum) => getCandidate(datum))
+      .find(
+        (candidate) =>
+          candidate.groundingMetadata ||
+          candidate.groundingChunks ||
+          candidate.groundingSupports ||
+          candidate.webSearchQueries,
+      );
+  }
+
+  private calculateGeminiCost(
+    tokenUsage: TokenUsage,
+    lastData: GeminiResponseData,
+    config: CompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    if (cached) {
+      return undefined;
+    }
+    const completionForCost =
+      tokenUsage.completion == null
+        ? undefined
+        : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
+    return calculateGoogleCost(
+      this.modelName,
+      config,
+      tokenUsage.prompt,
+      completionForCost,
+      this.isVertexMode,
+    );
+  }
+
+  private buildGeminiMetadata(candidate: ReturnType<typeof getCandidate> | undefined) {
+    return {
+      ...(candidate?.groundingMetadata && { groundingMetadata: candidate.groundingMetadata }),
+      ...(candidate?.groundingChunks && { groundingChunks: candidate.groundingChunks }),
+      ...(candidate?.groundingSupports && { groundingSupports: candidate.groundingSupports }),
+      ...(candidate?.webSearchQueries && { webSearchQueries: candidate.webSearchQueries }),
+    };
+  }
+
+  private async applyGeminiFunctionCallback(
+    response: ProviderResponse,
+    config: CompletionOptions,
+    toolsDisabled: boolean,
+  ): Promise<void> {
+    if (toolsDisabled || !config.functionToolCallbacks || typeof response.output !== 'string') {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(response.output);
+      if (!parsed.functionCall) {
+        return;
+      }
+      const functionName = parsed.functionCall.name;
+      if (!config.functionToolCallbacks[functionName]) {
+        return;
+      }
+      const args =
+        typeof parsed.functionCall.args === 'string'
+          ? JSON.parse(parsed.functionCall.args)
+          : parsed.functionCall.args;
+      response.output = await this.executeFunctionCallback(
+        functionName,
+        JSON.stringify(args),
+        config,
+      );
+    } catch {
+      // Not JSON or no function call, ignore
     }
   }
 
