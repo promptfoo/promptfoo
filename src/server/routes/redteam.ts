@@ -11,7 +11,7 @@ import {
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
-import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
@@ -368,6 +368,11 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
   }
 
   const { taskId } = paramsResult.data;
+  if (neverGenerateRemote()) {
+    res.status(400).json({ success: false, error: 'Requires remote generation be enabled.' });
+    return;
+  }
+
   const cloudFunctionUrl = getRemoteGenerationUrl();
   logger.debug(`Received ${taskId} task request`, {
     method: req.method,
