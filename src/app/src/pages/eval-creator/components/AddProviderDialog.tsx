@@ -183,94 +183,62 @@ export function getProviderTypeFromId(id: string | undefined): string | undefine
     return undefined;
   }
 
-  if (id.startsWith('openai:')) {
-    return 'openai';
+  const prefixMatches: Array<[string, string]> = [
+    ['openai:', 'openai'],
+    ['anthropic:', 'anthropic'],
+    ['bedrock:', 'bedrock'],
+    ['bedrock-agent:', 'bedrock-agent'],
+    ['azure:', 'azure'],
+    ['vertex:', 'vertex'],
+    ['google:', 'google'],
+    ['mistral:', 'mistral'],
+    ['openrouter:', 'openrouter'],
+    ['groq:', 'groq'],
+    ['deepseek:', 'deepseek'],
+    ['perplexity:', 'perplexity'],
+    ['exec:', 'exec'],
+  ];
+  const prefixedProvider = prefixMatches.find(([prefix]) => id.startsWith(prefix));
+  if (prefixedProvider) {
+    return prefixedProvider[1];
   }
-  if (id.startsWith('anthropic:')) {
-    return 'anthropic';
+
+  const exactMatches = new Set(['http', 'websocket', 'browser', 'mcp']);
+  if (exactMatches.has(id)) {
+    return id;
   }
-  if (id.startsWith('bedrock:')) {
-    return 'bedrock';
-  }
-  if (id.startsWith('bedrock-agent:')) {
-    return 'bedrock-agent';
-  }
-  if (id.startsWith('azure:')) {
-    return 'azure';
-  }
-  if (id.startsWith('vertex:')) {
-    return 'vertex';
-  }
-  if (id.startsWith('google:')) {
-    return 'google';
-  }
-  if (id.startsWith('mistral:')) {
-    return 'mistral';
-  }
-  if (id.startsWith('openrouter:')) {
-    return 'openrouter';
-  }
-  if (id.startsWith('groq:')) {
-    return 'groq';
-  }
-  if (id.startsWith('deepseek:')) {
-    return 'deepseek';
-  }
-  if (id.startsWith('perplexity:')) {
-    return 'perplexity';
-  }
-  if (id === 'http') {
-    return 'http';
-  }
-  if (id === 'websocket') {
-    return 'websocket';
-  }
-  if (id === 'browser') {
-    return 'browser';
-  }
-  if (id === 'mcp') {
-    return 'mcp';
-  }
-  if (id.startsWith('exec:')) {
-    return 'exec';
-  }
+
   if (id.startsWith('file://')) {
-    if (id.includes('.py')) {
-      return 'python';
-    }
-    if (id.includes('.js')) {
-      return 'javascript';
-    }
-    if (id.includes('.go')) {
-      return 'go';
-    }
-    // Check for agent frameworks
-    if (id.includes('langchain')) {
-      return 'langchain';
-    }
-    if (id.includes('autogen')) {
-      return 'autogen';
-    }
-    if (id.includes('crewai')) {
-      return 'crewai';
-    }
-    if (id.includes('llamaindex')) {
-      return 'llamaindex';
-    }
-    if (id.includes('langgraph')) {
-      return 'langgraph';
-    }
-    if (id.includes('openai_agents') || id.includes('openai-agents')) {
-      return 'openai-agents-sdk';
-    }
-    if (id.includes('pydantic_ai') || id.includes('pydantic-ai')) {
-      return 'pydantic-ai';
-    }
-    if (id.includes('google_adk') || id.includes('google-adk')) {
-      return 'google-adk';
-    }
-    return 'generic-agent';
+    return getFileProviderType(id);
   }
 
   return 'custom';
+}
+
+function getFileProviderType(id: string): string {
+  const scriptMatches: Array<[string, string]> = [
+    ['.py', 'python'],
+    ['.js', 'javascript'],
+    ['.go', 'go'],
+  ];
+  const scriptType = scriptMatches.find(([needle]) => id.includes(needle));
+  if (scriptType) {
+    return scriptType[1];
+  }
+
+  const frameworkMatches: Array<[string[], string]> = [
+    [['langchain'], 'langchain'],
+    [['autogen'], 'autogen'],
+    [['crewai'], 'crewai'],
+    [['llamaindex'], 'llamaindex'],
+    [['langgraph'], 'langgraph'],
+    [['openai_agents', 'openai-agents'], 'openai-agents-sdk'],
+    [['pydantic_ai', 'pydantic-ai'], 'pydantic-ai'],
+    [['google_adk', 'google-adk'], 'google-adk'],
+  ];
+  const frameworkType = frameworkMatches.find(([needles]) =>
+    needles.some((needle) => id.includes(needle)),
+  );
+
+  return frameworkType?.[1] || 'generic-agent';
 }
