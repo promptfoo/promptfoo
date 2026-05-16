@@ -157,12 +157,12 @@ _Note: Even the "best" models fail nearly 1 in 5 times. In security terms, a 20%
 
 **Per-category breakdown** (GPT-5.2, results vary between runs):
 
-| Attack Category        | ASR       | Why                                            |
-| ---------------------- | --------- | ---------------------------------------------- |
-| Protocol Override      | ~100%     | Model follows the "most specific" instruction  |
-| Answer Smuggling       | 25-50%    | Stochastic—model may or may not find decoy     |
-| Format Impersonation   | 0-25%     | Modern models resist fake verdict structures   |
-| Direct Injection       | ~0%       | "Ignore instructions" is reliably blocked      |
+| Attack Category      | ASR    | Why                                           |
+| -------------------- | ------ | --------------------------------------------- |
+| Protocol Override    | ~100%  | Model follows the "most specific" instruction |
+| Answer Smuggling     | 25-50% | Stochastic—model may or may not find decoy    |
+| Format Impersonation | 0-25%  | Modern models resist fake verdict structures  |
+| Direct Injection     | ~0%    | "Ignore instructions" is reliably blocked     |
 
 Protocol Override is the most dangerous because it doesn't ask the model to ignore instructions—it redefines what to evaluate.
 

@@ -78,6 +78,7 @@ Per-category breakdown (GPT-5.2, results vary between runs):
 ## Configuration
 
 The main config (`promptfooconfig.yaml`) includes 18 tests:
+
 - 2 baseline tests (correct answers should pass)
 - 13 attack tests across 4 categories
 - 3 control tests (naive attacks that should be blocked)
