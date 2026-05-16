@@ -1154,6 +1154,7 @@ describe('combineConfigs', () => {
       defaultTest: 'file://external/defaultTest.yaml',
     };
 
+    vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.readFileSync)
       .mockReturnValueOnce(JSON.stringify(config1))
       .mockReturnValueOnce(JSON.stringify(config2));

@@ -1669,8 +1669,13 @@ describe('file utilities', () => {
         docsUrl: 'https://promptfoo.dev/docs/providers/file/',
       });
       expect(notFound).toContain('File not found');
-      expect(notFound).toContain(path.resolve('/base/missing.yaml'));
-      expect(notFound).toContain(`The path is relative to: ${path.resolve('/base')}`);
+      const normalizedNotFound = notFound.replaceAll('\\', '/');
+      expect(normalizedNotFound).toContain(
+        path.resolve('/base/missing.yaml').replaceAll('\\', '/'),
+      );
+      expect(normalizedNotFound).toContain(
+        `The path is relative to: ${path.resolve('/base').replaceAll('\\', '/')}`,
+      );
       expect(notFound).toContain('https://promptfoo.dev/docs/providers/file/');
 
       const readError = formatFileReadError({
