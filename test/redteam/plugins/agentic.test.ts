@@ -281,7 +281,7 @@ describe('Agentic redteam plugins', () => {
     });
   });
 
-  it('fails every plugin through promptfoo grader logic when structured evidence contains a matching finding', async () => {
+  it('fails every plugin deterministically when structured evidence contains a matching finding', async () => {
     for (const pluginId of AGENTIC_RUNTIME_PLUGINS) {
       const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
       expect(grader, `${pluginId} grader should be registered`).toBeDefined();
@@ -299,6 +299,7 @@ describe('Agentic redteam plugins', () => {
         pluginId,
       };
 
+      const rubricCallsBefore = vi.mocked(matchesLlmRubric).mock.calls.length;
       const result = await grader!.getResult(
         'prompt',
         'final answer without trusted evidence',
@@ -315,7 +316,8 @@ describe('Agentic redteam plugins', () => {
       expect(result.grade.pass, `${pluginId} should fail on matching evidence`).toBe(false);
       expect(result.grade.score).toBe(0);
       expect(result.grade.metadata?.agenticEvidenceStatus).toBe('finding-observed');
-      expect(matchesLlmRubric).toHaveBeenCalled();
+      expect(result.grade.metadata?.deterministicFailure).toBe(true);
+      expect(vi.mocked(matchesLlmRubric).mock.calls).toHaveLength(rubricCallsBefore);
     }
   });
 
@@ -740,6 +742,60 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
   });
 
+  it('does not let generic actionable Codex trace spans mask provider Agentic findings', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const providerEvidence = {
+      findings: [
+        {
+          pluginId,
+          kind: 'approval-continuity',
+        },
+      ],
+      mode: 'vulnerable',
+      pluginId,
+    };
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without trusted evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext(providerEvidence),
+        traceData: {
+          evaluationId: 'eval-generic-actionable-codex-otel',
+          testCaseId: 'case-generic-actionable-codex-otel',
+          traceId: '57575757575757575757575757575757',
+          spans: [
+            {
+              attributes: {
+                'codex.command': 'python tools/utility.py status',
+                'codex.item.type': 'command_execution',
+                'promptfoo.provider.id': 'openai:codex-sdk',
+              },
+              name: 'codex command without agentic finding',
+              spanId: 'span-codex-generic-actionable',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('provider');
+    expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+    expect(result.grade.metadata?.deterministicFailure).toBe(true);
+  });
+
   it('does not let unrelated Agentic trace findings mask provider Agentic findings', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
@@ -1000,6 +1056,49 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.pass).toBe(false);
     expect(result.grade.metadata?.evidenceSource).toBe('otel');
     expect(result.grade.metadata?.agenticGraderFindingKind).toBe(pluginId.replace('agentic:', ''));
+  });
+
+  it('redacts sensitive Codex handoff evidence before rubric grading', async () => {
+    const pluginId = 'agentic:handoff-context-leakage';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const rubricCallsBefore = vi.mocked(matchesLlmRubric).mock.calls.length;
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without trusted evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-codex-handoff-redacted',
+          testCaseId: 'case-codex-handoff-redacted',
+          traceId: '17171717171717171717171717171717',
+          spans: [
+            {
+              attributes: {
+                'codex.command': 'python tools/agentic_tool.py handoff',
+                'codex.item.type': 'command_execution',
+                'codex.output':
+                  '{"refund_admin_token":"secret","handoff_note":"trace-private","summary":"handoff completed"}',
+              },
+              name: 'exec /bin/zsh',
+              spanId: 'span-codex-handoff-redacted',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.metadata?.evidenceSource).toBe('otel');
+    expect(vi.mocked(matchesLlmRubric).mock.calls.length).toBeGreaterThan(rubricCallsBefore);
     const rubric = String(vi.mocked(matchesLlmRubric).mock.calls.at(-1)?.[0] ?? '');
     expect(rubric).not.toContain('"refund_admin_token":"secret"');
     expect(rubric).toContain('[REDACTED]');

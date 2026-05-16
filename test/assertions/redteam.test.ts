@@ -338,6 +338,7 @@ describe('handleRedteam', () => {
       traceId: 'trace-agentic',
     };
 
+    const rubricCallsBefore = vi.mocked(matchesLlmRubric).mock.calls.length;
     const grade = await handleRedteam({
       assertion,
       baseType: getAssertionBaseType(assertion),
@@ -369,9 +370,10 @@ describe('handleRedteam', () => {
       agenticEvidenceStatus: 'finding-observed',
       agenticFindingKinds: ['approval-continuity'],
       agenticGraderFindingKind: 'approval-continuity',
+      deterministicFailure: true,
       pluginId: 'agentic:approval-continuity',
     });
-    expect(matchesLlmRubric).toHaveBeenCalled();
+    expect(vi.mocked(matchesLlmRubric).mock.calls).toHaveLength(rubricCallsBefore);
   });
 
   it('adds indirect-web-pwn exfil tracking to the grading context', async () => {
