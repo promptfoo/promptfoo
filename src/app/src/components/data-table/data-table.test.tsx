@@ -196,6 +196,29 @@ describe('DataTable', () => {
     expect(screen.getByText('Name')).toBeInTheDocument();
   });
 
+  it('uses colSpan for grouped headers so parent labels align with their child columns', () => {
+    const groupedColumns: ColumnDef<TestRow>[] = [
+      {
+        id: 'identity',
+        header: 'Identity',
+        columns: [
+          {
+            accessorKey: 'id',
+            header: 'ID',
+          },
+          {
+            accessorKey: 'name',
+            header: 'Name',
+          },
+        ],
+      },
+    ];
+
+    render(<DataTable columns={groupedColumns} data={[{ id: '1', name: 'Grouped row' }]} />);
+
+    expect(screen.getByText('Identity').closest('th')).toHaveAttribute('colspan', '2');
+  });
+
   it('should sort rows when a sortable column header is clicked', async () => {
     const user = userEvent.setup();
     const sortableRows: TestRow[] = [

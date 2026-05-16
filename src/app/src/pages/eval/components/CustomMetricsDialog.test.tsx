@@ -1,3 +1,4 @@
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,6 +53,7 @@ const mockTableData: EvaluateTable = {
 describe('MetricsTable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useCustomPoliciesMap).mockReturnValue({});
     vi.mocked(useTableStore).mockReturnValue({
       table: mockTableData,
       config: {
@@ -124,6 +126,99 @@ describe('MetricsTable', () => {
     const dataTable = await screen.findByRole('table');
 
     expect(dataTable).toBeInTheDocument();
+  });
+
+  it('should label a single prompt group without rendering multi-prompt summary columns', async () => {
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(await screen.findByText('Prompt 1')).toBeInTheDocument();
+    expect(screen.getByText('Test Provider')).toBeInTheDocument();
+    expect(screen.getByText('Pass')).toBeInTheDocument();
+    expect(screen.getByText('Score')).toBeInTheDocument();
+    expect(screen.getByText('Count')).toBeInTheDocument();
+    expect(screen.queryByText('Summary')).not.toBeInTheDocument();
+    expect(screen.queryByText('Spread')).not.toBeInTheDocument();
+  });
+
+  it('should render summary metrics when multiple prompt columns are present', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      table: {
+        head: {
+          prompts: [
+            {
+              raw: 'Prompt A',
+              label: 'Prompt A',
+              provider: 'Provider A',
+              metrics: {
+                namedScores: {
+                  accuracy: 80,
+                },
+                namedScoresCount: {
+                  accuracy: 100,
+                },
+                cost: 0,
+                score: 0,
+                testPassCount: 0,
+                testFailCount: 0,
+                testErrorCount: 0,
+                assertPassCount: 0,
+                assertFailCount: 0,
+                totalLatencyMs: 0,
+                tokenUsage: {},
+              },
+            },
+            {
+              raw: 'Prompt B',
+              label: 'Prompt B',
+              provider: 'Provider B',
+              metrics: {
+                namedScores: {
+                  accuracy: 60,
+                },
+                namedScoresCount: {
+                  accuracy: 100,
+                },
+                cost: 0,
+                score: 0,
+                testPassCount: 0,
+                testFailCount: 0,
+                testErrorCount: 0,
+                assertPassCount: 0,
+                assertFailCount: 0,
+                totalLatencyMs: 0,
+                tokenUsage: {},
+              },
+            },
+          ],
+          vars: [],
+        },
+        body: [],
+      },
+      config: {
+        redteam: {
+          plugins: [],
+        },
+      },
+      addFilter: mockAddFilter,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+          metadata: [],
+        },
+      },
+    } as any);
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    expect(await screen.findByText('Provider A')).toBeInTheDocument();
+    expect(screen.getByText('Provider B')).toBeInTheDocument();
+    expect(screen.getByText('Summary')).toBeInTheDocument();
+    expect(screen.getByText('Avg. Pass')).toBeInTheDocument();
+    expect(screen.getByText('Spread')).toBeInTheDocument();
+    expect(screen.getByText('70.00%')).toBeInTheDocument();
+    expect(screen.getByText('20.00 pts')).toBeInTheDocument();
   });
 
   it('should return null when promptMetricNames is empty', () => {
