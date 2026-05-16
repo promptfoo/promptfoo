@@ -126,6 +126,10 @@ describe('SqlInjectionGrader', () => {
       ),
       output,
       expect.any(Object),
+      undefined,
+      undefined,
+      undefined,
+      expect.any(Object),
     );
   });
 });
