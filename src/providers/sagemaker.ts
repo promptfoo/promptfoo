@@ -327,6 +327,59 @@ abstract class SageMakerGenericProvider {
     }
   }
 
+  protected getDelayMs(context?: CallApiContextParams): number | undefined {
+    return context?.originalProvider?.delay || this.delay;
+  }
+
+  protected logTransformation(
+    label: 'Prompt' | 'Text',
+    original: string,
+    transformed: string,
+  ): void {
+    if (original === transformed) {
+      return;
+    }
+
+    logger.debug(
+      `${label} transformed for SageMaker ${label === 'Text' ? 'embedding ' : ''}endpoint ${this.getEndpointName()}`,
+    );
+    logger.debug(`Original: ${original.substring(0, 100)}${original.length > 100 ? '...' : ''}`);
+    logger.debug(
+      `Transformed: ${transformed.substring(0, 100)}${transformed.length > 100 ? '...' : ''}`,
+    );
+  }
+
+  protected async applyConfiguredDelay(
+    delayMs: number | undefined,
+    target: 'endpoint' | 'embedding endpoint',
+  ): Promise<void> {
+    if (!delayMs || delayMs <= 0) {
+      return;
+    }
+
+    logger.debug(
+      `Applying delay of ${delayMs}ms before calling SageMaker ${target} ${this.getEndpointName()}`,
+    );
+    await sleep(delayMs);
+  }
+
+  protected async resolveCache(getCacheFn?: typeof import('../cache').getCache) {
+    return getCacheFn ? getCacheFn() : import('../cache').then((module) => module.getCache());
+  }
+
+  protected async sendInvokeEndpointCommand(runtime: any, payload: string) {
+    const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
+    const command = new InvokeEndpointCommand({
+      EndpointName: this.getEndpointName(),
+      ContentType: this.getContentType(),
+      Accept: this.getAcceptType(),
+      Body: payload,
+    });
+    const startTime = Date.now();
+    const response = await runtime.send(command);
+    return { ...response, latencyMs: Date.now() - startTime };
+  }
+
   /**
    * Extracts data from a response using a path expression
    * Supports JavaScript expressions and file-based transforms
@@ -673,12 +726,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     context?: CallApiContextParams,
     _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
-
-    // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = context?.originalProvider?.delay || this.delay;
-
     const transformResult = await this.runTransformSafely(
       prompt,
       context,
@@ -689,152 +737,187 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     }
     const transformedPrompt = transformResult.value;
     const isTransformed = transformedPrompt !== prompt;
+    const bustCache = context?.bustCache ?? context?.debug === true;
 
-    if (isTransformed) {
-      logger.debug(`Prompt transformed for SageMaker endpoint ${this.getEndpointName()}`);
-      logger.debug(`Original: ${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}`);
-      logger.debug(
-        `Transformed: ${transformedPrompt.substring(0, 100)}${transformedPrompt.length > 100 ? '...' : ''}`,
-      );
+    this.logTransformation('Prompt', prompt, transformedPrompt);
+
+    const cachedResult = await this.getCachedCompletionResult(
+      transformedPrompt,
+      prompt,
+      isTransformed,
+      isCacheEnabled(),
+      bustCache,
+      getCache,
+    );
+    if (cachedResult) {
+      return cachedResult;
     }
 
-    // Check if we should use cache - use the transformed prompt for cache key
-    const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
-      const cacheKey = this.getCacheKey(transformedPrompt);
-      const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
+    await this.applyConfiguredDelay(this.getDelayMs(context), 'endpoint');
 
-      // Try to get from cache
-      const cachedResult = await cache.get<string>(cacheKey);
-      if (cachedResult) {
-        logger.debug(`Using cached SageMaker response for ${this.getEndpointName()}`);
+    const invocationResult = await this.invokeCompletionEndpoint(
+      transformedPrompt,
+      prompt,
+      isTransformed,
+    );
+    if (invocationResult.error) {
+      return invocationResult;
+    }
 
-        try {
-          // Parse the cached result
-          const parsedResult = JSON.parse(cachedResult) as ProviderResponse;
+    await this.cacheCompletionResult(
+      invocationResult,
+      transformedPrompt,
+      isCacheEnabled(),
+      bustCache,
+      getCache,
+    );
+    return invocationResult;
+  }
 
-          // Add cache flag to token usage
-          if (parsedResult.tokenUsage) {
-            parsedResult.tokenUsage.cached = parsedResult.tokenUsage.total || 0;
-          }
+  private async getCachedCompletionResult(
+    transformedPrompt: string,
+    originalPrompt: string,
+    isTransformed: boolean,
+    cacheEnabled: boolean,
+    bustCache: boolean,
+    getCacheFn?: typeof import('../cache').getCache,
+  ): Promise<ProviderResponse | undefined> {
+    if (!cacheEnabled || bustCache) {
+      return undefined;
+    }
 
-          // Add metadata about transformation if prompt was transformed
-          if (isTransformed && parsedResult.metadata) {
-            parsedResult.metadata.transformed = true;
-            parsedResult.metadata.originalPrompt = prompt;
-          }
+    const cacheKey = this.getCacheKey(transformedPrompt);
+    const cache = await this.resolveCache(getCacheFn);
+    const cachedResult = await cache.get<string>(cacheKey);
+    if (!cachedResult) {
+      return undefined;
+    }
 
-          return { ...parsedResult, cached: true };
-        } catch (_) {
-          logger.warn(`Failed to parse cached SageMaker response: ${_}`);
-          // Continue with API call if parsing fails
-        }
+    logger.debug(`Using cached SageMaker response for ${this.getEndpointName()}`);
+    try {
+      const parsedResult = JSON.parse(cachedResult) as ProviderResponse;
+      if (parsedResult.tokenUsage) {
+        parsedResult.tokenUsage.cached = parsedResult.tokenUsage.total || 0;
       }
+      if (isTransformed && parsedResult.metadata) {
+        parsedResult.metadata.transformed = true;
+        parsedResult.metadata.originalPrompt = originalPrompt;
+      }
+      return { ...parsedResult, cached: true };
+    } catch (error) {
+      logger.warn(`Failed to parse cached SageMaker response: ${error}`);
+      return undefined;
     }
+  }
 
-    // Apply delay if specified and not using cached response
-    if (delayMs && delayMs > 0) {
-      logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${this.getEndpointName()}`,
-      );
-      await sleep(delayMs);
-    }
-
-    // Not in cache or cache disabled, make the actual API call
+  private async invokeCompletionEndpoint(
+    transformedPrompt: string,
+    originalPrompt: string,
+    isTransformed: boolean,
+  ): Promise<ProviderResponse> {
     const runtime = await this.getSageMakerRuntimeInstance();
     const payload = this.formatPayload(transformedPrompt);
 
     logger.debug(`Calling SageMaker endpoint ${this.getEndpointName()}`);
     logger.debug(
-      `With payload: ${payload.length > 1000 ? payload.substring(0, 1000) + '...' : payload}`,
+      `With payload: ${payload.length > 1000 ? `${payload.substring(0, 1000)}...` : payload}`,
     );
 
     try {
-      const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
-
-      const command = new InvokeEndpointCommand({
-        EndpointName: this.getEndpointName(),
-        ContentType: this.getContentType(),
-        Accept: this.getAcceptType(),
-        Body: payload,
-      });
-
-      const startTime = Date.now();
-      const response = await runtime.send(command);
-      const endTime = Date.now();
-      const _latency = endTime - startTime;
-
+      const response = await this.sendInvokeEndpointCommand(runtime, payload);
       if (!response.Body) {
         logger.error('No response body returned from SageMaker endpoint');
-        return {
-          error: 'No response body returned from SageMaker endpoint',
-        };
+        return { error: 'No response body returned from SageMaker endpoint' };
       }
 
       const responseBody = new TextDecoder().decode(response.Body);
       logger.debug(
-        `SageMaker response (truncated): ${responseBody.length > 1000 ? responseBody.substring(0, 1000) + '...' : responseBody}`,
+        `SageMaker response (truncated): ${responseBody.length > 1000 ? `${responseBody.substring(0, 1000)}...` : responseBody}`,
       );
 
       const output = await this.parseResponse(responseBody);
-
-      // Handle known errors:
-      if (typeof output === 'object' && output !== null && 'code' in output) {
-        const code = output.code;
-        // 424 has been observed to result from malformed request payloads, specifically incorrect keys within the
-        // `parameters` object.
-        if (Number.isInteger(code) && code === 424) {
-          const errorMessage = `API Error: 424${output?.message ? ` ${output.message}` : ''}\n${JSON.stringify(output)}`;
-          logger.error(errorMessage);
-          return { error: errorMessage };
-        }
+      const knownError = this.getKnownCompletionError(output);
+      if (knownError) {
+        return knownError;
       }
 
-      // Calculate token usage estimation (very rough estimate)
-      // Note: 4 characters per token is a simplified approximation
-      const promptTokens = Math.ceil(payload.length / 4);
-      const completionTokens = Math.ceil((typeof output === 'string' ? output.length : 0) / 4);
-
-      const result: ProviderResponse = {
+      return this.createCompletionResult(
         output,
-        raw: responseBody,
-        tokenUsage: {
-          prompt: promptTokens,
-          completion: completionTokens,
-          total: promptTokens + completionTokens,
-          cached: 0, // No caching for this request
-          numRequests: 1,
-        },
-        metadata: {
-          latencyMs: _latency,
-          modelType: this.config.modelType || 'custom',
-          transformed: isTransformed,
-          originalPrompt: isTransformed ? prompt : undefined,
-        },
-      };
-
-      // Save result to cache if successful and caching enabled
-      if (isCacheEnabled() && !bustCache && result.output && !result.error) {
-        const cacheKey = this.getCacheKey(transformedPrompt);
-        const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
-        const resultToCache = JSON.stringify(result);
-
-        try {
-          await cache.set(cacheKey, resultToCache);
-          logger.debug(
-            `Stored SageMaker response in cache with key: ${cacheKey.substring(0, 100)}...`,
-          );
-        } catch (_) {
-          logger.warn(`Failed to store SageMaker response in cache: ${_}`);
-        }
-      }
-
-      return result;
+        responseBody,
+        payload,
+        response.latencyMs,
+        originalPrompt,
+        isTransformed,
+      );
     } catch (error: any) {
       logger.error(`SageMaker API error: ${error}`);
-      return {
-        error: `SageMaker API error: ${error.message || String(error)}`,
-      };
+      return { error: `SageMaker API error: ${error.message || String(error)}` };
+    }
+  }
+
+  private getKnownCompletionError(output: any): ProviderResponse | undefined {
+    if (!output || typeof output !== 'object' || !('code' in output)) {
+      return undefined;
+    }
+
+    const code = output.code;
+    if (!Number.isInteger(code) || code !== 424) {
+      return undefined;
+    }
+
+    const errorMessage = `API Error: 424${output?.message ? ` ${output.message}` : ''}\n${JSON.stringify(output)}`;
+    logger.error(errorMessage);
+    return { error: errorMessage };
+  }
+
+  private createCompletionResult(
+    output: any,
+    responseBody: string,
+    payload: string,
+    latencyMs: number,
+    originalPrompt: string,
+    isTransformed: boolean,
+  ): ProviderResponse {
+    const promptTokens = Math.ceil(payload.length / 4);
+    const completionTokens = Math.ceil((typeof output === 'string' ? output.length : 0) / 4);
+
+    return {
+      output,
+      raw: responseBody,
+      tokenUsage: {
+        prompt: promptTokens,
+        completion: completionTokens,
+        total: promptTokens + completionTokens,
+        cached: 0,
+        numRequests: 1,
+      },
+      metadata: {
+        latencyMs,
+        modelType: this.config.modelType || 'custom',
+        transformed: isTransformed,
+        originalPrompt: isTransformed ? originalPrompt : undefined,
+      },
+    };
+  }
+
+  private async cacheCompletionResult(
+    result: ProviderResponse,
+    transformedPrompt: string,
+    cacheEnabled: boolean,
+    bustCache: boolean,
+    getCacheFn?: typeof import('../cache').getCache,
+  ): Promise<void> {
+    if (!cacheEnabled || bustCache || !result.output || result.error) {
+      return;
+    }
+
+    const cacheKey = this.getCacheKey(transformedPrompt);
+    const cache = await this.resolveCache(getCacheFn);
+    try {
+      await cache.set(cacheKey, JSON.stringify(result));
+      logger.debug(`Stored SageMaker response in cache with key: ${cacheKey.substring(0, 100)}...`);
+    } catch (error) {
+      logger.warn(`Failed to store SageMaker response in cache: ${error}`);
     }
   }
 }
@@ -883,12 +966,7 @@ export class SageMakerEmbeddingProvider
     text: string,
     context?: CallApiContextParams,
   ): Promise<ProviderEmbeddingResponse> {
-    // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
-
-    // Get the delay value - the context delay takes precedence over the provider's delay
-    const delayMs = context?.originalProvider?.delay || this.delay;
-
     const transformResult = await this.runTransformSafely(
       text,
       context,
@@ -899,214 +977,210 @@ export class SageMakerEmbeddingProvider
     }
     const transformedText = transformResult.value;
     const isTransformed = transformedText !== text;
+    const bustCache = context?.debug === true;
 
-    if (isTransformed) {
-      logger.debug(`Text transformed for SageMaker embedding endpoint ${this.getEndpointName()}`);
-      logger.debug(`Original: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
-      logger.debug(
-        `Transformed: ${transformedText.substring(0, 100)}${transformedText.length > 100 ? '...' : ''}`,
-      );
+    this.logTransformation('Text', text, transformedText);
+
+    const cachedResult = await this.getCachedEmbeddingResult(
+      transformedText,
+      isCacheEnabled(),
+      bustCache,
+      getCache,
+    );
+    if (cachedResult) {
+      return cachedResult;
     }
 
-    // Check if we should use cache - use the transformed text for cache key
-    const bustCache = context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
-      const cacheKey = this.getCacheKey(transformedText);
-      const cache = (await getCache)
-        ? await getCache()
-        : await import('../cache').then((m) => m.getCache());
+    await this.applyConfiguredDelay(this.getDelayMs(context), 'embedding endpoint');
+    return this.invokeEmbeddingEndpoint(text, transformedText, isTransformed, context);
+  }
 
-      // Try to get from cache
-      const cachedResult = await cache.get<string>(cacheKey);
-      if (cachedResult) {
-        logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
+  private async getCachedEmbeddingResult(
+    transformedText: string,
+    cacheEnabled: boolean,
+    bustCache: boolean,
+    getCacheFn?: typeof import('../cache').getCache,
+  ): Promise<ProviderEmbeddingResponse | undefined> {
+    if (!cacheEnabled || bustCache) {
+      return undefined;
+    }
 
-        try {
-          // Parse the cached result
-          const parsedResult = JSON.parse(cachedResult) as ProviderEmbeddingResponse;
+    const cacheKey = this.getCacheKey(transformedText);
+    const cache = await this.resolveCache(getCacheFn);
+    const cachedResult = await cache.get<string>(cacheKey);
+    if (!cachedResult) {
+      return undefined;
+    }
 
-          // Add cache flag to token usage
-          if (parsedResult.tokenUsage) {
-            parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
-          }
-
-          return { ...parsedResult, cached: true };
-        } catch (_) {
-          logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
-          // Continue with API call if parsing fails
-        }
+    logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
+    try {
+      const parsedResult = JSON.parse(cachedResult) as ProviderEmbeddingResponse;
+      if (parsedResult.tokenUsage) {
+        parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
       }
+      return { ...parsedResult, cached: true };
+    } catch (error) {
+      logger.warn(`Failed to parse cached SageMaker embedding response: ${error}`);
+      return undefined;
     }
+  }
 
-    // Apply delay if specified and not using cached response
-    if (delayMs && delayMs > 0) {
-      logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
-      );
-      await sleep(delayMs);
-    }
-
-    // Not in cache or cache disabled, make the actual API call
+  private async invokeEmbeddingEndpoint(
+    originalText: string,
+    transformedText: string,
+    isTransformed: boolean,
+    context?: CallApiContextParams,
+  ): Promise<ProviderEmbeddingResponse> {
     const runtime = await this.getSageMakerRuntimeInstance();
-
-    let payload;
-    const modelType = this.config.modelType || 'custom';
-
-    logger.debug(`Formatting embedding payload for model type: ${modelType}`);
-
-    switch (modelType) {
-      case 'openai':
-        payload = JSON.stringify({
-          input: transformedText,
-          model: 'embedding',
-        });
-        break;
-
-      case 'huggingface':
-        payload = JSON.stringify({
-          inputs: transformedText,
-        });
-        break;
-
-      case 'custom':
-      default:
-        // Try to support multiple common formats
-        payload = JSON.stringify({
-          input: transformedText,
-          text: transformedText,
-          inputs: transformedText,
-        });
-        break;
-    }
+    const payload = this.formatEmbeddingPayload(transformedText);
 
     logger.debug(`Calling SageMaker embedding endpoint ${this.getEndpointName()}`);
     logger.debug(`With payload: ${payload}`);
 
     try {
-      const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
-
-      const command = new InvokeEndpointCommand({
-        EndpointName: this.getEndpointName(),
-        ContentType: this.getContentType(),
-        Accept: this.getAcceptType(),
-        Body: payload,
-      });
-
-      const startTime = Date.now();
-      const response = await runtime.send(command);
-      const endTime = Date.now();
-      const _latency = endTime - startTime;
-
+      const response = await this.sendInvokeEndpointCommand(runtime, payload);
       if (!response.Body) {
         logger.error('No response body returned from SageMaker embedding endpoint');
-        return {
-          error: 'No response body returned from SageMaker embedding endpoint',
-        };
+        return { error: 'No response body returned from SageMaker embedding endpoint' };
       }
 
       const responseBody = new TextDecoder().decode(response.Body);
       logger.debug(`SageMaker embedding response: ${responseBody.substring(0, 200)}...`);
 
-      let responseJson;
-      try {
-        responseJson = JSON.parse(responseBody);
-      } catch (_) {
-        return {
-          error: `Failed to parse embedding response as JSON: ${_}`,
-        };
+      const responseJson = this.parseEmbeddingResponseJson(responseBody);
+      if ('error' in responseJson) {
+        return responseJson;
       }
 
-      // Try various common embedding response formats first
-      const embedding =
-        responseJson.embedding ||
-        responseJson.embeddings ||
-        responseJson.data?.[0]?.embedding ||
-        (Array.isArray(responseJson) ? responseJson[0] : responseJson);
-
-      // If response format specifies a path, extract it using JavaScript expression evaluation
-      if (this.config.responseFormat?.path) {
-        try {
-          const pathExpression = this.config.responseFormat.path;
-
-          // Extract data using the expression
-          const extracted = await this.extractFromPath(responseJson, pathExpression);
-
-          // Validate that the extracted data is an array of numbers (embedding)
-          if (Array.isArray(extracted) && extracted.every((val) => typeof val === 'number')) {
-            const result = {
-              embedding: extracted,
-              tokenUsage: {
-                prompt: Math.ceil(text.length / 4), // Approximate token count
-                cached: 0,
-                numRequests: 1,
-              },
-              metadata: {
-                transformed: isTransformed,
-                originalText: isTransformed ? text : undefined,
-              },
-            };
-
-            // Cache the result if caching is enabled
-            await this.cacheEmbeddingResult(
-              result,
-              transformedText,
-              context,
-              isTransformed,
-              isTransformed ? text : undefined,
-            );
-
-            return result;
-          } else {
-            logger.warn(
-              'Extracted data is not a valid embedding array, trying other extraction methods',
-            );
-          }
-        } catch (error) {
-          logger.warn(
-            `Failed to extract embedding from path expression: ${this.config.responseFormat.path}, Error: ${error}`,
-          );
-          logger.debug(
-            `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
-          );
-          // Continue to try other extraction methods
-        }
+      const extractedResult = await this.getPathExtractedEmbeddingResult(
+        responseJson,
+        originalText,
+        transformedText,
+        isTransformed,
+        context,
+      );
+      if (extractedResult) {
+        return extractedResult;
       }
 
-      if (!embedding || !Array.isArray(embedding)) {
+      const embedding = this.findEmbedding(responseJson);
+      if (!embedding) {
         return {
           error: `Invalid embedding response format. Could not find embedding array in: ${JSON.stringify(responseJson).substring(0, 100)}...`,
         };
       }
 
-      const result = {
-        embedding,
-        tokenUsage: {
-          prompt: Math.ceil(text.length / 4), // Approximate token count
-          cached: 0,
-          numRequests: 1,
-        },
-        metadata: {
-          transformed: isTransformed,
-          originalText: isTransformed ? text : undefined,
-        },
-      };
-
-      // Cache the result if caching is enabled
+      const result = this.createEmbeddingResult(embedding, originalText, isTransformed);
       await this.cacheEmbeddingResult(
         result,
         transformedText,
         context,
         isTransformed,
-        isTransformed ? text : undefined,
+        isTransformed ? originalText : undefined,
       );
-
       return result;
     } catch (error: any) {
       logger.error(`SageMaker embedding API error: ${error}`);
-      return {
-        error: `SageMaker embedding API error: ${error.message || String(error)}`,
-      };
+      return { error: `SageMaker embedding API error: ${error.message || String(error)}` };
     }
+  }
+
+  private formatEmbeddingPayload(transformedText: string): string {
+    const modelType = this.config.modelType || 'custom';
+    logger.debug(`Formatting embedding payload for model type: ${modelType}`);
+
+    if (modelType === 'openai') {
+      return JSON.stringify({ input: transformedText, model: 'embedding' });
+    }
+
+    if (modelType === 'huggingface') {
+      return JSON.stringify({ inputs: transformedText });
+    }
+
+    return JSON.stringify({
+      input: transformedText,
+      text: transformedText,
+      inputs: transformedText,
+    });
+  }
+
+  private parseEmbeddingResponseJson(responseBody: string): any | ProviderEmbeddingResponse {
+    try {
+      return JSON.parse(responseBody);
+    } catch (error) {
+      return { error: `Failed to parse embedding response as JSON: ${error}` };
+    }
+  }
+
+  private async getPathExtractedEmbeddingResult(
+    responseJson: any,
+    originalText: string,
+    transformedText: string,
+    isTransformed: boolean,
+    context?: CallApiContextParams,
+  ): Promise<ProviderEmbeddingResponse | undefined> {
+    const pathExpression = this.config.responseFormat?.path;
+    if (!pathExpression) {
+      return undefined;
+    }
+
+    try {
+      const extracted = await this.extractFromPath(responseJson, pathExpression);
+      if (!this.isEmbeddingArray(extracted)) {
+        logger.warn(
+          'Extracted data is not a valid embedding array, trying other extraction methods',
+        );
+        return undefined;
+      }
+
+      const result = this.createEmbeddingResult(extracted, originalText, isTransformed);
+      await this.cacheEmbeddingResult(
+        result,
+        transformedText,
+        context,
+        isTransformed,
+        isTransformed ? originalText : undefined,
+      );
+      return result;
+    } catch (error) {
+      logger.warn(
+        `Failed to extract embedding from path expression: ${pathExpression}, Error: ${error}`,
+      );
+      logger.debug(`Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`);
+      return undefined;
+    }
+  }
+
+  private findEmbedding(responseJson: any): number[] | undefined {
+    const embedding =
+      responseJson.embedding ||
+      responseJson.embeddings ||
+      responseJson.data?.[0]?.embedding ||
+      (Array.isArray(responseJson) ? responseJson[0] : responseJson);
+    return this.isEmbeddingArray(embedding) ? embedding : undefined;
+  }
+
+  private isEmbeddingArray(value: unknown): value is number[] {
+    return Array.isArray(value) && value.every((item) => typeof item === 'number');
+  }
+
+  private createEmbeddingResult(
+    embedding: number[],
+    originalText: string,
+    isTransformed: boolean,
+  ): ProviderEmbeddingResponse {
+    return {
+      embedding,
+      tokenUsage: {
+        prompt: Math.ceil(originalText.length / 4),
+        cached: 0,
+        numRequests: 1,
+      },
+      metadata: {
+        transformed: isTransformed,
+        originalText: isTransformed ? originalText : undefined,
+      },
+    };
   }
 
   /**
