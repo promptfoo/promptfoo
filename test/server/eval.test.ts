@@ -20,22 +20,23 @@ describe('eval routes', () => {
     jobId: string,
     maxWaitMs = 10000,
   ): Promise<{ updatedResults: number; skippedResults: number; skippedAssertions: number }> {
-    const startTime = Date.now();
-    while (Date.now() - startTime < maxWaitMs) {
-      const statusRes = await api.get(`/api/eval/${evalId}/assertions/job/${jobId}`);
-      expect(statusRes.status).toBe(200);
+    return vi.waitFor(
+      async () => {
+        const statusRes = await api.get(`/api/eval/${evalId}/assertions/job/${jobId}`);
+        expect(statusRes.status).toBe(200);
 
-      const { status, updatedResults, skippedResults, skippedAssertions } = statusRes.body.data;
-      if (status === 'complete') {
+        const { status, updatedResults, skippedResults, skippedAssertions } = statusRes.body.data;
+        if (status === 'error') {
+          throw new Error('Assertion job failed');
+        }
+        if (status !== 'complete') {
+          throw new Error(`Assertion job still ${status}`);
+        }
+
         return { updatedResults, skippedResults, skippedAssertions };
-      }
-      if (status === 'error') {
-        throw new Error('Assertion job failed');
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    throw new Error('Assertion job timed out');
+      },
+      { interval: 50, timeout: maxWaitMs },
+    );
   }
 
   beforeAll(async () => {

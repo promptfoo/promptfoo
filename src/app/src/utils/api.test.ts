@@ -38,9 +38,6 @@ const mockState = (apiBaseUrl: string) =>
     enablePersistApiBaseUrl: vi.fn(),
   }) as ReturnType<typeof useApiConfig.getState>;
 
-// Mock fetch globally
-global.fetch = vi.fn();
-
 describe('getApiBaseUrl', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -1,4 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
+
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PosthocAssertionsForm from './PosthocAssertionsForm';
@@ -12,6 +14,22 @@ HTMLElement.prototype.scrollIntoView = vi.fn();
 
 describe('PosthocAssertionsForm', () => {
   let onChange: (assertions: Assertion[]) => void;
+
+  function EditableAssertionHarness() {
+    const [assertions, setAssertions] = useState<Assertion[]>([
+      { type: 'equals', value: 'initial value' },
+    ]);
+
+    return (
+      <PosthocAssertionsForm
+        assertions={assertions}
+        onChange={(nextAssertions) => {
+          onChange(nextAssertions);
+          setAssertions(nextAssertions);
+        }}
+      />
+    );
+  }
 
   beforeEach(() => {
     onChange = vi.fn();
@@ -27,11 +45,12 @@ describe('PosthocAssertionsForm', () => {
     expect(screen.getByText('Equals exactly')).toBeInTheDocument();
   });
 
-  it('adds assertion when quick action is clicked', () => {
+  it('adds assertion when quick action is clicked', async () => {
+    const user = userEvent.setup();
     render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
 
     // Click "Contains text" quick action
-    fireEvent.click(screen.getByText('Contains text'));
+    await user.click(screen.getByText('Contains text'));
 
     expect(onChange).toHaveBeenCalledWith([{ type: 'icontains', value: '' }]);
   });
@@ -50,22 +69,20 @@ describe('PosthocAssertionsForm', () => {
     expect(onChange).toHaveBeenCalledWith([{ type: 'regex', value: '' }]);
   });
 
-  it('updates the assertion value when edited', () => {
-    render(
-      <PosthocAssertionsForm
-        assertions={[{ type: 'equals', value: 'initial value' }]}
-        onChange={onChange}
-      />,
-    );
+  it('updates the assertion value when edited', async () => {
+    const user = userEvent.setup();
+    render(<EditableAssertionHarness />);
 
     // Find the textarea by its placeholder
     const valueInput = screen.getByPlaceholderText('Expected exact output...');
-    fireEvent.change(valueInput, { target: { value: 'updated value' } });
+    await user.clear(valueInput);
+    await user.type(valueInput, 'updated value');
 
-    expect(onChange).toHaveBeenCalledWith([{ type: 'equals', value: 'updated value' }]);
+    expect(onChange).toHaveBeenLastCalledWith([{ type: 'equals', value: 'updated value' }]);
   });
 
-  it('removes an assertion when the delete button is clicked', () => {
+  it('removes an assertion when the delete button is clicked', async () => {
+    const user = userEvent.setup();
     render(
       <PosthocAssertionsForm
         assertions={[{ type: 'equals', value: 'initial value' }]}
@@ -73,16 +90,17 @@ describe('PosthocAssertionsForm', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove assertion' }));
+    await user.click(screen.getByRole('button', { name: 'Remove assertion' }));
 
     expect(onChange).toHaveBeenCalledWith([]);
   });
 
-  it('keeps quick actions visible after adding an assertion', () => {
+  it('keeps quick actions visible after adding an assertion', async () => {
+    const user = userEvent.setup();
     render(<PosthocAssertionsForm assertions={[]} onChange={onChange} />);
 
     // Click "Is valid JSON" quick action
-    fireEvent.click(screen.getByText('Is valid JSON'));
+    await user.click(screen.getByText('Is valid JSON'));
 
     // Quick actions should still be visible for adding more assertions
     expect(screen.getByText('LLM evaluates')).toBeInTheDocument();

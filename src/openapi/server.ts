@@ -20,6 +20,7 @@ import { ServerSchemas } from '../types/api/server';
 import { TracesSchemas } from '../types/api/traces';
 import { UserSchemas } from '../types/api/user';
 import { VersionSchemas } from '../types/api/version';
+import { EvalResultsFilterMode } from '../types/index';
 
 extendZodWithOpenApi(z);
 
@@ -70,7 +71,97 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
+const OpenApiEvalAssertionsParamsSchema = z.object({
+  evalId: z.string().min(1),
+});
+
+const OpenApiEvalAssertionJobParamsSchema = OpenApiEvalAssertionsParamsSchema.extend({
+  jobId: z.string().min(1),
+});
+
+const OpenApiPosthocResultsFilterSchema = z.object({
+  type: z.string(),
+  operator: z.string(),
+  value: z.string().optional(),
+  field: z.string().optional(),
+  logicOperator: z.enum(['and', 'or']).optional(),
+});
+
+const OpenApiPosthocAssertionsScopeSchema = z.object({
+  type: z.enum(['results', 'tests', 'filtered']),
+  resultIds: z.array(z.string()).optional(),
+  testIndices: z.array(z.number()).optional(),
+  filters: z.array(OpenApiPosthocResultsFilterSchema).optional(),
+  filterMode: EvalResultsFilterMode.optional(),
+  searchText: z.string().optional(),
+});
+
+const OpenApiPosthocAssertionsRequestSchema = z.object({
+  assertions: z.array(OpenApiLooseObjectSchema).min(1),
+  scope: OpenApiPosthocAssertionsScopeSchema,
+});
+
+const OpenApiAssertionJobErrorSchema = z.object({
+  resultId: z.string(),
+  error: z.string(),
+});
+
+const OpenApiPosthocAssertionsResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    jobId: z.string().uuid().nullable(),
+    total: z.number().optional(),
+    matchedTestCount: z.number().optional(),
+    updatedResults: z.number().optional(),
+    skippedResults: z.number().optional(),
+    skippedAssertions: z.number().optional(),
+    errors: z.array(OpenApiAssertionJobErrorSchema).optional(),
+  }),
+});
+
+const OpenApiAssertionJobStatusResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    status: z.enum(['in-progress', 'complete', 'error']),
+    progress: z.number(),
+    total: z.number(),
+    completedResults: z.array(
+      z.object({
+        resultId: z.string(),
+        pass: z.boolean(),
+        score: z.number(),
+      }),
+    ),
+    updatedResults: z.number(),
+    skippedResults: z.number(),
+    skippedAssertions: z.number(),
+    errors: z.array(OpenApiAssertionJobErrorSchema),
+    matchedTestCount: z.number().optional(),
+  }),
+});
+
+const OpenApiGenerateAssertionsRequestSchema = z.object({
+  type: z.enum(['llm-rubric', 'g-eval']).default('llm-rubric'),
+  numAssertions: z.number().int().min(1).max(20).default(5),
+  instructions: z.string().optional(),
+  provider: z.string().optional(),
+  testIndices: z.array(z.number()).optional(),
+  resultIds: z.array(z.string()).optional(),
+});
+
+const OpenApiGenerateAssertionsResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    assertions: z.array(OpenApiLooseObjectSchema),
+    context: z.object({
+      numPromptsAnalyzed: z.number(),
+      numOutputsAnalyzed: z.number(),
+      existingAssertionCount: z.number(),
+    }),
+  }),
+});
+
+export const SERVER_OPENAPI_ROUTE_COUNT = 70;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
 type RouteRequest = NonNullable<RouteConfig['request']>;
@@ -608,6 +699,57 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('SubmitRatingResponse', EvalSchemas.SubmitRating.Response),
       400: validationError(),
       404: notFound('Result or evaluation not found'),
+      500: serverError(),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/eval/{evalId}/assertions',
+    operationId: 'addEvalAssertions',
+    tags: ['Eval'],
+    summary: 'Add assertions to evaluation results',
+    request: {
+      params: params('EvalAssertionsParams', OpenApiEvalAssertionsParamsSchema),
+      body: jsonBody('PosthocAssertionsRequest', OpenApiPosthocAssertionsRequestSchema),
+    },
+    responses: {
+      200: jsonResponse('PosthocAssertionsResponse', OpenApiPosthocAssertionsResponseSchema),
+      400: validationError(),
+      404: notFound('Evaluation or result not found'),
+    },
+  });
+
+  register({
+    method: 'get',
+    path: '/api/eval/{evalId}/assertions/job/{jobId}',
+    operationId: 'getEvalAssertionJob',
+    tags: ['Eval'],
+    summary: 'Get post-hoc assertion job status',
+    request: {
+      params: params('EvalAssertionJobParams', OpenApiEvalAssertionJobParamsSchema),
+    },
+    responses: {
+      200: jsonResponse('AssertionJobStatusResponse', OpenApiAssertionJobStatusResponseSchema),
+      400: validationError(),
+      404: notFound('Assertion job not found'),
+    },
+  });
+
+  register({
+    method: 'post',
+    path: '/api/eval/{evalId}/assertions/generate',
+    operationId: 'generateEvalAssertions',
+    tags: ['Eval'],
+    summary: 'Generate assertion suggestions for an evaluation',
+    request: {
+      params: params('GenerateEvalAssertionsParams', OpenApiEvalAssertionsParamsSchema),
+      body: jsonBody('GenerateEvalAssertionsRequest', OpenApiGenerateAssertionsRequestSchema),
+    },
+    responses: {
+      200: jsonResponse('GenerateEvalAssertionsResponse', OpenApiGenerateAssertionsResponseSchema),
+      400: validationError(),
+      404: notFound('Evaluation not found'),
       500: serverError(),
     },
   });
