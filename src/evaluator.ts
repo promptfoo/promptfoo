@@ -2771,7 +2771,7 @@ function configureEvaluationTimeout({
 }: {
   combinedAbortSignal: AbortSignal;
   concurrency: number;
-  options: EvaluateOptions;
+  options: InternalEvaluateOptions;
   providerAbortSignal?: AbortSignal;
   runEvalOptions: RunEvalOptions[];
   testSuite: TestSuite;
