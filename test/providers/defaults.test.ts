@@ -6,15 +6,9 @@ import {
   setDefaultEmbeddingProviders,
   setDefaultRedteamProviders,
 } from '../../src/providers/defaults';
-import {
-  DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
-  DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
-  DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
-  DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
-} from '../../src/providers/google/ai.studio';
+import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
-import { DefaultEmbeddingProvider as GeminiEmbeddingProvider } from '../../src/providers/google/vertex';
+import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
   DefaultGradingJsonProvider as MistralGradingJsonProvider,
@@ -407,13 +401,13 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
-      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
-      expect(providers.llmRubricProvider?.id()).toBe(GoogleAiStudioLlmRubricProvider.id());
-      expect(providers.suggestionsProvider.id()).toBe(GoogleAiStudioSuggestionsProvider.id());
-      expect(providers.synthesizeProvider.id()).toBe(GoogleAiStudioSynthesizeProvider.id());
+      expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.gradingJsonProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
     });
 
     it('should use Google AI Studio providers when GOOGLE_API_KEY is set', async () => {
@@ -421,13 +415,13 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
-      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
-      expect(providers.llmRubricProvider?.id()).toBe(GoogleAiStudioLlmRubricProvider.id());
-      expect(providers.suggestionsProvider.id()).toBe(GoogleAiStudioSuggestionsProvider.id());
-      expect(providers.synthesizeProvider.id()).toBe(GoogleAiStudioSynthesizeProvider.id());
+      expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.gradingJsonProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
     });
 
     it('should use Google AI Studio providers when PALM_API_KEY is set', async () => {
@@ -435,13 +429,13 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
-      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
-      expect(providers.llmRubricProvider?.id()).toBe(GoogleAiStudioLlmRubricProvider.id());
-      expect(providers.suggestionsProvider.id()).toBe(GoogleAiStudioSuggestionsProvider.id());
-      expect(providers.synthesizeProvider.id()).toBe(GoogleAiStudioSynthesizeProvider.id());
+      expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.gradingJsonProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
     });
 
     it('should use Google AI Studio providers when provided via env overrides', async () => {
@@ -451,13 +445,13 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders(envOverrides);
 
-      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
-      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
-      expect(providers.llmRubricProvider?.id()).toBe(GoogleAiStudioLlmRubricProvider.id());
-      expect(providers.suggestionsProvider.id()).toBe(GoogleAiStudioSuggestionsProvider.id());
-      expect(providers.synthesizeProvider.id()).toBe(GoogleAiStudioSynthesizeProvider.id());
+      expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.gradingJsonProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.llmRubricProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
-      expect(providers.embeddingProvider).toBe(GeminiEmbeddingProvider); // Falls back to Vertex
+      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider); // Falls back to Vertex
     });
 
     it('should not use Google AI Studio providers when OpenAI credentials exist', async () => {
@@ -466,10 +460,10 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider).not.toBe(GoogleAiStudioGradingProvider);
-      expect(providers.gradingJsonProvider).not.toBe(GoogleAiStudioGradingJsonProvider);
-      expect(providers.suggestionsProvider).not.toBe(GoogleAiStudioSuggestionsProvider);
-      expect(providers.synthesizeProvider).not.toBe(GoogleAiStudioSynthesizeProvider);
+      expect(providers.gradingProvider).not.toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.gradingJsonProvider).not.toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.suggestionsProvider).not.toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.synthesizeProvider).not.toBeInstanceOf(AIStudioChatProvider);
     });
 
     it('should not use Google AI Studio providers when Anthropic credentials exist', async () => {
@@ -478,10 +472,10 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider).not.toBe(GoogleAiStudioGradingProvider);
-      expect(providers.gradingJsonProvider).not.toBe(GoogleAiStudioGradingJsonProvider);
-      expect(providers.suggestionsProvider).not.toBe(GoogleAiStudioSuggestionsProvider);
-      expect(providers.synthesizeProvider).not.toBe(GoogleAiStudioSynthesizeProvider);
+      expect(providers.gradingProvider).not.toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.gradingJsonProvider).not.toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.suggestionsProvider).not.toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.synthesizeProvider).not.toBeInstanceOf(AIStudioChatProvider);
     });
 
     it('should prefer Google AI Studio over Vertex when both credentials are available', async () => {
@@ -491,10 +485,10 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
-      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
-      expect(providers.suggestionsProvider.id()).toBe(GoogleAiStudioSuggestionsProvider.id());
-      expect(providers.synthesizeProvider.id()).toBe(GoogleAiStudioSynthesizeProvider.id());
+      expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.gradingJsonProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
     });
 
@@ -504,10 +498,10 @@ describe('Provider override tests', () => {
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toBe(GoogleAiStudioGradingProvider.id());
-      expect(providers.gradingJsonProvider.id()).toBe(GoogleAiStudioGradingJsonProvider.id());
-      expect(providers.suggestionsProvider.id()).toBe(GoogleAiStudioSuggestionsProvider.id());
-      expect(providers.synthesizeProvider.id()).toBe(GoogleAiStudioSynthesizeProvider.id());
+      expect(providers.gradingProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.gradingJsonProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.suggestionsProvider).toBeInstanceOf(AIStudioChatProvider);
+      expect(providers.synthesizeProvider).toBeInstanceOf(AIStudioChatProvider);
       expect(providers.redteamProvider?.id()).toContain('google:');
       expect(providers.gradingProvider).not.toBe(MistralGradingProvider);
       expect(providers.gradingJsonProvider).not.toBe(MistralGradingJsonProvider);
