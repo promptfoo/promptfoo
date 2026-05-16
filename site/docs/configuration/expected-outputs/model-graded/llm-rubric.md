@@ -102,11 +102,10 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
      options:
        provider: openai:gpt-5-mini
      // highlight-end
-     assert:
-       - description: Evaluate output using LLM
-         assert:
-           - type: llm-rubric
-             value: Is written in a professional tone
+   tests:
+     - assert:
+         - type: llm-rubric
+           value: Is written in a professional tone
    ```
 
 3. Using `assertion.provider`:
@@ -122,7 +121,48 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
            // highlight-end
    ```
 
+### Setting grader parameters (temperature, etc.)
+
+To pin `temperature`, `max_tokens`, or other provider-specific parameters on the grader, expand the `provider` shorthand into an object with `id` and `config`. This is the supported way to push grading toward reproducibility when swapping in a custom judge:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: Is not apologetic and provides a clear, concise answer
+    // highlight-start
+    provider:
+      id: openai:gpt-5-mini
+      config:
+        temperature: 0
+    // highlight-end
+```
+
+The same shape works under `defaultTest.options.provider` and `test.options.provider`.
+
+Provider precedence is exact: `assertion.provider` overrides `test.options.provider`, which
+overrides `defaultTest.options.provider`. If your default grader is a full object with `config`, do
+not add a shorthand `provider: openai:chat:...` on the assertion unless you also repeat the full
+object there.
+
+:::note
+The built-in OpenAI grader already defaults to `temperature=0`, so this override is only needed when you're pointing at a different model or provider whose default differs. GPT-5 series reasoning models ignore `temperature` and do not need it set.
+:::
+
 Custom `llm-rubric` providers can also return a `metadata` object in their `ProviderResponse`. promptfoo copies those keys onto the assertion's `GradingResult.metadata` alongside `renderedGradingPrompt`, which makes per-assertion fields such as upload IDs or trace IDs available in hooks like `afterEach`.
+
+### OpenAI-compatible judges with thinking output
+
+Some self-hosted OpenAI-compatible judges, including vLLM servers configured with reasoning parsers,
+return hidden reasoning separately from final content. Promptfoo includes that reasoning in provider
+output by default. For a judge, that can confuse JSON parsing if the reasoning contains scratchpad
+objects before the final `{"pass": ..., "score": ..., "reason": ...}` verdict.
+
+Set `showThinking: false` on the judge provider. See the
+[vLLM provider guide](/docs/providers/vllm#use-vllm-as-an-llm-judge) for a complete local judge
+recipe, including truncated `<think>` output and request-level thinking controls. The same rule
+applies to other model-graded assertions that use a text judge; see the
+[model-graded overview](/docs/configuration/expected-outputs/model-graded#openai-compatible-thinking-judges)
+for the full metric list.
 
 ## Customizing the rubric prompt
 
@@ -131,17 +171,17 @@ For more control over the `llm-rubric` evaluation, you can set a custom prompt u
 ```yaml
 defaultTest:
   options:
-  rubricPrompt: >
-    [
-        {
-            "role": "system",
-            "content": "Evaluate the following output based on these criteria:\n1. Clarity of explanation\n2. Accuracy of information\n3. Relevance to the topic\n\nProvide a score out of 10 for each criterion and an overall assessment."
-        },
-        {
-            "role": "user",
-            "content": "Output to evaluate: {{output}}\n\nRubric: {{rubric}}"
-        }
-    ]
+    rubricPrompt: >
+      [
+          {
+              "role": "system",
+              "content": "Evaluate the following output based on these criteria:\n1. Clarity of explanation\n2. Accuracy of information\n3. Relevance to the topic\n\nProvide a score out of 10 for each criterion and an overall assessment."
+          },
+          {
+              "role": "user",
+              "content": "Output to evaluate: {{output}}\n\nRubric: {{rubric}}"
+          }
+      ]
 ```
 
 ## Non-English Evaluation
@@ -309,6 +349,18 @@ assert:
       Return {"pass": true, "score": 1} if the response is correct
       Return {"pass": false, "score": 0} if the response is incorrect
 ```
+
+## Negation with `not-llm-rubric`
+
+Prepend `not-` to invert the assertion — useful for "must not" criteria:
+
+```yaml
+assert:
+  - type: not-llm-rubric
+    value: Apologizes or hedges before answering
+```
+
+`not-llm-rubric` passes when the rubric criterion does **not** match. Transport or parse failures from the grader are reported as failures in both directions — a grader error is not treated as evidence that the criterion was or was not met, so inversion never silently turns a failed grader call into a pass.
 
 ## Further reading
 

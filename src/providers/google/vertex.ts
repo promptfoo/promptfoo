@@ -1,3 +1,5 @@
+import { createHmac } from 'crypto';
+
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
@@ -18,7 +20,7 @@ import {
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
@@ -27,9 +29,12 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
+  mergeGoogleCompletionOptions,
   mergeParts,
   normalizeSafetySettings,
   parseConfigSystemInstruction,
+  removeGoogleFunctionDeclarations,
+  resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
 
@@ -42,7 +47,13 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { ClaudeRequest, ClaudeResponse, ClaudeThinkingConfig } from './types';
+import type {
+  ClaudeRequest,
+  ClaudeResponse,
+  ClaudeThinkingConfig,
+  CompletionOptions,
+  GoogleProviderConfig,
+} from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -53,6 +64,21 @@ import type {
 
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
+
+type VertexEmbeddingPredictResponse = {
+  predictions?: Array<{
+    embeddings?: {
+      values?: number[];
+      statistics?: {
+        token_count?: number;
+      };
+    };
+  }>;
+};
+
+type VertexEmbeddingProviderConfig = GoogleProviderConfig & {
+  autoTruncate?: boolean;
+};
 
 function getVertexApiHost(
   region: string,
@@ -65,6 +91,13 @@ function getVertexApiHost(
     getEnvString('VERTEX_API_HOST') ||
     (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
   );
+}
+
+function getVertexBodyCacheKey(prefix: string, body: unknown): string {
+  const serialized = typeof body === 'string' ? body : JSON.stringify(body);
+  return `${prefix}:${createHmac('sha256', 'promptfoo:vertex:cache-key:v1')
+    .update(serialized ?? String(body))
+    .digest('hex')}`;
 }
 
 /**
@@ -296,7 +329,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     const showThinking = this.config.showThinking ?? isThinkingEnabled;
 
     const cache = await getCache();
-    const cacheKey = `vertex:claude:${this.modelName}:showThinking=${showThinking}:${JSON.stringify(body)}`;
+    const cacheKey = getVertexBodyCacheKey(
+      `vertex:claude:${this.modelName}:showThinking=${showThinking}`,
+      body,
+    );
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -307,7 +343,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
         }
-        logger.debug(`Returning cached response: ${cachedResponse}`);
+        logger.debug('Returning cached Vertex Claude response', {
+          model: this.modelName,
+          cacheKey,
+        });
         return { ...parsedCachedResponse, cached: true };
       }
     }
@@ -325,7 +364,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json; charset=utf-8',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
 
       data = res.data as ClaudeResponse;
@@ -419,10 +458,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
+    const config = mergeGoogleCompletionOptions(
+      this.config,
+      context?.prompt?.config as Partial<CompletionOptions> | undefined,
+    );
 
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
@@ -432,8 +471,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
       { useAssistantRole: config.useAssistantRole },
     );
 
+    const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
     // Get all tools (MCP + config tools) using base class method
-    const allTools = await this.getAllTools(context);
+    const allTools = await this.getAllTools(context, {
+      skipExecutableToolFiles: toolsDisabled,
+    });
+    const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -450,8 +493,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
       ...(config.safetySettings
         ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
         : {}),
-      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
-      ...(allTools.length > 0 ? { tools: allTools } : {}),
+      ...(toolConfig ? { toolConfig } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
       // Model Armor integration: inject template configuration for prompt/response screening
       // See: https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
@@ -496,7 +539,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const cache = await getCache();
-    const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
+    const cacheKey = getVertexBodyCacheKey(`vertex:${this.modelName}`, body);
 
     let response;
     let cachedResponse;
@@ -508,7 +551,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
         }
-        logger.debug(`Returning cached response: ${cachedResponse}`);
+        logger.debug('Returning cached Vertex Gemini response', {
+          model: this.modelName,
+          cacheKey,
+        });
         response = { ...parsedCachedResponse, cached: true };
       }
     }
@@ -530,7 +576,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             method: 'POST',
             headers: await this.getAuthHeaders(),
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            signal: AbortSignal.timeout(getRequestTimeoutMs()),
           });
 
           if (!res.ok) {
@@ -553,7 +599,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             url,
             method: 'POST',
             data: body,
-            timeout: REQUEST_TIMEOUT_MS,
+            timeout: getRequestTimeoutMs(),
           });
           data = res.data as GeminiApiResponse;
         }
@@ -768,7 +814,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
     try {
       // Handle function tool callbacks
-      if (config.functionToolCallbacks && isValidJson(response.output)) {
+      if (!toolsDisabled && config.functionToolCallbacks && isValidJson(response.output)) {
         const structured_output = JSON.parse(response.output);
         if (structured_output.functionCall) {
           const results = [];
@@ -832,7 +878,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     };
 
     const cache = await getCache();
-    const cacheKey = `vertex:palm2:${JSON.stringify(body)}`;
+    const cacheKey = getVertexBodyCacheKey(`vertex:palm2:${this.modelName}`, body);
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -843,7 +889,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
         }
-        logger.debug(`Returning cached response: ${cachedResponse}`);
+        logger.debug('Returning cached Vertex Palm2 response', {
+          model: this.modelName,
+          cacheKey,
+        });
         return { ...parsedCachedResponse, cached: true };
       }
     }
@@ -862,7 +911,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
       data = res.data as Palm2ApiResponse;
     } catch (err) {
@@ -958,10 +1007,20 @@ export class VertexChatProvider extends GoogleGenericProvider {
       },
     };
 
-    logger.debug(`Preparing to call Llama API with body: ${JSON.stringify(body)}`);
-
     const cache = await getCache();
-    const cacheKey = `vertex:llama:${this.modelName}:${JSON.stringify(body)}`;
+    const cacheKey = getVertexBodyCacheKey(`vertex:llama:${this.modelName}`, body);
+    logger.debug('Preparing to call Llama API', {
+      model: this.modelName,
+      region: this.getRegion(),
+      messageCount: messages.length,
+      maxTokens: body.max_tokens,
+      temperature: body.temperature,
+      topP: body.top_p,
+      topK: body.top_k,
+      safetySettingsEnabled: modelSafetySettings.enabled,
+      llamaGuardSettingCount: Object.keys(modelSafetySettings.llama_guard_settings).length,
+      cacheKey,
+    });
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -972,7 +1031,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
         if (tokenUsage) {
           tokenUsage.cached = tokenUsage.total;
         }
-        logger.debug(`Returning cached response: ${cachedResponse}`);
+        logger.debug('Returning cached Vertex Llama response', {
+          model: this.modelName,
+          cacheKey,
+        });
         return { ...parsedCachedResponse, cached: true };
       }
     }
@@ -1005,20 +1067,32 @@ export class VertexChatProvider extends GoogleGenericProvider {
           'Content-Type': 'application/json; charset=utf-8',
         },
         data: body,
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: getRequestTimeoutMs(),
       });
 
       data = res.data as LlamaResponse;
-      logger.debug(`Llama API response: ${JSON.stringify(data)}`);
+      logger.debug('Llama API response', {
+        choiceCount: data.choices?.length ?? 0,
+        hasUsage: data.usage !== undefined,
+        totalTokens: data.usage?.total_tokens,
+        promptTokens: data.usage?.prompt_tokens,
+        completionTokens: data.usage?.completion_tokens,
+      });
     } catch (err) {
       const error = err as GaxiosError;
       if (error.response && error.response.data) {
-        logger.debug(`Llama API error:\n${JSON.stringify(error.response.data)}`);
+        logger.debug('Llama API error', {
+          status: error.response.status,
+          statusText: error.response.statusText,
+          hasResponseData: error.response.data !== undefined,
+        });
         return {
           error: `API call error: ${JSON.stringify(error.response.data)}`,
         };
       }
-      logger.debug(`Llama API error:\n${JSON.stringify(err)}`);
+      logger.debug('Llama API error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -1068,13 +1142,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;
-  config: any;
-  env?: any;
+  config: VertexEmbeddingProviderConfig;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, config: any = {}, env?: any) {
+  constructor(modelName: string, options: GoogleProviderOptions = {}) {
     this.modelName = modelName;
-    this.config = config;
-    this.env = env;
+    this.config = options.config || {};
+    this.env = options.env;
   }
 
   /**
@@ -1124,7 +1198,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       },
     };
 
-    let data: any;
+    let data: VertexEmbeddingPredictResponse = {};
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
@@ -1136,7 +1210,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         method: 'POST',
         data: body,
       });
-      data = res.data;
+      data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
       logger.error(`Vertex API call error: ${err}`);
       throw err;
@@ -1162,5 +1236,20 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-export const DefaultGradingProvider = new VertexChatProvider('gemini-2.5-pro');
-export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');
+const DEFAULT_VERTEX_MODEL = 'gemini-2.5-pro';
+const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';
+
+export function getGoogleVertexEmbeddingProvider(env?: EnvOverrides) {
+  return new VertexEmbeddingProvider(DEFAULT_VERTEX_EMBEDDING_MODEL, { env });
+}
+
+export function getGoogleVertexProviders(env?: EnvOverrides) {
+  const gradingProvider = new VertexChatProvider(DEFAULT_VERTEX_MODEL, { env });
+  return {
+    embeddingProvider: getGoogleVertexEmbeddingProvider(env),
+    gradingJsonProvider: gradingProvider,
+    gradingProvider,
+    suggestionsProvider: gradingProvider,
+    synthesizeProvider: gradingProvider,
+  };
+}

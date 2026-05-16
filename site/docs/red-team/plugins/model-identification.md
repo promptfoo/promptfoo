@@ -70,5 +70,4 @@ Testing for model identification vulnerabilities is important for:
 - [**Debug Access**](/docs/red-team/plugins/debug-access) — Tests for exposed debugging interfaces that might also reveal model information.
 - [**Prompt Extraction**](/docs/red-team/plugins/prompt-extraction) — System prompts may contain model identity information.
 - [**Tool Discovery**](/docs/red-team/plugins/tool-discovery) — Enumerating tools can reveal model-specific capabilities.
-
-For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
