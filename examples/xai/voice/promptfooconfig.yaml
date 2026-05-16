@@ -5,7 +5,7 @@ prompts:
   - file://input.json
 
 providers:
-  - id: xai:voice:grok-3
+  - id: xai:voice:grok-voice-think-fast-1.0
     config:
       voice: 'Ara' # Options: Ara, Rex, Sal, Eve, Leo
       instructions: |

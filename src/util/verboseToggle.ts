@@ -1,9 +1,18 @@
 import chalk from 'chalk';
 import { isCI } from '../envars';
-import { getLogLevel, setLogLevel } from '../logger';
+import logger, { getLogLevel, setLogLevel } from '../logger';
 
 let isVerboseToggleEnabled = false;
 let cleanupFn: (() => void) | null = null;
+
+export interface VerboseToggleOptions {
+  /**
+   * Called when the user presses Ctrl+C while the toggle owns stdin.
+   * The terminal is already restored before this fires; the callback's job is
+   * to re-enter the host's normal interruption pathway (e.g. `process.kill`).
+   */
+  onInterrupt: () => void;
+}
 
 /**
  * Shows a brief status message that doesn't interfere with progress bars
@@ -27,7 +36,7 @@ function showToggleStatus(isVerbose: boolean): void {
  *
  * @returns cleanup function to disable the toggle, or null if not enabled
  */
-export function initVerboseToggle(): (() => void) | null {
+export function initVerboseToggle(options: VerboseToggleOptions): (() => void) | null {
   // Don't enable in CI or non-interactive environments
   if (isCI() || !process.stdin.isTTY || !process.stdout.isTTY) {
     return null;
@@ -47,10 +56,23 @@ export function initVerboseToggle(): (() => void) | null {
     process.stdin.setEncoding('utf8');
 
     const handleKeypress = (key: string): void => {
-      // Handle Ctrl+C to exit gracefully
+      // In raw mode Ctrl+C arrives as stdin data instead of SIGINT. Restore the
+      // terminal first, then let the caller decide how interruption should work.
       if (key === '\u0003') {
         disableVerboseToggle();
-        process.exit();
+        try {
+          options.onInterrupt();
+        } catch (err) {
+          // A throwing onInterrupt would otherwise surface as an uncaughtException
+          // out of an EventEmitter listener and leave Ctrl+C broken for the user.
+          // Log the bug, then force-exit with the conventional SIGINT exit code so
+          // the keypress still terminates the process.
+          logger.error(
+            `verboseToggle onInterrupt callback threw: ${err instanceof Error ? err.message : err}`,
+          );
+          process.exit(130);
+        }
+        return;
       }
 
       // Toggle verbose on 'v' or 'V'
@@ -64,10 +86,20 @@ export function initVerboseToggle(): (() => void) | null {
 
     process.stdin.on('data', handleKeypress);
 
+    // Stored so cleanupFn can deregister it; otherwise repeated init/teardown
+    // cycles accumulate one 'exit' listener per cycle.
+    const exitHandler = () => {
+      if (cleanupFn) {
+        cleanupFn();
+      }
+    };
+    process.on('exit', exitHandler);
+
     isVerboseToggleEnabled = true;
 
     cleanupFn = () => {
       process.stdin.removeListener('data', handleKeypress);
+      process.removeListener('exit', exitHandler);
       if (process.stdin.setRawMode) {
         process.stdin.setRawMode(false);
       }
@@ -75,13 +107,6 @@ export function initVerboseToggle(): (() => void) | null {
       isVerboseToggleEnabled = false;
       cleanupFn = null;
     };
-
-    // Auto-cleanup on process exit
-    process.on('exit', () => {
-      if (cleanupFn) {
-        cleanupFn();
-      }
-    });
 
     // Show initial hint
     const initialVerbose = getLogLevel() === 'debug';

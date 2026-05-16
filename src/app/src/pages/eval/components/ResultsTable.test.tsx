@@ -4008,6 +4008,13 @@ describe('ResultsTable minimal scroll room detection', () => {
     expect(stickyContainer).toHaveClass('minimal-scroll-room');
   });
 
+  it('clips the standalone header wrapper so wide tables do not widen the page', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const stickyContainer = screen.getByTestId('results-table-header');
+    expect(stickyContainer).toHaveClass('-mx-4', 'overflow-hidden', 'px-4');
+  });
+
   it('does not add minimal-scroll-room class when scroll room is 150px or more', async () => {
     // Mock scroll room >= 150px (1000 - 700 = 300px)
     scrollHeightValue = 1000;
