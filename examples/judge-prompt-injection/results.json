@@ -1926,9 +1926,7 @@
   },
   "config": {
     "description": "LLM-as-a-Judge boundary failure testing",
-    "prompts": [
-      "{{response}}"
-    ],
+    "prompts": ["{{response}}"],
     "providers": [
       {
         "id": "echo",
@@ -2176,9 +2174,7 @@
         "provider": "openai:gpt-5.2"
       }
     },
-    "outputPath": [
-      "results.json"
-    ],
+    "outputPath": ["results.json"],
     "extensions": []
   },
   "shareableUrl": "https://www.promptfoo.app/eval/eval-7KT-2026-01-12T21:20:00",

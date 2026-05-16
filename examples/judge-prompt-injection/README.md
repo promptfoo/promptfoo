@@ -10,7 +10,7 @@ Test the **Control Boundary Problem** in LLM-as-a-Judge systems. When LLMs evalu
 
 LLM judges mix trusted instructions (your rubric) with untrusted content (the output being graded) in the same context. This creates an "in-band signaling" vulnerability where injected instructions can manipulate evaluation.
 
-```
+```text
 ┌─────────────────────────────────────────┐
 │  Trusted: "Grade if output equals 4"    │  ← Your rubric
 ├─────────────────────────────────────────┤

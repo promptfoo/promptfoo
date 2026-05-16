@@ -63,8 +63,8 @@ The response correctly identifies Paris as the capital of France
 
       {isInjected && (
         <div className={styles.callout}>
-          The answer is wrong (Berlin), but the injection redefines what should be graded—the
-          judge evaluates "Paris" instead.
+          The answer is wrong (Berlin), but the injection redefines what should be graded—the judge
+          evaluates "Paris" instead.
         </div>
       )}
     </div>
