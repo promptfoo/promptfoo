@@ -3,6 +3,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
@@ -98,12 +99,71 @@ vi.mock('../../../src/providers/google/util', async () => {
   };
 });
 
+// Mock GoogleAuthManager to prevent API key detection from environment
+vi.mock('../../../src/providers/google/auth', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/providers/google/auth')>(
+    '../../../src/providers/google/auth',
+  );
+  return {
+    ...actual,
+    GoogleAuthManager: {
+      ...actual.GoogleAuthManager,
+      // Return no API key by default so tests use OAuth mode
+      getApiKey: vi.fn().mockReturnValue({ apiKey: undefined, source: 'none' }),
+      determineVertexMode: vi.fn().mockReturnValue(true),
+      validateAndWarn: vi.fn(),
+      // Respect config.region when provided, otherwise default to us-central1
+      resolveRegion: vi.fn().mockImplementation((config?: { region?: string }) => {
+        return config?.region || 'us-central1';
+      }),
+      resolveProjectId: vi.fn().mockResolvedValue('test-project-id'),
+    },
+  };
+});
+
 vi.mock('../../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     importModule: mockImportModule,
   };
 });
+
+function mockVertexRequest(data: unknown) {
+  const mockRequest = vi.fn().mockResolvedValue({ data });
+
+  vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    client: {
+      request: mockRequest,
+    } as unknown as JSONClient,
+    projectId: 'test-project-id',
+  });
+
+  vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+    if (typeof creds === 'object') {
+      return JSON.stringify(creds);
+    }
+    return creds;
+  });
+  vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+  return mockRequest;
+}
+
+function expectHashedBodyCacheKeys(expectedPattern: RegExp, forbiddenValues: string[]) {
+  expect(mockCacheGet).toHaveBeenCalledTimes(1);
+  expect(mockCacheSet).toHaveBeenCalledTimes(1);
+
+  const cacheGetKey = mockCacheGet.mock.calls[0][0] as string;
+  const cacheSetKey = mockCacheSet.mock.calls[0][0] as string;
+
+  expect(cacheGetKey).toBe(cacheSetKey);
+  expect(cacheSetKey).toMatch(expectedPattern);
+  for (const value of forbiddenValues) {
+    expect(cacheSetKey).not.toContain(value);
+  }
+
+  return cacheSetKey;
+}
 
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
@@ -158,6 +218,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -172,6 +235,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+      cost: expect.closeTo(0.00001, 10),
       metadata: {},
     });
 
@@ -325,6 +389,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -346,6 +413,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 8,
         completion: 7,
       },
+      cost: expect.closeTo(0.0000145, 10),
       metadata: {},
     });
 
@@ -359,6 +427,142 @@ describe('VertexChatProvider.callGeminiApi', () => {
             },
           },
           tools,
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    ['tool_choice', 'none' as const],
+    ['toolConfig', { functionCallingConfig: { mode: 'NONE' as const } }],
+    ['tool_config', { function_calling_config: { mode: 'none' as const } }],
+  ])('should disable function calling via %s', async (key, value) => {
+    const tools = [
+      {
+        functionDeclarations: [
+          {
+            name: 'get_weather',
+            description: 'Get weather information',
+            parameters: { type: 'OBJECT' as const, properties: {} },
+          },
+        ],
+      },
+      { googleSearch: {} },
+    ];
+
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tools,
+        [key]: value,
+      } as any,
+    });
+
+    const mockResponse = {
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
+          usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
+        },
+      ],
+    };
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((c) => c as any);
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callGeminiApi('hi');
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tools: [{ googleSearch: {} }],
+        }),
+      }),
+    );
+  });
+
+  it('should not invoke functionToolCallbacks when tools are disabled', async () => {
+    // Use a cached response so executeFunctionCallback would normally fire if not gated.
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({
+        cached: true,
+        output: JSON.stringify({
+          functionCall: { name: 'should_not_run', args: '{}' },
+        }),
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      }),
+    );
+
+    const callback = vi.fn().mockResolvedValue('should not be called');
+
+    const provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tool_choice: 'none',
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                name: 'should_not_run',
+                description: 'Test',
+                parameters: { type: 'OBJECT', properties: {} },
+              },
+            ],
+          },
+        ],
+        functionToolCallbacks: { should_not_run: callback },
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(callback).not.toHaveBeenCalled();
+    // Output remains the original functionCall envelope when callbacks are gated.
+    expect(result.output).toBe(
+      JSON.stringify({ functionCall: { name: 'should_not_run', args: '{}' } }),
+    );
+
+    // Reset cache state so other tests aren't affected.
+    mockIsCacheEnabled.mockReturnValue(false);
+    mockCacheGet.mockReset();
+  });
+
+  it('should skip executable tool files while preserving inline non-function tools when disabled', async () => {
+    provider = new VertexChatProvider('gemini-pro', {
+      config: {
+        tool_choice: 'none',
+        tools: [{ googleSearch: {} }, 'file://tools.js:getTools'] as any,
+      },
+    });
+
+    const mockResponse = {
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'no tools used' }] } }],
+          usageMetadata: { totalTokenCount: 10, promptTokenCount: 5, candidatesTokenCount: 5 },
+        },
+      ],
+    };
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((c) => c as any);
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callGeminiApi('hi');
+
+    expect(mockImportModule).not.toHaveBeenCalled();
+    expect(mockRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          tools: [{ googleSearch: {} }],
         }),
       }),
     );
@@ -420,6 +624,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -437,6 +644,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         prompt: 5,
         completion: 5,
       },
+      cost: expect.closeTo(0.00001, 10),
       metadata: {},
     });
 
@@ -481,6 +689,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -488,6 +699,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     provider = new VertexChatProvider('gemini-2.0-flash-001');
     await provider.callGeminiApi('test prompt');
 
+    expectHashedBodyCacheKeys(/^vertex:gemini-2\.0-flash-001:[a-f0-9]{64}$/, ['test prompt']);
     expect(mockCacheSet).toHaveBeenCalledWith(
       expect.stringContaining('vertex:gemini-2.0-flash-001:'),
       expect.any(String),
@@ -507,6 +719,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
         total: 15,
         prompt: 10,
         completion: 5,
+      },
+      cost: 0.00045,
+      metadata: {
+        groundingMetadata: {
+          test: true,
+        },
       },
     };
 
@@ -546,6 +764,53 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
     expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+    expect(result.cost).toBe(0.00045);
+    expect(result.metadata).toEqual({
+      groundingMetadata: {
+        test: true,
+      },
+    });
+  });
+
+  it('should return undefined cost when Gemini omits usage metadata', async () => {
+    const mockResponse = {
+      data: [
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+        },
+      ],
+    };
+
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: mockRequest,
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    const response = await provider.callGeminiApi('test prompt');
+
+    expect(response).toEqual({
+      cached: false,
+      output: 'response text',
+      tokenUsage: {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+      },
+      cost: undefined,
+      metadata: {},
+    });
   });
 
   it('should handle errors in function tool callbacks', async () => {
@@ -1042,6 +1307,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1094,6 +1362,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1140,6 +1411,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1186,6 +1460,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1238,6 +1515,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1286,6 +1566,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1330,6 +1613,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1377,6 +1663,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1433,6 +1722,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1484,6 +1776,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1533,6 +1828,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       });
 
       vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        if (typeof creds === 'object') {
+          return JSON.stringify(creds);
+        }
         return creds;
       });
       vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1547,6 +1845,65 @@ describe('VertexChatProvider.callGeminiApi', () => {
         completion: 10,
       });
     });
+  });
+});
+
+describe('VertexChatProvider.callPalm2Api', () => {
+  beforeEach(() => {
+    mockCacheGet.mockReset();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockReset();
+
+    mockIsCacheEnabled.mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('hashes Palm2 request body cache keys without leaking prompts', async () => {
+    const prompt = 'palm2-secret-prompt-value';
+    const provider = new VertexChatProvider('chat-bison', {
+      config: {
+        context: 'palm2-secret-context',
+        temperature: 0.4,
+      },
+    });
+
+    mockVertexRequest({
+      predictions: [{ candidates: [{ content: 'Palm2 response content' }] }],
+    });
+
+    await provider.callPalm2Api(prompt);
+
+    expectHashedBodyCacheKeys(/^vertex:palm2:chat-bison:[a-f0-9]{64}$/, [
+      prompt,
+      'palm2-secret-context',
+    ]);
+  });
+
+  it('scopes Palm2 request body cache keys by model name', async () => {
+    const prompt = 'same palm2 prompt';
+    const providerA = new VertexChatProvider('chat-bison', {
+      config: { context: 'same palm2 context' },
+    });
+    const providerB = new VertexChatProvider('text-bison', {
+      config: { context: 'same palm2 context' },
+    });
+
+    mockVertexRequest({
+      predictions: [{ candidates: [{ content: 'Palm2 response content' }] }],
+    });
+
+    await providerA.callPalm2Api(prompt);
+    await providerB.callPalm2Api(prompt);
+
+    const [cacheKeyA, cacheKeyB] = mockCacheGet.mock.calls.map(([key]) => key as string);
+    expect(cacheKeyA).toMatch(/^vertex:palm2:chat-bison:[a-f0-9]{64}$/);
+    expect(cacheKeyB).toMatch(/^vertex:palm2:text-bison:[a-f0-9]{64}$/);
+    expect(cacheKeyA).not.toBe(cacheKeyB);
+    expect(cacheKeyA).not.toContain(prompt);
+    expect(cacheKeyB).not.toContain(prompt);
   });
 });
 
@@ -1644,6 +2001,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1686,6 +2046,83 @@ describe('VertexChatProvider.callLlamaApi', () => {
     );
   });
 
+  it('hashes Llama request body cache keys without leaking prompts', async () => {
+    const prompt = 'llama-secret-prompt-value';
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+        temperature: 0.7,
+        llamaConfig: {
+          safetySettings: {
+            llama_guard_settings: { marker: 'llama-secret-safety-setting' },
+          },
+        },
+      },
+    });
+
+    mockVertexRequest({
+      choices: [
+        {
+          message: {
+            content: 'Llama response content',
+          },
+        },
+      ],
+      usage: {
+        total_tokens: 35,
+        prompt_tokens: 15,
+        completion_tokens: 20,
+      },
+    });
+
+    await provider.callLlamaApi(prompt);
+
+    expectHashedBodyCacheKeys(/^vertex:llama:llama-3\.3-70b-instruct-maas:[a-f0-9]{64}$/, [
+      prompt,
+      'llama-secret-safety-setting',
+    ]);
+  });
+
+  it('does not log raw Llama prompts, safety settings, or outputs', async () => {
+    const prompt = 'llama-secret-prompt-value';
+    const output = 'llama-secret-output-value';
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
+      config: {
+        region: 'us-central1',
+        llamaConfig: {
+          safetySettings: {
+            llama_guard_settings: { marker: 'llama-secret-safety-setting' },
+          },
+        },
+      },
+    });
+
+    mockVertexRequest({
+      choices: [
+        {
+          message: {
+            content: output,
+          },
+        },
+      ],
+      usage: {
+        total_tokens: 35,
+        prompt_tokens: 15,
+        completion_tokens: 20,
+      },
+    });
+
+    await provider.callLlamaApi(prompt);
+
+    const debugLogs = JSON.stringify(debugSpy.mock.calls);
+    expect(debugLogs).not.toContain(prompt);
+    expect(debugLogs).not.toContain(output);
+    expect(debugLogs).not.toContain('llama-secret-safety-setting');
+    expect(debugLogs).toContain('Preparing to call Llama API');
+    debugSpy.mockRestore();
+  });
+
   it('should default safety settings to enabled when not specified', async () => {
     provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
       config: {
@@ -1720,6 +2157,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1810,6 +2250,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1886,6 +2329,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1899,6 +2345,40 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
           max_tokens: 500,
         }),
       }),
+    );
+  });
+
+  it('hashes Claude request body cache keys without leaking prompts', async () => {
+    const prompt = 'claude-secret-prompt-value';
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+      config: {
+        anthropicVersion: 'vertex-2023-10-16',
+        maxOutputTokens: 500,
+        systemInstruction: 'claude-secret-system-instruction',
+      },
+    });
+
+    mockVertexRequest({
+      id: 'test-id',
+      type: 'message',
+      role: 'assistant',
+      model: 'claude-3-5-sonnet-v2@20241022',
+      content: [{ type: 'text', text: 'Response from Claude' }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: {
+        input_tokens: 20,
+        output_tokens: 30,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    });
+
+    await provider.callClaudeApi(prompt);
+
+    expectHashedBodyCacheKeys(
+      /^vertex:claude:claude-3-5-sonnet-v2@20241022:showThinking=false:[a-f0-9]{64}$/,
+      [prompt, 'claude-secret-system-instruction'],
     );
   });
 
@@ -1938,6 +2418,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -1952,6 +2435,83 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         }),
       }),
     );
+  });
+
+  it('omits temperature for Claude Opus 4.7 on Vertex', async () => {
+    provider = new VertexChatProvider('claude-opus-4-7', {
+      config: { max_tokens: 32, temperature: 0.5 },
+    });
+
+    const mockResponse = {
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-4-7',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    };
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callClaudeApi('test prompt');
+
+    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    expect(sentBody.temperature).toBeUndefined();
+    expect(sentBody.max_tokens).toBe(32);
+  });
+
+  it('still sends temperature for Opus 4.6 on Vertex (regression)', async () => {
+    provider = new VertexChatProvider('claude-opus-4-6', {
+      config: { max_tokens: 32, temperature: 0 },
+    });
+
+    const mockResponse = {
+      data: {
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-4-6',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 1,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+        },
+      },
+    };
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: { request: mockRequest } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+      typeof creds === 'object' ? JSON.stringify(creds) : creds,
+    );
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+    await provider.callClaudeApi('test prompt');
+
+    const sentBody = mockRequest.mock.calls[0][0].data as Record<string, unknown>;
+    expect(sentBody.temperature).toBe(0);
   });
 
   it('should accept both max_tokens and maxOutputTokens parameters', async () => {
@@ -1993,6 +2553,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     });
 
     vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      if (typeof creds === 'object') {
+        return JSON.stringify(creds);
+      }
       return creds;
     });
     vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
@@ -2008,6 +2571,336 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         }),
       }),
     );
+  });
+
+  describe('system message handling', () => {
+    let mockRequest: ReturnType<typeof vi.fn>;
+
+    function setupClaudeMocks(): void {
+      mockRequest = vi.fn().mockResolvedValue({
+        data: {
+          id: 'test-id',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-3-5-sonnet-v2@20241022',
+          content: [{ type: 'text', text: 'Response from Claude' }],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 20,
+            output_tokens: 30,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        },
+      });
+
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: { request: mockRequest } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) =>
+        typeof creds === 'object' ? JSON.stringify(creds) : creds,
+      );
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    }
+
+    function getRequestData(): Record<string, unknown> {
+      return mockRequest.mock.calls[0][0].data;
+    }
+
+    beforeEach(() => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
+      setupClaudeMocks();
+    });
+
+    it('should extract system messages to top-level system parameter', async () => {
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'system', content: 'You are a helpful assistant' },
+          { role: 'user', content: 'Hello' },
+        ]),
+      );
+
+      expect(mockRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            system: [{ type: 'text', text: 'You are a helpful assistant' }],
+            messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+          }),
+        }),
+      );
+    });
+
+    it('should not include system parameter for plain string prompts', async () => {
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ]);
+      expect(requestData).not.toHaveProperty('system');
+    });
+
+    it('should not include system parameter when structured messages have no system role', async () => {
+      await provider.callClaudeApi(JSON.stringify([{ role: 'user', content: 'Hello' }]));
+
+      const requestData = getRequestData();
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ]);
+      expect(requestData).not.toHaveProperty('system');
+    });
+
+    it('should handle multi-turn conversation with system message', async () => {
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'system', content: 'You are a math tutor' },
+          { role: 'user', content: 'What is 2+2?' },
+          { role: 'assistant', content: '4' },
+          { role: 'user', content: 'What about 3+3?' },
+        ]),
+      );
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'You are a math tutor' }]);
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'What is 2+2?' }] },
+        { role: 'assistant', content: [{ type: 'text', text: '4' }] },
+        { role: 'user', content: [{ type: 'text', text: 'What about 3+3?' }] },
+      ]);
+    });
+
+    it('should use config.systemInstruction string for Claude system parameter', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: 'Always respond NO.',
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'Always respond NO.' }]);
+    });
+
+    it('should render context vars in config.systemInstruction for Claude system parameter', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: 'Answer {{ style }}.',
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello', {
+        vars: { style: 'briefly' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'Answer briefly.' }]);
+    });
+
+    it('should use config.systemInstruction Content object for Claude system parameter', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: { parts: [{ text: 'Be concise.' }] },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'Be concise.' }]);
+    });
+
+    it('should merge config.systemInstruction with prompt system messages', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          systemInstruction: 'Config instruction.',
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'system', content: 'Prompt instruction.' },
+          { role: 'user', content: 'Hello' },
+        ]),
+      );
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([
+        { type: 'text', text: 'Config instruction.' },
+        { type: 'text', text: 'Prompt instruction.' },
+      ]);
+    });
+
+    it('should forward thinking config from prompt and not leak metadata into messages', async () => {
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'user', content: 'Solve this step by step' },
+          { thinking: { type: 'enabled', budget_tokens: 5000 } },
+        ]),
+      );
+
+      const requestData = getRequestData();
+      expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 5000 });
+      // max_tokens must be >= budget_tokens
+      expect(requestData.max_tokens).toBe(6024);
+      // Metadata entries (no role) must not leak into messages
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Solve this step by step' }] },
+      ]);
+    });
+
+    it('should prefer config thinking over prompt thinking', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 10000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi(
+        JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { thinking: { type: 'enabled', budget_tokens: 5000 } },
+        ]),
+      );
+
+      const requestData = getRequestData();
+      expect(requestData.thinking).toEqual({ type: 'enabled', budget_tokens: 10000 });
+      // max_tokens should accommodate config budget_tokens
+      expect(requestData.max_tokens).toBe(11024);
+    });
+
+    it('should ensure max_tokens >= budget_tokens when thinking is enabled', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      // Default would be 2048 but budget_tokens is 5000, so it must be bumped
+      expect(getRequestData().max_tokens).toBe(6024);
+    });
+
+    it('should use explicit max_tokens when it exceeds budget_tokens', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+          max_tokens: 16384,
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      expect(getRequestData().max_tokens).toBe(16384);
+    });
+
+    it('should use default max_tokens of 512 without thinking', async () => {
+      await provider.callClaudeApi('Hello');
+
+      expect(getRequestData().max_tokens).toBe(512);
+    });
+
+    it('should include thinking output in response when thinking is enabled', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: { thinking: { type: 'enabled', budget_tokens: 5000 } },
+      });
+      setupClaudeMocks();
+
+      // Override mock response AFTER setupClaudeMocks creates the new mockRequest
+      mockRequest.mockResolvedValue({
+        data: {
+          id: 'test-id',
+          type: 'message',
+          role: 'assistant',
+          model: 'claude-3-5-sonnet-v2@20241022',
+          content: [
+            { type: 'thinking', thinking: 'Let me think...', signature: 'sig123' },
+            { type: 'text', text: 'The answer is 42' },
+          ],
+          stop_reason: 'end_turn',
+          stop_sequence: null,
+          usage: {
+            input_tokens: 20,
+            output_tokens: 50,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+          },
+        },
+      });
+
+      const result = await provider.callClaudeApi('Think about this');
+
+      expect(result.output).toContain('Thinking: Let me think...');
+      expect(result.output).toContain('The answer is 42');
+    });
+
+    it('should return cost for Vertex Claude model names', async () => {
+      const result = await provider.callClaudeApi('Hello');
+
+      // claude-3-5-sonnet-v2@20241022 normalizes to claude-3-5-sonnet-20241022 for cost lookup
+      expect(result.cost).toBeDefined();
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should use default max_tokens of 512 when thinking is disabled', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'disabled' },
+        },
+      });
+      setupClaudeMocks();
+
+      await provider.callClaudeApi('Hello');
+
+      const requestData = getRequestData();
+      expect(requestData.max_tokens).toBe(512);
+      // thinking config should still be sent (API needs to see it)
+      expect(requestData.thinking).toEqual({ type: 'disabled' });
+    });
+
+    it('should not show thinking output when thinking is disabled', async () => {
+      provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022', {
+        config: {
+          thinking: { type: 'disabled' },
+        },
+      });
+      setupClaudeMocks();
+
+      const result = await provider.callClaudeApi('Hello');
+
+      // Output should be plain text, not prefixed with "Thinking:"
+      expect(result.output).toBe('Response from Claude');
+    });
+
+    it('should parse YAML chat prompts', async () => {
+      const yamlPrompt =
+        '- role: system\n  content: You are helpful\n- role: user\n  content: Hello';
+      await provider.callClaudeApi(yamlPrompt);
+
+      const requestData = getRequestData();
+      expect(requestData.system).toEqual([{ type: 'text', text: 'You are helpful' }]);
+      expect(requestData.messages).toEqual([
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ]);
+    });
+
+    it('should return error for invalid YAML prompts', async () => {
+      const invalidYaml = '- role: system\n  content: test\n- invalid: {{{';
+      const result = await provider.callClaudeApi(invalidYaml);
+
+      expect(result.error).toContain('YAML');
+    });
   });
 
   describe('responseSchema handling', () => {

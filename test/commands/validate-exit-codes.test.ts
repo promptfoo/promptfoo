@@ -1,13 +1,16 @@
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doValidate, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
-import { resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 
 import type { UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/logger');
-vi.mock('../../src/util/config/load');
+vi.mock('../../src/util/config/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/config/load')>()),
+  resolveConfigs: vi.fn(),
+}));
 vi.mock('../../src/telemetry', () => ({
   default: {
     record: vi.fn(),
@@ -28,6 +31,10 @@ describe('Validate Command Exit Codes', () => {
     process.exitCode = 0;
   });
 
+  afterEach(() => {
+    vi.mocked(resolveConfigs).mockReset();
+  });
+
   describe('Success scenarios - should set exit code 0', () => {
     it('should set exit code 0 when configuration is valid', async () => {
       // Mock successful config resolution and validation
@@ -39,7 +46,7 @@ describe('Validate Command Exit Codes', () => {
 
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
-        providers: [{ id: () => 'test-provider' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
         tests: [{ vars: { test: 'value' } }],
       };
 
@@ -63,7 +70,7 @@ describe('Validate Command Exit Codes', () => {
 
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
-        providers: [{ id: () => 'test-provider' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
       };
 
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -89,7 +96,7 @@ describe('Validate Command Exit Codes', () => {
 
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
-        providers: [{ id: () => 'test-provider' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
       };
 
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -116,7 +123,7 @@ describe('Validate Command Exit Codes', () => {
       const mockInvalidTestSuite = {
         // Invalid test suite structure to trigger validation error
         prompts: 'invalid prompts format', // Should be an array
-        providers: [{ id: () => 'test-provider' }],
+        providers: [{ id: () => 'test-provider', callApi: () => Promise.resolve({}) }],
       };
 
       vi.mocked(resolveConfigs).mockResolvedValue({
@@ -141,6 +148,19 @@ describe('Validate Command Exit Codes', () => {
 
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to validate configuration: Failed to load configuration'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should prefix config resolution messages with the validate context', async () => {
+      vi.mocked(resolveConfigs).mockRejectedValue(
+        new ConfigResolutionError('You must provide at least 1 prompt'),
+      );
+
+      await doValidate({ config: ['invalid-config.yaml'] }, defaultConfig, defaultConfigPath);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to validate configuration: You must provide at least 1 prompt',
       );
       expect(process.exitCode).toBe(1);
     });

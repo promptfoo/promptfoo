@@ -17,7 +17,8 @@ vi.mock('../../../../src/util/config/default', () => ({
   }),
 }));
 
-vi.mock('../../../../src/util/config/load', () => ({
+vi.mock('../../../../src/util/config/load', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../../src/util/config/load')>()),
   resolveConfigs: vi.fn().mockResolvedValue({
     config: {},
     testSuite: {
@@ -228,6 +229,129 @@ describe('runEvaluation tool', () => {
 
       const result = formatPromptsSummary(mockSummary as any);
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('promptFilter validation', () => {
+    it('should error on mixed numeric and non-numeric filters', async () => {
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      const mockServer = {
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any;
+
+      registerRunEvaluationTool(mockServer);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: ['0', 'morning.*'],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('Cannot mix numeric indices and regex patterns');
+    });
+
+    it('should return error when all prompts are filtered out', async () => {
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {},
+        testSuite: {
+          prompts: [{ label: 'test-prompt', raw: 'test' }],
+          providers: [{ id: 'test-provider' }],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      } as any);
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: 'nonexistent.*',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('No prompts found after applying filter');
+    });
+
+    it('should return error when all providers are filtered out', async () => {
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: {},
+        testSuite: {
+          prompts: [{ label: 'test-prompt', raw: 'test' }],
+          providers: [
+            { id: () => 'openai:gpt-4', callApi: async () => ({ output: 'test' }) },
+          ] as any,
+          tests: [{ vars: { input: 'test' } }],
+        },
+      } as any);
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        providerFilter: 'nonexistent',
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain('No providers matched filter');
+    });
+
+    it('should return an error when config resolution fails instead of terminating the host', async () => {
+      const { ConfigResolutionError, resolveConfigs } = await import(
+        '../../../../src/util/config/load'
+      );
+
+      vi.mocked(resolveConfigs).mockRejectedValueOnce(
+        new ConfigResolutionError('You must provide at least 1 prompt'),
+      );
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        promptFilter: 'anything',
+      });
+
+      expect(result.isError).toBe(true);
+      const logger = (await import('../../../../src/logger')).default;
+      expect(logger.error).toHaveBeenCalledWith(
+        'Evaluation execution failed: You must provide at least 1 prompt',
+      );
     });
   });
 });

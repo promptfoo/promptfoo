@@ -8,6 +8,7 @@ Initialize this example:
 
 ```bash
 npx promptfoo@latest init --example openai-video
+cd openai-video
 ```
 
 Set your OpenAI API key:

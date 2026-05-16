@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
@@ -38,18 +39,7 @@ import {
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import {
-  BarChart2,
-  ChevronDown,
-  Eye,
-  Info,
-  Play,
-  Save,
-  Search,
-  Sliders,
-  Square,
-  X,
-} from 'lucide-react';
+import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
@@ -59,7 +49,7 @@ import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
-import type { Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
+import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
@@ -79,6 +69,77 @@ interface JobStatusResponse {
   jobId?: string;
 }
 
+interface IntentEntry {
+  display: string;
+  isMultiStep: boolean;
+  // Position of the intent plugin in `config.plugins`. Configs may contain
+  // multiple intent plugins, so we identify which one this entry came from.
+  pluginIndex: number;
+  // Position of the entry within that plugin's `config.intent` array.
+  entryIndex: number;
+}
+
+interface IntentPluginRef {
+  id: 'intent';
+  config: { intent: string | (string | string[])[] };
+}
+
+const isIntentPlugin = (plugin: unknown): plugin is IntentPluginRef =>
+  typeof plugin === 'object' &&
+  plugin !== null &&
+  (plugin as { id?: unknown }).id === 'intent' &&
+  (plugin as { config?: { intent?: unknown } }).config?.intent !== undefined;
+
+const isNonEmptyIntentEntry = (entry: string | string[]): boolean =>
+  typeof entry === 'string' ? entry.trim() !== '' : Array.isArray(entry) && entry.length > 0;
+
+type ReviewPlugin = RedteamPlugin | { id: string; config?: PluginConfig };
+
+// Aggregates entries across every intent plugin in the config. Each top-level
+// entry in `config.intent` is one intent test case at runtime (an inner array
+// is a single multi-step sequence). Tracks (pluginIndex, entryIndex) so the
+// remove handler can target the exact entry, even when multiple intent plugins
+// exist (e.g. configs assembled from YAML that include duplicate `intent:`
+// blocks).
+function getDisplayedIntents(plugins: readonly ReviewPlugin[]): IntentEntry[] {
+  return plugins.flatMap<IntentEntry>((plugin, pluginIndex) => {
+    if (!isIntentPlugin(plugin)) {
+      return [];
+    }
+    const raw = plugin.config.intent;
+    const entries: (string | string[])[] = Array.isArray(raw) ? raw : [raw];
+    return entries.flatMap<IntentEntry>((entry, entryIndex) => {
+      if (!isNonEmptyIntentEntry(entry)) {
+        return [];
+      }
+      if (Array.isArray(entry)) {
+        return [{ display: entry.join(' → '), isMultiStep: true, pluginIndex, entryIndex }];
+      }
+      return [{ display: entry, isMultiStep: false, pluginIndex, entryIndex }];
+    });
+  });
+}
+
+function removeIntentEntry(
+  plugins: readonly ReviewPlugin[],
+  pluginIndex: number,
+  entryIndex: number,
+): ReviewPlugin[] | null {
+  const target = plugins[pluginIndex];
+  if (!target || !isIntentPlugin(target)) {
+    return null;
+  }
+  const currentIntents: (string | string[])[] = Array.isArray(target.config.intent)
+    ? target.config.intent
+    : [target.config.intent];
+  const newIntents = currentIntents.filter((_, i) => i !== entryIndex);
+  return plugins.map((p, i) =>
+    i === pluginIndex && isIntentPlugin(p)
+      ? { ...p, config: { ...p.config, intent: newIntents } }
+      : p,
+  );
+}
+
 export default function Review({
   onBack,
   navigateToPlugins,
@@ -92,6 +153,7 @@ export default function Review({
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
+  const { signalEvalCompleted } = useEvalHistoryRefresh();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
@@ -205,10 +267,8 @@ export default function Review({
 
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
-  // Using "use no memo" - this effect intentionally runs once after hydration with limited deps
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    'use no memo';
     if (!_hasHydrated || hasAttemptedRecovery.current) {
       return;
     }
@@ -323,16 +383,17 @@ export default function Review({
     );
   }, [config.plugins]);
 
-  const intents = useMemo(() => {
-    return config.plugins
-      .filter(
-        (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-          typeof p === 'object' && p.id === 'intent' && p.config?.intent !== undefined,
-      )
-      .map((p) => p.config.intent)
-      .flat()
-      .filter((intent): intent is string => typeof intent === 'string' && intent.trim() !== '');
-  }, [config.plugins]);
+  const intents = useMemo(() => getDisplayedIntents(config.plugins), [config.plugins]);
+
+  const handleRemoveIntent = useCallback(
+    (pluginIndex: number, entryIndex: number) => {
+      const next = removeIntentEntry(config.plugins, pluginIndex, entryIndex);
+      if (next) {
+        updateConfig('plugins', next);
+      }
+    },
+    [config.plugins, updateConfig],
+  );
 
   const [expanded, setExpanded] = React.useState(false);
 
@@ -426,6 +487,7 @@ export default function Review({
 
             if (status.status === 'complete' && status.result && status.evalId) {
               setEvalId(status.evalId);
+              signalEvalCompleted();
 
               recordEvent('funnel', {
                 type: 'redteam',
@@ -453,7 +515,7 @@ export default function Review({
 
       pollIntervalRef.current = interval;
     },
-    [clearJob, recordEvent, showToast],
+    [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
   const handleRunWithSettings = async () => {
@@ -628,6 +690,7 @@ export default function Review({
                     {count > 1 ? `${label} (${count})` : label}
                     <button
                       type="button"
+                      aria-label={`Remove plugin ${label}`}
                       onClick={() => {
                         const newPlugins = config.plugins.filter((plugin) => {
                           const pluginLabel = getPluginSummary(plugin).label;
@@ -645,10 +708,12 @@ export default function Review({
               {pluginSummary.length === 0 && (
                 <>
                   <Alert variant="warning" className="mt-4">
-                    <AlertDescription>
-                      You haven't selected any plugins. Plugins are the vulnerabilities that the red
-                      team will search for.
-                    </AlertDescription>
+                    <AlertContent>
+                      <AlertDescription>
+                        You haven't selected any plugins. Plugins are the vulnerabilities that the
+                        red team will search for.
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
                   <Button onClick={navigateToPlugins} className="mt-4">
                     Add a plugin
@@ -670,6 +735,7 @@ export default function Review({
                     {count > 1 ? `${label} (${count})` : label}
                     <button
                       type="button"
+                      aria-label={`Remove strategy ${label}`}
                       onClick={() => {
                         const strategyId =
                           Object.entries(strategyDisplayNames).find(
@@ -711,11 +777,13 @@ export default function Review({
                 (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
                 <>
                   <Alert variant="warning" className="mt-4">
-                    <AlertDescription>
-                      The basic strategy is great for an end-to-end setup test, but don't expect any
-                      findings. Once you've verified that the setup is working, add another
-                      strategy.
-                    </AlertDescription>
+                    <AlertContent>
+                      <AlertDescription>
+                        The basic strategy is great for an end-to-end setup test, but don't expect
+                        any findings. Once you've verified that the setup is working, add another
+                        strategy.
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
                   <Button onClick={navigateToStrategies} className="mt-4">
                     Add more strategies
@@ -755,6 +823,11 @@ export default function Review({
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={`Remove policy ${
+                            isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : makeDefaultPolicyName(index)
+                          }`}
                           className="size-6 shrink-0"
                           onClick={() => {
                             const policyToMatch =
@@ -794,42 +867,35 @@ export default function Review({
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
-                    <div key={index} className="relative rounded-lg bg-muted/50 p-3 pr-8">
-                      <p className="line-clamp-2 text-sm">{intent}</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1 size-6"
-                        onClick={() => {
-                          const intentPlugin = config.plugins.find(
-                            (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-                              typeof p === 'object' &&
-                              p.id === 'intent' &&
-                              p.config?.intent !== undefined,
-                          );
-
-                          if (intentPlugin) {
-                            const currentIntents = Array.isArray(intentPlugin.config.intent)
-                              ? intentPlugin.config.intent
-                              : [intentPlugin.config.intent];
-
-                            const newIntents = currentIntents.filter((i) => i !== intent);
-
-                            const newPlugins = config.plugins.map((p) =>
-                              typeof p === 'object' && p.id === 'intent'
-                                ? { ...p, config: { ...p.config, intent: newIntents } }
-                                : p,
-                            );
-
-                            updateConfig('plugins', newPlugins);
-                          }
-                        }}
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                  ))}
+                  {intents
+                    .slice(0, expanded ? undefined : 5)
+                    .map(({ display, isMultiStep, pluginIndex, entryIndex }) => {
+                      // Truncate long entries for the SR/title label so screen
+                      // readers can distinguish multiple Remove buttons.
+                      const shortLabel = display.length > 80 ? `${display.slice(0, 80)}…` : display;
+                      const key = `${pluginIndex}:${entryIndex}`;
+                      return (
+                        <div key={key} className="relative rounded-lg bg-muted/50 p-3 pr-8">
+                          <p className="line-clamp-2 text-sm" title={display}>
+                            {display}
+                          </p>
+                          {isMultiStep && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              Multi-step intent
+                            </p>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Remove intent: ${shortLabel}`}
+                            className="absolute right-1 top-1 size-6"
+                            onClick={() => handleRemoveIntent(pluginIndex, entryIndex)}
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   {intents.length > 5 && (
                     <Button
                       variant="link"
@@ -850,10 +916,12 @@ export default function Review({
         <div className="mt-6 rounded-lg border border-border shadow-sm">
           {/* Application Details */}
           <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
-              <div className="flex items-center gap-2">
-                <Info className="size-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">Application Details</h3>
+            <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 border-b border-border p-4 hover:bg-muted/50 sm:items-center">
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Info className="size-4 shrink-0 text-muted-foreground" />
+                  <h3 className="min-w-0 text-lg font-semibold">Application Details</h3>
+                </div>
                 {config.purpose && (
                   <Badge
                     variant="outline"
@@ -908,18 +976,20 @@ export default function Review({
                 !isFoundationModelProvider(config.target.id) ? (
                   <div className="mb-4">
                     <Alert variant="warning">
-                      <AlertDescription>
-                        Application details are required to generate a high quality red team. Go to
-                        the Application Details section and add a purpose.{' '}
-                        <Link
-                          className="underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
-                        >
-                          Learn more about red team best practices.
-                        </Link>
-                      </AlertDescription>
+                      <AlertContent>
+                        <AlertDescription>
+                          Application details are required to generate a high quality red team. Go
+                          to the Application Details section and add a purpose.{' '}
+                          <Link
+                            className="underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                          >
+                            Learn more about red team best practices.
+                          </Link>
+                        </AlertDescription>
+                      </AlertContent>
                     </Alert>
                     <Button onClick={navigateToPurpose} className="mt-4">
                       Add application details
@@ -930,7 +1000,7 @@ export default function Review({
                 {parsedPurposeSections.length > 0 ? (
                   <div className="mt-2 space-y-4">
                     {parsedPurposeSections.map((section, index) => (
-                      <div key={index} className="overflow-hidden rounded-lg border">
+                      <div key={index} className="overflow-hidden rounded-lg border border-border">
                         <button
                           type="button"
                           onClick={() => togglePurposeSection(section.title)}
@@ -1009,10 +1079,12 @@ export default function Review({
 
           {/* Advanced Configuration */}
           <Collapsible open={isAdvancedConfigExpanded} onOpenChange={setIsAdvancedConfigExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
-              <div className="flex items-center gap-2">
-                <Sliders className="size-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">Advanced Configuration</h3>
+            <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 border-b border-border p-4 hover:bg-muted/50 sm:items-center">
+              <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Sliders className="size-4 shrink-0 text-muted-foreground" />
+                  <h3 className="min-w-0 text-lg font-semibold">Advanced Configuration</h3>
+                </div>
                 <Badge variant="outline" className="text-xs">
                   Optional
                 </Badge>
@@ -1053,13 +1125,17 @@ export default function Review({
               <div className="p-4 pt-0">
                 <RunOptionsContent
                   numTests={config.numTests}
+                  maxCharsPerMessage={config.maxCharsPerMessage}
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
                     delay: config.target.config.delay,
                     verbose: config.target.config.verbose,
                   }}
                   updateConfig={updateConfig}
-                  updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
+                  updateRunOption={(
+                    key: keyof RedteamRunOptions,
+                    value: RedteamRunOptions[keyof RedteamRunOptions],
+                  ) => {
                     if (key === 'delay') {
                       updateConfig('target', {
                         ...config.target,
@@ -1117,13 +1193,15 @@ export default function Review({
             </p>
             {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
-                <AlertDescription>
-                  {apiHealthStatus === 'blocked'
-                    ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
-                    : apiHealthStatus === 'disabled'
-                      ? 'Remote generation is disabled. The "Run Now" option is not available.'
-                      : 'Checking connection status...'}
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription>
+                    {apiHealthStatus === 'blocked'
+                      ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
+                      : apiHealthStatus === 'disabled'
+                        ? 'Remote generation is disabled. The "Run Now" option is not available.'
+                        : 'Checking connection status...'}
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             )}
             <div className="mb-4">
@@ -1145,7 +1223,7 @@ export default function Review({
                 </Tooltip>
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
-                    <Square className="size-4" />
+                    <X className="size-4" />
                     Cancel
                   </Button>
                 )}
@@ -1204,7 +1282,9 @@ export default function Review({
 
         {emailVerificationError && (
           <Alert variant="destructive" className="mt-4">
-            <AlertDescription>{emailVerificationError}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{emailVerificationError}</AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 

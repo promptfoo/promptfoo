@@ -3,6 +3,7 @@ import { fetchWithProxy } from '../../util/fetch';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 
+import type { VarValue } from '../../types/shared';
 import type {
   MCPApiKeyAuth,
   MCPOAuthClientCredentialsAuth,
@@ -12,13 +13,22 @@ import type {
 
 export type { OAuthTokenResult };
 
+export function isMcpToolNameFilter(tools: unknown): tools is string | string[] {
+  const isPlainToolName = (tool: unknown): tool is string =>
+    typeof tool === 'string' && !tool.startsWith('file://');
+
+  return (
+    isPlainToolName(tools) || (Array.isArray(tools) && tools.every((tool) => isPlainToolName(tool)))
+  );
+}
+
 /**
  * Render environment variables in server config auth fields.
  * Supports {{VAR_NAME}} syntax for variable substitution.
  */
 export function renderAuthVars(
   server: MCPServerConfig,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): MCPServerConfig {
   if (!server.auth) {
     return server;
@@ -52,6 +62,15 @@ function getOAuthCacheKey(auth: MCPOAuthClientCredentialsAuth | MCPOAuthPassword
 
 // Cache for discovered token endpoints
 const tokenEndpointCache = new Map<string, string>();
+
+function isValidTokenEndpoint(tokenEndpoint: string): boolean {
+  try {
+    const parsedUrl = new URL(tokenEndpoint);
+    return parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Discover the OAuth token endpoint from the server's well-known metadata.
@@ -95,13 +114,13 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
       }
 
       const metadata = (await response.json()) as { token_endpoint?: string };
-      if (metadata.token_endpoint) {
+      if (metadata.token_endpoint && isValidTokenEndpoint(metadata.token_endpoint)) {
         logger.debug(`[MCP Auth] Discovered token endpoint: ${metadata.token_endpoint}`);
         tokenEndpointCache.set(serverUrl, metadata.token_endpoint);
         return metadata.token_endpoint;
       }
 
-      logger.debug(`[MCP Auth] No token_endpoint in metadata from ${discoveryUrl}`);
+      logger.debug(`[MCP Auth] No valid token_endpoint in metadata from ${discoveryUrl}`);
     } catch (error) {
       logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
     }

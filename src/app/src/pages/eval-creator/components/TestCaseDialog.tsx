@@ -8,6 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import AssertsForm from './AssertsForm';
 import VarsForm from './VarsForm';
 import type { Assertion, TestCase } from '@promptfoo/types';
@@ -58,12 +60,29 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{initialValues ? 'Edit Test Case' : 'Add Test Case'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div
+          data-testid="test-case-dialog-scroll-body"
+          className="min-h-0 flex-1 space-y-6 overflow-y-auto py-4"
+        >
+          <div className="space-y-2">
+            <div className="flex items-baseline gap-1.5">
+              <Label htmlFor="test-case-description" className="text-lg font-semibold">
+                Description
+              </Label>
+              <span className="text-xs text-muted-foreground">(optional)</span>
+            </div>
+            <Input
+              id="test-case-description"
+              placeholder="Enter a description for this test case"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
           <VarsForm
             onAdd={(vars) => setVars(vars)}
             varsList={varsList}
@@ -80,7 +99,7 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
           />
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter data-testid="test-case-dialog-footer" className="shrink-0 gap-2 sm:gap-0">
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>

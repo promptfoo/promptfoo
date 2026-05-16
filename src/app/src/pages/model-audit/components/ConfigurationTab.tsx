@@ -1,4 +1,4 @@
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { PlayArrowIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
@@ -45,7 +45,8 @@ export default function ConfigurationTab({
   const installationUnknown = installationStatus?.installed === null;
   const installationError = installationStatus?.error ?? null;
 
-  const scanButtonDisabled = isScanning || paths.length === 0 || isCheckingInstallation;
+  const scanButtonDisabled =
+    isScanning || paths.length === 0 || isCheckingInstallation || isNotInstalled;
 
   const getScanButtonText = () => {
     if (isScanning) {
@@ -71,7 +72,7 @@ export default function ConfigurationTab({
       return 'Checking if ModelAudit is installed...';
     }
     if (isNotInstalled) {
-      return 'Click to see installation instructions';
+      return 'Install ModelAudit to start a scan';
     }
     if (installationUnknown) {
       return 'Installation status will be verified when you click';
@@ -92,7 +93,7 @@ export default function ConfigurationTab({
         />
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-semibold tracking-tight">Select Models</h2>
         <Button variant="outline" onClick={onShowOptions}>
           <SettingsIcon className="size-4 mr-2" />
@@ -138,12 +139,14 @@ export default function ConfigurationTab({
 
         {error && (
           <Alert variant="destructive" className="mt-4">
-            <AlertDescription className="flex items-center justify-between">
-              <span>{error}</span>
-              <Button type="button" variant="destructive" onClick={onClearError}>
-                Dismiss
-              </Button>
-            </AlertDescription>
+            <AlertContent>
+              <AlertDescription className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="min-w-0">{error}</span>
+                <Button type="button" variant="destructive" onClick={onClearError}>
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
       </div>

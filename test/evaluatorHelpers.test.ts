@@ -3,19 +3,23 @@ import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  type AfterEachExtensionHookContext,
   collectFileMetadata,
   extractTextFromPDF,
+  getExtensionHookName,
   renderPrompt,
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import { transform } from '../src/util/transform';
+import { createMockProvider } from './factories/provider';
+import { mockProcessEnv } from './util/utils';
 
-import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index';
+import type { Prompt, TestCase, TestSuite } from '../src/types/index';
 
 // Use vi.hoisted to define mocks and helpers that need to be accessible in vi.mock factories
-const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve } = vi.hoisted(
-  () => {
+const { actualPathResolve, dynamicModuleMocks, fsMocks, mockDynamicModule, mockPathResolve } =
+  vi.hoisted(() => {
     const actualPath = require('path');
     const actualPathResolve = actualPath.resolve.bind(actualPath);
     const mockPathResolve = vi.fn((...paths: string[]) => actualPathResolve(...paths));
@@ -24,9 +28,16 @@ const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolv
       const resolvedPath = actualPathResolve(filePath);
       dynamicModuleMocks.set(resolvedPath, moduleExport);
     };
-    return { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve };
-  },
-);
+    const fsMocks = {
+      readFileSync: vi.fn(),
+      writeFileSync: vi.fn(),
+      statSync: vi.fn(),
+      readdirSync: vi.fn(),
+      existsSync: vi.fn(),
+      mkdirSync: vi.fn(),
+    };
+    return { actualPathResolve, dynamicModuleMocks, fsMocks, mockDynamicModule, mockPathResolve };
+  });
 
 vi.mock('path', async () => {
   const actual = await vi.importActual<typeof import('path')>('path');
@@ -54,15 +65,17 @@ vi.mock('node:module', () => {
 });
 
 vi.mock('fs', () => ({
-  readFileSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  statSync: vi.fn(),
-  readdirSync: vi.fn(),
-  existsSync: vi.fn(),
-  mkdirSync: vi.fn(),
+  ...fsMocks,
   promises: {
-    readFile: vi.fn(),
+    readFile: fsMocks.readFileSync,
   },
+}));
+
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: fsMocks.readFileSync,
+  },
+  readFile: fsMocks.readFileSync,
 }));
 
 const mockGetText = vi.fn().mockResolvedValue({ text: 'Extracted PDF text' });
@@ -106,15 +119,7 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
-const mockApiProvider: ApiProvider = {
-  id: function id() {
-    return 'test-provider';
-  },
-  callApi: vi.fn().mockResolvedValue({
-    output: 'Test output',
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-  }),
-};
+const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
@@ -170,8 +175,8 @@ describe('evaluatorHelpers', () => {
 
   describe('renderPrompt', () => {
     beforeEach(() => {
-      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
-      delete process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE;
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: undefined });
     });
 
     it('should render a prompt with a single variable', async () => {
@@ -222,19 +227,19 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should render environment variables in JSON prompts', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       const prompt = toPrompt('{"text": "{{ env.TEST_ENV_VAR }}"}');
       const renderedPrompt = await renderPrompt(prompt, {}, {});
       expect(renderedPrompt).toBe(JSON.stringify({ text: 'env_value' }, null, 2));
-      delete process.env.TEST_ENV_VAR;
+      mockProcessEnv({ TEST_ENV_VAR: undefined });
     });
 
     it('should render environment variables in non-JSON prompts', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       const prompt = toPrompt('Test prompt {{ env.TEST_ENV_VAR }}');
       const renderedPrompt = await renderPrompt(prompt, {}, {});
       expect(renderedPrompt).toBe('Test prompt env_value');
-      delete process.env.TEST_ENV_VAR;
+      mockProcessEnv({ TEST_ENV_VAR: undefined });
     });
 
     it('should handle complex variable substitutions in JSON prompts', async () => {
@@ -332,6 +337,21 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
     });
 
+    it('should throw a clear error when a package variable does not export a function', async () => {
+      const prompt = toPrompt('Test prompt with {{ var1 }}');
+      const vars = {
+        var1: 'package:@promptfoo/fake:testFunction',
+      };
+
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        testFunction: false,
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).rejects.toThrow(
+        'Variable source malformed: package:@promptfoo/fake:testFunction must export a function. Received: boolean',
+      );
+    });
+
     it('should load external json files in renderPrompt and parse the JSON content', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = { var1: 'file:///path/to/testData.json' };
@@ -366,11 +386,11 @@ describe('evaluatorHelpers', () => {
 
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
-        process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+        mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
       });
 
       afterEach(() => {
-        delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+        mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
       });
 
       it('should return raw prompt when templating is disabled', async () => {
@@ -381,11 +401,11 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should render normally when templating is enabled', async () => {
-      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'false';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'false' });
       const prompt = toPrompt('Test prompt {{ var1 }}');
       const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
       expect(renderedPrompt).toBe('Test prompt value1');
-      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
     });
 
     it('should respect Nunjucks raw tags when variable is provided as a string', async () => {
@@ -657,13 +677,14 @@ describe('evaluatorHelpers', () => {
       });
 
       describe('extensions provided', () => {
-        it('should call transform for each extension', async () => {
+        it('should call transform for each extension using LEGACY convention', async () => {
+          // Non-file:// extensions use LEGACY calling convention: (hookName, context)
           const extensions = ['ext1', 'ext2', 'ext3'];
           await runExtensionHook(extensions, hookName, context);
           expect(transform).toHaveBeenCalledTimes(3);
-          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', context, { hookName }, false);
-          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', context, { hookName }, false);
-          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', context, { hookName }, false);
+          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
         });
 
         it('should return the original context when extension(s) do not return a value', async () => {
@@ -744,13 +765,15 @@ describe('evaluatorHelpers', () => {
       });
 
       describe('extensions provided', () => {
-        it('should call transform for each extension', async () => {
+        it('should call transform for each extension using LEGACY convention', async () => {
+          // Extensions without file:// prefix or function name use LEGACY convention
           const extensions = ['ext1', 'ext2', 'ext3'];
           await runExtensionHook(extensions, hookName, context);
           expect(transform).toHaveBeenCalledTimes(3);
-          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', context, { hookName }, false);
-          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', context, { hookName }, false);
-          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', context, { hookName }, false);
+          // LEGACY convention: (extension, hookName, context, false)
+          expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
+          expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
+          expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
         });
 
         it('should return the original context when extension(s) do not return a value', async () => {
@@ -784,6 +807,526 @@ describe('evaluatorHelpers', () => {
           expect(result.test).toBe('invalid_test_value');
         });
       });
+    });
+
+    describe('hook filtering with function names', () => {
+      const context = {
+        suite: {
+          providers: [mockApiProvider],
+          prompts: [{ raw: 'test prompt', label: 'test' } as Prompt],
+          tests: [{ vars: { var1: 'value1' } }],
+        } as TestSuite,
+      };
+
+      beforeEach(() => {
+        vi.mocked(transform).mockResolvedValue(undefined);
+      });
+
+      it('should skip extension with hook name that does not match current hook', async () => {
+        // Extension specifies :afterAll but we're running beforeAll
+        await runExtensionHook(['file://path/to/hooks.js:afterAll'], 'beforeAll', context);
+        expect(transform).not.toHaveBeenCalled();
+      });
+
+      it('should run extension with hook name that matches current hook', async () => {
+        // Extension specifies :beforeAll and we're running beforeAll
+        await runExtensionHook(['file://path/to/hooks.js:beforeAll'], 'beforeAll', context);
+        expect(transform).toHaveBeenCalledWith(
+          'file://path/to/hooks.js:beforeAll',
+          context,
+          { hookName: 'beforeAll' },
+          false,
+        );
+      });
+
+      it('should run extension with custom function name for ALL hooks using LEGACY convention', async () => {
+        // Extension specifies :myHandler (custom name) - should run for all hooks
+        // Uses LEGACY calling convention: (hookName, context)
+        const customExtension = 'file://path/to/hooks.js:myHandler';
+
+        await runExtensionHook([customExtension], 'beforeAll', context);
+        expect(transform).toHaveBeenCalledWith(
+          customExtension,
+          'beforeAll', // LEGACY: hookName as first arg
+          context, // LEGACY: context as second arg
+          false,
+        );
+
+        vi.mocked(transform).mockClear();
+        const beforeEachContext = { test: {} as TestCase };
+        await runExtensionHook([customExtension], 'beforeEach', beforeEachContext);
+        expect(transform).toHaveBeenCalledWith(
+          customExtension,
+          'beforeEach',
+          beforeEachContext,
+          false,
+        );
+
+        vi.mocked(transform).mockClear();
+        const afterEachContext = {
+          test: {} as TestCase,
+          result: {} as any,
+        };
+        await runExtensionHook([customExtension], 'afterEach', afterEachContext);
+        expect(transform).toHaveBeenCalledWith(
+          customExtension,
+          'afterEach',
+          afterEachContext,
+          false,
+        );
+
+        vi.mocked(transform).mockClear();
+        const afterAllContext = {
+          results: [],
+          suite: {} as TestSuite,
+          prompts: [],
+          evalId: 'test-eval-id',
+          config: {},
+        };
+        await runExtensionHook([customExtension], 'afterAll', afterAllContext);
+        expect(transform).toHaveBeenCalledWith(customExtension, 'afterAll', afterAllContext, false);
+      });
+
+      it('should run extension without function name for ALL hooks using LEGACY convention', async () => {
+        // Extension without function name - should run for all hooks
+        // Uses LEGACY calling convention: (hookName, context)
+        const noFunctionExtension = 'file://path/to/hooks.js';
+
+        await runExtensionHook([noFunctionExtension], 'beforeAll', context);
+        expect(transform).toHaveBeenCalledWith(
+          noFunctionExtension,
+          'beforeAll', // LEGACY: hookName as first arg
+          context, // LEGACY: context as second arg
+          false,
+        );
+
+        vi.mocked(transform).mockClear();
+        const afterEachContext = {
+          test: {} as TestCase,
+          result: {} as any,
+        };
+        await runExtensionHook([noFunctionExtension], 'afterEach', afterEachContext);
+        expect(transform).toHaveBeenCalledWith(
+          noFunctionExtension,
+          'afterEach',
+          afterEachContext,
+          false,
+        );
+      });
+
+      it('should chain multiple beforeAll extensions so each sees prior changes', async () => {
+        const baseTests = [{ vars: { original: 'yes' } }];
+        const chainContext = {
+          suite: {
+            providers: [mockApiProvider],
+            prompts: [toPrompt('Test prompt')],
+            tests: baseTests,
+          } as TestSuite,
+        };
+
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            suite: {
+              providers: chainContext.suite.providers,
+              prompts: chainContext.suite.prompts,
+              tests: [...baseTests, { vars: { added_by_ext1: 'yes' } }],
+            },
+          })
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #2 should see the tests array modified by extension #1
+            const ctx = context as { suite: TestSuite };
+            expect(ctx.suite.tests).toHaveLength(2);
+            expect(ctx.suite.tests?.[1]).toEqual({ vars: { added_by_ext1: 'yes' } });
+            return {
+              suite: {
+                providers: ctx.suite.providers,
+                prompts: ctx.suite.prompts,
+                tests: [...(ctx.suite.tests || []), { vars: { added_by_ext2: 'yes' } }],
+              },
+            };
+          });
+
+        const out = await runExtensionHook(
+          ['file://ext1.js:beforeAll', 'file://ext2.js:beforeAll'],
+          'beforeAll',
+          chainContext,
+        );
+        expect(out.suite.tests).toHaveLength(3);
+        expect(out.suite.tests?.[0]).toEqual({ vars: { original: 'yes' } });
+        expect(out.suite.tests?.[1]).toEqual({ vars: { added_by_ext1: 'yes' } });
+        expect(out.suite.tests?.[2]).toEqual({ vars: { added_by_ext2: 'yes' } });
+      });
+
+      it('should handle mixed extensions with correct calling conventions', async () => {
+        // Mix of hook-specific and generic extensions
+        const extensions = [
+          'file://hooks.js:beforeAll', // Only runs for beforeAll, NEW convention
+          'file://hooks.js:myHandler', // Runs for all hooks, LEGACY convention
+          'file://hooks.js:afterAll', // Only runs for afterAll (skipped here)
+        ];
+
+        await runExtensionHook(extensions, 'beforeAll', context);
+        // Should call transform twice (beforeAll and myHandler, skip afterAll)
+        expect(transform).toHaveBeenCalledTimes(2);
+
+        // First call: :beforeAll uses NEW convention
+        expect(transform).toHaveBeenCalledWith(
+          'file://hooks.js:beforeAll',
+          context, // NEW: context as first arg
+          { hookName: 'beforeAll' }, // NEW: hookName in object as second arg
+          false,
+        );
+
+        // Second call: :myHandler uses LEGACY convention
+        expect(transform).toHaveBeenCalledWith(
+          'file://hooks.js:myHandler',
+          'beforeAll', // LEGACY: hookName as first arg
+          context, // LEGACY: context as second arg
+          false,
+        );
+      });
+    });
+
+    describe('afterEach return value handling', () => {
+      const baseResult = {
+        provider: { id: () => 'test' } as any,
+        prompt: { raw: 'test', label: 'test' } as any,
+        vars: {},
+        response: { output: 'test output' } as any,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        namedScores: { existing_metric: 0.5 },
+        metadata: { existing_key: 'value' },
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {},
+        cost: 0,
+      } as any;
+
+      it('should merge returned namedScores into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: { num_turns: 3, cost_usd: 0.05 },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          num_turns: 3,
+          cost_usd: 0.05,
+        });
+      });
+
+      it('should merge returned metadata into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            metadata: { session_url: 'https://example.com', tool_calls: 5 },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.metadata).toEqual({
+          existing_key: 'value',
+          session_url: 'https://example.com',
+          tool_calls: 5,
+        });
+      });
+
+      it('should merge returned response.metadata into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            response: { metadata: { session_viewer: 'https://viewer.example.com', tool_count: 3 } },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.response?.metadata).toEqual({
+          session_viewer: 'https://viewer.example.com',
+          tool_count: 3,
+        });
+        // Other response fields should be preserved
+        expect(out.result.response?.output).toBe('test output');
+      });
+
+      it('should preserve existing namedScores and metadata when extension returns none', async () => {
+        vi.mocked(transform).mockResolvedValue(undefined);
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.namedScores).toEqual({ existing_metric: 0.5 });
+        expect(out.result.metadata).toEqual({ existing_key: 'value' });
+      });
+
+      it('should chain multiple extensions correctly', async () => {
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { metric_a: 1 },
+              metadata: { key_a: 'a' },
+            },
+          })
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { metric_b: 2 },
+              metadata: { key_b: 'b' },
+            },
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          metric_a: 1,
+          metric_b: 2,
+        });
+        expect(out.result.metadata).toEqual({
+          existing_key: 'value',
+          key_a: 'a',
+          key_b: 'b',
+        });
+      });
+
+      it('should allow later extensions to override earlier extension values', async () => {
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { shared_metric: 1 },
+            },
+          })
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { shared_metric: 99 },
+            },
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores.shared_metric).toBe(99);
+      });
+
+      it('should filter non-numeric namedScores values', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: {
+              valid_int: 42,
+              valid_float: 3.14,
+              valid_zero: 0,
+              valid_negative: -5,
+              string_val: 'not_a_number' as any,
+              null_val: null as any,
+              array_val: [1, 2] as any,
+              object_val: { nested: true } as any,
+              nan_val: NaN,
+              infinity_val: Infinity,
+              neg_infinity_val: -Infinity,
+            },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        // Only finite numeric values should survive
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          valid_int: 42,
+          valid_float: 3.14,
+          valid_zero: 0,
+          valid_negative: -5,
+        });
+      });
+
+      it('should not allow overriding success, score, or response.output via return value', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: { custom: 1 },
+            success: false,
+            score: 0,
+            response: { output: 'hacked', metadata: { injected: true } },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        // success and score should remain unchanged
+        expect(out.result.success).toBe(true);
+        expect(out.result.score).toBe(1);
+        // response.output should remain unchanged
+        expect(out.result.response?.output).toBe('test output');
+        // but namedScores and response.metadata should be merged
+        expect(out.result.namedScores.custom).toBe(1);
+        expect(out.result.response?.metadata?.injected).toBe(true);
+      });
+
+      it('should pass accumulated context to subsequent extensions (chaining input)', async () => {
+        // Extension #2 should receive the context modified by extension #1
+        vi.mocked(transform)
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #1: verify it gets the original context, return new namedScores
+            const ctx = context as AfterEachExtensionHookContext;
+            expect(ctx.result.namedScores).toEqual({ existing_metric: 0.5 });
+            return {
+              test: ctx.test,
+              result: {
+                namedScores: { from_ext1: 10 },
+              },
+            };
+          })
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #2: should see extension #1's merged namedScores in input
+            const ctx = context as AfterEachExtensionHookContext;
+            expect(ctx.result.namedScores).toEqual({
+              existing_metric: 0.5,
+              from_ext1: 10,
+            });
+            return {
+              test: ctx.test,
+              result: {
+                namedScores: { from_ext2: 20 },
+              },
+            };
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          from_ext1: 10,
+          from_ext2: 20,
+        });
+      });
+    });
+  });
+
+  describe('getExtensionHookName', () => {
+    it('should extract function name from file:// path', () => {
+      expect(getExtensionHookName('file://path/to/hooks.js:beforeAll')).toBe('beforeAll');
+      expect(getExtensionHookName('file://path/to/hooks.py:afterEach')).toBe('afterEach');
+      expect(getExtensionHookName('file://hooks.js:myHandler')).toBe('myHandler');
+    });
+
+    it('should return undefined when no function name specified', () => {
+      expect(getExtensionHookName('file://path/to/hooks.js')).toBeUndefined();
+      expect(getExtensionHookName('file://hooks.py')).toBeUndefined();
+    });
+
+    it('should return undefined for non-file:// paths', () => {
+      expect(getExtensionHookName('path/to/hooks.js:beforeAll')).toBeUndefined();
+      expect(getExtensionHookName('hooks.js:beforeAll')).toBeUndefined();
+    });
+
+    it('should handle Windows drive letters correctly', () => {
+      // Position 7 is C:, position 8 is the colon after drive letter
+      // The function should not treat C: as function name
+      expect(getExtensionHookName('file://C:/path/to/hooks.js')).toBeUndefined();
+      expect(getExtensionHookName('file://C:/path/to/hooks.js:beforeAll')).toBe('beforeAll');
+      expect(getExtensionHookName('file://D:/hooks.js:myHandler')).toBe('myHandler');
+    });
+
+    it('should extract the last colon-separated segment', () => {
+      // Multiple colons - should get the last one
+      expect(getExtensionHookName('file://path:with:colons/hooks.js:functionName')).toBe(
+        'functionName',
+      );
+    });
+
+    it('should return undefined for trailing colon (empty function name)', () => {
+      // Edge case: "file://hooks.js:" should not return empty string
+      expect(getExtensionHookName('file://hooks.js:')).toBeUndefined();
+      expect(getExtensionHookName('file://path/to/hooks.py:')).toBeUndefined();
+    });
+  });
+
+  describe('runExtensionHook error handling', () => {
+    const context = {
+      suite: {
+        providers: [mockApiProvider],
+        prompts: [{ raw: 'test prompt', label: 'test' } as Prompt],
+        tests: [{ vars: { var1: 'value1' } }],
+      } as TestSuite,
+    };
+
+    it('should wrap transform errors with hook context', async () => {
+      const originalError = new Error('Python script failed');
+      vi.mocked(transform).mockRejectedValue(originalError);
+
+      await expect(
+        runExtensionHook(['file://broken.py:handler'], 'beforeAll', context),
+      ).rejects.toThrow('Extension hook "beforeAll" failed for file://broken.py:handler');
+    });
+
+    it('should preserve original error as cause', async () => {
+      const originalError = new Error('Original error message');
+      vi.mocked(transform).mockRejectedValue(originalError);
+
+      try {
+        await runExtensionHook(['file://broken.js:handler'], 'beforeAll', context);
+        expect.fail('Expected error to be thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).cause).toBe(originalError);
+      }
     });
   });
 

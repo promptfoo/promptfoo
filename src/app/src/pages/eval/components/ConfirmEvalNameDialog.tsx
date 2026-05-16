@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -13,6 +13,7 @@ import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
 import { cn } from '@app/lib/utils';
+import { isInputComposing } from '@app/utils/keyboard';
 import { AlertTriangle } from 'lucide-react';
 
 interface ConfirmEvalNameDialogProps {
@@ -92,9 +93,12 @@ export const ConfirmEvalNameDialog = ({
     }
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isInputComposing(e)) {
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       handleConfirm();
     }
   };
@@ -115,14 +119,16 @@ export const ConfirmEvalNameDialog = ({
           {isLargeOperation && (
             <Alert variant={isVeryLargeOperation ? 'warning' : 'info'}>
               {isVeryLargeOperation && <AlertTriangle className="size-4" />}
-              <AlertDescription>
-                <strong>
-                  This evaluation has {itemCount?.toLocaleString()} {itemLabel}.
-                </strong>{' '}
-                {isVeryLargeOperation
-                  ? 'This operation may take several minutes. Please be patient.'
-                  : 'This operation may take up to a minute.'}
-              </AlertDescription>
+              <AlertContent>
+                <AlertDescription>
+                  <strong>
+                    This evaluation has {itemCount?.toLocaleString()} {itemLabel}.
+                  </strong>{' '}
+                  {isVeryLargeOperation
+                    ? 'This operation may take several minutes. Please be patient.'
+                    : 'This operation may take up to a minute.'}
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
           <div className="space-y-2">

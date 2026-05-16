@@ -19,13 +19,14 @@ export function listCommand(program: Command) {
     .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
       setupEnv(cmdObj.envPath);
 
-      const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
-
+      // For --ids-only, fetch all at once (typically used in scripts)
       if (cmdObj.idsOnly) {
+        const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
         evals.forEach((evl) => logger.info(evl.id));
         return;
       }
 
+      const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
       const vars = await EvalQueries.getVarsFromEvals(evals);
 
       const tableData = evals

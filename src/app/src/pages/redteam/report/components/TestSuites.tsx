@@ -2,11 +2,9 @@ import React from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
-import { Card } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
-import { useTelemetry } from '@app/hooks/useTelemetry';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import {
   categoryAliases,
@@ -28,7 +26,7 @@ import {
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import { Download } from 'lucide-react';
+import { Download, ScrollText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from '../utils/color';
 import { type TestResultStats } from './FrameworkComplianceUtils';
@@ -67,7 +65,6 @@ const TestSuites = ({
   vulnerabilitiesDataGridRef,
 }: TestSuitesProps) => {
   const navigate = useNavigate();
-  const { recordEvent } = useTelemetry();
   const { severityFilter } = useReportStore();
   const [sortModel] = React.useState<SortingState>([{ id: 'riskScore', desc: true }]);
 
@@ -220,12 +217,13 @@ const TestSuites = ({
       }
 
       if (sortModel.length > 0 && sortModel[0].id === 'severity') {
-        const severityOrder = {
-          [Severity.Critical]: 4,
-          [Severity.High]: 3,
-          [Severity.Medium]: 2,
-          [Severity.Low]: 1,
-        } as const;
+        const severityOrder: Record<Severity, number> = {
+          [Severity.Critical]: 5,
+          [Severity.High]: 4,
+          [Severity.Medium]: 3,
+          [Severity.Low]: 2,
+          [Severity.Informational]: 1,
+        };
 
         return sortModel[0].desc
           ? severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity]
@@ -301,7 +299,8 @@ const TestSuites = ({
       {
         accessorKey: 'type',
         header: 'Type',
-        size: 180,
+        size: 200,
+        meta: { sticky: 'left' },
         accessorFn: (row) =>
           displayNameOverrides[row.pluginName as keyof typeof displayNameOverrides] || row.type,
         cell: ({ getValue }) => <span style={{ fontWeight: 500 }}>{getValue<string>()}</span>,
@@ -309,7 +308,7 @@ const TestSuites = ({
       {
         accessorKey: 'description',
         header: 'Description',
-        size: 220,
+        size: 230,
         cell: ({ getValue }) => (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -321,14 +320,22 @@ const TestSuites = ({
       },
       {
         accessorKey: 'riskScore',
-        header: 'Risk Score',
-        size: 100,
+        header: () => (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">Risk</span>
+            </TooltipTrigger>
+            <TooltipContent>Risk Score</TooltipContent>
+          </Tooltip>
+        ),
+        size: 110,
+        meta: { align: 'right' },
         cell: ({ row }) => {
           const value = row.original.riskScore;
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex cursor-help items-center gap-2">
+                <span className="flex cursor-help items-center justify-end gap-2 tabular-nums">
                   <span
                     className="size-3 rounded-full"
                     style={{ backgroundColor: getRiskScoreColor(value) }}
@@ -361,12 +368,13 @@ const TestSuites = ({
         accessorKey: 'complexityScore',
         header: 'Complexity',
         size: 100,
+        meta: { align: 'right' },
         cell: ({ row }) => {
           const value = row.original.complexityScore;
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help">{value.toFixed(0)}</span>
+                <span className="cursor-help tabular-nums">{value.toFixed(0)}</span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 <div className="space-y-1">
@@ -393,8 +401,17 @@ const TestSuites = ({
       },
       {
         accessorKey: 'successfulAttacks',
-        header: 'Successful Attacks',
-        size: 110,
+        header: () => (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">Succeeded</span>
+            </TooltipTrigger>
+            <TooltipContent>Successful Attacks</TooltipContent>
+          </Tooltip>
+        ),
+        size: 120,
+        meta: { align: 'right' },
+        cell: ({ getValue }) => <span className="tabular-nums">{getValue<number>()}</span>,
       },
       {
         accessorKey: 'attackSuccessRate',
@@ -406,13 +423,14 @@ const TestSuites = ({
             <TooltipContent>Attack Success Rate</TooltipContent>
           </Tooltip>
         ),
-        size: 80,
+        size: 88,
+        meta: { align: 'right' },
         cell: ({ row }) => {
           const value = row.original.attackSuccessRate;
           const passRateWithFilter = row.original.passRateWithFilter;
           const passRate = row.original.passRate;
           return (
-            <div>
+            <div className="tabular-nums">
               <strong>{formatASRForDisplay(value)}%</strong>
               {passRateWithFilter !== passRate && (
                 <>
@@ -426,17 +444,18 @@ const TestSuites = ({
       {
         accessorKey: 'severity',
         header: 'Severity',
-        size: 90,
+        size: 100,
         cell: ({ getValue }) => {
           const value = getValue<Severity>();
           return severityDisplayNames[value] || 'Unknown';
         },
         sortingFn: (rowA, rowB) => {
-          const severityOrder: Record<string, number> = {
-            [Severity.Critical]: 4,
-            [Severity.High]: 3,
-            [Severity.Medium]: 2,
-            [Severity.Low]: 1,
+          const severityOrder: Record<Severity, number> = {
+            [Severity.Critical]: 5,
+            [Severity.High]: 4,
+            [Severity.Medium]: 3,
+            [Severity.Low]: 2,
+            [Severity.Informational]: 1,
           };
           const a = severityOrder[rowA.original.severity as Severity] ?? 0;
           const b = severityOrder[rowB.original.severity as Severity] ?? 0;
@@ -449,97 +468,79 @@ const TestSuites = ({
             { label: 'High', value: Severity.High },
             { label: 'Medium', value: Severity.Medium },
             { label: 'Low', value: Severity.Low },
+            { label: 'Informational', value: Severity.Informational },
           ],
         },
       },
       {
         id: 'actions',
         header: 'Actions',
-        size: 220,
+        size: 72,
+        meta: { sticky: 'right' },
         enableSorting: false,
         cell: ({ row }) => (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => {
-                const pluginId = row.original.pluginName;
-                const plugin = pluginsById[pluginId];
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                aria-label="View logs"
+                onClick={() => {
+                  const pluginId = row.original.pluginName;
+                  const plugin = pluginsById[pluginId];
 
-                const filterParam = encodeURIComponent(
-                  JSON.stringify([
-                    {
-                      type: plugin?.id === 'policy' ? 'policy' : 'plugin',
-                      operator: 'equals',
-                      value: pluginId,
-                    },
-                  ]),
-                );
+                  const filterParam = encodeURIComponent(
+                    JSON.stringify([
+                      {
+                        type: plugin?.id === 'policy' ? 'policy' : 'plugin',
+                        operator: 'equals',
+                        value: pluginId,
+                      },
+                    ]),
+                  );
 
-                // If ASR is 0, show passes
-                const mode = row.original.attackSuccessRate === 0 ? 'passes' : 'failures';
-                navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
-              }}
-            >
-              View logs
-            </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    // Track the mitigation button click
-                    recordEvent('feature_used', {
-                      feature: 'redteam_apply_mitigation_clicked',
-                      plugin: row.original.pluginName,
-                      evalId,
-                    });
-
-                    // Open email in new tab
-                    window.open(
-                      'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
-                      '_blank',
-                    );
-                  }}
-                >
-                  Apply mitigation
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Temporarily disabled while in beta, click to contact us to enable
-              </TooltipContent>
-            </Tooltip>
-          </div>
+                  // If ASR is 0, show passes
+                  const mode = row.original.attackSuccessRate === 0 ? 'passes' : 'failures';
+                  navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
+                }}
+              >
+                <ScrollText className="size-4" />
+                <span className="sr-only">View logs</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View logs</TooltipContent>
+          </Tooltip>
         ),
       },
     ],
-    [navigate, pluginsById, recordEvent, evalId],
+    [navigate, pluginsById, evalId],
   );
 
   return (
-    <div className="break-before-page print:break-before-always" ref={vulnerabilitiesDataGridRef}>
-      <div className="mb-4 flex items-center justify-between">
+    <div ref={vulnerabilitiesDataGridRef} className="min-w-0">
+      <div
+        data-testid="vulnerabilities-header"
+        className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between"
+      >
         <h2 className="text-xl font-semibold">Vulnerabilities and Mitigations</h2>
         <Button onClick={exportToCSV} className="print:hidden">
           <Download className="mr-2 size-4" />
           Export vulnerabilities to CSV
         </Button>
       </div>
-      <Card className="pb-4">
-        <DataTable
-          columns={columns}
-          data={rows}
-          initialSorting={sortModel}
-          onExportCSV={exportToCSV}
-          showToolbar={true}
-          showColumnToggle={true}
-          showFilter={true}
-          showExport={false}
-          showPagination={true}
-          initialPageSize={25}
-          getRowId={(row) => row.id}
-        />
-      </Card>
+      <DataTable
+        className="[&_td]:py-2.5 [&_th]:py-2.5"
+        columns={columns}
+        data={rows}
+        initialSorting={sortModel}
+        onExportCSV={exportToCSV}
+        showToolbar={true}
+        showColumnToggle={true}
+        showFilter={true}
+        showExport={false}
+        getRowId={(row) => row.id}
+      />
     </div>
   );
 };

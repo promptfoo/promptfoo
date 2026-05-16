@@ -64,6 +64,18 @@ describe('TestCaseForm', () => {
     expect(screen.queryByRole('button', { name: 'Add Another' })).toBeNull();
   });
 
+  it('keeps dialog actions visible while the test case form scrolls independently', () => {
+    renderComponent();
+
+    const dialog = screen.getByRole('dialog');
+    const scrollBody = screen.getByTestId('test-case-dialog-scroll-body');
+    const footer = screen.getByTestId('test-case-dialog-footer');
+
+    expect(dialog).toHaveClass('flex', 'max-h-[85vh]', 'flex-col', 'overflow-hidden');
+    expect(scrollBody).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto');
+    expect(footer).toHaveClass('shrink-0');
+  });
+
   it("should call onAdd with form data and onCancel when 'Add Test Case' button is clicked", async () => {
     renderComponent();
 
@@ -297,6 +309,39 @@ describe('TestCaseForm', () => {
     expect(mockVarsForm.mock.calls[0][0]).toMatchObject({
       varsList: [],
     });
+  });
+
+  it('should render a description input field and update description state when changed', async () => {
+    renderComponent();
+
+    const descriptionInput = screen.getByLabelText('Description');
+    expect(descriptionInput).toBeInTheDocument();
+    expect(descriptionInput).toHaveValue('');
+
+    await userEvent.type(descriptionInput, 'My test case description');
+    expect(descriptionInput).toHaveValue('My test case description');
+
+    const addButton = screen.getByRole('button', { name: 'Add Test Case' });
+    await userEvent.click(addButton);
+
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'My test case description',
+      }),
+      true,
+    );
+  });
+
+  it('should populate description input with initialValues when editing', () => {
+    const initialValues = {
+      description: 'Existing description',
+      vars: { var1: 'value1' },
+      assert: [],
+    };
+    renderComponent({ initialValues });
+
+    const descriptionInput = screen.getByLabelText('Description');
+    expect(descriptionInput).toHaveValue('Existing description');
   });
 
   it('should create deep copies of initialValues to prevent mutation', async () => {

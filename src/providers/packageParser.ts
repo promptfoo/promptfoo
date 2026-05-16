@@ -1,9 +1,6 @@
 import path from 'path';
 
-import chalk from 'chalk';
-import dedent from 'dedent';
 import { importModule, resolvePackageEntryPoint } from '../esm';
-import logger from '../logger';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
 
@@ -34,21 +31,23 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
   }
 
   // Then, try to import the module
+  let module;
   try {
-    const module = await importModule(filePath);
-    const entity = getValue(module, entityName ?? 'default');
-
-    if (!entity) {
-      logger.error(dedent`
-        Could not find entity: ${chalk.bold(entityName)} in module: ${chalk.bold(filePath)}.
-      `);
-      process.exit(1);
-    }
-
-    return entity;
+    module = await importModule(filePath);
   } catch (error) {
     throw new Error(`Failed to import module: ${packageName}. Error: ${error}`);
   }
+
+  const entity = getValue(module, entityName);
+
+  if (entity === undefined) {
+    throw new Error(
+      `Could not find entity: ${entityName} in module: ${filePath}. ` +
+        `Make sure the entity is exported from the package.`,
+    );
+  }
+
+  return entity;
 }
 
 export async function parsePackageProvider(
@@ -57,6 +56,11 @@ export async function parsePackageProvider(
   options: ProviderOptions,
 ): Promise<ApiProvider> {
   const Provider = await loadFromPackage(providerPath, basePath);
+  if (typeof Provider !== 'function') {
+    throw new Error(
+      `Provider malformed: ${providerPath} must export a provider constructor. Received: ${typeof Provider}`,
+    );
+  }
 
   return new Provider(options);
 }

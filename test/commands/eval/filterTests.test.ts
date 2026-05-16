@@ -2,6 +2,7 @@ import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterTests } from '../../../src/commands/eval/filterTests';
+import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 
@@ -126,6 +127,165 @@ describe('filterTests', () => {
       const result = await filterTests(testSuite, { metadata: 'type=unit' });
       expect(result).toHaveLength(2);
       expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test3']);
+    });
+
+    describe('multiple metadata filters', () => {
+      const multiMetadataTestSuite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [
+          {
+            description: 'test1',
+            vars: { var1: 'test1' },
+            assert: [],
+            metadata: { type: 'unit', env: 'dev', priority: 'high' },
+          },
+          {
+            description: 'test2',
+            vars: { var1: 'test2' },
+            assert: [],
+            metadata: { type: 'unit', env: 'prod', priority: 'low' },
+          },
+          {
+            description: 'test3',
+            vars: { var1: 'test3' },
+            assert: [],
+            metadata: { type: 'integration', env: 'dev', priority: 'high' },
+          },
+          {
+            description: 'test4',
+            vars: { var1: 'test4' },
+            assert: [],
+            metadata: { type: 'integration', env: 'prod', priority: 'medium' },
+          },
+        ],
+      };
+
+      it('should filter tests matching ALL metadata conditions (AND logic)', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit', 'env=dev'],
+        });
+        expect(result).toHaveLength(1);
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+
+      it('should return empty when no tests match all conditions', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit', 'env=staging'],
+        });
+        expect(result).toHaveLength(0);
+      });
+
+      it('should handle single string value (backward compatibility)', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: 'type=unit',
+        });
+        expect(result).toHaveLength(2);
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+      });
+
+      it('should handle array with single element', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit'],
+        });
+        expect(result).toHaveLength(2);
+        expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+      });
+
+      it('should filter with three or more conditions', async () => {
+        const result = await filterTests(multiMetadataTestSuite, {
+          metadata: ['type=unit', 'env=dev', 'priority=high'],
+        });
+        expect(result).toHaveLength(1);
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+
+      it('should handle values containing equals sign', async () => {
+        const testSuiteWithEquals: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [
+            {
+              description: 'test-with-equals',
+              vars: { var1: 'test1' },
+              assert: [],
+              metadata: { query: 'a=1&b=2', type: 'special' },
+            },
+          ],
+        };
+        const result = await filterTests(testSuiteWithEquals, {
+          metadata: ['query=a=1&b=2'],
+        });
+        expect(result).toHaveLength(1);
+      });
+
+      it('should throw error if any filter in array is invalid', async () => {
+        await expect(
+          filterTests(multiMetadataTestSuite, {
+            metadata: ['type=unit', 'invalid'],
+          }),
+        ).rejects.toThrow('--filter-metadata must be specified in key=value format');
+      });
+
+      it('should throw error for empty value', async () => {
+        await expect(
+          filterTests(multiMetadataTestSuite, {
+            metadata: ['type='],
+          }),
+        ).rejects.toThrow('--filter-metadata must be specified in key=value format');
+      });
+
+      it('should exclude tests missing any of the required metadata keys', async () => {
+        const testSuitePartialMetadata: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [
+            {
+              description: 'has-both',
+              vars: { var1: 'test1' },
+              assert: [],
+              metadata: { type: 'unit', env: 'dev' },
+            },
+            {
+              description: 'missing-env',
+              vars: { var1: 'test2' },
+              assert: [],
+              metadata: { type: 'unit' },
+            },
+          ],
+        };
+        const result = await filterTests(testSuitePartialMetadata, {
+          metadata: ['type=unit', 'env=dev'],
+        });
+        expect(result).toHaveLength(1);
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+
+      it('should work with array metadata values', async () => {
+        const testSuiteArrayMetadata: TestSuite = {
+          prompts: [],
+          providers: [],
+          tests: [
+            {
+              description: 'has-security-tag',
+              vars: { var1: 'test1' },
+              assert: [],
+              metadata: { type: 'unit', tags: ['security', 'auth'] },
+            },
+            {
+              description: 'no-security-tag',
+              vars: { var1: 'test2' },
+              assert: [],
+              metadata: { type: 'unit', tags: ['performance'] },
+            },
+          ],
+        };
+        const result = await filterTests(testSuiteArrayMetadata, {
+          metadata: ['type=unit', 'tags=security'],
+        });
+        expect(result).toHaveLength(1);
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
     });
   });
 
@@ -292,6 +452,85 @@ describe('filterTests', () => {
       await expect(filterTests(mockTestSuite, { pattern: '[invalid' })).rejects.toThrow(
         /Invalid regex pattern "\[invalid"/,
       );
+    });
+  });
+
+  describe('range filter', () => {
+    it('should slice tests by zero-based start-inclusive, end-exclusive range', async () => {
+      const result = await filterTests(mockTestSuite, { range: '1:3' });
+      expect(result).toHaveLength(2);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test2', 'test3']);
+    });
+
+    it('should support omitted start and omitted end', async () => {
+      const fromStart = await filterTests(mockTestSuite, { range: ':2' });
+      expect(fromStart.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+
+      const toEnd = await filterTests(mockTestSuite, { range: '1:' });
+      expect(toEnd.map((t: TestCase) => t.vars?.var1)).toEqual(['test2', 'test3']);
+    });
+
+    it('should allow range ends beyond the test count', async () => {
+      const result = await filterTests(mockTestSuite, { range: '2:100' });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars?.var1).toBe('test3');
+    });
+
+    it('should apply after pattern and before firstN', async () => {
+      const result = await filterTests(mockTestSuite, {
+        pattern: 'test',
+        range: '1:3',
+        firstN: 1,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars?.var1).toBe('test2');
+    });
+
+    it('should throw error for invalid range format', async () => {
+      await expect(filterTests(mockTestSuite, { range: '1' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+      await expect(filterTests(mockTestSuite, { range: ':' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+      await expect(filterTests(mockTestSuite, { range: 'a:b' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+    });
+
+    it('should reject invalid whitespace-heavy ranges without excessive backtracking', async () => {
+      await expect(
+        filterTests(mockTestSuite, { range: `${'\t'.repeat(10_000)}:${'\t'.repeat(10_000)}x` }),
+      ).rejects.toThrow(/--filter-range must be specified in start:end format/);
+    });
+
+    it('should throw error when start is greater than end', async () => {
+      await expect(filterTests(mockTestSuite, { range: '3:1' })).rejects.toThrow(
+        '--filter-range start must be less than or equal to end, got: 3:1',
+      );
+    });
+
+    it('should reject negative range bounds', async () => {
+      await expect(filterTests(mockTestSuite, { range: '-1:5' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+      await expect(filterTests(mockTestSuite, { range: '0:-3' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+    });
+
+    it('should warn when range slices to an empty set on a non-empty suite', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined as any);
+      try {
+        const result = await filterTests(mockTestSuite, { range: '100:200' });
+        expect(result).toHaveLength(0);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('--filter-range 100:200 selected 0 tests'),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 

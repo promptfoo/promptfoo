@@ -1,11 +1,15 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import path from 'path';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import { doEval } from '../../src/commands/eval';
+import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
+import { PartialGenerationError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import { initVerboseToggle } from '../../src/util/verboseToggle';
@@ -47,6 +51,7 @@ vi.mock('../../src/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+  clearLogCallbackIfOwned: vi.fn(),
   setLogCallback: vi.fn(),
   setLogLevel: vi.fn(),
 }));
@@ -102,6 +107,7 @@ vi.mock('../../src/util/config/manage', async (importOriginal) => {
   };
 });
 vi.mock('fs');
+vi.mock('fs/promises');
 vi.mock('js-yaml');
 vi.mock('os');
 
@@ -121,6 +127,9 @@ describe('doRedteamRun', () => {
     vi.mocked(fs.existsSync).mockImplementation(function () {
       return true;
     });
+    vi.mocked(fsPromises.access).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fsPromises.writeFile).mockResolvedValue();
     vi.mocked(os.tmpdir).mockImplementation(function () {
       return '/tmp';
     });
@@ -197,8 +206,10 @@ describe('doRedteamRun', () => {
       const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
       const expectedPath = path.join('', expectedFilename);
 
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(expectedPath, 'mocked-yaml-content');
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(expectedPath, 'mocked-yaml-content');
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -218,8 +229,10 @@ describe('doRedteamRun', () => {
       const expectedFilePrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining(expectedFilePrefix),
         'mocked-yaml-content',
       );
@@ -242,8 +255,10 @@ describe('doRedteamRun', () => {
       const expectedFilePrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect(fsPromises.mkdir).toHaveBeenCalledWith(path.dirname(expectedPath), {
+        recursive: true,
+      });
+      expect(fsPromises.writeFile).toHaveBeenCalledWith(
         expect.stringContaining(expectedFilePrefix),
         'mocked-yaml-content',
       );
@@ -279,8 +294,12 @@ describe('doRedteamRun', () => {
       const secondExpectedPath = path.join('', `redteam-${secondTimestamp}.yaml`);
 
       // Verify different filenames were generated
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, firstExpectedPath, 'mocked-yaml-content');
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(
+      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
+        1,
+        firstExpectedPath,
+        'mocked-yaml-content',
+      );
+      expect(fsPromises.writeFile).toHaveBeenNthCalledWith(
         2,
         secondExpectedPath,
         'mocked-yaml-content',
@@ -335,9 +354,51 @@ describe('doRedteamRun', () => {
 
   describe('verbose toggle integration', () => {
     it('should initialize verbose toggle when logCallback is not provided', async () => {
-      await doRedteamRun({});
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(initVerboseToggle).toHaveBeenCalled();
+    });
+
+    it('should not initialize verbose toggle for reusable invocations', async () => {
+      await doRedteamRun({});
+
+      expect(initVerboseToggle).not.toHaveBeenCalled();
+    });
+
+    it('should provide Ctrl+C delegation for CLI invocations', async () => {
+      await doRedteamRun({ eventSource: 'cli' });
+
+      expect(initVerboseToggle).toHaveBeenCalledWith({
+        onInterrupt: expect.any(Function),
+      });
+    });
+
+    it('should re-emit SIGINT through process.kill when Ctrl+C delegation fires', async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      try {
+        await doRedteamRun({ eventSource: 'cli' });
+
+        const lastCall = vi.mocked(initVerboseToggle).mock.calls.at(-1);
+        expect(lastCall).toBeDefined();
+        const onInterrupt = lastCall![0]!.onInterrupt;
+
+        onInterrupt();
+
+        expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGINT');
+      } finally {
+        killSpy.mockRestore();
+      }
+    });
+
+    it('should forward eventSource into the wrapped doEval call', async () => {
+      await doRedteamRun({ eventSource: 'cli' });
+
+      expect(doEval).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ eventSource: 'cli' }),
+      );
     });
 
     it('should NOT initialize verbose toggle when logCallback is provided', async () => {
@@ -354,7 +415,7 @@ describe('doRedteamRun', () => {
       const mockCleanup = vi.fn();
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
 
-      await doRedteamRun({});
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(mockCleanup).toHaveBeenCalled();
     });
@@ -364,7 +425,7 @@ describe('doRedteamRun', () => {
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
       vi.mocked(doGenerateRedteam).mockResolvedValue(null);
 
-      await doRedteamRun({});
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(mockCleanup).toHaveBeenCalled();
     });
@@ -373,16 +434,109 @@ describe('doRedteamRun', () => {
       vi.mocked(initVerboseToggle).mockReturnValue(null);
 
       // Should not throw
-      await expect(doRedteamRun({})).resolves.not.toThrow();
+      await expect(doRedteamRun({ eventSource: 'cli' })).resolves.not.toThrow();
     });
 
     it('should not call cleanup when initVerboseToggle returns null', async () => {
       vi.mocked(initVerboseToggle).mockReturnValue(null);
 
-      await doRedteamRun({});
+      await doRedteamRun({ eventSource: 'cli' });
 
       // Just verifying no errors - cleanup should be handled gracefully
       expect(initVerboseToggle).toHaveBeenCalled();
+    });
+
+    it('should cleanup run state when evaluation throws', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
+
+      await expect(doRedteamRun({ eventSource: 'cli' })).rejects.toThrow('eval failed');
+
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(null);
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should clear log callbacks when evaluation throws', async () => {
+      const mockLogCallback = vi.fn();
+      vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
+
+      await expect(doRedteamRun({ logCallback: mockLogCallback })).rejects.toThrow('eval failed');
+
+      expect(setLogCallback).toHaveBeenNthCalledWith(1, mockLogCallback);
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(mockLogCallback);
+    });
+  });
+
+  describe('PartialGenerationError handling', () => {
+    it('should re-throw PartialGenerationError after logging when strict mode causes error', async () => {
+      const failedPlugins = [
+        { pluginId: 'pii', requested: 5 },
+        { pluginId: 'harmful:hate', requested: 3 },
+      ];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      // This happens when strict mode is enabled and doGenerateRedteam throws
+      await expect(doRedteamRun({ strict: true })).rejects.toThrow(PartialGenerationError);
+    });
+
+    it('should log error message before re-throwing PartialGenerationError', async () => {
+      const mockLogger = (await import('../../src/logger')).default;
+      const failedPlugins = [{ pluginId: 'pii', requested: 5 }];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      try {
+        await doRedteamRun({ strict: true });
+      } catch {
+        // Expected to throw
+      }
+
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('should call cleanup function when PartialGenerationError is thrown', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      const failedPlugins = [{ pluginId: 'pii', requested: 5 }];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      try {
+        await doRedteamRun({ strict: true, eventSource: 'cli' });
+      } catch {
+        // Expected to throw
+      }
+
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should re-throw other errors without special handling', async () => {
+      const genericError = new Error('Some other error');
+      vi.mocked(doGenerateRedteam).mockRejectedValue(genericError);
+
+      await expect(doRedteamRun({})).rejects.toThrow('Some other error');
+    });
+
+    it('should pass strict option through to doGenerateRedteam', async () => {
+      await doRedteamRun({ strict: true });
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.objectContaining({
+          strict: true,
+        }),
+      );
+    });
+
+    it('should not pass strict option when not specified', async () => {
+      await doRedteamRun({});
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          strict: true,
+        }),
+      );
     });
   });
 });

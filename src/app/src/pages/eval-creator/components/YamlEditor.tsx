@@ -1,17 +1,16 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import { CopyButton } from '@app/components/ui/copy-button';
-import { CancelIcon, SaveIcon } from '@app/components/ui/icons';
+import { CancelIcon, DownloadIcon, SaveIcon, TerminalIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import yaml from 'js-yaml';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 import type { UnifiedConfig } from '@promptfoo/types';
-import 'prismjs/components/prism-yaml';
 import 'prismjs/themes/prism.css';
 
 interface YamlEditorProps {
@@ -23,6 +22,8 @@ interface YamlEditorProps {
 // Schema comment that should always be at the top of the YAML file
 const YAML_SCHEMA_COMMENT =
   '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json';
+const YAML_DOWNLOAD_FILE_NAME = 'promptfooconfig.yaml';
+const EVAL_CLI_COMMAND = `promptfoo eval -c ${YAML_DOWNLOAD_FILE_NAME}`;
 
 // Ensure the schema comment is at the top of YAML content
 const ensureSchemaComment = (yamlContent: string): string => {
@@ -42,6 +43,8 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+  const textareaId = React.useId();
+  const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
   const { getTestSuite, updateConfig } = useStore();
@@ -90,6 +93,31 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     showToast('Changes discarded', 'info');
   };
 
+  const handleDownload = () => {
+    const blob = new Blob([code], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = YAML_DOWNLOAD_FILE_NAME;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast(`Downloaded ${YAML_DOWNLOAD_FILE_NAME}`, 'success');
+  };
+
+  const handleEditorKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement | HTMLDivElement> = (
+    event,
+  ) => {
+    const isSaveShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
+    if (readOnly || !isSaveShortcut) {
+      return;
+    }
+
+    event.preventDefault();
+    if (hasUnsavedChanges) {
+      handleSave();
+    }
+  };
+
   // Initial load effect
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
@@ -115,12 +143,26 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     setHasUnsavedChanges(code !== originalCode);
   }, [code, originalCode]);
 
+  React.useEffect(() => {
+    // react-simple-code-editor does not expose arbitrary textarea props directly.
+    const textarea = editorContainerRef.current?.querySelector('textarea');
+    if (!textarea) {
+      return;
+    }
+
+    if (readOnly) {
+      textarea.removeAttribute('aria-keyshortcuts');
+    } else {
+      textarea.setAttribute('aria-keyshortcuts', 'Control+S Meta+S');
+    }
+  }, [readOnly]);
+
   return (
     <div className="space-y-4 min-w-0">
       {/* Action bar */}
       {!readOnly && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={handleSave} disabled={!hasUnsavedChanges}>
               <SaveIcon className="size-4 mr-2" />
               Save
@@ -134,6 +176,10 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
               <CancelIcon className="size-4 mr-2" />
               Discard Changes
             </Button>
+            <Button variant="outline" size="sm" onClick={handleDownload}>
+              <DownloadIcon className="size-4 mr-2" />
+              Download YAML
+            </Button>
           </div>
           {hasUnsavedChanges && (
             <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
@@ -143,16 +189,44 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
         </div>
       )}
 
+      {!readOnly && (
+        <Alert variant="info" className="items-start">
+          <TerminalIcon className="size-4 mt-0.5" />
+          <AlertContent className="space-y-2">
+            <p className="font-medium text-sm">Run in CLI</p>
+            <AlertDescription>
+              Download this file as <code>{YAML_DOWNLOAD_FILE_NAME}</code>, then run:
+            </AlertDescription>
+            <div className="relative">
+              <code className="block rounded bg-background/70 px-3 py-2 pr-12 text-sm font-mono">
+                {EVAL_CLI_COMMAND}
+              </code>
+              <CopyButton
+                value={EVAL_CLI_COMMAND}
+                className="absolute right-2 top-1.5"
+                aria-label="Copy CLI command"
+              />
+            </div>
+          </AlertContent>
+        </Alert>
+      )}
+
       {/* Error display */}
       {parseError && (
         <Alert variant="destructive">
-          <AlertDescription>{parseError}</AlertDescription>
+          <AlertContent>
+            <AlertDescription>{parseError}</AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
       {/* Editor Container */}
       <div className="relative min-w-0">
+        <label htmlFor={textareaId} className="sr-only">
+          {readOnly ? 'YAML configuration preview' : 'YAML configuration editor'}
+        </label>
         <div
+          ref={editorContainerRef}
           className={cn(
             'rounded-lg overflow-auto max-h-[60vh]',
             'border-2 transition-all',
@@ -161,7 +235,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
         >
           <Editor
             autoCapitalize="off"
+            textareaId={textareaId}
             value={code}
+            onKeyDown={handleEditorKeyDown}
             onValueChange={(newCode) => {
               if (readOnly) {
                 return;
@@ -193,7 +269,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
 
         {/* Copy button - offset to avoid scrollbar */}
         <div className="absolute top-2 right-5">
-          <CopyButton value={code} />
+          <CopyButton value={code} aria-label="Copy YAML configuration" />
         </div>
       </div>
     </div>

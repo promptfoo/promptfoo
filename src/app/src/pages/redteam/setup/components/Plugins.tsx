@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Separator } from '@app/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
@@ -62,11 +62,17 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
     <p>
       <span>
         Intents are seed phrases for attack generation, for example "teach me how to cook meth".
-        Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
+        Promptfoo can apply jailbreak strategies to single-turn intents; multi-step sequences run as
+        authored.
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-5">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Intent file format help"
+            className="size-5"
+          >
             <Info className="size-4" />
           </Button>
         </TooltipTrigger>
@@ -263,24 +269,24 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     // Check custom policies with actual content
-    const hasPolicies = config.plugins.some(
-      (p) =>
-        typeof p === 'object' &&
-        p.id === 'policy' &&
-        p.config?.policy &&
-        typeof p.config.policy === 'string' &&
-        p.config.policy.trim().length > 0,
-    );
+    const hasPolicies = config.plugins.some((p) => {
+      if (typeof p !== 'object' || p.id !== 'policy' || !p.config?.policy) {
+        return false;
+      }
 
-    // Check custom intents with actual content
-    const hasIntents = config.plugins.some(
-      (p) =>
-        typeof p === 'object' &&
-        p.id === 'intent' &&
-        p.config?.intent &&
-        Array.isArray(p.config.intent) &&
-        p.config.intent.length > 0,
-    );
+      const { policy } = p.config;
+      if (typeof policy === 'string') {
+        return policy.trim().length > 0;
+      }
+
+      if (typeof policy !== 'object' || policy === null || !('text' in policy)) {
+        return false;
+      }
+
+      return typeof policy.text === 'string' && policy.text.trim().length > 0;
+    });
+
+    const hasIntents = countSelectedCustomIntents({ plugins: config.plugins }) > 0;
 
     return hasPolicies || hasIntents;
   }, [selectedPlugins, config.plugins]);
@@ -372,13 +378,15 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {isRemoteGenerationDisabled && (
         <Alert variant="warning" className="sticky top-0 z-10 -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Remote Generation Disabled</AlertTitle>
-          <AlertDescription>
-            Some plugins require remote generation and are currently unavailable. These plugins
-            include harmful content tests, bias tests, and other advanced security checks. To enable
-            them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
-            <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>Remote Generation Disabled</AlertTitle>
+            <AlertDescription>
+              Some plugins require remote generation and are currently unavailable. These plugins
+              include harmful content tests, bias tests, and other advanced security checks. To
+              enable them, unset the <code>PROMPTFOO_DISABLE_REMOTE_GENERATION</code> or{' '}
+              <code>PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION</code> environment variables.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
@@ -386,12 +394,14 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       {hasSelectedMostPlugins && (
         <Alert variant="warning" className="sticky top-0 z-[9] -mx-3 mb-3 rounded-none shadow-sm">
           <AlertTriangle className="size-4" />
-          <AlertTitle>Performance Warning: Too Many Plugins Selected</AlertTitle>
-          <AlertDescription>
-            Selecting many plugins is usually not efficient and will significantly increase
-            evaluation time and cost. It's recommended to use the preset configurations or select
-            only the plugins specifically needed for your use case.
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>Performance Warning: Too Many Plugins Selected</AlertTitle>
+            <AlertDescription>
+              Selecting many plugins is usually not efficient and will significantly increase
+              evaluation time and cost. It's recommended to use the preset configurations or select
+              only the plugins specifically needed for your use case.
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
@@ -399,7 +409,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       <div className="mb-6 w-full">
         <TestCaseGenerationProvider redTeamConfig={config}>
           <Tabs value={activeTab} onValueChange={handleTabChange}>
-            <TabsList>
+            <TabsList className="!h-auto w-full max-w-full flex-wrap justify-start gap-1 overflow-visible sm:!h-10 sm:w-auto sm:flex-nowrap sm:gap-0">
               <TabsTrigger value="plugins">Plugins ({selectedPlugins.size})</TabsTrigger>
               <TabsTrigger value="intents">Custom Intents ({customIntentsCount})</TabsTrigger>
               <TabsTrigger value="policies">Custom Policies ({customPoliciesCount})</TabsTrigger>

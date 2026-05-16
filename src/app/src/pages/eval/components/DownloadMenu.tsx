@@ -11,6 +11,7 @@ import { CheckCircle, Copy, Download } from 'lucide-react';
 import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
 import { useTableStore as useResultsViewStore } from './store';
+import type { UnifiedConfig } from '@promptfoo/types';
 
 interface DownloadMenuItemProps {
   onClick: () => void;
@@ -27,6 +28,44 @@ export function DownloadMenuItem({ onClick }: DownloadMenuItemProps) {
       </DropdownMenuItemIcon>
       Download
     </DropdownMenuItem>
+  );
+}
+
+interface CommandBlockProps {
+  fileName: string;
+  helpText?: string;
+  isDownloaded: boolean;
+  onCopy: (commandText: string) => void;
+}
+
+function CommandBlock({ fileName, helpText, isDownloaded, onCopy }: CommandBlockProps) {
+  const commandText = `promptfoo eval -c ${fileName}`;
+
+  return (
+    <div className="mt-4 p-4 bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.08] dark:border-white/[0.08] rounded-lg">
+      {helpText && (
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium text-muted-foreground">{helpText}</span>
+          {isDownloaded && (
+            <div className="flex items-center">
+              <CheckCircle className="size-4 text-emerald-500 mr-1" />
+              <span className="text-sm font-medium text-emerald-500">Downloaded</span>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex flex-col items-stretch gap-2 rounded-md border border-black/15 bg-white/80 p-3 dark:border-white/15 dark:bg-black/40 sm:flex-row sm:items-center">
+        <code className="flex-1 font-mono text-sm font-medium">{commandText}</code>
+        <button
+          type="button"
+          onClick={() => onCopy(commandText)}
+          className="self-end rounded p-1 text-primary transition-colors hover:bg-primary/15 sm:ml-2 sm:self-auto"
+          aria-label="Copy command"
+        >
+          <Copy className="size-4" />
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -90,7 +129,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
    * @param options Additional options (skipInvalid for yaml.dump)
    */
   const downloadYamlConfig = (
-    configToDownload: any,
+    configToDownload: Partial<UnifiedConfig>,
     fileName: string,
     successMessage: string,
     options: { skipInvalid?: boolean } = {},
@@ -118,8 +157,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   };
 
   const downloadConfig = () => {
-    if (!evalId) {
-      showToast('No evaluation ID', 'error');
+    if (!evalId || !config) {
+      showToast('No evaluation ID or configuration available', 'error');
       return;
     }
     const fileName = getFilename('config.yaml');
@@ -280,44 +319,6 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     handleClose();
   };
 
-  // Generate the command text based on filename
-  const getCommandText = (fileName: string) => {
-    return `promptfoo eval -c ${fileName}`;
-  };
-
-  // Create a component for the command with copy button
-  const CommandBlock = ({ fileName, helpText }: { fileName: string; helpText?: string }) => {
-    const commandText = getCommandText(fileName);
-    const isDownloaded = downloadedFiles.has(fileName);
-
-    return (
-      <div className="mt-4 p-4 bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.08] dark:border-white/[0.08] rounded-lg">
-        {helpText && (
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-muted-foreground">{helpText}</span>
-            {isDownloaded && (
-              <div className="flex items-center">
-                <CheckCircle className="size-4 text-emerald-500 mr-1" />
-                <span className="text-sm font-medium text-emerald-500">Downloaded</span>
-              </div>
-            )}
-          </div>
-        )}
-        <div className="flex items-center bg-white/80 dark:bg-black/40 border border-black/15 dark:border-white/15 rounded-md p-3">
-          <code className="flex-1 font-mono text-sm font-medium">{commandText}</code>
-          <button
-            type="button"
-            onClick={() => copyToClipboard(commandText)}
-            className="ml-2 p-1 text-primary hover:bg-primary/15 rounded transition-colors"
-            aria-label="Copy command"
-          >
-            <Copy className="size-4" />
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -326,7 +327,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         </DialogHeader>
         <div className="space-y-6 py-4">
           {/* Configuration Files Section */}
-          <Card className="border">
+          <Card className="border border-border">
             <CardContent className="p-6">
               <h3 className="text-lg font-semibold mb-4">Configuration Files</h3>
 
@@ -343,6 +344,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     <CommandBlock
                       fileName={getFilename('config.yaml')}
                       helpText="Run this command to execute the eval again:"
+                      isDownloaded={downloadedFiles.has(getFilename('config.yaml'))}
+                      onCopy={copyToClipboard}
                     />
                   )}
                 </div>
@@ -368,6 +371,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     <CommandBlock
                       fileName={getFilename('failed-tests.yaml')}
                       helpText="Run this command to re-run just the failed tests:"
+                      isDownloaded={downloadedFiles.has(getFilename('failed-tests.yaml'))}
+                      onCopy={copyToClipboard}
                     />
                   )}
                 </div>
@@ -376,7 +381,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
           </Card>
 
           {/* Table Data Section */}
-          <Card className="border">
+          <Card className="border border-border">
             <CardContent className="p-6">
               <h3 className="text-lg font-semibold mb-2">Export Results</h3>
               <p className="text-sm text-muted-foreground mb-6">
@@ -408,7 +413,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
           </Card>
 
           {/* Advanced Options Section */}
-          <Card className="border">
+          <Card className="border border-border">
             <CardContent className="p-6">
               <h3 className="text-lg font-semibold mb-2">Advanced Exports</h3>
               <p className="text-sm text-muted-foreground mb-6">

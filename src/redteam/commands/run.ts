@@ -3,15 +3,16 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
+import { EmailValidationError } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { getConfigFromCloud } from '../../util/cloud';
+import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/load';
 import { setupEnv } from '../../util/index';
 import { doRedteamRun } from '../shared';
+import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 import type { Command } from 'commander';
-
-import type { RedteamRunOptions } from '../types';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 
@@ -44,6 +45,15 @@ export function redteamRunCommand(program: Command) {
     .option('--remote', 'Force remote inference wherever possible', false)
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
+    .option(
+      '--strict',
+      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
+      false,
+    )
+    .option(
+      '--filter-prompts <pattern>',
+      'Only run tests with prompts whose id or label matches the regex pattern',
+    )
     .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
@@ -90,14 +100,23 @@ export function redteamRunCommand(program: Command) {
         if (opts.remote) {
           cliState.remote = true;
         }
-        await doRedteamRun(opts);
+        if (opts.maxConcurrency !== undefined) {
+          cliState.maxConcurrency = opts.maxConcurrency;
+        }
+        await doRedteamRun({ ...opts, eventSource: 'cli' });
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');
-          error.errors.forEach((err: z.ZodIssue) => {
+          error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
-        } else {
+        } else if (error instanceof ConfigResolutionError) {
+          logConfigResolutionError(error);
+        } else if (
+          !(error instanceof EmailValidationError) &&
+          !(error instanceof ProbeLimitExceededError)
+        ) {
+          // These expected failures are already logged by their helpers.
           logger.error(
             `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
               error instanceof Error ? error.stack : ''
@@ -105,6 +124,10 @@ export function redteamRunCommand(program: Command) {
           );
         }
         process.exitCode = 1;
+      } finally {
+        // Reset cliState to prevent stale state leaking to later commands
+        cliState.remote = false;
+        cliState.maxConcurrency = undefined;
       }
     });
 

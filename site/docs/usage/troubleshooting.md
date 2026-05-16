@@ -1,6 +1,6 @@
 ---
 sidebar_position: 60
-description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, and native builds in your LLM testing pipeline
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, native builds, and network/proxy setup in your LLM testing pipeline
 ---
 
 # Troubleshooting
@@ -27,7 +27,7 @@ When you start a scan, you'll see:
   Tip: Press v to toggle debug output
 ```
 
-Press `v` to enable debug logs and see detailed API requests, provider responses, and grading results. Press `v` again to return to clean output.
+Press `v` to enable debug logs and see detailed request metadata, provider response summaries, and grading status. Sensitive payloads, credentials, and raw response bodies may be redacted or summarized. Press `v` again to return to clean output.
 
 :::tip
 This is especially helpful when a scan seems stuck or you want to understand what's happening with a specific test case.
@@ -141,7 +141,7 @@ prompts:
 
 ## Node.js version mismatch error
 
-When running `npx promptfoo@latest`, you might encounter this error:
+You might encounter this error after switching Node.js versions:
 
 ```text
 Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
@@ -151,17 +151,53 @@ NODE_MODULE_VERSION 127. Please try re-compiling or re-installing
 the module (for instance, using `npm rebuild` or `npm install`).
 ```
 
-This happens because promptfoo uses native code modules (like better-sqlite3) that need to be compiled specifically for your Node.js version.
+This happens because promptfoo uses native code modules such as `better-sqlite3`,
+which must be compiled for the active Node.js version.
 
 ### Solution: Remove npx cache and reinstall
 
-To fix this issue, run this single command:
+Use the repair path that matches how you run promptfoo.
+
+**Project checkout**
+
+If you are running promptfoo from a local checkout, switch to the Node.js version
+you intend to use, then rebuild the native dependency:
+
+```bash
+npm rebuild better-sqlite3
+```
+
+If the project includes an `.nvmrc`, run `nvm use` first so the active Node.js version
+matches the project before rebuilding.
+
+**Global npm install**
+
+If you installed promptfoo globally with npm, reinstall it under the active Node.js
+version:
+
+```bash
+npm install -g promptfoo@latest
+```
+
+**npx**
+
+If the error happens with `npx promptfoo@latest`, remove the cached npx install and
+run the command again. With newer npm versions, remove only the matching cache entry:
+
+```bash
+npm cache npx ls
+npm cache npx rm <key>
+npx -y promptfoo@latest
+```
+
+Use the key shown next to `promptfoo@latest` in `npm cache npx ls`. If your npm
+version does not support `npm cache npx`, remove the older npx cache directory instead:
 
 ```bash
 rm -rf ~/.npm/_npx && npx -y promptfoo@latest
 ```
 
-This removes any cached npm packages in the npx cache directory and forces a fresh download and installation of promptfoo, ensuring the native modules are compiled correctly for your current Node.js version.
+This forces a fresh install for the current Node.js version.
 
 ## Native build failures
 
@@ -179,11 +215,46 @@ npm install --build-from-source
 npm rebuild
 ```
 
+## Network and proxy issues
+
+If you're behind a corporate proxy or firewall and having trouble connecting to LLM APIs:
+
+### Configure proxy settings
+
+Set standard proxy environment variables before running promptfoo:
+
+```bash
+# Set proxy for HTTPS requests (most common)
+export HTTPS_PROXY=http://proxy.company.com:8080
+
+# With authentication if needed
+export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+# Exclude specific hosts from proxying
+export NO_PROXY=localhost,127.0.0.1,internal.domain.com
+```
+
+### Custom CA certificates
+
+For environments with custom certificate authorities:
+
+```bash
+export PROMPTFOO_CA_CERT_PATH=/path/to/ca-bundle.crt
+```
+
+### Verify your configuration
+
+Run `promptfoo debug` to see detected proxy settings and verify your network configuration is correct.
+
+See the [FAQ](/docs/faq/#how-do-i-configure-promptfoo-for-corporate-networks-or-proxies) for complete proxy and SSL configuration details.
+
 ## OpenAI API key is not set
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
 
-If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `llm-rubric` or `similar` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+For default text-only model grading and synthesis, you can also install `@openai/codex-sdk`, sign in through the Codex CLI, and let Promptfoo use `openai:codex-sdk` automatically when no higher-priority API credentials are set. This does not cover embedding or moderation providers.
+
+If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `similar` or `moderation` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) or configure an embedding/moderation provider explicitly.
 
 Follow the instructions to override the grader, e.g., using the `defaultTest` property:
 
@@ -371,8 +442,8 @@ providers:
 
 On Windows, promptfoo tries to detect Python in this order:
 
-1. `PROMPTFOO_PYTHON` environment variable (if set)
-2. Provider-specific `pythonExecutable` config (if set)
+1. Provider-specific `pythonExecutable` config (if set)
+2. `PROMPTFOO_PYTHON` environment variable (if set)
 3. **Windows smart detection**: Uses `where python` command and filters out Microsoft Store stubs
 4. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
 5. Common fallback commands: `python`, `python3`, `py -3`, `py`
@@ -429,7 +500,14 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 
 ## Finding log files
 
-Promptfoo logs errors and verbose logs to `~/.promptfoo/logs` by default.
+Promptfoo logs errors and debug logs to `~/.promptfoo/logs` by default.
+
+To inspect them from the CLI:
+
+```bash
+promptfoo logs --list
+promptfoo logs <filename>
+```
 
 Change the location by setting `PROMPTFOO_LOG_DIR` to a different directory.
 
