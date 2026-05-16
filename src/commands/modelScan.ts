@@ -677,23 +677,11 @@ async function processJsonResults(
   existingAudit: ModelAudit | null,
   preScanRevision?: HuggingFaceRevisionSnapshot,
 ): Promise<number> {
-  if (!jsonOutput) {
-    logger.error('No output received from model scan');
+  const results = parseJsonScanResults(jsonOutput, options);
+  if (!results) {
     return 1;
   }
 
-  let results: ModelAuditScanResults;
-  try {
-    results = parseCompleteModelAuditResults(JSON.parse(jsonOutput));
-  } catch (error) {
-    logger.error(`Failed to parse scan results: ${error}`);
-    if (options.verbose) {
-      logger.error(`Raw output: ${jsonOutput}`);
-    }
-    return 1;
-  }
-
-  // Fetch revision info and save to database
   const revisionInfo = await fetchRevisionInfo(paths, results, preScanRevision);
   const audit = await saveAuditRecord(
     paths,
@@ -703,82 +691,133 @@ async function processJsonResults(
     existingAudit,
     revisionInfo,
   );
+  const sharePromise = startModelAuditShareIfNeeded(audit, options);
 
-  // Determine if we should share (matches eval command behavior)
+  displayNormalizedScanResults(results, audit, currentScannerVersion, existingAudit, options);
+  if (!(await writeNormalizedScanOutput(results, options.output))) {
+    return 1;
+  }
+  await awaitModelAuditShare(sharePromise);
+
+  return getModelScanExitCode(exitCode, results);
+}
+
+function parseJsonScanResults(
+  jsonOutput: string,
+  options: Pick<ScanOptions, 'verbose'>,
+): ModelAuditScanResults | null {
+  if (!jsonOutput) {
+    logger.error('No output received from model scan');
+    return null;
+  }
+
+  try {
+    return parseCompleteModelAuditResults(JSON.parse(jsonOutput));
+  } catch (error) {
+    logger.error(`Failed to parse scan results: ${error}`);
+    if (options.verbose) {
+      logger.error(`Raw output: ${jsonOutput}`);
+    }
+    return null;
+  }
+}
+
+function shouldShareModelAudit(options: Pick<ScanOptions, 'share' | 'noShare'>): boolean {
   const hasExplicitDisable =
     options.share === false || options.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
-
-  let wantsToShare: boolean;
   if (hasExplicitDisable) {
-    wantsToShare = false;
-  } else if (options.share === true) {
-    wantsToShare = true;
-  } else {
-    // Default: auto-share when cloud is enabled
-    wantsToShare = cloudConfig.isEnabled();
+    return false;
   }
+  if (options.share === true) {
+    return true;
+  }
+  return cloudConfig.isEnabled();
+}
 
-  // Check if sharing is actually possible (cloud enabled or custom share URL configured)
+function startModelAuditShareIfNeeded(
+  audit: ModelAudit,
+  options: Pick<ScanOptions, 'share' | 'noShare'>,
+): Promise<string | null> | null {
+  const wantsToShare = shouldShareModelAudit(options);
   const canShare = isModelAuditSharingEnabled();
-
   logger.debug(`Model audit sharing decision: wantsToShare=${wantsToShare}, canShare=${canShare}`);
+  return wantsToShare && canShare ? createShareableModelAuditUrl(audit) : null;
+}
 
-  // Start sharing in background (don't await yet - non-blocking like evals!)
-  let sharePromise: Promise<string | null> | null = null;
-  if (wantsToShare && canShare) {
-    sharePromise = createShareableModelAuditUrl(audit);
-  }
-
-  // Display summary immediately (don't wait for upload)
+function displayNormalizedScanResults(
+  results: ModelAuditScanResults,
+  audit: ModelAudit,
+  currentScannerVersion: string | null,
+  existingAudit: ModelAudit | null,
+  options: Pick<ScanOptions, 'format'>,
+): void {
   if (options.format !== 'json') {
     displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
   }
+}
 
-  // Save to user-specified output file if requested. Persisted scans always emit
-  // Promptfoo's normalized JSON payload; use --no-write for raw ModelAudit output.
-  if (options.output) {
-    try {
-      await fs.writeFile(options.output, JSON.stringify(results, null, 2));
-      logger.info(`Results also saved to ${options.output}`);
-    } catch (error) {
-      logger.error(`Failed to save results to ${options.output}: ${error}`);
-      return 1;
-    }
+async function writeNormalizedScanOutput(
+  results: ModelAuditScanResults,
+  outputPath: string | undefined,
+): Promise<boolean> {
+  if (!outputPath) {
+    return true;
   }
+  try {
+    await fs.writeFile(outputPath, JSON.stringify(results, null, 2));
+    logger.info(`Results also saved to ${outputPath}`);
+    return true;
+  } catch (error) {
+    logger.error(`Failed to save results to ${outputPath}: ${error}`);
+    return false;
+  }
+}
 
-  // Now wait for share to complete and show spinner (like evals)
-  if (sharePromise != null) {
-    if (process.stdout.isTTY && !isCI()) {
-      const spinner = ora({
-        text: 'Sharing model audit...',
-        prefixText: chalk.dim('»'),
-        spinner: 'dots',
-      }).start();
+async function awaitModelAuditShare(sharePromise: Promise<string | null> | null): Promise<void> {
+  if (sharePromise === null) {
+    return;
+  }
+  if (process.stdout.isTTY && !isCI()) {
+    await awaitModelAuditShareWithSpinner(sharePromise);
+    return;
+  }
+  await awaitModelAuditShareInLogs(sharePromise);
+}
 
-      try {
-        const shareableUrl = await sharePromise;
-        if (shareableUrl) {
-          spinner.succeed(shareableUrl);
-        } else {
-          spinner.fail(chalk.red('Share failed'));
-        }
-      } catch (error) {
-        spinner.fail(chalk.red('Share failed'));
-        logger.debug(`Share error: ${error}`);
-      }
+async function awaitModelAuditShareWithSpinner(
+  sharePromise: Promise<string | null>,
+): Promise<void> {
+  const spinner = ora({
+    text: 'Sharing model audit...',
+    prefixText: chalk.dim('»'),
+    spinner: 'dots',
+  }).start();
+
+  try {
+    const shareableUrl = await sharePromise;
+    if (shareableUrl) {
+      spinner.succeed(shareableUrl);
     } else {
-      // CI mode - direct log
-      try {
-        const shareableUrl = await sharePromise;
-        if (shareableUrl) {
-          logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
-        }
-      } catch (error) {
-        logger.debug(`Share error: ${error}`);
-      }
+      spinner.fail(chalk.red('Share failed'));
     }
+  } catch (error) {
+    spinner.fail(chalk.red('Share failed'));
+    logger.debug(`Share error: ${error}`);
   }
+}
 
+async function awaitModelAuditShareInLogs(sharePromise: Promise<string | null>): Promise<void> {
+  try {
+    const shareableUrl = await sharePromise;
+    if (shareableUrl) {
+      logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
+    }
+  } catch (error) {
+    logger.debug(`Share error: ${error}`);
+  }
+}
+
+function getModelScanExitCode(exitCode: number, results: ModelAuditScanResults): number {
   return exitCode === 0 && getModelAuditVerdict(results).hasFindings ? 1 : exitCode;
 }
 
@@ -878,6 +917,271 @@ async function processScanResultsFromStdout(
 // Main Command
 // ============================================================================
 
+async function handleListScanners(
+  paths: string[],
+  options: ScanOptions,
+  delegationEnv: NodeJS.ProcessEnv,
+): Promise<void> {
+  const parsed = buildCliArgs(paths || [], {
+    ...options,
+    format: options.format || 'text',
+    output: options.output,
+    timeout: undefined,
+  });
+  if (parsed) {
+    await runPassthroughModelAudit(parsed.args, delegationEnv);
+  }
+}
+
+async function prepareExistingAuditState(
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  saveToDatabase: boolean,
+): Promise<{
+  shouldContinue: boolean;
+  existingAuditToUpdate: ModelAudit | null;
+  huggingFaceRevision?: HuggingFaceRevisionSnapshot;
+}> {
+  if (!saveToDatabase) {
+    return { shouldContinue: true, existingAuditToUpdate: null };
+  }
+
+  const {
+    shouldSkip,
+    existingAudit,
+    huggingFaceRevision: scannedRevision,
+  } = await checkExistingScan(paths, options, currentScannerVersion);
+  if (shouldSkip) {
+    process.exitCode = 0;
+    return { shouldContinue: false, existingAuditToUpdate: existingAudit };
+  }
+
+  return {
+    shouldContinue: true,
+    existingAuditToUpdate: existingAudit,
+    huggingFaceRevision: scannedRevision,
+  };
+}
+
+function buildScanCliArgs(
+  paths: string[],
+  options: ScanOptions,
+  saveToDatabase: boolean,
+): { args: string[]; unsupportedOptions: string[]; outputFormat: string } | null {
+  const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
+  const parsed = buildCliArgs(paths, {
+    ...options,
+    format: outputFormat,
+    output: options.output && !saveToDatabase ? options.output : undefined,
+    timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
+  });
+  if (!parsed) {
+    return null;
+  }
+  return { ...parsed, outputFormat };
+}
+
+function logUnsupportedScanOptions(unsupportedOptions: string[]): void {
+  if (unsupportedOptions.length > 0) {
+    logger.warn(`Unsupported options detected: ${unsupportedOptions.join(', ')}`);
+  }
+}
+
+function shouldLogScanStart(saveToDatabase: boolean, outputFormat: string): boolean {
+  return saveToDatabase || outputFormat === 'text';
+}
+
+function createTempOutputCleanup(tempOutputPath: string): () => void {
+  let cleanedUp = false;
+  return () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+    try {
+      unlinkSync(tempOutputPath);
+    } catch {
+      // Ignore - file may already be cleaned up or doesn't exist
+    }
+    try {
+      rmSync(path.dirname(tempOutputPath), { recursive: true, force: true });
+    } catch {
+      // Ignore - directory may already be removed
+    }
+  };
+}
+
+async function runCliUiScan(
+  args: string[],
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAuditToUpdate: ModelAudit | null,
+  huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined,
+  delegationEnv: NodeJS.ProcessEnv,
+): Promise<number> {
+  const tempOutputPath = createTempOutputPath();
+  args.push('--output', tempOutputPath);
+  const cleanupTempFileOnExit = createTempOutputCleanup(tempOutputPath);
+
+  process.once('exit', cleanupTempFileOnExit);
+  process.once('SIGINT', cleanupTempFileOnExit);
+  process.once('SIGTERM', cleanupTempFileOnExit);
+
+  try {
+    const spawnResult = await spawnModelAudit(args, {
+      captureOutput: false,
+      env: delegationEnv,
+    });
+    return await processScanResultsFromFile(
+      spawnResult,
+      tempOutputPath,
+      paths,
+      options,
+      currentScannerVersion,
+      existingAuditToUpdate,
+      huggingFaceRevision,
+    );
+  } finally {
+    cleanupTempFileOnExit();
+    process.removeListener('exit', cleanupTempFileOnExit);
+    process.removeListener('SIGINT', cleanupTempFileOnExit);
+    process.removeListener('SIGTERM', cleanupTempFileOnExit);
+  }
+}
+
+async function runCapturedStdoutScan(
+  args: string[],
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAuditToUpdate: ModelAudit | null,
+  huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined,
+  delegationEnv: NodeJS.ProcessEnv,
+): Promise<number> {
+  logger.debug('Using stdout capture (modelaudit < 0.2.20)');
+  const spawnResult = await spawnModelAudit(args, {
+    captureOutput: true,
+    env: delegationEnv,
+  });
+  return processScanResultsFromStdout(
+    spawnResult,
+    paths,
+    options,
+    currentScannerVersion,
+    existingAuditToUpdate,
+    huggingFaceRevision,
+  );
+}
+
+async function runPersistedModelScan(
+  args: string[],
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAuditToUpdate: ModelAudit | null,
+  huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined,
+  delegationEnv: NodeJS.ProcessEnv,
+): Promise<number> {
+  if (supportsCliUiWithOutput(currentScannerVersion)) {
+    return runCliUiScan(
+      args,
+      paths,
+      options,
+      currentScannerVersion,
+      existingAuditToUpdate,
+      huggingFaceRevision,
+      delegationEnv,
+    );
+  }
+  return runCapturedStdoutScan(
+    args,
+    paths,
+    options,
+    currentScannerVersion,
+    existingAuditToUpdate,
+    huggingFaceRevision,
+    delegationEnv,
+  );
+}
+
+async function handleModelScanAction(paths: string[], options: ScanOptions): Promise<void> {
+  if (!options.listScanners && (!paths || paths.length === 0)) {
+    logger.error('No paths specified. Provide at least one model file or directory to scan.');
+    process.exitCode = 1;
+    return;
+  }
+
+  warnDeprecatedOptions(options as Record<string, unknown>);
+  const { installed, version: currentScannerVersion } = await checkModelAuditInstalled();
+  if (!installed) {
+    logger.error('ModelAudit is not installed.');
+    logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
+    logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
+    process.exitCode = 1;
+    return;
+  }
+
+  await checkModelAuditUpdates();
+  if (currentScannerVersion) {
+    logger.debug(`Using modelaudit version: ${currentScannerVersion}`);
+  }
+
+  const delegationEnv = {
+    ...process.env,
+    PROMPTFOO_DELEGATED: 'true',
+  };
+
+  if (options.listScanners) {
+    await handleListScanners(paths, options, delegationEnv);
+    return;
+  }
+
+  const saveToDatabase = options.write === undefined || options.write === true;
+  const auditState = await prepareExistingAuditState(
+    paths,
+    options,
+    currentScannerVersion,
+    saveToDatabase,
+  );
+  if (!auditState.shouldContinue) {
+    return;
+  }
+
+  const parsed = buildScanCliArgs(paths, options, saveToDatabase);
+  if (!parsed) {
+    return;
+  }
+  logUnsupportedScanOptions(parsed.unsupportedOptions);
+  if (shouldLogScanStart(saveToDatabase, parsed.outputFormat)) {
+    logger.info(`Running model scan on: ${paths.join(', ')}`);
+  }
+
+  if (!saveToDatabase) {
+    await runPassthroughModelAudit(parsed.args, delegationEnv, true);
+    return;
+  }
+
+  try {
+    process.exitCode = await runPersistedModelScan(
+      parsed.args,
+      paths,
+      options,
+      currentScannerVersion,
+      auditState.existingAuditToUpdate,
+      auditState.huggingFaceRevision,
+      delegationEnv,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to start modelaudit: ${message}`);
+    logger.info('Make sure modelaudit is installed and available in your PATH.');
+    logger.info('Install it using: pip install modelaudit');
+    process.exitCode = 1;
+  }
+}
+
 export function modelScanCommand(program: Command): void {
   program
     .command('scan-model')
@@ -931,192 +1235,5 @@ export function modelScanCommand(program: Command): void {
     .option('--share', 'Share the model audit results')
     .option('--no-share', 'Do not share the model audit results')
 
-    .action(async (paths: string[], options: ScanOptions) => {
-      // Validate input
-      if (!options.listScanners && (!paths || paths.length === 0)) {
-        logger.error('No paths specified. Provide at least one model file or directory to scan.');
-        process.exitCode = 1;
-        return;
-      }
-
-      // Warn about deprecated options
-      warnDeprecatedOptions(options as Record<string, unknown>);
-
-      // Check modelaudit installation
-      const { installed, version: currentScannerVersion } = await checkModelAuditInstalled();
-      if (!installed) {
-        logger.error('ModelAudit is not installed.');
-        logger.info(`Please install it using: ${chalk.green('pip install modelaudit')}`);
-        logger.info('For more information, visit: https://www.promptfoo.dev/docs/model-audit/');
-        process.exitCode = 1;
-        return;
-      }
-
-      // Check for updates
-      await checkModelAuditUpdates();
-      if (currentScannerVersion) {
-        logger.debug(`Using modelaudit version: ${currentScannerVersion}`);
-      }
-
-      const delegationEnv = {
-        ...process.env,
-        PROMPTFOO_DELEGATED: 'true',
-      };
-
-      if (options.listScanners) {
-        const parsed = buildCliArgs(paths || [], {
-          ...options,
-          format: options.format || 'text',
-          output: options.output,
-          timeout: undefined,
-        });
-        if (!parsed) {
-          return;
-        }
-        await runPassthroughModelAudit(parsed.args, delegationEnv);
-        return;
-      }
-
-      // Determine if we should save to database
-      const saveToDatabase = options.write === undefined || options.write === true;
-
-      // Check for existing scan (skip or get audit to update)
-      let existingAuditToUpdate: ModelAudit | null = null;
-      let huggingFaceRevision: HuggingFaceRevisionSnapshot | undefined;
-      if (saveToDatabase) {
-        const {
-          shouldSkip,
-          existingAudit,
-          huggingFaceRevision: scannedRevision,
-        } = await checkExistingScan(paths, options, currentScannerVersion);
-        if (shouldSkip) {
-          process.exitCode = 0;
-          return;
-        }
-        existingAuditToUpdate = existingAudit;
-        huggingFaceRevision = scannedRevision;
-      }
-
-      // Parse CLI arguments
-      const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
-      const parsed = buildCliArgs(paths, {
-        ...options,
-        format: outputFormat,
-        output: options.output && !saveToDatabase ? options.output : undefined,
-        timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
-      });
-      if (!parsed) {
-        return;
-      }
-      const args = parsed.args;
-      if (parsed.unsupportedOptions.length > 0) {
-        logger.warn(`Unsupported options detected: ${parsed.unsupportedOptions.join(', ')}`);
-      }
-
-      if (saveToDatabase || outputFormat === 'text') {
-        logger.info(`Running model scan on: ${paths.join(', ')}`);
-      }
-
-      if (!saveToDatabase) {
-        await runPassthroughModelAudit(args, delegationEnv, true);
-        return;
-      }
-
-      try {
-        // Check if modelaudit version supports CLI UI with --output flag (v0.2.20+)
-        const useCliUiFlow = supportsCliUiWithOutput(currentScannerVersion);
-
-        if (useCliUiFlow) {
-          // Use temp file for JSON output so CLI UI can display
-          // (modelaudit 0.2.20+ shows CLI UI when --output is used)
-          const tempOutputPath = createTempOutputPath();
-          args.push('--output', tempOutputPath);
-
-          // Cleanup handler for temp file on abnormal termination.
-          // Note: Child process termination is handled by spawnModelAudit's signal
-          // handlers - this only handles temp file cleanup.
-          //
-          // IMPORTANT: We use unlinkSync (synchronous) instead of fs.promises.unlink
-          // because signal handlers must complete synchronously. Async operations
-          // in signal handlers are unsafe - the process may exit before they complete.
-          let cleanedUp = false;
-          const cleanupTempFileOnExit = () => {
-            if (cleanedUp) {
-              return;
-            }
-            cleanedUp = true;
-            try {
-              unlinkSync(tempOutputPath);
-            } catch {
-              // Ignore - file may already be cleaned up or doesn't exist
-            }
-            try {
-              rmSync(path.dirname(tempOutputPath), { recursive: true, force: true });
-            } catch {
-              // Ignore - directory may already be removed
-            }
-          };
-
-          // Register cleanup handlers for abnormal termination.
-          // We use once() so handlers auto-remove after firing, but we also manually
-          // remove them in finally{} for the normal exit path. The cleanedUp flag
-          // prevents double-cleanup if a signal fires between our manual cleanup call
-          // and removeListener calls. This belt-and-suspenders approach ensures:
-          // 1. Normal exit: finally{} cleans up and removes handlers
-          // 2. Signal during await: once() handler cleans up, auto-removes itself
-          // 3. Signal during finally{}: cleanedUp flag prevents double-cleanup
-          process.once('exit', cleanupTempFileOnExit);
-          process.once('SIGINT', cleanupTempFileOnExit);
-          process.once('SIGTERM', cleanupTempFileOnExit);
-
-          try {
-            // Use inherited stdio so CLI UI displays (spinners, progress, colors)
-            const spawnResult = await spawnModelAudit(args, {
-              captureOutput: false,
-              env: delegationEnv,
-            });
-
-            // Read JSON from temp file and process results
-            process.exitCode = await processScanResultsFromFile(
-              spawnResult,
-              tempOutputPath,
-              paths,
-              options,
-              currentScannerVersion,
-              existingAuditToUpdate,
-              huggingFaceRevision,
-            );
-          } finally {
-            // Cleanup first, then remove handlers. Order matters: if we removed
-            // handlers first, a signal arriving before cleanup would be missed.
-            cleanupTempFileOnExit();
-            process.removeListener('exit', cleanupTempFileOnExit);
-            process.removeListener('SIGINT', cleanupTempFileOnExit);
-            process.removeListener('SIGTERM', cleanupTempFileOnExit);
-          }
-        } else {
-          // Fallback for older modelaudit versions: capture stdout for JSON
-          logger.debug('Using stdout capture (modelaudit < 0.2.20)');
-          const spawnResult = await spawnModelAudit(args, {
-            captureOutput: true,
-            env: delegationEnv,
-          });
-
-          process.exitCode = await processScanResultsFromStdout(
-            spawnResult,
-            paths,
-            options,
-            currentScannerVersion,
-            existingAuditToUpdate,
-            huggingFaceRevision,
-          );
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error(`Failed to start modelaudit: ${message}`);
-        logger.info('Make sure modelaudit is installed and available in your PATH.');
-        logger.info('Install it using: pip install modelaudit');
-        process.exitCode = 1;
-      }
-    });
+    .action(handleModelScanAction);
 }
