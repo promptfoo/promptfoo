@@ -20,143 +20,121 @@ function extractToolNames(output: unknown): Set<string> {
   if (output === null || output === undefined) {
     return names;
   }
-
-  // Handle string output - try to parse as JSON and recursively extract
   if (typeof output === 'string') {
-    // First, try parsing the entire string as JSON
+    addToolNamesFromString(output, names);
+    return names;
+  }
+  if (Array.isArray(output)) {
+    addToolNamesFromArray(output, names);
+    return names;
+  }
+  if (typeof output === 'object') {
+    addToolNamesFromObject(output as Record<string, unknown>, names);
+  }
+  return names;
+}
+
+function addExtractedNames(value: unknown, names: Set<string>): void {
+  for (const name of extractToolNames(value)) {
+    names.add(name);
+  }
+}
+
+function addToolNamesFromString(output: string, names: Set<string>): void {
+  try {
+    addExtractedNames(JSON.parse(output), names);
+    return;
+  } catch {
+    // Not valid JSON as a whole, continue to line-by-line parsing.
+  }
+
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      continue;
+    }
     try {
-      const parsed = JSON.parse(output);
-      const parsedNames = extractToolNames(parsed);
-      for (const name of parsedNames) {
-        names.add(name);
-      }
-      return names;
+      addExtractedNames(JSON.parse(trimmed), names);
     } catch {
-      // Not valid JSON as a whole, continue to try line-by-line parsing
+      // Ignore non-JSON lines embedded in natural language output.
     }
-
-    // Handle Anthropic-style output: text and JSON objects separated by newlines
-    // Example: "Let me check the weather.\n\n{"type":"tool_use","name":"get_weather",...}"
-    const lines = output.split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          const parsedNames = extractToolNames(parsed);
-          for (const name of parsedNames) {
-            names.add(name);
-          }
-        } catch {
-          // Not valid JSON, ignore this line
-        }
-      }
-    }
-    return names;
   }
+}
 
-  if (typeof output !== 'object') {
-    return names;
+function addToolNamesFromObject(obj: Record<string, unknown>, names: Set<string>): void {
+  if (Array.isArray(obj.tool_calls)) {
+    addOpenAiToolCalls(obj.tool_calls, names);
+    return;
   }
-
-  const obj = output as Record<string, unknown>;
-
-  // Handle OpenAI format: { tool_calls: [{ function: { name: "..." } }] }
-  if ('tool_calls' in obj && Array.isArray(obj.tool_calls)) {
-    for (const tc of obj.tool_calls) {
-      if (tc && typeof tc === 'object') {
-        const toolCall = tc as Record<string, unknown>;
-        // OpenAI: { function: { name: "..." } }
-        if (toolCall.function && typeof toolCall.function === 'object') {
-          const fn = toolCall.function as Record<string, unknown>;
-          if (typeof fn.name === 'string') {
-            names.add(fn.name);
-          }
-        }
-        // Simple: { name: "..." }
-        if (typeof toolCall.name === 'string') {
-          names.add(toolCall.name);
-        }
-      }
-    }
-    return names;
-  }
-
-  // Handle Anthropic single tool_use block: { type: 'tool_use', name: '...' }
   if (obj.type === 'tool_use' && typeof obj.name === 'string') {
     names.add(obj.name);
-    return names;
+    return;
   }
+  if (isRecord(obj.functionCall)) {
+    addNameFromRecord(obj.functionCall, names);
+    return;
+  }
+  if (isRecord(obj.toolCall)) {
+    addGoogleLiveToolCalls(obj.toolCall, names);
+  }
+}
 
-  // Handle Google/Vertex single functionCall: { functionCall: { name: '...' } }
-  if ('functionCall' in obj && obj.functionCall && typeof obj.functionCall === 'object') {
-    const fc = obj.functionCall as Record<string, unknown>;
-    if (typeof fc.name === 'string') {
-      names.add(fc.name);
+function addToolNamesFromArray(output: unknown[], names: Set<string>): void {
+  for (const item of output) {
+    if (!isRecord(item)) {
+      continue;
     }
-    return names;
-  }
-
-  // Handle Google Live format: { toolCall: { functionCalls: [...] } }
-  if ('toolCall' in obj && obj.toolCall && typeof obj.toolCall === 'object') {
-    const toolCall = obj.toolCall as Record<string, unknown>;
-    if ('functionCalls' in toolCall && Array.isArray(toolCall.functionCalls)) {
-      for (const fc of toolCall.functionCalls) {
-        if (
-          fc &&
-          typeof fc === 'object' &&
-          typeof (fc as Record<string, unknown>).name === 'string'
-        ) {
-          names.add((fc as Record<string, unknown>).name as string);
-        }
-      }
+    if (item.type === 'tool_use' && typeof item.name === 'string') {
+      names.add(item.name);
+      continue;
     }
-    return names;
-  }
-
-  // Handle arrays (Anthropic content blocks, Google arrays, OpenAI arrays)
-  if (Array.isArray(output)) {
-    for (const item of output) {
-      if (item && typeof item === 'object') {
-        const block = item as Record<string, unknown>;
-
-        // Anthropic content block: { type: 'tool_use', name: '...' }
-        if (block.type === 'tool_use' && typeof block.name === 'string') {
-          names.add(block.name);
-          continue;
-        }
-
-        // Google/Vertex array item: { functionCall: { name: '...' } }
-        if (
-          'functionCall' in block &&
-          block.functionCall &&
-          typeof block.functionCall === 'object'
-        ) {
-          const fc = block.functionCall as Record<string, unknown>;
-          if (typeof fc.name === 'string') {
-            names.add(fc.name);
-          }
-          continue;
-        }
-
-        // OpenAI format: { function: { name: "..." } }
-        if (block.function && typeof block.function === 'object') {
-          const fn = block.function as Record<string, unknown>;
-          if (typeof fn.name === 'string') {
-            names.add(fn.name);
-          }
-          continue;
-        }
-
-        // Simple format: { name: "..." }
-        if (typeof block.name === 'string') {
-          names.add(block.name);
-        }
-      }
+    if (isRecord(item.functionCall)) {
+      addNameFromRecord(item.functionCall, names);
+      continue;
+    }
+    if (isRecord(item.function)) {
+      addNameFromRecord(item.function, names);
+      continue;
+    }
+    if (typeof item.name === 'string') {
+      names.add(item.name);
     }
   }
+}
 
-  return names;
+function addOpenAiToolCalls(toolCalls: unknown[], names: Set<string>): void {
+  for (const toolCall of toolCalls) {
+    if (!isRecord(toolCall)) {
+      continue;
+    }
+    if (isRecord(toolCall.function)) {
+      addNameFromRecord(toolCall.function, names);
+    }
+    if (typeof toolCall.name === 'string') {
+      names.add(toolCall.name);
+    }
+  }
+}
+
+function addGoogleLiveToolCalls(toolCall: Record<string, unknown>, names: Set<string>): void {
+  if (!Array.isArray(toolCall.functionCalls)) {
+    return;
+  }
+  for (const functionCall of toolCall.functionCalls) {
+    if (isRecord(functionCall)) {
+      addNameFromRecord(functionCall, names);
+    }
+  }
+}
+
+function addNameFromRecord(value: Record<string, unknown>, names: Set<string>): void {
+  if (typeof value.name === 'string') {
+    names.add(value.name);
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
