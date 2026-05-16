@@ -411,6 +411,50 @@ export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig
  * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
  */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+  const configs = await loadConfigs(configPaths);
+  const providers = collectProviders(configs);
+  const tests = await collectTests(configs, configPaths);
+  const extensions = collectExtensions(configs);
+  const redteam = collectRedteamConfig(configs);
+  const prompts = collectPrompts(configs, configPaths);
+
+  return {
+    tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
+    description: configs.map((config) => config.description).join(', '),
+    providers,
+    prompts,
+    tests,
+    scenarios: configs.flatMap((config) => config.scenarios || []),
+    defaultTest: mergeDefaultTests(configs),
+    derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
+      if (curr.derivedMetrics) {
+        return [...(prev ?? []), ...curr.derivedMetrics];
+      }
+      return prev;
+    }, undefined),
+    nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
+    env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
+    evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
+    outputPath: configs.flatMap((config) =>
+      typeof config.outputPath === 'string'
+        ? [config.outputPath]
+        : Array.isArray(config.outputPath)
+          ? config.outputPath
+          : [],
+    ),
+    commandLineOptions: configs.reduce(
+      (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
+      {},
+    ),
+    extensions,
+    redteam,
+    metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
+    sharing: getCombinedSharing(configs),
+    tracing: configs.find((config) => config.tracing)?.tracing,
+  };
+}
+
+async function loadConfigs(configPaths: string[]): Promise<UnifiedConfig[]> {
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
@@ -430,6 +474,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
   }
 
+  return configs;
+}
+
+function collectProviders(configs: UnifiedConfig[]): UnifiedConfig['providers'] {
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<string>();
   configs.forEach((config) => {
@@ -452,6 +500,13 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
   });
 
+  return providers;
+}
+
+async function collectTests(
+  configs: UnifiedConfig[],
+  configPaths: string[],
+): Promise<UnifiedConfig['tests']> {
   const tests: UnifiedConfig['tests'] = [];
   for (let i = 0; i < configs.length; i++) {
     const config = configs[i];
@@ -468,6 +523,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
   }
 
+  return tests;
+}
+
+function collectExtensions(configs: UnifiedConfig[]): UnifiedConfig['extensions'] {
   const extensions: UnifiedConfig['extensions'] = [];
   for (const config of configs) {
     if (Array.isArray(config.extensions)) {
@@ -480,6 +539,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     );
   }
 
+  return extensions;
+}
+
+function collectRedteamConfig(configs: UnifiedConfig[]): UnifiedConfig['redteam'] | undefined {
   let redteam: UnifiedConfig['redteam'] | undefined;
   for (const config of configs) {
     if (config.redteam) {
@@ -508,6 +571,10 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     }
   }
 
+  return redteam;
+}
+
+function collectPrompts(configs: UnifiedConfig[], configPaths: string[]): UnifiedConfig['prompts'] {
   const configsAreStringOrArray = configs.every(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
@@ -573,74 +640,41 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts.push(...Array.from(seenPrompts));
   }
 
-  // Combine all configs into a single UnifiedConfig
-  const combinedConfig: UnifiedConfig = {
-    tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
-    description: configs.map((config) => config.description).join(', '),
-    providers,
-    prompts,
-    tests,
-    scenarios: configs.flatMap((config) => config.scenarios || []),
-    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
-      // If any config has a string defaultTest (file reference), preserve it
-      if (typeof curr.defaultTest === 'string') {
-        return curr.defaultTest;
-      }
-      // If prev is already a string (file reference), keep it
-      if (typeof prev === 'string') {
-        return prev;
-      }
-      // If neither prev nor curr has defaultTest, return undefined
-      if (!prev && !curr.defaultTest) {
-        return undefined;
-      }
-      // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
-      const prevObj = typeof prev === 'object' ? prev : {};
-      return {
-        ...prevObj,
-        ...currDefaultTest,
-        vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
-        assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
-        options: { ...prevObj?.options, ...currDefaultTest?.options },
-        metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
-      };
-    }, undefined) as UnifiedConfig['defaultTest'],
-    derivedMetrics: configs.reduce<UnifiedConfig['derivedMetrics']>((prev, curr) => {
-      if (curr.derivedMetrics) {
-        return [...(prev ?? []), ...curr.derivedMetrics];
-      }
+  return prompts;
+}
+
+function mergeDefaultTests(configs: UnifiedConfig[]): UnifiedConfig['defaultTest'] {
+  return configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+    if (typeof curr.defaultTest === 'string') {
+      return curr.defaultTest;
+    }
+    if (typeof prev === 'string') {
       return prev;
-    }, undefined),
-    nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
-    env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
-    evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
-    outputPath: configs.flatMap((config) =>
-      typeof config.outputPath === 'string'
-        ? [config.outputPath]
-        : Array.isArray(config.outputPath)
-          ? config.outputPath
-          : [],
-    ),
-    commandLineOptions: configs.reduce(
-      (prev, curr) => ({ ...prev, ...curr.commandLineOptions }),
-      {},
-    ),
-    extensions,
-    redteam,
-    metadata: configs.reduce((prev, curr) => ({ ...prev, ...curr.metadata }), {}),
-    sharing: (() => {
-      if (configs.some((config) => config.sharing === false)) {
-        return false;
-      }
+    }
+    if (!prev && !curr.defaultTest) {
+      return undefined;
+    }
 
-      const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
-      return sharingConfig ? sharingConfig.sharing : undefined;
-    })(),
-    tracing: configs.find((config) => config.tracing)?.tracing,
-  };
+    const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+    const prevObj = typeof prev === 'object' ? prev : {};
+    return {
+      ...prevObj,
+      ...currDefaultTest,
+      vars: { ...prevObj?.vars, ...currDefaultTest?.vars },
+      assert: [...(prevObj?.assert || []), ...(currDefaultTest?.assert || [])],
+      options: { ...prevObj?.options, ...currDefaultTest?.options },
+      metadata: { ...prevObj?.metadata, ...currDefaultTest?.metadata },
+    };
+  }, undefined) as UnifiedConfig['defaultTest'];
+}
 
-  return combinedConfig;
+function getCombinedSharing(configs: UnifiedConfig[]): UnifiedConfig['sharing'] {
+  if (configs.some((config) => config.sharing === false)) {
+    return false;
+  }
+
+  const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
+  return sharingConfig ? sharingConfig.sharing : undefined;
 }
 
 /**
