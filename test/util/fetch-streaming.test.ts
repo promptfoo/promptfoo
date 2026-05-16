@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   detectorForStreamFormat,
   estimateStreamingTokensPerSecond,
@@ -8,9 +8,20 @@ import {
   STREAM_FORMAT_PATTERNS,
 } from '../../src/util/fetch';
 
+async function settlePendingTimers<T>(promise: Promise<T>): Promise<T> {
+  await vi.runAllTimersAsync();
+  return promise;
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('processStreamingResponse', () => {
   describe('TTFT correctness', () => {
     it('should measure TTFT from request start, not stream start', async () => {
+      vi.useFakeTimers();
+
       const requestStartTime = Date.now() - 200; // Simulate 200ms ago
 
       // Create a mock streaming response with 2 chunks
@@ -24,8 +35,9 @@ describe('processStreamingResponse', () => {
         read: vi.fn(async () => {
           if (chunkIndex < chunks.length) {
             // Simulate 50ms delay between chunks
-            await new Promise((resolve) => setTimeout(resolve, 50));
-            return { done: false, value: chunks[chunkIndex++] };
+            return new Promise((resolve) => {
+              setTimeout(() => resolve({ done: false, value: chunks[chunkIndex++] }), 50);
+            });
           }
           return { done: true, value: undefined };
         }),
@@ -38,7 +50,9 @@ describe('processStreamingResponse', () => {
         },
       } as unknown as Response;
 
-      const result = await processStreamingResponse(mockResponse, requestStartTime);
+      const result = await settlePendingTimers(
+        processStreamingResponse(mockResponse, requestStartTime),
+      );
 
       // CRITICAL: TTFT should include the simulated 200ms network delay
       expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThan(200);
@@ -113,6 +127,8 @@ describe('processStreamingResponse', () => {
     });
 
     it('should pin totalStreamTime to first-byte → last-byte window', async () => {
+      vi.useFakeTimers();
+
       // Two chunks 100ms apart. totalStreamTime should be ~100ms, not
       // "time spent in the function" (which includes reader initialization).
       const requestStartTime = Date.now();
@@ -123,17 +139,20 @@ describe('processStreamingResponse', () => {
         read: vi.fn(async () => {
           if (i < chunks.length) {
             // First read resolves after 30ms, second after an additional 100ms.
-            await new Promise((r) => setTimeout(r, i === 0 ? 30 : 100));
-            return { done: false, value: chunks[i++] };
+            return new Promise((resolve) => {
+              setTimeout(() => resolve({ done: false, value: chunks[i++] }), i === 0 ? 30 : 100);
+            });
           }
           return { done: true, value: undefined };
         }),
         releaseLock: vi.fn(),
       };
 
-      const result = await processStreamingResponse(
-        { body: { getReader: () => mockReader } } as unknown as Response,
-        requestStartTime,
+      const result = await settlePendingTimers(
+        processStreamingResponse(
+          { body: { getReader: () => mockReader } } as unknown as Response,
+          requestStartTime,
+        ),
       );
 
       // totalStreamTime is from first byte to last byte: ~100ms.
@@ -143,6 +162,8 @@ describe('processStreamingResponse', () => {
     });
 
     it('should trigger TTFT on OpenAI role-prefix SSE frame (documented semantics)', async () => {
+      vi.useFakeTimers();
+
       // Pins current behavior: TTFT measures "first non-whitespace wire byte",
       // not "first content token". OpenAI's SSE stream opens with a role frame:
       //   data: {"choices":[{"delta":{"role":"assistant"}}]}
@@ -162,17 +183,20 @@ describe('processStreamingResponse', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (i < chunks.length) {
-            await new Promise((r) => setTimeout(r, 20));
-            return { done: false, value: chunks[i++] };
+            return new Promise((resolve) => {
+              setTimeout(() => resolve({ done: false, value: chunks[i++] }), 20);
+            });
           }
           return { done: true, value: undefined };
         }),
         releaseLock: vi.fn(),
       };
 
-      const result = await processStreamingResponse(
-        { body: { getReader: () => mockReader } } as unknown as Response,
-        requestStartTime,
+      const result = await settlePendingTimers(
+        processStreamingResponse(
+          { body: { getReader: () => mockReader } } as unknown as Response,
+          requestStartTime,
+        ),
       );
 
       // TTFT fires on the very first SSE frame (~20ms), not on the content delta (~40ms).
@@ -181,6 +205,8 @@ describe('processStreamingResponse', () => {
     });
 
     it('should handle empty chunks and wait for first non-empty chunk', async () => {
+      vi.useFakeTimers();
+
       const requestStartTime = Date.now();
 
       const chunks = [
@@ -194,8 +220,9 @@ describe('processStreamingResponse', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (chunkIndex < chunks.length) {
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            return { done: false, value: chunks[chunkIndex++] };
+            return new Promise((resolve) => {
+              setTimeout(() => resolve({ done: false, value: chunks[chunkIndex++] }), 10);
+            });
           }
           return { done: true, value: undefined };
         }),
@@ -208,7 +235,9 @@ describe('processStreamingResponse', () => {
         },
       } as unknown as Response;
 
-      const result = await processStreamingResponse(mockResponse, requestStartTime);
+      const result = await settlePendingTimers(
+        processStreamingResponse(mockResponse, requestStartTime),
+      );
 
       // TTFT should trigger on first non-empty trimmed chunk (3rd chunk)
       // Should be at least 30ms (3 chunks × 10ms delay)
@@ -321,6 +350,8 @@ describe('processStreamingResponse', () => {
 
   describe('tokensPerSecond derivation', () => {
     it('should not be set by processStreamingResponse (raw SSE inflates the number)', async () => {
+      vi.useFakeTimers();
+
       const requestStartTime = Date.now();
 
       // Simulate SSE frames: 4 chunks totalling ~200 chars of wire bytes
@@ -336,17 +367,20 @@ describe('processStreamingResponse', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (i < chunks.length) {
-            await new Promise((r) => setTimeout(r, 20));
-            return { done: false, value: chunks[i++] };
+            return new Promise((resolve) => {
+              setTimeout(() => resolve({ done: false, value: chunks[i++] }), 20);
+            });
           }
           return { done: true, value: undefined };
         }),
         releaseLock: vi.fn(),
       };
 
-      const result = await processStreamingResponse(
-        { body: { getReader: () => mockReader } } as unknown as Response,
-        requestStartTime,
+      const result = await settlePendingTimers(
+        processStreamingResponse(
+          { body: { getReader: () => mockReader } } as unknown as Response,
+          requestStartTime,
+        ),
       );
 
       // The util deliberately leaves tps unpopulated — callers compute it
@@ -391,8 +425,16 @@ describe('processStreamingResponse', () => {
           getReader: () => ({
             read: vi.fn(async () => {
               if (i < frames.length) {
-                await new Promise((r) => setTimeout(r, perChunkDelayMs));
-                return { done: false, value: new TextEncoder().encode(frames[i++]) };
+                return new Promise((resolve) => {
+                  setTimeout(
+                    () =>
+                      resolve({
+                        done: false,
+                        value: new TextEncoder().encode(frames[i++]),
+                      }),
+                    perChunkDelayMs,
+                  );
+                });
               }
               return { done: true, value: undefined };
             }),
@@ -403,6 +445,8 @@ describe('processStreamingResponse', () => {
     }
 
     it('should use canonical TTFT when detector targets content deltas', async () => {
+      vi.useFakeTimers();
+
       // Simulates OpenAI: role frame first, content frame second, separated by ~20ms.
       const frames = [
         'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
@@ -413,9 +457,11 @@ describe('processStreamingResponse', () => {
       const requestStartTime = Date.now();
 
       const contentPattern = /"delta":\s*\{[^}]*"content":"[^"]/;
-      const result = await processStreamingResponse(response, requestStartTime, {
-        firstTokenDetector: (buf) => contentPattern.test(buf),
-      });
+      const result = await settlePendingTimers(
+        processStreamingResponse(response, requestStartTime, {
+          firstTokenDetector: (buf) => contentPattern.test(buf),
+        }),
+      );
 
       // TTFT fires on the second frame (~40ms), not on the role frame (~20ms).
       expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(35);
@@ -423,12 +469,16 @@ describe('processStreamingResponse', () => {
     });
 
     it('should fall back to default detector when no opts provided', async () => {
+      vi.useFakeTimers();
+
       const frames = [
         'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
         'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
       ];
       const requestStartTime = Date.now();
-      const result = await processStreamingResponse(mockStream(frames, 20), requestStartTime);
+      const result = await settlePendingTimers(
+        processStreamingResponse(mockStream(frames, 20), requestStartTime),
+      );
 
       // Default fires on the first frame (~20ms).
       expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(15);
@@ -436,12 +486,16 @@ describe('processStreamingResponse', () => {
     });
 
     it('should leave TTFT undefined when detector never fires', async () => {
+      vi.useFakeTimers();
+
       const frames = ['data: {"only":"metadata"}\n\n', 'data: [DONE]\n\n'];
       const requestStartTime = Date.now();
 
-      const result = await processStreamingResponse(mockStream(frames, 10), requestStartTime, {
-        firstTokenDetector: (buf) => /"content":/.test(buf),
-      });
+      const result = await settlePendingTimers(
+        processStreamingResponse(mockStream(frames, 10), requestStartTime, {
+          firstTokenDetector: (buf) => /"content":/.test(buf),
+        }),
+      );
 
       expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
     });
@@ -586,6 +640,8 @@ describe('processStreamingResponse', () => {
     });
 
     it('closes the framing gap on a mocked OpenAI Chat stream', async () => {
+      vi.useFakeTimers();
+
       // Same-stream comparison: role frame at ~20ms, content delta at ~40ms.
       // Default detector fires on the role frame; openai-chat preset fires on
       // the content delta. Both measurements come from the *same* mocked
@@ -603,8 +659,16 @@ describe('processStreamingResponse', () => {
             getReader: () => ({
               read: vi.fn(async () => {
                 if (i < frames.length) {
-                  await new Promise((r) => setTimeout(r, 20));
-                  return { done: false, value: new TextEncoder().encode(frames[i++]) };
+                  return new Promise((resolve) => {
+                    setTimeout(
+                      () =>
+                        resolve({
+                          done: false,
+                          value: new TextEncoder().encode(frames[i++]),
+                        }),
+                      20,
+                    );
+                  });
                 }
                 return { done: true, value: undefined };
               }),
@@ -615,10 +679,14 @@ describe('processStreamingResponse', () => {
       };
 
       const t0 = Date.now();
-      const defaultResult = await processStreamingResponse(buildResponse(), t0);
-      const presetResult = await processStreamingResponse(buildResponse(), t0, {
-        firstTokenDetector: detectorForStreamFormat('openai-chat'),
-      });
+      const defaultResult = await settlePendingTimers(
+        processStreamingResponse(buildResponse(), t0),
+      );
+      const presetResult = await settlePendingTimers(
+        processStreamingResponse(buildResponse(), t0, {
+          firstTokenDetector: detectorForStreamFormat('openai-chat'),
+        }),
+      );
 
       const defaultTtft = defaultResult.streamingMetrics.timeToFirstToken!;
       const presetTtft = presetResult.streamingMetrics.timeToFirstToken!;

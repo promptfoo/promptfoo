@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
 import * as fetchModule from '../../src/util/fetch';
 
+async function settlePendingTimers<T>(promise: Promise<T>): Promise<T> {
+  await vi.runAllTimersAsync();
+  return promise;
+}
+
 describe('HttpProvider streaming integration', () => {
   let _originalFetchWithRetries: typeof fetchModule.fetchWithRetries;
 
@@ -11,10 +16,13 @@ describe('HttpProvider streaming integration', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   describe('TTFT measurement', () => {
     it('should measure TTFT correctly for streaming responses', async () => {
+      vi.useFakeTimers();
+
       const provider = new HttpProvider('https://api.example.com/chat', {
         config: {
           method: 'POST',
@@ -41,11 +49,14 @@ describe('HttpProvider streaming integration', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (chunkIndex < mockChunks.length) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-            return {
-              done: false,
-              value: new TextEncoder().encode(mockChunks[chunkIndex++]),
-            };
+            return new Promise((resolve) => {
+              setTimeout(() => {
+                resolve({
+                  done: false,
+                  value: new TextEncoder().encode(mockChunks[chunkIndex++]),
+                });
+              }, 50);
+            });
           }
           return { done: true, value: undefined };
         }),
@@ -64,7 +75,7 @@ describe('HttpProvider streaming integration', () => {
       vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(mockResponse);
 
       const startTime = Date.now();
-      const result = await provider.callApi('Test prompt');
+      const result = await settlePendingTimers(provider.callApi('Test prompt'));
       const totalTime = Date.now() - startTime;
 
       // Verify streaming metrics exist
@@ -185,6 +196,8 @@ describe('HttpProvider streaming integration', () => {
     });
 
     it('should ensure TTFT is always <= latencyMs', async () => {
+      vi.useFakeTimers();
+
       const provider = new HttpProvider('https://api.example.com/chat', {
         config: {
           method: 'POST',
@@ -210,11 +223,14 @@ describe('HttpProvider streaming integration', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (chunkIndex < mockChunks.length) {
-            await new Promise((resolve) => setTimeout(resolve, 25));
-            return {
-              done: false,
-              value: new TextEncoder().encode(mockChunks[chunkIndex++]),
-            };
+            return new Promise((resolve) => {
+              setTimeout(() => {
+                resolve({
+                  done: false,
+                  value: new TextEncoder().encode(mockChunks[chunkIndex++]),
+                });
+              }, 25);
+            });
           }
           return { done: true, value: undefined };
         }),
@@ -232,7 +248,7 @@ describe('HttpProvider streaming integration', () => {
 
       vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(mockResponse);
 
-      const result = await provider.callApi('Test prompt');
+      const result = await settlePendingTimers(provider.callApi('Test prompt'));
 
       // Critical invariant: TTFT must be <= total latency
       expect(result.streamingMetrics?.timeToFirstToken).toBeLessThanOrEqual(result.latencyMs!);
@@ -276,6 +292,8 @@ describe('HttpProvider streaming integration', () => {
     });
 
     it('leaves completionChars undefined when transformResponse returns non-string without .output', async () => {
+      vi.useFakeTimers();
+
       // Regression pin: if a user's transformResponse returns e.g. a tool-call
       // object with no `.output` key, we should NOT report the raw SSE buffer
       // length as completionChars — that would be off by 20-60x and mislead
@@ -302,8 +320,11 @@ describe('HttpProvider streaming integration', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (i < mockChunks.length) {
-            await new Promise((r) => setTimeout(r, 10));
-            return { done: false, value: new TextEncoder().encode(mockChunks[i++]) };
+            return new Promise((resolve) => {
+              setTimeout(() => {
+                resolve({ done: false, value: new TextEncoder().encode(mockChunks[i++]) });
+              }, 10);
+            });
           }
           return { done: true, value: undefined };
         }),
@@ -318,7 +339,7 @@ describe('HttpProvider streaming integration', () => {
 
       vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(mockResponse);
 
-      const result = await provider.callApi('Test');
+      const result = await settlePendingTimers(provider.callApi('Test'));
 
       expect(result.streamingMetrics).toBeDefined();
       expect(result.streamingMetrics?.timeToFirstToken).toBeDefined();
@@ -328,6 +349,8 @@ describe('HttpProvider streaming integration', () => {
     });
 
     it('leaves raw-request throughput undefined when transformResponse has no definite output', async () => {
+      vi.useFakeTimers();
+
       // Raw request mode should use the same strict parsed-output semantics
       // as body mode. Falling back to raw SSE text would report throughput
       // from framing bytes instead of completion content.
@@ -353,8 +376,11 @@ describe('HttpProvider streaming integration', () => {
       const mockReader = {
         read: vi.fn(async () => {
           if (i < mockChunks.length) {
-            await new Promise((r) => setTimeout(r, 30));
-            return { done: false, value: new TextEncoder().encode(mockChunks[i++]) };
+            return new Promise((resolve) => {
+              setTimeout(() => {
+                resolve({ done: false, value: new TextEncoder().encode(mockChunks[i++]) });
+              }, 30);
+            });
           }
           return { done: true, value: undefined };
         }),
@@ -369,7 +395,7 @@ describe('HttpProvider streaming integration', () => {
 
       vi.spyOn(fetchModule, 'fetchWithRetries').mockResolvedValue(mockResponse);
 
-      const result = await provider.callApi('Test');
+      const result = await settlePendingTimers(provider.callApi('Test'));
 
       expect(result.streamingMetrics).toBeDefined();
       expect(result.streamingMetrics?.timeToFirstToken).toBeDefined();
