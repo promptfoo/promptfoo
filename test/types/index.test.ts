@@ -12,6 +12,7 @@ import {
   CommandLineOptionsSchema,
   GradingConfigSchema,
   isGradingResult,
+  MAX_SUGGESTIONS_COUNT,
   OutputConfigSchema,
   TestCaseSchema,
   TestSuiteConfigSchema,
@@ -19,10 +20,11 @@ import {
   UnifiedConfigSchema,
   VarsSchema,
 } from '../../src/types/index';
+import { dereferenceConfig } from '../../src/util/config/load';
 import { PromptConfigSchema } from '../../src/validators/prompts';
 import { createMockProvider } from '../factories/provider';
 
-import type { TestSuite } from '../../src/types/index';
+import type { TestSuite, TestSuiteConfig } from '../../src/types/index';
 
 describe('AssertionSchema', () => {
   it('should validate a basic assertion', () => {
@@ -139,7 +141,6 @@ describe('AssertionSchema', () => {
 
 describe('VarsSchema', () => {
   it('should validate and transform various types of values', () => {
-    expect.assertions(9);
     const testCases = [
       { input: { key: 'string value' }, expected: { key: 'string value' } },
       { input: { key: 42 }, expected: { key: 42 } },
@@ -155,20 +156,22 @@ describe('VarsSchema', () => {
       },
     ];
 
+    expect.assertions(testCases.length);
+
     testCases.forEach(({ input, expected }) => {
       expect(VarsSchema.safeParse(input)).toEqual({ success: true, data: expected });
     });
   });
 
   it('should throw an error for invalid types', () => {
-    expect.assertions(4);
-
     const invalidCases = [
       { key: null },
       { key: undefined },
       { key: Symbol('test') },
       { key: () => {} },
     ];
+
+    expect.assertions(invalidCases.length);
 
     invalidCases.forEach((invalidInput) => {
       expect(() => VarsSchema.parse(invalidInput)).toThrow(z.ZodError);
@@ -744,6 +747,37 @@ describe('CommandLineOptionsSchema', () => {
   });
 });
 
+describe('CommandLineOptionsSchema suggestionsCount', () => {
+  const baseOptions = { providers: ['p'], output: ['o'] };
+
+  it('coerces string CLI input', () => {
+    expect(CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: '5' })).toMatchObject(
+      { suggestionsCount: 5 },
+    );
+  });
+
+  it.each([
+    ['zero', 0],
+    ['negative', -1],
+    ['above max', MAX_SUGGESTIONS_COUNT + 1],
+    ['non-integer', 1.5],
+    ['NaN string', 'abc'],
+  ])('rejects %s (%s)', (_label, value) => {
+    expect(() =>
+      CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: value }),
+    ).toThrow();
+  });
+
+  it('accepts the boundary values', () => {
+    expect(CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: 1 })).toMatchObject({
+      suggestionsCount: 1,
+    });
+    expect(
+      CommandLineOptionsSchema.parse({ ...baseOptions, suggestionsCount: MAX_SUGGESTIONS_COUNT }),
+    ).toMatchObject({ suggestionsCount: MAX_SUGGESTIONS_COUNT });
+  });
+});
+
 describe('TestSuiteConfigSchema', () => {
   const rootDir = path.join(__dirname, '../..');
   const configFiles = globSync(`${rootDir}/examples/**/promptfooconfig.{yaml,yml,json}`, {
@@ -998,10 +1032,11 @@ describe('TestSuiteConfigSchema', () => {
     it(`should validate ${path.relative(rootDir, file)}`, async () => {
       const configContent = fs.readFileSync(file, 'utf8');
       const config = yaml.load(configContent) as Record<string, unknown>;
+      const dereferencedConfig = await dereferenceConfig(config as TestSuiteConfig);
       const extendedSchema = TestSuiteConfigSchema.extend({
-        targets: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        providers: z.union([TestSuiteConfigSchema.shape.providers, z.undefined()]),
-        ...(typeof config.redteam !== 'undefined' && {
+        targets: TestSuiteConfigSchema.shape.providers.optional(),
+        providers: TestSuiteConfigSchema.shape.providers.optional(),
+        ...(typeof dereferencedConfig.redteam !== 'undefined' && {
           prompts: z.optional(TestSuiteConfigSchema.shape.prompts),
         }),
       }).refine(
@@ -1015,7 +1050,7 @@ describe('TestSuiteConfigSchema', () => {
         },
       );
 
-      const result = extendedSchema.safeParse(config);
+      const result = extendedSchema.safeParse(dereferencedConfig);
       expect(
         result.success,
         `Validation failed for ${file}: ${result.success ? '' : result.error.message}`,
