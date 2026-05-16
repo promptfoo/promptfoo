@@ -335,6 +335,146 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     }
   }
 
+  private async buildCachedVideoResponse({
+    cacheKey,
+    cachedVideoKey,
+    model,
+    size,
+    seconds,
+    prompt,
+  }: {
+    cacheKey: string;
+    cachedVideoKey: string;
+    model: OpenAiVideoModel;
+    size: OpenAiVideoSize;
+    seconds: OpenAiVideoDuration;
+    prompt: string;
+  }): Promise<ProviderResponse> {
+    logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
+
+    const storage = getMediaStorage();
+    const mapping = await readCacheMapping(cacheKey);
+    const thumbnailKey = mapping?.thumbnailKey;
+    const spritesheetKey = mapping?.spritesheetKey;
+    const videoUrl = buildStorageRefUrl(cachedVideoKey);
+    const [hasThumbnail, hasSpritesheet] = await Promise.all([
+      thumbnailKey ? storage.exists(thumbnailKey) : Promise.resolve(false),
+      spritesheetKey ? storage.exists(spritesheetKey) : Promise.resolve(false),
+    ]);
+
+    return {
+      output: formatVideoOutput(prompt, videoUrl),
+      cached: true,
+      latencyMs: 0,
+      cost: 0,
+      video: {
+        id: undefined,
+        storageRef: { key: cachedVideoKey },
+        url: videoUrl,
+        format: 'mp4',
+        size,
+        duration: seconds,
+        thumbnail: hasThumbnail && thumbnailKey ? buildStorageRefUrl(thumbnailKey) : undefined,
+        spritesheet:
+          hasSpritesheet && spritesheetKey ? buildStorageRefUrl(spritesheetKey) : undefined,
+        model,
+      },
+      metadata: {
+        cached: true,
+        cacheKey,
+        model,
+        size,
+        seconds,
+      },
+    };
+  }
+
+  private async downloadOptionalAsset({
+    videoId,
+    variant,
+    cacheKey,
+    evalId,
+    enabled,
+  }: {
+    videoId: string;
+    variant: Extract<OpenAiVideoVariant, 'thumbnail' | 'spritesheet'>;
+    cacheKey: string;
+    evalId?: string;
+    enabled: boolean;
+  }): Promise<MediaStorageRef | undefined> {
+    if (!enabled) {
+      return undefined;
+    }
+
+    const { storageRef, error } = await this.downloadVideoContent(
+      videoId,
+      variant,
+      cacheKey,
+      evalId,
+    );
+    if (error) {
+      logger.warn(`[OpenAI Video] Failed to download ${variant}: ${error}`);
+      return undefined;
+    }
+    return storageRef;
+  }
+
+  private buildGeneratedVideoResponse({
+    prompt,
+    videoId,
+    videoRef,
+    thumbnailRef,
+    spritesheetRef,
+    model,
+    size,
+    seconds,
+    latencyMs,
+    cost,
+    cacheKey,
+  }: {
+    prompt: string;
+    videoId: string;
+    videoRef: MediaStorageRef;
+    thumbnailRef?: MediaStorageRef;
+    spritesheetRef?: MediaStorageRef;
+    model: OpenAiVideoModel;
+    size: OpenAiVideoSize;
+    seconds: OpenAiVideoDuration;
+    latencyMs: number;
+    cost: number;
+    cacheKey: string;
+  }): ProviderResponse {
+    const videoUrl = buildStorageRefUrl(videoRef.key);
+    const thumbnailUrl = thumbnailRef ? buildStorageRefUrl(thumbnailRef.key) : undefined;
+    const spritesheetUrl = spritesheetRef ? buildStorageRefUrl(spritesheetRef.key) : undefined;
+
+    return {
+      output: formatVideoOutput(prompt, videoUrl),
+      cached: false,
+      latencyMs,
+      cost,
+      video: {
+        id: videoId,
+        storageRef: { key: videoRef.key },
+        url: videoUrl,
+        format: 'mp4',
+        size,
+        duration: seconds,
+        thumbnail: thumbnailUrl,
+        spritesheet: spritesheetUrl,
+        model,
+      },
+      metadata: {
+        soraVideoId: videoId,
+        cacheKey,
+        model,
+        size,
+        seconds,
+        storageKey: videoRef.key,
+      },
+    };
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -383,48 +523,14 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       ? null
       : await checkVideoCache(cacheKey, PROVIDER_NAME);
     if (cachedVideoKey) {
-      logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
-
-      const storage = getMediaStorage();
-
-      // Read the cache mapping from filesystem to get thumbnail/spritesheet keys
-      const mapping = await readCacheMapping(cacheKey);
-      const thumbnailKey = mapping?.thumbnailKey;
-      const spritesheetKey = mapping?.spritesheetKey;
-
-      // Build storage ref URL for video using the actual stored key
-      const videoUrl = buildStorageRefUrl(cachedVideoKey);
-
-      // Check for optional assets using actual stored keys
-      const hasThumbnail = thumbnailKey && (await storage.exists(thumbnailKey));
-      const hasSpritesheet = spritesheetKey && (await storage.exists(spritesheetKey));
-
-      const output = formatVideoOutput(prompt, videoUrl);
-
-      return {
-        output,
-        cached: true,
-        latencyMs: 0,
-        cost: 0,
-        video: {
-          id: undefined, // No Sora ID for cached results
-          storageRef: { key: cachedVideoKey }, // Structured storage reference (preferred)
-          url: videoUrl, // Legacy URL format for backwards compatibility
-          format: 'mp4',
-          size,
-          duration: seconds,
-          thumbnail: hasThumbnail ? buildStorageRefUrl(thumbnailKey!) : undefined,
-          spritesheet: hasSpritesheet ? buildStorageRefUrl(spritesheetKey!) : undefined,
-          model,
-        },
-        metadata: {
-          cached: true,
-          cacheKey,
-          model,
-          size,
-          seconds,
-        },
-      };
+      return this.buildCachedVideoResponse({
+        cacheKey,
+        cachedVideoKey,
+        model,
+        size,
+        seconds,
+        prompt,
+      });
     }
 
     const startTime = Date.now();
@@ -457,9 +563,6 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     // Step 3: Download and store video
     logger.debug(`[OpenAI Video] Downloading and storing video assets...`);
 
-    const downloadThumbnail = config.download_thumbnail !== false;
-    const downloadSpritesheet = config.download_spritesheet !== false;
-
     // Download video (required)
     const { storageRef: videoRef, error: videoDownloadError } = await this.downloadVideoContent(
       videoId,
@@ -472,37 +575,22 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       return { error: videoDownloadError || 'Failed to download video' };
     }
 
-    // Download thumbnail (optional)
-    let thumbnailRef: MediaStorageRef | undefined;
-    if (downloadThumbnail) {
-      const { storageRef, error } = await this.downloadVideoContent(
+    const [thumbnailRef, spritesheetRef] = await Promise.all([
+      this.downloadOptionalAsset({
         videoId,
-        'thumbnail',
+        variant: 'thumbnail',
         cacheKey,
         evalId,
-      );
-      if (error) {
-        logger.warn(`[OpenAI Video] Failed to download thumbnail: ${error}`);
-      } else {
-        thumbnailRef = storageRef;
-      }
-    }
-
-    // Download spritesheet (optional)
-    let spritesheetRef: MediaStorageRef | undefined;
-    if (downloadSpritesheet) {
-      const { storageRef, error } = await this.downloadVideoContent(
+        enabled: config.download_thumbnail !== false,
+      }),
+      this.downloadOptionalAsset({
         videoId,
-        'spritesheet',
+        variant: 'spritesheet',
         cacheKey,
         evalId,
-      );
-      if (error) {
-        logger.warn(`[OpenAI Video] Failed to download spritesheet: ${error}`);
-      } else {
-        spritesheetRef = storageRef;
-      }
-    }
+        enabled: config.download_spritesheet !== false,
+      }),
+    ]);
 
     const latencyMs = Date.now() - startTime;
     const cost = calculateVideoCost(model, seconds, false);
@@ -516,38 +604,18 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       PROVIDER_NAME,
     );
 
-    // Build storage ref URLs
-    const videoUrl = buildStorageRefUrl(videoRef.key);
-    const thumbnailUrl = thumbnailRef ? buildStorageRefUrl(thumbnailRef.key) : undefined;
-    const spritesheetUrl = spritesheetRef ? buildStorageRefUrl(spritesheetRef.key) : undefined;
-
-    // Format output as markdown (similar to image provider)
-    const output = formatVideoOutput(prompt, videoUrl);
-
-    return {
-      output,
-      cached: false,
+    return this.buildGeneratedVideoResponse({
+      prompt,
+      videoId,
+      videoRef,
+      thumbnailRef,
+      spritesheetRef,
+      model,
+      size,
+      seconds,
       latencyMs,
       cost,
-      video: {
-        id: videoId,
-        storageRef: { key: videoRef.key }, // Structured storage reference (preferred)
-        url: videoUrl, // Legacy URL format for backwards compatibility
-        format: 'mp4',
-        size,
-        duration: seconds,
-        thumbnail: thumbnailUrl,
-        spritesheet: spritesheetUrl,
-        model,
-      },
-      metadata: {
-        soraVideoId: videoId,
-        cacheKey,
-        model,
-        size,
-        seconds,
-        storageKey: videoRef.key,
-      },
-    };
+      cacheKey,
+    });
   }
 }

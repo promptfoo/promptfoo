@@ -77,141 +77,161 @@ export function registerTestProviderTool(server: McpServer) {
           `,
         ),
     },
-    async (args) => {
-      const { provider, testPrompt, timeoutMs = 30000 } = args;
-
-      // Track whether user provided a custom prompt
-      const isCustomPrompt = Boolean(testPrompt);
-
-      // Use a comprehensive test prompt that evaluates reasoning, accuracy, and instruction following
-      const defaultPrompt =
-        testPrompt ||
-        dedent`
-          Please solve this step-by-step reasoning problem:
-
-          A farmer has 17 sheep. All but 9 die. How many sheep are left alive?
-
-          Requirements:
-          1. Show your step-by-step reasoning
-          2. Explain any assumptions you make
-          3. Provide the final numerical answer
-
-          This tests logical reasoning, reading comprehension, and instruction following.
-        `;
-
-      try {
-        // Extract provider ID for error messages
-        const _providerId = typeof provider === 'string' ? provider : provider.id;
-
-        // Load the provider
-        const apiProvider = await loadProvider(provider);
-
-        // Test the provider with timeout and detailed metrics
-        const startTime = Date.now();
-
-        try {
-          const response = await withTimeout(
-            apiProvider.callApi(defaultPrompt),
-            timeoutMs,
-            `Provider test`,
-          );
-
-          const endTime = Date.now();
-          const responseTime = endTime - startTime;
-
-          // Evaluate response quality (skip correctness check for custom prompts)
-          const responseQuality = evaluateResponseQuality(response.output, isCustomPrompt);
-
-          const testResult: TestResult = {
-            providerId: typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id,
-            success: true,
-            responseTime,
-            response: response.output,
-            tokenUsage: response.tokenUsage,
-            cost: response.cost,
-            timedOut: false,
-            metadata: {
-              prompt: defaultPrompt,
-              completedAt: new Date(endTime).toISOString(),
-              model: (response as any).model || 'unknown',
-              responseQuality,
-              promptLength: defaultPrompt.length,
-              responseLength: response.output?.length || 0,
-              isCustomPrompt,
-            },
-          };
-
-          return createToolResponse('test_provider', true, testResult);
-        } catch (error) {
-          const endTime = Date.now();
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          const timedOut = errorMessage.includes('timed out');
-
-          const testResult: TestResult = {
-            providerId: typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id,
-            success: false,
-            responseTime: endTime - startTime,
-            error: errorMessage,
-            timedOut,
-            metadata: {
-              prompt: defaultPrompt,
-              failedAt: new Date(endTime).toISOString(),
-              timeoutMs,
-              errorType: timedOut ? 'timeout' : 'api_error',
-            },
-          };
-
-          return createToolResponse(
-            'test_provider',
-            false,
-            testResult,
-            `Provider test failed: ${errorMessage}`,
-          );
-        }
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        const providerId = typeof provider === 'string' ? provider : provider.id;
-
-        // Provide specific error guidance
-        if (errorMessage.includes('credentials')) {
-          return createToolResponse(
-            'test_provider',
-            false,
-            {
-              providerId,
-              suggestion: 'Set the appropriate environment variables or update your config file.',
-            },
-            `Invalid credentials for provider "${providerId}". Check your API keys and configuration.`,
-          );
-        }
-
-        if (errorMessage.includes('not found') || errorMessage.includes('unknown provider')) {
-          return createToolResponse(
-            'test_provider',
-            false,
-            {
-              providerId,
-              suggestion:
-                'Use format like "openai:gpt-4" or check available providers with "promptfoo providers"',
-              examples: [
-                'openai:gpt-4o',
-                'anthropic:messages:claude-3-sonnet',
-                'azure:deployment-name',
-              ],
-            },
-            `Provider "${providerId}" not found. Check the provider ID format.`,
-          );
-        }
-
-        return createToolResponse(
-          'test_provider',
-          false,
-          { providerId, originalError: errorMessage },
-          `Failed to test provider: ${errorMessage}`,
-        );
-      }
-    },
+    async (args) => runTestProviderTool(args),
   );
+}
+
+type TestProviderArgs = {
+  provider: string | { id: string; config?: Record<string, unknown> };
+  testPrompt?: string;
+  timeoutMs?: number;
+};
+
+async function runTestProviderTool({ provider, testPrompt, timeoutMs = 30000 }: TestProviderArgs) {
+  const isCustomPrompt = Boolean(testPrompt);
+  const prompt = getTestPrompt(testPrompt);
+
+  try {
+    const apiProvider = await loadProvider(provider);
+    return await runProviderProbe({
+      apiProvider,
+      prompt,
+      timeoutMs,
+      isCustomPrompt,
+    });
+  } catch (error: unknown) {
+    return buildProviderLoadFailure(provider, error);
+  }
+}
+
+function getTestPrompt(testPrompt?: string): string {
+  return (
+    testPrompt ||
+    dedent`
+      Please solve this step-by-step reasoning problem:
+
+      A farmer has 17 sheep. All but 9 die. How many sheep are left alive?
+
+      Requirements:
+      1. Show your step-by-step reasoning
+      2. Explain any assumptions you make
+      3. Provide the final numerical answer
+
+      This tests logical reasoning, reading comprehension, and instruction following.
+    `
+  );
+}
+
+async function runProviderProbe({
+  apiProvider,
+  prompt,
+  timeoutMs,
+  isCustomPrompt,
+}: {
+  apiProvider: Awaited<ReturnType<typeof loadProvider>>;
+  prompt: string;
+  timeoutMs: number;
+  isCustomPrompt: boolean;
+}) {
+  const startTime = Date.now();
+  try {
+    const response = await withTimeout(apiProvider.callApi(prompt), timeoutMs, 'Provider test');
+    const endTime = Date.now();
+    const testResult: TestResult = {
+      providerId: getApiProviderId(apiProvider),
+      success: true,
+      responseTime: endTime - startTime,
+      response: response.output,
+      tokenUsage: response.tokenUsage,
+      cost: response.cost,
+      timedOut: false,
+      metadata: {
+        prompt,
+        completedAt: new Date(endTime).toISOString(),
+        model: (response as { model?: string }).model || 'unknown',
+        responseQuality: evaluateResponseQuality(response.output, isCustomPrompt),
+        promptLength: prompt.length,
+        responseLength: response.output?.length || 0,
+        isCustomPrompt,
+      },
+    };
+
+    return createToolResponse('test_provider', true, testResult);
+  } catch (error) {
+    const endTime = Date.now();
+    const errorMessage = getErrorMessage(error);
+    const timedOut = errorMessage.includes('timed out');
+    const testResult: TestResult = {
+      providerId: getApiProviderId(apiProvider),
+      success: false,
+      responseTime: endTime - startTime,
+      error: errorMessage,
+      timedOut,
+      metadata: {
+        prompt,
+        failedAt: new Date(endTime).toISOString(),
+        timeoutMs,
+        errorType: timedOut ? 'timeout' : 'api_error',
+      },
+    };
+
+    return createToolResponse(
+      'test_provider',
+      false,
+      testResult,
+      `Provider test failed: ${errorMessage}`,
+    );
+  }
+}
+
+function buildProviderLoadFailure(provider: TestProviderArgs['provider'], error: unknown) {
+  const errorMessage = getErrorMessage(error);
+  const providerId = getProviderInputId(provider);
+
+  if (errorMessage.includes('credentials')) {
+    return createToolResponse(
+      'test_provider',
+      false,
+      {
+        providerId,
+        suggestion: 'Set the appropriate environment variables or update your config file.',
+      },
+      `Invalid credentials for provider "${providerId}". Check your API keys and configuration.`,
+    );
+  }
+
+  if (errorMessage.includes('not found') || errorMessage.includes('unknown provider')) {
+    return createToolResponse(
+      'test_provider',
+      false,
+      {
+        providerId,
+        suggestion:
+          'Use format like "openai:gpt-4" or check available providers with "promptfoo providers"',
+        examples: ['openai:gpt-4o', 'anthropic:messages:claude-3-sonnet', 'azure:deployment-name'],
+      },
+      `Provider "${providerId}" not found. Check the provider ID format.`,
+    );
+  }
+
+  return createToolResponse(
+    'test_provider',
+    false,
+    { providerId, originalError: errorMessage },
+    `Failed to test provider: ${errorMessage}`,
+  );
+}
+
+function getProviderInputId(provider: TestProviderArgs['provider']): string {
+  return typeof provider === 'string' ? provider : provider.id;
+}
+
+function getApiProviderId(apiProvider: Awaited<ReturnType<typeof loadProvider>>): string {
+  return typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Unknown error occurred';
 }
 
 async function loadProvider(provider: string | { id: string; config?: Record<string, unknown> }) {
