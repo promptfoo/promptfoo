@@ -74,6 +74,8 @@ function runCli(
 }
 
 describe('Extension Hook Logger Smoke Tests', () => {
+  const pythonAvailable = isPythonAvailable();
+
   beforeAll(() => {
     if (!fs.existsSync(CLI_PATH)) {
       throw new Error(`Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`);
@@ -118,8 +120,12 @@ describe('Extension Hook Logger Smoke Tests', () => {
     });
   });
 
-  describe.skipIf(!isPythonAvailable())('Python extension hooks with logger', () => {
+  describe('Python extension hooks with logger', () => {
     it('completes eval with Python hooks using context logger and direct import', () => {
+      if (!pythonAvailable) {
+        return;
+      }
+
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-py-logger.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'py-hooks-output.json');
 
@@ -150,6 +156,10 @@ describe('Extension Hook Logger Smoke Tests', () => {
     });
 
     it('routes Python warn-level messages correctly', () => {
+      if (!pythonAvailable) {
+        return;
+      }
+
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-py-logger.yaml');
 
       const { stdout, stderr, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
@@ -162,6 +172,10 @@ describe('Extension Hook Logger Smoke Tests', () => {
     });
 
     it('shows Python debug messages only with LOG_LEVEL=debug', () => {
+      if (!pythonAvailable) {
+        return;
+      }
+
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-py-logger.yaml');
 
       // Without debug level - debug messages should NOT appear
@@ -180,6 +194,10 @@ describe('Extension Hook Logger Smoke Tests', () => {
     });
 
     it('includes structured data in Python log messages', () => {
+      if (!pythonAvailable) {
+        return;
+      }
+
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-py-logger.yaml');
 
       const { stdout, stderr, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
@@ -192,8 +210,12 @@ describe('Extension Hook Logger Smoke Tests', () => {
     });
   });
 
-  describe.skipIf(!isPythonAvailable())('Mixed JS + Python extension hooks', () => {
+  describe('Mixed JS + Python extension hooks', () => {
     it('completes eval with both JS and Python hooks', () => {
+      if (!pythonAvailable) {
+        return;
+      }
+
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-mixed-logger.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'mixed-hooks-output.json');
 
@@ -223,6 +245,10 @@ describe('Extension Hook Logger Smoke Tests', () => {
     });
 
     it('Python afterAll receives correct result count in mixed mode', () => {
+      if (!pythonAvailable) {
+        return;
+      }
+
       const configPath = path.join(FIXTURES_DIR, 'configs/extension-hook-mixed-logger.yaml');
 
       const { stdout, stderr, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
