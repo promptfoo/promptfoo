@@ -244,6 +244,33 @@ describe('OpenAI billing helpers', () => {
     );
   });
 
+  it('uses current gpt-realtime-2 multimodal and cached rates', () => {
+    const cost = calculateOpenAIUsageCost(
+      'gpt-realtime-2',
+      {},
+      {
+        input_tokens: 1_030,
+        output_tokens: 30,
+        input_tokens_details: {
+          text_tokens: 1_000,
+          audio_tokens: 20,
+          image_tokens: 10,
+          cached_tokens: 100,
+        },
+        output_tokens_details: {
+          text_tokens: 20,
+          audio_tokens: 10,
+        },
+      },
+      {},
+    );
+
+    expect(cost).toBeCloseTo(
+      (900 * 4 + 100 * 0.4 + 20 * 32 + 10 * 5 + 20 * 24 + 10 * 64) / 1e6,
+      10,
+    );
+  });
+
   it('uses explicit cached modality splits when realtime payloads provide them', () => {
     const cost = calculateOpenAIUsageCost(
       'gpt-realtime-mini',
