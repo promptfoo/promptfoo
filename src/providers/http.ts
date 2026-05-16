@@ -1045,6 +1045,108 @@ function buildHttpTemplateVars(
   };
 }
 
+function applyTraceContextHeaders(
+  headers: Record<string, string>,
+  context: CallApiContextParams | undefined,
+): void {
+  if (context?.traceparent) {
+    headers.traceparent = context.traceparent;
+    logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
+  }
+  if (context?.tracestate) {
+    headers.tracestate = context.tracestate;
+  }
+}
+
+function renderQueryParams(
+  queryParams: Record<string, string> | undefined,
+  vars: Record<string, any>,
+): Record<string, string> {
+  if (!queryParams) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(queryParams).map(([key, value]) => [
+      key,
+      getNunjucksEngine().renderString(value, vars),
+    ]),
+  );
+}
+
+function appendQueryParamsToUrl(
+  url: string,
+  queryParams: Record<string, string> | undefined,
+): string {
+  if (!queryParams) {
+    return url;
+  }
+
+  try {
+    const urlObj = new URL(url);
+    Object.entries(queryParams).forEach(([key, value]) => {
+      urlObj.searchParams.append(key, value);
+    });
+    return urlObj.toString();
+  } catch (err) {
+    logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
+    const queryString = new URLSearchParams(queryParams).toString();
+    return `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
+  }
+}
+
+function parseJsonResponseText(rawText: string): any | null {
+  try {
+    return JSON.parse(rawText);
+  } catch {
+    return null;
+  }
+}
+
+function buildStructuredFetchBody(
+  method: string,
+  body: unknown,
+  headers: Record<string, string>,
+  multipartBody: RenderedHttpMultipartBody | undefined,
+): Record<string, unknown> {
+  if (method === 'GET') {
+    return {};
+  }
+  if (multipartBody) {
+    return { body: multipartBody.body };
+  }
+  if (body == null) {
+    return {};
+  }
+
+  if (contentTypeIsJson(headers)) {
+    return { body: typeof body === 'string' ? body : JSON.stringify(body) };
+  }
+  return { body: typeof body === 'string' ? body.trim() : String(body) };
+}
+
+function getRawRequestBodyContent(
+  parsedRequest: ReturnType<typeof parseRawRequest>,
+  renderedRequest: string,
+): string | undefined {
+  if (parsedRequest.body?.text) {
+    return parsedRequest.body.text.trim();
+  }
+  if (parsedRequest.body?.params) {
+    return extractBodyFromRawRequest(renderedRequest);
+  }
+  return undefined;
+}
+
+function rewriteRawRequestPath(renderedRequest: string, urlObj: URL): string {
+  const requestLines = renderedRequest.split('\n');
+  const firstLine = requestLines[0];
+  const method = firstLine.split(' ')[0];
+  const protocol = firstLine.split(' ').slice(-1)[0];
+  requestLines[0] = `${method} ${urlObj.pathname}${urlObj.search} ${protocol}`;
+  return requestLines.join('\n');
+}
+
 function contentTypeIsJson(headers: Record<string, string> | undefined) {
   if (!headers) {
     return false;
@@ -2371,92 +2473,116 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const vars = await this.prepareTemplateVars(prompt, context);
+
+    if (this.config.request) {
+      return this.callApiWithRawRequest(vars, context, options);
+    }
+
+    const preparedRequest = await this.prepareStructuredRequest(prompt, vars, context, options);
+    const response = await this.fetchStructuredResponse(preparedRequest, context);
+    return this.finalizeStructuredResponse(preparedRequest, response, vars, context, prompt);
+  }
+
+  private async prepareTemplateVars(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<Record<string, any>> {
     const { tools, toolChoice } = resolveHttpToolTemplateValues(
       this.config,
       context?.prompt?.config as Record<string, any> | undefined,
     );
     warnIfToolChoiceHasNoTools(tools, toolChoice);
 
-    // Pre-serialize tools and tool_choice as JSON strings so templates can use
-    // {{ tools }} and {{ tool_choice }} without the dump filter. processJsonBody
-    // will parse JSON strings starting with { or [ back into objects/arrays.
-    // String values (e.g. tool_choice: 'required') are passed through as-is.
     const vars = buildHttpTemplateVars(prompt, context, tools, toolChoice);
+    await this.applyConfiguredAuthVars(prompt, vars, context);
+    await this.applySignatureVars(vars);
+    await this.applySessionVars(vars);
+    return vars;
+  }
 
+  private async applyConfiguredAuthVars(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
     if (this.config.auth?.type === 'oauth') {
-      await this.refreshOAuthTokenIfNeeded(vars);
-      invariant(this.lastToken, 'OAuth token should be defined at this point');
-
-      if (hasOwnProperty(vars, 'token')) {
-        logger.warn(
-          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
-        );
-      }
-
-      vars.token = this.lastToken;
-    } else if (this.config.auth?.type === 'file') {
-      await this.refreshFileTokenIfNeeded(prompt, vars, context);
-      invariant(this.lastToken, 'File auth token should be defined at this point');
-
-      if (hasOwnProperty(vars, 'token')) {
-        logger.warn(
-          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
-        );
-      }
-      if (hasOwnProperty(vars, 'expiration')) {
-        logger.warn(
-          '[HTTP Provider Auth]: `expiration` is already defined in vars and will be overwritten',
-        );
-      }
-
-      vars.token = this.lastToken;
-      vars.expiration = this.lastTokenExpiresAt;
+      await this.applyOauthVars(vars);
+      return;
     }
-
-    // Add signature values to vars if signature auth is enabled
-    if (this.config.signatureAuth) {
-      await this.refreshSignatureIfNeeded(vars);
-      invariant(this.lastSignature, 'Signature should be defined at this point');
-      invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
-
-      if (vars.signature) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signature` is already defined in vars and will be overwritten',
-        );
-      }
-      if (vars.signatureTimestamp) {
-        logger.warn(
-          '[HTTP Provider Auth]: `signatureTimestamp` is already defined in vars and will be overwritten',
-        );
-      }
-
-      vars.signature = this.lastSignature;
-      vars.signatureTimestamp = this.lastSignatureTimestamp;
+    if (this.config.auth?.type === 'file') {
+      await this.applyFileAuthVars(prompt, vars, context);
     }
+  }
 
-    // Resolve session ID from session endpoint if configured
-    if (this.config.session) {
-      const resolvedSessionId = await this.resolveSessionId(vars);
-      if (resolvedSessionId) {
-        vars.sessionId = resolvedSessionId;
-      }
+  private async applyOauthVars(vars: Record<string, any>): Promise<void> {
+    await this.refreshOAuthTokenIfNeeded(vars);
+    invariant(this.lastToken, 'OAuth token should be defined at this point');
+    this.warnOnOverwrittenVar(vars, 'token');
+    vars.token = this.lastToken;
+  }
+
+  private async applyFileAuthVars(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    await this.refreshFileTokenIfNeeded(prompt, vars, context);
+    invariant(this.lastToken, 'File auth token should be defined at this point');
+    this.warnOnOverwrittenVar(vars, 'token');
+    this.warnOnOverwrittenVar(vars, 'expiration');
+    vars.token = this.lastToken;
+    vars.expiration = this.lastTokenExpiresAt;
+  }
+
+  private async applySignatureVars(vars: Record<string, any>): Promise<void> {
+    if (!this.config.signatureAuth) {
+      return;
     }
+    await this.refreshSignatureIfNeeded(vars);
+    invariant(this.lastSignature, 'Signature should be defined at this point');
+    invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
+    this.warnOnOverwrittenVar(vars, 'signature');
+    this.warnOnOverwrittenVar(vars, 'signatureTimestamp');
+    vars.signature = this.lastSignature;
+    vars.signatureTimestamp = this.lastSignatureTimestamp;
+  }
 
-    if (this.config.request) {
-      return this.callApiWithRawRequest(vars, context, options);
+  private async applySessionVars(vars: Record<string, any>): Promise<void> {
+    if (!this.config.session) {
+      return;
     }
+    const resolvedSessionId = await this.resolveSessionId(vars);
+    if (resolvedSessionId) {
+      vars.sessionId = resolvedSessionId;
+    }
+  }
 
+  private warnOnOverwrittenVar(vars: Record<string, any>, key: string): void {
+    if (hasOwnProperty(vars, key)) {
+      logger.warn(
+        `[HTTP Provider Auth]: \`${key}\` is already defined in vars and will be overwritten`,
+      );
+    }
+  }
+
+  private async prepareStructuredRequest(
+    prompt: string,
+    vars: Record<string, any>,
+    context: CallApiContextParams | undefined,
+    options: CallApiOptionsParams | undefined,
+  ): Promise<{
+    headers: Record<string, string>;
+    transformedPrompt: any;
+    renderedConfig: Partial<HttpProviderConfig>;
+    method: string;
+    url: string;
+    multipartBody?: RenderedHttpMultipartBody;
+    fetchOptions: any;
+  }> {
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
     const headers = await this.getHeaders(defaultHeaders, vars);
-
-    // Add W3C Trace Context headers if provided
-    if (context?.traceparent) {
-      headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
-    }
-    if (context?.tracestate) {
-      headers.tracestate = context.tracestate;
-    }
+    applyTraceContextHeaders(headers, context);
 
     if (this.config.multipart) {
       removeMultipartContentType(headers);
@@ -2485,25 +2611,7 @@ export class HttpProvider implements ApiProvider {
             this.config.body,
             vars,
           ),
-      queryParams: (() => {
-        const baseQueryParams = this.config.queryParams
-          ? Object.fromEntries(
-              Object.entries(this.config.queryParams).map(([key, value]) => [
-                key,
-                getNunjucksEngine().renderString(value, vars),
-              ]),
-            )
-          : {};
-
-        // Add API Key to query params if configured
-        if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
-          const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
-          const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
-          baseQueryParams[renderedKeyName] = renderedValue;
-        }
-
-        return Object.keys(baseQueryParams).length > 0 ? baseQueryParams : undefined;
-      })(),
+      queryParams: this.buildStructuredQueryParams(vars),
       transformResponse: this.config.transformResponse || this.config.responseParser,
     };
 
@@ -2515,23 +2623,7 @@ export class HttpProvider implements ApiProvider {
       throw new Error(`HTTP provider ${method} requests cannot use multipart`);
     }
 
-    // Template the base URL first, then construct URL with query parameters
-    let url = renderedConfig.url as string;
-    if (renderedConfig.queryParams) {
-      try {
-        const urlObj = new URL(url);
-        // Add each query parameter to the URL object
-        Object.entries(renderedConfig.queryParams).forEach(([key, value]) => {
-          urlObj.searchParams.append(key, value);
-        });
-        url = urlObj.toString();
-      } catch (err) {
-        // Fallback for potentially malformed URLs
-        logger.warn(`[HTTP Provider]: Failed to construct URL object: ${String(err)}`);
-        const queryString = new URLSearchParams(renderedConfig.queryParams).toString();
-        url = `${url}${url.includes('?') ? '&' : '?'}${queryString}`;
-      }
-    }
+    const url = appendQueryParamsToUrl(renderedConfig.url as string, renderedConfig.queryParams);
 
     logger.debug(`[HTTP Provider]: Calling ${sanitizeUrl(url)} with config.`, {
       config: renderedConfig,
@@ -2554,21 +2646,7 @@ export class HttpProvider implements ApiProvider {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
-      ...(method !== 'GET' &&
-        multipartBody && {
-          body: multipartBody.body,
-        }),
-      ...(method !== 'GET' &&
-        !multipartBody &&
-        renderedConfig.body != null && {
-          body: contentTypeIsJson(headers)
-            ? typeof renderedConfig.body === 'string'
-              ? renderedConfig.body // Already a JSON string, use as-is
-              : JSON.stringify(renderedConfig.body) // Object, needs stringifying
-            : typeof renderedConfig.body === 'string'
-              ? renderedConfig.body.trim()
-              : String(renderedConfig.body),
-        }),
+      ...buildStructuredFetchBody(method, renderedConfig.body, headers, multipartBody),
     };
 
     // Add HTTPS agent as dispatcher if configured
@@ -2577,32 +2655,60 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    let data,
+    return { headers, transformedPrompt, renderedConfig, method, url, multipartBody, fetchOptions };
+  }
+
+  private buildStructuredQueryParams(
+    vars: Record<string, any>,
+  ): Record<string, string> | undefined {
+    const baseQueryParams = renderQueryParams(this.config.queryParams, vars);
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      baseQueryParams[renderedKeyName] = renderedValue;
+    }
+
+    return Object.keys(baseQueryParams).length > 0 ? baseQueryParams : undefined;
+  }
+
+  private async fetchStructuredResponse(
+    preparedRequest: {
+      url: string;
+      fetchOptions: any;
+      multipartBody?: RenderedHttpMultipartBody;
+    },
+    context?: CallApiContextParams,
+  ) {
+    return fetchWithCache(
+      preparedRequest.url,
+      preparedRequest.fetchOptions,
+      getRequestTimeoutMs(),
+      'text',
+      preparedRequest.multipartBody ? true : (context?.bustCache ?? context?.debug),
+      this.config.maxRetries,
+    );
+  }
+
+  private async finalizeStructuredResponse(
+    preparedRequest: {
+      headers: Record<string, string>;
+      transformedPrompt: any;
+      renderedConfig: Partial<HttpProviderConfig>;
+      multipartBody?: RenderedHttpMultipartBody;
+    },
+    response: Awaited<ReturnType<typeof fetchWithCache>>,
+    vars: Record<string, any>,
+    context: CallApiContextParams | undefined,
+    prompt: string,
+  ): Promise<ProviderResponse> {
+    const {
+      data,
       cached = false,
       status,
       statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        multipartBody ? true : (context?.bustCache ?? context?.debug),
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
-
+      headers: responseHeaders,
+      latencyMs,
+    } = response;
     if (!(await this.validateStatus)(status)) {
       throw new Error(`HTTP call failed with status ${status} ${statusText}: ${data}`);
     }
@@ -2621,32 +2727,47 @@ export class HttpProvider implements ApiProvider {
         statusText,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         ...(context?.debug && {
-          requestHeaders: sanitizeObject(renderedConfig.headers, { context: 'request headers' }),
+          requestHeaders: sanitizeObject(preparedRequest.renderedConfig.headers, {
+            context: 'request headers',
+          }),
         }),
       },
     };
     if (context?.debug) {
-      ret.metadata.transformedRequest = transformedPrompt;
-      if (multipartBody) {
+      ret.metadata.transformedRequest = preparedRequest.transformedPrompt;
+      if (preparedRequest.multipartBody) {
         ret.metadata.multipart = {
-          fields: sanitizeMultipartFields(multipartBody.fields),
-          files: sanitizeMultipartFiles(multipartBody.files),
+          fields: sanitizeMultipartFields(preparedRequest.multipartBody.fields),
+          files: sanitizeMultipartFiles(preparedRequest.multipartBody.files),
         };
       } else {
-        ret.metadata.finalRequestBody = renderedConfig.body;
+        ret.metadata.finalRequestBody = preparedRequest.renderedConfig.body;
       }
     }
 
     const rawText = data as string;
-    let parsedData;
-    try {
-      parsedData = JSON.parse(rawText);
-    } catch {
-      parsedData = null;
-    }
+    const parsedData = parseJsonResponseText(rawText);
+    await this.applySessionResponseMetadata(ret, vars, responseHeaders, parsedData, rawText);
+    const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
+      response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
+    });
 
-    // If we used a session endpoint, set the sessionId we used
-    // This can be overridden by sessionParser if the server returns a different session
+    return this.processResponseWithTokenEstimation(
+      ret,
+      parsedOutput,
+      rawText,
+      preparedRequest.transformedPrompt,
+      prompt,
+    );
+  }
+
+  private async applySessionResponseMetadata(
+    ret: ProviderResponse,
+    vars: Record<string, any>,
+    responseHeaders: Record<string, any> | undefined,
+    parsedData: any,
+    rawText: string,
+  ): Promise<void> {
     if (vars.sessionId && this.config.session) {
       ret.sessionId = vars.sessionId;
     }
@@ -2665,17 +2786,6 @@ export class HttpProvider implements ApiProvider {
       );
       throw err;
     }
-    const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
-      response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
-    });
-
-    return this.processResponseWithTokenEstimation(
-      ret,
-      parsedOutput,
-      rawText,
-      transformedPrompt,
-      prompt,
-    );
   }
 
   private async callApiWithRawRequest(
@@ -2683,118 +2793,115 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    invariant(this.config.request, 'Expected request to be set in http provider config');
+    const preparedRequest = await this.prepareRawRequest(vars, context, options);
+    const response = await this.fetchRawResponse(preparedRequest, context);
+    return this.finalizeRawResponse(preparedRequest, response, vars, context);
+  }
 
-    // Transform prompt using request transform
+  private async prepareRawRequest(
+    vars: Record<string, any>,
+    context: CallApiContextParams | undefined,
+    options: CallApiOptionsParams | undefined,
+  ): Promise<{
+    prompt: any;
+    transformedPrompt: any;
+    renderedRequest: string;
+    parsedRequest: ReturnType<typeof parseRawRequest>;
+    url: string;
+    fetchOptions: any;
+  }> {
+    invariant(this.config.request, 'Expected request to be set in http provider config');
     const prompt = vars.prompt;
-    const transformFn = await this.transformRequest;
-    const transformedPrompt = await transformFn(prompt, vars, context);
+    const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
     logger.debug(
       `[HTTP Provider]: Transformed prompt: ${safeJsonStringify(transformedPrompt)}. Original prompt: ${safeJsonStringify(prompt)}`,
     );
 
-    // JSON-escape all string variables for safe substitution in raw request body
-    // This prevents control characters and quotes from breaking JSON strings
-    const escapedVars = escapeJsonVariables({
-      ...vars,
-      prompt: transformedPrompt,
-    });
-
+    const escapedVars = escapeJsonVariables({ ...vars, prompt: transformedPrompt });
     const renderedRequest = renderRawRequestWithNunjucks(this.config.request, escapedVars);
     const parsedRequest = parseRawRequest(renderedRequest.trim());
-
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
     let url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
 
-    // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
     delete parsedRequest.headers['content-length'];
-
-    // Add W3C Trace Context headers if provided
-    if (context?.traceparent) {
-      parsedRequest.headers.traceparent = context.traceparent;
-      logger.debug(`[HTTP Provider]: Adding traceparent header: ${context.traceparent}`);
-    }
-    if (context?.tracestate) {
-      parsedRequest.headers.tracestate = context.tracestate;
-    }
-
-    // Add OAuth Bearer token if configured
-    if (this.config.auth?.type === 'oauth' && this.lastToken) {
-      parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
-    }
-
-    // Add Bearer token if configured
-    if (this.config.auth?.type === 'bearer') {
-      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
-      parsedRequest.headers.authorization = `Bearer ${renderedToken}`;
-    }
-
-    // Add Basic Auth credentials if configured
-    if (this.config.auth?.type === 'basic') {
-      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
-      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
-      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
-      parsedRequest.headers.authorization = `Basic ${credentials}`;
-    }
-
-    // Add API Key to header if configured
-    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
-      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
-      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
-      parsedRequest.headers[renderedKeyName.toLowerCase()] = renderedValue;
-    }
-
-    // Add API Key to query params if configured
-    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
-      try {
-        const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
-        const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
-        const urlObj = new URL(url);
-        urlObj.searchParams.append(renderedKeyName, renderedValue);
-        url = urlObj.toString();
-        // Extract the path and query from the full URL
-        const urlPath = urlObj.pathname + urlObj.search;
-        // Update the request line with the new URL path
-        const requestLines = renderedRequest.split('\n');
-        const firstLine = requestLines[0];
-        const method = firstLine.split(' ')[0];
-        const protocol = firstLine.split(' ').slice(-1)[0];
-        requestLines[0] = `${method} ${urlPath} ${protocol}`;
-        // Re-parse with updated URL
-        const updatedRequest = requestLines.join('\n');
-        const reParsed = parseRawRequest(updatedRequest.trim());
-        Object.assign(parsedRequest, reParsed);
-      } catch (err) {
-        logger.warn(
-          `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
-        );
-      }
-    }
+    applyTraceContextHeaders(parsedRequest.headers, context);
+    url = this.applyRawRequestAuth(parsedRequest, renderedRequest, vars, url);
 
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
-      {
-        request: parsedRequest,
-      },
+      { request: parsedRequest },
     );
 
-    // Prepare fetch options with dispatcher if HTTPS agent is configured
-    const httpsAgent = await this.getHttpsAgent();
+    const fetchOptions = await this.buildRawFetchOptions(parsedRequest, renderedRequest, options);
+    return { prompt, transformedPrompt, renderedRequest, parsedRequest, url, fetchOptions };
+  }
 
-    // Determine body content:
-    // - For JSON/text bodies, http-z provides body.text
-    // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
-    //   but we need the raw body text, so extract it from the rendered request
-    let bodyContent: string | undefined;
-    if (parsedRequest.body?.text) {
-      bodyContent = parsedRequest.body.text.trim();
-    } else if (parsedRequest.body?.params) {
-      bodyContent = extractBodyFromRawRequest(renderedRequest);
+  private applyRawRequestAuth(
+    parsedRequest: ReturnType<typeof parseRawRequest>,
+    renderedRequest: string,
+    vars: Record<string, any>,
+    url: string,
+  ): string {
+    const auth = this.config.auth;
+    if (auth?.type === 'oauth' && this.lastToken) {
+      parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
     }
+    if (auth?.type === 'bearer') {
+      const renderedToken = getNunjucksEngine().renderString(auth.token, vars);
+      parsedRequest.headers.authorization = `Bearer ${renderedToken}`;
+    }
+    if (auth?.type === 'basic') {
+      const renderedUsername = getNunjucksEngine().renderString(auth.username, vars);
+      const renderedPassword = getNunjucksEngine().renderString(auth.password, vars);
+      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
+      parsedRequest.headers.authorization = `Basic ${credentials}`;
+    }
+    if (auth?.type === 'api_key' && auth.placement === 'header') {
+      const renderedKeyName = getNunjucksEngine().renderString(auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(auth.value, vars);
+      parsedRequest.headers[renderedKeyName.toLowerCase()] = renderedValue;
+    }
+    if (auth?.type === 'api_key' && auth.placement === 'query') {
+      return this.applyRawRequestApiKeyQuery(parsedRequest, renderedRequest, vars, url);
+    }
+    return url;
+  }
 
+  private applyRawRequestApiKeyQuery(
+    parsedRequest: ReturnType<typeof parseRawRequest>,
+    renderedRequest: string,
+    vars: Record<string, any>,
+    url: string,
+  ): string {
+    try {
+      const auth = this.config.auth;
+      invariant(auth?.type === 'api_key', 'Expected API key auth');
+      const renderedKeyName = getNunjucksEngine().renderString(auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(auth.value, vars);
+      const urlObj = new URL(url);
+      urlObj.searchParams.append(renderedKeyName, renderedValue);
+      Object.assign(
+        parsedRequest,
+        parseRawRequest(rewriteRawRequestPath(renderedRequest, urlObj).trim()),
+      );
+      return urlObj.toString();
+    } catch (err) {
+      logger.warn(
+        `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
+      );
+      return url;
+    }
+  }
+
+  private async buildRawFetchOptions(
+    parsedRequest: ReturnType<typeof parseRawRequest>,
+    renderedRequest: string,
+    options?: CallApiOptionsParams,
+  ): Promise<any> {
+    const bodyContent = getRawRequestBodyContent(parsedRequest, renderedRequest);
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
@@ -2802,38 +2909,47 @@ export class HttpProvider implements ApiProvider {
       ...(bodyContent && { body: bodyContent }),
     };
 
-    // Add HTTPS agent as dispatcher if configured
+    const httpsAgent = await this.getHttpsAgent();
     if (httpsAgent) {
       fetchOptions.dispatcher = httpsAgent;
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
+    return fetchOptions;
+  }
 
-    let data,
+  private async fetchRawResponse(
+    preparedRequest: { url: string; fetchOptions: any },
+    context?: CallApiContextParams,
+  ) {
+    return fetchWithCache(
+      preparedRequest.url,
+      preparedRequest.fetchOptions,
+      getRequestTimeoutMs(),
+      'text',
+      context?.bustCache ?? context?.debug,
+      this.config.maxRetries,
+    );
+  }
+
+  private async finalizeRawResponse(
+    preparedRequest: {
+      prompt: any;
+      transformedPrompt: any;
+      renderedRequest: string;
+      parsedRequest: ReturnType<typeof parseRawRequest>;
+    },
+    response: Awaited<ReturnType<typeof fetchWithCache>>,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    const {
+      data,
       cached = false,
       status,
       statusText,
-      responseHeaders,
-      latencyMs: number | undefined;
-    try {
-      ({
-        data,
-        cached,
-        status,
-        statusText,
-        headers: responseHeaders,
-        latencyMs,
-      } = await fetchWithCache(
-        url,
-        fetchOptions,
-        getRequestTimeoutMs(),
-        'text',
-        context?.bustCache ?? context?.debug,
-        this.config.maxRetries,
-      ));
-    } catch (err) {
-      throw err;
-    }
-
+      headers: responseHeaders,
+      latencyMs,
+    } = response;
     logger.debug('[HTTP Provider]: Response received', {
       length: typeof data === 'string' ? data.length : undefined,
       cached,
@@ -2844,38 +2960,10 @@ export class HttpProvider implements ApiProvider {
     }
 
     const rawText = data as string;
-    let parsedData;
-    try {
-      parsedData = JSON.parse(rawText);
-    } catch {
-      parsedData = null;
-    }
-    const ret: ProviderResponse = {};
-    ret.latencyMs = latencyMs;
-    ret.cached = cached;
+    const parsedData = parseJsonResponseText(rawText);
+    const ret: ProviderResponse = { latencyMs, cached };
+    await this.applySessionResponseMetadata(ret, vars, responseHeaders, parsedData, rawText);
 
-    // If we used a session endpoint, set the sessionId we used
-    if (vars.sessionId && this.config.session) {
-      ret.sessionId = vars.sessionId;
-    }
-
-    // Also check sessionParser for raw request mode
-    try {
-      const sessionId =
-        this.sessionParser == null
-          ? undefined
-          : (await this.sessionParser)({ headers: responseHeaders, body: parsedData ?? rawText });
-      if (sessionId) {
-        ret.sessionId = sessionId;
-      }
-    } catch (err) {
-      logger.error(
-        `Error parsing session ID: ${String(err)}. Got headers: ${safeJsonStringify(sanitizeObject(responseHeaders, { context: 'response headers' }))} and parsed body: ${safeJsonStringify(sanitizeObject(parsedData, { context: 'response body' }))}`,
-      );
-      throw err;
-    }
-
-    // Always include HTTP status for error detection (e.g., aborting on non-transient errors)
     ret.metadata = {
       ...ret.metadata,
       http: {
@@ -2889,17 +2977,17 @@ export class HttpProvider implements ApiProvider {
       ret.metadata = {
         ...ret.metadata,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
-        // If no transform was applied, show the final raw request body with nunjucks applied
-        // Otherwise show the transformed prompt
         transformedRequest: this.config.transformRequest
-          ? transformedPrompt
-          : parsedRequest.body?.text || renderedRequest.trim(),
-        finalRequestBody: parsedRequest.body?.text,
+          ? preparedRequest.transformedPrompt
+          : preparedRequest.parsedRequest.body?.text || preparedRequest.renderedRequest.trim(),
+        finalRequestBody: preparedRequest.parsedRequest.body?.text,
         http: {
           status,
           statusText,
           headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
-          requestHeaders: sanitizeObject(parsedRequest.headers, { context: 'request headers' }),
+          requestHeaders: sanitizeObject(preparedRequest.parsedRequest.headers, {
+            context: 'request headers',
+          }),
         },
       };
     }
@@ -2912,8 +3000,8 @@ export class HttpProvider implements ApiProvider {
       ret,
       parsedOutput,
       rawText,
-      transformedPrompt,
-      prompt,
+      preparedRequest.transformedPrompt,
+      preparedRequest.prompt,
     );
   }
 
