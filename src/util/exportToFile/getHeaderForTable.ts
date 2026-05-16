@@ -3,66 +3,80 @@ import type Eval from '../../models/eval';
 export function getHeaderForTable(eval_: Eval) {
   const varsForHeader = new Set<string>();
 
-  if (typeof eval_.config.defaultTest === 'object' && eval_.config.defaultTest?.vars) {
-    for (const varName of Object.keys(eval_.config.defaultTest.vars || {})) {
-      varsForHeader.add(varName);
-    }
-  }
+  addVarsFromDefaultTest(eval_, varsForHeader);
+  addVarsFromResults(eval_, varsForHeader);
+  addVarsFromTests(eval_, varsForHeader);
+  addVarsFromScenarios(eval_, varsForHeader);
 
-  // Collect vars from actual evaluation results
-  for (const result of eval_.results) {
-    if (result.testCase?.vars) {
-      for (const varName of Object.keys(result.testCase.vars)) {
-        varsForHeader.add(varName);
-      }
-    }
-  }
-
-  // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
-  const tests = eval_.config.tests;
-  let testsArray: any[] = [];
-  if (Array.isArray(tests)) {
-    testsArray = tests;
-  } else if (tests) {
-    testsArray = [tests];
-  }
-
-  for (const test of testsArray) {
-    if (typeof test === 'string') {
-      continue;
-    }
-    // Skip TestGeneratorConfig objects as they don't have vars directly
-    if (test && typeof test === 'object' && 'path' in test) {
-      continue;
-    }
-    // Only process actual test cases with vars
-    if (test && 'vars' in test) {
-      for (const varName of Object.keys(test.vars || {})) {
-        varsForHeader.add(varName);
-      }
-    }
-  }
-
-  for (const scenario of eval_.config.scenarios || []) {
-    if (typeof scenario === 'string') {
-      continue;
-    }
-    for (const config of scenario.config || []) {
-      for (const varName of Object.keys(config.vars || {})) {
-        varsForHeader.add(varName);
-      }
-    }
-    for (const test of scenario.tests || []) {
-      if (typeof test === 'string') {
-        continue;
-      }
-      for (const varName of Object.keys(test.vars || {})) {
-        varsForHeader.add(varName);
-      }
-    }
-  }
   return {
     vars: [...varsForHeader].sort(),
     prompts: eval_.prompts,
   };
+}
+
+function addVarsFromDefaultTest(eval_: Eval, varsForHeader: Set<string>): void {
+  if (typeof eval_.config.defaultTest !== 'object' || !eval_.config.defaultTest?.vars) {
+    return;
+  }
+  addVarNames(eval_.config.defaultTest.vars, varsForHeader);
+}
+
+function addVarsFromResults(eval_: Eval, varsForHeader: Set<string>): void {
+  for (const result of eval_.results) {
+    addVarNames(result.testCase?.vars, varsForHeader);
+  }
+}
+
+function addVarsFromTests(eval_: Eval, varsForHeader: Set<string>): void {
+  for (const test of normalizeTests(eval_.config.tests)) {
+    if (!isTestCaseWithVars(test)) {
+      continue;
+    }
+    addVarNames(test.vars, varsForHeader);
+  }
+}
+
+function addVarsFromScenarios(eval_: Eval, varsForHeader: Set<string>): void {
+  for (const scenario of eval_.config.scenarios || []) {
+    if (typeof scenario === 'string') {
+      continue;
+    }
+    addVarsFromScenarioConfigs(scenario.config || [], varsForHeader);
+    addVarsFromScenarioTests(scenario.tests || [], varsForHeader);
+  }
+}
+
+function addVarsFromScenarioConfigs(
+  configs: Array<{ vars?: Record<string, unknown> }>,
+  varsForHeader: Set<string>,
+): void {
+  for (const config of configs) {
+    addVarNames(config.vars, varsForHeader);
+  }
+}
+
+function addVarsFromScenarioTests(tests: unknown[], varsForHeader: Set<string>): void {
+  for (const test of tests) {
+    if (!isTestCaseWithVars(test)) {
+      continue;
+    }
+    addVarNames(test.vars, varsForHeader);
+  }
+}
+
+function normalizeTests(tests: Eval['config']['tests']): unknown[] {
+  if (Array.isArray(tests)) {
+    return tests;
+  }
+  return tests ? [tests] : [];
+}
+
+function isTestCaseWithVars(test: unknown): test is { vars?: Record<string, unknown> } {
+  return typeof test === 'object' && test !== null && !('path' in test) && 'vars' in test;
+}
+
+function addVarNames(vars: Record<string, unknown> | undefined, varsForHeader: Set<string>): void {
+  for (const varName of Object.keys(vars || {})) {
+    varsForHeader.add(varName);
+  }
 }
