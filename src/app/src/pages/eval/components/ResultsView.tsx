@@ -54,6 +54,13 @@ import type { ResultsFilter } from './store';
 
 const Report = React.lazy(() => import('@app/pages/redteam/report/components/Report'));
 
+const MAX_SEARCH_BADGE_LENGTH = 5;
+const MAX_FILTER_VALUE_LENGTH = 50;
+const MAX_PROMPT_LABEL_LENGTH = 60;
+
+// Default to showing charts only on sufficiently tall viewports to avoid crowding above-the-fold content.
+const MIN_VIEWPORT_HEIGHT_FOR_CHARTS = 1100;
+
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
   onRecentEvalSelected: (file: string) => void;
@@ -67,7 +74,7 @@ interface ResultsChartsSectionProps {
   resultsChartsUnavailableReasons: string[];
   showCharts: boolean | null;
   setShowCharts: (showCharts: boolean) => void;
-  children: (toggleButton: React.ReactNode) => React.ReactNode;
+  children: (toggleButton: React.ReactNode | null) => React.ReactNode;
 }
 
 interface AppliedFilterBadgesProps {
@@ -97,8 +104,11 @@ function getAppliedFilterLabel(
     return null;
   }
 
+  const filterValue = filter.value ?? '';
   const truncatedValue =
-    filter.value.length > 50 ? `${filter.value.slice(0, 50)}...` : filter.value;
+    filterValue.length > MAX_FILTER_VALUE_LENGTH
+      ? `${filterValue.slice(0, MAX_FILTER_VALUE_LENGTH)}...`
+      : filterValue;
 
   if (filter.type === 'metric') {
     const operatorSymbols: Record<string, string> = {
@@ -159,7 +169,7 @@ function AppliedFilterBadges({
         <button
           type="button"
           onClick={() => onRemoveFilter(filter.id)}
-          className="ml-1 hover:bg-muted rounded-full"
+          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
         >
           <X className="size-3" />
         </button>
@@ -168,7 +178,7 @@ function AppliedFilterBadges({
   });
 }
 
-function ResultsChartsSection({
+export function ResultsChartsSection({
   canRenderResultsCharts,
   isRedteamEval,
   resultsChartsScores,
@@ -178,7 +188,7 @@ function ResultsChartsSection({
   children,
 }: ResultsChartsSectionProps) {
   if (isRedteamEval) {
-    return null;
+    return <>{children(null)}</>;
   }
 
   const [explicitShowCharts, setExplicitShowCharts] = React.useState<boolean | null>(showCharts);
@@ -188,7 +198,9 @@ function ResultsChartsSection({
 
   const shouldShowCharts =
     explicitShowCharts ??
-    (canRenderResultsCharts && typeof window !== 'undefined' && window.innerHeight >= 1100);
+    (canRenderResultsCharts &&
+      typeof window !== 'undefined' &&
+      window.innerHeight >= MIN_VIEWPORT_HEIGHT_FOR_CHARTS);
 
   const handleToggleCharts = () => {
     const nextShowCharts = !shouldShowCharts;
@@ -432,12 +444,12 @@ export default function ResultsView({
   const promptOptions = head.prompts.map((prompt, idx) => {
     const label = prompt.label || prompt.display || prompt.raw;
     const provider = prompt.provider || 'unknown';
-    const displayLabel = [
-      label && `"${label.slice(0, 60)}${label.length > 60 ? '...' : ''}"`,
-      provider && `[${provider}]`,
-    ]
-      .filter(Boolean)
-      .join(' ');
+    const truncatedLabel =
+      label &&
+      `"${label.slice(0, MAX_PROMPT_LABEL_LENGTH)}${
+        label.length > MAX_PROMPT_LABEL_LENGTH ? '...' : ''
+      }"`;
+    const displayLabel = [truncatedLabel, provider && `[${provider}]`].filter(Boolean).join(' ');
 
     return {
       value: `Prompt ${idx + 1}`,
@@ -769,8 +781,12 @@ export default function ResultsView({
         Edit name
       </DropdownMenuItem>
       <DropdownMenuItem
+        disabled={!config}
         onClick={() => {
-          updateConfig(config!);
+          if (!config) {
+            return;
+          }
+          updateConfig(config);
           navigate(ROUTES.SETUP);
         }}
       >
@@ -847,7 +863,7 @@ export default function ResultsView({
                       value={String(resultsTableZoom)}
                       onValueChange={(val) => setResultsTableZoom(Number(val))}
                     >
-                      <SelectTrigger className="w-[115px] h-8 text-xs">
+                      <SelectTrigger aria-label="Results zoom" className="w-[115px] h-8 text-xs">
                         <span>
                           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                             ZOOM
@@ -901,13 +917,13 @@ export default function ResultsView({
                     {debouncedSearchText && (
                       <Badge variant="secondary" className="text-xs h-5 gap-1">
                         Search:{' '}
-                        {debouncedSearchText.length > 5
-                          ? debouncedSearchText.substring(0, 5) + '...'
+                        {debouncedSearchText.length > MAX_SEARCH_BADGE_LENGTH
+                          ? debouncedSearchText.substring(0, MAX_SEARCH_BADGE_LENGTH) + '...'
                           : debouncedSearchText}
                         <button
                           type="button"
                           onClick={handleClearSearch}
-                          className="ml-1 hover:bg-muted rounded-full"
+                          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>
@@ -919,7 +935,7 @@ export default function ResultsView({
                         <button
                           type="button"
                           onClick={() => setFilterMode('all')}
-                          className="ml-1 hover:bg-muted rounded-full"
+                          className="ml-1 cursor-pointer hover:bg-muted rounded-full"
                         >
                           <X className="size-3" />
                         </button>

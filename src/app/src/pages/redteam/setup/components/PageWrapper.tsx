@@ -88,7 +88,7 @@ export default function PageWrapper({
   }, []);
 
   const nextButton = (
-    <Button onClick={onNext} disabled={nextDisabled} className="mr-[72px] px-6 py-2">
+    <Button onClick={onNext} disabled={nextDisabled} className="px-6 py-2 md:mr-[72px]">
       {nextLabel}
       <ChevronRight className="ml-1 size-4" />
     </Button>
@@ -116,8 +116,8 @@ export default function PageWrapper({
         {description && (
           <div
             className={cn(
-              'text-base text-muted-foreground transition-all duration-200 ease-in-out',
-              isMinimized ? 'max-h-0 overflow-hidden opacity-0' : 'max-h-[100px] opacity-100',
+              'overflow-hidden text-base text-muted-foreground transition-all duration-200 ease-in-out',
+              isMinimized ? 'max-h-0 opacity-0' : 'max-h-[320px] opacity-100 md:max-h-[100px]',
             )}
           >
             {description}
@@ -133,8 +133,9 @@ export default function PageWrapper({
       {/* Navigation */}
       {(onBack || onNext) && (
         <div
-          className="fixed bottom-0 z-[15] flex items-center justify-between border-t border-border bg-card/95 px-6 py-4 backdrop-blur-sm"
-          style={{ left: SIDEBAR_WIDTH, right: 0 }}
+          data-testid="page-navigation"
+          style={{ '--sidebar-width': `${SIDEBAR_WIDTH}px` } as React.CSSProperties}
+          className="fixed bottom-0 left-0 right-0 z-[15] flex items-center justify-between border-t border-border bg-card/95 px-6 py-4 backdrop-blur-sm md:left-[var(--sidebar-width)]"
         >
           <div>
             {onBack && (
