@@ -2509,13 +2509,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   static AWS_BEDROCK_COMPLETION_MODELS = Object.keys(AWS_BEDROCK_MODELS);
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    let stop: string[];
-    try {
-      stop = getEnvString('AWS_BEDROCK_STOP') ? JSON.parse(getEnvString('AWS_BEDROCK_STOP')!) : [];
-    } catch (err) {
-      throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
-    }
-
+    const stop = getBedrockStopSequences();
     let model = getHandlerForModel(this.modelName, { ...this.config, ...context?.prompt.config });
     if (!model) {
       logger.warn(
@@ -2675,6 +2669,15 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         error: `API response error: ${String(err)}: ${JSON.stringify(response)}`,
       };
     }
+  }
+}
+
+function getBedrockStopSequences(): string[] {
+  try {
+    const stopEnvVar = getEnvString('AWS_BEDROCK_STOP');
+    return stopEnvVar ? JSON.parse(stopEnvVar) : [];
+  } catch (err) {
+    throw new Error(`BEDROCK_STOP is not a valid JSON string: ${err}`);
   }
 }
 

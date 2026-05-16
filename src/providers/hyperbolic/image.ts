@@ -182,50 +182,7 @@ export class HyperbolicImageProvider implements ApiProvider {
       width: config.width || 1024,
       backend: config.backend || 'auto',
     };
-
-    // Add optional parameters
-    if (config.prompt_2) {
-      body.prompt_2 = config.prompt_2;
-    }
-    if (config.negative_prompt) {
-      body.negative_prompt = config.negative_prompt;
-    }
-    if (config.negative_prompt_2) {
-      body.negative_prompt_2 = config.negative_prompt_2;
-    }
-    if (config.image) {
-      body.image = config.image;
-    }
-    if (config.strength !== undefined) {
-      body.strength = config.strength;
-    }
-    if (config.seed !== undefined) {
-      body.seed = config.seed;
-    }
-    if (config.cfg_scale !== undefined) {
-      body.cfg_scale = config.cfg_scale;
-    }
-    if (config.sampler) {
-      body.sampler = config.sampler;
-    }
-    if (config.steps !== undefined) {
-      body.steps = config.steps;
-    }
-    if (config.style_preset) {
-      body.style_preset = config.style_preset;
-    }
-    if (config.enable_refiner !== undefined) {
-      body.enable_refiner = config.enable_refiner;
-    }
-    if (config.controlnet_name) {
-      body.controlnet_name = config.controlnet_name;
-    }
-    if (config.controlnet_image) {
-      body.controlnet_image = config.controlnet_image;
-    }
-    if (config.loras) {
-      body.loras = config.loras;
-    }
+    addHyperbolicOptionalParams(body, config);
 
     const headers = {
       'Content-Type': 'application/json',
@@ -287,6 +244,32 @@ export class HyperbolicImageProvider implements ApiProvider {
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
       };
+    }
+  }
+}
+
+function addHyperbolicOptionalParams(body: Record<string, any>, config: HyperbolicImageOptions) {
+  const optionalParams: Array<keyof HyperbolicImageOptions> = [
+    'prompt_2',
+    'negative_prompt',
+    'negative_prompt_2',
+    'image',
+    'strength',
+    'seed',
+    'cfg_scale',
+    'sampler',
+    'steps',
+    'style_preset',
+    'enable_refiner',
+    'controlnet_name',
+    'controlnet_image',
+    'loras',
+  ];
+
+  for (const key of optionalParams) {
+    const value = config[key];
+    if (value !== undefined && value !== null && value !== '') {
+      body[key] = value;
     }
   }
 }

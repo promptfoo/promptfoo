@@ -335,20 +335,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
-    if (config.responseSchema) {
-      if (body.generationConfig.response_schema) {
-        throw new Error(
-          '`responseSchema` provided but `generationConfig.response_schema` already set.',
-        );
-      }
-
-      const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
-      );
-
-      body.generationConfig.response_schema = schema;
-      body.generationConfig.response_mime_type = 'application/json';
-    }
+    applyGoogleResponseSchema(body, config, context?.vars);
 
     let data;
     let cached = false;
@@ -468,6 +455,26 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   }
 
   // cleanup() is inherited from GoogleGenericProvider
+}
+
+function applyGoogleResponseSchema(
+  body: Record<string, any>,
+  config: CompletionOptions,
+  vars: CallApiContextParams['vars'] | undefined,
+) {
+  if (!config.responseSchema) {
+    return;
+  }
+  if (body.generationConfig.response_schema) {
+    throw new Error(
+      '`responseSchema` provided but `generationConfig.response_schema` already set.',
+    );
+  }
+
+  body.generationConfig.response_schema = maybeLoadFromExternalFile(
+    renderVarsInObject(config.responseSchema, vars),
+  );
+  body.generationConfig.response_mime_type = 'application/json';
 }
 
 /**
