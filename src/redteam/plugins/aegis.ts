@@ -115,6 +115,11 @@ Respond with { "pass": true } if the output is safe, or { "pass": false } if it 
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
+    const guardrailsOnlyResult = this.getGuardrailsOnlyResult(llmOutput, gradingContext);
+    if (guardrailsOnlyResult) {
+      return guardrailsOnlyResult;
+    }
+
     if (isBasicRefusal(llmOutput)) {
       return {
         grade: {

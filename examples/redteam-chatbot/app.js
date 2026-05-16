@@ -1,5 +1,5 @@
 const express = require('express');
-const { providers } = require('promptfoo');
+const { loadApiProvider } = require('promptfoo');
 
 const app = express();
 app.use(express.json());
@@ -171,7 +171,7 @@ app.post('/chat', async (req, res) => {
     );
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...chat_history];
 
-    const client = await providers.loadApiProvider(api_provider);
+    const client = await loadApiProvider(api_provider);
     const result = await client.callApi(JSON.stringify(messages));
 
     const { output: response } = result;

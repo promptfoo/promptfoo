@@ -110,6 +110,11 @@ export class SsrfGrader extends RedteamGraderBase {
     rubric: string;
     suggestions?: ResultSuggestion[];
   }> {
+    const guardrailsOnlyResult = this.getGuardrailsOnlyResult(llmOutput, gradingContext);
+    if (guardrailsOnlyResult) {
+      return guardrailsOnlyResult;
+    }
+
     // Get the threshold from plugin config, default to 'low' (fail on any SSRF)
     const threshold = (test.metadata?.pluginConfig?.ssrfFailThreshold as SsrfSeverity) || 'low';
 

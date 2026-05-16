@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Converse API - MCP Tool Use'
+
+prompts:
+  - |
+    Use the DeepWiki MCP tools to answer this question about the {{repo}} repository:
+
+    {{question}}
+
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-6
+    label: Claude Sonnet 4.6 with MCP
+    config:
+      region: us-east-1
+      maxTokens: 1024
+      temperature: 0
+      mcp:
+        enabled: true
+        servers:
+          - name: deepwiki
+            url: https://mcp.deepwiki.com/mcp
+        tools:
+          - ask_question
+      toolChoice: auto
+
+tests:
+  - vars:
+      repo: modelcontextprotocol/modelcontextprotocol
+      question: What transport protocols does MCP support?
+    assert:
+      - type: contains-any
+        value:
+          - stdio
+          - HTTP
+          - transport
+
+  - vars:
+      repo: promptfoo/promptfoo
+      question: How does promptfoo configure providers in an eval?
+    assert:
+      - type: contains-any
+        value:
+          - provider
+          - promptfoo
+          - config

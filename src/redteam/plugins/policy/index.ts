@@ -185,6 +185,11 @@ export class PolicyViolationGrader extends RedteamGraderBase {
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
+    const guardrailsOnlyResult = this.getGuardrailsOnlyResult(llmOutput, gradingContext);
+    if (guardrailsOnlyResult) {
+      return guardrailsOnlyResult;
+    }
+
     const { policy, ...restMetadata } = test.metadata || {};
 
     // For custom policies, we skip the refusal check by passing skipRefusalCheck=true
