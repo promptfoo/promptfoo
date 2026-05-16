@@ -299,7 +299,7 @@ describe('AddAssertionsDialog', () => {
         },
         {
           id: 'filter-2',
-          type: 'score',
+          type: 'metric',
           operator: 'lt',
           value: '0.5',
           logicOperator: 'and',
@@ -311,7 +311,10 @@ describe('AddAssertionsDialog', () => {
     });
 
     await user.click(screen.getByText('LLM evaluates'));
-    await user.type(screen.getByPlaceholderText('Describe what makes a good response...'), 'helpful');
+    await user.type(
+      screen.getByPlaceholderText('Describe what makes a good response...'),
+      'helpful',
+    );
     await user.click(screen.getByText('Semantically similar'));
     await user.type(
       screen.getByPlaceholderText('Expected output to compare against...'),

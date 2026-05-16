@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PosthocAssertionsForm from './PosthocAssertionsForm';
@@ -158,20 +158,18 @@ describe('PosthocAssertionsForm', () => {
     await user.type(screen.getByLabelText('Threshold'), '0.7');
     await user.type(screen.getByLabelText('Weight'), '2');
     await user.type(screen.getByLabelText('Metric name'), 'semantic-match');
-    await user.type(
-      screen.getByPlaceholderText('Optional transform expression'),
-      'output.trim()',
-    );
+    await user.type(screen.getByPlaceholderText('Optional transform expression'), 'output.trim()');
     await user.type(
       screen.getByPlaceholderText('Optional context transform expression'),
       'context.metadata',
     );
 
-    const configTextarea = screen.getByText('Config (JSON)').parentElement?.querySelector('textarea');
+    const configTextarea = screen
+      .getByText('Config (JSON)')
+      .parentElement?.querySelector('textarea');
     expect(configTextarea).not.toBeNull();
-    fireEvent.change(configTextarea as HTMLTextAreaElement, {
-      target: { value: '{"provider":"openai"}' },
-    });
+    await user.click(configTextarea as HTMLTextAreaElement);
+    await user.paste('{"provider":"openai"}');
 
     expect(onChange).toHaveBeenLastCalledWith([
       {
