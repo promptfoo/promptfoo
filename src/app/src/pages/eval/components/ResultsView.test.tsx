@@ -195,7 +195,8 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
 
   await userEvent.click(showChartsButton);
 
-  expect(screen.getByRole('button', { name: 'Hide Charts' })).toBeInTheDocument();
+  const hideChartsButtonAfterOpen = screen.getByRole('button', { name: 'Hide Charts' });
+  expect(hideChartsButtonAfterOpen).toBeInTheDocument();
   expect(screen.queryByTestId('results-charts')).toBeNull();
   expect(screen.getByText('Charts are unavailable for this evaluation')).toBeInTheDocument();
   expect(
@@ -208,34 +209,28 @@ async function expectChartsUnavailable(...reasonTexts: string[]) {
     expect(screen.getByText(reasonText)).toBeInTheDocument();
   }
 
-  await userEvent.click(screen.getByRole('button', { name: 'Hide Charts' }));
+  await userEvent.click(hideChartsButtonAfterOpen);
 
-  expect(screen.getByRole('button', { name: 'Show Charts' })).toBeInTheDocument();
+  const showChartsButtonAfterClose = screen.getByRole('button', { name: 'Show Charts' });
+  expect(showChartsButtonAfterClose).toBeInTheDocument();
   expect(screen.queryByText('Charts are unavailable for this evaluation')).toBeNull();
   for (const reasonText of reasonTexts) {
     expect(screen.queryByText(reasonText)).toBeNull();
   }
+
+  return {
+    showChartsButton,
+    hideChartsButtonAfterOpen,
+    showChartsButtonAfterClose,
+  };
 }
 
 function createCopyEvalResponse(): Response {
-  return {
-    ok: true,
-    json: () => Promise.resolve({ id: 'new-eval-id', distinctTestCount: 1234 }),
+  return new Response(JSON.stringify({ id: 'new-eval-id', distinctTestCount: 1234 }), {
     status: 200,
     statusText: 'OK',
-    headers: new Headers(),
-    redirected: false,
-    type: 'basic',
-    url: 'http://example.com',
-    bodyUsed: false,
-    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
-    blob: () => Promise.resolve(new Blob()),
-    formData: () => Promise.resolve(new FormData()),
-    text: () => Promise.resolve(''),
-    body: null,
-    bytes: () => Promise.resolve(new Uint8Array()),
-    clone: () => createCopyEvalResponse(),
-  };
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 beforeEach(() => {

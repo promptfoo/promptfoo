@@ -48,7 +48,9 @@ vi.mock('../src/util/time', () => ({
 
 const mockFetchWithRetries = vi.mocked(fetchWithRetries);
 
-// Mock cache-manager v7
+// Mock cache-manager v7. This is a behavioral test double, not a complete
+// cache-manager implementation; it models only the storage, TTL, namespace
+// iteration, and in-flight deduplication semantics exercised by this suite.
 vi.mock('cache-manager', () => ({
   createCache: vi.fn().mockImplementation(({ stores }) => {
     const cache = new Map<string, unknown>();
@@ -1068,7 +1070,9 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache disabled', () => {
-    const BODY_READ_TOTAL_ATTEMPTS = 3; // 1 initial attempt + 2 retries
+    // Mirrors fetchAndReadBody's idempotent body-read policy: one initial read
+    // plus two transient-error retries.
+    const BODY_READ_TOTAL_ATTEMPTS = 3;
 
     beforeEach(() => {
       disableCache();
