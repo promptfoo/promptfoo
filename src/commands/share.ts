@@ -19,6 +19,17 @@ import {
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
 
+type ShareCommandOptions = {
+  yes: boolean;
+  envPath?: string;
+  showAuth: boolean;
+} & Command;
+
+type ShareTarget =
+  | { kind: 'eval'; evalRecord: Eval }
+  | { kind: 'audit'; auditRecord: ModelAudit }
+  | { kind: 'error' };
+
 export function notCloudEnabledShareInstructions(): void {
   const cloudUrl = getDefaultShareViewBaseUrl();
   const welcomeUrl = `${cloudUrl}/welcome`;
@@ -63,6 +74,134 @@ export async function createAndDisplayShareableModelAuditUrl(
   return url;
 }
 
+async function resolveShareTarget(id: string | undefined): Promise<ShareTarget> {
+  if (id) {
+    if (id.startsWith('scan-')) {
+      const auditRecord = await ModelAudit.findById(id);
+      if (!auditRecord) {
+        logger.error(`Could not find model audit with ID ${chalk.bold(id)}.`);
+        process.exitCode = 1;
+        return { kind: 'error' };
+      }
+      return { kind: 'audit', auditRecord };
+    }
+
+    const evalRecord = await Eval.findById(id);
+    if (!evalRecord) {
+      logger.error(`Could not find eval with ID ${chalk.bold(id)}.`);
+      process.exitCode = 1;
+      return { kind: 'error' };
+    }
+    return { kind: 'eval', evalRecord };
+  }
+
+  const [latestEval, latestAudit] = await Promise.all([Eval.latest(), ModelAudit.latest()]);
+  if (!latestEval && !latestAudit) {
+    logger.error(
+      'Could not load results. Do you need to run `promptfoo eval` or `promptfoo scan-model` first?',
+    );
+    process.exitCode = 1;
+    return { kind: 'error' };
+  }
+
+  const evalTime = latestEval?.createdAt || 0;
+  const auditTime = latestAudit?.createdAt || 0;
+  return evalTime > auditTime && latestEval
+    ? { kind: 'eval', evalRecord: latestEval }
+    : { kind: 'audit', auditRecord: latestAudit as ModelAudit };
+}
+
+async function applyCurrentSharingConfig(evalRecord: Eval) {
+  try {
+    const { defaultConfig: currentConfig } = await loadDefaultConfig();
+    if (currentConfig?.sharing) {
+      evalRecord.config.sharing = currentConfig.sharing;
+      logger.debug(
+        `Applied sharing config from promptfooconfig.yaml: ${JSON.stringify(currentConfig.sharing)}`,
+      );
+    }
+  } catch (err) {
+    logger.debug(`Could not load config: ${err}`);
+  }
+}
+
+function validateShareableEval(evalRecord: Eval): boolean {
+  if (evalRecord.prompts.length > 0) {
+    return true;
+  }
+  logger.error(
+    dedent`
+      Eval ${chalk.bold(evalRecord.id)} cannot be shared.
+      This may be because the eval is still running or because it did not complete successfully.
+      If your eval is still running, wait for it to complete and try again.
+    `,
+  );
+  process.exitCode = 1;
+  return false;
+}
+
+async function confirmEvalOverwrite(evalRecord: Eval, showAuth: boolean): Promise<boolean> {
+  if (!cloudConfig.isEnabled() || !(await hasEvalBeenShared(evalRecord))) {
+    return true;
+  }
+  const url = await getShareableUrl(evalRecord, evalRecord.id, showAuth);
+  try {
+    return await confirm({
+      message: dedent`
+        Already shared at:
+          ${chalk.cyan(url)}
+
+        Re-share (will overwrite existing data)?
+      `,
+    });
+  } catch {
+    process.exitCode = 0;
+    return false;
+  }
+}
+
+async function shareEval(evalRecord: Eval, cmdObj: ShareCommandOptions) {
+  logger.info(`Sharing eval ${evalRecord.id}`);
+  await applyCurrentSharingConfig(evalRecord);
+  if (!validateShareableEval(evalRecord)) {
+    return;
+  }
+  if (!isSharingEnabled(evalRecord)) {
+    notCloudEnabledShareInstructions();
+    process.exitCode = 1;
+    return;
+  }
+  if (!(await confirmEvalOverwrite(evalRecord, cmdObj.showAuth))) {
+    process.exitCode = 0;
+    return;
+  }
+  await createAndDisplayShareableUrl(evalRecord, cmdObj.showAuth);
+}
+
+async function confirmAuditOverwrite(auditRecord: ModelAudit, showAuth: boolean): Promise<boolean> {
+  if (!cloudConfig.isEnabled() || !(await hasModelAuditBeenShared(auditRecord))) {
+    return true;
+  }
+  const url = getShareableModelAuditUrl(auditRecord, auditRecord.id, showAuth);
+  return confirm({
+    message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
+  });
+}
+
+async function shareAudit(auditRecord: ModelAudit, cmdObj: ShareCommandOptions) {
+  logger.info(`Sharing model audit ${auditRecord.id}`);
+  if (!isModelAuditSharingEnabled()) {
+    notCloudEnabledShareInstructions();
+    process.exitCode = 1;
+    return;
+  }
+  if (!(await confirmAuditOverwrite(auditRecord, cmdObj.showAuth))) {
+    process.exitCode = 0;
+    return;
+  }
+  await createAndDisplayShareableModelAuditUrl(auditRecord, cmdObj.showAuth);
+}
+
 export function shareCommand(program: Command) {
   program
     .command('share [id]')
@@ -81,175 +220,16 @@ export function shareCommand(program: Command) {
       false,
     )
     .action(
-      async (
-        id: string | undefined,
-        cmdObj: {
-          yes: boolean;
-          envPath?: string;
-          showAuth: boolean;
-        } & Command,
-      ) => {
-        let isEval = false;
-        let eval_: Eval | undefined | null = null;
-        let audit: ModelAudit | undefined | null = null;
-
-        if (id) {
-          // Determine type based on ID format (keep original simple logic for compatibility)
-          if (id.startsWith('scan-')) {
-            audit = await ModelAudit.findById(id);
-            if (!audit) {
-              logger.error(`Could not find model audit with ID ${chalk.bold(id)}.`);
-              process.exitCode = 1;
-              return;
-            }
-          } else {
-            // Assume it's an eval ID (could be eval- prefix or other format)
-            isEval = true;
-            eval_ = await Eval.findById(id);
-            if (!eval_) {
-              logger.error(`Could not find eval with ID ${chalk.bold(id)}.`);
-              process.exitCode = 1;
-              return;
-            }
-          }
-        } else {
-          // No ID provided, find the most recent of either type
-          const [latestEval, latestAudit] = await Promise.all([Eval.latest(), ModelAudit.latest()]);
-
-          if (!latestEval && !latestAudit) {
-            logger.error(
-              'Could not load results. Do you need to run `promptfoo eval` or `promptfoo scan-model` first?',
-            );
-            process.exitCode = 1;
-            return;
-          }
-
-          // Choose the most recent based on creation time
-          const evalTime = latestEval?.createdAt || 0;
-          const auditTime = latestAudit?.createdAt || 0;
-
-          if (evalTime > auditTime) {
-            isEval = true;
-            eval_ = latestEval;
-          } else {
-            audit = latestAudit;
-          }
-        }
-
-        // Now show what we're sharing
-        if (isEval && eval_) {
-          logger.info(`Sharing eval ${eval_!.id}`);
-        } else if (audit) {
-          logger.info(`Sharing model audit ${audit!.id}`);
-        }
-
-        // Handle evaluation sharing (prioritized since evals are more important)
-        if (isEval && eval_) {
-          try {
-            const { defaultConfig: currentConfig } = await loadDefaultConfig();
-            if (currentConfig && currentConfig.sharing) {
-              eval_.config.sharing = currentConfig.sharing;
-              logger.debug(
-                `Applied sharing config from promptfooconfig.yaml: ${JSON.stringify(currentConfig.sharing)}`,
-              );
-            }
-          } catch (err) {
-            logger.debug(`Could not load config: ${err}`);
-          }
-
-          if (eval_.prompts.length === 0) {
-            // FIXME(ian): Handle this on the server side.
-            logger.error(
-              dedent`
-                Eval ${chalk.bold(eval_.id)} cannot be shared.
-                This may be because the eval is still running or because it did not complete successfully.
-                If your eval is still running, wait for it to complete and try again.
-              `,
-            );
-            process.exitCode = 1;
-            return;
-          }
-
-          // Validate that the user has authenticated with Cloud.
-          if (!isSharingEnabled(eval_)) {
-            notCloudEnabledShareInstructions();
-            process.exitCode = 1;
-            return;
-          }
-
-          if (
-            // Idempotency is not implemented in self-hosted mode.
-            cloudConfig.isEnabled() &&
-            (await hasEvalBeenShared(eval_))
-          ) {
-            const url = await getShareableUrl(
-              eval_,
-              // `remoteEvalId` is always the Eval ID when sharing to Cloud.
-              eval_.id,
-              cmdObj.showAuth,
-            );
-
-            let shouldContinue = false;
-            try {
-              shouldContinue = await confirm({
-                message: dedent`
-                  Already shared at:
-                    ${chalk.cyan(url)}
-
-                  Re-share (will overwrite existing data)?
-                `,
-              });
-            } catch {
-              // User pressed Ctrl+C or cancelled
-              process.exitCode = 0;
-              return;
-            }
-
-            if (!shouldContinue) {
-              process.exitCode = 0;
-              return;
-            }
-          }
-
-          await createAndDisplayShareableUrl(eval_, cmdObj.showAuth);
+      async (id: string | undefined, cmdObj: ShareCommandOptions) => {
+        const target = await resolveShareTarget(id);
+        if (target.kind === 'error') {
           return;
         }
-
-        // Handle model audit sharing
-        if (!audit) {
-          logger.error('Unexpected error: no eval or audit to share');
-          process.exitCode = 1;
+        if (target.kind === 'eval') {
+          await shareEval(target.evalRecord, cmdObj);
           return;
         }
-
-        // Validate that the user has authenticated with Cloud for model audit sharing.
-        if (!isModelAuditSharingEnabled()) {
-          notCloudEnabledShareInstructions();
-          process.exitCode = 1;
-          return;
-        }
-
-        if (
-          // Idempotency is not implemented in self-hosted mode.
-          cloudConfig.isEnabled() &&
-          (await hasModelAuditBeenShared(audit))
-        ) {
-          const url = getShareableModelAuditUrl(
-            audit,
-            // `remoteAuditId` is always the Audit ID when sharing to Cloud.
-            audit.id,
-            cmdObj.showAuth,
-          );
-          const shouldContinue = await confirm({
-            message: `This model audit is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
-          });
-          if (!shouldContinue) {
-            process.exitCode = 0;
-            return;
-          }
-        }
-
-        await createAndDisplayShareableModelAuditUrl(audit, cmdObj.showAuth);
+        await shareAudit(target.auditRecord, cmdObj);
       },
     );
 }
