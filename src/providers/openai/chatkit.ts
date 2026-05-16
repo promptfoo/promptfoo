@@ -273,6 +273,140 @@ function generateChatKitHTML(
  * Extract assistant response text from the ChatKit iframe
  * Uses retry logic since DOM may still be updating after response.end event
  */
+interface ChatKitFrameExtractionResult {
+  text: string;
+  source: string;
+  isAssistant?: boolean;
+}
+
+function getElementText(element: Element | undefined | null): string {
+  return element?.textContent?.trim() || '';
+}
+
+function isUserMessageElement(element: Element): boolean {
+  const className = element.className?.toString().toLowerCase() || '';
+  const role = element.getAttribute('data-role') || '';
+  const testId = element.getAttribute('data-testid') || '';
+  return className.includes('user') || role === 'user' || testId.includes('user');
+}
+
+function isAssistantMessageElement(element: Element): boolean {
+  const className = element.className?.toString().toLowerCase() || '';
+  const role = element.getAttribute('data-role') || '';
+  const testId = element.getAttribute('data-testid') || '';
+  return className.includes('assistant') || role === 'assistant' || testId.includes('assistant');
+}
+
+function isInsideUserArea(element: Element): boolean {
+  let parent = element.parentElement;
+  while (parent && parent !== document.body) {
+    if (isUserMessageElement(parent)) {
+      return true;
+    }
+    parent = parent.parentElement;
+  }
+  return false;
+}
+
+function findAssistantSelectorResponse(): ChatKitFrameExtractionResult | undefined {
+  const assistantSelectors = [
+    '[data-thread-item="assistant-message"]',
+    '[data-testid="assistant-message"]',
+    '[data-role="assistant"]',
+    '[class*="assistant"]:not([class*="user"])',
+  ];
+  for (const selector of assistantSelectors) {
+    const elements = document.querySelectorAll(selector);
+    const text = getElementText(elements[elements.length - 1]);
+    if (text) {
+      return { text, source: selector, isAssistant: true };
+    }
+  }
+  return undefined;
+}
+
+function findLastNonUserMessage(): ChatKitFrameExtractionResult | undefined {
+  const messages = Array.from(document.querySelectorAll('[class*="message"]'))
+    .map((message) => ({
+      text: getElementText(message),
+      isUser: isUserMessageElement(message),
+      isAssistant: isAssistantMessageElement(message),
+    }))
+    .filter((message) => message.text.length > 0);
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (!message.isUser) {
+      return { text: message.text, source: 'last-non-user', isAssistant: true };
+    }
+  }
+  return undefined;
+}
+
+function findMarkdownResponse(): ChatKitFrameExtractionResult | undefined {
+  const markdownElements = document.querySelectorAll('.markdown, [class*="markdown"]');
+  for (let index = markdownElements.length - 1; index >= 0; index--) {
+    const element = markdownElements[index];
+    if (isInsideUserArea(element)) {
+      continue;
+    }
+    const text = getElementText(element);
+    if (text) {
+      return { text, source: 'markdown', isAssistant: true };
+    }
+  }
+  return undefined;
+}
+
+function findResponseContainer(): ChatKitFrameExtractionResult | undefined {
+  const responseContainers = document.querySelectorAll(
+    '[class*="response"], [class*="reply"], [class*="answer"]',
+  );
+  for (let index = responseContainers.length - 1; index >= 0; index--) {
+    const container = responseContainers[index];
+    if (isUserMessageElement(container)) {
+      continue;
+    }
+    const text = getElementText(container);
+    if (text) {
+      return { text, source: 'response-container', isAssistant: true };
+    }
+  }
+  return undefined;
+}
+
+function findFallbackDivResponse(): ChatKitFrameExtractionResult | undefined {
+  const candidateDivs = Array.from(document.querySelectorAll('div'))
+    .map((element) => ({ text: getElementText(element), element }))
+    .filter(
+      ({ text, element }) =>
+        text.length > 0 &&
+        text.length < 5000 &&
+        !isUserMessageElement(element) &&
+        !isInsideUserArea(element),
+    );
+  if (candidateDivs.length === 0) {
+    return undefined;
+  }
+  const leafDivs = candidateDivs.filter(
+    ({ element }) => element.querySelectorAll('[class*="message"]').length === 0,
+  );
+  const selected = leafDivs[leafDivs.length - 1] || candidateDivs[candidateDivs.length - 1];
+  return { text: selected.text, source: leafDivs.length > 0 ? 'leaf-div' : 'fallback-div' };
+}
+
+function extractAssistantResponseFromDocument(): ChatKitFrameExtractionResult {
+  return (
+    findAssistantSelectorResponse() ||
+    findLastNonUserMessage() ||
+    findMarkdownResponse() ||
+    findResponseContainer() ||
+    findFallbackDivResponse() || {
+      text: document.body?.textContent?.trim() || '',
+      source: 'body',
+    }
+  );
+}
+
 async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Promise<string> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const frames = page.frames();
@@ -281,150 +415,7 @@ async function extractResponseFromFrame(page: Page, maxRetries: number = 3): Pro
       const url = frame.url();
       if (isOpenAICdnUrl(url)) {
         try {
-          const result = await frame.evaluate(() => {
-            // Helper to check if element is likely a user message
-            const isUserMessage = (el: Element): boolean => {
-              const className = el.className?.toString().toLowerCase() || '';
-              const role = el.getAttribute('data-role') || '';
-              const testId = el.getAttribute('data-testid') || '';
-              return className.includes('user') || role === 'user' || testId.includes('user');
-            };
-
-            // Helper to check if element is an assistant message
-            const isAssistantMessage = (el: Element): boolean => {
-              const className = el.className?.toString().toLowerCase() || '';
-              const role = el.getAttribute('data-role') || '';
-              const testId = el.getAttribute('data-testid') || '';
-              return (
-                className.includes('assistant') ||
-                role === 'assistant' ||
-                testId.includes('assistant')
-              );
-            };
-
-            // Try assistant-specific selectors first - these are most reliable
-            const assistantSelectors = [
-              '[data-thread-item="assistant-message"]', // ChatKit specific
-              '[data-testid="assistant-message"]',
-              '[data-role="assistant"]',
-              '[class*="assistant"]:not([class*="user"])',
-            ];
-
-            for (const sel of assistantSelectors) {
-              const els = document.querySelectorAll(sel);
-              if (els.length > 0) {
-                const lastEl = els[els.length - 1];
-                const text = lastEl.textContent?.trim() || '';
-                // Accept any non-empty assistant message (removed length requirement)
-                if (text.length > 0) {
-                  return { text, source: sel, isAssistant: true };
-                }
-              }
-            }
-
-            // Look for message containers and find messages
-            // Collect both user and assistant messages to identify the last assistant one
-            const allMessages = document.querySelectorAll('[class*="message"]');
-            const messages: Array<{ text: string; isUser: boolean; isAssistant: boolean }> = [];
-
-            allMessages.forEach((msg) => {
-              const text = msg.textContent?.trim() || '';
-              if (text.length > 0) {
-                messages.push({
-                  text,
-                  isUser: isUserMessage(msg),
-                  isAssistant: isAssistantMessage(msg),
-                });
-              }
-            });
-
-            // Find the last non-user message (assistant messages)
-            for (let i = messages.length - 1; i >= 0; i--) {
-              if (!messages[i].isUser && messages[i].text.length > 0) {
-                return { text: messages[i].text, source: 'last-non-user', isAssistant: true };
-              }
-            }
-
-            // Try markdown content (often contains the formatted response)
-            const markdown = document.querySelectorAll('.markdown, [class*="markdown"]');
-            if (markdown.length > 0) {
-              // Find markdown that's not inside a user message
-              for (let i = markdown.length - 1; i >= 0; i--) {
-                const el = markdown[i];
-                let parent = el.parentElement;
-                let inUserArea = false;
-                while (parent && parent !== document.body) {
-                  if (isUserMessage(parent)) {
-                    inUserArea = true;
-                    break;
-                  }
-                  parent = parent.parentElement;
-                }
-                if (!inUserArea) {
-                  const text = el.textContent?.trim() || '';
-                  if (text.length > 0) {
-                    return { text, source: 'markdown', isAssistant: true };
-                  }
-                }
-              }
-            }
-
-            // Try response-specific containers
-            const responseContainers = document.querySelectorAll(
-              '[class*="response"], [class*="reply"], [class*="answer"]',
-            );
-            for (let i = responseContainers.length - 1; i >= 0; i--) {
-              const container = responseContainers[i];
-              if (!isUserMessage(container)) {
-                const text = container.textContent?.trim() || '';
-                if (text.length > 0) {
-                  return { text, source: 'response-container', isAssistant: true };
-                }
-              }
-            }
-
-            // Fallback: look for the last div that's not in a user message area
-            // Prefer shorter texts to avoid grabbing the entire page
-            const divs = Array.from(document.querySelectorAll('div'));
-            const candidateDivs: Array<{ text: string; el: Element }> = [];
-
-            for (const div of divs) {
-              const text = div.textContent?.trim() || '';
-              if (text.length > 0 && text.length < 5000 && !isUserMessage(div)) {
-                // Check parent chain for user indicators
-                let parent = div.parentElement;
-                let inUserArea = false;
-                while (parent && parent !== document.body) {
-                  if (isUserMessage(parent)) {
-                    inUserArea = true;
-                    break;
-                  }
-                  parent = parent.parentElement;
-                }
-                if (!inUserArea) {
-                  candidateDivs.push({ text, el: div });
-                }
-              }
-            }
-
-            // Sort by length and prefer medium-length texts (likely actual responses)
-            // Avoid very short (labels) and very long (containers with multiple messages)
-            if (candidateDivs.length > 0) {
-              // Find divs that don't contain other message-like elements
-              const leafDivs = candidateDivs.filter(
-                (d) => d.el.querySelectorAll('[class*="message"]').length === 0,
-              );
-              if (leafDivs.length > 0) {
-                // Return the last leaf div (most recent)
-                return { text: leafDivs[leafDivs.length - 1].text, source: 'leaf-div' };
-              }
-              // Otherwise return the last candidate
-              return { text: candidateDivs[candidateDivs.length - 1].text, source: 'fallback-div' };
-            }
-
-            // Last resort: full body text
-            return { text: document.body?.textContent?.trim() || '', source: 'body' };
-          });
+          const result = await frame.evaluate(extractAssistantResponseFromDocument);
 
           if (result.text && result.text.length > 0) {
             // Skip if this looks like just approval button text
@@ -921,9 +912,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     _context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Stateful mode requires sequential processing, so disable pool mode
     const usePool = this.chatKitConfig.usePool && !this.chatKitConfig.stateful;
-
     logger.debug('[ChatKitProvider] Starting call', {
       prompt: prompt.substring(0, 100),
       workflowId: this.chatKitConfig.workflowId,
@@ -931,175 +920,177 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       stateful: this.chatKitConfig.stateful,
     });
 
-    // Use pool-based execution for better concurrency (not available in stateful mode)
-    if (usePool) {
-      return this.callApiWithPool(prompt);
-    }
+    return usePool ? this.callApiWithPool(prompt) : this.callApiWithoutPool(prompt);
+  }
 
+  private async callApiWithoutPool(prompt: string): Promise<ProviderResponse> {
     const startTime = Date.now();
 
     try {
-      await this.initialize();
-
-      if (!this.page) {
-        throw new Error('Browser page not initialized');
-      }
-
-      // For stateful mode, don't reload the page to maintain conversation state
-      // For non-stateful mode, refresh to get clean state for each evaluation
-      if (!this.chatKitConfig.stateful) {
-        await this.page.reload({ waitUntil: 'domcontentloaded' });
-
-        // Wait for ChatKit to be ready again after reload
-        await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
-          timeout: CHATKIT_READY_TIMEOUT_MS,
-        });
-      }
-
-      // For stateful mode, check if this is a follow-up message (responses already exist)
-      // Use newThread: false for follow-ups to continue the conversation
-      const responseCount = await this.page.evaluate(
-        () => (window as any).__state?.responses?.length || 0,
-      );
-      const isFollowUp = this.chatKitConfig.stateful && responseCount > 0;
-
-      logger.debug('[ChatKitProvider] Sending message', {
-        stateful: this.chatKitConfig.stateful,
-        isFollowUp,
-        responseCount,
-      });
-
-      // Send the message
-      await this.page.evaluate(
-        ({ text, newThread }) => {
-          return (window as any).__chatkit.sendUserMessage({
-            text,
-            newThread,
-          });
-        },
-        { text: prompt, newThread: !isFollowUp },
-      );
-
-      // Wait for response - in stateful mode, wait for a NEW response
-      // Multi-step workflows may update DOM content multiple times as different
-      // agents run (classification -> domain agent -> summarizer)
-      logger.debug('[ChatKitProvider] Waiting for response');
-      const expectedResponseCount = responseCount + 1;
-
-      // First, wait for at least one response to start
-      await this.page.waitForFunction(
-        (expected) => (window as any).__state?.responses?.length >= expected,
-        expectedResponseCount,
-        { timeout: this.chatKitConfig.timeout },
-      );
-
-      // Wait for workflow to stabilize by polling actual DOM content
-      // Multi-step workflows (classification -> domain agent) may continue
-      // updating DOM content after the first response.end event
-      // Capture the content during stabilization as a fallback for extraction
-      const stabilizationResult = await waitForContentStabilization(
-        this.page,
-        this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
+      const page = await this.prepareSequentialPage();
+      const responseCount = await this.getSequentialResponseCount(page);
+      const isFollowUp = Boolean(this.chatKitConfig.stateful && responseCount > 0);
+      await this.sendSequentialMessage(page, prompt, isFollowUp, responseCount);
+      const stabilizationResult = await this.waitForSequentialResponse(
+        page,
+        responseCount + 1,
         startTime,
       );
-
-      // Handle any approval steps in the workflow
-      const approvalsHandled = await processApprovals(
-        this.page,
-        this.chatKitConfig.approvalHandling ?? 'auto-approve',
-        this.chatKitConfig.maxApprovals ?? DEFAULT_MAX_APPROVALS,
-        this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
-      );
-
-      if (approvalsHandled > 0) {
-        logger.debug('[ChatKitProvider] Processed approvals', { count: approvalsHandled });
-      }
-
-      // Extract response from iframe DOM
-      // Try DOM extraction first, fall back to captured content from stabilization
-      let responseText = await extractResponseFromFrame(this.page);
-      if (!responseText && stabilizationResult.assistantResponse) {
-        logger.debug('[ChatKitProvider] Using fallback content from stabilization', {
-          fallbackLength: stabilizationResult.assistantResponse.length,
-        });
-        // Apply the same cleanup logic used for DOM extraction
-        responseText = cleanAssistantResponse(stabilizationResult.assistantResponse);
-      }
-
-      // Get thread ID
-      const threadId = await this.page.evaluate(() => (window as any).__state.threadId);
-
-      // Get final response count for turn tracking
-      const finalResponseCount = await this.page.evaluate(
-        () => (window as any).__state?.responses?.length || 0,
-      );
-
-      const latencyMs = Date.now() - startTime;
-
-      logger.debug('[ChatKitProvider] Response received', {
-        threadId,
-        textLength: responseText.length,
-        turnNumber: finalResponseCount,
-        latencyMs,
-      });
-
-      return {
-        output: responseText,
-        cached: false, // ChatKit responses are never cached (browser-based)
-        latencyMs,
-        // Use sessionId for consistency with HTTP provider's stateful handling
-        sessionId: threadId,
-        // Token usage not available from ChatKit, but track request count
-        tokenUsage: { numRequests: 1 },
-        metadata: {
-          workflowId: this.chatKitConfig.workflowId,
-          version: this.chatKitConfig.version,
-          stateful: this.chatKitConfig.stateful,
-          turnNumber: finalResponseCount,
-        },
-      };
+      await this.processSequentialApprovals(page);
+      const responseText = await this.extractSequentialResponse(page, stabilizationResult);
+      return this.buildSequentialResponse(page, responseText, startTime);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('[ChatKitProvider] Call failed', { error: errorMessage });
+      return this.handleChatKitCallError(error);
+    }
+  }
 
-      // Check for ChatKit-specific errors in page state
-      if (this.page) {
-        try {
-          const stateError = await this.page.evaluate(() => (window as any).__state?.error);
-          if (stateError) {
-            return {
-              error: `ChatKit workflow error: ${stateError}`,
-            };
-          }
-        } catch {
-          // Page may be in bad state, continue with general error
-        }
-      }
+  private async prepareSequentialPage(): Promise<Page> {
+    await this.initialize();
+    if (!this.page) {
+      throw new Error('Browser page not initialized');
+    }
+    if (!this.chatKitConfig.stateful) {
+      await this.page.reload({ waitUntil: 'domcontentloaded' });
+      await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
+        timeout: CHATKIT_READY_TIMEOUT_MS,
+      });
+    }
+    return this.page;
+  }
 
-      // Provide helpful error messages for common issues
-      if (errorMessage.includes('Timeout') || errorMessage.includes('timeout')) {
-        return {
-          error:
-            `ChatKit response timeout after ${this.chatKitConfig.timeout}ms. ` +
-            'Try increasing timeout in config or use --max-concurrency 1 for more reliable results.',
-        };
-      }
+  private async getSequentialResponseCount(page: Page): Promise<number> {
+    return page.evaluate(() => (window as any).__state?.responses?.length || 0);
+  }
 
-      if (errorMessage.includes('API key')) {
-        return {
-          error: 'OpenAI API key is required. Set OPENAI_API_KEY environment variable.',
-        };
-      }
+  private async sendSequentialMessage(
+    page: Page,
+    prompt: string,
+    isFollowUp: boolean,
+    responseCount: number,
+  ): Promise<void> {
+    logger.debug('[ChatKitProvider] Sending message', {
+      stateful: this.chatKitConfig.stateful,
+      isFollowUp,
+      responseCount,
+    });
+    await page.evaluate(
+      ({ text, newThread }) =>
+        (window as any).__chatkit.sendUserMessage({
+          text,
+          newThread,
+        }),
+      { text: prompt, newThread: !isFollowUp },
+    );
+  }
 
-      if (errorMessage.includes('Playwright') || errorMessage.includes('browser')) {
-        return {
-          error: `Browser error: ${errorMessage}. Ensure Playwright is installed: npx playwright install chromium`,
-        };
-      }
+  private async waitForSequentialResponse(
+    page: Page,
+    expectedResponseCount: number,
+    startTime: number,
+  ): Promise<StabilizationResult> {
+    logger.debug('[ChatKitProvider] Waiting for response');
+    await page.waitForFunction(
+      (expected) => (window as any).__state?.responses?.length >= expected,
+      expectedResponseCount,
+      { timeout: this.chatKitConfig.timeout },
+    );
+    return waitForContentStabilization(
+      page,
+      this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
+      startTime,
+    );
+  }
 
+  private async processSequentialApprovals(page: Page): Promise<void> {
+    const approvalsHandled = await processApprovals(
+      page,
+      this.chatKitConfig.approvalHandling ?? 'auto-approve',
+      this.chatKitConfig.maxApprovals ?? DEFAULT_MAX_APPROVALS,
+      this.chatKitConfig.timeout ?? DEFAULT_TIMEOUT_MS,
+    );
+    if (approvalsHandled > 0) {
+      logger.debug('[ChatKitProvider] Processed approvals', { count: approvalsHandled });
+    }
+  }
+
+  private async extractSequentialResponse(
+    page: Page,
+    stabilizationResult: StabilizationResult,
+  ): Promise<string> {
+    let responseText = await extractResponseFromFrame(page);
+    if (!responseText && stabilizationResult.assistantResponse) {
+      logger.debug('[ChatKitProvider] Using fallback content from stabilization', {
+        fallbackLength: stabilizationResult.assistantResponse.length,
+      });
+      responseText = cleanAssistantResponse(stabilizationResult.assistantResponse);
+    }
+    return responseText;
+  }
+
+  private async buildSequentialResponse(
+    page: Page,
+    responseText: string,
+    startTime: number,
+  ): Promise<ProviderResponse> {
+    const threadId = await page.evaluate(() => (window as any).__state.threadId);
+    const finalResponseCount = await page.evaluate(
+      () => (window as any).__state?.responses?.length || 0,
+    );
+    const latencyMs = Date.now() - startTime;
+    logger.debug('[ChatKitProvider] Response received', {
+      threadId,
+      textLength: responseText.length,
+      turnNumber: finalResponseCount,
+      latencyMs,
+    });
+    return {
+      output: responseText,
+      cached: false,
+      latencyMs,
+      sessionId: threadId,
+      tokenUsage: { numRequests: 1 },
+      metadata: {
+        workflowId: this.chatKitConfig.workflowId,
+        version: this.chatKitConfig.version,
+        stateful: this.chatKitConfig.stateful,
+        turnNumber: finalResponseCount,
+      },
+    };
+  }
+
+  private async handleChatKitCallError(error: unknown): Promise<ProviderResponse> {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('[ChatKitProvider] Call failed', { error: errorMessage });
+    const stateError = await this.getPageStateError();
+    if (stateError) {
+      return { error: `ChatKit workflow error: ${stateError}` };
+    }
+    if (errorMessage.includes('Timeout') || errorMessage.includes('timeout')) {
       return {
-        error: `ChatKit provider error: ${errorMessage}`,
+        error:
+          `ChatKit response timeout after ${this.chatKitConfig.timeout}ms. ` +
+          'Try increasing timeout in config or use --max-concurrency 1 for more reliable results.',
       };
+    }
+    if (errorMessage.includes('API key')) {
+      return { error: 'OpenAI API key is required. Set OPENAI_API_KEY environment variable.' };
+    }
+    if (errorMessage.includes('Playwright') || errorMessage.includes('browser')) {
+      return {
+        error: `Browser error: ${errorMessage}. Ensure Playwright is installed: npx playwright install chromium`,
+      };
+    }
+    return { error: `ChatKit provider error: ${errorMessage}` };
+  }
+
+  private async getPageStateError(): Promise<string | undefined> {
+    if (!this.page) {
+      return undefined;
+    }
+    try {
+      return await this.page.evaluate(() => (window as any).__state?.error);
+    } catch {
+      return undefined;
     }
   }
 
