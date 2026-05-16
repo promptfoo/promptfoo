@@ -340,7 +340,7 @@ function FilterRow({
   }, [filter.type, metadataKey]);
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
       {/* AND/OR selector (spacer for first filter only when multiple filters exist) */}
       {index === 0 && totalFilters > 1 ? (
         <span className="w-[70px] shrink-0" />
@@ -583,7 +583,7 @@ export default function FiltersForm() {
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-auto min-w-[500px] max-w-[90vw] p-3"
+        className="w-[min(500px,calc(100vw_-_1rem))] p-3"
         align="start"
         side="bottom"
         sideOffset={4}

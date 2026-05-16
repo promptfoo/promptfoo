@@ -1,217 +1,118 @@
 # integration-google-adk (Google ADK Integration)
 
-This example demonstrates how to test Google Agent Development Kit (ADK) agents using promptfoo. It shows both single-turn and multi-turn conversation patterns with automatic session management.
+This example shows how to evaluate the Python [Google Agent Development Kit (ADK)](https://adk.dev/) in promptfoo with native ADK tracing.
 
-You can run this example with:
+It demonstrates:
+
+- an in-process Python provider instead of an `adk api_server` wrapper
+- native ADK OpenTelemetry spans exported into Promptfoo
+- multi-turn session state, callbacks, plugins, and artifacts
+- workflow agents via `SequentialAgent`
+- trajectory assertions over real ADK tool calls
+
+## Quick Start
 
 ```bash
 npx promptfoo@latest init --example integration-google-adk
 cd integration-google-adk
-```
 
-## What this example shows
-
-- **Real Gemini Integration**: Uses Gemini 2.5 Flash for actual AI responses
-- **Function Tool Usage**: Weather agent with `get_weather` tool
-- **Single-turn Testing**: Independent queries with isolated sessions
-- **Multi-turn Testing**: Conversational memory across multiple queries
-- **Automatic Session Management**: Setup and cleanup handled by promptfoo hooks
-
-## Prerequisites
-
-1. **Python 3.8+** installed on your system
-2. **Google API Key** for Gemini model access (both agent and LLM grading)
-3. **ADK Python package** installed
-
-## Setup Instructions
-
-### 1. Install the Google Agent Development Kit
-
-```bash
-pip install google-adk
-```
-
-### 2. Set up API Authentication
-
-Get a Google API key from the [Google AI Studio](https://ai.google.dev/) and set it as an environment variable:
-
-```bash
-export GOOGLE_API_KEY="your-google-api-key-here"
-```
-
-### 3. Install Python Dependencies
-
-```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+
+export GOOGLE_API_KEY=your_google_api_key_here
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
+npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
+npx promptfoo@latest view
 ```
 
-Note: The session management is now handled entirely in JavaScript using Node.js native fetch, eliminating the need for additional Python HTTP libraries.
-
-## Running the Examples
-
-### 1. Start the ADK API Server
-
-From this directory, run:
+The default model is `gemini-2.5-flash`. To use another ADK-supported model, set `ADK_MODEL` before running the eval. Provider-style model strings such as `openai/gpt-5.4-mini` require the optional ADK extensions:
 
 ```bash
-export GOOGLE_API_KEY="your-api-key-here"
-adk api_server
+pip install 'google-adk[extensions]>=1.32.0,<2'
+export ADK_MODEL=openai/gpt-5.4-mini
 ```
 
-You should see output like:
-
-```text
-INFO:     Started server process [12345]
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://localhost:8000
-```
-
-Keep this server running in one terminal.
-
-### 2. Run Tests
-
-In a new terminal, choose either:
-
-**Single-turn testing** (isolated sessions):
+If Promptfoo is launched outside the activated virtual environment, point the Python provider at it explicitly:
 
 ```bash
-promptfoo eval -c promptfooconfig-single-turn.yaml
+PROMPTFOO_PYTHON=.venv/bin/python npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
-**Multi-turn testing** (shared conversation):
+## Files
 
-```bash
-promptfoo eval -c promptfooconfig-multi-turn.yaml --max-concurrency 1
-```
+- `agent.py`: ADK app builders, tools, callback, plugin, and workflow agent graph
+- `provider.py`: Promptfoo Python provider plus ADK-to-Promptfoo trace propagation
+- `provider_test.py`: focused tests for provider helpers
+- `promptfooconfig.yaml`: conversational multi-turn eval with state, artifacts, and trajectory assertions
+- `promptfooconfig.workflow.yaml`: workflow-agent eval with `SequentialAgent`
+- `requirements.txt`: Python dependencies
 
-Both configurations will:
+## What The Conversational Eval Covers
 
-- Automatically create and manage ADK sessions
-- Test the weather agent with real Gemini calls
-- Clean up sessions after completion
+The main config turns one Promptfoo row into a small multi-turn task:
 
-## Example Output
+1. Ask for London weather.
+2. Ask the agent to save a trip note.
+3. Ask which city was discussed earlier.
 
-**Single-turn** - Each test uses a separate session:
+The provider returns the user-visible answer plus an inspection payload:
 
-```text
-✅ Weather query for New York
-✅ Weather query for London (independent session)
-✅ Context isolation test: "I don't have memory of previous conversations"
+- `session_state` from ADK state
+- `artifact_names` and `artifacts` from `InMemoryArtifactService`
+- `plugin_events` recorded by an ADK `BasePlugin`
+- `event_count` from the ADK session
 
-Pass Rate: 100% (demonstrates session isolation)
-```
+The eval asserts that:
 
-**Multi-turn** - All tests share one session:
+- ADK used both `get_weather` and `save_trip_note`
+- the tool arguments were correct
+- the tool sequence was correct
+- ADK emitted `invoke_agent`, `call_llm`, and `execute_tool` spans
+- no traced error spans were emitted
 
-```text
-✅ Initial weather query
-✅ Follow-up weather query
-✅ Memory test: "Comparing New York (sunny, 72°F) vs London (cloudy, 58°F)"
+## How Tracing Works
 
-Pass Rate: 100% (demonstrates conversation memory)
-```
+ADK 1.x already emits OpenTelemetry spans for the important framework steps:
 
-## Understanding the Configuration
+- `invocation`
+- `invoke_agent <name>`
+- `call_llm`
+- `execute_tool <name>`
 
-This example follows the official ADK pattern:
+`provider.py` keeps those spans inside Promptfoo's trace by:
 
-### Agent Structure (`weather_agent/agent.py`)
+1. reading the W3C `traceparent` from the Promptfoo Python provider context
+2. creating an OpenTelemetry provider with an OTLP HTTP exporter pointed at Promptfoo's receiver
+3. starting a small provider span under the Promptfoo parent trace
+4. letting ADK emit its native child spans beneath it
 
-```python
-from google.adk.agents import Agent
+Because ADK records `gen_ai.tool.name` and tool-call arguments, Promptfoo can normalize those spans into `trajectory:*` assertions without a custom SDK span converter.
 
-def get_weather(city: str) -> dict:
-    # Mock weather function - replace with real API in production
-    return {"status": "success", "report": "..."}
+After an eval, open the Trace Timeline for the row and inspect:
 
-root_agent = Agent(
-    name="weather_agent",
-    model="gemini-2.5-flash",  # Real Gemini 2.5 Flash model
-    description="Agent to answer questions about weather in various cities",
-    instruction="You are a helpful weather assistant...",
-    tools=[get_weather]
-)
-```
+- `invoke_agent weather_agent`
+- `call_llm`
+- `execute_tool get_weather`
+- `execute_tool save_trip_note`
+- tool attributes such as `gen_ai.tool.name`
+- ADK tool arguments captured in `gcp.vertex.agent.tool_call_args`
 
-### Key Integration Files
+## Why This Uses A Python Provider
 
-1. **`adk-session-hook.js`**: Session management using Node.js native fetch
-2. **`adk-response-transform.js`**: Extracts text responses from ADK's event-based format
-3. **`weather_agent/`**: The actual ADK agent code (Python)
+The older HTTP shape around `adk api_server` is fine when you need to test a deployed service boundary, but it hides useful framework details from Promptfoo. The in-process provider is the better default when you want:
 
-## Understanding ADK Sessions
+- direct control over sessions and state
+- access to artifacts and plugins
+- trace assertions on ADK's internal workflow
+- one eval row to represent a long-horizon task
 
-ADK sessions are **stateful conversation contexts** that maintain memory between interactions. This is crucial for building conversational agents.
-
-### Session Structure
-
-Sessions follow this hierarchy:
-
-```text
-/apps/{app_name}/users/{user_id}/sessions/{session_id}
-```
-
-- **`app_name`**: Your agent (e.g., `weather_agent`)
-- **`user_id`**: User identifier (e.g., `test_user`)
-- **`session_id`**: Conversation thread (e.g., `session_shared`)
-
-### Session Strategies
-
-**Multi-turn (Shared Session)**:
-
-```yaml
-# promptfooconfig-multi-turn.yaml
-body:
-  session_id: 'conversation' # Same for all tests
-```
-
-**Benefits**: Agent remembers context across tests
-**Use case**: Testing conversational flow and memory
-
-**Single-turn (Separate Sessions)**:
-
-```yaml
-# promptfooconfig-single-turn.yaml
-vars:
-  session_id: 'session_ny' # Different per test
-body:
-  session_id: '{{session_id}}'
-```
-
-**Benefits**: Complete isolation, no test interference
-**Use case**: Independent validation scenarios
-
-### Session Management
-
-Our example uses automatic session management:
-
-1. **Creation**: `beforeAll` hook creates session before tests
-2. **Usage**: All tests reference the same session
-3. **Cleanup**: `afterAll` hook removes session after tests
-
-To change session strategy, modify the session hook or use test-specific session IDs.
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication errors**:
-
-   ```bash
-   export GOOGLE_API_KEY="your-key-from-ai-google-dev"
-   ```
-
-2. **500 Internal Server Error**:
-   - Verify your Google API key is valid
-   - Check that the ADK server is running
-   - Ensure all Python dependencies are installed
-
-3. **"Agent not found" error**: Make sure the ADK server can find the `weather_agent` directory
+Use an HTTP provider when the deployed API itself is what you want to validate.
 
 ## Learn More
 
-- [Google ADK Documentation](https://google.github.io/adk-docs/)
-- [Official ADK Samples](https://github.com/google/adk-samples)
-- [Google AI Studio](https://ai.google.dev/) (get API keys)
-- [promptfoo HTTP Provider](https://promptfoo.dev/docs/providers/http)
+- [Evaluate Google ADK agents](https://promptfoo.dev/docs/guides/evaluate-google-adk)
+- [ADK technical overview](https://adk.dev/get-started/about/)
+- [ADK sessions](https://adk.dev/sessions/)
+- [ADK callbacks](https://adk.dev/callbacks/)
+- [ADK artifacts](https://adk.dev/artifacts/)

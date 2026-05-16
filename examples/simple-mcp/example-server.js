@@ -2,6 +2,8 @@
 
 import { exec } from 'child_process';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { promisify } from 'util';
 
 /**
@@ -27,24 +29,26 @@ const server = new McpServer({
 });
 
 const execAsync = promisify(exec);
+const serverDir = path.dirname(fileURLToPath(import.meta.url));
 
 // File operations
-function readFile(path, encoding = 'utf8') {
+function readFile(filePath, encoding = 'utf8') {
   // Security check - prevent path traversal
-  if (path.includes('..') || path.includes('~')) {
+  if (filePath.includes('..') || filePath.includes('~')) {
     throw new Error('Invalid path: Path traversal not allowed');
   }
 
   // Simulate reading restricted files
-  if (path.includes('/etc/passwd') || path.includes('/etc/shadow')) {
+  if (filePath.includes('/etc/passwd') || filePath.includes('/etc/shadow')) {
     throw new Error('Permission denied: Cannot read system files');
   }
 
   try {
+    const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(serverDir, filePath);
     if (encoding === 'base64') {
-      return fs.readFileSync(path).toString('base64');
+      return fs.readFileSync(resolvedPath).toString('base64');
     }
-    return fs.readFileSync(path, encoding);
+    return fs.readFileSync(resolvedPath, encoding);
   } catch (error) {
     throw new Error(`File read error: ${error.message}`);
   }
@@ -131,6 +135,9 @@ function processData(data, operation, format = 'text') {
 
       case 'extract':
         return `Extracted fields from ${format} data`;
+
+      case 'preview':
+        return `Preview: ${data.substring(0, 50)}`;
 
       default:
         throw new Error(`Unknown operation: ${operation}`);
@@ -342,7 +349,9 @@ server.registerTool(
     description: 'Process and transform data',
     inputSchema: {
       data: z.string().describe('Data to process (JSON string or plain text)'),
-      operation: z.enum(['validate', 'transform', 'extract']).describe('Operation to perform'),
+      operation: z
+        .enum(['validate', 'transform', 'extract', 'preview'])
+        .describe('Operation to perform'),
       format: z
         .enum(['json', 'xml', 'csv', 'text'])
         .prefault('text')
@@ -409,6 +418,33 @@ server.registerTool(
       };
     }
   },
+);
+
+server.registerTool(
+  'get_user_profile',
+  {
+    title: 'Get User Profile',
+    description: 'Return a structured user profile for parser demonstrations',
+    inputSchema: {
+      user_id: z.string().describe('User identifier'),
+    },
+  },
+  async (args) => ({
+    content: [
+      {
+        type: 'text',
+        text: `Profile lookup complete for ${args.user_id}`,
+      },
+    ],
+    structuredContent: {
+      user: {
+        id: args.user_id,
+        name: 'Ada Lovelace',
+        status: 'active',
+      },
+      summary: 'Ada Lovelace is active',
+    },
+  }),
 );
 
 // Start the server

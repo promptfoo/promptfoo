@@ -715,15 +715,23 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         </>
       )}
 
-      <div className="mx-auto max-w-7xl px-4 pb-8 pt-4 print:max-w-none print:px-0 print:pt-0 print:pb-0">
+      <div className="mx-auto w-full min-w-0 max-w-7xl px-4 pb-8 pt-4 print:max-w-none print:px-0 print:pt-0 print:pb-0">
         <div className="flex flex-col gap-6">
           {!embedded && <EnterpriseBanner evalId={evalId} />}
 
           {!embedded && (
             <>
               {/* Report Header Card */}
-              <Card className="relative rounded-xl p-6 pr-48 shadow-md dark:shadow-none print:pr-4">
-                <div className="absolute right-4 top-4 flex print:hidden">{actionButtons}</div>
+              <Card
+                data-testid="report-header-card"
+                className="relative rounded-xl p-6 shadow-md sm:pr-48 dark:shadow-none print:pr-4"
+              >
+                <div
+                  data-testid="report-header-actions"
+                  className="mb-4 flex justify-end print:hidden sm:absolute sm:right-4 sm:top-4 sm:mb-0"
+                >
+                  {actionButtons}
+                </div>
                 <h1 className="text-2xl font-bold">
                   {evalData.config.description || 'Risk Assessment'}
                 </h1>

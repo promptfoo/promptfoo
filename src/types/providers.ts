@@ -1,6 +1,7 @@
 import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
+import type { MinimalApiProvider } from '../contracts/prompts';
 import type { ChildLogger } from '../logger';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
@@ -123,8 +124,7 @@ export interface CallApiOptionsParams {
   abortSignal?: AbortSignal;
 }
 
-export interface ApiProvider {
-  id: () => string;
+export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
@@ -171,6 +171,15 @@ export interface ProviderResponse {
   cost?: number;
   error?: string;
   /**
+   * Indicates that a remote Promptfoo server already materialized multi-input vars
+   * for this response. When true, callers must not re-materialize locally.
+   */
+  materializationHandled?: boolean;
+  /**
+   * Materialized per-input vars returned by a remote Promptfoo server.
+   */
+  materializedVars?: Record<string, string>;
+  /**
    * Indicates that `output` contains base64-encoded binary data (often as JSON like OpenAI `b64_json`).
    * Used to enable blob externalization and avoid token bloat in downstream grading/agentic strategies.
    */
@@ -203,6 +212,10 @@ export interface ProviderResponse {
   prompt?: string | ChatMessage[];
   raw?: string | any;
   output?: string | any;
+  /**
+   * Input materialization metadata returned by a remote Promptfoo server.
+   */
+  inputMaterialization?: Record<string, unknown>;
   /**
    * Output after provider-level transform. Used by contextTransform to ensure
    * it operates on provider-normalized output, independent of test transforms.

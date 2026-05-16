@@ -1,26 +1,33 @@
-// Note: This file is in the process of being deconstructed into `types/` and `validators/`
-// Right now Zod and pure types are mixed together!
 import { z } from 'zod';
-import { ProviderEnvOverridesSchema } from '../types/env';
-import { BaseTokenUsageSchema } from '../types/shared';
+import { ProviderEnvOverridesSchema } from '../contracts/env';
+import { BaseTokenUsageSchema } from '../contracts/shared';
+import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
+import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
-import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
+import { parseFilterRange } from '../util/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 
 export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
+
+export {
+  EVENT_SOURCES,
+  type EventSource,
+  EventSourceSchema,
+  isCliEventSource,
+} from './eventSource';
 
 import type { BlobRef } from '../blobs/types';
+import type { EnvOverrides } from '../contracts/env';
+import type { Prompt, PromptFunction } from '../contracts/prompts';
+import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
   RedteamFileConfig,
   StrategyConfig,
 } from '../redteam/types';
-import type { EnvOverrides } from '../types/env';
-import type { Prompt, PromptFunction } from './prompts';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -29,10 +36,6 @@ import type {
   ProviderResponse,
   ProvidersConfig,
 } from './providers';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
-
-export type { VarValue } from './shared';
-
 import type { TraceData } from './tracing';
 
 /**
@@ -67,6 +70,25 @@ export * from './shared';
 export * from './tracing';
 
 export type { EnvOverrides };
+
+const FilterRangeSchema = z
+  .string()
+  .superRefine((value, ctx) => {
+    try {
+      parseFilterRange(value);
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          error instanceof Error
+            ? error.message
+            : '--filter-range must be specified in start:end format using zero-based indices',
+      });
+    }
+  })
+  .optional();
+
+export const MAX_SUGGESTIONS_COUNT = 50;
 
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
@@ -104,11 +126,13 @@ export const CommandLineOptionsSchema = z.object({
   filterPattern: z.string().optional(),
   filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
 
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
@@ -246,8 +270,8 @@ export interface RunEvalOptions {
 export const EvaluateOptionsSchema = z.object({
   cache: z.boolean().optional(),
   delay: z.number().optional(),
-  eventSource: z.string().optional(),
   generateSuggestions: z.boolean().optional(),
+  suggestionsCount: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   /**
    * @deprecated This option has been removed as of 2024-08-21.
    * @description Use `maxConcurrency: 1` or the CLI option `-j 1` instead to run evaluations serially.
@@ -305,8 +329,15 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  /**
+   * Zero-based test index range in start:end format (end exclusive).
+   * Persisted on the eval record so resume runs reproduce the original slice.
+   */
+  filterRange: FilterRangeSchema,
 });
-export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
+  abortSignal?: AbortSignal;
+};
 
 const PromptMetricsSchema = z.object({
   score: z.number(),
@@ -548,6 +579,8 @@ export interface GradingResult {
     // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
     context?: string | string[];
     contextUnits?: string[];
+    // Raw textual responses returned by one or more LLM grader phases
+    graderOutputs?: Record<string, string>;
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)

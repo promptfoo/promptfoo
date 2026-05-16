@@ -77,8 +77,8 @@ const allProviderOptions = [
   },
   {
     value: 'custom',
-    label: 'Custom Provider',
-    description: 'Other custom providers and implementations',
+    label: 'Custom Target',
+    description: 'Any other target via a custom provider',
     tag: 'app',
     last: true,
   },
@@ -169,7 +169,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano and older models',
+    description: 'GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models',
     tag: 'providers',
     recommended: true,
   },
@@ -599,7 +599,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'cohere') {
       setProvider(
         {
-          id: 'cohere:command-r-plus',
+          id: 'cohere:command-a-03-2025',
           config: {},
           label: currentLabel,
         },
@@ -734,7 +734,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'xai') {
       setProvider(
         {
-          id: 'xai:grok-2-1212',
+          id: 'xai:grok-4.20-reasoning',
           config: {},
           label: currentLabel,
         },
@@ -743,7 +743,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'ai21') {
       setProvider(
         {
-          id: 'ai21:jamba-1.5-large',
+          id: 'ai21:jamba-large',
           config: {},
           label: currentLabel,
         },
@@ -1046,7 +1046,7 @@ export default function ProviderTypeSelector({
   if (selectedOption && !isExpanded) {
     return (
       <div>
-        <div className="flex w-full items-center rounded-lg border-2 border-primary bg-primary/5 p-4">
+        <div className="flex w-full flex-col gap-3 rounded-lg border-2 border-primary bg-primary/5 p-4 sm:flex-row sm:items-center">
           <CheckCircle className="mr-4 size-5 shrink-0 text-primary" />
 
           <div className="min-w-0 flex-1">
@@ -1063,7 +1063,7 @@ export default function ProviderTypeSelector({
             </p>
           </div>
 
-          <div className="ml-4 flex shrink-0 items-center">
+          <div className="flex shrink-0 items-center self-end sm:ml-4 sm:self-auto">
             {/* Documentation link */}
             {hasSpecificDocumentation(selectedOption.value) && (
               <Tooltip>
@@ -1108,7 +1108,7 @@ export default function ProviderTypeSelector({
   return (
     <div className="space-y-4">
       {/* Filter bar - chips on left, search on right */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -1142,7 +1142,7 @@ export default function ProviderTypeSelector({
         </div>
 
         {/* Search */}
-        <div className="relative w-64 shrink-0">
+        <div className="relative w-full sm:w-64 sm:shrink-0">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search providers..."
