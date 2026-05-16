@@ -6,6 +6,7 @@ It demonstrates:
 
 - a long-horizon task executed as multiple turns over a persistent `SQLiteSession`
 - the SDK 0.14 `SandboxAgent` runtime over a staged Unix-local Python workspace
+- a local-shell `discount-review` skill mounted through `ShellTool`
 - specialist handoffs between a triage agent, an FAQ agent, and a seat-booking agent
 - agentic assertions such as `trajectory:tool-used`, `trajectory:tool-args-match`, `trajectory:tool-sequence`, and `trajectory:step-count`
 - telemetry you can inspect in Promptfoo's Trace Timeline
@@ -17,6 +18,8 @@ The tracing path is important: the example installs a custom OpenAI Agents traci
 - `agent_provider.py`: the Promptfoo Python provider and agent graph
 - `promptfoo_tracing.py`: bridges OpenAI Agents SDK traces to Promptfoo OTLP
 - `promptfooconfig.yaml`: eval config with tracing and trajectory assertions
+- `skills/discount-review/`: a local `SKILL.md` bundle plus helper script for the skill eval
+- `skill_fixture/`: the real local repo fixture inspected by the skill workflow
 - `promptfooconfig.redteam.yaml`: airline agent red-team config with trace assertions
 - `promptfooconfig.redteam.coding.yaml`: SandboxAgent coding-agent red-team config
 - `requirements.txt`: Python dependencies for the example
@@ -64,6 +67,7 @@ The provider returns aggregate token usage with the SDK's real request count, ca
 - the final trajectory achieved the stated goal
 - third-party booking changes are refused without mutating the reservation
 - the sandbox agent created a workspace, ran shell commands, ran the unittest command, and reported the staged ticket details with the minimal fix
+- the local-shell skill workflow read `SKILL.md`, ran the bundled helper script without shell stderr, and reported the expected ticket details
 
 ## Red Team The Agent
 
@@ -88,3 +92,4 @@ This sample is intentionally not a production-hardened airline agent. Some gener
 - If you do not need SDK spans, remove the `configure_promptfoo_tracing(...)` import and call from `agent_provider.py`. You can then delete `promptfoo_tracing.py`, but you will lose tool-path assertions because Promptfoo will no longer receive the SDK's internal agent spans.
 - `trajectory:goal-success` adds an extra judge-model call. Remove it if you want a cheaper run.
 - The SDK's experimental `codex_tool` is available from `agents.extensions.experimental.codex`. Use it inside a Python provider when a larger agent should delegate a bounded workspace task to Codex. Use Promptfoo's `openai:codex-sdk` or `openai:codex-app-server` providers when Codex itself is the system under test.
+- The local skill workflow uses `ShellTool(environment={"type": "local", "skills": [...]})` because the Python SDK exposes skills through shell environments rather than Codex-style ambient discovery. The SDK does not currently emit a first-class skill invocation event, so the example proves usage through traced shell commands that read `SKILL.md` and run the helper script.
