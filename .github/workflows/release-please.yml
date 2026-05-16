@@ -6,6 +6,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Optional existing release tag to publish to npm (e.g., 0.121.10)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -16,6 +21,7 @@ concurrency:
 
 jobs:
   release-please:
+    if: github.event_name != 'workflow_dispatch' || inputs.tag_name == ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -48,7 +54,18 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
 
   build:
-    if: needs.release-please.outputs.release_created == 'true' || needs.release-please.outputs.code_scan_action_release_created == 'true'
+    # release-please can create a release, then still fail while opening the
+    # next release PR. Preserve artifact publication when the release outputs
+    # prove a release was already created.
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        (
+          needs.release-please.outputs.release_created == 'true' ||
+          needs.release-please.outputs.code_scan_action_release_created == 'true'
+        )
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: release-please
@@ -56,7 +73,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -66,7 +83,13 @@ jobs:
       - run: npm test
 
   publish-npm:
-    if: needs.release-please.outputs.release_created == 'true'
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.release-please.outputs.release_created == 'true' &&
+        needs.build.result == 'success'
+      }}
     needs: [build, release-please]
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -75,7 +98,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
@@ -90,11 +113,57 @@ jobs:
           NODE_AUTH_TOKEN: ''
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
 
+  publish-npm-backfill:
+    # npm trusted publishing is bound to this workflow filename on npmjs.com,
+    # so manual backfills must stay inside release-please.yml.
+    if: github.event_name == 'workflow_dispatch' && inputs.tag_name != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TAG_NAME: ${{ inputs.tag_name }}
+    steps:
+      - name: Validate release tag
+        run: |
+          if [[ ! "$TAG_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::TAG_NAME '$TAG_NAME' is empty or invalid"
+            exit 1
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: refs/tags/${{ inputs.tag_name }}
+
+      - name: Verify package version matches tag
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "$package_version" != "$TAG_NAME" ]]; then
+            echo "::error::package.json version '$package_version' does not match tag '$TAG_NAME'"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - run: npm install -g npm@11.11.0
+      - run: npm ci
+      - name: Publish package
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ''
+          PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+
   docker:
     if: >-
       ${{
+        always() &&
         !cancelled() &&
-        needs.release-please.result == 'success' &&
         needs.publish-npm.result == 'success' &&
         needs.release-please.outputs.release_created == 'true'
       }}
@@ -324,7 +393,13 @@ jobs:
           packages-dir: dist/
 
   publish-code-scan-action:
-    if: needs.release-please.outputs.code_scan_action_release_created == 'true'
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.release-please.outputs.code_scan_action_release_created == 'true' &&
+        needs.build.result == 'success'
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Gate on `build` so root test failures block the mirror — code-scan-action
@@ -348,7 +423,7 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'

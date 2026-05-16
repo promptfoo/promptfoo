@@ -37,7 +37,7 @@ Install promptfoo using the shell installer, [npm](https://nodejs.org/en/downloa
 </Tabs>
 
 :::note
-The shell installer includes its own runtime. npm and npx require [Node.js](https://nodejs.org/en/download) 20.20+ or 22.22+.
+The shell installer includes its own runtime. npm and npx require [Node.js](https://nodejs.org/en/download) `^20.20.0` or `>=22.22.0`.
 :::
 
 To use promptfoo as a library in your project, run `npm install promptfoo --save`.

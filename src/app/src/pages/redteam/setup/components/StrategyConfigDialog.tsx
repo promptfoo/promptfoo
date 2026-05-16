@@ -696,9 +696,8 @@ export default function StrategyConfigDialog({
   const renderHydraStrategyConfig = () => (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        Configure the Hydra multi-turn jailbreak. Hydra branches across multiple conversations,
-        reuses what it learns during the scan, and automatically aligns with target session
-        settings.
+        Hydra tracks its own attack history across turns and reuses what it learns during the scan.
+        By default it sends the full transcript to the target on every turn.
       </p>
 
       <div className="space-y-2">
@@ -734,7 +733,8 @@ export default function StrategyConfigDialog({
           className="mt-0.5"
         />
         <Label htmlFor="hydra-stateful" className="text-sm font-normal">
-          Enable when your target maintains server-side sessions and expects a session ID per turn.
+          Use target-managed session memory. Hydra will send only the newest turn, so your provider
+          must preserve prior turns for the same session.
         </Label>
       </div>
 

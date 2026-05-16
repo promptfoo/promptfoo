@@ -16,6 +16,7 @@ bundle
 .vite
 **/*.tsbuildinfo
 task.md
+!examples/openai-agents-advanced/workspace/task.md
 plan.md
 
 # pnpm-specific
