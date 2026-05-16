@@ -14,8 +14,253 @@ import { loadDefaultConfig } from '../../../util/config/default';
 import { RedteamGenerateOptionsSchema } from '../../../validators/redteam';
 import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { ToolResult } from '../lib/types';
 
 import type { RedteamCliGenerateOptions } from '../../../redteam/types';
+
+type RedteamGenerateArgs = {
+  configPath?: string;
+  output?: string;
+  purpose?: string;
+  plugins?: string[];
+  strategies?: string[];
+  numTests?: number;
+  maxConcurrency?: number;
+  delay?: number;
+  language?: string;
+  provider?: string;
+  force?: boolean;
+  write?: boolean;
+  remote?: boolean;
+  progressBar?: boolean;
+};
+
+type LoadedGenerateConfig =
+  | {
+      ok: true;
+      defaultConfig: Awaited<ReturnType<typeof loadDefaultConfig>>['defaultConfig'];
+      defaultConfigPath: Awaited<ReturnType<typeof loadDefaultConfig>>['defaultConfigPath'];
+    }
+  | { ok: false; error: ToolResult };
+
+async function loadGenerateConfig(): Promise<LoadedGenerateConfig> {
+  try {
+    const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
+    return { ok: true, defaultConfig, defaultConfigPath };
+  } catch (error) {
+    return {
+      ok: false,
+      error: createToolResponse(
+        'redteam_generate',
+        false,
+        undefined,
+        `Failed to load default config: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      ),
+    };
+  }
+}
+
+function buildGenerateOptions(
+  args: RedteamGenerateArgs,
+  loadedConfig: Extract<LoadedGenerateConfig, { ok: true }>,
+): Partial<RedteamCliGenerateOptions> {
+  const {
+    configPath,
+    output,
+    purpose,
+    plugins,
+    strategies,
+    numTests,
+    maxConcurrency = DEFAULT_MAX_CONCURRENCY,
+    delay,
+    language,
+    provider,
+    force = false,
+    write = false,
+    remote = false,
+    progressBar = true,
+  } = args;
+  return {
+    config: configPath,
+    output: output || (write ? undefined : 'redteam.yaml'),
+    purpose,
+    plugins: plugins?.map((plugin) => ({ id: plugin })),
+    strategies,
+    numTests,
+    maxConcurrency,
+    delay,
+    language,
+    provider,
+    force,
+    write,
+    remote,
+    progressBar,
+    cache: true,
+    defaultConfig: loadedConfig.defaultConfig,
+    defaultConfigPath: loadedConfig.defaultConfigPath,
+  };
+}
+
+function getGeneratedMetadata(result: any, fallbackPurpose?: string) {
+  if (
+    result.defaultTest &&
+    typeof result.defaultTest === 'object' &&
+    'metadata' in result.defaultTest
+  ) {
+    return {
+      purpose: result.defaultTest.metadata?.purpose,
+      entities: result.defaultTest.metadata?.entities || [],
+    };
+  }
+  return {
+    purpose: fallbackPurpose,
+    entities: [],
+  };
+}
+
+function getAttackPreview(attack: unknown) {
+  if (!attack) {
+    return 'N/A';
+  }
+  if (typeof attack === 'string') {
+    return attack.slice(0, 100) + (attack.length > 100 ? '...' : '');
+  }
+  const serialized = JSON.stringify(attack);
+  return serialized ? serialized.slice(0, 100) : String(attack).slice(0, 100);
+}
+
+function buildRedteamGenerateData(
+  args: RedteamGenerateArgs,
+  result: any,
+  startTime: number,
+  endTime: number,
+) {
+  const {
+    configPath,
+    output,
+    purpose,
+    plugins,
+    strategies,
+    numTests,
+    maxConcurrency = DEFAULT_MAX_CONCURRENCY,
+    delay,
+    language,
+    provider,
+    force = false,
+    write = false,
+    remote = false,
+  } = args;
+  const metadata = getGeneratedMetadata(result, purpose);
+  const tests = Array.isArray(result.tests) ? result.tests : [];
+
+  return {
+    generation: {
+      status: 'completed',
+      duration: endTime - startTime,
+      timestamp: new Date().toISOString(),
+      configPath: configPath || 'promptfooconfig.yaml',
+      outputPath: output || (write ? 'written to config' : 'redteam.yaml'),
+    },
+    configuration: {
+      purpose: metadata.purpose,
+      plugins: plugins || Array.from(REDTEAM_DEFAULT_PLUGINS).map((plugin) => plugin),
+      strategies: strategies || Array.from(DEFAULT_STRATEGIES).map((strategy) => strategy),
+      numTests,
+      maxConcurrency,
+      delay,
+      language,
+      provider: provider || REDTEAM_MODEL,
+      force,
+      write,
+      remote,
+    },
+    results: {
+      totalTestCases: tests.length,
+      testCasesByPlugin: tests.reduce((acc: Record<string, number>, test: any) => {
+        const plugin = test.metadata?.plugin || 'unknown';
+        acc[plugin] = (acc[plugin] || 0) + 1;
+        return acc;
+      }, {}),
+      sampleTestCases: tests.slice(0, 5).map((test: any, index: number) => ({
+        index,
+        description: test.description || 'No description',
+        plugin: test.metadata?.plugin || 'unknown',
+        strategy: test.metadata?.strategy || 'unknown',
+        vars: test.vars ? Object.keys(test.vars).slice(0, 3) : [],
+        attack: getAttackPreview(test.vars?.attack),
+      })),
+    },
+    metadata: {
+      purpose: metadata.purpose,
+      entities: metadata.entities,
+      generatedAt: new Date().toISOString(),
+      language,
+      provider: provider || REDTEAM_MODEL,
+    },
+    nextSteps: {
+      runEvaluation: write
+        ? 'Run "redteam_run" to execute the generated tests'
+        : `Run "redteam_run" with output: "${output || 'redteam.yaml'}" to execute the tests`,
+      viewConfig: write
+        ? `Generated tests were added to your config file: ${configPath || 'promptfooconfig.yaml'}`
+        : `Generated tests were written to: ${output || 'redteam.yaml'}`,
+    },
+  };
+}
+
+function buildRedteamGenerateErrorResponse(args: RedteamGenerateArgs, error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+  logger.error(`Redteam generation failed: ${errorMessage}`);
+  if (errorMessage.includes('timed out')) {
+    return createToolResponse(
+      'redteam_generate',
+      false,
+      {
+        originalError: errorMessage,
+        suggestion:
+          'The generation took too long. Try reducing numTests, checking API credentials, or using fewer plugins.',
+      },
+      'Redteam test generation timed out',
+    );
+  }
+  return createToolResponse('redteam_generate', false, {
+    configuration: {
+      configPath: args.configPath || 'promptfooconfig.yaml',
+      output: args.output,
+      purpose: args.purpose,
+      plugins: args.plugins,
+      numTests: args.numTests,
+    },
+    error: errorMessage,
+    troubleshooting: {
+      commonIssues: [
+        'Configuration file not found or invalid format',
+        'Invalid plugin or strategy names specified',
+        'Provider authentication or configuration errors',
+        'Network connectivity issues',
+        'Insufficient permissions to write output files',
+      ],
+      configurationTips: [
+        'Ensure your config file exists or use standalone generation with "purpose"',
+        'Use valid plugin names from the supported list',
+        'Check that provider credentials are properly configured',
+        'Verify write permissions for output directory',
+      ],
+      supportedPlugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
+        .concat(Array.from(REDTEAM_ADDITIONAL_PLUGINS))
+        .sort(),
+      supportedStrategies: (
+        [...Array.from(DEFAULT_STRATEGIES), ...Array.from(ADDITIONAL_STRATEGIES)] as string[]
+      ).sort(),
+      exampleUsage: {
+        basic: '{"purpose": "Test my chatbot", "plugins": ["harmful", "pii"]}',
+        withOutput:
+          '{"purpose": "Banking chatbot", "output": "./bank-redteam.yaml", "numTests": 20}',
+        writeToConfig: '{"configPath": "./my-config.yaml", "write": true, "force": true}',
+      },
+    },
+  });
+}
 
 /**
  * Generate adversarial test cases for redteam security testing
@@ -156,61 +401,11 @@ export function registerRedteamGenerateTool(server: McpServer) {
     },
     async (args) => {
       try {
-        const {
-          configPath,
-          output,
-          purpose,
-          plugins,
-          strategies,
-          numTests,
-          maxConcurrency = DEFAULT_MAX_CONCURRENCY,
-          delay,
-          language,
-          provider,
-          force = false,
-          write = false,
-          remote = false,
-          progressBar = true,
-        } = args;
-
-        // Load default config
-        let defaultConfig;
-        let defaultConfigPath;
-        try {
-          const result = await loadDefaultConfig();
-          defaultConfig = result.defaultConfig;
-          defaultConfigPath = result.defaultConfigPath;
-        } catch (error) {
-          return createToolResponse(
-            'redteam_generate',
-            false,
-            undefined,
-            `Failed to load default config: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          );
+        const loadedConfig = await loadGenerateConfig();
+        if (!loadedConfig.ok) {
+          return loadedConfig.error;
         }
-
-        // Prepare generation options
-        const options: Partial<RedteamCliGenerateOptions> = {
-          config: configPath,
-          output: output || (write ? undefined : 'redteam.yaml'),
-          purpose,
-          plugins: plugins?.map((p) => ({ id: p })),
-          strategies,
-          numTests,
-          maxConcurrency,
-          delay,
-          language,
-          provider,
-          force,
-          write,
-          remote,
-          progressBar,
-          cache: true,
-          defaultConfig,
-          defaultConfigPath,
-        };
-
-        // Validate options
+        const options = buildGenerateOptions(args, loadedConfig);
         const optionsParse = RedteamGenerateOptionsSchema.safeParse(options);
         if (!optionsParse.success) {
           return createToolResponse(
@@ -220,12 +415,10 @@ export function registerRedteamGenerateTool(server: McpServer) {
             `Options validation error: ${z.prettifyError(optionsParse.error)}`,
           );
         }
-
+        const { configPath } = args;
         logger.debug(
           `Generating redteam tests with config: ${configPath || 'promptfooconfig.yaml'}`,
         );
-
-        // Generate test cases with timeout protection
         const startTime = Date.now();
         const result = await withTimeout(
           doGenerateRedteam(optionsParse.data),
@@ -242,144 +435,13 @@ export function registerRedteamGenerateTool(server: McpServer) {
             'Test case generation completed but no results were returned. This may indicate configuration issues or that no test cases could be generated.',
           );
         }
-
-        // Prepare detailed response
-        const generationData = {
-          generation: {
-            status: 'completed',
-            duration: endTime - startTime,
-            timestamp: new Date().toISOString(),
-            configPath: configPath || 'promptfooconfig.yaml',
-            outputPath: output || (write ? 'written to config' : 'redteam.yaml'),
-          },
-          configuration: {
-            purpose:
-              result.defaultTest &&
-              typeof result.defaultTest === 'object' &&
-              'metadata' in result.defaultTest
-                ? result.defaultTest.metadata?.purpose
-                : purpose,
-            plugins: plugins || Array.from(REDTEAM_DEFAULT_PLUGINS).map((p) => p),
-            strategies: strategies || Array.from(DEFAULT_STRATEGIES).map((s) => s),
-            numTests,
-            maxConcurrency,
-            delay,
-            language,
-            provider: provider || REDTEAM_MODEL,
-            force,
-            write,
-            remote,
-          },
-          results: {
-            totalTestCases: Array.isArray(result.tests) ? result.tests.length : 0,
-            testCasesByPlugin: Array.isArray(result.tests)
-              ? result.tests.reduce((acc: Record<string, number>, test: any) => {
-                  const plugin = test.metadata?.plugin || 'unknown';
-                  acc[plugin] = (acc[plugin] || 0) + 1;
-                  return acc;
-                }, {})
-              : {},
-            sampleTestCases: Array.isArray(result.tests)
-              ? result.tests.slice(0, 5).map((test: any, index: number) => ({
-                  index,
-                  description: test.description || 'No description',
-                  plugin: test.metadata?.plugin || 'unknown',
-                  strategy: test.metadata?.strategy || 'unknown',
-                  vars: test.vars ? Object.keys(test.vars).slice(0, 3) : [],
-                  attack: test.vars?.attack
-                    ? typeof test.vars.attack === 'string'
-                      ? test.vars.attack.slice(0, 100) +
-                        (test.vars.attack.length > 100 ? '...' : '')
-                      : JSON.stringify(test.vars.attack).slice(0, 100)
-                    : 'N/A',
-                }))
-              : [],
-          },
-          metadata: {
-            purpose:
-              result.defaultTest &&
-              typeof result.defaultTest === 'object' &&
-              'metadata' in result.defaultTest
-                ? result.defaultTest.metadata?.purpose
-                : purpose,
-            entities:
-              result.defaultTest &&
-              typeof result.defaultTest === 'object' &&
-              'metadata' in result.defaultTest
-                ? result.defaultTest.metadata?.entities || []
-                : [],
-            generatedAt: new Date().toISOString(),
-            language,
-            provider: provider || REDTEAM_MODEL,
-          },
-          nextSteps: {
-            runEvaluation: write
-              ? 'Run "redteam_run" to execute the generated tests'
-              : `Run "redteam_run" with output: "${output || 'redteam.yaml'}" to execute the tests`,
-            viewConfig: write
-              ? `Generated tests were added to your config file: ${configPath || 'promptfooconfig.yaml'}`
-              : `Generated tests were written to: ${output || 'redteam.yaml'}`,
-          },
-        };
-
-        return createToolResponse('redteam_generate', true, generationData);
+        return createToolResponse(
+          'redteam_generate',
+          true,
+          buildRedteamGenerateData(args, result, startTime, endTime),
+        );
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        logger.error(`Redteam generation failed: ${errorMessage}`);
-
-        // Handle timeout specifically
-        if (errorMessage.includes('timed out')) {
-          return createToolResponse(
-            'redteam_generate',
-            false,
-            {
-              originalError: errorMessage,
-              suggestion:
-                'The generation took too long. Try reducing numTests, checking API credentials, or using fewer plugins.',
-            },
-            'Redteam test generation timed out',
-          );
-        }
-
-        const errorData = {
-          configuration: {
-            configPath: args.configPath || 'promptfooconfig.yaml',
-            output: args.output,
-            purpose: args.purpose,
-            plugins: args.plugins,
-            numTests: args.numTests,
-          },
-          error: errorMessage,
-          troubleshooting: {
-            commonIssues: [
-              'Configuration file not found or invalid format',
-              'Invalid plugin or strategy names specified',
-              'Provider authentication or configuration errors',
-              'Network connectivity issues',
-              'Insufficient permissions to write output files',
-            ],
-            configurationTips: [
-              'Ensure your config file exists or use standalone generation with "purpose"',
-              'Use valid plugin names from the supported list',
-              'Check that provider credentials are properly configured',
-              'Verify write permissions for output directory',
-            ],
-            supportedPlugins: Array.from(REDTEAM_DEFAULT_PLUGINS)
-              .concat(Array.from(REDTEAM_ADDITIONAL_PLUGINS))
-              .sort(),
-            supportedStrategies: (
-              [...Array.from(DEFAULT_STRATEGIES), ...Array.from(ADDITIONAL_STRATEGIES)] as string[]
-            ).sort(),
-            exampleUsage: {
-              basic: '{"purpose": "Test my chatbot", "plugins": ["harmful", "pii"]}',
-              withOutput:
-                '{"purpose": "Banking chatbot", "output": "./bank-redteam.yaml", "numTests": 20}',
-              writeToConfig: '{"configPath": "./my-config.yaml", "write": true, "force": true}',
-            },
-          },
-        };
-
-        return createToolResponse('redteam_generate', false, errorData);
+        return buildRedteamGenerateErrorResponse(args, error);
       }
     },
   );
