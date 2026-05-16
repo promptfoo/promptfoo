@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GenerateTestCasesDialog } from './GenerateTestCasesDialog';
@@ -172,8 +172,14 @@ describe('GenerateTestCasesDialog', () => {
 
     await user.click(screen.getByLabelText('Include assertions (recommended)'));
     await user.click(screen.getByRole('button', { name: 'Customize' }));
-    fireEvent.change(screen.getByLabelText('Personas'), { target: { value: '2' } });
-    fireEvent.change(screen.getByLabelText('Tests per persona'), { target: { value: '4' } });
+    const personasInput = screen.getByLabelText('Personas');
+    const testsPerPersonaInput = screen.getByLabelText('Tests per persona');
+    await user.click(personasInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('2');
+    await user.click(testsPerPersonaInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('4');
     await user.type(
       screen.getByLabelText('Custom instructions (optional)'),
       'Focus on short prompts',

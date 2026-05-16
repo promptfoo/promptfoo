@@ -1,11 +1,13 @@
 import type { ComponentProps } from 'react';
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenerationProgressDialog } from './GenerationProgressDialog';
 
 afterEach(() => {
-  vi.useRealTimers();
+  restoreTestTimers();
 });
 
 function renderDialog(props: Partial<ComponentProps<typeof GenerationProgressDialog>> = {}) {
@@ -25,8 +27,8 @@ function renderDialog(props: Partial<ComponentProps<typeof GenerationProgressDia
 }
 
 describe('GenerationProgressDialog', () => {
-  it('tracks elapsed time, computes progress, and allows cancellation', () => {
-    vi.useFakeTimers();
+  it('tracks elapsed time, computes progress, and allows cancellation', async () => {
+    const timers = useTestTimers();
     const onCancel = vi.fn();
     renderDialog({ onCancel });
 
@@ -34,11 +36,13 @@ describe('GenerationProgressDialog', () => {
     expect(screen.getByText('0:00')).toBeInTheDocument();
 
     act(() => {
-      vi.advanceTimersByTime(1000);
+      timers.advanceBy(1000);
     });
     expect(screen.getByText('0:01')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    timers.restore();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
