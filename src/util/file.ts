@@ -22,6 +22,156 @@ type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
 };
 
+type FileLoadContext = 'assertion' | 'general' | 'vars';
+
+type ExternalFileReference = {
+  cleanPath: string;
+  functionName?: string;
+  renderedFilePath: string;
+};
+
+function isScriptFile(filePath: string): boolean {
+  return filePath.endsWith('.py') || isJavascriptFile(filePath);
+}
+
+function parseExternalFileReference(filePath: string): ExternalFileReference {
+  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+  const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
+
+  return {
+    cleanPath,
+    functionName,
+    renderedFilePath,
+  };
+}
+
+function shouldPreserveExternalFileReference(
+  reference: ExternalFileReference,
+  context?: FileLoadContext,
+): boolean {
+  if (context === 'assertion' && isScriptFile(reference.cleanPath)) {
+    logger.debug(
+      `Preserving Python/JS file reference in assertion context: ${reference.renderedFilePath}`,
+    );
+    return true;
+  }
+
+  if (context === 'vars') {
+    logger.debug(`Preserving file reference in vars context: ${reference.renderedFilePath}`);
+    return true;
+  }
+
+  if (reference.functionName && isScriptFile(reference.cleanPath)) {
+    return true;
+  }
+
+  return false;
+}
+
+function getExternalPathToUse(reference: ExternalFileReference): string {
+  if (reference.functionName && !isScriptFile(reference.cleanPath)) {
+    return reference.renderedFilePath.slice('file://'.length);
+  }
+
+  return reference.cleanPath;
+}
+
+function parseCsvContents(contents: string): Record<string, string>[] | string[] {
+  const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
+    columns: true as const,
+  };
+  const records = csvParse<Record<string, string>>(contents, csvOptions);
+
+  if (records.length > 0 && Object.keys(records[0]).length === 1) {
+    return records.map((record) => Object.values(record)[0]);
+  }
+
+  return records;
+}
+
+function parseFileContents(filePath: string, contents: string): any {
+  if (filePath.endsWith('.json')) {
+    try {
+      return JSON.parse(contents);
+    } catch (error) {
+      throw new Error(`Failed to parse JSON file ${filePath}: ${error}`);
+    }
+  }
+
+  if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+    try {
+      return yaml.load(contents);
+    } catch (error) {
+      throw new Error(`Failed to parse YAML file ${filePath}: ${error}`);
+    }
+  }
+
+  if (filePath.endsWith('.csv')) {
+    return parseCsvContents(contents);
+  }
+
+  return contents;
+}
+
+function readExternalFile(filePath: string): any {
+  let contents: string;
+  try {
+    contents = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`File does not exist: ${filePath}`);
+    }
+    throw new Error(`Failed to read file ${filePath}: ${error}`);
+  }
+
+  return parseFileContents(filePath, contents);
+}
+
+function appendLoadedFileContents(target: any[], filePath: string, loaded: any): void {
+  if ((filePath.endsWith('.yaml') || filePath.endsWith('.yml')) && loaded === null) {
+    return;
+  }
+
+  if (loaded === undefined) {
+    return;
+  }
+
+  if (Array.isArray(loaded)) {
+    target.push(...loaded);
+    return;
+  }
+
+  target.push(loaded);
+}
+
+function loadGlobContents(resolvedPath: string): any[] {
+  const matchedFiles = globSync(resolvedPath, {
+    windowsPathsNoEscape: true,
+  });
+
+  if (matchedFiles.length === 0) {
+    throw new Error(`No files found matching pattern: ${resolvedPath}`);
+  }
+
+  const allContents: any[] = [];
+  for (const matchedFile of matchedFiles) {
+    let contents: string;
+    try {
+      contents = fs.readFileSync(matchedFile, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        logger.debug(`File disappeared during glob expansion: ${matchedFile}`);
+        continue;
+      }
+      throw error;
+    }
+
+    appendLoadedFileContents(allContents, matchedFile, parseFileContents(matchedFile, contents));
+  }
+
+  return allContents;
+}
+
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
  * surfaces when a path component isn't a directory) yield false; other errors
@@ -74,7 +224,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  */
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: FileLoadContext,
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
@@ -90,144 +240,20 @@ export function maybeLoadFromExternalFile(
     return filePath;
   }
 
-  // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
-
-  // Parse the file URL to extract file path and function name using existing utility
-  // This handles colon splitting correctly, including Windows drive letters (C:\path)
-  const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
-
-  // In assertion contexts, always preserve Python/JS file references
-  // This prevents premature dereferencing of assertion files that should be
-  // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
-    return renderedFilePath;
+  const reference = parseExternalFileReference(filePath);
+  if (shouldPreserveExternalFileReference(reference, context)) {
+    return reference.renderedFilePath;
   }
 
-  // In vars contexts, preserve all file:// references for test case expansion
-  // This prevents premature file loading - JS/Python files should be executed at runtime
-  // by renderPrompt in evaluatorHelpers.ts, and glob patterns should be expanded by
-  // generateVarCombinations in evaluator.ts
-  if (context === 'vars') {
-    logger.debug(`Preserving file reference in vars context: ${renderedFilePath}`);
-    return renderedFilePath;
-  }
-
-  // For Python/JS files with function names, return the original string unchanged
-  // to allow the assertion system to handle function loading at execution time.
-  // This prevents premature file existence checks that would fail for function references.
-  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    return renderedFilePath;
-  }
-
-  // For non-Python/JS files, use the original path (ignore potential function name)
-  const pathToUse =
-    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
-      ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
-      : cleanPath;
+  const pathToUse = getExternalPathToUse(reference);
 
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
-  // Check if the path contains glob patterns
   if (hasMagic(pathToUse)) {
-    // Use globSync to expand the pattern
-    const matchedFiles = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
-
-    if (matchedFiles.length === 0) {
-      throw new Error(`No files found matching pattern: ${resolvedPath}`);
-    }
-
-    // Load all matched files and combine their contents
-    const allContents: any[] = [];
-    for (const matchedFile of matchedFiles) {
-      let contents: string;
-      try {
-        contents = fs.readFileSync(matchedFile, 'utf8');
-      } catch (error) {
-        // File may have been deleted between glob and read (race condition)
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-          logger.debug(`File disappeared during glob expansion: ${matchedFile}`);
-          continue;
-        }
-        throw error;
-      }
-      if (matchedFile.endsWith('.json')) {
-        const parsed = JSON.parse(contents);
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = yaml.load(contents);
-        if (parsed === null || parsed === undefined) {
-          continue; // Skip empty files
-        }
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.csv')) {
-        const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-          columns: true as const,
-        };
-        const records = csvParse<Record<string, string>>(contents, csvOptions);
-        // If single column, return array of values to match single file behavior
-        if (records.length > 0 && Object.keys(records[0]).length === 1) {
-          allContents.push(...records.map((record) => Object.values(record)[0]));
-        } else {
-          allContents.push(...records);
-        }
-      } else {
-        allContents.push(contents);
-      }
-    }
-
-    return allContents;
+    return loadGlobContents(resolvedPath);
   }
 
-  // Original single file logic
-  const finalPath = resolvedPath;
-
-  let contents: string;
-  try {
-    contents = fs.readFileSync(finalPath, 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error(`File does not exist: ${finalPath}`);
-    }
-    throw new Error(`Failed to read file ${finalPath}: ${error}`);
-  }
-  if (finalPath.endsWith('.json')) {
-    try {
-      return JSON.parse(contents);
-    } catch (error) {
-      throw new Error(`Failed to parse JSON file ${finalPath}: ${error}`);
-    }
-  }
-  if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
-    try {
-      return yaml.load(contents);
-    } catch (error) {
-      throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
-    }
-  }
-  if (finalPath.endsWith('.csv')) {
-    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-      columns: true as const,
-    };
-    const records = csvParse<Record<string, string>>(contents, csvOptions);
-    // If single column, return array of values
-    if (records.length > 0 && Object.keys(records[0]).length === 1) {
-      return records.map((record) => Object.values(record)[0]);
-    }
-    return records;
-  }
-  return contents;
+  return readExternalFile(resolvedPath);
 }
 
 /**
@@ -490,90 +516,15 @@ export async function maybeLoadToolsFromExternalFile(
 ): Promise<any> {
   const rendered = renderVarsInObject(tools, vars);
 
-  // Check if this is a Python/JS file reference with function name
-  // These need special handling to execute the function and get the result
   if (typeof rendered === 'string' && rendered.startsWith('file://')) {
     const { filePath, functionName } = parseFileUrl(rendered);
 
-    if (functionName && (filePath.endsWith('.py') || isJavascriptFile(filePath))) {
-      // Execute the function to get tool definitions
-      const fileType = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
-      logger.debug(
-        `[maybeLoadToolsFromExternalFile] Loading tools from ${fileType} file: ${filePath}:${functionName}`,
-      );
-
-      try {
-        let toolDefinitions: any;
-
-        if (filePath.endsWith('.py')) {
-          // Resolve Python path relative to config base directory (same as JavaScript)
-          const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
-          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved Python path: ${absPath}`);
-          toolDefinitions = await runPython(absPath, functionName, []);
-        } else {
-          // Use safeResolve for security (prevents path traversal)
-          const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
-          logger.debug(`[maybeLoadToolsFromExternalFile] Resolved JavaScript path: ${absPath}`);
-
-          const module = await importModule(absPath);
-          const fn = module[functionName] || module.default?.[functionName];
-
-          if (typeof fn !== 'function') {
-            const availableExports = Object.keys(module).filter((k) => k !== 'default');
-            const basePath = cliState.basePath || process.cwd();
-            throw new Error(
-              `Function "${functionName}" not found in ${filePath}. ` +
-                `Available exports: ${availableExports.length > 0 ? availableExports.join(', ') : '(none)'}\n` +
-                `Resolved from: ${basePath}`,
-            );
-          }
-
-          // Call the function - handle both sync and async functions
-          toolDefinitions = await Promise.resolve(fn());
-        }
-
-        // Validate the result - must be array or object, not primitive
-        if (
-          !toolDefinitions ||
-          typeof toolDefinitions === 'string' ||
-          typeof toolDefinitions === 'number' ||
-          typeof toolDefinitions === 'boolean'
-        ) {
-          throw new Error(
-            `Function "${functionName}" must return an array or object of tool definitions, ` +
-              `but returned: ${toolDefinitions === null ? 'null' : typeof toolDefinitions}`,
-          );
-        }
-
-        logger.debug(
-          `[maybeLoadToolsFromExternalFile] Successfully loaded ${Array.isArray(toolDefinitions) ? toolDefinitions.length : 'object'} tools`,
-        );
-        return toolDefinitions;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const basePath = cliState.basePath || process.cwd();
-        throw new Error(
-          `Failed to load tools from ${rendered}:\n${errorMessage}\n\n` +
-            `Make sure the function "${functionName}" exists and returns a valid tool definition array.\n` +
-            `Resolved from: ${basePath}`,
-        );
-      }
+    if (functionName && isScriptFile(filePath)) {
+      return loadToolsFromFunctionReference(rendered, filePath, functionName);
     }
 
-    // Python/JS file without function name - provide helpful error
-    if (filePath.endsWith('.py') || isJavascriptFile(filePath)) {
-      const ext = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
-      const basePath = cliState.basePath || process.cwd();
-      throw new Error(
-        `Cannot load tools from ${rendered}\n` +
-          `${ext} files require a function name. Use this format:\n` +
-          `  tools: file://${filePath}:get_tools\n\n` +
-          `Your ${ext} file should export a function that returns tool definitions:\n` +
-          (filePath.endsWith('.py')
-            ? `  def get_tools():\n      return [{"type": "function", "function": {...}}]`
-            : `  module.exports.get_tools = () => [{ type: "function", function: {...} }];`) +
-          `\n\nResolved from: ${basePath}`,
-      );
+    if (isScriptFile(filePath)) {
+      throw createMissingToolFunctionError(rendered, filePath);
     }
   }
 
@@ -594,34 +545,119 @@ export async function maybeLoadToolsFromExternalFile(
     return rendered;
   }
 
-  // Standard loading for JSON/YAML files
   const loaded = maybeLoadFromExternalFile(rendered);
+  return validateLoadedTools(loaded);
+}
 
-  // Validate the loaded result - tools must be an array or object, not a string
-  if (loaded !== undefined && loaded !== null && typeof loaded === 'string') {
-    // Unresolved file:// reference
-    if (loaded.startsWith('file://')) {
-      throw new Error(
-        `Failed to load tools from ${loaded}\n` +
-          `Ensure the file exists and contains valid JSON or YAML tool definitions.`,
-      );
-    }
+async function loadToolsFromFunctionReference(
+  rendered: string,
+  filePath: string,
+  functionName: string,
+): Promise<any> {
+  const fileType = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
+  logger.debug(
+    `[maybeLoadToolsFromExternalFile] Loading tools from ${fileType} file: ${filePath}:${functionName}`,
+  );
 
-    // Raw file content loaded (e.g., Python code read as text without function name)
-    if (loaded.includes('def ') || loaded.includes('import ')) {
-      throw new Error(
-        `Invalid tools configuration: file appears to contain Python code.\n` +
-          `Python files require a function name. Use this format:\n` +
-          `  tools: file://tools.py:get_tools`,
-      );
-    }
+  try {
+    const toolDefinitions = filePath.endsWith('.py')
+      ? await loadPythonToolDefinitions(filePath, functionName)
+      : await loadJavascriptToolDefinitions(filePath, functionName);
 
-    // Some other invalid string content
+    validateToolDefinitions(functionName, toolDefinitions);
+    logger.debug(
+      `[maybeLoadToolsFromExternalFile] Successfully loaded ${Array.isArray(toolDefinitions) ? toolDefinitions.length : 'object'} tools`,
+    );
+    return toolDefinitions;
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const basePath = cliState.basePath || process.cwd();
     throw new Error(
-      `Invalid tools configuration: expected an array or object, but got a string.\n` +
-        `If using file://, ensure the file contains valid JSON or YAML tool definitions.`,
+      `Failed to load tools from ${rendered}:\n${errorMessage}\n\n` +
+        `Make sure the function "${functionName}" exists and returns a valid tool definition array.\n` +
+        `Resolved from: ${basePath}`,
+    );
+  }
+}
+
+async function loadPythonToolDefinitions(filePath: string, functionName: string): Promise<any> {
+  const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
+  logger.debug(`[maybeLoadToolsFromExternalFile] Resolved Python path: ${absPath}`);
+  return runPython(absPath, functionName, []);
+}
+
+async function loadJavascriptToolDefinitions(filePath: string, functionName: string): Promise<any> {
+  const absPath = safeResolve(cliState.basePath || process.cwd(), filePath);
+  logger.debug(`[maybeLoadToolsFromExternalFile] Resolved JavaScript path: ${absPath}`);
+
+  const module = await importModule(absPath);
+  const fn = module[functionName] || module.default?.[functionName];
+
+  if (typeof fn !== 'function') {
+    const availableExports = Object.keys(module).filter((key) => key !== 'default');
+    const basePath = cliState.basePath || process.cwd();
+    throw new Error(
+      `Function "${functionName}" not found in ${filePath}. ` +
+        `Available exports: ${availableExports.length > 0 ? availableExports.join(', ') : '(none)'}\n` +
+        `Resolved from: ${basePath}`,
     );
   }
 
-  return loaded;
+  return Promise.resolve(fn());
+}
+
+function validateToolDefinitions(functionName: string, toolDefinitions: unknown): void {
+  if (
+    !toolDefinitions ||
+    typeof toolDefinitions === 'string' ||
+    typeof toolDefinitions === 'number' ||
+    typeof toolDefinitions === 'boolean'
+  ) {
+    throw new Error(
+      `Function "${functionName}" must return an array or object of tool definitions, ` +
+        `but returned: ${toolDefinitions === null ? 'null' : typeof toolDefinitions}`,
+    );
+  }
+}
+
+function createMissingToolFunctionError(rendered: string, filePath: string): Error {
+  const ext = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
+  const basePath = cliState.basePath || process.cwd();
+
+  return new Error(
+    `Cannot load tools from ${rendered}\n` +
+      `${ext} files require a function name. Use this format:\n` +
+      `  tools: file://${filePath}:get_tools\n\n` +
+      `Your ${ext} file should export a function that returns tool definitions:\n` +
+      (filePath.endsWith('.py')
+        ? `  def get_tools():\n      return [{"type": "function", "function": {...}}]`
+        : `  module.exports.get_tools = () => [{ type: "function", function: {...} }];`) +
+      `\n\nResolved from: ${basePath}`,
+  );
+}
+
+function validateLoadedTools(loaded: any): any {
+  if (loaded === undefined || loaded === null || typeof loaded !== 'string') {
+    return loaded;
+  }
+
+  if (loaded.startsWith('file://')) {
+    throw new Error(
+      `Failed to load tools from ${loaded}\n` +
+        `Ensure the file exists and contains valid JSON or YAML tool definitions.`,
+    );
+  }
+
+  if (loaded.includes('def ') || loaded.includes('import ')) {
+    throw new Error(
+      `Invalid tools configuration: file appears to contain Python code.\n` +
+        `Python files require a function name. Use this format:\n` +
+        `  tools: file://tools.py:get_tools`,
+    );
+  }
+
+  throw new Error(
+    `Invalid tools configuration: expected an array or object, but got a string.\n` +
+      `If using file://, ensure the file contains valid JSON or YAML tool definitions.`,
+  );
 }
