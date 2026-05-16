@@ -52,6 +52,8 @@ import { RunOptionsContent } from './RunOptions';
 import type { PluginConfig, Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
 import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
+import type { Config } from '../types';
+
 interface ReviewProps {
   onBack?: () => void;
   navigateToPlugins: () => void;
@@ -83,6 +85,13 @@ interface IntentPluginRef {
   id: 'intent';
   config: { intent: string | (string | string[])[] };
 }
+
+interface PurposeSection {
+  title: string;
+  content: string;
+}
+
+type UpdateConfig = <K extends keyof Config>(section: K, value: Config[K]) => void;
 
 const isIntentPlugin = (plugin: unknown): plugin is IntentPluginRef =>
   typeof plugin === 'object' &&
@@ -140,6 +149,615 @@ function removeIntentEntry(
   );
 }
 
+function parsePurposeSections(purpose: string | undefined): PurposeSection[] {
+  if (!purpose) {
+    return [];
+  }
+
+  const sections: PurposeSection[] = [];
+  const lines = purpose.split('\n');
+  let currentSection: PurposeSection | null = null;
+  let inCodeBlock = false;
+  let contentLines: string[] = [];
+
+  const flushCurrentSection = () => {
+    if (!currentSection) {
+      return;
+    }
+    currentSection.content = contentLines.join('\n').trim();
+    if (currentSection.content) {
+      sections.push(currentSection);
+    }
+  };
+
+  for (const line of lines) {
+    if (line === '```') {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+
+    const isSectionHeader =
+      !inCodeBlock && line.endsWith(':') && !line.startsWith(' ') && !line.startsWith('\t');
+    if (isSectionHeader) {
+      flushCurrentSection();
+      currentSection = { title: line.slice(0, -1), content: '' };
+      contentLines = [];
+      continue;
+    }
+
+    if (currentSection) {
+      contentLines.push(line);
+    }
+  }
+
+  flushCurrentSection();
+  if (sections.length === 0 && purpose.trim()) {
+    sections.push({ title: 'Application Details', content: purpose.trim() });
+  }
+  return sections;
+}
+
+async function recoverExistingJob({
+  savedJobId,
+  checkForRunningJob,
+  setLogs,
+  setIsRunning,
+  setEvalId,
+  setJob,
+  clearJob,
+  startPolling,
+  showToast,
+}: {
+  savedJobId: string | null;
+  checkForRunningJob: () => Promise<JobStatusResponse>;
+  setLogs: React.Dispatch<React.SetStateAction<string[]>>;
+  setIsRunning: React.Dispatch<React.SetStateAction<boolean>>;
+  setEvalId: React.Dispatch<React.SetStateAction<string | null>>;
+  setJob: (jobId: string) => void;
+  clearJob: () => void;
+  startPolling: (jobId: string) => void;
+  showToast: ReturnType<typeof useToast>['showToast'];
+}): Promise<void> {
+  const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
+
+  if (hasRunningJob && serverJobId) {
+    try {
+      const jobResponse = await callApi(`/eval/job/${serverJobId}`);
+      if (!jobResponse.ok) {
+        showToast('Could not reconnect to running job.', 'error');
+        clearJob();
+        return;
+      }
+
+      const job = (await jobResponse.json()) as Job;
+      setLogs(job.logs || []);
+
+      if (job.status === 'in-progress') {
+        setIsRunning(true);
+        setJob(serverJobId);
+        startPolling(serverJobId);
+      } else if (job.status === 'complete' && job.evalId) {
+        setEvalId(job.evalId);
+        clearJob();
+      } else if (job.status === 'error') {
+        showToast('Previous job failed. Check logs for details.', 'error');
+        clearJob();
+      }
+    } catch (error) {
+      console.error('Failed to recover job:', error);
+      showToast('Failed to reconnect to running job.', 'error');
+      clearJob();
+    }
+    return;
+  }
+
+  if (!savedJobId) {
+    return;
+  }
+
+  try {
+    const jobResponse = await callApi(`/eval/job/${savedJobId}`);
+    if (jobResponse.ok) {
+      const job = (await jobResponse.json()) as Job;
+      setLogs(job.logs || []);
+
+      if (job.status === 'complete' && job.evalId) {
+        setEvalId(job.evalId);
+        showToast('Your evaluation completed!', 'success');
+      } else if (job.status === 'error') {
+        showToast('Previous job failed. Check logs for details.', 'error');
+      }
+    }
+  } catch {
+    // Job doesn't exist anymore (server restarted or cleaned up)
+  }
+  clearJob();
+}
+
+function getStrategyId(strategy: string | { id: string }): string {
+  return typeof strategy === 'string' ? strategy : strategy.id;
+}
+
+function PluginSummaryCard({
+  pluginSummary,
+  plugins,
+  getPluginSummary,
+  updateConfig,
+  navigateToPlugins,
+}: {
+  pluginSummary: Array<[string, number]>;
+  plugins: Config['plugins'];
+  getPluginSummary: (plugin: string | RedteamPlugin) => { label: string; count: number };
+  updateConfig: UpdateConfig;
+  navigateToPlugins: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">Plugins ({pluginSummary.length})</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-2">
+          {pluginSummary.map(([label, count]) => (
+            <Badge
+              key={label}
+              variant="secondary"
+              className={cn(
+                'gap-1 pr-1',
+                label === 'Custom Policy' && 'bg-primary text-primary-foreground',
+              )}
+            >
+              {count > 1 ? `${label} (${count})` : label}
+              <button
+                type="button"
+                aria-label={`Remove plugin ${label}`}
+                onClick={() => {
+                  const newPlugins = plugins.filter(
+                    (plugin) => getPluginSummary(plugin).label !== label,
+                  );
+                  updateConfig('plugins', newPlugins);
+                }}
+                className="ml-1 rounded-full p-0.5 hover:bg-black/10"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+        {pluginSummary.length === 0 && (
+          <>
+            <Alert variant="warning" className="mt-4">
+              <AlertContent>
+                <AlertDescription>
+                  You haven't selected any plugins. Plugins are the vulnerabilities that the red
+                  team will search for.
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+            <Button onClick={navigateToPlugins} className="mt-4">
+              Add a plugin
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StrategySummaryCard({
+  strategySummary,
+  strategies,
+  updateConfig,
+  navigateToStrategies,
+}: {
+  strategySummary: Array<[string, number]>;
+  strategies: Config['strategies'];
+  updateConfig: UpdateConfig;
+  navigateToStrategies: () => void;
+}) {
+  const removeStrategy = (label: string) => {
+    const strategyId =
+      Object.entries(strategyDisplayNames).find(
+        ([_id, displayName]) => displayName === label,
+      )?.[0] || label;
+
+    if (strategyId === 'basic') {
+      updateConfig(
+        'strategies',
+        strategies.map((strategy) => {
+          if (getStrategyId(strategy) !== 'basic') {
+            return strategy;
+          }
+          return {
+            id: 'basic',
+            config: {
+              ...(typeof strategy === 'object' ? strategy.config : {}),
+              enabled: false,
+            },
+          };
+        }),
+      );
+      return;
+    }
+
+    updateConfig(
+      'strategies',
+      strategies.filter((strategy) => getStrategyId(strategy) !== strategyId),
+    );
+  };
+
+  const onlyBasicStrategy = strategySummary.length === 1 && strategySummary[0][0] === 'Basic';
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">Strategies ({strategySummary.length})</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-2">
+          {strategySummary.map(([label, count]) => (
+            <Badge key={label} variant="secondary" className="gap-1 pr-1">
+              {count > 1 ? `${label} (${count})` : label}
+              <button
+                type="button"
+                aria-label={`Remove strategy ${label}`}
+                onClick={() => removeStrategy(label)}
+                className="ml-1 rounded-full p-0.5 hover:bg-black/10"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+        {(strategySummary.length === 0 || onlyBasicStrategy) && (
+          <>
+            <Alert variant="warning" className="mt-4">
+              <AlertContent>
+                <AlertDescription>
+                  The basic strategy is great for an end-to-end setup test, but don't expect any
+                  findings. Once you've verified that the setup is working, add another strategy.
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+            <Button onClick={navigateToStrategies} className="mt-4">
+              Add more strategies
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function CustomPoliciesCard({
+  customPolicies,
+  plugins,
+  updateConfig,
+}: {
+  customPolicies: PolicyPlugin[];
+  plugins: Config['plugins'];
+  updateConfig: UpdateConfig;
+}) {
+  if (customPolicies.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">Custom Policies ({customPolicies.length})</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="max-h-[400px] space-y-2 overflow-y-auto">
+          {customPolicies.map((policy, index) => {
+            const isPolicyObject = isValidPolicyObject(policy.config.policy);
+            const policyName = isPolicyObject
+              ? (policy.config.policy as PolicyObject).name
+              : makeDefaultPolicyName(index);
+            const policyText =
+              typeof policy.config.policy === 'string'
+                ? policy.config.policy
+                : policy.config.policy?.text || '';
+            const policyToMatch =
+              typeof policy.config.policy === 'string'
+                ? policy.config.policy
+                : policy.config.policy?.id;
+
+            return (
+              <div
+                key={index}
+                className="relative flex items-start justify-between rounded-lg bg-muted/50 p-3"
+              >
+                <div className="min-w-0 flex-1 pr-8">
+                  <p className="mb-1 font-medium">{policyName}</p>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">{policyText}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Remove policy ${policyName}`}
+                  className="size-6 shrink-0"
+                  onClick={() => {
+                    const nextPlugins = plugins.filter(
+                      (plugin) =>
+                        !(
+                          typeof plugin === 'object' &&
+                          plugin.id === 'policy' &&
+                          ((typeof plugin.config?.policy === 'string' &&
+                            plugin.config.policy === policyToMatch) ||
+                            (typeof plugin.config?.policy === 'object' &&
+                              plugin.config.policy?.id === policyToMatch))
+                        ),
+                    );
+                    updateConfig('plugins', nextPlugins);
+                  }}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function IntentsCard({
+  intents,
+  expanded,
+  setExpanded,
+  handleRemoveIntent,
+}: {
+  intents: IntentEntry[];
+  expanded: boolean;
+  setExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  handleRemoveIntent: (pluginIndex: number, entryIndex: number) => void;
+}) {
+  if (intents.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">Intents ({intents.length})</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {intents
+            .slice(0, expanded ? undefined : 5)
+            .map(({ display, isMultiStep, pluginIndex, entryIndex }) => {
+              const shortLabel = display.length > 80 ? `${display.slice(0, 80)}…` : display;
+              const key = `${pluginIndex}:${entryIndex}`;
+              return (
+                <div key={key} className="relative rounded-lg bg-muted/50 p-3 pr-8">
+                  <p className="line-clamp-2 text-sm" title={display}>
+                    {display}
+                  </p>
+                  {isMultiStep && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">Multi-step intent</p>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove intent: ${shortLabel}`}
+                    className="absolute right-1 top-1 size-6"
+                    onClick={() => handleRemoveIntent(pluginIndex, entryIndex)}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              );
+            })}
+          {intents.length > 5 && (
+            <Button
+              variant="link"
+              size="sm"
+              onClick={() => setExpanded(!expanded)}
+              className="mt-2 px-0"
+            >
+              {expanded ? 'Show Less' : `Show ${intents.length - 5} More`}
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ApplicationDetailsSection({
+  config,
+  parsedPurposeSections,
+  expandedPurposeSections,
+  setExpandedPurposeSections,
+  isPurposeExpanded,
+  setIsPurposeExpanded,
+  isTestInstructionsExpanded,
+  setIsTestInstructionsExpanded,
+  togglePurposeSection,
+  navigateToPurpose,
+}: {
+  config: Config;
+  parsedPurposeSections: PurposeSection[];
+  expandedPurposeSections: Set<string>;
+  setExpandedPurposeSections: React.Dispatch<React.SetStateAction<Set<string>>>;
+  isPurposeExpanded: boolean;
+  setIsPurposeExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  isTestInstructionsExpanded: boolean;
+  setIsTestInstructionsExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  togglePurposeSection: (sectionTitle: string) => void;
+  navigateToPurpose: () => void;
+}) {
+  const hasDetailedPurpose =
+    Boolean(config.purpose?.trim()) && (config.purpose?.length ?? 0) >= 100;
+  const shouldWarnAboutPurpose =
+    !hasDetailedPurpose && !isFoundationModelProvider(config.target.id);
+  const shouldShowPlainPurpose = Boolean(config.purpose) && parsedPurposeSections.length === 0;
+  const shouldShowPurposeToggle =
+    shouldShowPlainPurpose && (config.purpose?.split('\n').length ?? 0) > 6;
+  const shouldShowInstructionToggle =
+    Boolean(config.testGenerationInstructions) &&
+    (config.testGenerationInstructions?.split('\n').length ?? 0) > 6;
+  const allPurposeSectionsExpanded = expandedPurposeSections.size === parsedPurposeSections.length;
+
+  return (
+    <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
+      <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 border-b border-border p-4 hover:bg-muted/50 sm:items-center">
+        <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 items-center gap-2">
+            <Info className="size-4 shrink-0 text-muted-foreground" />
+            <h3 className="min-w-0 text-lg font-semibold">Application Details</h3>
+          </div>
+          {config.purpose ? (
+            <Badge
+              variant="outline"
+              className={cn(
+                'text-xs',
+                config.purpose.length < 100
+                  ? 'border-amber-500 text-amber-600'
+                  : 'border-green-500 text-green-600',
+              )}
+            >
+              {config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-destructive text-xs text-destructive">
+              Not configured
+            </Badge>
+          )}
+        </div>
+        <ChevronDown
+          className={cn(
+            'size-5 text-muted-foreground transition-transform',
+            isPurposeExpanded && 'rotate-180',
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="p-4">
+          {parsedPurposeSections.length > 1 && (
+            <div className="mb-2 flex justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  setExpandedPurposeSections(
+                    allPurposeSectionsExpanded
+                      ? new Set()
+                      : new Set(parsedPurposeSections.map((section) => section.title)),
+                  )
+                }
+              >
+                {allPurposeSectionsExpanded ? 'Collapse All' : 'Expand All'}
+              </Button>
+            </div>
+          )}
+
+          {shouldWarnAboutPurpose && (
+            <div className="mb-4">
+              <Alert variant="warning">
+                <AlertContent>
+                  <AlertDescription>
+                    Application details are required to generate a high quality red team. Go to the
+                    Application Details section and add a purpose.{' '}
+                    <Link
+                      className="underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                    >
+                      Learn more about red team best practices.
+                    </Link>
+                  </AlertDescription>
+                </AlertContent>
+              </Alert>
+              <Button onClick={navigateToPurpose} className="mt-4">
+                Add application details
+              </Button>
+            </div>
+          )}
+
+          {parsedPurposeSections.length > 0 ? (
+            <div className="mt-2 space-y-4">
+              {parsedPurposeSections.map((section, index) => (
+                <div key={index} className="overflow-hidden rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => togglePurposeSection(section.title)}
+                    className="flex w-full items-center justify-between bg-muted/50 p-3 hover:bg-muted"
+                  >
+                    <span className="text-sm font-medium">{section.title}</span>
+                    <ChevronDown
+                      className={cn(
+                        'size-4 transition-transform',
+                        expandedPurposeSections.has(section.title) && 'rotate-180',
+                      )}
+                    />
+                  </button>
+                  {expandedPurposeSections.has(section.title) && (
+                    <div className="bg-background p-4">
+                      <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                        {section.content}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : shouldShowPlainPurpose ? (
+            <p
+              onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+              className={cn(
+                'cursor-pointer whitespace-pre-wrap rounded-lg bg-background p-2 text-sm hover:bg-muted/50',
+                !isPurposeExpanded && 'line-clamp-6',
+              )}
+            >
+              {config.purpose}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Not specified</p>
+          )}
+
+          {shouldShowPurposeToggle && (
+            <button
+              type="button"
+              className="mt-1 text-xs text-primary hover:underline"
+              onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
+            >
+              {isPurposeExpanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
+
+          {config.testGenerationInstructions && (
+            <div className="mt-4">
+              <h4 className="mb-2 text-sm font-medium">Test Generation Instructions</h4>
+              <p
+                onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                className={cn(
+                  'cursor-pointer whitespace-pre-wrap rounded-lg bg-background p-2 text-sm hover:bg-muted/50',
+                  !isTestInstructionsExpanded && 'line-clamp-6',
+                )}
+              >
+                {config.testGenerationInstructions}
+              </p>
+              {shouldShowInstructionToggle && (
+                <button
+                  type="button"
+                  className="mt-1 text-xs text-primary hover:underline"
+                  onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
+                >
+                  {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export default function Review({
   onBack,
   navigateToPlugins,
@@ -180,58 +798,10 @@ export default function Review({
     config.defaultTest?.vars && Object.keys(config.defaultTest.vars).length > 0;
   const [isAdvancedConfigExpanded, setIsAdvancedConfigExpanded] = useState(hasTestVariables);
 
-  // Parse purpose text into sections
-  const parsedPurposeSections = useMemo(() => {
-    if (!config.purpose) {
-      return [];
-    }
-
-    const sections: { title: string; content: string }[] = [];
-    const lines = config.purpose.split('\n');
-    let currentSection: { title: string; content: string } | null = null;
-    let inCodeBlock = false;
-    let contentLines: string[] = [];
-
-    for (const line of lines) {
-      // Check if we're entering or exiting a code block
-      if (line === '```') {
-        inCodeBlock = !inCodeBlock;
-        continue;
-      }
-
-      // Check if this is a section header (ends with colon and not in code block)
-      if (!inCodeBlock && line.endsWith(':') && !line.startsWith(' ') && !line.startsWith('\t')) {
-        // Save previous section if exists
-        if (currentSection) {
-          currentSection.content = contentLines.join('\n').trim();
-          if (currentSection.content) {
-            sections.push(currentSection);
-          }
-        }
-        // Start new section
-        currentSection = { title: line.slice(0, -1), content: '' };
-        contentLines = [];
-      } else if (currentSection) {
-        // Add to current section content
-        contentLines.push(line);
-      }
-    }
-
-    // Save last section
-    if (currentSection) {
-      currentSection.content = contentLines.join('\n').trim();
-      if (currentSection.content) {
-        sections.push(currentSection);
-      }
-    }
-
-    // If no sections were found, treat the entire text as a single section
-    if (sections.length === 0 && config.purpose.trim()) {
-      sections.push({ title: 'Application Details', content: config.purpose.trim() });
-    }
-
-    return sections;
-  }, [config.purpose]);
+  const parsedPurposeSections = useMemo(
+    () => parsePurposeSections(config.purpose),
+    [config.purpose],
+  );
 
   // State to track which purpose sections are expanded (auto-expand first section)
   const [expandedPurposeSections, setExpandedPurposeSections] = useState<Set<string>>(new Set());
@@ -274,64 +844,17 @@ export default function Review({
     }
     hasAttemptedRecovery.current = true;
 
-    const recoverJob = async () => {
-      // Check what the server thinks is running
-      const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
-
-      if (hasRunningJob && serverJobId) {
-        // Server has a running job - reconnect to it
-        try {
-          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'in-progress') {
-              setIsRunning(true);
-              setJob(serverJobId);
-              startPolling(serverJobId);
-            } else if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              clearJob();
-            } else if (job.status === 'error') {
-              setLogs(job.logs || []);
-              showToast('Previous job failed. Check logs for details.', 'error');
-              clearJob();
-            }
-          } else {
-            // Server reported a running job but we couldn't fetch it
-            showToast('Could not reconnect to running job.', 'error');
-            clearJob();
-          }
-        } catch (error) {
-          console.error('Failed to recover job:', error);
-          showToast('Failed to reconnect to running job.', 'error');
-          clearJob();
-        }
-      } else if (savedJobId) {
-        // We have a saved job ID but server says nothing running
-        // Check if it completed while we were away
-        try {
-          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
-
-            if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              showToast('Your evaluation completed!', 'success');
-            } else if (job.status === 'error') {
-              showToast('Previous job failed. Check logs for details.', 'error');
-            }
-          }
-        } catch {
-          // Job doesn't exist anymore (server restarted or cleaned up)
-        }
-        clearJob();
-      }
-    };
-
-    recoverJob();
+    recoverExistingJob({
+      savedJobId,
+      checkForRunningJob,
+      setLogs,
+      setIsRunning,
+      setEvalId,
+      setJob,
+      clearJob,
+      startPolling,
+      showToast,
+    });
   }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
@@ -397,11 +920,6 @@ export default function Review({
 
   const [expanded, setExpanded] = React.useState(false);
 
-  const getStrategyId = (strategy: string | { id: string }): string => {
-    return typeof strategy === 'string' ? strategy : strategy.id;
-  };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const strategySummary = useMemo(() => {
     const summary = new Map<string, number>();
 
@@ -671,411 +1189,46 @@ export default function Review({
         <h2 className="mb-6 text-xl font-semibold">Configuration Summary</h2>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {/* Plugins Card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Plugins ({pluginSummary.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {pluginSummary.map(([label, count]) => (
-                  <Badge
-                    key={label}
-                    variant="secondary"
-                    className={cn(
-                      'gap-1 pr-1',
-                      label === 'Custom Policy' && 'bg-primary text-primary-foreground',
-                    )}
-                  >
-                    {count > 1 ? `${label} (${count})` : label}
-                    <button
-                      type="button"
-                      aria-label={`Remove plugin ${label}`}
-                      onClick={() => {
-                        const newPlugins = config.plugins.filter((plugin) => {
-                          const pluginLabel = getPluginSummary(plugin).label;
-                          return pluginLabel !== label;
-                        });
-                        updateConfig('plugins', newPlugins);
-                      }}
-                      className="ml-1 rounded-full p-0.5 hover:bg-black/10"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-              {pluginSummary.length === 0 && (
-                <>
-                  <Alert variant="warning" className="mt-4">
-                    <AlertContent>
-                      <AlertDescription>
-                        You haven't selected any plugins. Plugins are the vulnerabilities that the
-                        red team will search for.
-                      </AlertDescription>
-                    </AlertContent>
-                  </Alert>
-                  <Button onClick={navigateToPlugins} className="mt-4">
-                    Add a plugin
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Strategies Card */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Strategies ({strategySummary.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {strategySummary.map(([label, count]) => (
-                  <Badge key={label} variant="secondary" className="gap-1 pr-1">
-                    {count > 1 ? `${label} (${count})` : label}
-                    <button
-                      type="button"
-                      aria-label={`Remove strategy ${label}`}
-                      onClick={() => {
-                        const strategyId =
-                          Object.entries(strategyDisplayNames).find(
-                            ([_id, displayName]) => displayName === label,
-                          )?.[0] || label;
-
-                        // Special handling for 'basic' strategy - set enabled: false instead of removing
-                        if (strategyId === 'basic') {
-                          const newStrategies = config.strategies.map((strategy) => {
-                            const id = getStrategyId(strategy);
-                            if (id === 'basic') {
-                              return {
-                                id: 'basic',
-                                config: {
-                                  ...(typeof strategy === 'object' ? strategy.config : {}),
-                                  enabled: false,
-                                },
-                              };
-                            }
-                            return strategy;
-                          });
-                          updateConfig('strategies', newStrategies);
-                        } else {
-                          const newStrategies = config.strategies.filter((strategy) => {
-                            const id = getStrategyId(strategy);
-                            return id !== strategyId;
-                          });
-                          updateConfig('strategies', newStrategies);
-                        }
-                      }}
-                      className="ml-1 rounded-full p-0.5 hover:bg-black/10"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-              {(strategySummary.length === 0 ||
-                (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
-                <>
-                  <Alert variant="warning" className="mt-4">
-                    <AlertContent>
-                      <AlertDescription>
-                        The basic strategy is great for an end-to-end setup test, but don't expect
-                        any findings. Once you've verified that the setup is working, add another
-                        strategy.
-                      </AlertDescription>
-                    </AlertContent>
-                  </Alert>
-                  <Button onClick={navigateToStrategies} className="mt-4">
-                    Add more strategies
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Custom Policies Card */}
-          {customPolicies.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Custom Policies ({customPolicies.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="max-h-[400px] space-y-2 overflow-y-auto">
-                  {customPolicies.map((policy, index) => {
-                    const isPolicyObject = isValidPolicyObject(policy.config.policy);
-                    return (
-                      <div
-                        key={index}
-                        className="relative flex items-start justify-between rounded-lg bg-muted/50 p-3"
-                      >
-                        <div className="min-w-0 flex-1 pr-8">
-                          <p className="mb-1 font-medium">
-                            {isPolicyObject
-                              ? (policy.config.policy as PolicyObject).name
-                              : makeDefaultPolicyName(index)}
-                          </p>
-                          <p className="line-clamp-2 text-sm text-muted-foreground">
-                            {typeof policy.config.policy === 'string'
-                              ? policy.config.policy
-                              : policy.config.policy?.text || ''}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Remove policy ${
-                            isPolicyObject
-                              ? (policy.config.policy as PolicyObject).name
-                              : makeDefaultPolicyName(index)
-                          }`}
-                          className="size-6 shrink-0"
-                          onClick={() => {
-                            const policyToMatch =
-                              typeof policy.config.policy === 'string'
-                                ? policy.config.policy
-                                : policy.config.policy?.id;
-
-                            const newPlugins = config.plugins.filter(
-                              (p, _i) =>
-                                !(
-                                  typeof p === 'object' &&
-                                  p.id === 'policy' &&
-                                  ((typeof p.config?.policy === 'string' &&
-                                    p.config.policy === policyToMatch) ||
-                                    (typeof p.config?.policy === 'object' &&
-                                      p.config.policy?.id === policyToMatch))
-                                ),
-                            );
-                            updateConfig('plugins', newPlugins);
-                          }}
-                        >
-                          <X className="size-4" />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Intents Card */}
-          {intents.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Intents ({intents.length})</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {intents
-                    .slice(0, expanded ? undefined : 5)
-                    .map(({ display, isMultiStep, pluginIndex, entryIndex }) => {
-                      // Truncate long entries for the SR/title label so screen
-                      // readers can distinguish multiple Remove buttons.
-                      const shortLabel = display.length > 80 ? `${display.slice(0, 80)}…` : display;
-                      const key = `${pluginIndex}:${entryIndex}`;
-                      return (
-                        <div key={key} className="relative rounded-lg bg-muted/50 p-3 pr-8">
-                          <p className="line-clamp-2 text-sm" title={display}>
-                            {display}
-                          </p>
-                          {isMultiStep && (
-                            <p className="mt-0.5 text-xs text-muted-foreground">
-                              Multi-step intent
-                            </p>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Remove intent: ${shortLabel}`}
-                            className="absolute right-1 top-1 size-6"
-                            onClick={() => handleRemoveIntent(pluginIndex, entryIndex)}
-                          >
-                            <X className="size-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  {intents.length > 5 && (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      onClick={() => setExpanded(!expanded)}
-                      className="mt-2 px-0"
-                    >
-                      {expanded ? 'Show Less' : `Show ${intents.length - 5} More`}
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          <PluginSummaryCard
+            pluginSummary={pluginSummary}
+            plugins={config.plugins}
+            getPluginSummary={getPluginSummary}
+            updateConfig={updateConfig}
+            navigateToPlugins={navigateToPlugins}
+          />
+          <StrategySummaryCard
+            strategySummary={strategySummary}
+            strategies={config.strategies}
+            updateConfig={updateConfig}
+            navigateToStrategies={navigateToStrategies}
+          />
+          <CustomPoliciesCard
+            customPolicies={customPolicies}
+            plugins={config.plugins}
+            updateConfig={updateConfig}
+          />
+          <IntentsCard
+            intents={intents}
+            expanded={expanded}
+            setExpanded={setExpanded}
+            handleRemoveIntent={handleRemoveIntent}
+          />
         </div>
 
         {/* Collapsible Sections */}
         <div className="mt-6 rounded-lg border border-border shadow-sm">
-          {/* Application Details */}
-          <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
-            <CollapsibleTrigger className="flex w-full items-start justify-between gap-3 border-b border-border p-4 hover:bg-muted/50 sm:items-center">
-              <div className="flex min-w-0 flex-1 flex-col items-start gap-2 sm:flex-row sm:items-center">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Info className="size-4 shrink-0 text-muted-foreground" />
-                  <h3 className="min-w-0 text-lg font-semibold">Application Details</h3>
-                </div>
-                {config.purpose && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'text-xs',
-                      config.purpose.length < 100
-                        ? 'border-amber-500 text-amber-600'
-                        : 'border-green-500 text-green-600',
-                    )}
-                  >
-                    {config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
-                  </Badge>
-                )}
-                {!config.purpose && (
-                  <Badge variant="outline" className="border-destructive text-xs text-destructive">
-                    Not configured
-                  </Badge>
-                )}
-              </div>
-              <ChevronDown
-                className={cn(
-                  'size-5 text-muted-foreground transition-transform',
-                  isPurposeExpanded && 'rotate-180',
-                )}
-              />
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="p-4">
-                {parsedPurposeSections.length > 1 && (
-                  <div className="mb-2 flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        if (expandedPurposeSections.size === parsedPurposeSections.length) {
-                          setExpandedPurposeSections(new Set());
-                        } else {
-                          setExpandedPurposeSections(
-                            new Set(parsedPurposeSections.map((s) => s.title)),
-                          );
-                        }
-                      }}
-                    >
-                      {expandedPurposeSections.size === parsedPurposeSections.length
-                        ? 'Collapse All'
-                        : 'Expand All'}
-                    </Button>
-                  </div>
-                )}
-
-                {(!config.purpose?.trim() || config.purpose.length < 100) &&
-                !isFoundationModelProvider(config.target.id) ? (
-                  <div className="mb-4">
-                    <Alert variant="warning">
-                      <AlertContent>
-                        <AlertDescription>
-                          Application details are required to generate a high quality red team. Go
-                          to the Application Details section and add a purpose.{' '}
-                          <Link
-                            className="underline"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
-                          >
-                            Learn more about red team best practices.
-                          </Link>
-                        </AlertDescription>
-                      </AlertContent>
-                    </Alert>
-                    <Button onClick={navigateToPurpose} className="mt-4">
-                      Add application details
-                    </Button>
-                  </div>
-                ) : null}
-
-                {parsedPurposeSections.length > 0 ? (
-                  <div className="mt-2 space-y-4">
-                    {parsedPurposeSections.map((section, index) => (
-                      <div key={index} className="overflow-hidden rounded-lg border border-border">
-                        <button
-                          type="button"
-                          onClick={() => togglePurposeSection(section.title)}
-                          className="flex w-full items-center justify-between bg-muted/50 p-3 hover:bg-muted"
-                        >
-                          <span className="text-sm font-medium">{section.title}</span>
-                          <ChevronDown
-                            className={cn(
-                              'size-4 transition-transform',
-                              expandedPurposeSections.has(section.title) && 'rotate-180',
-                            )}
-                          />
-                        </button>
-                        {expandedPurposeSections.has(section.title) && (
-                          <div className="bg-background p-4">
-                            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                              {section.content}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : config.purpose ? (
-                  <p
-                    onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                    className={cn(
-                      'cursor-pointer whitespace-pre-wrap rounded-lg bg-background p-2 text-sm hover:bg-muted/50',
-                      !isPurposeExpanded && 'line-clamp-6',
-                    )}
-                  >
-                    {config.purpose}
-                  </p>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Not specified</p>
-                )}
-                {config.purpose &&
-                  parsedPurposeSections.length === 0 &&
-                  config.purpose.split('\n').length > 6 && (
-                    <button
-                      type="button"
-                      className="mt-1 text-xs text-primary hover:underline"
-                      onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                    >
-                      {isPurposeExpanded ? 'Show less' : 'Show more'}
-                    </button>
-                  )}
-
-                {config.testGenerationInstructions && (
-                  <div className="mt-4">
-                    <h4 className="mb-2 text-sm font-medium">Test Generation Instructions</h4>
-                    <p
-                      onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                      className={cn(
-                        'cursor-pointer whitespace-pre-wrap rounded-lg bg-background p-2 text-sm hover:bg-muted/50',
-                        !isTestInstructionsExpanded && 'line-clamp-6',
-                      )}
-                    >
-                      {config.testGenerationInstructions}
-                    </p>
-                    {config.testGenerationInstructions &&
-                      config.testGenerationInstructions.split('\n').length > 6 && (
-                        <button
-                          type="button"
-                          className="mt-1 text-xs text-primary hover:underline"
-                          onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                        >
-                          {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
-                        </button>
-                      )}
-                  </div>
-                )}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
+          <ApplicationDetailsSection
+            config={config}
+            parsedPurposeSections={parsedPurposeSections}
+            expandedPurposeSections={expandedPurposeSections}
+            setExpandedPurposeSections={setExpandedPurposeSections}
+            isPurposeExpanded={isPurposeExpanded}
+            setIsPurposeExpanded={setIsPurposeExpanded}
+            isTestInstructionsExpanded={isTestInstructionsExpanded}
+            setIsTestInstructionsExpanded={setIsTestInstructionsExpanded}
+            togglePurposeSection={togglePurposeSection}
+            navigateToPurpose={navigateToPurpose}
+          />
 
           {/* Advanced Configuration */}
           <Collapsible open={isAdvancedConfigExpanded} onOpenChange={setIsAdvancedConfigExpanded}>
