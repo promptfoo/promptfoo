@@ -72,7 +72,7 @@ describe('ProgressBarReporter', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('tracks counts without rendering a progress bar when disabled', () => {
