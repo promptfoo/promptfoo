@@ -188,8 +188,7 @@ export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadat
     metadataKey: string,
     visiting = new WeakSet<object>(),
   ): void {
-    const objectValue =
-      typeof value === 'object' && value !== null ? (value as object) : undefined;
+    const objectValue = typeof value === 'object' && value !== null ? (value as object) : undefined;
     if (objectValue) {
       if (visiting.has(objectValue)) {
         return;
