@@ -1862,6 +1862,10 @@ describe('RedteamGraderBase', () => {
         expect.stringContaining('agents-tool'),
         expect.any(String),
         expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
+        expect.any(Object),
       );
     });
 
@@ -1914,6 +1918,10 @@ describe('RedteamGraderBase', () => {
       expect(matchesLlmRubric).toHaveBeenCalledWith(
         expect.stringContaining('Test rubric without tools'),
         expect.any(String),
+        expect.any(Object),
+        undefined,
+        undefined,
+        undefined,
         expect.any(Object),
       );
     });
