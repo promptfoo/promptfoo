@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 import http from 'http';
 import https from 'https';
 import path from 'path';
@@ -13,8 +13,11 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
-import { isJavascriptFile } from '../util/fileExtensions';
+import {
+  maybeLoadConfigFromExternalFile,
+  maybeLoadFromExternalFile,
+  pathExists,
+} from '../util/file';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
@@ -40,7 +43,15 @@ import {
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS, type ToolFormat, transformToolChoice, transformTools } from './shared';
+import {
+  getRequestTimeoutMs,
+  type ToolFormat,
+  transformToolChoice,
+  transformTools,
+} from './shared';
+import { loadTransformModule, parseFileTransformReference } from './transformUtils';
+
+export { loadTransformModule } from './transformUtils';
 
 import type {
   ApiProvider,
@@ -339,7 +350,7 @@ export async function generateSignature(
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
-          privateKey = fs.readFileSync(resolvedPath, 'utf8');
+          privateKey = await fs.readFile(resolvedPath, 'utf8');
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
         } else if (signatureAuth.certificateContent) {
@@ -383,7 +394,7 @@ export async function generateSignature(
         } else if (signatureAuth.keystorePath) {
           // Use file path (existing behavior)
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
-          keystoreData = fs.readFileSync(resolvedPath);
+          keystoreData = await fs.readFile(resolvedPath);
         } else {
           throw new Error(
             'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
@@ -479,7 +490,7 @@ export async function generateSignature(
               const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
               try {
-                const stat = await fs.promises.stat(resolvedPath);
+                const stat = await fs.stat(resolvedPath);
                 logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
               } catch (e) {
                 logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
@@ -541,15 +552,20 @@ export async function generateSignature(
                 `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
               );
 
-              // Read the private key directly from the key file
-              if (!fs.existsSync(resolvedKeyPath)) {
-                throw new Error(`Key file not found: ${resolvedKeyPath}`);
-              }
-              if (!fs.existsSync(resolvedCertPath)) {
+              // Verify the cert path resolves; the cert contents aren't consumed
+              // here, only its presence is validated for early operator feedback.
+              if (!(await pathExists(resolvedCertPath))) {
                 throw new Error(`Certificate file not found: ${resolvedCertPath}`);
               }
-
-              privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+              try {
+                // Read the key directly — readFile surfaces ENOENT with the path.
+                privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+              } catch (err) {
+                if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+                  throw new Error(`Key file not found: ${resolvedKeyPath}`);
+                }
+                throw err;
+              }
               logger.debug(
                 `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
               );
@@ -978,46 +994,6 @@ interface SessionParserData {
   body?: Record<string, any> | string | null;
 }
 
-/**
- * Loads a module from a file:// reference if needed
- * This function should be called before passing transforms to createTransformResponse/createTransformRequest
- *
- * @param transform - The transform config (string or function)
- * @returns The loaded function, or the original value if not a file:// reference
- */
-export async function loadTransformModule(
-  transform: string | Function | undefined,
-): Promise<string | Function | undefined> {
-  if (!transform) {
-    return transform;
-  }
-  if (typeof transform === 'function') {
-    return transform;
-  }
-  if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Transform module malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  }
-  // For string expressions, return as-is
-  return transform;
-}
-
 function hasOwnProperty(obj: Record<string, any>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
@@ -1171,14 +1147,7 @@ export async function createSessionParser(
     return (response) => parser(response);
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    let filename = parser.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
+    const { filename, functionName } = parseFileTransformReference(parser);
     const requiredModule = await importModule(
       path.resolve(cliState.basePath || '', filename),
       functionName,
@@ -1431,14 +1400,7 @@ export async function createValidateStatus(
 
   if (typeof validator === 'string') {
     if (validator.startsWith('file://')) {
-      let filename = validator.slice('file://'.length);
-      let functionName: string | undefined;
-      if (filename.includes(':')) {
-        const splits = filename.split(':');
-        if (splits[0] && isJavascriptFile(splits[0])) {
-          [filename, functionName] = splits;
-        }
-      }
+      const { filename, functionName } = parseFileTransformReference(validator);
       try {
         const requiredModule = await importModule(
           path.resolve(cliState.basePath || '', filename),
@@ -1493,18 +1455,44 @@ export function estimateTokenCount(text: string, multiplier: number = 1.3): numb
  */
 async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>): Promise<Agent> {
   const tlsOptions: https.AgentOptions = {};
+  const basePath = cliState.basePath || '';
+  const usingJks = Boolean((tlsConfig as any).jksPath || (tlsConfig as any).jksContent);
+
+  // Kick off all independent file reads in parallel. JKS and cert/key are
+  // mutually exclusive, so at most we read CA + cert + key + PFX concurrently.
+  type ReadResult = { resolved: string; contents: string | Buffer } | undefined;
+  const readUtf8 = async (p: string | undefined): Promise<ReadResult> => {
+    if (!p) {
+      return undefined;
+    }
+    const resolved = safeResolve(basePath, p);
+    return { resolved, contents: await fs.readFile(resolved, 'utf8') };
+  };
+  const readBuffer = async (p: string | undefined): Promise<ReadResult> => {
+    if (!p) {
+      return undefined;
+    }
+    const resolved = safeResolve(basePath, p);
+    return { resolved, contents: await fs.readFile(resolved) };
+  };
+
+  const [caResult, certResult, keyResult, pfxResult] = await Promise.all([
+    tlsConfig.ca ? Promise.resolve(undefined) : readUtf8(tlsConfig.caPath),
+    !usingJks && !tlsConfig.cert ? readUtf8(tlsConfig.certPath) : Promise.resolve(undefined),
+    !usingJks && !tlsConfig.key ? readUtf8(tlsConfig.keyPath) : Promise.resolve(undefined),
+    tlsConfig.pfx ? Promise.resolve(undefined) : readBuffer(tlsConfig.pfxPath),
+  ]);
 
   // Load CA certificates
   if (tlsConfig.ca) {
     tlsOptions.ca = tlsConfig.ca;
-  } else if (tlsConfig.caPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.caPath);
-    tlsOptions.ca = fs.readFileSync(resolvedPath, 'utf8');
-    logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
+  } else if (caResult) {
+    tlsOptions.ca = caResult.contents;
+    logger.debug(`[HTTP Provider] Loaded CA certificate from ${caResult.resolved}`);
   }
 
   // Handle JKS certificates for TLS (extract cert and key)
-  if ((tlsConfig as any).jksPath || (tlsConfig as any).jksContent) {
+  if (usingJks) {
     try {
       const jksModule = await import('jks-js').catch(() => {
         throw new Error(
@@ -1513,7 +1501,6 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       });
       const jks = jksModule as any;
 
-      let keystoreData: Buffer;
       const keystorePassword =
         (tlsConfig as any).keystorePassword ||
         tlsConfig.passphrase ||
@@ -1525,15 +1512,14 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
         );
       }
 
+      let keystoreData: Buffer;
       if ((tlsConfig as any).jksContent) {
-        // Use base64 encoded content
         logger.debug(`[HTTP Provider] Loading JKS from base64 content for TLS`);
         keystoreData = Buffer.from((tlsConfig as any).jksContent, 'base64');
       } else if ((tlsConfig as any).jksPath) {
-        // Use file path
-        const resolvedPath = safeResolve(cliState.basePath || '', (tlsConfig as any).jksPath);
+        const resolvedPath = safeResolve(basePath, (tlsConfig as any).jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
-        keystoreData = fs.readFileSync(resolvedPath);
+        keystoreData = await fs.readFile(resolvedPath);
       } else {
         throw new Error('JKS content or path is required');
       }
@@ -1580,19 +1566,17 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     // Load client certificate (non-JKS)
     if (tlsConfig.cert) {
       tlsOptions.cert = tlsConfig.cert;
-    } else if (tlsConfig.certPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
-      tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
+    } else if (certResult) {
+      tlsOptions.cert = certResult.contents;
+      logger.debug(`[HTTP Provider] Loaded client certificate from ${certResult.resolved}`);
     }
 
     // Load private key (non-JKS)
     if (tlsConfig.key) {
       tlsOptions.key = tlsConfig.key;
-    } else if (tlsConfig.keyPath) {
-      const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
-      tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
-      logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
+    } else if (keyResult) {
+      tlsOptions.key = keyResult.contents;
+      logger.debug(`[HTTP Provider] Loaded private key from ${keyResult.resolved}`);
     }
   }
 
@@ -1614,10 +1598,9 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       tlsOptions.pfx = tlsConfig.pfx;
       logger.debug(`[HTTP Provider] Using inline PFX certificate buffer`);
     }
-  } else if (tlsConfig.pfxPath) {
-    const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
-    tlsOptions.pfx = fs.readFileSync(resolvedPath);
-    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
+  } else if (pfxResult) {
+    tlsOptions.pfx = pfxResult.contents;
+    logger.debug(`[HTTP Provider] Loaded PFX certificate from ${pfxResult.resolved}`);
   }
 
   // Set passphrase if provided
@@ -1874,7 +1857,7 @@ export class HttpProvider implements ApiProvider {
       const response = await fetchWithCache(
         oauthConfig.tokenUrl,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         true, // Always bust cache for token requests
         0, // No retries for token requests
@@ -2214,7 +2197,7 @@ export class HttpProvider implements ApiProvider {
     const response = await fetchWithCache(
       url,
       fetchOptions,
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'text',
       true, // Always bust cache for session requests
       this.config.maxRetries,
@@ -2651,7 +2634,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         multipartBody ? true : (context?.bustCache ?? context?.debug),
         this.config.maxRetries,
@@ -2882,7 +2865,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         context?.bustCache ?? context?.debug,
         this.config.maxRetries,
