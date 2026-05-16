@@ -447,22 +447,19 @@ export class GoogleLiveProvider implements ApiProvider {
         ws.send(JSON.stringify(setupMessage));
       };
 
-      ws.onmessage = async (event) => {
-        // Once the request has been resolved (e.g. by an early onclose or
-        // timeout), drop any in-flight messages so they don't trigger side
-        // effects like stateful-API fetches after the caller has moved on.
-        if (isResolved) {
-          return;
-        }
-        // Handle different data types from WebSocket
-        logger.debug('WebSocket message received');
-        let responseData: string;
+      const sendContentMessage = (logMessage: string) => {
+        const contentMessage = formatContentMessage(contents, contentIndex, usesRealtimeTextInput);
+        contentIndex += 1;
+        logger.debug(`${logMessage}: ${JSON.stringify(contentMessage)}`);
+        ws.send(JSON.stringify(contentMessage));
+      };
+
+      const parseWebSocketMessage = (event: WebSocket.MessageEvent) => {
         if (event.data instanceof ArrayBuffer || event.data instanceof Buffer) {
           const dataString = event.data.toString('utf-8');
-
           try {
             JSON.parse(dataString);
-            responseData = dataString;
+            return dataString;
           } catch {
             hasAudioContent = true;
             const audioBuffer = Buffer.isBuffer(event.data) ? event.data : Buffer.from(event.data);
@@ -471,292 +468,359 @@ export class GoogleLiveProvider implements ApiProvider {
             if (isAudioExpected) {
               hasAudioStreamEnded = false;
             }
+            return undefined;
+          }
+        }
+
+        if (typeof event.data === 'string') {
+          return event.data;
+        }
+
+        logger.warn(`Unexpected event.data type: ${typeof event.data}`);
+        ws.close();
+        safeResolve({ error: 'Unexpected response data format' });
+        return undefined;
+      };
+
+      const getMessageType = (response: any) =>
+        response.setupComplete
+          ? 'setupComplete'
+          : response.serverContent?.modelTurn
+            ? 'modelTurn'
+            : response.serverContent?.generationComplete
+              ? 'generationComplete'
+              : response.serverContent?.turnComplete
+                ? 'turnComplete'
+                : response.toolCall
+                  ? 'toolCall'
+                  : response.streamingCustomOp
+                    ? 'streamingCustomOp'
+                    : 'unknown';
+
+      const finalizeSafely = async () => {
+        try {
+          await finalizeResponse();
+        } catch (err) {
+          logger.error(`Error in finalizeResponse: ${err}`);
+          safeResolve({ error: `Error finalizing response: ${err}` });
+        }
+      };
+
+      type LiveFunctionCall = FunctionCall & { id?: string };
+
+      const appendServerContentParts = (serverContent: any) => {
+        if (!serverContent.modelTurn?.parts) {
+          if (serverContent.outputTranscription?.text) {
+            response_audio_transcript += serverContent.outputTranscription.text;
+            clearTimeout(timeout);
+          }
+          return;
+        }
+
+        for (const part of serverContent.modelTurn.parts) {
+          if (part.text) {
+            response_text_total += part.text;
+            clearTimeout(timeout);
+          }
+          if (part.inlineData?.mimeType?.includes('audio')) {
+            hasAudioContent = true;
+            response_audio_total += part.inlineData.data;
+            clearTimeout(timeout);
+            if (isAudioExpected) {
+              hasAudioStreamEnded = false;
+            }
+          }
+        }
+
+        if (serverContent.outputTranscription?.text) {
+          response_audio_transcript += serverContent.outputTranscription.text;
+          if (isAudioExpected) {
+            hasAudioContent = true;
+          }
+          clearTimeout(timeout);
+        }
+      };
+
+      const handleGenerationComplete = (serverContent: any) => {
+        if (!serverContent.generationComplete) {
+          return false;
+        }
+
+        logger.debug(
+          `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
+        );
+        if (isTextExpected && !hasTextStreamEnded) {
+          hasTextStreamEnded = true;
+        }
+        if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
+          hasAudioStreamEnded = true;
+        }
+        if (usesRealtimeTextInput && contentIndex < contents.length) {
+          sendContentMessage('WebSocket sent after generation complete');
+          hasTextStreamEnded = !isTextExpected;
+          hasAudioStreamEnded = !isAudioExpected;
+          return true;
+        }
+        return false;
+      };
+
+      const handleTurnComplete = (serverContent: any) => {
+        if (!serverContent.turnComplete) {
+          return false;
+        }
+
+        if (contentIndex < contents.length) {
+          sendContentMessage('WebSocket sent (multi-turn)');
+          return true;
+        }
+
+        logger.debug(
+          `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
+        );
+        if (isTextExpected && !hasTextStreamEnded) {
+          hasTextStreamEnded = true;
+        }
+        if (isAudioExpected && !hasAudioStreamEnded) {
+          hasAudioStreamEnded = true;
+        }
+        return false;
+      };
+
+      const handleServerContent = async (serverContent: any) => {
+        appendServerContentParts(serverContent);
+        if (handleGenerationComplete(serverContent)) {
+          return;
+        }
+        if (handleTurnComplete(serverContent)) {
+          return;
+        }
+        if (hasTextStreamEnded && hasAudioStreamEnded && contentIndex >= contents.length) {
+          await finalizeSafely();
+        }
+      };
+
+      const sendDisabledToolResponses = (functionCalls: LiveFunctionCall[]) => {
+        logger.warn('Ignoring function calls received while tools are disabled.');
+        for (const functionCall of functionCalls) {
+          if (!functionCall?.id || !functionCall.name) {
+            continue;
+          }
+          const toolMessage = {
+            tool_response: {
+              function_responses: {
+                id: functionCall.id,
+                name: functionCall.name,
+                response: { error: 'Tool calls are disabled for this request.' },
+              },
+            },
+          };
+          ws.send(JSON.stringify(toolMessage));
+        }
+      };
+
+      const buildToolCallbackResponse = async (functionCall: LiveFunctionCall) => {
+        const functionName = functionCall.name;
+        if (!functionName) {
+          return {};
+        }
+
+        try {
+          if (config.functionToolCallbacks?.[functionName]) {
+            return await this.executeFunctionCallback(
+              functionName,
+              JSON.stringify(
+                typeof functionCall.args === 'string'
+                  ? JSON.parse(functionCall.args)
+                  : functionCall.args,
+              ),
+              config.functionToolCallbacks,
+            );
+          }
+
+          if (config.functionToolStatefulApi) {
+            logger.warn(
+              'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
+            );
+            const baseUrl = new URL(functionName, config.functionToolStatefulApi.url).href;
+            try {
+              const callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
+              logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
+              return callbackResponse;
+            } catch (err) {
+              logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
+              return {
+                error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+              };
+            }
+          }
+        } catch (err) {
+          logger.error(`Error executing function ${functionName}: ${JSON.stringify(err)}`);
+          return {
+            error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
+          };
+        }
+
+        return {};
+      };
+
+      const sendToolResponse = (
+        functionCall: LiveFunctionCall,
+        functionName: string,
+        callbackResponse: unknown,
+      ) => {
+        const toolMessage = {
+          tool_response: {
+            function_responses: {
+              id: functionCall.id,
+              name: functionName,
+              response: callbackResponse,
+            },
+          },
+        };
+        logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
+        ws.send(JSON.stringify(toolMessage));
+      };
+
+      const handleToolCalls = async (functionCalls: LiveFunctionCall[]) => {
+        if (isResolved) {
+          return;
+        }
+        if (toolsDisabled) {
+          sendDisabledToolResponses(functionCalls);
+          return;
+        }
+
+        for (const functionCall of functionCalls) {
+          function_calls_total.push(functionCall);
+          if (!functionCall?.id || !functionCall.name) {
+            continue;
+          }
+          const callbackResponse = await buildToolCallbackResponse(functionCall);
+          if (isResolved) {
             return;
           }
-        } else if (typeof event.data === 'string') {
-          responseData = event.data;
-        } else {
-          logger.warn(`Unexpected event.data type: ${typeof event.data}`);
+          sendToolResponse(functionCall, functionCall.name, callbackResponse);
+        }
+      };
+
+      const appendRealtimeAudioChunks = (chunks: any[]) => {
+        for (const chunk of chunks) {
+          if (chunk.mimeType?.includes('audio')) {
+            hasAudioContent = true;
+            response_audio_total += chunk.data;
+          }
+        }
+      };
+
+      const appendCandidateAudioParts = (parts: any[]) => {
+        for (const part of parts) {
+          if (part.inlineData?.mimeType?.includes('audio')) {
+            hasAudioContent = true;
+            response_audio_total += part.inlineData.data;
+          }
+        }
+      };
+
+      const handleSupplementalMessage = (response: any) => {
+        if (response.sessionResumptionUpdate) {
+          logger.debug(
+            `Session resumption update received: ${JSON.stringify(response.sessionResumptionUpdate)}`,
+          );
+          return true;
+        }
+        if (response.realtimeInput?.mediaChunks) {
+          appendRealtimeAudioChunks(response.realtimeInput.mediaChunks);
+          return true;
+        }
+        if (response.candidates?.[0]?.content?.parts) {
+          appendCandidateAudioParts(response.candidates[0].content.parts);
+          return true;
+        }
+        if (
+          response.streamingCustomOp?.[
+            'type.googleapis.com/google.ai.generativelanguage.v1alpha.StreamingCustomOpOutput'
+          ]?.audioCompletionSignal
+        ) {
+          hasAudioStreamEnded = true;
+          return true;
+        }
+        return false;
+      };
+
+      const handleUnhandledMessage = async (response: any) => {
+        if (
+          response.setupComplete ||
+          response.serverContent ||
+          response.toolCall ||
+          response.realtimeInput ||
+          response.candidates ||
+          response.streamingCustomOp
+        ) {
+          return;
+        }
+
+        logger.warn(
+          `Received unhandled WebSocket message structure: ${JSON.stringify(response).substring(0, 200)}`,
+        );
+        if (
+          !hasOutputTranscription ||
+          !hasAudioContent ||
+          !isAudioExpected ||
+          hasAudioStreamEnded
+        ) {
+          return;
+        }
+        logger.debug('Unknown message with transcription enabled - marking audio as complete');
+        hasAudioStreamEnded = true;
+        if (hasTextStreamEnded) {
+          await finalizeSafely();
+        }
+      };
+
+      const processWebSocketResponse = async (response: any) => {
+        if (response.error) {
+          logger.error(`Google Live API error: ${JSON.stringify(response.error)}`);
           ws.close();
-          safeResolve({ error: 'Unexpected response data format' });
+          safeResolve({ error: `Google Live API error: ${JSON.stringify(response.error)}` });
+          return;
+        }
+
+        logger.debug(
+          `Message type: ${getMessageType(response)}, hasAudioContent: ${hasAudioContent}, hasOutputTranscription: ${hasOutputTranscription}`,
+        );
+        if (response.setupComplete) {
+          sendContentMessage('WebSocket sent');
+          return;
+        }
+        if (response.serverContent) {
+          await handleServerContent(response.serverContent);
+          return;
+        }
+        if (response.toolCall?.functionCalls) {
+          await handleToolCalls(response.toolCall.functionCalls);
+          return;
+        }
+        if (!handleSupplementalMessage(response)) {
+          await handleUnhandledMessage(response);
+        }
+      };
+
+      ws.onmessage = async (event) => {
+        if (isResolved) {
+          return;
+        }
+        logger.debug('WebSocket message received');
+        const responseData = parseWebSocketMessage(event);
+        if (!responseData) {
           return;
         }
 
         try {
           const responseText = await new Response(responseData).text();
-          // Re-check after the await: the request may have been resolved by an
-          // onclose/timeout while we were parsing.
           if (isResolved) {
             return;
           }
-          const response = JSON.parse(responseText);
-
-          if (response.error) {
-            logger.error(`Google Live API error: ${JSON.stringify(response.error)}`);
-            ws.close();
-            safeResolve({ error: `Google Live API error: ${JSON.stringify(response.error)}` });
-            return;
-          }
-
-          const messageType = response.setupComplete
-            ? 'setupComplete'
-            : response.serverContent?.modelTurn
-              ? 'modelTurn'
-              : response.serverContent?.generationComplete
-                ? 'generationComplete'
-                : response.serverContent?.turnComplete
-                  ? 'turnComplete'
-                  : response.toolCall
-                    ? 'toolCall'
-                    : response.streamingCustomOp
-                      ? 'streamingCustomOp'
-                      : 'unknown';
-          logger.debug(
-            `Message type: ${messageType}, hasAudioContent: ${hasAudioContent}, hasOutputTranscription: ${hasOutputTranscription}`,
-          );
-
-          if (response.setupComplete) {
-            const contentMessage = formatContentMessage(
-              contents,
-              contentIndex,
-              usesRealtimeTextInput,
-            );
-            contentIndex += 1;
-            logger.debug(`WebSocket sent: ${JSON.stringify(contentMessage)}`);
-            ws.send(JSON.stringify(contentMessage));
-          } else if (response.serverContent) {
-            const { serverContent } = response;
-
-            if (serverContent.modelTurn?.parts) {
-              for (const part of serverContent.modelTurn.parts) {
-                if (part.text) {
-                  response_text_total += part.text;
-                  clearTimeout(timeout);
-                }
-                if (part.inlineData?.mimeType?.includes('audio')) {
-                  hasAudioContent = true;
-                  response_audio_total += part.inlineData.data;
-                  clearTimeout(timeout);
-                  if (isAudioExpected) {
-                    hasAudioStreamEnded = false;
-                  }
-                }
-              }
-              if (serverContent.outputTranscription?.text) {
-                response_audio_transcript += serverContent.outputTranscription.text;
-                if (isAudioExpected) {
-                  hasAudioContent = true;
-                }
-                clearTimeout(timeout);
-              }
-            } else if (serverContent.outputTranscription?.text) {
-              // Handle transcription-only messages when transcription arrives separately.
-              response_audio_transcript += serverContent.outputTranscription.text;
-              clearTimeout(timeout);
-            }
-
-            if (serverContent.generationComplete) {
-              logger.debug(
-                `Generation complete received - text expected: ${isTextExpected}, audio expected: ${isAudioExpected}, has transcription: ${hasOutputTranscription}`,
-              );
-              if (isTextExpected && !hasTextStreamEnded) {
-                hasTextStreamEnded = true;
-              }
-              if (isAudioExpected && !hasAudioStreamEnded && hasOutputTranscription) {
-                hasAudioStreamEnded = true;
-              }
-              if (usesRealtimeTextInput && contentIndex < contents.length) {
-                const contentMessage = formatContentMessage(
-                  contents,
-                  contentIndex,
-                  usesRealtimeTextInput,
-                );
-                contentIndex += 1;
-                logger.debug(
-                  `WebSocket sent after generation complete: ${JSON.stringify(contentMessage)}`,
-                );
-                ws.send(JSON.stringify(contentMessage));
-                hasTextStreamEnded = !isTextExpected;
-                hasAudioStreamEnded = !isAudioExpected;
-                return;
-              }
-            }
-
-            if (serverContent.turnComplete && contentIndex < contents.length) {
-              const contentMessage = formatContentMessage(
-                contents,
-                contentIndex,
-                usesRealtimeTextInput,
-              );
-              contentIndex += 1;
-              logger.debug(`WebSocket sent (multi-turn): ${JSON.stringify(contentMessage)}`);
-              ws.send(JSON.stringify(contentMessage));
-              return;
-            }
-
-            if (serverContent.turnComplete && contentIndex >= contents.length) {
-              logger.debug(
-                `Turn complete received - text expected: ${isTextExpected}, text ended: ${hasTextStreamEnded}, audio expected: ${isAudioExpected}, audio ended: ${hasAudioStreamEnded}, has audio: ${hasAudioContent}, has transcription: ${!!response_audio_transcript}`,
-              );
-              if (isTextExpected && !hasTextStreamEnded) {
-                hasTextStreamEnded = true;
-              }
-              if (isAudioExpected && !hasAudioStreamEnded) {
-                hasAudioStreamEnded = true;
-              }
-            }
-
-            if (hasTextStreamEnded && hasAudioStreamEnded && contentIndex >= contents.length) {
-              try {
-                await finalizeResponse();
-              } catch (err) {
-                logger.error(`Error in finalizeResponse: ${err}`);
-                safeResolve({ error: `Error finalizing response: ${err}` });
-              }
-            }
-            return;
-          } else if (response.toolCall?.functionCalls) {
-            // Skip tool execution and tool_response sends if the request is
-            // already resolved (e.g. via timeout/onclose).
-            if (isResolved) {
-              return;
-            }
-            if (toolsDisabled) {
-              // Reply with an error tool_response so the model can complete its turn
-              // instead of waiting for a response that will never come (which would
-              // otherwise stall the websocket until the 30s timeoutMs fires).
-              logger.warn('Ignoring function calls received while tools are disabled.');
-              for (const functionCall of response.toolCall.functionCalls) {
-                if (functionCall?.id && functionCall.name) {
-                  const toolMessage = {
-                    tool_response: {
-                      function_responses: {
-                        id: functionCall.id,
-                        name: functionCall.name,
-                        response: { error: 'Tool calls are disabled for this request.' },
-                      },
-                    },
-                  };
-                  ws.send(JSON.stringify(toolMessage));
-                }
-              }
-            } else {
-              for (const functionCall of response.toolCall.functionCalls) {
-                function_calls_total.push(functionCall);
-                if (functionCall && functionCall.id && functionCall.name) {
-                  let callbackResponse: unknown = {};
-                  const functionName = functionCall.name;
-                  try {
-                    if (config.functionToolCallbacks?.[functionName]) {
-                      callbackResponse = await this.executeFunctionCallback(
-                        functionName,
-                        JSON.stringify(
-                          typeof functionCall.args === 'string'
-                            ? JSON.parse(functionCall.args)
-                            : functionCall.args,
-                        ),
-                        config.functionToolCallbacks,
-                      );
-                    } else if (config.functionToolStatefulApi) {
-                      logger.warn(
-                        'functionToolStatefulApi configured but no HTTP client implemented for it after cleanup.',
-                      );
-                      const baseUrl = new URL(functionName, config.functionToolStatefulApi.url)
-                        .href;
-                      try {
-                        callbackResponse = await tryGetThenPost(baseUrl, functionCall.args);
-                        logger.debug(`Stateful api response: ${JSON.stringify(callbackResponse)}`);
-                      } catch (err) {
-                        callbackResponse = {
-                          error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                        };
-                        logger.error(
-                          `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                        );
-                      }
-                    }
-                  } catch (err) {
-                    callbackResponse = {
-                      error: `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                    };
-                    logger.error(
-                      `Error executing function ${functionName}: ${JSON.stringify(err)}`,
-                    );
-                  }
-                  // The callback above may have awaited; bail before sending
-                  // a tool_response if the request has since been resolved.
-                  if (isResolved) {
-                    return;
-                  }
-                  const toolMessage = {
-                    tool_response: {
-                      function_responses: {
-                        id: functionCall.id,
-                        name: functionName,
-                        response: callbackResponse,
-                      },
-                    },
-                  };
-                  logger.debug(`WebSocket sent: ${JSON.stringify(toolMessage)}`);
-                  ws.send(JSON.stringify(toolMessage));
-                }
-              }
-            }
-          } else if (response.sessionResumptionUpdate) {
-            logger.debug(
-              `Session resumption update received: ${JSON.stringify(response.sessionResumptionUpdate)}`,
-            );
-          } else if (response.realtimeInput?.mediaChunks) {
-            for (const chunk of response.realtimeInput.mediaChunks) {
-              if (chunk.mimeType?.includes('audio')) {
-                hasAudioContent = true;
-                response_audio_total += chunk.data;
-              }
-            }
-          } else if (response.candidates?.[0]?.content?.parts) {
-            for (const part of response.candidates[0].content.parts) {
-              if (part.inlineData?.mimeType?.includes('audio')) {
-                hasAudioContent = true;
-                response_audio_total += part.inlineData.data;
-              }
-            }
-          } else if (
-            response.streamingCustomOp?.[
-              'type.googleapis.com/google.ai.generativelanguage.v1alpha.StreamingCustomOpOutput'
-            ]?.audioCompletionSignal
-          ) {
-            hasAudioStreamEnded = true;
-          } else if (
-            !response.setupComplete &&
-            !response.serverContent &&
-            !response.toolCall &&
-            !response.realtimeInput &&
-            !response.candidates &&
-            !response.streamingCustomOp
-          ) {
-            logger.warn(
-              `Received unhandled WebSocket message structure: ${JSON.stringify(response).substring(0, 200)}`,
-            );
-            if (
-              hasOutputTranscription &&
-              hasAudioContent &&
-              isAudioExpected &&
-              !hasAudioStreamEnded
-            ) {
-              logger.debug(
-                'Unknown message with transcription enabled - marking audio as complete',
-              );
-              hasAudioStreamEnded = true;
-              if (hasTextStreamEnded) {
-                try {
-                  await finalizeResponse();
-                } catch (err) {
-                  logger.error(`Error in finalizeResponse: ${err}`);
-                  safeResolve({ error: `Error finalizing response: ${err}` });
-                }
-              }
-            }
-          }
+          await processWebSocketResponse(JSON.parse(responseText));
         } catch (err) {
           logger.error(`Failed to process WebSocket response: ${JSON.stringify(err)}`);
           ws.close();
