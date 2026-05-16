@@ -62,5 +62,4 @@ Testing for reasoning DoS vulnerabilities is critical because:
 ## Related Concepts
 
 - [Divergent Repetition Plugin](divergent-repetition.md)
-
-For more information about LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) page.
+- [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping

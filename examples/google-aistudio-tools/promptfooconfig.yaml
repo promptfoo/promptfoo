@@ -29,10 +29,10 @@ tests:
         value: get_current_weather
         # Transform is a cleaner way to pick out specific properties
         transform: output[0].functionCall.name
-      - type: similar
+      - type: icontains
         value: '{{location}}'
-        threshold: 0.9
-        # Transform returns only the parsed location argument
+        # Transform returns only the parsed location argument.
+        # The model may normalize locations, e.g. "San Francisco, CA".
         transform: output[0].functionCall.args.location
 
   - vars:
@@ -42,7 +42,6 @@ tests:
       - type: equals
         value: get_current_weather
         transform: output[0].functionCall.name
-      - type: similar
+      - type: icontains
         value: '{{location}}'
-        threshold: 0.9
         transform: output[0].functionCall.args.location
