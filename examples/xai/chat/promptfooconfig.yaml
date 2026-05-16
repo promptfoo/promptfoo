@@ -10,36 +10,26 @@ providers:
   - id: xai:grok-4.3
     config:
       temperature: 0.7
-      max_completion_tokens: 4096
-
-  # Grok 4.1 Fast Models (optimized for agentic tool calling)
-  - id: xai:grok-4-1-fast-reasoning
-    config:
-      temperature: 0.7
-      max_completion_tokens: 4096
-      # Note: Does NOT support: presence_penalty, frequency_penalty, stop, reasoning_effort
-
-  # Grok-4 Fast Models
-  - id: xai:grok-4-fast-reasoning
-    config:
-      temperature: 0.7
-      max_completion_tokens: 4096
-
-  # Grok-4 Models
-  - id: xai:grok-4
-    config:
-      temperature: 0.7
-      max_completion_tokens: 4096
-
-  # Grok-3 Models
-  - xai:grok-3-fast
-  - id: xai:grok-3-mini-fast
-    config:
       reasoning_effort: high
+      max_completion_tokens: 4096
 
-  # Grok-2 Models
-  - xai:grok-2
-  - xai:grok-2-vision
+  # Grok 4.20 reasoning family
+  - id: xai:grok-4.20-reasoning
+    config:
+      temperature: 0.7
+      max_completion_tokens: 4096
+
+  # Grok 4.20 non-reasoning family
+  - id: xai:grok-4.20-non-reasoning
+    config:
+      temperature: 0.7
+      max_completion_tokens: 4096
+
+  # Grok 4.20 multi-agent family
+  - id: xai:grok-4.20-multi-agent
+    config:
+      temperature: 0.7
+      max_completion_tokens: 4096
 
 defaultTest:
   assert:
