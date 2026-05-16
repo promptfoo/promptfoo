@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PosthocAssertionsForm from './PosthocAssertionsForm';
@@ -18,6 +18,22 @@ describe('PosthocAssertionsForm', () => {
   function EditableAssertionHarness() {
     const [assertions, setAssertions] = useState<Assertion[]>([
       { type: 'equals', value: 'initial value' },
+    ]);
+
+    return (
+      <PosthocAssertionsForm
+        assertions={assertions}
+        onChange={(nextAssertions) => {
+          onChange(nextAssertions);
+          setAssertions(nextAssertions);
+        }}
+      />
+    );
+  }
+
+  function AdvancedAssertionHarness() {
+    const [assertions, setAssertions] = useState<Assertion[]>([
+      { type: 'similar', value: 'reference answer' },
     ]);
 
     return (
@@ -132,5 +148,42 @@ describe('PosthocAssertionsForm', () => {
 
     // Should not show the LLM API call warning
     expect(screen.queryByText(/API calls/)).not.toBeInTheDocument();
+  });
+
+  it('updates advanced assertion settings', async () => {
+    const user = userEvent.setup();
+    render(<AdvancedAssertionHarness />);
+
+    await user.click(screen.getByText('Advanced'));
+    await user.type(screen.getByLabelText('Threshold'), '0.7');
+    await user.type(screen.getByLabelText('Weight'), '2');
+    await user.type(screen.getByLabelText('Metric name'), 'semantic-match');
+    await user.type(
+      screen.getByPlaceholderText('Optional transform expression'),
+      'output.trim()',
+    );
+    await user.type(
+      screen.getByPlaceholderText('Optional context transform expression'),
+      'context.metadata',
+    );
+
+    const configTextarea = screen.getByText('Config (JSON)').parentElement?.querySelector('textarea');
+    expect(configTextarea).not.toBeNull();
+    fireEvent.change(configTextarea as HTMLTextAreaElement, {
+      target: { value: '{"provider":"openai"}' },
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith([
+      {
+        type: 'similar',
+        value: 'reference answer',
+        threshold: 0.7,
+        weight: 2,
+        metric: 'semantic-match',
+        transform: 'output.trim()',
+        contextTransform: 'context.metadata',
+        config: { provider: 'openai' },
+      },
+    ]);
   });
 });

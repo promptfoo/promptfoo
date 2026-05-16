@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
 
 import { ToastContext } from '@app/contexts/ToastContextDef';
-import { addEvalAssertions } from '@app/utils/api';
+import { addEvalAssertions, getAssertionJobStatus } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -276,5 +276,179 @@ describe('AddAssertionsDialog', () => {
 
     // Button should show "Run 1 on 100 →" for filtered scope with 100 test cases
     expect(screen.getByRole('button', { name: /Run 1 on 100/ })).toBeInTheDocument();
+  });
+
+  it('shows large filtered run confirmation details before submitting', async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-confirm',
+      availableScopes: ['filtered'],
+      defaultScope: 'filtered',
+      filteredCount: 150,
+      filters: [
+        {
+          id: 'filter-1',
+          type: 'metric',
+          operator: 'eq',
+          value: 'failed',
+          logicOperator: 'and',
+          sortIndex: 0,
+        },
+        {
+          id: 'filter-2',
+          type: 'score',
+          operator: 'lt',
+          value: '0.5',
+          logicOperator: 'and',
+          sortIndex: 1,
+        },
+      ],
+      searchText: 'timeout',
+      onApplied: mockOnApplied,
+    });
+
+    await user.click(screen.getByText('LLM evaluates'));
+    await user.type(screen.getByPlaceholderText('Describe what makes a good response...'), 'helpful');
+    await user.click(screen.getByText('Semantically similar'));
+    await user.type(
+      screen.getByPlaceholderText('Expected output to compare against...'),
+      'reference answer',
+    );
+    await user.click(screen.getByRole('button', { name: /Run 2 on 150/ }));
+
+    expect(screen.getByText('Confirm large assertion run')).toBeInTheDocument();
+    expect(screen.getByText(/2 assertions/)).toBeInTheDocument();
+    expect(screen.getByText(/150 test cases/)).toBeInTheDocument();
+    expect(screen.getByText(/Active: 2 filters, search: "timeout"/)).toBeInTheDocument();
+    expect(screen.getByText(/Search: "timeout"/)).toBeInTheDocument();
+    expect(screen.getByText(/2 LLM assertions × 150 =/)).toBeInTheDocument();
+    expect(screen.getByText(/300 API calls/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.queryByText('Confirm large assertion run')).not.toBeInTheDocument();
+    expect(addEvalAssertions).not.toHaveBeenCalled();
+  });
+
+  it('shows async job progress with completed pass and fail counts', async () => {
+    const user = userEvent.setup();
+
+    vi.mocked(addEvalAssertions).mockResolvedValue({
+      data: { jobId: 'job-progress', total: 2, matchedTestCount: 1 },
+    });
+    vi.mocked(getAssertionJobStatus).mockResolvedValue({
+      data: {
+        status: 'in-progress',
+        progress: 1,
+        total: 2,
+        completedResults: [
+          { resultId: 'result-pass', pass: true, score: 1 },
+          { resultId: 'result-fail', pass: false, score: 0, error: 'Mismatch' },
+        ],
+        updatedResults: 0,
+        skippedResults: 0,
+        skippedAssertions: 0,
+        errors: [],
+        matchedTestCount: 1,
+      },
+    });
+
+    renderDialog({
+      open: true,
+      onClose: mockOnClose,
+      evalId: 'eval-progress',
+      availableScopes: ['results'],
+      defaultScope: 'results',
+      resultId: 'result-progress',
+      onApplied: mockOnApplied,
+    });
+
+    await user.click(screen.getByText('Contains text'));
+    await user.type(screen.getByPlaceholderText('Text to search for...'), 'progress');
+    await user.click(screen.getByRole('button', { name: /Run 1 on 1/ }));
+
+    await waitFor(() => {
+      expect(getAssertionJobStatus).toHaveBeenCalledWith('eval-progress', 'job-progress');
+    });
+
+    expect(screen.getByText(/Running icontains/)).toBeInTheDocument();
+    expect(screen.getByText(/1 \/ 2 outputs/)).toBeInTheDocument();
+    expect(screen.getByText('1 passed')).toBeInTheDocument();
+    expect(screen.getByText('1 failed')).toBeInTheDocument();
+  });
+
+  it('shows completed job errors and retries the failed result ids', async () => {
+    const user = userEvent.setup();
+    const mockShowToast = vi.fn();
+
+    vi.mocked(addEvalAssertions)
+      .mockResolvedValueOnce({
+        data: { jobId: 'job-errors', total: 3 },
+      })
+      .mockResolvedValueOnce({
+        data: { jobId: null, updatedResults: 2, skippedResults: 0, skippedAssertions: 0 },
+      });
+    vi.mocked(getAssertionJobStatus).mockResolvedValueOnce({
+      data: {
+        status: 'complete',
+        progress: 3,
+        total: 3,
+        completedResults: [
+          { resultId: 'result-success', pass: true, score: 1 },
+          { resultId: 'result-error-1', pass: false, score: 0, error: 'Provider timeout' },
+          { resultId: 'result-error-2', pass: false, score: 0, error: 'Provider timeout' },
+        ],
+        updatedResults: 1,
+        skippedResults: 0,
+        skippedAssertions: 0,
+        errors: [
+          { resultId: 'result-error-1', error: 'Provider timeout' },
+          { resultId: 'result-error-2', error: 'Provider timeout' },
+        ],
+      },
+    });
+
+    render(
+      <ToastContext.Provider value={{ showToast: mockShowToast }}>
+        <AddAssertionsDialog
+          open={true}
+          onClose={mockOnClose}
+          evalId="eval-errors"
+          availableScopes={['results']}
+          defaultScope="results"
+          resultId="result-errors"
+          onApplied={mockOnApplied}
+        />
+      </ToastContext.Provider>,
+    );
+
+    await user.click(screen.getByText('Contains text'));
+    await user.type(screen.getByPlaceholderText('Text to search for...'), 'retry me');
+    await user.click(screen.getByRole('button', { name: /Run 1 on 1/ }));
+
+    expect(await screen.findByText('2 failed')).toBeInTheDocument();
+
+    await user.click(screen.getByText('View error details'));
+    expect(await screen.findByText('Provider timeout')).toBeInTheDocument();
+    expect(screen.getByText('(2 results)')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry 2 failed' }));
+
+    await waitFor(() => {
+      expect(addEvalAssertions).toHaveBeenLastCalledWith('eval-errors', {
+        assertions: [{ type: 'icontains', value: 'retry me' }],
+        scope: { type: 'results', resultIds: ['result-error-1', 'result-error-2'] },
+      });
+    });
+
+    expect(mockShowToast).toHaveBeenLastCalledWith(
+      'Retry: Added assertions to 2 results.',
+      'success',
+    );
+    expect(mockOnApplied).toHaveBeenCalled();
+    expect(mockOnClose).toHaveBeenCalled();
   });
 });
