@@ -9,14 +9,18 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { ResultFailureReason } from '../types/index';
-import { resolveConfigs } from '../util/config/load';
+import {
+  ConfigResolutionError,
+  logConfigResolutionError,
+  resolveConfigs,
+} from '../util/config/load';
 import { recalculatePromptMetrics } from '../util/recalculatePromptMetrics';
 import { shouldShareResults } from '../util/sharing';
 import type { Command } from 'commander';
 
-import type { EvaluateOptions } from '../types/index';
-
 export { recalculatePromptMetrics };
+
+import type { InternalEvaluateOptions } from '../types/internal';
 
 interface RetryCommandOptions {
   config?: string;
@@ -142,7 +146,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   }
 
   // Set up evaluation options
-  const evaluateOptions: EvaluateOptions = {
+  const evaluateOptions: InternalEvaluateOptions = {
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
@@ -229,16 +233,20 @@ export function setupRetryCommand(program: Command) {
       try {
         await retryCommand(evalId, cmdObj);
       } catch (error) {
-        logger.error('Failed to retry evaluation', { error, evalId });
-        logger.info(
-          chalk.yellow(dedent`
+        if (error instanceof ConfigResolutionError) {
+          logConfigResolutionError(error);
+        } else {
+          logger.error('Failed to retry evaluation', { error, evalId });
+          logger.info(
+            chalk.yellow(dedent`
 
-            Recovery options:
-              - Run the same retry command again to continue
-              - Check API credentials and network connectivity
-              - Use --verbose for detailed error information
-          `),
-        );
+              Recovery options:
+                - Run the same retry command again to continue
+                - Check API credentials and network connectivity
+                - Use --verbose for detailed error information
+            `),
+          );
+        }
         process.exitCode = 1;
       }
     });

@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Agents SDK sandbox and skill features
+
+prompts:
+  - '{{query}}'
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+
+providers:
+  - id: openai:agents:workspace-agent
+    config:
+      agent: file://./agents/workspace-agent.ts
+      sandbox:
+        type: unix-local
+      tracing: true
+      maxTurns: 12
+
+tests:
+  - description: Inspect sandbox workspace through the skill workflow
+    vars:
+      query: Use the ticket-summary skill, run exec_command to read task.md, and summarize the ticket.
+    assert:
+      - type: contains
+        value: PF-42
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*task.md*'
+          min: 1

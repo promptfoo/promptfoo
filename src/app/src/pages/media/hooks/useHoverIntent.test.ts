@@ -1,4 +1,4 @@
-import { mockMatchMedia } from '@app/tests/browserMocks';
+import { mockBrowserProperty, mockMatchMedia, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -221,5 +221,22 @@ describe('useHoverIntent', () => {
     unmount();
 
     expect(clearTimeoutSpy).toHaveBeenCalled();
+  });
+
+  it('should ignore delayed hover work after the browser window tears down', () => {
+    const { result } = renderHook(() => useHoverIntent({ delay: 300 }));
+
+    act(() => {
+      result.current.hoverProps.onMouseEnter();
+    });
+
+    mockBrowserProperty(globalThis, 'window', undefined);
+
+    expect(() => {
+      timers.advanceBy(300);
+    }).not.toThrow();
+
+    restoreBrowserMocks();
+    expect(result.current.isIntentional).toBe(false);
   });
 });
