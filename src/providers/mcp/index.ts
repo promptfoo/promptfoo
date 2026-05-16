@@ -90,10 +90,13 @@ export class MCPProvider implements ApiProvider {
       iteration: context?.iteration,
     };
 
-    return withTargetSpan(spanContext, () => this.callApiInternal(context));
+    return withTargetSpan(spanContext, () => this.callApiInternal(prompt, context));
   }
 
-  private async callApiInternal(context?: CallApiContextParams): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete
       await this.initializationPromise;
