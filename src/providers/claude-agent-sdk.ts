@@ -39,6 +39,7 @@ import type {
   PermissionResult,
   Options as QueryOptions,
   SandboxSettings,
+  SDKMessage,
   SDKResultMessage,
   SettingSource,
   Settings,
@@ -56,6 +57,7 @@ import type {
   ProviderResponse,
   SkillCallEntry,
 } from '../types/index';
+import type { CacheCheckResult } from './agentic-utils';
 
 /**
  * Represents a single tool call captured during a Claude Agent SDK session.
@@ -68,6 +70,17 @@ export interface ToolCallEntry {
   output: unknown;
   is_error: boolean;
   parentToolUseId: string | null;
+}
+
+interface ToolTrackingState {
+  toolCallsMap: Map<string, ToolCallEntry>;
+  toolStartTimes: Map<string, number>;
+}
+
+interface StreamResultSummary {
+  lastResultMsg?: SDKResultMessage;
+  lastMainResultMsg?: SDKResultMessage;
+  resultMsgCount: number;
 }
 
 /** Hard cap for attribute body length on synthesized tool spans. */
@@ -1000,62 +1013,142 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     context?: CallApiContextParams,
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Merge configs from the provider and the prompt
-    const config: ClaudeCodeOptions = {
+    const config = this.mergeConfig(context);
+    const env = this.buildEnvironment(config);
+    this.ensureCredentials(config, env);
+    this.validateConfig(config);
+    this.warnOnIgnoredTitle(config);
+
+    const basePath = this.getBasePath();
+    const { allowedTools, disallowedTools } = this.resolveToolPermissions(config);
+    const workingDirState = this.resolveWorkingDirState(config, basePath);
+    let { workingDir } = workingDirState;
+    const canUseTool = this.resolveCanUseTool(config);
+    const cacheKeyQueryOptions = this.buildCacheKeyQueryOptions(
+      config,
+      env,
+      basePath,
+      allowedTools,
+      disallowedTools,
+    );
+    const cacheResult = await this.initializeClaudeCache(
+      config,
+      workingDir,
+      context,
+      prompt,
+      cacheKeyQueryOptions,
+    );
+    const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    const mcpServers = await this.loadMcpServers(config);
+    workingDir = await this.prepareWorkingDir(config, workingDir, workingDirState.isTempDir);
+    if (callOptions?.abortSignal?.aborted) {
+      return { error: 'Claude Agent SDK call aborted before it started' };
+    }
+
+    const { abortController, abortHandler } = this.createAbortController(callOptions);
+    const options = this.buildQueryOptions(
+      cacheKeyQueryOptions,
+      abortController,
+      mcpServers,
+      workingDir,
+      config,
+      canUseTool,
+    );
+    const queryParams = { prompt, options };
+    this.logQueryParams(prompt, options, env);
+
+    try {
+      return await withGenAISpan(
+        {
+          system: 'anthropic',
+          operationName: 'chat',
+          model: config.model || 'default',
+          providerId: this.providerId,
+          traceparent: context?.traceparent,
+          maxTokens: config.max_thinking_tokens,
+          requestBody: prompt,
+        },
+        () => this.executeClaudeQuery(queryParams, env, context, cacheResult),
+        (response) => this.buildTraceResponseSummary(response),
+      );
+    } catch (error: any) {
+      const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
+
+      if (isAbort) {
+        logger.warn('Claude Agent SDK call aborted');
+        return { error: 'Claude Agent SDK call aborted' };
+      }
+
+      logger.error(`Error calling Claude Agent SDK: ${error}`);
+      return {
+        error: `Error calling Claude Agent SDK: ${error}`,
+      };
+    } finally {
+      if (workingDirState.isTempDir && workingDir) {
+        // Clean up the temp dir
+        await fs.rm(workingDir, { recursive: true, force: true });
+      }
+      if (callOptions?.abortSignal && abortHandler) {
+        callOptions.abortSignal.removeEventListener('abort', abortHandler);
+      }
+    }
+  }
+
+  private mergeConfig(context?: CallApiContextParams): ClaudeCodeOptions {
+    return {
       ...this.config,
       ...context?.prompt?.config,
     };
+  }
 
-    // Sort keys for stable cache-key hashing. Precedence is documented on the
-    // `env` field of ClaudeCodeOptions: process.env < config.env < EnvOverrides.
+  private buildEnvironment(config: ClaudeCodeOptions): Record<string, string> {
     const env: Record<string, string> = {};
-    for (const key of Object.keys(process.env).sort()) {
-      if (process.env[key] !== undefined) {
-        env[key] = process.env[key];
-      }
-    }
-
-    if (config.env) {
-      for (const key of Object.keys(config.env).sort()) {
-        const value = config.env[key];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-    }
-
-    if (this.env) {
-      for (const key of Object.keys(this.env).sort()) {
-        const value = this.env[key as keyof typeof this.env];
-        if (value !== undefined) {
-          env[key] = value;
-        }
-      }
-    }
-
-    // Ensure API key is available to Claude Agent SDK
+    this.mergeEnvironmentValues(env, process.env);
+    this.mergeEnvironmentValues(env, config.env);
+    this.mergeEnvironmentValues(env, this.env);
     if (this.apiKey) {
       env.ANTHROPIC_API_KEY = this.apiKey;
     }
+    return env;
+  }
 
-    // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
+  private mergeEnvironmentValues(
+    target: Record<string, string>,
+    source: Record<string, string | undefined> | EnvOverrides | undefined,
+  ): void {
+    if (!source) {
+      return;
+    }
+    for (const key of Object.keys(source).sort()) {
+      const value = source[key as keyof typeof source];
+      if (value !== undefined) {
+        target[key] = value;
+      }
+    }
+  }
+
+  private ensureCredentials(config: ClaudeCodeOptions, env: Record<string, string>): void {
     if (
-      !this.apiKey &&
-      !(
-        config.apiKeyRequired === false ||
-        env.CLAUDE_CODE_USE_BEDROCK ||
-        env.CLAUDE_CODE_USE_VERTEX
-      )
+      this.apiKey ||
+      config.apiKeyRequired === false ||
+      env.CLAUDE_CODE_USE_BEDROCK ||
+      env.CLAUDE_CODE_USE_VERTEX
     ) {
-      throw new Error(
-        dedent`Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add "apiKey" to the provider config.
-
-        Use CLAUDE_CODE_USE_BEDROCK or CLAUDE_CODE_USE_VERTEX environment variables to use Bedrock or Vertex instead.`,
-      );
+      return;
     }
 
-    // Set up allowed tools for the Claude Agent SDK call
-    // Check for conflicting config options (may want a zod schema in the future)
+    throw new Error(
+      dedent`Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add "apiKey" to the provider config.
+
+      Use CLAUDE_CODE_USE_BEDROCK or CLAUDE_CODE_USE_VERTEX environment variables to use Bedrock or Vertex instead.`,
+    );
+  }
+
+  private validateConfig(config: ClaudeCodeOptions): void {
     if (
       config.allow_all_tools &&
       ('custom_allowed_tools' in config || 'append_allowed_tools' in config)
@@ -1067,8 +1160,6 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     if ('custom_allowed_tools' in config && 'append_allowed_tools' in config) {
       throw new Error('Cannot specify both custom_allowed_tools and append_allowed_tools');
     }
-
-    // Validate that bypassPermissions mode requires the safety flag
     if (
       config.permission_mode === 'bypassPermissions' &&
       !config.allow_dangerously_skip_permissions
@@ -1077,83 +1168,94 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         "permission_mode 'bypassPermissions' requires allow_dangerously_skip_permissions: true as a safety measure",
       );
     }
+  }
 
-    // `title` only applies to new sessions; the SDK silently keeps the
-    // persisted title on resume/continue. Warn so users don't wonder why their
-    // custom title didn't stick.
-    if (config.title && (config.resume || config.continue)) {
-      logger.warn(
-        '[ClaudeAgentSDK] `title` is ignored when `resume` or `continue` is set; the persisted session title is used instead.',
-      );
+  private warnOnIgnoredTitle(config: ClaudeCodeOptions): void {
+    if (!config.title || (!config.resume && !config.continue)) {
+      return;
     }
+    logger.warn(
+      '[ClaudeAgentSDK] `title` is ignored when `resume` or `continue` is set; the persisted session title is used instead.',
+    );
+  }
 
-    // De-dupe and sort allowed/disallowed tools for cache key consistency
+  private getBasePath(): string {
+    return cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
+  }
+
+  private resolveToolPermissions(config: ClaudeCodeOptions): {
+    allowedTools: string[] | undefined;
+    disallowedTools: string[] | undefined;
+  } {
     const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
-
-    let allowedTools = config.allow_all_tools ? undefined : defaultAllowedTools;
-    if ('custom_allowed_tools' in config) {
-      allowedTools = Array.from(new Set(config.custom_allowed_tools ?? [])).sort();
-    } else if (config.append_allowed_tools) {
-      allowedTools = Array.from(
-        new Set([...defaultAllowedTools, ...config.append_allowed_tools]),
-      ).sort();
-    }
-
+    const allowedTools = this.resolveAllowedTools(config, defaultAllowedTools);
     const disallowedTools = config.disallowed_tools
       ? Array.from(new Set(config.disallowed_tools)).sort()
       : undefined;
+    return { allowedTools, disallowedTools };
+  }
 
-    const basePath = cliState.basePath ? path.resolve(cliState.basePath) : process.cwd();
-
-    let isTempDir = false;
-    let workingDir: string | undefined;
-
-    if (config.working_dir) {
-      workingDir = resolveAgenticWorkingDir(config.working_dir, basePath);
-    } else {
-      isTempDir = true;
+  private resolveAllowedTools(
+    config: ClaudeCodeOptions,
+    defaultAllowedTools: string[],
+  ): string[] | undefined {
+    if (config.allow_all_tools) {
+      return undefined;
     }
-
-    // Create canUseTool callback for ask_user_question convenience option
-    // AskUserQuestion is handled via canUseTool per SDK documentation
-    let canUseTool = config.can_use_tool;
-    if (config.ask_user_question) {
-      canUseTool = createAskUserQuestionCanUseTool(
-        config.ask_user_question.behavior,
-        config.can_use_tool,
-      );
+    if ('custom_allowed_tools' in config) {
+      return Array.from(new Set(config.custom_allowed_tools ?? [])).sort();
     }
+    if (config.append_allowed_tools) {
+      return Array.from(new Set([...defaultAllowedTools, ...config.append_allowed_tools])).sort();
+    }
+    return defaultAllowedTools;
+  }
 
-    // Just the keys we'll use to compute the cache key first
-    // Lets us avoid unnecessary work and cleanup if there's a cache hit
-    // Keys listed here are excluded from the cache key because they're either
-    // callbacks/runtime controllers (hashing them is pointless) or pure session
-    // metadata that doesn't influence the model's output (`title`).
-    const cacheKeyQueryOptions: Omit<
-      QueryOptions,
-      | 'abortController'
-      | 'canUseTool'
-      | 'cwd'
-      | 'mcpServers'
-      | 'onElicitation'
-      | 'spawnClaudeCodeProcess'
-      | 'stderr'
-      | 'title'
-    > = {
+  private resolveWorkingDirState(
+    config: ClaudeCodeOptions,
+    basePath: string,
+  ): { workingDir?: string; isTempDir: boolean } {
+    if (!config.working_dir) {
+      return { isTempDir: true };
+    }
+    return {
+      workingDir: resolveAgenticWorkingDir(config.working_dir, basePath),
+      isTempDir: false,
+    };
+  }
+
+  private resolveCanUseTool(config: ClaudeCodeOptions): CanUseTool | undefined {
+    if (!config.ask_user_question) {
+      return config.can_use_tool;
+    }
+    return createAskUserQuestionCanUseTool(config.ask_user_question.behavior, config.can_use_tool);
+  }
+
+  private buildCacheKeyQueryOptions(
+    config: ClaudeCodeOptions,
+    env: Record<string, string>,
+    basePath: string,
+    allowedTools: string[] | undefined,
+    disallowedTools: string[] | undefined,
+  ): Omit<
+    QueryOptions,
+    | 'abortController'
+    | 'canUseTool'
+    | 'cwd'
+    | 'mcpServers'
+    | 'onElicitation'
+    | 'spawnClaudeCodeProcess'
+    | 'stderr'
+    | 'title'
+  > {
+    return {
       maxTurns: config.max_turns,
       model: config.model,
       fallbackModel: config.fallback_model,
-      strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
+      strictMcpConfig: config.strict_mcp_config ?? true,
       permissionMode: config.permission_mode,
       planModeInstructions: config.plan_mode_instructions,
-      systemPrompt: config.custom_system_prompt
-        ? config.custom_system_prompt
-        : {
-            type: 'preset',
-            preset: 'claude_code',
-            append: config.append_system_prompt,
-            ...(config.exclude_dynamic_sections ? { excludeDynamicSections: true } : {}),
-          },
+      systemPrompt: this.buildSystemPrompt(config),
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
@@ -1179,10 +1281,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       toolConfig: config.tool_config,
       promptSuggestions: config.prompt_suggestions,
       agentProgressSummaries: config.agent_progress_summaries,
-      settings:
-        typeof config.settings === 'string' && config.settings
-          ? safeResolve(basePath, config.settings)
-          : config.settings,
+      settings: this.resolveSettings(config.settings, basePath),
       managedSettings: config.managed_settings,
       betas: config.betas,
       thinking: config.thinking,
@@ -1207,450 +1306,489 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       taskBudget: config.task_budget,
       env,
     };
+  }
 
-    // Cache handling using shared utilities. A user-supplied can_use_tool
-    // callback can change tool inputs/decisions in ways that aren't representable
-    // in the cache key, so we skip caching entirely when one is provided to avoid
-    // serving or poisoning entries across different callback implementations.
-    const userProvidedCanUseTool = Boolean(config.can_use_tool);
-    if (userProvidedCanUseTool) {
+  private buildSystemPrompt(config: ClaudeCodeOptions): QueryOptions['systemPrompt'] {
+    if (config.custom_system_prompt) {
+      return config.custom_system_prompt;
+    }
+    return {
+      type: 'preset',
+      preset: 'claude_code',
+      append: config.append_system_prompt,
+      ...(config.exclude_dynamic_sections ? { excludeDynamicSections: true } : {}),
+    };
+  }
+
+  private resolveSettings(
+    settings: ClaudeCodeOptions['settings'],
+    basePath: string,
+  ): ClaudeCodeOptions['settings'] {
+    if (typeof settings === 'string' && settings) {
+      return safeResolve(basePath, settings);
+    }
+    return settings;
+  }
+
+  private async initializeClaudeCache(
+    config: ClaudeCodeOptions,
+    workingDir: string | undefined,
+    context: CallApiContextParams | undefined,
+    prompt: string,
+    cacheKeyQueryOptions: Record<string, unknown>,
+  ): Promise<CacheCheckResult> {
+    if (config.can_use_tool) {
       logger.debug(
         '[ClaudeCodeSDKProvider] Bypassing cache: user-supplied can_use_tool callback present',
       );
+      return { shouldCache: false, shouldReadCache: false, shouldWriteCache: false };
     }
-    const cacheResult = userProvidedCanUseTool
-      ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
-      : await initializeAgenticCache(
-          {
-            cacheKeyPrefix: 'anthropic:claude-agent-sdk',
-            workingDir,
-            bustCache: context?.bustCache,
-            mcp: config.mcp?.servers?.length ? config.mcp : undefined,
-            cacheMcp: config.cache_mcp,
-          },
-          {
-            prompt,
-            cacheKeyQueryOptions,
-          },
-        );
+    return initializeAgenticCache(
+      {
+        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+        workingDir,
+        bustCache: context?.bustCache,
+        mcp: config.mcp?.servers?.length ? config.mcp : undefined,
+        cacheMcp: config.cache_mcp,
+      },
+      {
+        prompt,
+        cacheKeyQueryOptions,
+      },
+    );
+  }
 
-    // Check cache for existing response
-    const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
-    if (cachedResponse) {
-      return cachedResponse;
-    }
+  private async loadMcpServers(config: ClaudeCodeOptions) {
+    return config.mcp ? transformMCPConfigToClaudeCode(config.mcp) : {};
+  }
 
-    // Transform MCP config to Claude Agent SDK MCP servers
-    const mcpServers = config.mcp ? await transformMCPConfigToClaudeCode(config.mcp) : {};
-
+  private async prepareWorkingDir(
+    config: ClaudeCodeOptions,
+    workingDir: string | undefined,
+    isTempDir: boolean,
+  ): Promise<string | undefined> {
     if (workingDir) {
-      // verify the working dir exists and is a directory
-      let stats: Stats;
-      try {
-        stats = await fs.stat(workingDir);
-      } catch (err: any) {
-        throw new Error(
-          `Working dir ${config.working_dir} does not exist or isn't accessible: ${err.message}`,
-        );
-      }
-      if (!stats.isDirectory()) {
-        throw new Error(`Working dir ${config.working_dir} is not a directory`);
-      }
-    } else if (isTempDir) {
-      // use a temp dir
-      workingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
+      await this.assertWorkingDir(config, workingDir);
+      return workingDir;
     }
-
-    // Make sure we didn't already abort
-    if (callOptions?.abortSignal?.aborted) {
-      return { error: 'Claude Agent SDK call aborted before it started' };
+    if (isTempDir) {
+      return fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-claude-agent-sdk-'));
     }
+    return undefined;
+  }
 
-    // Propagate abort signal to the Claude Agent SDK call
+  private async assertWorkingDir(config: ClaudeCodeOptions, workingDir: string): Promise<void> {
+    let stats: Stats;
+    try {
+      stats = await fs.stat(workingDir);
+    } catch (err: any) {
+      throw new Error(
+        `Working dir ${config.working_dir} does not exist or isn't accessible: ${err.message}`,
+      );
+    }
+    if (!stats.isDirectory()) {
+      throw new Error(`Working dir ${config.working_dir} is not a directory`);
+    }
+  }
+
+  private createAbortController(callOptions?: CallApiOptionsParams): {
+    abortController: AbortController;
+    abortHandler?: () => void;
+  } {
     const abortController = new AbortController();
-    let abortHandler: (() => void) | undefined;
-    if (callOptions?.abortSignal) {
-      abortHandler = () => {
-        abortController.abort(callOptions.abortSignal!.reason);
-      };
-      callOptions.abortSignal.addEventListener('abort', abortHandler);
+    if (!callOptions?.abortSignal) {
+      return { abortController };
     }
+    const abortHandler = () => {
+      abortController.abort(callOptions.abortSignal!.reason);
+    };
+    callOptions.abortSignal.addEventListener('abort', abortHandler);
+    return { abortController, abortHandler };
+  }
 
-    // Make the Claude Agent SDK call
-    const options: QueryOptions = {
+  private buildQueryOptions(
+    cacheKeyQueryOptions: Omit<
+      QueryOptions,
+      | 'abortController'
+      | 'canUseTool'
+      | 'cwd'
+      | 'mcpServers'
+      | 'onElicitation'
+      | 'spawnClaudeCodeProcess'
+      | 'stderr'
+      | 'title'
+    >,
+    abortController: AbortController,
+    mcpServers: QueryOptions['mcpServers'],
+    workingDir: string | undefined,
+    config: ClaudeCodeOptions,
+    canUseTool: CanUseTool | undefined,
+  ): QueryOptions {
+    return {
       ...cacheKeyQueryOptions,
       abortController,
       mcpServers,
       cwd: workingDir,
-      // Callbacks are not included in cache key since they're functions
       stderr: config.stderr,
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
       canUseTool,
       onElicitation: config.on_elicitation,
-      // Session metadata — excluded from cache key so cosmetic changes don't
-      // force cache misses. The SDK ignores `title` on resumed sessions
-      // (the persisted title wins), so we warn above when both are set.
       title: config.title,
     };
-    const queryParams = { prompt, options };
+  }
 
-    // Log the query params for debugging
+  private logQueryParams(prompt: string, options: QueryOptions, env: Record<string, string>): void {
     logger.debug(
       `Calling Claude Agent SDK: ${JSON.stringify({
         prompt,
         options: {
           ...options,
-          // overwrite with metadata instead of the full objects to avoid logging secrets
           mcpServers: options.mcpServers ? Object.keys(options.mcpServers) : undefined,
           env: Object.keys(env).length > 0 ? Object.keys(env) : undefined,
         },
       })}`,
     );
+  }
 
-    try {
-      return await withGenAISpan(
-        {
-          system: 'anthropic',
-          operationName: 'chat',
-          model: config.model || 'default',
-          providerId: this.providerId,
-          traceparent: context?.traceparent,
-          maxTokens: config.max_thinking_tokens,
-          requestBody: prompt,
-        },
-        async () => {
-          // Propagate trace context to the SDK subprocess so its OTEL spans attach
-          // under our span. Prefer the active span's traceparent; fall back to the
-          // evaluator-supplied one. `getTraceparent()` can return an all-zero trace
-          // id when no OTEL SDK is registered (NonRecordingSpan / INVALID_TRACEID),
-          // which would poison propagation — skip it in that case.
-          const ZERO_TRACE_ID = '00000000000000000000000000000000';
-          const active = getTraceparent();
-          const activeValid = active && !active.includes(ZERO_TRACE_ID) ? active : undefined;
-          const traceparent = activeValid ?? context?.traceparent;
-          // Mutating env here is safe because initializeAgenticCache serialized
-          // cacheKeyQueryOptions (which shares this env reference) into a hash
-          // string earlier in callApi, so TRACEPARENT cannot affect the cache key.
-          if (traceparent && !env.TRACEPARENT) {
-            env.TRACEPARENT = traceparent;
-          }
-          // Some SDK telemetry signals (logs in particular) do not inherit
-          // TRACEPARENT into their OTEL context. Encode the trace + parent span
-          // IDs as resource attributes too — promptfoo's OTLP /v1/logs receiver
-          // reads these to link log-derived spans to the evaluation trace.
-          // traceparent format: "version-traceId-spanId-flags".
-          const [, tpTraceId, tpSpanId] = traceparent ? traceparent.split('-') : [];
-          if (tpTraceId && tpSpanId) {
-            env.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
-              env.OTEL_RESOURCE_ATTRIBUTES,
-              tpTraceId,
-              tpSpanId,
-            );
-          }
+  private async executeClaudeQuery(
+    queryParams: { prompt: string; options: QueryOptions },
+    env: Record<string, string>,
+    context: CallApiContextParams | undefined,
+    cacheResult: CacheCheckResult,
+  ): Promise<ProviderResponse> {
+    this.propagateTraceContext(env, context?.traceparent);
+    await this.ensureClaudeCodeModule();
+    const res = await this.claudeCodeModule!.query(queryParams);
+    const toolState = this.createToolTrackingState();
+    const streamSummary = await this.consumeClaudeStream(res, toolState);
+    this.drainOrphanToolSpans(toolState);
 
-          // Dynamically import the ESM module once and cache it
-          if (!this.claudeCodeModule) {
-            this.claudeCodeModule = await loadClaudeCodeSDK();
-          }
+    const finalMsg = streamSummary.lastMainResultMsg ?? streamSummary.lastResultMsg;
+    if (!finalMsg) {
+      return { error: "Claude Agent SDK call didn't return a result" };
+    }
 
-          const res = await this.claudeCodeModule.query(queryParams);
+    this.warnOnAmbiguousResultSelection(finalMsg, streamSummary);
+    this.markAbortedTerminalReason(finalMsg);
+    return this.buildClaudeResponse(finalMsg, toolState, cacheResult);
+  }
 
-          // Collect tool calls and results from intermediate messages
-          const toolCallsMap = new Map<string, ToolCallEntry>();
-          // Wall-clock start time per tool_use.id, captured when we first see the tool_use
-          // message so we can synthesize child spans with realistic durations.
-          const toolStartTimes = new Map<string, number>();
+  private propagateTraceContext(env: Record<string, string>, fallbackTraceparent?: string): void {
+    const zeroTraceId = '00000000000000000000000000000000';
+    const activeTraceparent = getTraceparent();
+    const activeValid =
+      activeTraceparent && !activeTraceparent.includes(zeroTraceId) ? activeTraceparent : undefined;
+    const traceparent = activeValid ?? fallbackTraceparent;
+    if (traceparent && !env.TRACEPARENT) {
+      env.TRACEPARENT = traceparent;
+    }
 
-          // Drain any tool_use entries that never saw a matching tool_result. Without
-          // this, aborted runs and stop-hook terminations silently drop the tool span.
-          const drainOrphans = (): void => {
-            if (toolStartTimes.size === 0) {
-              return;
-            }
-            const endedAt = Date.now();
-            for (const [toolUseId, startMs] of toolStartTimes) {
-              const entry = toolCallsMap.get(toolUseId);
-              if (entry) {
-                emitToolSpan(entry, startMs, endedAt, false, /* incomplete */ true);
-              }
-            }
-            toolStartTimes.clear();
-          };
-
-          // The Claude Agent SDK interleaves a `result` message for each background
-          // sub-agent (Task tool with run_in_background: true) into the parent
-          // session's stream before the main agent's terminal `result` arrives.
-          // As of @anthropic-ai/claude-agent-sdk 0.2.126, result messages carry
-          // `origin.kind`: the user-prompted main result is `human` and background
-          // sub-agent completions are `task-notification` followups. Prefer the
-          // last non-task-notification result, falling back to the last result
-          // overall for older SDK servers that don't emit `origin` (in which case
-          // the pre-0.2.126 position heuristic still applies — the main agent's
-          // result is the last one in the stream). Otherwise we'd return the
-          // first sub-agent's summary and skip the main agent's actual final
-          // response. See https://github.com/promptfoo/promptfoo/issues/9054.
-          let lastResultMsg: SDKResultMessage | undefined;
-          let lastMainResultMsg: SDKResultMessage | undefined;
-          let resultMsgCount = 0;
-
-          for await (const msg of res) {
-            if (msg.type === 'assistant') {
-              // Extract tool_use content blocks from assistant messages
-              for (const block of msg.message.content) {
-                if (block.type === 'tool_use') {
-                  toolCallsMap.set(block.id, {
-                    id: block.id,
-                    name: block.name,
-                    input: block.input,
-                    output: undefined,
-                    is_error: false,
-                    parentToolUseId: msg.parent_tool_use_id,
-                  });
-                  toolStartTimes.set(block.id, Date.now());
-                }
-              }
-            } else if (msg.type === 'user') {
-              // Extract tool_result content blocks and match to tool calls
-              const content = msg.message?.content;
-              if (Array.isArray(content)) {
-                for (const block of content) {
-                  if (block.type === 'tool_result') {
-                    const entry = toolCallsMap.get(block.tool_use_id);
-                    if (entry) {
-                      entry.output = block.content;
-                      entry.is_error = block.is_error ?? false;
-                      const startMs = toolStartTimes.get(block.tool_use_id);
-                      if (startMs !== undefined) {
-                        emitToolSpan(entry, startMs, Date.now(), entry.is_error);
-                        toolStartTimes.delete(block.tool_use_id);
-                      }
-                    }
-                  }
-                }
-              }
-            } else if (msg.type === 'result') {
-              lastResultMsg = msg;
-              resultMsgCount++;
-              // SDK >= 0.2.126: prefer the user-prompted ("human") result and
-              // skip task-notification followups from background sub-agents.
-              // Treat absent origin (older SDKs) and any non-task-notification
-              // kind as a candidate for the main result; the position-based
-              // last-wins fallback below preserves prior behavior in that case.
-              if (msg.origin?.kind !== 'task-notification') {
-                lastMainResultMsg = msg;
-              }
-            }
-          }
-
-          // The stream is about to close; emit any orphan tool spans first so
-          // abort/hook-stop runs don't silently drop them.
-          drainOrphans();
-
-          // Prefer the origin-tagged main result; fall back to the last result
-          // overall when older SDK servers don't emit `origin` (or — defensively
-          // — when every result was a task-notification, which would indicate
-          // the main agent's result never arrived).
-          const finalMsg = lastMainResultMsg ?? lastResultMsg;
-
-          if (!finalMsg) {
-            return { error: "Claude Agent SDK call didn't return a result" };
-          }
-
-          // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
-          // definitive answer, so only warn when origin was unavailable for
-          // every result (lastMainResultMsg defaulted to the last result) AND
-          // we saw >1 results AND the chosen result is a non-terminal success.
-          //
-          // Gate on subtype === 'success' because non-success subtypes
-          // ('error_during_execution', 'error_max_turns', etc.) are themselves
-          // a definitive terminal signal — they're how the SDK reports the
-          // run ending in error, not a truncation indicator. Warning on those
-          // would be a false positive on every legitimate main-agent failure
-          // that follows a background sub-agent.
-          const usedPositionHeuristic =
-            !lastMainResultMsg || lastMainResultMsg.origin === undefined;
-          if (
-            usedPositionHeuristic &&
-            resultMsgCount > 1 &&
-            finalMsg.subtype === 'success' &&
-            finalMsg.terminal_reason === undefined
-          ) {
-            logger.warn(
-              `[ClaudeAgentSDK] Stream produced ${resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
-            );
-            otelTrace.getActiveSpan()?.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: 'stream closed without terminal_reason after multiple result messages',
-            });
-          }
-          const raw = JSON.stringify(finalMsg);
-          const tokenUsage: ProviderResponse['tokenUsage'] = {
-            prompt: finalMsg.usage?.input_tokens,
-            completion: finalMsg.usage?.output_tokens,
-            total:
-              finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
-                ? finalMsg.usage?.input_tokens + finalMsg.usage?.output_tokens
-                : undefined,
-          };
-          const cost = finalMsg.total_cost_usd ?? 0;
-          const sessionId = finalMsg.session_id;
-
-          const toolCallsArray = Array.from(toolCallsMap.values());
-          const skillCalls = deriveSkillCalls(toolCallsArray);
-
-          // Aborted terminal reasons mean the agent stopped unexpectedly mid-run.
-          // Mark the provider span ERROR directly — without poisoning the
-          // response's `output`/`error` contract, since any produced output is
-          // still useful and downstream assertions may depend on it.
-          const abortedTerminalReason =
-            typeof finalMsg.terminal_reason === 'string' &&
-            (finalMsg.terminal_reason.startsWith('aborted_') ||
-              finalMsg.terminal_reason === 'hook_stopped')
-              ? finalMsg.terminal_reason
-              : undefined;
-          if (abortedTerminalReason) {
-            otelTrace.getActiveSpan()?.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: `aborted: ${abortedTerminalReason}`,
-            });
-          }
-
-          if (finalMsg.subtype === 'success') {
-            logger.debug(`Claude Agent SDK response: ${raw}`);
-            // When structured output is enabled and available, use it as the output
-            // Otherwise fall back to the text result
-            const output =
-              finalMsg.structured_output === undefined
-                ? finalMsg.result
-                : finalMsg.structured_output;
-            const response: ProviderResponse = {
-              output,
-              tokenUsage,
-              cost,
-              raw,
-              sessionId,
-              metadata: {
-                skillCalls,
-                toolCalls: toolCallsArray,
-                numTurns: finalMsg.num_turns,
-                durationMs: finalMsg.duration_ms,
-                durationApiMs: finalMsg.duration_api_ms,
-                modelUsage: finalMsg.modelUsage,
-                permissionDenials: finalMsg.permission_denials,
-                ...(finalMsg.terminal_reason === undefined
-                  ? {}
-                  : { terminalReason: finalMsg.terminal_reason }),
-                ...(finalMsg.structured_output === undefined
-                  ? {}
-                  : { structuredOutput: finalMsg.structured_output }),
-              },
-            };
-
-            // Cache the response using shared utilities
-            await cacheResponse(cacheResult, response, 'Claude Agent SDK');
-            return response;
-          }
-
-          return {
-            error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
-            tokenUsage,
-            cost,
-            raw,
-            sessionId,
-            metadata: {
-              skillCalls,
-              toolCalls: toolCallsArray,
-              numTurns: finalMsg.num_turns,
-              durationMs: finalMsg.duration_ms,
-              durationApiMs: finalMsg.duration_api_ms,
-              modelUsage: finalMsg.modelUsage,
-              permissionDenials: finalMsg.permission_denials,
-              ...(finalMsg.terminal_reason === undefined
-                ? {}
-                : { terminalReason: finalMsg.terminal_reason }),
-            },
-          };
-        },
-        (response) => {
-          const metadata = response.metadata ?? {};
-          const additional: Record<string, string | number | boolean> = {};
-          if (typeof metadata.numTurns === 'number') {
-            additional['gen_ai.agent.num_turns'] = metadata.numTurns;
-          }
-          if (typeof metadata.durationApiMs === 'number') {
-            additional['gen_ai.agent.duration_api_ms'] = metadata.durationApiMs;
-          }
-          if (typeof response.cost === 'number' && response.cost > 0) {
-            additional['gen_ai.agent.cost_usd'] = response.cost;
-          }
-          const toolCalls = metadata.toolCalls;
-          if (Array.isArray(toolCalls) && toolCalls.length > 0) {
-            additional['gen_ai.agent.tool_call_count'] = toolCalls.length;
-          }
-          // Response model: the SDK reports per-model usage keyed by model name.
-          // Pick the key with the largest token usage rather than iteration order —
-          // the SDK makes no ordering contract, and tie-breaking by usage gives the
-          // model that actually did most of the work when fallbacks fire.
-          let responseModel: string | undefined;
-          const modelUsage = metadata.modelUsage;
-          if (modelUsage && typeof modelUsage === 'object' && !Array.isArray(modelUsage)) {
-            let topUsage = -1;
-            for (const [key, usage] of Object.entries(
-              modelUsage as Record<string, { inputTokens?: number; outputTokens?: number }>,
-            )) {
-              if (typeof key !== 'string' || key.length === 0 || key === 'undefined') {
-                continue;
-              }
-              const total = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
-              if (total > topUsage) {
-                topUsage = total;
-                responseModel = key;
-              }
-            }
-          }
-
-          // Map the SDK's terminal_reason into the standard GenAI finish_reasons
-          // attribute so trace consumers can filter on it.
-          const finishReasons =
-            typeof metadata.terminalReason === 'string' ? [metadata.terminalReason] : undefined;
-
-          return {
-            tokenUsage: response.tokenUsage,
-            responseModel,
-            responseId: response.sessionId,
-            finishReasons,
-            cacheHit: response.cached,
-            responseBody:
-              typeof response.output === 'string'
-                ? response.output
-                : response.output === undefined
-                  ? undefined
-                  : JSON.stringify(response.output),
-            additionalAttributes: Object.keys(additional).length > 0 ? additional : undefined,
-          };
-        },
+    const [, traceId, parentSpanId] = traceparent ? traceparent.split('-') : [];
+    if (traceId && parentSpanId) {
+      env.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
+        env.OTEL_RESOURCE_ATTRIBUTES,
+        traceId,
+        parentSpanId,
       );
-    } catch (error: any) {
-      const isAbort = error?.name === 'AbortError' || callOptions?.abortSignal?.aborted;
+    }
+  }
 
-      if (isAbort) {
-        logger.warn('Claude Agent SDK call aborted');
-        return { error: 'Claude Agent SDK call aborted' };
-      }
+  private async ensureClaudeCodeModule(): Promise<void> {
+    if (!this.claudeCodeModule) {
+      this.claudeCodeModule = await loadClaudeCodeSDK();
+    }
+  }
 
-      logger.error(`Error calling Claude Agent SDK: ${error}`);
-      return {
-        error: `Error calling Claude Agent SDK: ${error}`,
-      };
-    } finally {
-      if (isTempDir && workingDir) {
-        // Clean up the temp dir
-        await fs.rm(workingDir, { recursive: true, force: true });
-      }
-      if (callOptions?.abortSignal && abortHandler) {
-        callOptions.abortSignal.removeEventListener('abort', abortHandler);
+  private createToolTrackingState(): ToolTrackingState {
+    return {
+      toolCallsMap: new Map<string, ToolCallEntry>(),
+      toolStartTimes: new Map<string, number>(),
+    };
+  }
+
+  private async consumeClaudeStream(
+    res: AsyncIterable<SDKMessage>,
+    toolState: ToolTrackingState,
+  ): Promise<StreamResultSummary> {
+    const summary: StreamResultSummary = { resultMsgCount: 0 };
+    for await (const msg of res) {
+      if (msg.type === 'assistant') {
+        this.recordAssistantToolUses(msg, toolState);
+      } else if (msg.type === 'user') {
+        this.recordToolResults(msg, toolState);
+      } else if (msg.type === 'result') {
+        this.recordResultMessage(msg, summary);
       }
     }
+    return summary;
+  }
+
+  private recordAssistantToolUses(
+    msg: Extract<SDKMessage, { type: 'assistant' }>,
+    toolState: ToolTrackingState,
+  ): void {
+    for (const block of msg.message.content) {
+      if (block.type !== 'tool_use') {
+        continue;
+      }
+      toolState.toolCallsMap.set(block.id, {
+        id: block.id,
+        name: block.name,
+        input: block.input,
+        output: undefined,
+        is_error: false,
+        parentToolUseId: msg.parent_tool_use_id,
+      });
+      toolState.toolStartTimes.set(block.id, Date.now());
+    }
+  }
+
+  private recordToolResults(
+    msg: Extract<SDKMessage, { type: 'user' }>,
+    toolState: ToolTrackingState,
+  ): void {
+    const content = msg.message?.content;
+    if (!Array.isArray(content)) {
+      return;
+    }
+    for (const block of content) {
+      if (block.type !== 'tool_result') {
+        continue;
+      }
+      this.applyToolResult(block, toolState);
+    }
+  }
+
+  private applyToolResult(
+    block: Extract<
+      NonNullable<Extract<SDKMessage, { type: 'user' }>['message']>['content'][number],
+      { type: 'tool_result' }
+    >,
+    toolState: ToolTrackingState,
+  ): void {
+    const entry = toolState.toolCallsMap.get(block.tool_use_id);
+    if (!entry) {
+      return;
+    }
+    entry.output = block.content;
+    entry.is_error = block.is_error ?? false;
+    const startMs = toolState.toolStartTimes.get(block.tool_use_id);
+    if (startMs === undefined) {
+      return;
+    }
+    emitToolSpan(entry, startMs, Date.now(), entry.is_error);
+    toolState.toolStartTimes.delete(block.tool_use_id);
+  }
+
+  private recordResultMessage(msg: SDKResultMessage, summary: StreamResultSummary): void {
+    summary.lastResultMsg = msg;
+    summary.resultMsgCount++;
+    if (msg.origin?.kind !== 'task-notification') {
+      summary.lastMainResultMsg = msg;
+    }
+  }
+
+  private drainOrphanToolSpans(toolState: ToolTrackingState): void {
+    if (toolState.toolStartTimes.size === 0) {
+      return;
+    }
+    const endedAt = Date.now();
+    for (const [toolUseId, startMs] of toolState.toolStartTimes) {
+      const entry = toolState.toolCallsMap.get(toolUseId);
+      if (entry) {
+        emitToolSpan(entry, startMs, endedAt, false, true);
+      }
+    }
+    toolState.toolStartTimes.clear();
+  }
+
+  private warnOnAmbiguousResultSelection(
+    finalMsg: SDKResultMessage,
+    summary: StreamResultSummary,
+  ): void {
+    const usedPositionHeuristic =
+      !summary.lastMainResultMsg || summary.lastMainResultMsg.origin === undefined;
+    if (
+      !usedPositionHeuristic ||
+      summary.resultMsgCount <= 1 ||
+      finalMsg.subtype !== 'success' ||
+      finalMsg.terminal_reason !== undefined
+    ) {
+      return;
+    }
+    logger.warn(
+      `[ClaudeAgentSDK] Stream produced ${summary.resultMsgCount} result messages and the last had no terminal_reason; returning it as the main-agent result, but the stream may have been truncated.`,
+    );
+    otelTrace.getActiveSpan()?.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: 'stream closed without terminal_reason after multiple result messages',
+    });
+  }
+
+  private markAbortedTerminalReason(finalMsg: SDKResultMessage): void {
+    const abortedTerminalReason =
+      typeof finalMsg.terminal_reason === 'string' &&
+      (finalMsg.terminal_reason.startsWith('aborted_') ||
+        finalMsg.terminal_reason === 'hook_stopped')
+        ? finalMsg.terminal_reason
+        : undefined;
+    if (!abortedTerminalReason) {
+      return;
+    }
+    otelTrace.getActiveSpan()?.setStatus({
+      code: SpanStatusCode.ERROR,
+      message: `aborted: ${abortedTerminalReason}`,
+    });
+  }
+
+  private async buildClaudeResponse(
+    finalMsg: SDKResultMessage,
+    toolState: ToolTrackingState,
+    cacheResult: CacheCheckResult,
+  ): Promise<ProviderResponse> {
+    const raw = JSON.stringify(finalMsg);
+    const tokenUsage = this.buildTokenUsage(finalMsg);
+    const cost = finalMsg.total_cost_usd ?? 0;
+    const sessionId = finalMsg.session_id;
+    const toolCalls = Array.from(toolState.toolCallsMap.values());
+    const skillCalls = deriveSkillCalls(toolCalls);
+    const metadata = this.buildResponseMetadata(finalMsg, toolCalls, skillCalls);
+
+    if (finalMsg.subtype !== 'success') {
+      return {
+        error: `Claude Agent SDK call failed: ${finalMsg.subtype}`,
+        tokenUsage,
+        cost,
+        raw,
+        sessionId,
+        metadata,
+      };
+    }
+
+    logger.debug(`Claude Agent SDK response: ${raw}`);
+    const response: ProviderResponse = {
+      output:
+        finalMsg.structured_output === undefined ? finalMsg.result : finalMsg.structured_output,
+      tokenUsage,
+      cost,
+      raw,
+      sessionId,
+      metadata: {
+        ...metadata,
+        ...(finalMsg.structured_output === undefined
+          ? {}
+          : { structuredOutput: finalMsg.structured_output }),
+      },
+    };
+    await cacheResponse(cacheResult, response, 'Claude Agent SDK');
+    return response;
+  }
+
+  private buildTokenUsage(finalMsg: SDKResultMessage): ProviderResponse['tokenUsage'] {
+    return {
+      prompt: finalMsg.usage?.input_tokens,
+      completion: finalMsg.usage?.output_tokens,
+      total:
+        finalMsg.usage?.input_tokens && finalMsg.usage?.output_tokens
+          ? finalMsg.usage.input_tokens + finalMsg.usage.output_tokens
+          : undefined,
+    };
+  }
+
+  private buildResponseMetadata(
+    finalMsg: SDKResultMessage,
+    toolCalls: ToolCallEntry[],
+    skillCalls: SkillCallEntry[],
+  ): NonNullable<ProviderResponse['metadata']> {
+    return {
+      skillCalls,
+      toolCalls,
+      numTurns: finalMsg.num_turns,
+      durationMs: finalMsg.duration_ms,
+      durationApiMs: finalMsg.duration_api_ms,
+      modelUsage: finalMsg.modelUsage,
+      permissionDenials: finalMsg.permission_denials,
+      ...(finalMsg.terminal_reason === undefined
+        ? {}
+        : { terminalReason: finalMsg.terminal_reason }),
+    };
+  }
+
+  private buildTraceResponseSummary(response: ProviderResponse) {
+    const metadata = response.metadata ?? {};
+    const additionalAttributes = this.buildTraceAdditionalAttributes(response, metadata);
+    return {
+      tokenUsage: response.tokenUsage,
+      responseModel: this.getTraceResponseModel(metadata),
+      responseId: response.sessionId,
+      finishReasons: this.getTraceFinishReasons(metadata),
+      cacheHit: response.cached,
+      responseBody: this.serializeTraceResponseBody(response.output),
+      additionalAttributes:
+        Object.keys(additionalAttributes).length > 0 ? additionalAttributes : undefined,
+    };
+  }
+
+  private buildTraceAdditionalAttributes(
+    response: ProviderResponse,
+    metadata: NonNullable<ProviderResponse['metadata']>,
+  ): Record<string, string | number | boolean> {
+    const additional: Record<string, string | number | boolean> = {};
+    if (typeof metadata.numTurns === 'number') {
+      additional['gen_ai.agent.num_turns'] = metadata.numTurns;
+    }
+    if (typeof metadata.durationApiMs === 'number') {
+      additional['gen_ai.agent.duration_api_ms'] = metadata.durationApiMs;
+    }
+    if (typeof response.cost === 'number' && response.cost > 0) {
+      additional['gen_ai.agent.cost_usd'] = response.cost;
+    }
+    const toolCalls = metadata.toolCalls;
+    if (Array.isArray(toolCalls) && toolCalls.length > 0) {
+      additional['gen_ai.agent.tool_call_count'] = toolCalls.length;
+    }
+    return additional;
+  }
+
+  private getTraceResponseModel(
+    metadata: NonNullable<ProviderResponse['metadata']>,
+  ): string | undefined {
+    const modelUsage = metadata.modelUsage;
+    if (!modelUsage || typeof modelUsage !== 'object' || Array.isArray(modelUsage)) {
+      return undefined;
+    }
+
+    let responseModel: string | undefined;
+    let topUsage = -1;
+    for (const [key, usage] of Object.entries(
+      modelUsage as Record<string, { inputTokens?: number; outputTokens?: number }>,
+    )) {
+      if (typeof key !== 'string' || key.length === 0 || key === 'undefined') {
+        continue;
+      }
+      const total = (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
+      if (total > topUsage) {
+        topUsage = total;
+        responseModel = key;
+      }
+    }
+    return responseModel;
+  }
+
+  private getTraceFinishReasons(
+    metadata: NonNullable<ProviderResponse['metadata']>,
+  ): string[] | undefined {
+    return typeof metadata.terminalReason === 'string' ? [metadata.terminalReason] : undefined;
+  }
+
+  private serializeTraceResponseBody(output: ProviderResponse['output']): string | undefined {
+    if (typeof output === 'string') {
+      return output;
+    }
+    if (output === undefined) {
+      return undefined;
+    }
+    return JSON.stringify(output);
   }
 
   toString(): string {
