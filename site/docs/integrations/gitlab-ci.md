@@ -25,7 +25,7 @@ image: node:20
 evaluate_prompts:
   script:
     - npm install -g promptfoo
-    - promptfoo eval -c promptfooconfig.yaml --prompts prompts/**/*.json --share -o output.json
+    - promptfoo eval -c promptfooconfig.yaml --prompts prompts/**/*.json --share -o output.json -o output.junit.xml
   variables:
     OPENAI_API_KEY: ${OPENAI_API_KEY}
     PROMPTFOO_CACHE_PATH: .promptfoo/cache
@@ -38,8 +38,9 @@ evaluate_prompts:
   artifacts:
     paths:
       - output.json
+      - output.junit.xml
     reports:
-      json: output.json
+      junit: output.junit.xml
   rules:
     - changes:
         - prompts/**/*
@@ -79,7 +80,7 @@ You can add custom steps to process the evaluation results:
 evaluate_prompts:
   script:
     - npm install -g promptfoo
-    - promptfoo eval -c promptfooconfig.yaml --prompts prompts/**/*.json --share -o output.json
+    - promptfoo eval -c promptfooconfig.yaml --prompts prompts/**/*.json --share -o output.json -o output.junit.xml
     - |
       if jq -e '.results.stats.failures > 0' output.json; then
         echo "Evaluation had failures"
@@ -109,12 +110,12 @@ evaluate_prompts:
   script:
     - npm install -g promptfoo
     - |
-      OUTPUT=$(promptfoo eval -c promptfooconfig.yaml --prompts prompts/**/*.json --share)
+      OUTPUT=$(promptfoo eval -c promptfooconfig.yaml --prompts prompts/**/*.json --share -o output.junit.xml)
       SHARE_URL=$(echo "$OUTPUT" | grep "View results:" | cut -d' ' -f3)
       echo "Evaluation Results: $SHARE_URL" | tee merge_request_comment.txt
   artifacts:
     reports:
-      junit: output.json
+      junit: output.junit.xml
     paths:
       - merge_request_comment.txt
   after_script:
