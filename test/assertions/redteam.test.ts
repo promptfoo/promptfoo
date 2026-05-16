@@ -420,7 +420,20 @@ describe('handleRedteam', () => {
     const trackingResult = {
       wasExfiltrated: true,
       exfilCount: 2,
-      exfilRecords: [{ id: 'record-1' }, { id: 'record-2' }],
+      exfilRecords: [
+        {
+          timestamp: '2026-05-16T00:00:00.000Z',
+          ip: '127.0.0.1',
+          userAgent: 'promptfoo-test-agent',
+          queryParams: { record: '1' },
+        },
+        {
+          timestamp: '2026-05-16T00:00:01.000Z',
+          ip: '127.0.0.1',
+          userAgent: 'promptfoo-test-agent',
+          queryParams: { record: '2' },
+        },
+      ],
     };
     vi.mocked(checkExfilTracking).mockResolvedValue(trackingResult);
     const graderSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
