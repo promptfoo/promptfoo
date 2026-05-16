@@ -405,6 +405,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -482,6 +484,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -548,6 +552,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -643,6 +649,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -728,6 +736,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -809,6 +819,8 @@ describeEvaluator('evaluator execution control', () => {
       getResults: vi.fn().mockResolvedValue(results),
       save: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setConcurrencyUsed: vi.fn(),
+      setSchedulerMetrics: vi.fn(),
       setVars: vi.fn(),
       toEvaluateSummary: vi.fn(),
     };
