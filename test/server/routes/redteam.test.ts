@@ -14,7 +14,7 @@ vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
 import logger from '../../../src/logger';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
-import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import {
   extractGeneratedPrompt,
@@ -28,6 +28,7 @@ const mockedGetPluginConfigurationError = vi.mocked(getPluginConfigurationError)
 const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
+const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 const debugSpy = vi.spyOn(logger, 'debug');
 
@@ -620,6 +621,20 @@ describe('Redteam Routes', () => {
           body: JSON.stringify({ data: 'test', task: 'my-task' }),
         }),
       );
+    });
+
+    it('should not proxy task bodies when remote generation is disabled', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
+
+      const response = await request(app).post('/api/redteam/my-task').send({ data: 'test' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        success: false,
+        error: 'Requires remote generation be enabled.',
+      });
+      expect(mockedGetRemoteGenerationUrl).not.toHaveBeenCalled();
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
     });
 
     it('should log task metadata without stringifying the body', async () => {

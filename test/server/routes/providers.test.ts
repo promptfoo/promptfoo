@@ -469,6 +469,18 @@ describe('Providers Routes', () => {
       );
     });
 
+    it('should not call the hosted HTTP generator when remote generation is disabled', async () => {
+      mockedNeverGenerateRemote.mockReturnValue(true);
+
+      const response = await api
+        .post('/api/providers/http-generator')
+        .send({ requestExample: 'curl https://api.example.com/v1/chat' });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Requires remote generation be enabled.' });
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('should return 500 when the cloud API returns a non-object generator response', async () => {
       mockedFetchWithProxy.mockResolvedValue({
         ok: true,
