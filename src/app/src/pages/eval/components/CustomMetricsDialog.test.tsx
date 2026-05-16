@@ -81,7 +81,9 @@ describe('MetricsTable', () => {
     const row = metricText.closest('tr');
     expect(row).not.toBeNull();
 
-    const filterButton = within(row as HTMLElement).getByRole('button');
+    const filterButton = within(row as HTMLElement).getByRole('button', {
+      name: 'Filter results by accuracy',
+    });
     await user.click(filterButton);
 
     expect(mockAddFilter).toHaveBeenCalledTimes(1);

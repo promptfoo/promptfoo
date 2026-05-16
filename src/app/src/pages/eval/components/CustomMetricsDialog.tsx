@@ -4,6 +4,12 @@ import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { FilterIcon } from '@app/components/ui/icons';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { cn } from '@app/lib/utils';
 import {
@@ -362,14 +368,22 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       cell: ({ row }) => {
         return (
           <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => handleMetricFilterClick(row.original.metric)}
-              className="filter-icon size-8 p-0"
-            >
-              <FilterIcon className="size-4" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    aria-label={`Filter results by ${row.original.metric}`}
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleMetricFilterClick(row.original.metric)}
+                    className="filter-icon size-8 p-0"
+                  >
+                    <FilterIcon className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Filter results by this metric</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         );
       },
