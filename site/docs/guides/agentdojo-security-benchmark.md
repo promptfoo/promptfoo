@@ -25,14 +25,14 @@ This guide shows how to run AgentDojo through Promptfoo and how to read the resu
 
 ## What You Will Run
 
-| Question                         | Answer                                                                                 |
-| -------------------------------- | -------------------------------------------------------------------------------------- |
-| Benchmark                        | AgentDojo `workspace` prompt injection benchmark                                       |
-| Framework                        | Promptfoo evals with a Python provider that wraps AgentDojo                            |
-| Main score                       | `safe_utility`: the user task worked and the injected attacker goal did not execute    |
-| Evidence                         | Promptfoo row results, AgentDojo metadata, tool traces, and optional OTEL spans        |
-| Default full run                 | 560 rows: 40 user tasks crossed with 14 injection tasks                                |
-| Best first step                  | Run one row, inspect the trace, then scale to model or defense comparisons             |
+| Question         | Answer                                                                              |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| Benchmark        | AgentDojo `workspace` prompt injection benchmark                                    |
+| Framework        | Promptfoo evals with a Python provider that wraps AgentDojo                         |
+| Main score       | `safe_utility`: the user task worked and the injected attacker goal did not execute |
+| Evidence         | Promptfoo row results, AgentDojo metadata, tool traces, and optional OTEL spans     |
+| Default full run | 560 rows: 40 user tasks crossed with 14 injection tasks                             |
+| Best first step  | Run one row, inspect the trace, then scale to model or defense comparisons          |
 
 ## Start With One AgentDojo Row
 
