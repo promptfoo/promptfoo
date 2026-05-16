@@ -6,7 +6,8 @@ import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { doEval } from '../commands/eval';
 import { cloudConfig } from '../globalConfig/cloud';
-import logger, { setLogCallback, setLogLevel } from '../logger';
+import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
+import { isCliEventSource } from '../types/eventSource';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { createEvalInCloud, streamResultsToCloud } from '../util/cloud';
 import { loadDefaultConfig } from '../util/config/default';
@@ -69,6 +70,7 @@ type RedteamPaths = {
 };
 
 function configureRedteamLogging(options: RedteamRunOptions) {
+  const isCliInvocation = isCliEventSource(options);
   if (options.verbose) {
     setLogLevel('debug');
   }
@@ -78,11 +80,18 @@ function configureRedteamLogging(options: RedteamRunOptions) {
 
   // Enable live verbose toggle (press 'v' to toggle debug logs)
   // Only works in interactive TTY mode, not in CI or web UI
-  return options.logCallback ? null : initVerboseToggle();
+  return options.logCallback || !isCliInvocation
+    ? null
+    : initVerboseToggle({
+        onInterrupt: () => process.kill(process.pid, 'SIGINT'),
+      });
 }
 
-function cleanupRedteamLogging(verboseToggleCleanup: ReturnType<typeof initVerboseToggle>) {
-  setLogCallback(null);
+function cleanupRedteamLogging(
+  verboseToggleCleanup: ReturnType<typeof initVerboseToggle>,
+  logCallback: RedteamRunOptions['logCallback'],
+) {
+  clearLogCallbackIfOwned(logCallback ?? null);
   if (verboseToggleCleanup) {
     verboseToggleCleanup();
   }
@@ -167,7 +176,6 @@ async function generateRedteamTestCases(
   } catch (error) {
     if (error instanceof PartialGenerationError) {
       logger.error(chalk.red('\n' + error.message));
-      cleanupRedteamLogging(verboseToggleCleanup);
       throw error;
     }
     throw error;
@@ -269,60 +277,63 @@ async function logRedteamCompletion(
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
   const verboseToggleCleanup = configureRedteamLogging(options);
-  const { configPath, redteamPath } = await applyLiveRedteamConfig(
-    options,
-    getRedteamPaths(options),
-  );
+  try {
+    const { configPath, redteamPath } = await applyLiveRedteamConfig(
+      options,
+      getRedteamPaths(options),
+    );
 
-  await checkPromptfooApiHealth();
+    await checkPromptfooApiHealth();
 
-  const generationStartTime = Date.now();
-  const redteamConfig = await generateRedteamTestCases(
-    options,
-    configPath,
-    redteamPath,
-    verboseToggleCleanup,
-  );
-  const generationDurationMs = Date.now() - generationStartTime;
+    const generationStartTime = Date.now();
+    const redteamConfig = await generateRedteamTestCases(
+      options,
+      configPath,
+      redteamPath,
+      verboseToggleCleanup,
+    );
+    const generationDurationMs = Date.now() - generationStartTime;
 
-  if (!redteamConfig || !(await pathExists(redteamPath))) {
-    logger.info('No test cases generated. Skipping scan.');
-    cleanupRedteamLogging(verboseToggleCleanup);
-    return;
+    if (!redteamConfig || !(await pathExists(redteamPath))) {
+      logger.info('No test cases generated. Skipping scan.');
+      return;
+    }
+
+    const { cloudEvalId, cloudStreamer } = await setupCloudStreamingForRun(options, redteamPath);
+
+    logger.info('Running scan...');
+    const { defaultConfig } = await loadDefaultConfig();
+    const { description: _description, ...evalOptions } = options;
+    const evalResult = await doEval(
+      {
+        ...evalOptions,
+        config: [redteamPath],
+        output: options.output ? [options.output] : undefined,
+        cache: true,
+        write: !cloudEvalId,
+        filterPrompts: options.filterPrompts,
+        filterProviders: options.filterProviders,
+        filterTargets: options.filterTargets,
+      },
+      defaultConfig,
+      redteamPath,
+      {
+        showProgressBar: options.progressBar,
+        abortSignal: options.abortSignal,
+        progressCallback: options.progressCallback,
+        resultStreamCallback: cloudStreamer?.resultStreamCallback,
+        eventSource: options.eventSource,
+      },
+    );
+
+    await flushCloudStreamer(cloudStreamer);
+    await logEvalTiming(evalResult, generationDurationMs);
+    await logRedteamCompletion(evalResult, options, cloudEvalId);
+
+    return evalResult;
+  } finally {
+    cleanupRedteamLogging(verboseToggleCleanup, options.logCallback);
   }
-
-  const { cloudEvalId, cloudStreamer } = await setupCloudStreamingForRun(options, redteamPath);
-
-  logger.info('Running scan...');
-  const { defaultConfig } = await loadDefaultConfig();
-  const { description: _description, ...evalOptions } = options;
-  const evalResult = await doEval(
-    {
-      ...evalOptions,
-      config: [redteamPath],
-      output: options.output ? [options.output] : undefined,
-      cache: true,
-      write: !cloudEvalId,
-      filterPrompts: options.filterPrompts,
-      filterProviders: options.filterProviders,
-      filterTargets: options.filterTargets,
-    },
-    defaultConfig,
-    redteamPath,
-    {
-      showProgressBar: options.progressBar,
-      abortSignal: options.abortSignal,
-      progressCallback: options.progressCallback,
-      resultStreamCallback: cloudStreamer?.resultStreamCallback,
-    },
-  );
-
-  await flushCloudStreamer(cloudStreamer);
-  await logEvalTiming(evalResult, generationDurationMs);
-  await logRedteamCompletion(evalResult, options, cloudEvalId);
-
-  cleanupRedteamLogging(verboseToggleCleanup);
-  return evalResult;
 }
 
 /**
@@ -336,7 +347,12 @@ export async function doRedteamResume(options: RedteamResumeOptions): Promise<Ev
     setLogCallback(options.logCallback);
   }
 
-  const verboseToggleCleanup = options.logCallback ? null : initVerboseToggle();
+  const verboseToggleCleanup =
+    options.logCallback || !isCliEventSource(options)
+      ? null
+      : initVerboseToggle({
+          onInterrupt: () => process.kill(process.pid, 'SIGINT'),
+        });
   const { liveRedteamConfig, resultStreamCallback } = options;
   const filename = `redteam-resume-${Date.now()}.yaml`;
   const tmpFile = path.join('', filename);
@@ -376,6 +392,7 @@ export async function doRedteamResume(options: RedteamResumeOptions): Promise<Ev
         abortSignal: options.abortSignal,
         progressCallback: options.progressCallback,
         resultStreamCallback,
+        eventSource: options.eventSource,
       },
     );
 
@@ -387,7 +404,7 @@ export async function doRedteamResume(options: RedteamResumeOptions): Promise<Ev
     } catch {
       // Ignore cleanup errors.
     }
-    setLogCallback(null);
+    clearLogCallbackIfOwned(options.logCallback ?? null);
     if (verboseToggleCleanup) {
       verboseToggleCleanup();
     }

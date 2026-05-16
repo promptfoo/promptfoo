@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EmailValidationError } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
@@ -8,6 +9,7 @@ import {
   doRedteamResume,
   doRedteamRun,
 } from '../../../src/redteam/shared';
+import { ProbeLimitExceededError } from '../../../src/redteam/types';
 import {
   getCompletedPairsFromCloud,
   getConfigFromCloud,
@@ -127,6 +129,7 @@ describe('redteamRunCommand', () => {
         config: undefined,
         loadedFromCloud: true,
         target: targetUUID,
+        eventSource: 'cli',
       }),
     );
   });
@@ -180,6 +183,23 @@ describe('redteamRunCommand', () => {
 
     // doRedteamRun should not be called
     expect(doRedteamRun).not.toHaveBeenCalled();
+  });
+
+  it('should not log an unexpected error for recoverable email validation failures', async () => {
+    vi.mocked(doRedteamRun).mockRejectedValueOnce(
+      new EmailValidationError(
+        'email_verification_required',
+        'Please verify your email address and try again.',
+      ),
+    );
+
+    const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+    expect(runCommand).toBeDefined();
+
+    await runCommand!.parseAsync(['node', 'test']);
+
+    expect(process.exitCode).toBe(1);
+    expect(logger.error).not.toHaveBeenCalled();
   });
 
   it('should throw error when target is not a UUID', async () => {
@@ -236,6 +256,7 @@ describe('redteamRunCommand', () => {
         config: undefined,
         loadedFromCloud: true,
         target: targetUUID,
+        eventSource: 'cli',
       }),
     );
   });
@@ -406,6 +427,7 @@ describe('redteamRunCommand', () => {
           liveRedteamConfig: expect.objectContaining({
             description: customDescription,
           }),
+          eventSource: 'cli',
         }),
       );
     });
@@ -445,6 +467,7 @@ describe('redteamRunCommand', () => {
           liveRedteamConfig: expect.objectContaining({
             description: originalDescription,
           }),
+          eventSource: 'cli',
         }),
       );
     });
@@ -479,6 +502,37 @@ describe('redteamRunCommand', () => {
 
       // Verify that the description was overridden using short flag
       expect(mockConfig.description).toBe(customDescription);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should suppress stack trace when doRedteamRun throws ProbeLimitExceededError', async () => {
+      vi.mocked(doRedteamRun).mockRejectedValueOnce(new ProbeLimitExceededError(100, 100));
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test']);
+
+      expect(logger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('An unexpected error occurred during red team run'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should still log unexpected errors with stack', async () => {
+      const boom = new Error('boom');
+      vi.mocked(doRedteamRun).mockRejectedValueOnce(boom);
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      expect(runCommand).toBeDefined();
+
+      await runCommand!.parseAsync(['node', 'test']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('An unexpected error occurred during red team run: boom'),
+      );
+      expect(process.exitCode).toBe(1);
     });
   });
 });

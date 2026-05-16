@@ -6,6 +6,7 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { doEval } from '../../src/commands/eval';
 import { cloudConfig } from '../../src/globalConfig/cloud';
+import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamResume, doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
@@ -61,6 +62,7 @@ vi.mock('../../src/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+  clearLogCallbackIfOwned: vi.fn(),
   setLogCallback: vi.fn(),
   setLogLevel: vi.fn(),
 }));
@@ -388,9 +390,51 @@ describe('doRedteamRun', () => {
 
   describe('verbose toggle integration', () => {
     it('should initialize verbose toggle when logCallback is not provided', async () => {
-      await doRedteamRun({});
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(initVerboseToggle).toHaveBeenCalled();
+    });
+
+    it('should not initialize verbose toggle for reusable invocations', async () => {
+      await doRedteamRun({});
+
+      expect(initVerboseToggle).not.toHaveBeenCalled();
+    });
+
+    it('should provide Ctrl+C delegation for CLI invocations', async () => {
+      await doRedteamRun({ eventSource: 'cli' });
+
+      expect(initVerboseToggle).toHaveBeenCalledWith({
+        onInterrupt: expect.any(Function),
+      });
+    });
+
+    it('should re-emit SIGINT through process.kill when Ctrl+C delegation fires', async () => {
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+      try {
+        await doRedteamRun({ eventSource: 'cli' });
+
+        const lastCall = vi.mocked(initVerboseToggle).mock.calls.at(-1);
+        expect(lastCall).toBeDefined();
+        const onInterrupt = lastCall![0]!.onInterrupt;
+
+        onInterrupt();
+
+        expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGINT');
+      } finally {
+        killSpy.mockRestore();
+      }
+    });
+
+    it('should forward eventSource into the wrapped doEval call', async () => {
+      await doRedteamRun({ eventSource: 'cli' });
+
+      expect(doEval).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ eventSource: 'cli' }),
+      );
     });
 
     it('should NOT initialize verbose toggle when logCallback is provided', async () => {
@@ -407,7 +451,7 @@ describe('doRedteamRun', () => {
       const mockCleanup = vi.fn();
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
 
-      await doRedteamRun({});
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(mockCleanup).toHaveBeenCalled();
     });
@@ -417,7 +461,7 @@ describe('doRedteamRun', () => {
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
       vi.mocked(doGenerateRedteam).mockResolvedValue(null);
 
-      await doRedteamRun({});
+      await doRedteamRun({ eventSource: 'cli' });
 
       expect(mockCleanup).toHaveBeenCalled();
     });
@@ -426,16 +470,37 @@ describe('doRedteamRun', () => {
       vi.mocked(initVerboseToggle).mockReturnValue(null);
 
       // Should not throw
-      await expect(doRedteamRun({})).resolves.not.toThrow();
+      await expect(doRedteamRun({ eventSource: 'cli' })).resolves.not.toThrow();
     });
 
     it('should not call cleanup when initVerboseToggle returns null', async () => {
       vi.mocked(initVerboseToggle).mockReturnValue(null);
 
-      await doRedteamRun({});
+      await doRedteamRun({ eventSource: 'cli' });
 
       // Just verifying no errors - cleanup should be handled gracefully
       expect(initVerboseToggle).toHaveBeenCalled();
+    });
+
+    it('should cleanup run state when evaluation throws', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
+
+      await expect(doRedteamRun({ eventSource: 'cli' })).rejects.toThrow('eval failed');
+
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(null);
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should clear log callbacks when evaluation throws', async () => {
+      const mockLogCallback = vi.fn();
+      vi.mocked(doEval).mockRejectedValueOnce(new Error('eval failed'));
+
+      await expect(doRedteamRun({ logCallback: mockLogCallback })).rejects.toThrow('eval failed');
+
+      expect(setLogCallback).toHaveBeenNthCalledWith(1, mockLogCallback);
+      expect(clearLogCallbackIfOwned).toHaveBeenCalledWith(mockLogCallback);
     });
   });
 
@@ -580,7 +645,7 @@ describe('doRedteamRun', () => {
       vi.mocked(doGenerateRedteam).mockRejectedValue(error);
 
       try {
-        await doRedteamRun({ strict: true });
+        await doRedteamRun({ strict: true, eventSource: 'cli' });
       } catch {
         // Expected to throw
       }
@@ -691,10 +756,11 @@ describe('doRedteamResume', () => {
     );
   });
 
-  it('should initialize verbose toggle when logCallback is not provided', async () => {
+  it('should initialize verbose toggle for CLI resumes without logCallback', async () => {
     await doRedteamResume({
       liveRedteamConfig: mockConfig,
       resumeEvalId: 'eval-123',
+      eventSource: 'cli',
     });
 
     expect(initVerboseToggle).toHaveBeenCalled();

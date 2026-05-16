@@ -26,6 +26,7 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
+import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
@@ -46,16 +47,17 @@ import {
 } from './tracing/evaluatorTracing';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
 import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
+import { isCliEventSource } from './types/eventSource';
 import {
   type Assertion,
   type AssertionOrSet,
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
-  type EvaluateOptions,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
+  MAX_SUGGESTIONS_COUNT,
   type Prompt,
   type ProviderResponse,
   ResultFailureReason,
@@ -106,7 +108,15 @@ import type {
   Vars,
   VarValue,
 } from './types/index';
+import type { InternalEvaluateOptions } from './types/internal';
 import type { CallApiContextParams } from './types/providers';
+
+export class PromptSuggestionsRejectedError extends Error {
+  constructor(message = 'No prompts selected. Aborting.') {
+    super(message);
+    this.name = 'PromptSuggestionsRejectedError';
+  }
+}
 
 const CONVERSATION_VAR_NAME = '_conversation';
 const PROMPT_CONVERSATION_CACHE_MAX = 1024;
@@ -400,7 +410,7 @@ function hasNestedRedteamAssertion(assertion: NestedAssertion): boolean {
 
 function getRepeatCacheNamespace(
   repeatIndex: number,
-  evaluateOptions?: EvaluateOptions,
+  evaluateOptions?: InternalEvaluateOptions,
 ): string | undefined {
   if (repeatIndex > 0 || (evaluateOptions?.repeat ?? 1) > 1) {
     return `repeat:${repeatIndex}`;
@@ -825,13 +835,17 @@ async function callActiveProvider({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderResponse> {
-  const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
+  const originalProvider = maybeWrapMcpProviderForRedteam(provider, test);
+  const activeProvider = maybeWrapMcpProviderForRedteam(
+    isApiProvider(test.provider) ? test.provider : originalProvider,
+    test,
+  );
   logger.debug(`Provider type: ${activeProvider.id()}`);
 
   const callApiContext = buildCallApiContext({
     evalId,
     filters,
-    originalProvider: provider,
+    originalProvider,
     promptForRender,
     repeatIndex,
     test,
@@ -1785,15 +1799,34 @@ function ensureDefaultTestForExtensions(testSuite: TestSuite) {
   }
 }
 
-async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateOptions) {
+async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: InternalEvaluateOptions) {
   if (!options.generateSuggestions) {
     return true;
   }
 
+  // Library callers bypass CLI/config schema validation, so re-clamp here.
+  const rawCount = options.suggestionsCount ?? 1;
+  let requestedCount = Number.isInteger(rawCount) && rawCount >= 1 ? rawCount : 1;
+  if (requestedCount > MAX_SUGGESTIONS_COUNT) {
+    logger.warn(
+      `suggestionsCount=${rawCount} exceeds max of ${MAX_SUGGESTIONS_COUNT}; clamping to ${MAX_SUGGESTIONS_COUNT}.`,
+    );
+    requestedCount = MAX_SUGGESTIONS_COUNT;
+  }
   logger.info(`Generating prompt variations...`);
-  const { prompts: newPrompts, error } = await generatePrompts(testSuite.prompts[0].raw, 1);
+  const { prompts: newPrompts, error } = await generatePrompts(
+    testSuite.prompts[0].raw,
+    requestedCount,
+  );
   if (error || !newPrompts) {
     throw new Error(`Failed to generate prompts: ${error}`);
+  }
+  if (newPrompts.length < requestedCount) {
+    logger.warn(
+      chalk.yellow(
+        `Only ${newPrompts.length} of ${requestedCount} requested prompt variants were generated. See warnings above for details.`,
+      ),
+    );
   }
 
   logger.info(chalk.blue('Generated prompts:'));
@@ -1815,8 +1848,11 @@ async function maybeAddGeneratedPrompts(testSuite: TestSuite, options: EvaluateO
     return true;
   }
   logger.info(chalk.red('No prompts selected. Aborting.'));
-  process.exitCode = 1;
-  return false;
+  if (isCliEventSource(options)) {
+    process.exitCode = 1;
+    return false;
+  }
+  throw new PromptSuggestionsRejectedError();
 }
 
 function createDefaultPromptMetrics(): PromptMetrics {
@@ -2021,7 +2057,7 @@ async function buildRunEvalOptions({
   concurrency: number;
   conversations: EvalConversations;
   evalId: string;
-  options: EvaluateOptions;
+  options: InternalEvaluateOptions;
   promptIndexMap: Map<string, number>;
   providerAbortSignal?: AbortSignal;
   rateLimitRegistry?: RateLimitRegistryRef;
@@ -2145,7 +2181,7 @@ function appendRunEvalOptionsForTestCase({
   conversations: EvalConversations;
   evalId: string;
   nextTestIdx: number;
-  options: EvaluateOptions;
+  options: InternalEvaluateOptions;
   promptIdCache: Map<Prompt, string>;
   promptIndexMap: Map<string, number>;
   providerAbortSignal?: AbortSignal;
@@ -2212,7 +2248,7 @@ function appendRunEvalOptionsForVars({
   concurrency: number;
   conversations: EvalConversations;
   evalId: string;
-  options: EvaluateOptions;
+  options: InternalEvaluateOptions;
   promptIdCache: Map<Prompt, string>;
   promptIndexMap: Map<string, number>;
   promptPrefix: string;
@@ -2277,7 +2313,7 @@ function appendRunEvalOptionsForProvider({
   concurrency: number;
   conversations: EvalConversations;
   evalId: string;
-  options: EvaluateOptions;
+  options: InternalEvaluateOptions;
   promptIdCache: Map<Prompt, string>;
   promptIndexMap: Map<string, number>;
   promptPrefix: string;
@@ -2365,7 +2401,7 @@ function createRunEvalOption({
   concurrency: number;
   conversations: EvalConversations;
   evalId: string;
-  options: EvaluateOptions;
+  options: InternalEvaluateOptions;
   prompt: Prompt;
   promptIdx: number;
   promptPrefix: string;
@@ -2559,7 +2595,7 @@ interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
   numComplete: number;
-  options: EvaluateOptions;
+  options: InternalEvaluateOptions;
   promptEvalCounts: number[];
   prompts: CompletedPrompt[];
   rowsWithMaxScoreAssertion: Set<number>;
@@ -2858,14 +2894,14 @@ function usesExampleProvider(testSuite: TestSuite) {
 class Evaluator {
   evalRecord: Eval;
   testSuite: TestSuite;
-  options: EvaluateOptions;
+  options: InternalEvaluateOptions;
   stats: EvaluateStats;
   conversations: EvalConversations;
   registers: EvalRegisters;
   fileWriters: JsonlFileWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
 
-  constructor(testSuite: TestSuite, evalRecord: Eval, options: EvaluateOptions) {
+  constructor(testSuite: TestSuite, evalRecord: Eval, options: InternalEvaluateOptions) {
     this.testSuite = testSuite;
     this.evalRecord = evalRecord;
     this.options = options;
@@ -4014,7 +4050,7 @@ class Evaluator {
     evalTimedOut: boolean;
     globalTimeout?: NodeJS.Timeout;
     maxEvalTimeMs: number;
-    options: EvaluateOptions;
+    options: InternalEvaluateOptions;
     processedIndices: Set<number>;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
@@ -4128,7 +4164,7 @@ class Evaluator {
     assertionTypes: Set<string>;
     concurrency: number;
     evalTimedOut: boolean;
-    options: EvaluateOptions;
+    options: InternalEvaluateOptions;
     prompts: CompletedPrompt[];
     startTime: number;
     testSuite: TestSuite;
@@ -4524,7 +4560,7 @@ class Evaluator {
 export function evaluate(
   testSuite: TestSuite,
   evalRecord: Eval,
-  options: EvaluateOptions,
+  options: InternalEvaluateOptions,
 ): Promise<Eval> {
   const ev = new Evaluator(testSuite, evalRecord, options);
   return ev.evaluate();

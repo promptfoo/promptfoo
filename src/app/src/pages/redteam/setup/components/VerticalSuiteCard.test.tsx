@@ -301,4 +301,26 @@ describe('VerticalSuiteCard handleToggleAll batch update', () => {
       expect(screen.getByRole('heading', { name: 'Test Suite' })).toBeInTheDocument();
     });
   });
+
+  describe('plugin action labels', () => {
+    it('labels configure and documentation actions for selected plugins', async () => {
+      const user = userEvent.setup();
+      const selectedPlugins = new Set<Plugin>(['bola']);
+
+      renderWithProviders(
+        <VerticalSuiteCard {...defaultProps} selectedPlugins={selectedPlugins} />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Expand' }));
+
+      expect(
+        screen.getByRole('button', { name: 'Configure Object-Level Authorization Bypass' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {
+          name: 'View documentation for Object-Level Authorization Bypass',
+        }),
+      ).toBeInTheDocument();
+    });
+  });
 });

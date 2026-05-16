@@ -3,16 +3,17 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
+import { EmailValidationError } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { getCompletedPairsFromCloud, getConfigFromCloud, getEvalFromCloud } from '../../util/cloud';
+import { ConfigResolutionError, logConfigResolutionError } from '../../util/config/load';
 import { setupEnv } from '../../util/index';
 import { createCloudResultStreamer, doRedteamResume, doRedteamRun } from '../shared';
+import { ProbeLimitExceededError, type RedteamRunOptions } from '../types';
 import { poisonCommand } from './poison';
 import type { Command } from 'commander';
-
-import type { RedteamRunOptions } from '../types';
 
 const UUID_REGEX = /^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/;
 const CLOUD_EVAL_ID_REGEX = /^eval-[A-Za-z0-9]+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
@@ -89,6 +90,7 @@ async function handleCloudResume(opts: RedteamRunCommandOptions) {
     const streamer = createCloudResultStreamer(evalId);
     await doRedteamResume({
       ...opts,
+      eventSource: 'cli',
       liveRedteamConfig: cloudEval.config,
       resumeEvalId: evalId,
       resultStreamCallback: streamer.resultStreamCallback,
@@ -151,6 +153,15 @@ function logRedteamRunError(error: unknown) {
     return;
   }
 
+  if (error instanceof ConfigResolutionError) {
+    logConfigResolutionError(error);
+    return;
+  }
+
+  if (error instanceof EmailValidationError || error instanceof ProbeLimitExceededError) {
+    return;
+  }
+
   logger.error(
     `An unexpected error occurred during red team run: ${error instanceof Error ? error.message : String(error)}\n${
       error instanceof Error ? error.stack : ''
@@ -161,7 +172,7 @@ function logRedteamRunError(error: unknown) {
 async function runStandardRedteam(opts: RedteamRunOptions) {
   try {
     applyCliRuntimeOptions(opts);
-    await doRedteamRun(opts);
+    await doRedteamRun({ ...opts, eventSource: 'cli' });
   } catch (error) {
     logRedteamRunError(error);
     process.exitCode = 1;
