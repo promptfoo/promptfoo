@@ -38,6 +38,8 @@ import type { EnvOverrides } from '../../types/env';
 import type { CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { AnthropicMessageOptions } from './types';
 
+type ProcessedAnthropicTool = ReturnType<typeof processAnthropicTools>['processedTools'][number];
+
 function parseEnvFloat(value: string | undefined): number | undefined {
   if (value === undefined) {
     return undefined;
@@ -106,6 +108,179 @@ function getMessagesResponseMetadata(response: Anthropic.Messages.Message) {
     outputTokens: response.usage?.output_tokens,
     cacheReadInputTokens: response.usage?.cache_read_input_tokens,
     cacheCreationInputTokens: response.usage?.cache_creation_input_tokens,
+  };
+}
+
+function warnForThinkingConflicts(config: AnthropicMessageOptions, thinkingEnabled: boolean): void {
+  if (!thinkingEnabled) {
+    return;
+  }
+  if (config.top_k != null) {
+    logger.warn(
+      'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
+    );
+  }
+  if (config.temperature != null) {
+    logger.warn(
+      'temperature is incompatible with extended thinking and will be omitted. Remove temperature from your config or disable thinking.',
+    );
+  }
+  if (config.top_p != null && (config.top_p < 0.95 || config.top_p > 1.0)) {
+    logger.warn(
+      `top_p must be between 0.95 and 1.0 with extended thinking (got ${config.top_p}). Clamping to valid range.`,
+    );
+  }
+}
+
+function resolveToolChoiceForThinking(
+  config: AnthropicMessageOptions,
+  thinkingEnabled: boolean,
+): Anthropic.Messages.ToolChoice | undefined {
+  if (!config.tool_choice) {
+    return undefined;
+  }
+  const transformed = transformToolChoice(
+    config.tool_choice,
+    'anthropic',
+  ) as Anthropic.Messages.ToolChoice;
+  if (thinkingEnabled && (transformed.type === 'any' || transformed.type === 'tool')) {
+    logger.warn(
+      `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
+    );
+    return undefined;
+  }
+  return transformed;
+}
+
+function resolveTopPForThinking(
+  config: AnthropicMessageOptions,
+  thinkingEnabled: boolean,
+): number | undefined {
+  if (config.top_p == null) {
+    return undefined;
+  }
+  return thinkingEnabled ? Math.max(0.95, Math.min(1.0, config.top_p)) : config.top_p;
+}
+
+function warnForTemperatureWithTopP(
+  config: AnthropicMessageOptions,
+  resolvedTopP: number | undefined,
+  thinkingEnabled: boolean,
+): void {
+  if (config.temperature != null && resolvedTopP != null && !thinkingEnabled) {
+    logger.warn(
+      'temperature is incompatible with top_p on Anthropic and will be omitted. Remove one of these parameters.',
+    );
+  }
+}
+
+function resolveSystemBlocks(
+  usingClaudeCodeOAuth: boolean,
+  system: Anthropic.TextBlockParam[] | undefined,
+): Anthropic.TextBlockParam[] | undefined {
+  return usingClaudeCodeOAuth
+    ? [{ type: 'text', text: CLAUDE_CODE_IDENTITY_PROMPT }, ...(system ?? [])]
+    : system;
+}
+
+function buildMessagesHeaders({
+  config,
+  requiredBetaFeatures,
+  processedOutputFormat,
+  usingClaudeCodeOAuth,
+}: {
+  config: AnthropicMessageOptions;
+  requiredBetaFeatures: string[];
+  processedOutputFormat: Anthropic.Messages.OutputConfig['format'] | undefined;
+  usingClaudeCodeOAuth: boolean;
+}) {
+  const headers: Record<string, string> = { ...(config.headers || {}) };
+  let allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
+  const userBetaHeader = config.headers?.['anthropic-beta'];
+
+  if (typeof userBetaHeader === 'string' && userBetaHeader.length > 0) {
+    allBetaFeatures.push(
+      ...userBetaHeader
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    );
+  }
+  if (processedOutputFormat && !allBetaFeatures.includes('structured-outputs-2025-11-13')) {
+    allBetaFeatures.push('structured-outputs-2025-11-13');
+  }
+  if (usingClaudeCodeOAuth) {
+    allBetaFeatures.push(...CLAUDE_CODE_OAUTH_BETA_FEATURES);
+  }
+
+  allBetaFeatures = [...new Set(allBetaFeatures)];
+  if (allBetaFeatures.length > 0) {
+    headers['anthropic-beta'] = allBetaFeatures.join(',');
+  }
+  if (usingClaudeCodeOAuth) {
+    headers['user-agent'] = CLAUDE_CODE_USER_AGENT;
+    headers['x-app'] = CLAUDE_CODE_X_APP;
+  }
+  return headers;
+}
+
+function getMessageRequestOptions(headers: Record<string, string>) {
+  return Object.keys(headers).length > 0 ? { headers } : {};
+}
+
+function parseStructuredAnthropicOutput(
+  output: unknown,
+  processedOutputFormat: Anthropic.Messages.OutputConfig['format'] | undefined,
+) {
+  if (processedOutputFormat?.type !== 'json_schema' || typeof output !== 'string') {
+    return output;
+  }
+  try {
+    return JSON.parse(output);
+  } catch (error) {
+    logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
+    return output;
+  }
+}
+
+function buildAnthropicProviderResponse({
+  response,
+  config,
+  processedOutputFormat,
+  modelName,
+  cached,
+}: {
+  response: Anthropic.Messages.Message;
+  config: AnthropicMessageOptions;
+  processedOutputFormat: Anthropic.Messages.OutputConfig['format'] | undefined;
+  modelName: string;
+  cached: boolean;
+}): ProviderResponse {
+  const finishReason = normalizeFinishReason(response.stop_reason);
+  const output = parseStructuredAnthropicOutput(
+    outputFromMessage(response, config.showThinking ?? true),
+    processedOutputFormat,
+  );
+  const refusalDetails = getRefusalDetails(response);
+
+  if (refusalDetails && !cached) {
+    logger.warn(refusalDetails);
+  }
+
+  return {
+    output,
+    tokenUsage: getTokenUsage(response, cached),
+    ...(finishReason && { finishReason }),
+    ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
+    cost: calculateAnthropicCost(
+      modelName,
+      config,
+      response.usage?.input_tokens,
+      response.usage?.output_tokens,
+      response.usage?.cache_read_input_tokens ?? undefined,
+      response.usage?.cache_creation_input_tokens ?? undefined,
+    ),
+    ...(cached ? { cached: true } : {}),
   };
 }
 
@@ -247,147 +422,66 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
-  /**
-   * Internal implementation of callApi without tracing wrapper.
-   */
-  private async callApiInternal(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
-    // Merge configs from the provider and the prompt
-    const config: AnthropicMessageOptions = {
-      ...this.config,
-      ...context?.prompt?.config,
-    };
-
-    const { system, extractedMessages, thinking } = parseMessages(prompt);
-
-    // Get MCP tools if client is initialized
-    let mcpTools: Anthropic.Tool[] = [];
-    if (this.mcpClient) {
-      mcpTools = transformMCPToolsToAnthropic(this.mcpClient.getAllTools());
+  private warnForAssistantPrefill(extractedMessages: Anthropic.Messages.MessageParam[]) {
+    if (!this.modelName.startsWith('claude-opus-4-6') || extractedMessages.length === 0) {
+      return;
     }
-
-    // Load and process tools from config (handles both external files and inline tool definitions)
-    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
-    // Transform tools to Anthropic format if needed
-    const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
-    const { processedTools: processedConfigTools, requiredBetaFeatures } =
-      processAnthropicTools(configTools);
-
-    // Combine all tools
-    const allTools = [...mcpTools, ...processedConfigTools];
-
-    // Process output_format with external file loading and variable rendering
-    const processedOutputFormat = maybeLoadResponseFormatFromExternalFile(
-      config.output_format,
-      context?.vars,
-    );
-
-    const resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
-    const thinkingEnabled = isThinkingEnabled(resolvedThinking);
-
-    // Validate and warn about thinking-incompatible params
-    if (thinkingEnabled) {
-      if (config.top_k != null) {
-        logger.warn(
-          'top_k is incompatible with extended thinking and will be omitted. Remove top_k from your config or disable thinking.',
-        );
-      }
-      if (config.temperature != null) {
-        logger.warn(
-          'temperature is incompatible with extended thinking and will be omitted. Remove temperature from your config or disable thinking.',
-        );
-      }
-      if (config.top_p != null && (config.top_p < 0.95 || config.top_p > 1.0)) {
-        logger.warn(
-          `top_p must be between 0.95 and 1.0 with extended thinking (got ${config.top_p}). Clamping to valid range.`,
-        );
-      }
-    }
-
-    // Resolve tool_choice, suppressing forced tool use when thinking is enabled
-    let resolvedToolChoice: Anthropic.Messages.ToolChoice | undefined;
-    if (config.tool_choice) {
-      const transformed = transformToolChoice(
-        config.tool_choice,
-        'anthropic',
-      ) as Anthropic.Messages.ToolChoice;
-      if (thinkingEnabled && (transformed.type === 'any' || transformed.type === 'tool')) {
-        logger.warn(
-          `tool_choice type '${transformed.type}' (forced tool use) is incompatible with extended thinking and will be omitted. Use 'auto' or remove tool_choice.`,
-        );
-      } else {
-        resolvedToolChoice = transformed;
-      }
-    }
-
-    // Resolve top_p: clamp to [0.95, 1.0] when thinking is enabled
-    let resolvedTopP: number | undefined;
-    if (config.top_p != null) {
-      resolvedTopP = thinkingEnabled ? Math.max(0.95, Math.min(1.0, config.top_p)) : config.top_p;
-    }
-
-    // Warn when temperature is silently omitted due to top_p (even without thinking)
-    if (config.temperature != null && resolvedTopP != null && !thinkingEnabled) {
+    const lastMessage = extractedMessages[extractedMessages.length - 1];
+    if (lastMessage.role === 'assistant') {
       logger.warn(
-        'temperature is incompatible with top_p on Anthropic and will be omitted. Remove one of these parameters.',
+        'Assistant message prefilling is not supported on Claude Opus 4.6 and will cause a 400 error. Remove the trailing assistant message from your prompt.',
       );
     }
+  }
 
-    // Warn about assistant prefilling on Opus 4.6 (not supported, returns 400)
-    const isOpus46 = this.modelName.startsWith('claude-opus-4-6');
-    if (isOpus46 && extractedMessages.length > 0) {
-      const lastMessage = extractedMessages[extractedMessages.length - 1];
-      if (lastMessage.role === 'assistant') {
-        logger.warn(
-          'Assistant message prefilling is not supported on Claude Opus 4.6 and will cause a 400 error. Remove the trailing assistant message from your prompt.',
-        );
-      }
-    }
-
-    // Opus 4.7 deprecated `temperature` at the model level — the API returns
-    // 400 `invalid_request_error` for any request that includes it, including
-    // promptfoo's built-in default of 0. Suppress the parameter entirely and
-    // warn once per provider instance when the user supplied an explicit
-    // temperature via config or the ANTHROPIC_TEMPERATURE env var (the
-    // built-in default stays silent to avoid spamming every request).
-    const isOpus47 = isClaudeOpus47Model(this.modelName);
+  private warnForOpus47Temperature(config: AnthropicMessageOptions) {
     const explicitTemperature =
       config.temperature != null ||
       parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
       parseEnvFloat(process.env.ANTHROPIC_TEMPERATURE) != null;
-    if (isOpus47 && explicitTemperature && !this.opus47TemperatureWarned) {
-      logger.warn(
-        'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
-      );
-      this.opus47TemperatureWarned = true;
+    if (
+      !isClaudeOpus47Model(this.modelName) ||
+      !explicitTemperature ||
+      this.opus47TemperatureWarned
+    ) {
+      return;
     }
+    logger.warn(
+      'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
+    );
+    this.opus47TemperatureWarned = true;
+  }
 
-    // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
-    // and on Opus 4.7 (deprecated at the model level). Collapse all three cases
-    // into one predicate so the params spread stays readable.
-    const omitTemperature = resolvedTopP != null || thinkingEnabled || isOpus47;
-
-    // When authenticating via a Claude Code OAuth token, Anthropic's API
-    // requires the Claude Code identity as the first system block — as of
-    // 2025-Q4, sending any other leading system block returns HTTP 400
-    // `invalid_request_error`. Prepend it as its own block so the
-    // user-provided system prompt still flows through. If the user's own
-    // system prompt happens to start with the same string the API tolerates
-    // the duplicate.
-    const resolvedSystem: Anthropic.TextBlockParam[] | undefined = this.usingClaudeCodeOAuth
-      ? [{ type: 'text', text: CLAUDE_CODE_IDENTITY_PROMPT }, ...(system ?? [])]
-      : system;
-
-    const shouldStream = config.stream ?? false;
-    const params: Anthropic.MessageCreateParams = {
+  private buildMessagesParams({
+    config,
+    extractedMessages,
+    resolvedSystem,
+    thinkingEnabled,
+    resolvedTopP,
+    resolvedToolChoice,
+    resolvedThinking,
+    allTools,
+    processedOutputFormat,
+  }: {
+    config: AnthropicMessageOptions;
+    extractedMessages: Anthropic.Messages.MessageParam[];
+    resolvedSystem: Anthropic.TextBlockParam[] | undefined;
+    thinkingEnabled: boolean;
+    resolvedTopP: number | undefined;
+    resolvedToolChoice: Anthropic.Messages.ToolChoice | undefined;
+    resolvedThinking: Anthropic.Messages.ThinkingConfigParam | undefined;
+    allTools: ProcessedAnthropicTool[];
+    processedOutputFormat: Anthropic.Messages.OutputConfig['format'] | undefined;
+  }): Anthropic.MessageCreateParams {
+    const omitTemperature =
+      resolvedTopP != null || thinkingEnabled || isClaudeOpus47Model(this.modelName);
+    return {
       model: this.modelName,
       ...(resolvedSystem && resolvedSystem.length > 0 ? { system: resolvedSystem } : {}),
       max_tokens:
         config.max_tokens ?? getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingEnabled ? 2048 : 1024),
       messages: extractedMessages,
-      stream: shouldStream,
+      stream: config.stream ?? false,
       ...(omitTemperature
         ? {}
         : {
@@ -397,7 +491,6 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
           }),
       ...(resolvedTopP == null ? {} : { top_p: resolvedTopP }),
-      // Anthropic docs: top_k is incompatible with extended thinking
       ...(config.top_k == null || thinkingEnabled ? {} : { top_k: config.top_k }),
       ...(config.cache_control ? { cache_control: config.cache_control } : {}),
       ...(config.service_tier ? { service_tier: config.service_tier } : {}),
@@ -416,221 +509,179 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         : {}),
       ...(typeof config?.extra_body === 'object' && config.extra_body ? config.extra_body : {}),
     };
+  }
 
-    logger.debug('Calling Anthropic Messages API', {
-      params: getMessagesRequestMetadata(params),
-    });
-
-    const headers: Record<string, string> = {
-      ...(config.headers || {}),
-    };
-
-    // Add beta features header if specified
-    let allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
-
-    // Merge any `anthropic-beta` the user passed via `config.headers` so it
-    // isn't silently dropped when we rebuild the header below. The SDK
-    // accepts a comma-separated list, so we split, trim, and dedupe.
-    const userBetaHeader = config.headers?.['anthropic-beta'];
-    if (typeof userBetaHeader === 'string' && userBetaHeader.length > 0) {
-      allBetaFeatures.push(
-        ...userBetaHeader
-          .split(',')
-          .map((entry) => entry.trim())
-          .filter((entry) => entry.length > 0),
-      );
-    }
-
-    // Automatically add structured-outputs beta when output_format is used
-    if (processedOutputFormat && !allBetaFeatures.includes('structured-outputs-2025-11-13')) {
-      allBetaFeatures.push('structured-outputs-2025-11-13');
-    }
-
-    // Claude Code OAuth tokens require additional beta flags. These are also
-    // set as default SDK headers by the generic provider, but we merge them
-    // into per-request headers as well so explicit `config.headers` or
-    // `config.beta` entries don't drop them.
-    if (this.usingClaudeCodeOAuth) {
-      allBetaFeatures.push(...CLAUDE_CODE_OAUTH_BETA_FEATURES);
-    }
-
-    // Deduplicate beta features
-    allBetaFeatures = [...new Set(allBetaFeatures)];
-
-    if (allBetaFeatures.length > 0) {
-      headers['anthropic-beta'] = allBetaFeatures.join(',');
-    }
-
-    // Force the Claude Code identity headers when authenticating via OAuth.
-    // These are also set on the SDK client as `defaultHeaders`, but per-request
-    // `headers` override those, so a user-supplied `config.headers['user-agent']`
-    // (or `x-app`) would otherwise break OAuth — Anthropic gates OAuth tokens
-    // to the Claude Code app identity and responds with 401 if either header
-    // doesn't match.
-    if (this.usingClaudeCodeOAuth) {
-      headers['user-agent'] = CLAUDE_CODE_USER_AGENT;
-      headers['x-app'] = CLAUDE_CODE_X_APP;
-    }
-
-    const cache = await getCache();
+  private buildCacheKey(
+    params: Anthropic.MessageCreateParams,
+    headers: Record<string, string>,
+  ): string {
     const { metadata: _metadata, ...cacheKeyParams } = params;
     const cacheKeyHeaders = normalizeHeadersForCacheKey(headers);
-    const cacheKey = `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
+    return `anthropic:messages:${this.modelName}:${this.getCacheIdentityHash()}:${this.getCacheAuthNamespace()}:${hashAnthropicCacheValue(
       {
         ...cacheKeyParams,
         ...(cacheKeyHeaders ? { headers: cacheKeyHeaders } : {}),
       },
     )}`;
+  }
 
-    if (isCacheEnabled()) {
-      // Try to get the cached response
-      const cachedResponse = await cache.get<string | undefined>(cacheKey);
-      if (cachedResponse) {
-        logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
-        try {
-          const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
-          const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
-          let output = outputFromMessage(parsedCachedResponse, config.showThinking ?? true);
+  private async getCachedResponse({
+    cacheKey,
+    cache,
+    config,
+    processedOutputFormat,
+  }: {
+    cacheKey: string;
+    cache: Awaited<ReturnType<typeof getCache>>;
+    config: AnthropicMessageOptions;
+    processedOutputFormat: Anthropic.Messages.OutputConfig['format'] | undefined;
+  }): Promise<ProviderResponse | undefined> {
+    if (!isCacheEnabled()) {
+      return undefined;
+    }
+    const cachedResponse = await cache.get<string | undefined>(cacheKey);
+    if (!cachedResponse) {
+      return undefined;
+    }
 
-          // Handle structured JSON output parsing
-          if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-            try {
-              output = JSON.parse(output);
-            } catch (error) {
-              logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-            }
-          }
+    logger.debug('Returning cached Anthropic Messages response', { model: this.modelName });
+    try {
+      const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
+      return buildAnthropicProviderResponse({
+        response: parsedCachedResponse,
+        config,
+        processedOutputFormat,
+        modelName: this.modelName,
+        cached: true,
+      });
+    } catch {
+      return {
+        output: cachedResponse,
+        tokenUsage: createEmptyTokenUsage(),
+      };
+    }
+  }
 
-          const cachedRefusalDetails = getRefusalDetails(parsedCachedResponse);
+  private async cacheResponse(
+    cache: Awaited<ReturnType<typeof getCache>>,
+    cacheKey: string,
+    response: Anthropic.Messages.Message,
+  ) {
+    if (!isCacheEnabled()) {
+      return;
+    }
+    try {
+      await cache.set(cacheKey, JSON.stringify(response));
+    } catch (err) {
+      logger.error(`Failed to cache response: ${String(err)}`);
+    }
+  }
 
-          return {
-            output,
-            tokenUsage: getTokenUsage(parsedCachedResponse, true),
-            ...(finishReason && { finishReason }),
-            ...(cachedRefusalDetails && {
-              guardrails: { flagged: true, reason: cachedRefusalDetails },
-            }),
-            cost: calculateAnthropicCost(
-              this.modelName,
-              config,
-              parsedCachedResponse.usage?.input_tokens,
-              parsedCachedResponse.usage?.output_tokens,
-              parsedCachedResponse.usage?.cache_read_input_tokens ?? undefined,
-              parsedCachedResponse.usage?.cache_creation_input_tokens ?? undefined,
-            ),
-            cached: true,
-          };
-        } catch {
-          // Could be an old cache item, which was just the text content from TextBlock.
-          return {
-            output: cachedResponse,
-            tokenUsage: createEmptyTokenUsage(),
-          };
-        }
-      }
+  private async createAnthropicMessage(
+    params: Anthropic.MessageCreateParams,
+    headers: Record<string, string>,
+  ) {
+    if (params.stream) {
+      const stream = await this.anthropic.messages.stream(
+        params,
+        getMessageRequestOptions(headers),
+      );
+      const finalMessage = await stream.finalMessage();
+      logger.debug(`Anthropic Messages API streaming complete`, {
+        finalMessage: getMessagesResponseMetadata(finalMessage),
+      });
+      return finalMessage;
+    }
+
+    const response = (await this.anthropic.messages.create(
+      params,
+      getMessageRequestOptions(headers),
+    )) as Anthropic.Messages.Message;
+    logger.debug(`Anthropic Messages API response`, {
+      response: getMessagesResponseMetadata(response),
+    });
+    return response;
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    const config: AnthropicMessageOptions = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+    const { system, extractedMessages, thinking } = parseMessages(prompt);
+
+    const mcpTools = this.mcpClient
+      ? transformMCPToolsToAnthropic(this.mcpClient.getAllTools())
+      : [];
+    const loadedTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
+    const configTools = transformTools(loadedTools, 'anthropic') as typeof loadedTools;
+    const { processedTools: processedConfigTools, requiredBetaFeatures } =
+      processAnthropicTools(configTools);
+    const allTools = [...mcpTools, ...processedConfigTools];
+    const processedOutputFormat = maybeLoadResponseFormatFromExternalFile(
+      config.output_format,
+      context?.vars,
+    );
+
+    const resolvedThinking = resolveThinkingConfig(config.thinking, thinking);
+    const thinkingEnabled = isThinkingEnabled(resolvedThinking);
+    warnForThinkingConflicts(config, thinkingEnabled);
+    const resolvedToolChoice = resolveToolChoiceForThinking(config, thinkingEnabled);
+    const resolvedTopP = resolveTopPForThinking(config, thinkingEnabled);
+    warnForTemperatureWithTopP(config, resolvedTopP, thinkingEnabled);
+    this.warnForAssistantPrefill(extractedMessages);
+    this.warnForOpus47Temperature(config);
+
+    const params = this.buildMessagesParams({
+      config,
+      extractedMessages,
+      resolvedSystem: resolveSystemBlocks(this.usingClaudeCodeOAuth, system),
+      thinkingEnabled,
+      resolvedTopP,
+      resolvedToolChoice,
+      resolvedThinking,
+      allTools,
+      processedOutputFormat,
+    });
+
+    logger.debug('Calling Anthropic Messages API', {
+      params: getMessagesRequestMetadata(params),
+    });
+    const headers = buildMessagesHeaders({
+      config,
+      requiredBetaFeatures,
+      processedOutputFormat,
+      usingClaudeCodeOAuth: this.usingClaudeCodeOAuth,
+    });
+
+    const cache = await getCache();
+    const cacheKey = this.buildCacheKey(params, headers);
+    const cachedResponse = await this.getCachedResponse({
+      cacheKey,
+      cache,
+      config,
+      processedOutputFormat,
+    });
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     try {
-      if (shouldStream) {
-        // Handle streaming request
-        const stream = await this.anthropic.messages.stream(params, {
-          ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
-        });
-
-        // Wait for the stream to complete and get the final message
-        const finalMessage = await stream.finalMessage();
-        logger.debug(`Anthropic Messages API streaming complete`, {
-          finalMessage: getMessagesResponseMetadata(finalMessage),
-        });
-
-        if (isCacheEnabled()) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(finalMessage));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-
-        const finishReason = normalizeFinishReason(finalMessage.stop_reason);
-        let output = outputFromMessage(finalMessage, config.showThinking ?? true);
-
-        // Handle structured JSON output parsing
-        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-          try {
-            output = JSON.parse(output);
-          } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-          }
-        }
-
-        const refusalDetails = getRefusalDetails(finalMessage);
-        if (refusalDetails) {
-          logger.warn(refusalDetails);
-        }
-
-        return {
-          output,
-          tokenUsage: getTokenUsage(finalMessage, false),
-          ...(finishReason && { finishReason }),
-          ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-          cost: calculateAnthropicCost(
-            this.modelName,
-            config,
-            finalMessage.usage?.input_tokens,
-            finalMessage.usage?.output_tokens,
-            finalMessage.usage?.cache_read_input_tokens ?? undefined,
-            finalMessage.usage?.cache_creation_input_tokens ?? undefined,
-          ),
-        };
-      } else {
-        // Handle non-streaming request
-        const response = (await this.anthropic.messages.create(params, {
-          ...(typeof headers === 'object' && Object.keys(headers).length > 0 ? { headers } : {}),
-        })) as Anthropic.Messages.Message;
-        logger.debug(`Anthropic Messages API response`, {
-          response: getMessagesResponseMetadata(response),
-        });
-
-        if (isCacheEnabled()) {
-          try {
-            await cache.set(cacheKey, JSON.stringify(response));
-          } catch (err) {
-            logger.error(`Failed to cache response: ${String(err)}`);
-          }
-        }
-
-        const finishReason = normalizeFinishReason(response.stop_reason);
-        let output = outputFromMessage(response, config.showThinking ?? true);
-
-        // Handle structured JSON output parsing
-        if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
-          try {
-            output = JSON.parse(output);
-          } catch (error) {
-            logger.error(`Failed to parse JSON output from structured outputs: ${error}`);
-          }
-        }
-
-        const refusalDetails = getRefusalDetails(response);
-        if (refusalDetails) {
-          logger.warn(refusalDetails);
-        }
-
-        return {
-          output,
-          tokenUsage: getTokenUsage(response, false),
-          ...(finishReason && { finishReason }),
-          ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
-          cost: calculateAnthropicCost(
-            this.modelName,
-            config,
-            response.usage?.input_tokens,
-            response.usage?.output_tokens,
-            response.usage?.cache_read_input_tokens ?? undefined,
-            response.usage?.cache_creation_input_tokens ?? undefined,
-          ),
-        };
-      }
+      const response = await this.createAnthropicMessage(params, headers);
+      await this.cacheResponse(cache, cacheKey, response);
+      return buildAnthropicProviderResponse({
+        response,
+        config,
+        processedOutputFormat,
+        modelName: this.modelName,
+        cached: false,
+      });
     } catch (err) {
       logger.error(
         `Anthropic Messages API call error: ${err instanceof Error ? err.message : String(err)}`,
