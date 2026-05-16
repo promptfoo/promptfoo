@@ -343,6 +343,93 @@ export class XAIVideoProvider implements ApiProvider {
     return undefined;
   }
 
+  private validateGenerationConfig({
+    prompt,
+    config,
+    duration,
+    aspectRatio,
+    resolution,
+    isEdit,
+  }: {
+    prompt: string;
+    config: XaiVideoOptions;
+    duration: number;
+    aspectRatio: XaiVideoAspectRatio;
+    resolution: XaiVideoResolution;
+    isEdit: boolean;
+  }): string | undefined {
+    const referenceImageError = this.validateReferenceImages(prompt, config, duration, isEdit);
+    if (referenceImageError) {
+      return referenceImageError;
+    }
+    if (isEdit) {
+      return undefined;
+    }
+
+    const durationValidation = validateDuration(duration);
+    if (!durationValidation.valid) {
+      return durationValidation.message;
+    }
+    const aspectRatioValidation = validateAspectRatio(aspectRatio);
+    if (!aspectRatioValidation.valid) {
+      return aspectRatioValidation.message;
+    }
+    const resolutionValidation = validateResolution(resolution);
+    if (!resolutionValidation.valid) {
+      return resolutionValidation.message;
+    }
+    return undefined;
+  }
+
+  private async getCachedVideoResponse({
+    cacheKey,
+    prompt,
+    aspectRatio,
+    resolution,
+    duration,
+    hasReferenceImages,
+  }: {
+    cacheKey: string;
+    prompt: string;
+    aspectRatio: XaiVideoAspectRatio;
+    resolution: XaiVideoResolution;
+    duration: number;
+    hasReferenceImages: boolean;
+  }): Promise<ProviderResponse | undefined> {
+    const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
+    if (!cachedVideoKey) {
+      return undefined;
+    }
+
+    logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
+    const videoUrl = buildStorageRefUrl(cachedVideoKey);
+    return {
+      output: formatVideoOutput(prompt, videoUrl),
+      cached: true,
+      latencyMs: 0,
+      cost: 0,
+      video: {
+        storageRef: { key: cachedVideoKey },
+        url: videoUrl,
+        format: 'mp4',
+        size: aspectRatio,
+        duration,
+        model: this.modelName,
+        aspectRatio,
+        resolution,
+      },
+      metadata: {
+        cached: true,
+        cacheKey,
+        model: this.modelName,
+        aspectRatio,
+        resolution,
+        duration,
+        hasReferenceImages,
+      },
+    };
+  }
+
   /**
    * Poll for video job completion
    *
@@ -476,27 +563,16 @@ export class XAIVideoProvider implements ApiProvider {
     const isEdit = !!config.video?.url;
     const hasReferenceImages = Boolean(config.reference_images?.length);
 
-    const referenceImageError = this.validateReferenceImages(prompt, config, duration, isEdit);
-    if (referenceImageError) {
-      return { error: referenceImageError };
-    }
-
-    // Validate parameters (only for generation, not edits)
-    if (!isEdit) {
-      const durationValidation = validateDuration(duration);
-      if (!durationValidation.valid) {
-        return { error: durationValidation.message };
-      }
-
-      const aspectRatioValidation = validateAspectRatio(aspectRatio);
-      if (!aspectRatioValidation.valid) {
-        return { error: aspectRatioValidation.message };
-      }
-
-      const resolutionValidation = validateResolution(resolution);
-      if (!resolutionValidation.valid) {
-        return { error: resolutionValidation.message };
-      }
+    const validationError = this.validateGenerationConfig({
+      prompt,
+      config,
+      duration,
+      aspectRatio,
+      resolution,
+      isEdit,
+    });
+    if (validationError) {
+      return { error: validationError };
     }
 
     // Generate cache key (skip caching for edits)
@@ -515,38 +591,16 @@ export class XAIVideoProvider implements ApiProvider {
 
     // Check cache (skip for edits)
     if (!isEdit) {
-      const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
-      if (cachedVideoKey) {
-        logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
-
-        const videoUrl = buildStorageRefUrl(cachedVideoKey);
-        const output = formatVideoOutput(prompt, videoUrl);
-
-        return {
-          output,
-          cached: true,
-          latencyMs: 0,
-          cost: 0,
-          video: {
-            storageRef: { key: cachedVideoKey },
-            url: videoUrl,
-            format: 'mp4',
-            size: aspectRatio,
-            duration,
-            model: this.modelName,
-            aspectRatio,
-            resolution,
-          },
-          metadata: {
-            cached: true,
-            cacheKey,
-            model: this.modelName,
-            aspectRatio,
-            resolution,
-            duration,
-            hasReferenceImages,
-          },
-        };
+      const cachedResponse = await this.getCachedVideoResponse({
+        cacheKey,
+        prompt,
+        aspectRatio,
+        resolution,
+        duration,
+        hasReferenceImages,
+      });
+      if (cachedResponse) {
+        return cachedResponse;
       }
     }
 
