@@ -35,7 +35,7 @@ import { fetchTraceContext } from '../../src/tracing/traceContext';
 
 describe('fetchTraceContext', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mocks.addSpans.mockResolvedValue({ stored: true });
     mocks.getTraceStore.mockReturnValue({
       addSpans: mocks.addSpans,
