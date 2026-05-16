@@ -363,6 +363,7 @@ export default function CustomIntentSection() {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label="Dismiss upload error"
                 className="size-5"
                 onClick={() => setUploadError(null)}
               >
@@ -434,6 +435,7 @@ export default function CustomIntentSection() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label={`Remove intent ${actualIndex + 1}`}
                     onClick={() => removeArrayItem('intent', index)}
                     disabled={(localConfig.intent || []).length <= 1}
                     className="self-start"

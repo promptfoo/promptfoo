@@ -453,6 +453,7 @@ const sidebars = {
                 'guides/evaluate-openai-assistants',
                 'guides/evaluate-crewai',
                 'guides/evaluate-langgraph',
+                'guides/evaluate-google-adk',
                 'guides/evaluate-elevenlabs',
               ],
             },
