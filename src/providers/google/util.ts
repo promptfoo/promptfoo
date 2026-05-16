@@ -857,80 +857,53 @@ function processImagesInContents(
     }
   }
 
-  return contents.map((content) => {
-    if (content.parts) {
-      const newParts: Part[] = [];
+  const appendTextBlock = (parts: Part[], text: string) => {
+    if (text.length > 0) {
+      parts.push({ text });
+    }
+  };
 
-      for (const part of content.parts) {
-        if (part.text) {
-          const lines = part.text.split('\n');
-          let foundValidImage = false;
-          let currentTextBlock = '';
-          const processedParts: Part[] = [];
+  const createInlineImagePart = (base64Value: string): Part => ({
+    inlineData: {
+      mimeType: getMimeTypeFromBase64(base64Value),
+      data: isDataUrl(base64Value) ? extractBase64FromDataUrl(base64Value) : base64Value,
+    },
+  });
 
-          // First pass: check if any line is a valid base64 image from context variables
-          for (const line of lines) {
-            const trimmedLine = line.trim();
+  const processTextPart = (part: Part): Part[] => {
+    if (!part.text) {
+      return [part];
+    }
 
-            // Check if this line is a base64 image that was loaded from a variable
-            if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
-              foundValidImage = true;
+    let foundValidImage = false;
+    let currentTextBlock = '';
+    const processedParts: Part[] = [];
 
-              // Add any accumulated text as a text part
-              if (currentTextBlock.length > 0) {
-                processedParts.push({
-                  text: currentTextBlock,
-                });
-                currentTextBlock = '';
-              }
-
-              // Add the image part
-              const mimeType = getMimeTypeFromBase64(trimmedLine);
-              // Extract raw base64 data (Google expects raw base64, not data URLs)
-              const base64Data = isDataUrl(trimmedLine)
-                ? extractBase64FromDataUrl(trimmedLine)
-                : trimmedLine;
-              processedParts.push({
-                inlineData: {
-                  mimeType,
-                  data: base64Data,
-                },
-              });
-            } else {
-              // Accumulate text, preserving original formatting including newlines
-              if (currentTextBlock.length > 0) {
-                currentTextBlock += '\n';
-              }
-              currentTextBlock += line;
-            }
-          }
-
-          // Add any remaining text block
-          if (currentTextBlock.length > 0) {
-            processedParts.push({
-              text: currentTextBlock,
-            });
-          }
-
-          // If we found valid images, use the processed parts; otherwise, keep the original part
-          if (foundValidImage) {
-            newParts.push(...processedParts);
-          } else {
-            newParts.push(part);
-          }
-        } else {
-          // Keep non-text parts as is
-          newParts.push(part);
-        }
+    for (const line of part.text.split('\n')) {
+      const trimmedLine = line.trim();
+      if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
+        foundValidImage = true;
+        appendTextBlock(processedParts, currentTextBlock);
+        currentTextBlock = '';
+        processedParts.push(createInlineImagePart(trimmedLine));
+        continue;
       }
 
-      return {
-        ...content,
-        parts: newParts,
-      };
+      currentTextBlock = currentTextBlock.length > 0 ? `${currentTextBlock}\n${line}` : line;
     }
-    return content;
-  });
+
+    appendTextBlock(processedParts, currentTextBlock);
+    return foundValidImage ? processedParts : [part];
+  };
+
+  return contents.map((content) =>
+    content.parts
+      ? {
+          ...content,
+          parts: content.parts.flatMap((part) => processTextPart(part)),
+        }
+      : content,
+  );
 }
 
 /**

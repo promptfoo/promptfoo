@@ -121,6 +121,152 @@ function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | un
     : undefined;
 }
 
+async function createOpenAiCodexProvider({
+  modelType,
+  modelName,
+  configuredModel,
+  providerPath,
+  providerOptions,
+  context,
+}: {
+  modelType: string | undefined;
+  modelName: string;
+  configuredModel: string | undefined;
+  providerPath: string;
+  providerOptions: ProviderOptions;
+  context: LoadApiProviderContext;
+}) {
+  if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
+    const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
+    const codexModel = modelName || configuredModel;
+    const codexProviderId = providerOptions.id ?? providerPath;
+    return new OpenAICodexAppServerProvider({
+      ...providerOptions,
+      id: codexProviderId,
+      config: codexModel
+        ? {
+            ...providerOptions.config,
+            model: codexModel,
+          }
+        : providerOptions.config,
+      env: {
+        ...context.env,
+        ...providerOptions.env,
+      },
+    });
+  }
+
+  if (modelType === 'codex-sdk' || modelType === 'codex') {
+    const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
+    const codexModel = modelName || configuredModel;
+    const codexProviderId = providerOptions.id ?? providerPath;
+    return new OpenAICodexSDKProvider({
+      ...providerOptions,
+      id: codexProviderId,
+      config: codexModel
+        ? {
+            ...providerOptions.config,
+            model: codexModel,
+          }
+        : providerOptions.config,
+      env: context.env,
+    });
+  }
+
+  return undefined;
+}
+
+async function createOpenAiNamedProvider({
+  modelType,
+  modelName,
+  configuredModel,
+  providerOptions,
+}: {
+  modelType: string | undefined;
+  modelName: string;
+  configuredModel: string | undefined;
+  providerOptions: ProviderOptions;
+}) {
+  switch (modelType) {
+    case 'chat':
+      return new OpenAiChatCompletionProvider(
+        modelName || configuredModel || 'gpt-4.1-2025-04-14',
+        providerOptions,
+      );
+    case 'embedding':
+    case 'embeddings':
+      return new OpenAiEmbeddingProvider(
+        modelName || configuredModel || 'text-embedding-3-large',
+        providerOptions,
+      );
+    case 'completion':
+      return new OpenAiCompletionProvider(
+        modelName || configuredModel || 'gpt-3.5-turbo-instruct',
+        providerOptions,
+      );
+    case 'moderation':
+      return new OpenAiModerationProvider(
+        modelName || configuredModel || 'omni-moderation-latest',
+        providerOptions,
+      );
+    case 'realtime':
+      return new OpenAiRealtimeProvider(
+        modelName || configuredModel || 'gpt-realtime-1.5',
+        providerOptions,
+      );
+    case 'responses':
+      return new OpenAiResponsesProvider(
+        modelName || configuredModel || 'gpt-4.1-2025-04-14',
+        providerOptions,
+      );
+    case 'transcription': {
+      const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
+      return new OpenAiTranscriptionProvider(
+        modelName || configuredModel || 'gpt-4o-transcribe-diarize',
+        providerOptions,
+      );
+    }
+    case 'agents': {
+      const { OpenAiAgentsProvider } = await import('./openai/agents');
+      return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+    }
+    case 'chatkit': {
+      const { OpenAiChatKitProvider } = await import('./openai/chatkit');
+      return new OpenAiChatKitProvider(modelName || '', providerOptions);
+    }
+    case 'assistant':
+      return new OpenAiAssistantProvider(modelName, providerOptions);
+    case 'image':
+      return new OpenAiImageProvider(modelName, providerOptions);
+    case 'video':
+      return new OpenAiVideoProvider(modelName || 'sora-2', providerOptions);
+    default:
+      return undefined;
+  }
+}
+
+function createOpenAiModelAliasProvider(
+  modelType: string | undefined,
+  providerOptions: ProviderOptions,
+) {
+  if (!modelType) {
+    return undefined;
+  }
+  if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
+    return new OpenAiChatCompletionProvider(modelType, providerOptions);
+  }
+  if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
+    return new OpenAiCompletionProvider(modelType, providerOptions);
+  }
+  if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
+    return new OpenAiRealtimeProvider(modelType, providerOptions);
+  }
+  if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
+    return new OpenAiResponsesProvider(modelType, providerOptions);
+  }
+  return undefined;
+}
+
 export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('exec', null, ScriptCompletionProvider),
   createScriptBasedProviderFactory('golang', 'go', GolangProvider),
@@ -886,123 +1032,38 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       context: LoadApiProviderContext,
     ) => {
-      // Load OpenAI module
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
 
-      // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
-      if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
-        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
-        const codexModel = modelName || configuredModel;
-        const codexProviderId = providerOptions.id ?? providerPath;
-        return new OpenAICodexAppServerProvider({
-          ...providerOptions,
-          id: codexProviderId,
-          config: codexModel
-            ? {
-                ...providerOptions.config,
-                model: codexModel,
-              }
-            : providerOptions.config,
-          env: {
-            ...context.env,
-            ...providerOptions.env,
-          },
-        });
+      const codexProvider = await createOpenAiCodexProvider({
+        modelType,
+        modelName,
+        configuredModel,
+        providerPath,
+        providerOptions,
+        context,
+      });
+      if (codexProvider) {
+        return codexProvider;
       }
 
-      // Codex SDK providers (openai:codex-sdk or openai:codex)
-      if (modelType === 'codex-sdk' || modelType === 'codex') {
-        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
-        const codexModel = modelName || configuredModel;
-        const codexProviderId = providerOptions.id ?? providerPath;
-        return new OpenAICodexSDKProvider({
-          ...providerOptions,
-          id: codexProviderId,
-          config: codexModel
-            ? {
-                ...providerOptions.config,
-                model: codexModel,
-              }
-            : providerOptions.config,
-          env: context.env,
-        });
+      const namedProvider = await createOpenAiNamedProvider({
+        modelType,
+        modelName,
+        configuredModel,
+        providerOptions,
+      });
+      if (namedProvider) {
+        return namedProvider;
       }
-      if (modelType === 'chat') {
-        return new OpenAiChatCompletionProvider(
-          modelName || configuredModel || 'gpt-4.1-2025-04-14',
-          providerOptions,
-        );
+
+      const aliasProvider = createOpenAiModelAliasProvider(modelType, providerOptions);
+      if (aliasProvider) {
+        return aliasProvider;
       }
-      if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new OpenAiEmbeddingProvider(
-          modelName || configuredModel || 'text-embedding-3-large',
-          providerOptions,
-        );
-      }
-      if (modelType === 'completion') {
-        return new OpenAiCompletionProvider(
-          modelName || configuredModel || 'gpt-3.5-turbo-instruct',
-          providerOptions,
-        );
-      }
-      if (modelType === 'moderation') {
-        return new OpenAiModerationProvider(
-          modelName || configuredModel || 'omni-moderation-latest',
-          providerOptions,
-        );
-      }
-      if (modelType === 'realtime') {
-        return new OpenAiRealtimeProvider(
-          modelName || configuredModel || 'gpt-realtime-1.5',
-          providerOptions,
-        );
-      }
-      if (modelType === 'responses') {
-        return new OpenAiResponsesProvider(
-          modelName || configuredModel || 'gpt-4.1-2025-04-14',
-          providerOptions,
-        );
-      }
-      if (modelType === 'transcription') {
-        const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
-        return new OpenAiTranscriptionProvider(
-          modelName || configuredModel || 'gpt-4o-transcribe-diarize',
-          providerOptions,
-        );
-      }
-      if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiChatCompletionProvider(modelType, providerOptions);
-      }
-      if (OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiCompletionProvider(modelType, providerOptions);
-      }
-      if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiRealtimeProvider(modelType, providerOptions);
-      }
-      if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
-        return new OpenAiResponsesProvider(modelType, providerOptions);
-      }
-      if (modelType === 'agents') {
-        const { OpenAiAgentsProvider } = await import('./openai/agents');
-        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
-      }
-      if (modelType === 'chatkit') {
-        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
-        return new OpenAiChatKitProvider(modelName || '', providerOptions);
-      }
-      if (modelType === 'assistant') {
-        return new OpenAiAssistantProvider(modelName, providerOptions);
-      }
-      if (modelType === 'image') {
-        return new OpenAiImageProvider(modelName, providerOptions);
-      }
-      if (modelType === 'video') {
-        return new OpenAiVideoProvider(modelName || 'sora-2', providerOptions);
-      }
-      // Assume user did not provide model type, and it's a chat model
+
       logger.warn(
         `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );

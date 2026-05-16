@@ -24,6 +24,70 @@ import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
+function parseAzureResponsesInput(prompt: string) {
+  try {
+    const parsedJson = JSON.parse(prompt);
+    return Array.isArray(parsedJson) ? parsedJson : prompt;
+  } catch {
+    return prompt;
+  }
+}
+
+function resolveAzureMaxOutputTokens(
+  config: AzureChatResponsesOptions & { max_output_tokens?: number },
+  isReasoningModel: boolean,
+) {
+  const maxOutputTokensDefault = config.omitDefaults
+    ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+      ? undefined
+      : getEnvInt('OPENAI_MAX_TOKENS')
+    : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+  const reasoningMaxOutputTokensDefault =
+    getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
+  return (
+    config.max_output_tokens ??
+    (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault)
+  );
+}
+
+function resolveAzureTemperature(config: AzureChatResponsesOptions, supportsTemperature: boolean) {
+  if (!supportsTemperature) {
+    return undefined;
+  }
+  const temperatureDefault = config.omitDefaults
+    ? getEnvString('OPENAI_TEMPERATURE') === undefined
+      ? undefined
+      : getEnvFloat('OPENAI_TEMPERATURE')
+    : getEnvFloat('OPENAI_TEMPERATURE', 0);
+  return config.temperature ?? temperatureDefault;
+}
+
+function buildAzureTextFormat(
+  responseFormat: ReturnType<typeof maybeLoadResponseFormatFromExternalFile>,
+  isReasoningModel: boolean,
+  verbosity: AzureChatResponsesOptions['verbosity'],
+) {
+  let textFormat;
+  if (responseFormat?.type === 'json_object') {
+    textFormat = { format: { type: 'json_object' } };
+  } else if (responseFormat?.type === 'json_schema') {
+    const schema = responseFormat.schema || responseFormat.json_schema?.schema;
+    const schemaName = responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
+    textFormat = {
+      format: {
+        type: 'json_schema',
+        name: schemaName,
+        schema,
+        strict: true,
+      },
+    };
+  } else {
+    textFormat = { format: { type: 'text' } };
+  }
+
+  return isReasoningModel && verbosity ? { ...textFormat, verbosity } : textFormat;
+}
+
 export class AzureResponsesProvider extends AzureGenericProvider {
   declare config: AzureChatResponsesOptions;
 
@@ -102,38 +166,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...context?.prompt?.config,
     };
 
-    let input;
-    try {
-      const parsedJson = JSON.parse(prompt);
-      if (Array.isArray(parsedJson)) {
-        input = parsedJson;
-      } else {
-        input = prompt;
-      }
-    } catch {
-      input = prompt;
-    }
-
     const isReasoningModel = this.isReasoningModel();
-    const maxOutputTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const reasoningMaxOutputTokensDefault =
-      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
-    const maxOutputTokens =
-      config.max_output_tokens ??
-      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
-
-    const temperatureDefault = config.omitDefaults
-      ? getEnvString('OPENAI_TEMPERATURE') === undefined
-        ? undefined
-        : getEnvFloat('OPENAI_TEMPERATURE')
-      : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const temperature = this.supportsTemperature()
-      ? (config.temperature ?? temperatureDefault)
-      : undefined;
+    const maxOutputTokens = resolveAzureMaxOutputTokens(config, isReasoningModel);
+    const temperature = resolveAzureTemperature(config, this.supportsTemperature());
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
       : undefined;
@@ -146,44 +181,12 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       context?.vars,
     );
 
-    let textFormat;
-    if (responseFormat) {
-      if (responseFormat.type === 'json_object') {
-        textFormat = {
-          format: {
-            type: 'json_object',
-          },
-        };
-      } else if (responseFormat.type === 'json_schema') {
-        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
-        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
-        const schemaName =
-          responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
-
-        textFormat = {
-          format: {
-            type: 'json_schema',
-            name: schemaName,
-            schema,
-            strict: true,
-          },
-        };
-      } else {
-        textFormat = { format: { type: 'text' } };
-      }
-    } else {
-      textFormat = { format: { type: 'text' } };
-    }
-
-    // Add verbosity for reasoning models if configured
-    if (isReasoningModel && config.verbosity) {
-      textFormat = { ...textFormat, verbosity: config.verbosity };
-    }
+    const textFormat = buildAzureTextFormat(responseFormat, isReasoningModel, config.verbosity);
 
     // Azure Responses API uses 'model' field for deployment name
     const body = {
       model: this.deploymentName,
-      input,
+      input: parseAzureResponsesInput(prompt),
       ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
