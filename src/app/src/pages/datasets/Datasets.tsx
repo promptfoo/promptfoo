@@ -132,7 +132,8 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
           return (
             <Link
               to={EVAL_ROUTES.DETAIL(value)}
-              className="text-primary hover:underline font-mono text-sm"
+              title={value}
+              className="block truncate font-mono text-sm text-primary hover:underline"
             >
               {value}
             </Link>
@@ -158,7 +159,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
     >
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
-          <h1 className="text-2xl font-semibold">Datasets</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Datasets</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage test datasets and track their evaluation history
           </p>
@@ -175,6 +176,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
               onRowClick={handleRowClick}
               emptyMessage="Create a dataset to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
+              globalFilterLabel="Search datasets"
             />
           </Card>
         </div>

@@ -694,7 +694,7 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(result.cost).toBe(0);
     });
 
-    it('should handle missing duration in response', async () => {
+    it('should leave cost undefined when the API omits duration', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
         config: { apiKey: 'test-key' },
       });
@@ -711,8 +711,8 @@ describe('OpenAiTranscriptionProvider', () => {
 
       const result = await provider.callApi('/path/to/audio.mp3');
 
-      expect(result.cost).toBe(0);
-      expect(result.metadata?.duration).toBe(0);
+      expect(result.cost).toBeUndefined();
+      expect(result.metadata?.duration).toBeUndefined();
     });
 
     it('should handle diarized segments with missing fields', async () => {

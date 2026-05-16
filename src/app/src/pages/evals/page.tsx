@@ -18,7 +18,7 @@ export default function EvalsIndexPage() {
     >
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
-          <h1 className="text-2xl font-semibold">Evaluations</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Evaluations</h1>
           <p className="text-sm text-muted-foreground mt-1">View and manage your evaluation runs</p>
         </div>
       </PageHeader>

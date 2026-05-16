@@ -70,7 +70,9 @@ export default function Prompts({
         accessorKey: 'label',
         header: 'Label',
         accessorFn: (row) => row.prompt.label || row.prompt.display || row.prompt.raw,
-        cell: ({ getValue }) => <span className="text-sm">{getValue<string>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="line-clamp-2 break-words text-sm">{getValue<string>()}</span>
+        ),
         size: 200,
       },
       {
@@ -128,7 +130,7 @@ export default function Prompts({
     >
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
-          <h1 className="text-2xl font-semibold">Prompts</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Prompts</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage and track all prompt templates and their evaluation history
           </p>
@@ -145,6 +147,7 @@ export default function Prompts({
               onRowClick={handleRowClick}
               emptyMessage="Create a prompt to start evaluating your AI responses"
               initialSorting={[{ id: 'recentEvalDate', desc: true }]}
+              globalFilterLabel="Search prompts"
             />
           </Card>
         </div>

@@ -17,8 +17,8 @@ describe('UpdateBanner', () => {
   });
 
   afterEach(() => {
-    document.documentElement.style.removeProperty('--update-banner-height');
     vi.restoreAllMocks();
+    document.documentElement.style.removeProperty('--update-banner-height');
   });
 
   it('should render the banner with correct info when an update with a primary command is available', () => {
@@ -252,21 +252,15 @@ describe('UpdateBanner', () => {
     expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe('');
   });
 
-  it('should publish the banner height after version loading finishes', async () => {
-    mockUseVersionCheck.mockReturnValue({
+  it('should measure the banner when it becomes visible after loading', async () => {
+    const hiddenState: ReturnType<typeof useVersionCheck> = {
       versionInfo: null,
       loading: true,
       error: null,
       dismissed: false,
       dismiss: vi.fn(),
-    });
-    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(48);
-
-    const { rerender } = renderWithProviders(<UpdateBanner />);
-
-    expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe('');
-
-    mockUseVersionCheck.mockReturnValue({
+    };
+    const visibleState: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
         latestVersion: '2.0.0',
@@ -282,8 +276,15 @@ describe('UpdateBanner', () => {
       error: null,
       dismissed: false,
       dismiss: vi.fn(),
-    });
+    };
+    mockUseVersionCheck.mockReturnValue(hiddenState);
 
+    const { rerender } = renderWithProviders(<UpdateBanner />);
+
+    expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe('');
+
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(48);
+    mockUseVersionCheck.mockReturnValue(visibleState);
     rerender(<UpdateBanner />);
 
     await waitFor(() => {
