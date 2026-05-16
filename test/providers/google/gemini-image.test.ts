@@ -952,6 +952,46 @@ describe('GeminiImageProvider', () => {
       expect(body.tools).toEqual([{ googleSearch: {} }]);
     });
 
+    it('should preserve googleSearch when function calling is disabled', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
+        config: {
+          tools: [
+            {
+              googleSearch: {},
+            },
+          ],
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'NONE',
+            },
+          },
+        },
+      });
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+        },
+        cached: false,
+        statusText: 'OK',
+      });
+
+      await provider.callApi('Generate a grounded image');
+
+      const callArgs = mockFetchWithCache.mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
     it('should normalize google_search tool format to googleSearch', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
         config: {

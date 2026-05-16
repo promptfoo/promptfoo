@@ -11,6 +11,8 @@ import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
 
 const renderWithProviders = (ui: React.ReactElement) => {
+  const queryClient = new QueryClient();
+
   return render(
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
@@ -27,8 +29,6 @@ vi.mock('@app/hooks/useToast');
 vi.mock('./StrategyConfigDialog', () => ({
   default: () => <div data-testid="strategy-config-dialog">Strategy Config Dialog</div>,
 }));
-
-const queryClient = new QueryClient();
 
 const mockUpdateConfig = vi.fn();
 const mockRecordEvent = vi.fn();
@@ -118,12 +118,6 @@ describe('Strategies', () => {
     it('exports MULTI_MODAL_STRATEGIES constant with expected values', () => {
       expect(MULTI_MODAL_STRATEGIES).toBeDefined();
       expect(MULTI_MODAL_STRATEGIES).toEqual(['audio', 'image', 'video']);
-    });
-
-    it('contains expected multi-modal strategy identifiers', () => {
-      expect(MULTI_MODAL_STRATEGIES).toContain('audio');
-      expect(MULTI_MODAL_STRATEGIES).toContain('video');
-      expect(MULTI_MODAL_STRATEGIES).toContain('image');
     });
   });
 
