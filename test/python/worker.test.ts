@@ -2,7 +2,7 @@ import fs from 'fs';
 import { createServer } from 'http';
 import path from 'path';
 
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { PythonWorker } from '../../src/python/worker';
 import { mockProcessEnv } from '../util/utils';
@@ -15,6 +15,10 @@ vi.mock('../../src/logger', () => ({
     warn: vi.fn(),
   },
 }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 afterEach(() => {
   vi.clearAllMocks();
